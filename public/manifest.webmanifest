@@ -1,0 +1,30 @@
+{
+  "name": "無名 S note｜note INSIGHT",
+  "short_name": "note INSIGHT",
+  "description": "noteの反応を保存し、全記事を差分分析する会員制PWA",
+  "start_url": "/note-insight/",
+  "scope": "/note-insight/",
+  "display": "standalone",
+  "background_color": "#050706",
+  "theme_color": "#050706",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
