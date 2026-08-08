@@ -4,7 +4,8 @@ GitHub Pagesで開くPWA画面です。会員認証、管理者承認、分析�
 
 ## 公開
 
-`main` ブランチへの更新後、GitHub Actionsが自動でビルドし、GitHub Pagesへ公開します。
+- 公開URL: https://mumei-s.github.io/note-insight/
+- `main` ブランチへの更新後、GitHub Actionsが自動でビルドし、GitHub Pagesへ公開します。
 
 ## 安全設計
 
