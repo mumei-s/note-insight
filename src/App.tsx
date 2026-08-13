@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AccessPortal } from "./access-portal";
+import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { FeaturePage } from "./feature-page";
@@ -26,6 +27,7 @@ export function App() {
   if (route === "access/insight") return <AccessPortal target="insight" />;
   if (route === "access/catalog") return <AccessPortal target="catalog" />;
   if (route === "catalog") return <CatalogIconsPage />;
+  if (route === "battle") return <BattleArenaPage />;
   if (route === "manage" || route === "catalog-admin" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
   if (route === "dashboard") return <CombinedAnalyticsApp />;
