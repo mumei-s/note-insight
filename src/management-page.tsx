@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 
 const OWNER_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 const CATALOG_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-world";
+const INSIGHT_ADMIN_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-insight-admin";
 const OWNER_KEY = "mumei-unified-owner-token";
+const ENTRY_KEY = "mumei-note-insight:entry";
 const MEMBER_KEY = "mumei-note-insight:member";
+const DEVICE_KEY = "mumei-note-insight:device";
 
 type Submission = { id: string; note_id: string; display_name: string; status: string; job: string; rarity: string; created_at: string };
 
@@ -27,6 +30,16 @@ async function catalogCall(action: string, extra: Record<string, unknown> = {}) 
   if (!response.ok) throw new Error(payload?.error ?? "名鑑管理を読み込めませんでした。");
   return payload;
 }
+async function insightAdminCall(action: string, extra: Record<string, unknown> = {}) {
+  const response = await fetch(INSIGHT_ADMIN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "" },
+    body: JSON.stringify({ action, ...extra }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error ?? "INSIGHT管理セッションを確認できませんでした。");
+  return payload;
+}
 
 const card = { border: "1px solid #273244", borderRadius: 20, background: "linear-gradient(180deg,#101722,#0b1017)", padding: 20 } as const;
 
@@ -36,6 +49,7 @@ export function ManagementPage() {
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [legacyLinked, setLegacyLinked] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const pending = useMemo(() => submissions.filter((x) => x.status === "pending"), [submissions]);
   const active = useMemo(() => submissions.filter((x) => x.status === "approved"), [submissions]);
@@ -49,13 +63,46 @@ export function ManagementPage() {
     }
   }
 
+  async function syncLegacyOwnerSession() {
+    try {
+      const memberToken = localStorage.getItem(MEMBER_KEY) ?? "";
+      const deviceToken = localStorage.getItem(DEVICE_KEY) ?? "";
+      const entryToken = localStorage.getItem(ENTRY_KEY) ?? "";
+
+      if (memberToken && deviceToken) {
+        try {
+          await insightAdminCall("link", { memberToken, deviceToken, entryToken: entryToken || null });
+        } catch {
+          // The current browser may hold a normal member session. In that case,
+          // fall through and try the previously linked OWNER session instead.
+        }
+      }
+
+      const status = await insightAdminCall("status");
+      if (!status.linked) {
+        setLegacyLinked(false);
+        return false;
+      }
+
+      const restored = await insightAdminCall("restore");
+      if (restored.memberToken) localStorage.setItem(MEMBER_KEY, restored.memberToken);
+      if (restored.deviceToken) localStorage.setItem(DEVICE_KEY, restored.deviceToken);
+      if (restored.entryToken) localStorage.setItem(ENTRY_KEY, restored.entryToken);
+      setLegacyLinked(true);
+      return true;
+    } catch {
+      setLegacyLinked(false);
+      return false;
+    }
+  }
+
   useEffect(() => {
     if (!localStorage.getItem(OWNER_KEY)) return;
     ownerCall("status")
-      .then((p) => {
+      .then(async (p) => {
         if (p.authenticated) {
           setAuthenticated(true);
-          void loadCatalogAdmin();
+          await Promise.all([loadCatalogAdmin(), syncLegacyOwnerSession()]);
         }
       })
       .catch(() => {});
@@ -78,12 +125,21 @@ export function ManagementPage() {
       localStorage.setItem(OWNER_KEY, p.ownerToken);
       setAuthenticated(true);
       setCode(""); setChallengeId("");
+      await Promise.all([loadCatalogAdmin(), syncLegacyOwnerSession()]);
       setMessage("管理者本人を確認しました。プロフィールから一時コードを削除して大丈夫です。");
-      await loadCatalogAdmin();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "確認できませんでした。";
       setMessage(msg === "PROFILE_CODE_NOT_FOUND" ? "noteプロフィールに一時コードがまだ確認できません。保存後にもう一度押してください。" : msg);
     } finally { setBusy(false); }
+  }
+
+  async function reconnectInsight() {
+    setBusy(true); setMessage("");
+    const ok = await syncLegacyOwnerSession();
+    setMessage(ok
+      ? "INSIGHTの管理者セッションを復旧しました。"
+      : "この端末には旧INSIGHTのOWNERセッションがありません。以前OWNERで利用していた端末から管理ページを一度開くと、自動で共通管理へ引き継ぎます。");
+    setBusy(false);
   }
 
   async function catalogAction(id: string, next: string) {
@@ -99,6 +155,7 @@ export function ManagementPage() {
     try { await ownerCall("logout"); } catch {}
     localStorage.removeItem(OWNER_KEY);
     setAuthenticated(false);
+    setLegacyLinked(false);
     setSubmissions([]);
   }
 
@@ -139,12 +196,22 @@ export function ManagementPage() {
           </section>
         ) : (
           <>
+            <section style={{ ...card, marginBottom: 14, borderColor: legacyLinked ? "#2f6b3d" : "#665522" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <small style={{ color: legacyLinked ? "#7dffad" : "#ffcf5a", fontWeight: 900 }}>INSIGHT OWNER SESSION</small>
+                  <strong style={{ display: "block", marginTop: 5 }}>{legacyLinked ? "INSIGHT管理者セッション連携済み" : "INSIGHT管理者セッション未連携"}</strong>
+                </div>
+                {!legacyLinked ? <button disabled={busy} onClick={() => void reconnectInsight()} style={{ border: 0, borderRadius: 10, background: "#b6ff38", color: "#101600", padding: "9px 12px", fontWeight: 900 }}>既存OWNERセッションを引き継ぐ</button> : null}
+              </div>
+            </section>
+
             <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
               <article style={card}>
                 <small style={{ color: "#b6ff38", fontWeight: 900 }}>自分で使う</small>
                 <h2>自分のINSIGHT</h2>
                 <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加者として自分自身の分析画面を開きます。</p>
-                <a href={localStorage.getItem(MEMBER_KEY) ? "#dashboard" : "#access/insight"} style={{ color: "#b6ff38", fontWeight: 900 }}>開く →</a>
+                {legacyLinked ? <a href="#dashboard" style={{ color: "#b6ff38", fontWeight: 900 }}>開く →</a> : <button onClick={() => void reconnectInsight()} style={{ border: 0, background: "transparent", padding: 0, color: "#ffcf5a", fontWeight: 900 }}>OWNERセッションを復旧 →</button>}
               </article>
               <article style={card}>
                 <small style={{ color: "#54d8ff", fontWeight: 900 }}>自分で使う</small>
@@ -156,7 +223,7 @@ export function ManagementPage() {
                 <small style={{ color: "#b6ff38", fontWeight: 900 }}>管理する</small>
                 <h2>INSIGHT管理</h2>
                 <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加申請・承認・退会・利用状態を管理します。</p>
-                <a href={localStorage.getItem(MEMBER_KEY) ? "#member" : "#access/insight"} style={{ color: "#b6ff38", fontWeight: 900 }}>INSIGHT管理へ →</a>
+                {legacyLinked ? <a href="#member" style={{ color: "#b6ff38", fontWeight: 900 }}>INSIGHT管理へ →</a> : <button onClick={() => void reconnectInsight()} style={{ border: 0, background: "transparent", padding: 0, color: "#ffcf5a", fontWeight: 900 }}>OWNERセッションを復旧 →</button>}
               </article>
               <article style={card}>
                 <small style={{ color: "#ffcf5a", fontWeight: 900 }}>管理する</small>
