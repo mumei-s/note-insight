@@ -11,6 +11,12 @@ const OWNER_COMPAT_ORIGIN =
   "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-owner-compat";
 const ICON_ENDPOINT =
   "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
+const OWNER_TOOL_ENDPOINTS: Record<string, string> = {
+  "/owner/evidence-upload":
+    "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-evidence-upload",
+  "/owner/creator-upload":
+    "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-owner-upload",
+};
 const OWNER_COMPAT_PATHS = new Set([
   "/api/member/me",
   "/api/member/creators",
@@ -62,39 +68,42 @@ function rememberTokens(payload: unknown) {
   }
 }
 
-function apiParts(input: RequestInfo | URL) {
-  if (typeof input === "string" && input.startsWith("/api/")) {
-    const url = new URL(input, window.location.origin);
-    return { path: url.pathname, search: url.search };
-  }
-  if (input instanceof URL && input.pathname.startsWith("/api/")) {
-    return { path: input.pathname, search: input.search };
-  }
-  if (input instanceof Request) {
-    const url = new URL(input.url, window.location.origin);
-    if (url.pathname.startsWith("/api/")) {
-      return { path: url.pathname, search: url.search };
-    }
-  }
+function inputUrl(input: RequestInfo | URL) {
+  if (typeof input === "string") return new URL(input, window.location.origin);
+  if (input instanceof URL) return input;
+  if (input instanceof Request) return new URL(input.url, window.location.origin);
   return null;
 }
 
-function apiTarget(input: RequestInfo | URL) {
-  const parts = apiParts(input);
-  if (!parts) return { target: input, ownerCompat: false };
+function apiParts(input: RequestInfo | URL) {
+  const url = inputUrl(input);
+  if (!url || !url.pathname.startsWith("/api/")) return null;
+  return { path: url.pathname, search: url.search };
+}
 
+function apiTarget(input: RequestInfo | URL) {
+  const directUrl = inputUrl(input);
+  const ownerTool = directUrl ? OWNER_TOOL_ENDPOINTS[directUrl.pathname] : undefined;
   const ownerToken = localStorage.getItem(OWNER_KEY);
+  if (ownerTool && ownerToken) {
+    return { target: ownerTool, ownerCompat: true, enrich: false };
+  }
+
+  const parts = apiParts(input);
+  if (!parts) return { target: input, ownerCompat: false, enrich: false };
+
   if (ownerToken && OWNER_COMPAT_PATHS.has(parts.path)) {
     const target = new URL(OWNER_COMPAT_ORIGIN);
     target.searchParams.set("path", parts.path);
     const sourceParams = new URLSearchParams(parts.search);
     sourceParams.forEach((value, key) => target.searchParams.append(key, value));
-    return { target: target.toString(), ownerCompat: true };
+    return { target: target.toString(), ownerCompat: true, enrich: parts.path === "/api/analytics" };
   }
 
   return {
     target: `${API_ORIGIN}${parts.path}${parts.search}`,
     ownerCompat: false,
+    enrich: false,
   };
 }
 
@@ -105,12 +114,8 @@ function collectUrlnames(payload: any) {
       ids.add(value);
     }
   };
-  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
-    add(event?.actorUrlname);
-  }
-  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
-    add(event?.user?.urlname);
-  }
+  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) add(event?.actorUrlname);
+  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) add(event?.user?.urlname);
   for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
     for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
       for (const message of Array.isArray(thread?.messages) ? thread.messages : []) add(message?.user?.urlname);
@@ -119,10 +124,7 @@ function collectUrlnames(payload: any) {
   return [...ids];
 }
 
-async function fillIconCache(
-  ids: string[],
-  nativeFetch: typeof window.fetch,
-) {
+async function fillIconCache(ids: string[], nativeFetch: typeof window.fetch) {
   const missing = ids.filter((id) => !iconCache.has(id));
   for (let index = 0; index < missing.length; index += 200) {
     try {
@@ -134,9 +136,7 @@ async function fillIconCache(
       });
       const payload = await response.json().catch(() => ({}));
       for (const item of Array.isArray(payload?.items) ? payload.items : []) {
-        if (typeof item?.noteId === "string") {
-          iconCache.set(item.noteId, typeof item.image === "string" ? item.image : null);
-        }
+        if (typeof item?.noteId === "string") iconCache.set(item.noteId, typeof item.image === "string" ? item.image : null);
       }
     } catch {
       // 画像補完だけ失敗してもINSIGHT本体は止めない。
@@ -146,35 +146,24 @@ async function fillIconCache(
 
 function applyIcons(payload: any) {
   for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
-    if (!event?.actorImageUrl && typeof event?.actorUrlname === "string") {
-      event.actorImageUrl = iconCache.get(event.actorUrlname) ?? null;
-    }
+    if (!event?.actorImageUrl && typeof event?.actorUrlname === "string") event.actorImageUrl = iconCache.get(event.actorUrlname) ?? null;
   }
   for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
     const id = event?.user?.urlname;
-    if (event?.user && !event.user.profileImageUrl && typeof id === "string") {
-      event.user.profileImageUrl = iconCache.get(id) ?? null;
-    }
+    if (event?.user && !event.user.profileImageUrl && typeof id === "string") event.user.profileImageUrl = iconCache.get(id) ?? null;
   }
   for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
     for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
       for (const message of Array.isArray(thread?.messages) ? thread.messages : []) {
         const id = message?.user?.urlname;
-        if (message?.user && !message.user.profileImageUrl && typeof id === "string") {
-          message.user.profileImageUrl = iconCache.get(id) ?? null;
-        }
+        if (message?.user && !message.user.profileImageUrl && typeof id === "string") message.user.profileImageUrl = iconCache.get(id) ?? null;
       }
     }
   }
 }
 
-async function enrichOwnerResponse(
-  response: Response,
-  nativeFetch: typeof window.fetch,
-) {
-  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
-    return response;
-  }
+async function enrichOwnerResponse(response: Response, nativeFetch: typeof window.fetch) {
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
   try {
     const payload = await response.clone().json();
     const ids = collectUrlnames(payload);
@@ -183,11 +172,7 @@ async function enrichOwnerResponse(
     applyIcons(payload);
     const headers = new Headers(response.headers);
     headers.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify(payload), {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
   } catch {
     return response;
   }
@@ -196,13 +181,10 @@ async function enrichOwnerResponse(
 export function installApiBridge() {
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const { target, ownerCompat } = apiTarget(input);
+    const { target, ownerCompat, enrich } = apiTarget(input);
     if (target === input) return nativeFetch(input, init);
 
-    const headers = new Headers(
-      input instanceof Request ? input.headers : init.headers,
-    );
-
+    const headers = new Headers(input instanceof Request ? input.headers : init.headers);
     if (ownerCompat) {
       const ownerToken = localStorage.getItem(OWNER_KEY);
       if (ownerToken) headers.set("X-Owner-Token", ownerToken);
@@ -217,19 +199,9 @@ export function installApiBridge() {
       if (memberToken) headers.set("X-Insight-Member", memberToken);
     }
 
-    const response = await nativeFetch(target, {
-      ...init,
-      headers,
-      credentials: "omit",
-    });
-    if (ownerCompat) {
-      return enrichOwnerResponse(response, nativeFetch);
-    }
-    void response
-      .clone()
-      .json()
-      .then(rememberTokens)
-      .catch(() => {});
+    const response = await nativeFetch(target, { ...init, headers, credentials: "omit" });
+    if (ownerCompat) return enrich ? enrichOwnerResponse(response, nativeFetch) : response;
+    void response.clone().json().then(rememberTokens).catch(() => {});
     return response;
   };
 }
