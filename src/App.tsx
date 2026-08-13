@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { AccessPortal } from "./access-portal";
+import { CatalogPage } from "./catalog-page";
+import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { FeaturePage } from "./feature-page";
-import { InsightApp } from "./insight-app";
+import { HubHome } from "./hub-home";
+import { ManagementPage } from "./management-page";
 import { MemberPortal } from "./member-portal";
-import { PublicHome } from "./public-home";
 
 function currentRoute() {
   return window.location.hash.replace(/^#\/?/, "") || "home";
@@ -22,10 +25,14 @@ export function App() {
     return () => window.removeEventListener("hashchange", update);
   }, []);
 
+  if (route === "access/insight") return <AccessPortal target="insight" />;
+  if (route === "access/catalog") return <AccessPortal target="catalog" />;
+  if (route === "catalog") return <CatalogPage />;
+  if (route === "manage" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
-  if (route === "dashboard") return <InsightApp />;
+  if (route === "dashboard") return <CombinedAnalyticsApp />;
   if (route.startsWith("features/")) {
     return <FeaturePage slug={route.slice("features/".length)} />;
   }
-  return <PublicHome initialLoginOpen={false} />;
+  return <HubHome />;
 }
