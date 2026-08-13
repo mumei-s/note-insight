@@ -13,12 +13,21 @@ export type GameCreator = {
   id: string;
   note_id: string;
   display_name: string;
+  status?: string;
   images: { position: number; url: string | null }[];
 };
 
 export type CreatorGameData = {
   opponents: GameOpponent[];
   creators: GameCreator[];
+};
+
+export type PlayerDirectoryCard = {
+  id: string;
+  note_id: string;
+  display_name: string;
+  status: string;
+  cards: { position: number; url: string | null }[];
 };
 
 export function randomInt(min: number, max: number) {
