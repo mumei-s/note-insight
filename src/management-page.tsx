@@ -2,46 +2,63 @@ import { useEffect, useMemo, useState } from "react";
 
 const OWNER_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 const CATALOG_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-world";
-const INSIGHT_ADMIN_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-insight-admin";
 const OWNER_KEY = "mumei-unified-owner-token";
-const ENTRY_KEY = "mumei-note-insight:entry";
-const MEMBER_KEY = "mumei-note-insight:member";
-const DEVICE_KEY = "mumei-note-insight:device";
 
-type Submission = { id: string; note_id: string; display_name: string; status: string; job: string; rarity: string; created_at: string };
+type Submission = {
+  id: string;
+  note_id: string;
+  display_name: string;
+  status: string;
+  job: string;
+  rarity: string;
+  created_at: string;
+};
 
 async function ownerCall(action: string, extra: Record<string, unknown> = {}) {
   const response = await fetch(OWNER_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "",
+    },
     body: JSON.stringify({ action, ...extra }),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error ?? "管理者認証に失敗しました。");
   return payload;
 }
+
 async function catalogCall(action: string, extra: Record<string, unknown> = {}) {
   const response = await fetch(CATALOG_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "",
+    },
     body: JSON.stringify({ action, ...extra }),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error ?? "名鑑管理を読み込めませんでした。");
   return payload;
 }
-async function insightAdminCall(action: string, extra: Record<string, unknown> = {}) {
-  const response = await fetch(INSIGHT_ADMIN_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "" },
-    body: JSON.stringify({ action, ...extra }),
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error ?? "INSIGHT管理セッションを確認できませんでした。");
-  return payload;
-}
 
-const card = { border: "1px solid #273244", borderRadius: 20, background: "linear-gradient(180deg,#101722,#0b1017)", padding: 20 } as const;
+const card = {
+  border: "1px solid #273244",
+  borderRadius: 20,
+  background: "linear-gradient(180deg,#101722,#0b1017)",
+  padding: 20,
+} as const;
+
+const actionLink = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 44,
+  borderRadius: 12,
+  padding: "0 15px",
+  textDecoration: "none",
+  fontWeight: 900,
+} as const;
 
 export function ManagementPage() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -49,113 +66,94 @@ export function ManagementPage() {
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [legacyLinked, setLegacyLinked] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const pending = useMemo(() => submissions.filter((x) => x.status === "pending"), [submissions]);
-  const active = useMemo(() => submissions.filter((x) => x.status === "approved"), [submissions]);
+
+  const pending = useMemo(
+    () => submissions.filter((item) => item.status === "pending"),
+    [submissions],
+  );
+  const active = useMemo(
+    () => submissions.filter((item) => item.status === "approved"),
+    [submissions],
+  );
 
   async function loadCatalogAdmin() {
     try {
       const payload = await catalogCall("owner-list");
       setSubmissions(payload.submissions ?? []);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "名鑑管理を読み込めませんでした。");
-    }
-  }
-
-  async function syncLegacyOwnerSession() {
-    try {
-      const memberToken = localStorage.getItem(MEMBER_KEY) ?? "";
-      const deviceToken = localStorage.getItem(DEVICE_KEY) ?? "";
-      const entryToken = localStorage.getItem(ENTRY_KEY) ?? "";
-
-      if (memberToken && deviceToken) {
-        try {
-          await insightAdminCall("link", { memberToken, deviceToken, entryToken: entryToken || null });
-        } catch {
-          // The current browser may hold a normal member session. In that case,
-          // fall through and try the previously linked OWNER session instead.
-        }
-      }
-
-      const status = await insightAdminCall("status");
-      if (!status.linked) {
-        setLegacyLinked(false);
-        return false;
-      }
-
-      const restored = await insightAdminCall("restore");
-      if (restored.memberToken) localStorage.setItem(MEMBER_KEY, restored.memberToken);
-      if (restored.deviceToken) localStorage.setItem(DEVICE_KEY, restored.deviceToken);
-      if (restored.entryToken) localStorage.setItem(ENTRY_KEY, restored.entryToken);
-      setLegacyLinked(true);
-      return true;
-    } catch {
-      setLegacyLinked(false);
-      return false;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "名鑑管理を読み込めませんでした。");
     }
   }
 
   useEffect(() => {
     if (!localStorage.getItem(OWNER_KEY)) return;
     ownerCall("status")
-      .then(async (p) => {
-        if (p.authenticated) {
+      .then(async (payload) => {
+        if (payload.authenticated) {
           setAuthenticated(true);
-          await Promise.all([loadCatalogAdmin(), syncLegacyOwnerSession()]);
+          await loadCatalogAdmin();
         }
       })
       .catch(() => {});
   }, []);
 
   async function start() {
-    setBusy(true); setMessage("");
+    setBusy(true);
+    setMessage("");
     try {
-      const p = await ownerCall("start");
-      setChallengeId(p.challengeId);
-      setCode(p.code);
-    } catch (e) { setMessage(e instanceof Error ? e.message : "認証コードを発行できませんでした。"); }
-    finally { setBusy(false); }
+      const payload = await ownerCall("start");
+      setChallengeId(payload.challengeId);
+      setCode(payload.code);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "認証コードを発行できませんでした。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function verify() {
-    setBusy(true); setMessage("");
+    setBusy(true);
+    setMessage("");
     try {
-      const p = await ownerCall("verify", { challengeId });
-      localStorage.setItem(OWNER_KEY, p.ownerToken);
+      const payload = await ownerCall("verify", { challengeId });
+      localStorage.setItem(OWNER_KEY, payload.ownerToken);
       setAuthenticated(true);
-      setCode(""); setChallengeId("");
-      await Promise.all([loadCatalogAdmin(), syncLegacyOwnerSession()]);
+      setCode("");
+      setChallengeId("");
+      await loadCatalogAdmin();
       setMessage("管理者本人を確認しました。プロフィールから一時コードを削除して大丈夫です。");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "確認できませんでした。";
-      setMessage(msg === "PROFILE_CODE_NOT_FOUND" ? "noteプロフィールに一時コードがまだ確認できません。保存後にもう一度押してください。" : msg);
-    } finally { setBusy(false); }
-  }
-
-  async function reconnectInsight() {
-    setBusy(true); setMessage("");
-    const ok = await syncLegacyOwnerSession();
-    setMessage(ok
-      ? "INSIGHTの管理者セッションを復旧しました。"
-      : "この端末には旧INSIGHTのOWNERセッションがありません。以前OWNERで利用していた端末から管理ページを一度開くと、自動で共通管理へ引き継ぎます。");
-    setBusy(false);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "確認できませんでした。";
+      setMessage(
+        text === "PROFILE_CODE_NOT_FOUND"
+          ? "noteプロフィールに一時コードがまだ確認できません。保存後にもう一度押してください。"
+          : text,
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function catalogAction(id: string, next: string) {
-    setBusy(true); setMessage("");
+    setBusy(true);
+    setMessage("");
     try {
       await catalogCall("owner-action", { id, next });
       await loadCatalogAdmin();
-    } catch (e) { setMessage(e instanceof Error ? e.message : "変更できませんでした。"); }
-    finally { setBusy(false); }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "変更できませんでした。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function logout() {
-    try { await ownerCall("logout"); } catch {}
+    try {
+      await ownerCall("logout");
+    } catch {}
     localStorage.removeItem(OWNER_KEY);
     setAuthenticated(false);
-    setLegacyLinked(false);
     setSubmissions([]);
   }
 
@@ -164,13 +162,22 @@ export function ManagementPage() {
       <div style={{ width: "min(1050px,100%)", margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <a href="#" style={{ color: "#ffcf5a", textDecoration: "none", fontWeight: 900 }}>← TOP</a>
-          {authenticated ? <button onClick={() => void logout()} style={{ background: "transparent", color: "#9ca9bb", border: "1px solid #344156", borderRadius: 10, padding: "8px 11px" }}>管理ログアウト</button> : null}
+          {authenticated ? (
+            <button
+              onClick={() => void logout()}
+              style={{ background: "transparent", color: "#9ca9bb", border: "1px solid #344156", borderRadius: 10, padding: "8px 11px" }}
+            >
+              管理ログアウト
+            </button>
+          ) : null}
         </div>
 
         <header style={{ margin: "48px 0 24px" }}>
           <small style={{ color: "#ffcf5a", fontWeight: 900, letterSpacing: ".14em" }}>OWNER CONTROL</small>
           <h1 style={{ fontSize: "clamp(38px,7vw,62px)", margin: "8px 0" }}>管理ページ</h1>
-          <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>固定の「管理者パスワード」は使いません。管理者noteプロフィールへの一時コード掲載で本人確認し、その後は長期セッションを保持します。</p>
+          <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>
+            管理者noteプロフィールへの一時コード掲載で本人確認します。確認後はこの端末で長期セッションを保持します。
+          </p>
         </header>
 
         {message ? <div style={{ ...card, marginBottom: 16, color: "#ffcf5a" }}>{message}</div> : null}
@@ -180,73 +187,129 @@ export function ManagementPage() {
             <h2 style={{ marginTop: 0 }}>管理者本人を確認</h2>
             {!code ? (
               <>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>「コードを発行」を押すと、管理者noteプロフィールに一時掲載するコードが表示されます。</p>
-                <button disabled={busy} onClick={() => void start()} style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "12px 18px", fontWeight: 900 }}>{busy ? "発行中…" : "本人確認コードを発行"}</button>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>
+                  「コードを発行」を押すと、管理者noteプロフィールに一時掲載するコードが表示されます。
+                </p>
+                <button
+                  disabled={busy}
+                  onClick={() => void start()}
+                  style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "12px 18px", fontWeight: 900 }}
+                >
+                  {busy ? "発行中…" : "本人確認コードを発行"}
+                </button>
               </>
             ) : (
               <>
-                <p style={{ color: "#9ca9bb" }}>このコードを <b>無名S note（@ss_yr）</b> のプロフィールへ一時掲載して保存します。</p>
-                <code style={{ display: "block", padding: 16, borderRadius: 12, background: "#05080c", color: "#ffcf5a", fontSize: 21, fontWeight: 950, letterSpacing: ".05em" }}>{code}</code>
+                <p style={{ color: "#9ca9bb" }}>
+                  このコードを管理者noteプロフィールへ一時掲載して保存してください。
+                </p>
+                <code style={{ display: "block", padding: 16, borderRadius: 12, background: "#05080c", color: "#ffcf5a", fontSize: 21, fontWeight: 950, letterSpacing: ".05em" }}>
+                  {code}
+                </code>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                  <a href="https://note.com/ss_yr" target="_blank" rel="noreferrer" style={{ color: "#54d8ff", fontWeight: 800 }}>noteプロフィールを開く ↗</a>
-                  <button disabled={busy} onClick={() => void verify()} style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "10px 16px", fontWeight: 900 }}>{busy ? "確認中…" : "管理者として確認"}</button>
+                  <a href="https://note.com/ss_yr" target="_blank" rel="noreferrer" style={{ color: "#54d8ff", fontWeight: 800 }}>
+                    noteプロフィールを開く ↗
+                  </a>
+                  <button
+                    disabled={busy}
+                    onClick={() => void verify()}
+                    style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "10px 16px", fontWeight: 900 }}
+                  >
+                    {busy ? "確認中…" : "管理者として確認"}
+                  </button>
                 </div>
               </>
             )}
           </section>
         ) : (
           <>
-            <section style={{ ...card, marginBottom: 14, borderColor: legacyLinked ? "#2f6b3d" : "#665522" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
-                  <small style={{ color: legacyLinked ? "#7dffad" : "#ffcf5a", fontWeight: 900 }}>INSIGHT OWNER SESSION</small>
-                  <strong style={{ display: "block", marginTop: 5 }}>{legacyLinked ? "INSIGHT管理者セッション連携済み" : "INSIGHT管理者セッション未連携"}</strong>
-                </div>
-                {!legacyLinked ? <button disabled={busy} onClick={() => void reconnectInsight()} style={{ border: 0, borderRadius: 10, background: "#b6ff38", color: "#101600", padding: "9px 12px", fontWeight: 900 }}>既存OWNERセッションを引き継ぐ</button> : null}
-              </div>
+            <section style={{ ...card, marginBottom: 16, borderColor: "#2f6b3d" }}>
+              <small style={{ color: "#7dffad", fontWeight: 900 }}>OWNER VERIFIED</small>
+              <strong style={{ display: "block", marginTop: 6, fontSize: 20 }}>管理者認証済み</strong>
+              <p style={{ color: "#9ca9bb", marginBottom: 0 }}>
+                旧端末や旧OWNERセッションの有無は、管理ページ利用条件にしません。
+              </p>
             </section>
 
             <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
               <article style={card}>
                 <small style={{ color: "#b6ff38", fontWeight: 900 }}>自分で使う</small>
                 <h2>自分のINSIGHT</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加者として自分自身の分析画面を開きます。</p>
-                {legacyLinked ? <a href="#dashboard" style={{ color: "#b6ff38", fontWeight: 900 }}>開く →</a> : <button onClick={() => void reconnectInsight()} style={{ border: 0, background: "transparent", padding: 0, color: "#ffcf5a", fontWeight: 900 }}>OWNERセッションを復旧 →</button>}
+                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加者として自分自身のINSIGHTを開きます。</p>
+                <a href="#dashboard" style={{ ...actionLink, background: "#b6ff38", color: "#101600" }}>INSIGHTを開く →</a>
               </article>
+
               <article style={card}>
                 <small style={{ color: "#54d8ff", fontWeight: 900 }}>自分で使う</small>
                 <h2>自分のクリエイター名鑑</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>OWNERは参加申請なしで名鑑利用対象になります。</p>
-                <a href="#catalog" style={{ color: "#54d8ff", fontWeight: 900 }}>開く →</a>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>OWNERは参加申請なしで名鑑を利用します。</p>
+                <a href="#catalog" style={{ ...actionLink, background: "#54d8ff", color: "#071016" }}>名鑑を開く →</a>
               </article>
+
               <article style={card}>
                 <small style={{ color: "#b6ff38", fontWeight: 900 }}>管理する</small>
                 <h2>INSIGHT管理</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加申請・承認・退会・利用状態を管理します。</p>
-                {legacyLinked ? <a href="#member" style={{ color: "#b6ff38", fontWeight: 900 }}>INSIGHT管理へ →</a> : <button onClick={() => void reconnectInsight()} style={{ border: 0, background: "transparent", padding: 0, color: "#ffcf5a", fontWeight: 900 }}>OWNERセッションを復旧 →</button>}
+                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>INSIGHTの参加申請・承認・退会・利用状態を管理します。</p>
+                <a href="#member" style={{ ...actionLink, background: "#17202d", color: "#b6ff38", border: "1px solid #334158" }}>INSIGHT管理へ →</a>
               </article>
+
               <article style={card}>
                 <small style={{ color: "#ffcf5a", fontWeight: 900 }}>管理する</small>
                 <h2>クリエイター名鑑管理</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>名鑑参加申請・承認・掲載状態をこのページ下部で管理します。</p>
-                <a href="#catalog-admin" style={{ color: "#ffcf5a", fontWeight: 900 }}>申請一覧へ ↓</a>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加申請・承認・掲載状態を管理します。</p>
+                <a href="#catalog-admin" style={{ ...actionLink, background: "#17202d", color: "#ffcf5a", border: "1px solid #4e4322" }}>申請一覧へ ↓</a>
               </article>
             </section>
 
             <section id="catalog-admin" style={{ marginTop: 34, ...card }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "end" }}>
-                <div><small style={{ color: "#ffcf5a", fontWeight: 900 }}>CREATOR DIRECTORY ADMIN</small><h2 style={{ fontSize: 30, margin: "5px 0" }}>クリエイター名鑑管理</h2></div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "end", flexWrap: "wrap" }}>
+                <div>
+                  <small style={{ color: "#ffcf5a", fontWeight: 900 }}>CREATOR DIRECTORY ADMIN</small>
+                  <h2 style={{ fontSize: 30, margin: "5px 0" }}>クリエイター名鑑管理</h2>
+                </div>
                 <strong>承認待ち {pending.length} / 参加中 {active.length}</strong>
               </div>
+
               <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-                {submissions.map((s) => (
-                  <article key={s.id} style={{ border: "1px solid #2d394c", borderRadius: 14, padding: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}>
-                    <div><strong>{s.display_name || `@${s.note_id}`}</strong><div style={{ color: "#7f8da1", fontSize: 13 }}>@{s.note_id} · {s.status}</div></div>
-                    {s.note_id === "ss_yr" ? <span style={{ color: "#ffcf5a", fontWeight: 900 }}>OWNER</span> : (
+                {submissions.map((submission) => (
+                  <article
+                    key={submission.id}
+                    style={{ border: "1px solid #2d394c", borderRadius: 14, padding: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}
+                  >
+                    <div>
+                      <strong>{submission.display_name || `@${submission.note_id}`}</strong>
+                      <div style={{ color: "#7f8da1", fontSize: 13 }}>@{submission.note_id} · {submission.status}</div>
+                    </div>
+
+                    {submission.note_id === "ss_yr" ? (
+                      <span style={{ color: "#ffcf5a", fontWeight: 900 }}>OWNER</span>
+                    ) : (
                       <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-                        {s.status !== "approved" ? <button disabled={busy} onClick={() => void catalogAction(s.id, "approved")} style={{ border: 0, borderRadius: 9, background: "#b6ff38", padding: "8px 10px", fontWeight: 900 }}>承認</button> : null}
-                        {s.status === "approved" ? <button disabled={busy} onClick={() => void catalogAction(s.id, "unpublished")} style={{ border: "1px solid #445166", borderRadius: 9, background: "transparent", color: "#fff", padding: "7px 10px" }}>非公開</button> : null}
-                        <button disabled={busy} onClick={() => void catalogAction(s.id, "withdrawn")} style={{ border: "1px solid #74404a", borderRadius: 9, background: "transparent", color: "#ffb0b8", padding: "7px 10px" }}>退会</button>
+                        {submission.status !== "approved" ? (
+                          <button
+                            disabled={busy}
+                            onClick={() => void catalogAction(submission.id, "approved")}
+                            style={{ border: 0, borderRadius: 9, background: "#b6ff38", padding: "8px 10px", fontWeight: 900 }}
+                          >
+                            承認
+                          </button>
+                        ) : null}
+                        {submission.status === "approved" ? (
+                          <button
+                            disabled={busy}
+                            onClick={() => void catalogAction(submission.id, "unpublished")}
+                            style={{ border: "1px solid #445166", borderRadius: 9, background: "transparent", color: "#fff", padding: "7px 10px" }}
+                          >
+                            非公開
+                          </button>
+                        ) : null}
+                        <button
+                          disabled={busy}
+                          onClick={() => void catalogAction(submission.id, "withdrawn")}
+                          style={{ border: "1px solid #74404a", borderRadius: 9, background: "transparent", color: "#ffb0b8", padding: "7px 10px" }}
+                        >
+                          退会
+                        </button>
                       </div>
                     )}
                   </article>
