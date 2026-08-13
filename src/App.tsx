@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AccessPortal } from "./access-portal";
-import { CatalogPage } from "./catalog-page";
+import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { FeaturePage } from "./feature-page";
 import { HubHome } from "./hub-home";
@@ -18,21 +18,17 @@ export function goTo(route: string) {
 
 export function App() {
   const [route, setRoute] = useState(currentRoute);
-
   useEffect(() => {
     const update = () => setRoute(currentRoute());
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
   }, []);
-
   if (route === "access/insight") return <AccessPortal target="insight" />;
   if (route === "access/catalog") return <AccessPortal target="catalog" />;
-  if (route === "catalog") return <CatalogPage />;
+  if (route === "catalog") return <CatalogIconsPage />;
   if (route === "manage" || route === "catalog-admin" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
   if (route === "dashboard") return <CombinedAnalyticsApp />;
-  if (route.startsWith("features/")) {
-    return <FeaturePage slug={route.slice("features/".length)} />;
-  }
+  if (route.startsWith("features/")) return <FeaturePage slug={route.slice("features/".length)} />;
   return <HubHome />;
 }
