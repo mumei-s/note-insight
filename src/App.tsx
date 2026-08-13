@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { FeaturePage } from "./feature-page";
+import { InsightApp } from "./insight-app";
 import { MemberPortal } from "./member-portal";
 import { PublicHome } from "./public-home";
 
@@ -23,7 +23,7 @@ export function App() {
   }, []);
 
   if (route === "member") return <MemberPortal />;
-  if (route === "dashboard") return <CombinedAnalyticsApp />;
+  if (route === "dashboard") return <InsightApp />;
   if (route.startsWith("features/")) {
     return <FeaturePage slug={route.slice("features/".length)} />;
   }
