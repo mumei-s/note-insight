@@ -16,6 +16,8 @@ const OWNER_TOOL_ENDPOINTS: Record<string, string> = {
     "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-evidence-upload",
   "/owner/creator-upload":
     "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-owner-upload",
+  "/owner/game-data":
+    "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-game-data",
 };
 const OWNER_COMPAT_PATHS = new Set([
   "/api/member/me",
@@ -138,9 +140,7 @@ async function fillIconCache(ids: string[], nativeFetch: typeof window.fetch) {
       for (const item of Array.isArray(payload?.items) ? payload.items : []) {
         if (typeof item?.noteId === "string") iconCache.set(item.noteId, typeof item.image === "string" ? item.image : null);
       }
-    } catch {
-      // 画像補完だけ失敗してもINSIGHT本体は止めない。
-    }
+    } catch {}
   }
 }
 
