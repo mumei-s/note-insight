@@ -109,6 +109,14 @@ function apiTarget(input: RequestInfo | URL) {
   };
 }
 
+function eachSocialPerson(payload: any, fn: (person: any) => void) {
+  for (const side of [payload?.followers, payload?.followings]) {
+    for (const person of Array.isArray(side?.people) ? side.people : []) fn(person);
+    for (const person of Array.isArray(side?.added) ? side.added : []) fn(person);
+    for (const person of Array.isArray(side?.removed) ? side.removed : []) fn(person);
+  }
+}
+
 function collectUrlnames(payload: any) {
   const ids = new Set<string>();
   const add = (value: unknown) => {
@@ -123,6 +131,7 @@ function collectUrlnames(payload: any) {
       for (const message of Array.isArray(thread?.messages) ? thread.messages : []) add(message?.user?.urlname);
     }
   }
+  eachSocialPerson(payload, (person) => add(person?.urlname));
   return [...ids];
 }
 
@@ -160,6 +169,12 @@ function applyIcons(payload: any) {
       }
     }
   }
+  eachSocialPerson(payload, (person) => {
+    const id = person?.urlname;
+    if (person && !person.profileImageUrl && typeof id === "string") {
+      person.profileImageUrl = iconCache.get(id) ?? null;
+    }
+  });
 }
 
 async function enrichOwnerResponse(response: Response, nativeFetch: typeof window.fetch) {
