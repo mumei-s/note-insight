@@ -2,12 +2,19 @@ const STORAGE_PREFIX = "mumei-note-insight";
 const ENTRY_KEY = `${STORAGE_PREFIX}:entry`;
 const MEMBER_KEY = `${STORAGE_PREFIX}:member`;
 const DEVICE_KEY = `${STORAGE_PREFIX}:device`;
+const OWNER_KEY = "mumei-unified-owner-token";
 
-// The API location is not a credential. It is encoded only to keep the old
-// account label out of ordinary page text and casual link previews.
 const API_ORIGIN = atob(
   "aHR0cHM6Ly9ub3RlLWxpa2UtdHJhY2tlci5zYWJvc2FuMDQwNC5jaGF0Z3B0LnNpdGU=",
 );
+const OWNER_COMPAT_ORIGIN =
+  "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-owner-compat";
+const OWNER_COMPAT_PATHS = new Set([
+  "/api/member/me",
+  "/api/member/creators",
+  "/api/member/settings",
+  "/api/analytics",
+]);
 
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -52,41 +59,78 @@ function rememberTokens(payload: unknown) {
   }
 }
 
-function apiUrl(input: RequestInfo | URL) {
+function apiParts(input: RequestInfo | URL) {
   if (typeof input === "string" && input.startsWith("/api/")) {
-    return `${API_ORIGIN}${input}`;
+    const url = new URL(input, window.location.origin);
+    return { path: url.pathname, search: url.search };
   }
   if (input instanceof URL && input.pathname.startsWith("/api/")) {
-    return `${API_ORIGIN}${input.pathname}${input.search}`;
+    return { path: input.pathname, search: input.search };
   }
-  return input;
+  if (input instanceof Request) {
+    const url = new URL(input.url, window.location.origin);
+    if (url.pathname.startsWith("/api/")) {
+      return { path: url.pathname, search: url.search };
+    }
+  }
+  return null;
+}
+
+function apiTarget(input: RequestInfo | URL) {
+  const parts = apiParts(input);
+  if (!parts) return { target: input, ownerCompat: false };
+
+  const ownerToken = localStorage.getItem(OWNER_KEY);
+  if (ownerToken && OWNER_COMPAT_PATHS.has(parts.path)) {
+    const target = new URL(OWNER_COMPAT_ORIGIN);
+    target.searchParams.set("path", parts.path);
+    const sourceParams = new URLSearchParams(parts.search);
+    sourceParams.forEach((value, key) => target.searchParams.append(key, value));
+    return { target: target.toString(), ownerCompat: true };
+  }
+
+  return {
+    target: `${API_ORIGIN}${parts.path}${parts.search}`,
+    ownerCompat: false,
+  };
 }
 
 export function installApiBridge() {
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const target = apiUrl(input);
+    const { target, ownerCompat } = apiTarget(input);
     if (target === input) return nativeFetch(input, init);
 
     const headers = new Headers(
       input instanceof Request ? input.headers : init.headers,
     );
-    const entryToken = localStorage.getItem(ENTRY_KEY);
-    const memberToken = localStorage.getItem(MEMBER_KEY);
-    headers.set("X-Insight-Device", getDeviceId());
-    if (entryToken) headers.set("X-Insight-Entry", entryToken);
-    if (memberToken) headers.set("X-Insight-Member", memberToken);
+
+    if (ownerCompat) {
+      const ownerToken = localStorage.getItem(OWNER_KEY);
+      if (ownerToken) headers.set("X-Owner-Token", ownerToken);
+      headers.delete("X-Insight-Device");
+      headers.delete("X-Insight-Entry");
+      headers.delete("X-Insight-Member");
+    } else {
+      const entryToken = localStorage.getItem(ENTRY_KEY);
+      const memberToken = localStorage.getItem(MEMBER_KEY);
+      headers.set("X-Insight-Device", getDeviceId());
+      if (entryToken) headers.set("X-Insight-Entry", entryToken);
+      if (memberToken) headers.set("X-Insight-Member", memberToken);
+    }
 
     const response = await nativeFetch(target, {
       ...init,
       headers,
       credentials: "omit",
     });
-    void response
-      .clone()
-      .json()
-      .then(rememberTokens)
-      .catch(() => {});
+    if (!ownerCompat) {
+      void response
+        .clone()
+        .json()
+        .then(rememberTokens)
+        .catch(() => {});
+    }
     return response;
   };
 }
