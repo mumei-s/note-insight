@@ -4,6 +4,7 @@ import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { FeaturePage } from "./feature-page";
+import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
 import { ManagementPage } from "./management-page";
 import { MemberPortal } from "./member-portal";
@@ -28,6 +29,7 @@ export function App() {
   if (route === "access/catalog") return <AccessPortal target="catalog" />;
   if (route === "catalog") return <CatalogIconsPage />;
   if (route === "battle") return <BattleArenaPage />;
+  if (route === "game-admin") return <GameAdminPage />;
   if (route === "manage" || route === "catalog-admin" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
   if (route === "dashboard") return <CombinedAnalyticsApp />;
