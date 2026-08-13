@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { AnalyticsApp } from "./analytics-app";
 
 type CoreNotification = {
@@ -86,13 +86,13 @@ function coreHeaders() {
   };
 }
 
-async function coreApi(action: string) {
+async function coreApi<T = CorePayload>(action: string): Promise<T> {
   const response = await fetch(CORE_ENDPOINT, {
     method: "POST",
     headers: coreHeaders(),
     body: JSON.stringify({ action }),
   });
-  const payload = (await response.json()) as CorePayload & { error?: string };
+  const payload = (await response.json()) as T & { error?: string };
   if (!response.ok) {
     throw new Error(payload.error ?? "本人通知Coreへ接続できませんでした。");
   }
@@ -119,7 +119,7 @@ function legacyLabel(kind: LegacyPrivateNotification["kind"]) {
   return "本人通知";
 }
 
-const shellStyle: React.CSSProperties = {
+const shellStyle: CSSProperties = {
   position: "fixed",
   right: 14,
   bottom: 14,
@@ -137,7 +137,7 @@ export function CombinedAnalyticsApp() {
     setLoading(true);
     setMessage("");
     try {
-      const corePayload = await coreApi("dashboard");
+      const corePayload = await coreApi<CorePayload>("dashboard");
       setCore(corePayload);
       if (corePayload.member.noteUrlname) {
         try {
@@ -215,8 +215,7 @@ export function CombinedAnalyticsApp() {
     setLoading(true);
     setMessage("");
     try {
-      const payload = await coreApi("start-verification");
-      setCore(payload);
+      await coreApi<{ verificationCode: string }>("start-verification");
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "コードを発行できませんでした。");
@@ -228,7 +227,7 @@ export function CombinedAnalyticsApp() {
     setLoading(true);
     setMessage("");
     try {
-      await coreApi("check-verification");
+      await coreApi<{ verified: boolean }>("check-verification");
       setMessage("本人確認できました。プロフィールから認証コードを削除して大丈夫です。");
       await load();
     } catch (error) {
