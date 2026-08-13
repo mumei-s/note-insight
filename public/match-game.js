@@ -1,0 +1,1 @@
+window.CreatorMatchGame={shuffle(items){return items.slice().sort(()=>Math.random()-.5)}};
