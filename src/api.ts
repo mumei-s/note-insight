@@ -9,12 +9,15 @@ const API_ORIGIN = atob(
 );
 const OWNER_COMPAT_ORIGIN =
   "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-owner-compat";
+const ICON_ENDPOINT =
+  "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const OWNER_COMPAT_PATHS = new Set([
   "/api/member/me",
   "/api/member/creators",
   "/api/member/settings",
   "/api/analytics",
 ]);
+const iconCache = new Map<string, string | null>();
 
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -95,6 +98,101 @@ function apiTarget(input: RequestInfo | URL) {
   };
 }
 
+function collectUrlnames(payload: any) {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value)) {
+      ids.add(value);
+    }
+  };
+  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
+    add(event?.actorUrlname);
+  }
+  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
+    add(event?.user?.urlname);
+  }
+  for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
+    for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
+      for (const message of Array.isArray(thread?.messages) ? thread.messages : []) add(message?.user?.urlname);
+    }
+  }
+  return [...ids];
+}
+
+async function fillIconCache(
+  ids: string[],
+  nativeFetch: typeof window.fetch,
+) {
+  const missing = ids.filter((id) => !iconCache.has(id));
+  for (let index = 0; index < missing.length; index += 200) {
+    try {
+      const response = await nativeFetch(ICON_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteIds: missing.slice(index, index + 200) }),
+        credentials: "omit",
+      });
+      const payload = await response.json().catch(() => ({}));
+      for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+        if (typeof item?.noteId === "string") {
+          iconCache.set(item.noteId, typeof item.image === "string" ? item.image : null);
+        }
+      }
+    } catch {
+      // 画像補完だけ失敗してもINSIGHT本体は止めない。
+    }
+  }
+}
+
+function applyIcons(payload: any) {
+  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
+    if (!event?.actorImageUrl && typeof event?.actorUrlname === "string") {
+      event.actorImageUrl = iconCache.get(event.actorUrlname) ?? null;
+    }
+  }
+  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
+    const id = event?.user?.urlname;
+    if (event?.user && !event.user.profileImageUrl && typeof id === "string") {
+      event.user.profileImageUrl = iconCache.get(id) ?? null;
+    }
+  }
+  for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
+    for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
+      for (const message of Array.isArray(thread?.messages) ? thread.messages : []) {
+        const id = message?.user?.urlname;
+        if (message?.user && !message.user.profileImageUrl && typeof id === "string") {
+          message.user.profileImageUrl = iconCache.get(id) ?? null;
+        }
+      }
+    }
+  }
+}
+
+async function enrichOwnerResponse(
+  response: Response,
+  nativeFetch: typeof window.fetch,
+) {
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+    return response;
+  }
+  try {
+    const payload = await response.clone().json();
+    const ids = collectUrlnames(payload);
+    if (!ids.length) return response;
+    await fillIconCache(ids, nativeFetch);
+    applyIcons(payload);
+    const headers = new Headers(response.headers);
+    headers.set("Content-Type", "application/json; charset=utf-8");
+    return new Response(JSON.stringify(payload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return response;
+  }
+}
+
 export function installApiBridge() {
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -124,13 +222,14 @@ export function installApiBridge() {
       headers,
       credentials: "omit",
     });
-    if (!ownerCompat) {
-      void response
-        .clone()
-        .json()
-        .then(rememberTokens)
-        .catch(() => {});
+    if (ownerCompat) {
+      return enrichOwnerResponse(response, nativeFetch);
     }
+    void response
+      .clone()
+      .json()
+      .then(rememberTokens)
+      .catch(() => {});
     return response;
   };
 }
