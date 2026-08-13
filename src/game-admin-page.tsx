@@ -4,6 +4,17 @@ type Opponent={id:string;name:string;job:string;rarity:string;image_url:string|n
 type Creator={id:string;note_id:string;display_name:string;images:{position:number;url:string|null}[]};
 type GameData={opponents:Opponent[];creators:Creator[]};
 
+function syncGameAdminShortcut(){
+ if(typeof document==="undefined")return;
+ const id="game-admin-shortcut";const old=document.getElementById(id);const route=window.location.hash.replace(/^#\/?/,"");
+ const visible=route==="manage"||route==="catalog-admin"||route.startsWith("manage/");
+ if(!visible){old?.remove();return}if(old)return;
+ const link=document.createElement("a");link.id=id;link.href="#game-admin";link.textContent="バトル・ゲーム管理 →";
+ link.style.cssText="position:fixed;right:14px;bottom:14px;z-index:82;border:1px solid #ffcf5a;border-radius:999px;background:#211a0b;color:#ffdf79;padding:12px 16px;font-weight:950;text-decoration:none;box-shadow:0 12px 36px rgba(0,0,0,.38)";
+ document.body.appendChild(link);
+}
+if(typeof window!=="undefined"){window.addEventListener("hashchange",syncGameAdminShortcut);window.setTimeout(syncGameAdminShortcut,0)}
+
 export function GameAdminPage(){
   const[data,setData]=useState<GameData>({opponents:[],creators:[]});
   const[busy,setBusy]=useState("");
