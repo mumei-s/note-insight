@@ -28,7 +28,7 @@ export function App() {
   if (route === "access/insight") return <AccessPortal target="insight" />;
   if (route === "access/catalog") return <AccessPortal target="catalog" />;
   if (route === "catalog") return <CatalogPage />;
-  if (route === "manage" || route.startsWith("manage/")) return <ManagementPage />;
+  if (route === "manage" || route === "catalog-admin" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
   if (route === "dashboard") return <CombinedAnalyticsApp />;
   if (route.startsWith("features/")) {
