@@ -12,13 +12,19 @@
     <link rel="stylesheet" href="./creator-world-premium.css" />
     <style>
       .evidence-fab,#insight-dashboard-evidence-link{display:none!important}
-      div[style*="position: fixed"][style*="right: 14px"][style*="bottom: 14px"][style*="z-index: 80"]{
-        position:absolute!important;top:82px!important;right:14px!important;bottom:auto!important
-      }
+      div[style*="position: fixed"][style*="right: 14px"][style*="bottom: 14px"][style*="z-index: 80"]{display:none!important}
+      #insight-tool-row{display:none;background:#080d13;border-bottom:1px solid #243044;padding:9px 12px}
+      body:has(.app-shell) #insight-tool-row{display:block}
+      #insight-tool-row>div{width:min(1280px,100%);margin:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      #insight-tool-row strong{margin-right:auto;color:#dce7f4}
+      #insight-tool-row a{border:1px solid #33465d;border-radius:999px;padding:8px 12px;color:#dce7f4;text-decoration:none;font-weight:850}
+      #insight-tool-row a:first-of-type{color:#cfff64;border-color:#718b2f}
+      #insight-tool-row a:last-of-type{color:#75e6ff;border-color:#2b7890}
     </style>
     <title>無名 S note｜note INSIGHT</title>
   </head>
   <body>
+    <div id="insight-tool-row"><div><strong>INSIGHTツール</strong><a href="./notification-setup.html">本人通知を設定</a><a href="#evidence">ダッシュボード資料庫</a></div></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
