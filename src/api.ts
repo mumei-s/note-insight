@@ -99,7 +99,11 @@ function apiTarget(input: RequestInfo | URL) {
     target.searchParams.set("path", parts.path);
     const sourceParams = new URLSearchParams(parts.search);
     sourceParams.forEach((value, key) => target.searchParams.append(key, value));
-    return { target: target.toString(), ownerCompat: true, enrich: parts.path === "/api/analytics" };
+    return {
+      target: target.toString(),
+      ownerCompat: true,
+      enrich: parts.path === "/api/analytics",
+    };
   }
 
   return {
@@ -124,48 +128,78 @@ function collectUrlnames(payload: any) {
       ids.add(value);
     }
   };
-  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) add(event?.actorUrlname);
-  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) add(event?.user?.urlname);
+
+  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
+    if (!event?.actorImageUrl) add(event?.actorUrlname);
+  }
+  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
+    if (!event?.user?.profileImageUrl) add(event?.user?.urlname);
+  }
   for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
     for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
-      for (const message of Array.isArray(thread?.messages) ? thread.messages : []) add(message?.user?.urlname);
+      for (const message of Array.isArray(thread?.messages) ? thread.messages : []) {
+        if (!message?.user?.profileImageUrl) add(message?.user?.urlname);
+      }
     }
   }
-  eachSocialPerson(payload, (person) => add(person?.urlname));
+  eachSocialPerson(payload, (person) => {
+    if (!person?.profileImageUrl) add(person?.urlname);
+  });
   return [...ids];
 }
 
 async function fillIconCache(ids: string[], nativeFetch: typeof window.fetch) {
   const missing = ids.filter((id) => !iconCache.has(id));
+  const chunks: string[][] = [];
   for (let index = 0; index < missing.length; index += 200) {
-    try {
-      const response = await nativeFetch(ICON_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ noteIds: missing.slice(index, index + 200) }),
-        credentials: "omit",
-      });
-      const payload = await response.json().catch(() => ({}));
-      for (const item of Array.isArray(payload?.items) ? payload.items : []) {
-        if (typeof item?.noteId === "string") iconCache.set(item.noteId, typeof item.image === "string" ? item.image : null);
-      }
-    } catch {}
+    chunks.push(missing.slice(index, index + 200));
+  }
+
+  for (let start = 0; start < chunks.length; start += 4) {
+    const group = chunks.slice(start, start + 4);
+    await Promise.all(
+      group.map(async (noteIds) => {
+        try {
+          const response = await nativeFetch(ICON_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ noteIds }),
+            credentials: "omit",
+          });
+          const payload = await response.json().catch(() => ({}));
+          for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+            if (typeof item?.noteId === "string") {
+              iconCache.set(
+                item.noteId,
+                typeof item.image === "string" ? item.image : null,
+              );
+            }
+          }
+        } catch {}
+      }),
+    );
   }
 }
 
 function applyIcons(payload: any) {
   for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
-    if (!event?.actorImageUrl && typeof event?.actorUrlname === "string") event.actorImageUrl = iconCache.get(event.actorUrlname) ?? null;
+    if (!event?.actorImageUrl && typeof event?.actorUrlname === "string") {
+      event.actorImageUrl = iconCache.get(event.actorUrlname) ?? null;
+    }
   }
   for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
     const id = event?.user?.urlname;
-    if (event?.user && !event.user.profileImageUrl && typeof id === "string") event.user.profileImageUrl = iconCache.get(id) ?? null;
+    if (event?.user && !event.user.profileImageUrl && typeof id === "string") {
+      event.user.profileImageUrl = iconCache.get(id) ?? null;
+    }
   }
   for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
     for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
       for (const message of Array.isArray(thread?.messages) ? thread.messages : []) {
         const id = message?.user?.urlname;
-        if (message?.user && !message.user.profileImageUrl && typeof id === "string") message.user.profileImageUrl = iconCache.get(id) ?? null;
+        if (message?.user && !message.user.profileImageUrl && typeof id === "string") {
+          message.user.profileImageUrl = iconCache.get(id) ?? null;
+        }
       }
     }
   }
@@ -178,7 +212,9 @@ function applyIcons(payload: any) {
 }
 
 async function enrichOwnerResponse(response: Response, nativeFetch: typeof window.fetch) {
-  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+    return response;
+  }
   try {
     const payload = await response.clone().json();
     const ids = collectUrlnames(payload);
@@ -187,7 +223,11 @@ async function enrichOwnerResponse(response: Response, nativeFetch: typeof windo
     applyIcons(payload);
     const headers = new Headers(response.headers);
     headers.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
+    return new Response(JSON.stringify(payload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   } catch {
     return response;
   }
@@ -214,8 +254,14 @@ export function installApiBridge() {
       if (memberToken) headers.set("X-Insight-Member", memberToken);
     }
 
-    const response = await nativeFetch(target, { ...init, headers, credentials: "omit" });
-    if (ownerCompat) return enrich ? enrichOwnerResponse(response, nativeFetch) : response;
+    const response = await nativeFetch(target, {
+      ...init,
+      headers,
+      credentials: "omit",
+    });
+    if (ownerCompat) {
+      return enrich ? enrichOwnerResponse(response, nativeFetch) : response;
+    }
     void response.clone().json().then(rememberTokens).catch(() => {});
     return response;
   };
