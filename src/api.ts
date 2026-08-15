@@ -121,6 +121,36 @@ function eachSocialPerson(payload: any, fn: (person: any) => void) {
   }
 }
 
+function primeIconCache(payload: any) {
+  const remember = (id: unknown, image: unknown) => {
+    if (
+      typeof id === "string" &&
+      /^[A-Za-z0-9_-]{1,64}$/.test(id) &&
+      typeof image === "string" &&
+      image
+    ) {
+      iconCache.set(id, image);
+    }
+  };
+
+  for (const event of Array.isArray(payload?.activityEvents) ? payload.activityEvents : []) {
+    remember(event?.actorUrlname, event?.actorImageUrl);
+  }
+  for (const event of Array.isArray(payload?.cachedLikerEvents) ? payload.cachedLikerEvents : []) {
+    remember(event?.user?.urlname, event?.user?.profileImageUrl);
+  }
+  for (const result of Array.isArray(payload?.cachedCommentResults) ? payload.cachedCommentResults : []) {
+    for (const thread of Array.isArray(result?.threads) ? result.threads : []) {
+      for (const message of Array.isArray(thread?.messages) ? thread.messages : []) {
+        remember(message?.user?.urlname, message?.user?.profileImageUrl);
+      }
+    }
+  }
+  eachSocialPerson(payload, (person) => {
+    remember(person?.urlname, person?.profileImageUrl);
+  });
+}
+
 function collectUrlnames(payload: any) {
   const ids = new Set<string>();
   const add = (value: unknown) => {
@@ -217,17 +247,20 @@ async function enrichOwnerResponse(response: Response, nativeFetch: typeof windo
   }
   try {
     const payload = await response.clone().json();
+    primeIconCache(payload);
     const ids = collectUrlnames(payload);
-    if (!ids.length) return response;
-    await fillIconCache(ids, nativeFetch);
-    applyIcons(payload);
-    const headers = new Headers(response.headers);
-    headers.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify(payload), {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    if (ids.length) {
+      await fillIconCache(ids, nativeFetch);
+      applyIcons(payload);
+      const headers = new Headers(response.headers);
+      headers.set("Content-Type", "application/json; charset=utf-8");
+      return new Response(JSON.stringify(payload), {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+    return response;
   } catch {
     return response;
   }
