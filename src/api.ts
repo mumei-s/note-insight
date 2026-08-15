@@ -8,7 +8,7 @@ const API_ORIGIN = atob(
   "aHR0cHM6Ly9ub3RlLWxpa2UtdHJhY2tlci5zYWJvc2FuMDQwNC5jaGF0Z3B0LnNpdGU=",
 );
 const OWNER_COMPAT_ORIGIN =
-  "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-owner-compat";
+  "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-owner-fast";
 const ICON_ENDPOINT =
   "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const OWNER_TOOL_ENDPOINTS: Record<string, string> = {
@@ -175,7 +175,7 @@ function collectUrlnames(payload: any) {
   eachSocialPerson(payload, (person) => {
     if (!person?.profileImageUrl) add(person?.urlname);
   });
-  return [...ids];
+  return [...ids].slice(0, 400);
 }
 
 async function fillIconCache(ids: string[], nativeFetch: typeof window.fetch) {
@@ -185,30 +185,27 @@ async function fillIconCache(ids: string[], nativeFetch: typeof window.fetch) {
     chunks.push(missing.slice(index, index + 200));
   }
 
-  for (let start = 0; start < chunks.length; start += 4) {
-    const group = chunks.slice(start, start + 4);
-    await Promise.all(
-      group.map(async (noteIds) => {
-        try {
-          const response = await nativeFetch(ICON_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ noteIds }),
-            credentials: "omit",
-          });
-          const payload = await response.json().catch(() => ({}));
-          for (const item of Array.isArray(payload?.items) ? payload.items : []) {
-            if (typeof item?.noteId === "string") {
-              iconCache.set(
-                item.noteId,
-                typeof item.image === "string" ? item.image : null,
-              );
-            }
+  await Promise.all(
+    chunks.map(async (noteIds) => {
+      try {
+        const response = await nativeFetch(ICON_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteIds }),
+          credentials: "omit",
+        });
+        const payload = await response.json().catch(() => ({}));
+        for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+          if (typeof item?.noteId === "string") {
+            iconCache.set(
+              item.noteId,
+              typeof item.image === "string" ? item.image : null,
+            );
           }
-        } catch {}
-      }),
-    );
-  }
+        }
+      } catch {}
+    }),
+  );
 }
 
 function applyIcons(payload: any) {
