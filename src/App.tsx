@@ -4,6 +4,7 @@ import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidencePage } from "./evidence-page";
+import { FastInsightApp } from "./fast-insight-app";
 import { FeaturePage } from "./feature-page";
 import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
@@ -34,7 +35,8 @@ export function App() {
   if (route === "evidence") return <EvidencePage />;
   if (route === "manage" || route === "catalog-admin" || route.startsWith("manage/")) return <ManagementPage />;
   if (route === "member") return <MemberPortal />;
-  if (route === "dashboard") return <CombinedAnalyticsApp />;
+  if (route === "dashboard") return <FastInsightApp />;
+  if (route === "dashboard-legacy") return <CombinedAnalyticsApp />;
   if (route.startsWith("features/")) return <FeaturePage slug={route.slice("features/".length)} />;
   return <HubHome />;
 }
