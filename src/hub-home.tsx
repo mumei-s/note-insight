@@ -1,7 +1,5 @@
 import type { CSSProperties } from "react";
 
-// TOP navigation is intentionally fixed to three public entrances.
-// OWNER management remains a single separate entrance at the very bottom.
 const page: CSSProperties = {
   minHeight: "100vh",
   background: "#070a0f",
@@ -35,11 +33,11 @@ const button: CSSProperties = {
 
 function Entrance({ title, label, copy, href, accent }: { title: string; label: string; copy: string; href: string; accent: string }) {
   return (
-    <article style={{ ...card, display: "flex", flexDirection: "column", minHeight: 285, borderColor: `${accent}55` }}>
+    <article style={{ ...card, display: "flex", flexDirection: "column", minHeight: 270, borderColor: `${accent}55` }}>
       <small style={{ color: accent, fontWeight: 950, letterSpacing: ".14em" }}>{label}</small>
       <h2 style={{ fontSize: 32, margin: "12px 0 10px" }}>{title}</h2>
       <p style={{ color: "#aab6c8", lineHeight: 1.78, margin: 0, flex: 1 }}>{copy}</p>
-      <a href={href} style={{ ...button, marginTop: 24, background: accent, color: "#071016", boxShadow: `0 10px 30px ${accent}22` }}>開く →</a>
+      <a href={href} style={{ ...button, marginTop: 24, background: accent, color: "#071016" }}>開く →</a>
     </article>
   );
 }
@@ -47,7 +45,7 @@ function Entrance({ title, label, copy, href, accent }: { title: string; label: 
 export function HubHome() {
   return (
     <div style={page}>
-      <header style={{ borderBottom: "1px solid #202938", background: "rgba(7,10,15,.95)", position: "sticky", top: 0, zIndex: 20 }}>
+      <header style={{ borderBottom: "1px solid #202938", background: "rgba(7,10,15,.95)" }}>
         <div style={{ ...wrap, minHeight: 68, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <a href="#" style={{ color: "#fff", textDecoration: "none", fontWeight: 950, fontSize: 18 }}>
             <span style={{ display: "block", color: "#b6ff38", fontSize: 11, letterSpacing: ".16em" }}>無名S note</span>
@@ -58,32 +56,53 @@ export function HubHome() {
       </header>
 
       <main>
-        <section style={{ ...wrap, padding: "72px 0 38px" }}>
+        <section style={{ ...wrap, padding: "66px 0 34px" }}>
           <p style={{ color: "#b6ff38", fontWeight: 950, letterSpacing: ".15em", margin: 0 }}>MUMEI S NOTE CREATOR SYSTEM</p>
-          <h1 style={{ fontSize: "clamp(38px,7vw,78px)", lineHeight: 1.04, margin: "14px 0 18px", maxWidth: 980 }}>
-            分析する。つながる。遊ぶ。<br />
-            <span style={{ color: "#b6ff38" }}>3つの入口を、ひとつの場所に。</span>
+          <h1 style={{ fontSize: "clamp(40px,7vw,76px)", lineHeight: 1.05, margin: "14px 0 18px" }}>
+            無名S note CREATOR HUB
           </h1>
-          <p style={{ maxWidth: 800, color: "#aab6c8", lineHeight: 1.85, fontSize: 16 }}>
-            noteの活動分析はINSIGHT、カードを保存して眺める場所はクリエイター名鑑、カードで遊ぶ場所はゲームセンター。利用する機能をここから直接選びます。
+          <p style={{ maxWidth: 760, color: "#aab6c8", lineHeight: 1.85 }}>
+            使いたい機能を選択してください。
           </p>
         </section>
 
-        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 90 }}>
-          <Entrance title="INSIGHT" label="ANALYTICS" copy="スキ、コメント、返信、フォロー・フォロワー、マガジン、本人通知、ダッシュボード資料をまとめて確認・分析します。" href="#access/insight" accent="#b6ff38" />
-          <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターが自分のカード、紹介文、おすすめ記事をアルバムのように保存・公開する名鑑です。" href="#catalog" accent="#54d8ff" />
-          <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードを使って遊ぶゲームエリアです。" href="#battle" accent="#ffd76b" />
+        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 100 }}>
+          <Entrance
+            title="INSIGHT"
+            label="ANALYTICS"
+            copy="noteのスキ、コメント、フォロー、マガジン、本人通知、分析をまとめて確認します。"
+            href="#access/insight"
+            accent="#b6ff38"
+          />
+          <Entrance
+            title="クリエイター名鑑"
+            label="CREATOR DIRECTORY"
+            copy="参加クリエイターのカードや紹介、おすすめ記事をアルバムのように保存して見る場所です。"
+            href="#catalog"
+            accent="#54d8ff"
+          />
+          <Entrance
+            title="ゲームセンター"
+            label="CREATOR WORLD"
+            copy="名鑑に登録したクリエイターカードを使って遊ぶゲームエリアです。"
+            href="#battle"
+            accent="#ffd76b"
+          />
         </section>
 
-        <section style={{ borderTop: "1px solid #202938", background: "radial-gradient(circle at 50% 100%,rgba(255,207,90,.08),transparent 55%)" }}>
-          <div style={{ ...wrap, padding: "70px 0 76px" }}>
+        <section style={{ borderTop: "1px solid #202938", background: "#080b10" }}>
+          <div style={{ ...wrap, padding: "76px 0 84px" }}>
             <article style={{ ...card, borderColor: "#4d4326", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 24, alignItems: "center" }}>
               <div>
                 <small style={{ color: "#ffcf5a", fontWeight: 950, letterSpacing: ".14em" }}>OWNER ONLY</small>
                 <h2 style={{ fontSize: 30, margin: "8px 0" }}>管理ページ</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>INSIGHT参加管理、名鑑申請管理、対戦カード管理など、OWNER専用操作はこちらから。</p>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>
+                  OWNER専用の管理機能はこちら。
+                </p>
               </div>
-              <a href="#owner" style={{ ...button, background: "#ffcf5a", color: "#171000", minWidth: 180 }}>管理ページへ →</a>
+              <a href="#owner" style={{ ...button, background: "#ffcf5a", color: "#171000", minWidth: 180 }}>
+                管理ページへ →
+              </a>
             </article>
           </div>
         </section>
