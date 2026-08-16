@@ -46,12 +46,11 @@ export function HubHome() {
   return (
     <div style={page}>
       <header style={{ borderBottom: "1px solid #202938", background: "rgba(7,10,15,.95)" }}>
-        <div style={{ ...wrap, minHeight: 68, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ ...wrap, minHeight: 68, display: "flex", alignItems: "center" }}>
           <a href="#" style={{ color: "#fff", textDecoration: "none", fontWeight: 950, fontSize: 18 }}>
             <span style={{ display: "block", color: "#b6ff38", fontSize: 11, letterSpacing: ".16em" }}>無名S note</span>
             CREATOR HUB
           </a>
-          <span style={{ color: "#7f8ba0", fontSize: 12 }}>INSIGHT × 名鑑 × GAME CENTER</span>
         </div>
       </header>
 
@@ -67,27 +66,9 @@ export function HubHome() {
         </section>
 
         <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 100 }}>
-          <Entrance
-            title="INSIGHT"
-            label="ANALYTICS"
-            copy="noteのスキ、コメント、フォロー、マガジン、本人通知、分析をまとめて確認します。"
-            href="#access/insight"
-            accent="#b6ff38"
-          />
-          <Entrance
-            title="クリエイター名鑑"
-            label="CREATOR DIRECTORY"
-            copy="参加クリエイターのカードや紹介、おすすめ記事をアルバムのように保存して見る場所です。"
-            href="#catalog"
-            accent="#54d8ff"
-          />
-          <Entrance
-            title="ゲームセンター"
-            label="CREATOR WORLD"
-            copy="名鑑に登録したクリエイターカードを使って遊ぶゲームエリアです。"
-            href="#battle"
-            accent="#ffd76b"
-          />
+          <Entrance title="INSIGHT" label="ANALYTICS" copy="note活動を確認・管理・分析します。" href="#access/insight" accent="#b6ff38" />
+          <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff" />
+          <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードで遊ぶゲームエリアです。" href="#battle" accent="#ffd76b" />
         </section>
 
         <section style={{ borderTop: "1px solid #202938", background: "#080b10" }}>
@@ -96,13 +77,9 @@ export function HubHome() {
               <div>
                 <small style={{ color: "#ffcf5a", fontWeight: 950, letterSpacing: ".14em" }}>OWNER ONLY</small>
                 <h2 style={{ fontSize: 30, margin: "8px 0" }}>管理ページ</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>
-                  OWNER専用の管理機能はこちら。
-                </p>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>OWNER専用の管理機能はこちら。</p>
               </div>
-              <a href="#owner" style={{ ...button, background: "#ffcf5a", color: "#171000", minWidth: 180 }}>
-                管理ページへ →
-              </a>
+              <a href="#owner" style={{ ...button, background: "#ffcf5a", color: "#171000", minWidth: 180 }}>管理ページへ →</a>
             </article>
           </div>
         </section>
