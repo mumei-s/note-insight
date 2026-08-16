@@ -65,19 +65,19 @@ export function HubHome() {
           </p>
         </section>
 
-        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 100 }}>
+        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 110 }}>
           <Entrance title="INSIGHT" label="ANALYTICS" copy="note活動を確認・管理・分析します。" href="#access/insight" accent="#b6ff38" />
           <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff" />
           <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードで遊ぶゲームエリアです。" href="#battle" accent="#ffd76b" />
         </section>
 
         <section style={{ borderTop: "1px solid #202938", background: "#080b10" }}>
-          <div style={{ ...wrap, padding: "76px 0 84px" }}>
+          <div style={{ ...wrap, padding: "84px 0 92px" }}>
             <article style={{ ...card, borderColor: "#4d4326", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 24, alignItems: "center" }}>
               <div>
                 <small style={{ color: "#ffcf5a", fontWeight: 950, letterSpacing: ".14em" }}>OWNER ONLY</small>
                 <h2 style={{ fontSize: 30, margin: "8px 0" }}>管理ページ</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>OWNER専用の管理機能はこちら。</p>
+                <p style={{ color: "#9ca9bb", lineHeight: 1.75, margin: 0 }}>OWNER専用の管理機能。</p>
               </div>
               <a href="#owner" style={{ ...button, background: "#ffcf5a", color: "#171000", minWidth: 180 }}>管理ページへ →</a>
             </article>
