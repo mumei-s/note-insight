@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 // TOP navigation is intentionally fixed to three public entrances.
-// OWNER management remains a single separate entrance at the bottom.
+// OWNER management remains a single separate entrance at the very bottom.
 const page: CSSProperties = {
   minHeight: "100vh",
   background: "#070a0f",
@@ -69,10 +69,10 @@ export function HubHome() {
           </p>
         </section>
 
-        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 76 }}>
+        <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 90 }}>
           <Entrance title="INSIGHT" label="ANALYTICS" copy="スキ、コメント、返信、フォロー・フォロワー、マガジン、本人通知、ダッシュボード資料をまとめて確認・分析します。" href="#access/insight" accent="#b6ff38" />
           <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターが自分のカード、紹介文、おすすめ記事をアルバムのように保存・公開する名鑑です。" href="#catalog" accent="#54d8ff" />
-          <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードを使って、選択式・タップ・パズル・シューティングなどのゲームへ進みます。" href="#battle" accent="#ffd76b" />
+          <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードを使って遊ぶゲームエリアです。" href="#battle" accent="#ffd76b" />
         </section>
 
         <section style={{ borderTop: "1px solid #202938", background: "radial-gradient(circle at 50% 100%,rgba(255,207,90,.08),transparent 55%)" }}>
@@ -88,10 +88,6 @@ export function HubHome() {
           </div>
         </section>
       </main>
-
-      <footer style={{ borderTop: "1px solid #202938", padding: "26px 0", color: "#7f8ba0" }}>
-        <div style={wrap}>無名S note CREATOR HUB</div>
-      </footer>
     </div>
   );
 }
