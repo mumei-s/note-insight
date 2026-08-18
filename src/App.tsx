@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { AccessPortal } from "./access-portal";
+import { ArticleLikesPage } from "./article-likes-page";
 import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogAdminV2 } from "./catalog-admin-v2";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidenceV2 } from "./evidence-v2";
-import { FastInsightV3 } from "./fast-insight-v3";
+import { FastInsightV4 } from "./fast-insight-v4";
 import { FeaturePage } from "./feature-page";
 import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
@@ -36,12 +37,13 @@ export function App() {
   if (route === "battle") return <BattleArenaPage />;
   if (route === "game-admin") return <GameAdminPage />;
   if (route === "evidence") return <EvidenceV2 />;
+  if (route === "article-likes") return <ArticleLikesPage />;
   if (route === "owner") return <OwnerGate />;
   if (route === "manage") return <OwnerHub />;
   if (route === "catalog-admin") return <CatalogAdminV2 />;
   if (route === "insight-admin") return <InsightAdminV2 />;
   if (route === "member") return <MemberPortal />;
-  if (route === "dashboard") return <FastInsightV3 />;
+  if (route === "dashboard") return <FastInsightV4 />;
   if (route === "dashboard-legacy") return <CombinedAnalyticsApp />;
   if (route.startsWith("features/")) return <FeaturePage slug={route.slice("features/".length)} />;
   return <HubHome />;
