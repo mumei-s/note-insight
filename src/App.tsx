@@ -6,7 +6,7 @@ import { CatalogAdminV2 } from "./catalog-admin-v2";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidenceV2 } from "./evidence-v2";
-import { FastInsightV5 } from "./fast-insight-v5";
+import { FastInsightV6 } from "./fast-insight-v6";
 import { FeaturePage } from "./feature-page";
 import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
@@ -43,7 +43,7 @@ export function App() {
   if (route === "catalog-admin") return <CatalogAdminV2 />;
   if (route === "insight-admin") return <InsightAdminV2 />;
   if (route === "member") return <MemberPortal />;
-  if (route === "dashboard") return <FastInsightV5 />;
+  if (route === "dashboard") return <FastInsightV6 />;
   if (route === "dashboard-legacy") return <CombinedAnalyticsApp />;
   if (route.startsWith("features/")) return <FeaturePage slug={route.slice("features/".length)} />;
   return <HubHome />;
