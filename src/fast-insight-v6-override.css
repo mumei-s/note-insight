@@ -1,0 +1,7 @@
+.iv3-panel[data-insight-v6] > .iv6-panel,
+.iv3-panel[data-insight-v6][data-insight-v5] > .iv6-panel {
+  display: block !important;
+}
+.iv3-panel[data-insight-v6] > .iv5-panel {
+  display: none !important;
+}
