@@ -7,6 +7,7 @@ import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidenceV2 } from "./evidence-v2";
 import { FastInsightV6 } from "./fast-insight-v6";
+import "./fast-insight-v6-override.css";
 import { FeaturePage } from "./feature-page";
 import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
