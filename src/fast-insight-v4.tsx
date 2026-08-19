@@ -61,5 +61,5 @@ export function FastInsightV4(){
     observer.observe(document.body,{childList:true,subtree:true});
     return()=>observer.disconnect();
   },[]);
-  return <><FastInsightV3/>{topTarget?createPortal(<a href="#article-likes" style={{borderColor:"#6d5dfc",color:"#c9c2ff"}}>記事別スキ分析</a>,topTarget):null}{socialTarget?createPortal(<SocialSummary/>,socialTarget):null}</>;
+  return <><FastInsightV3/>{topTarget?createPortal(<><a href="#article-likes" style={{borderColor:"#6d5dfc",color:"#c9c2ff"}}>記事別スキ分析</a><a href="./notification-import.html" style={{borderColor:"#54d8ff",color:"#8feaff"}}>note通知を取り込む</a></>,topTarget):null}{socialTarget?createPortal(<SocialSummary/>,socialTarget):null}</>;
 }
