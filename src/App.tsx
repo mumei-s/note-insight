@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AccessPortal } from "./access-portal";
-import { ArticleLikesPage } from "./article-likes-page";
+import { ArticleLikesPageV2 } from "./article-likes-page-v2";
 import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogAdminV2 } from "./catalog-admin-v2";
 import { CatalogIconsPage } from "./catalog-icons-page";
@@ -38,7 +38,7 @@ export function App() {
   if (route === "battle") return <BattleArenaPage />;
   if (route === "game-admin") return <GameAdminPage />;
   if (route === "evidence") return <EvidenceV2 />;
-  if (route === "article-likes") return <ArticleLikesPage />;
+  if (route === "article-likes") return <ArticleLikesPageV2 />;
   if (route === "owner") return <OwnerGate />;
   if (route === "manage") return <OwnerHub />;
   if (route === "catalog-admin") return <CatalogAdminV2 />;
