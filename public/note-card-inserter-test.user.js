@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.1.0
-// @description  note編集画面へ極薄カード画像を直接挿入し、元記事リンク設定まで試す1枚テスト
+// @version      0.2.0
+// @description  note編集画面へ極薄カード画像を直接挿入し、その画像だけを元記事URLへリンクする1枚テスト
 // @match        https://note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -86,89 +86,60 @@
     return null;
   }
 
-  function labelOf(el) {
-    return [
-      el.getAttribute('aria-label'),
-      el.getAttribute('title'),
-      el.getAttribute('data-tooltip'),
-      el.getAttribute('data-testid'),
-      el.textContent
-    ].filter(Boolean).join(' ').trim();
+  function exactLinkedImage(img) {
+    const a = img.closest('a[href]');
+    if (!a) return false;
+    try {
+      return new URL(a.href, location.href).href === new URL(ARTICLE_URL).href;
+    } catch (_) {
+      return false;
+    }
   }
 
-  async function trySetImageLink(img) {
-    const beforeVisibleButtons = new Set(
-      [...document.querySelectorAll('button,[role="button"]')].filter(el => visible(el))
-    );
-    const beforeVisibleInputs = new Set(
-      [...document.querySelectorAll('input')].filter(el => visible(el))
-    );
-
+  async function setExactImageLink(img, editor) {
+    // Never guess toolbar buttons. Only operate on the image inserted by this run.
     img.scrollIntoView({ block: 'center', behavior: 'instant' });
-    img.click();
-    img.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-    img.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    await sleep(250);
+
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNode(img);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    let commandWorked = false;
+    try {
+      commandWorked = document.execCommand('createLink', false, ARTICLE_URL);
+    } catch (_) {}
     await sleep(700);
 
-    const allButtons = [...document.querySelectorAll('button,[role="button"]')]
-      .filter(el => visible(el) && !el.closest('#' + BUTTON_ID) && !el.closest('#' + PANEL_ID));
+    if (exactLinkedImage(img)) return { ok: true, method: 'createLink' };
 
-    let linkButton = allButtons.find(el => /(^|\s)(リンク|link|url)(\s|$)|リンクを|link to/i.test(labelOf(el)));
+    // Some ProseMirror builds normalize the DOM after execCommand. Try one scoped DOM mutation
+    // and immediately verify. If the editor rejects it, remove it and report failure.
+    let wrapper = null;
+    try {
+      wrapper = document.createElement('a');
+      wrapper.href = ARTICLE_URL;
+      wrapper.setAttribute('data-mumei-thin-card-link', '1');
+      img.parentNode.insertBefore(wrapper, img);
+      wrapper.appendChild(img);
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'formatCreateLink' }));
+      await sleep(900);
+      if (exactLinkedImage(img)) return { ok: true, method: commandWorked ? 'createLink+verify' : 'scoped-wrap' };
+    } catch (_) {}
 
-    if (!linkButton) {
-      const newButtons = allButtons.filter(el => !beforeVisibleButtons.has(el));
-      const imgRect = img.getBoundingClientRect();
-      const nearby = newButtons.filter(el => {
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const ix = imgRect.left + imgRect.width / 2;
-        const iy = imgRect.top + imgRect.height / 2;
-        return Math.abs(cx - ix) < Math.max(380, imgRect.width) && Math.abs(cy - iy) < 260;
-      });
-      if (nearby.length >= 1 && nearby.length <= 8) {
-        nearby.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        linkButton = nearby[0]; // note公式では画像ツールバーのリンクは一番左
-      }
+    // Safety rollback: never leave an unverified or wrong link around the image.
+    const current = img.closest('a[href]');
+    if (current) {
+      let isExact = false;
+      try { isExact = new URL(current.href, location.href).href === new URL(ARTICLE_URL).href; } catch (_) {}
+      if (!isExact && current.parentNode) current.replaceWith(img);
     }
+    if (wrapper && wrapper.isConnected && wrapper.parentNode) wrapper.replaceWith(img);
 
-    if (!linkButton) return { ok: false, reason: '画像ツールバーのリンクボタンを特定できませんでした' };
-
-    linkButton.click();
-    await sleep(500);
-
-    const inputs = [...document.querySelectorAll('input')].filter(el => visible(el));
-    let input = inputs.find(el => /url|リンク|link/i.test([
-      el.type,
-      el.placeholder,
-      el.getAttribute('aria-label'),
-      el.name
-    ].filter(Boolean).join(' ')));
-    if (!input) input = inputs.find(el => !beforeVisibleInputs.has(el));
-    if (!input) return { ok: false, reason: 'URL入力欄を特定できませんでした' };
-
-    input.focus();
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    if (setter) setter.call(input, ARTICLE_URL);
-    else input.value = ARTICLE_URL;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    await sleep(150);
-
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-    await sleep(500);
-
-    const okButton = [...document.querySelectorAll('button,[role="button"]')]
-      .filter(el => visible(el))
-      .find(el => /^(OK|設定|適用|保存)$/i.test((el.textContent || '').trim()));
-    if (okButton) okButton.click();
-
-    await sleep(700);
-    const linked = img.closest('a[href]');
-    if (linked && linked.href.includes('note.com/ss_yr/n/nc14eb3f2ea9f')) return { ok: true, verified: true };
-    if (document.documentElement.innerHTML.includes(ARTICLE_URL)) return { ok: true, verified: false };
-    return { ok: true, verified: false };
+    sel.removeAllRanges();
+    return { ok: false };
   }
 
   async function insertCard() {
@@ -187,24 +158,23 @@
       const dt = new DataTransfer();
       dt.items.add(file);
       const p = selectionPoint(editor);
-      const ev = new DragEvent('drop', {
+      editor.dispatchEvent(new DragEvent('drop', {
         bubbles: true,
         cancelable: true,
         clientX: p.x,
         clientY: p.y,
         dataTransfer: dt
-      });
-      editor.dispatchEvent(ev);
+      }));
 
       const img = await waitForNewImage(editor, before);
       if (!img) throw new Error('画像挿入を確認できませんでした');
 
-      setStatus('3/3 元記事リンクを設定中…');
-      const linked = await trySetImageLink(img);
-      if (linked.ok) {
-        setStatus(linked.verified ? '✅ 画像挿入＋リンク設定まで確認できました' : '✅ 画像挿入＋リンク設定処理まで完了。画像を1回タップしてリンクだけ確認してください');
+      setStatus('3/3 この画像だけに元記事リンクを設定中…');
+      const linked = await setExactImageLink(img, editor);
+      if (linked.ok && exactLinkedImage(img)) {
+        setStatus('✅ 画像挿入＋正しい記事URLを確認しました');
       } else {
-        setStatus('⚠️ 画像は挿入できました。' + linked.reason, true);
+        setStatus('⚠️ 画像は挿入できましたが、リンクは安全に設定できなかったので付けずに止めました', true);
       }
     } catch (e) {
       setStatus('⚠️ ' + (e?.message || String(e)), true);
