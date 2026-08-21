@@ -1,0 +1,58 @@
+name: Check live creator top10 order
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install selenium
+      - name: Read live public order
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re,time
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          o=Options(); o.add_argument('--headless=new'); o.add_argument('--no-sandbox'); o.add_argument('--disable-dev-shm-usage'); o.add_argument('--window-size=1536,2400'); o.add_argument('--lang=ja-JP'); o.add_argument('--user-agent=Mozilla/5.0 Chrome/138 Safari/537.36')
+          d=webdriver.Chrome(options=o)
+          try:
+              d.get('https://note.com/ss_yr'); time.sleep(8)
+              def collect():
+                  out=[]; seen=set()
+                  for a in d.find_elements(By.CSS_SELECTOR,'a[href]'):
+                      href=a.get_attribute('href') or ''
+                      m=re.match(r'^https://note\.com/ss_yr/n/(n[0-9a-z]+)(?:[?#].*)?$',href,re.I)
+                      if not m: continue
+                      u=f'https://note.com/ss_yr/n/{m.group(1)}'
+                      if u in seen: continue
+                      seen.add(u)
+                      text=(a.text or '').strip().replace('\n',' ')
+                      out.append((u,text))
+                  return out
+              first=collect(); print('BEFORE=',len(first))
+              # Click visible “もっとみる” controls, then collect again.
+              for _ in range(3):
+                  clicked=False
+                  for el in d.find_elements(By.XPATH,"//*[self::button or self::a or @role='button'][normalize-space(.)='もっとみる' or contains(normalize-space(.),'もっとみる')]"):
+                      try:
+                          if el.is_displayed() and el.is_enabled():
+                              d.execute_script("arguments[0].scrollIntoView({block:'center'});",el); time.sleep(.3); d.execute_script('arguments[0].click();',el); time.sleep(2); clicked=True
+                      except Exception: pass
+                  d.execute_script('window.scrollTo(0, document.body.scrollHeight)'); time.sleep(1.5)
+                  if len(collect())>=10: break
+                  if not clicked: break
+              rows=collect()
+              print('===TOP10_START===')
+              for i,(u,t) in enumerate(rows[:10],1): print(f'{i:02d}\t{u}\t{t}')
+              print('===TOP10_END===')
+          finally:
+              d.quit()
+          PY
