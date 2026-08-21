@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.3.0
-// @description  note新規記事・既存記事の編集画面へ極薄カード画像を直接挿入する1枚テスト
-// @match        https://note.com/*
+// @version      0.4.0
+// @description  note編集画面へ極薄カード画像を直接挿入する1枚テスト
+// @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
 // @run-at       document-idle
@@ -96,7 +96,7 @@
     }
   }
 
-  async function setExactImageLink(img, editor) {
+  async function setExactImageLink(img) {
     img.scrollIntoView({ block: 'center', behavior: 'instant' });
     await sleep(250);
 
@@ -150,7 +150,7 @@
       if (!img) throw new Error('画像挿入を確認できませんでした');
 
       setStatus('3/3 この画像だけに元記事リンクを設定中…');
-      const linked = await setExactImageLink(img, editor);
+      const linked = await setExactImageLink(img);
       if (linked) setStatus('✅ 画像挿入＋正しい記事URLを確認しました');
       else setStatus('⚠️ 画像は挿入できました。リンクは安全確認できないため付けずに止めました', true);
     } catch (e) {
@@ -194,8 +194,6 @@
     if (!document.getElementById(BUTTON_ID)) document.body.appendChild(makeButton());
   }
 
-  // noteはSPAなので、新規記事へ移動すると画面だけ差し替わりボタンが消えることがある。
-  // そのため新規記事・既存記事を問わず定期的に復活させる。
   ensureMounted();
   setInterval(ensureMounted, 1000);
   window.addEventListener('popstate', () => setTimeout(ensureMounted, 100));
