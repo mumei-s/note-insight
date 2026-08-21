@@ -1,0 +1,22 @@
+name: Check note creator newest order
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import requests
+          u='https://note.com/api/v2/creators/ss_yr/contents?kind=note&page=1&sort=new'
+          j=requests.get(u,headers={'User-Agent':'Mozilla/5.0'},timeout=30).json()['data']['contents']
+          print('===NEW_START===')
+          for i,x in enumerate(j,1): print(i,x.get('key'),x.get('publishAt'),x.get('likeCount'),x.get('name'))
+          print('===NEW_END===')
+          PY
