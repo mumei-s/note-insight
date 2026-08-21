@@ -22,7 +22,7 @@ jobs:
           pip install pillow requests
           sudo apt-get update -qq
           sudo apt-get install -y fonts-noto-cjk
-      - name: Build compact ultra-thin PNG from real note thumbnail
+      - name: Build sub-620px ultra-thin PNG from real note thumbnail
         run: |
           python - <<'PY'
           import io, os, requests
@@ -38,30 +38,32 @@ jobs:
           r=s.get(THUMB,timeout=30); r.raise_for_status()
           thumb=Image.open(io.BytesIO(r.content)).convert('RGB')
 
-          W,H=900,140
+          # IMPORTANT: stay below note's 620px body-image expansion threshold.
+          W,H=580,96
           img=Image.new('RGB',(W,H),(255,255,255))
           d=ImageDraw.Draw(img)
-          d.rounded_rectangle((1,1,W-2,H-2),radius=15,fill=(255,255,255),outline=(225,225,225),width=2)
+          d.rounded_rectangle((1,1,W-2,H-2),radius=11,fill=(255,255,255),outline=(225,225,225),width=1)
           font_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
           reg_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
 
-          tw,th=320,112
+          # Preserve the entire real thumbnail; no crop inside it.
+          tw,th=220,78
           thumb_fit=ImageOps.contain(thumb,(tw,th),Image.Resampling.LANCZOS)
-          tx=W-14-tw; ty=(H-th)//2
+          tx=W-9-tw; ty=(H-th)//2
           bg=Image.new('RGB',(tw,th),'white')
           bg.paste(thumb_fit,((tw-thumb_fit.width)//2,(th-thumb_fit.height)//2))
           mask=Image.new('L',(tw,th),0)
-          ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=8,fill=255)
+          ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=6,fill=255)
           img.paste(bg,(tx,ty),mask)
 
-          maxw=tx-32
+          maxw=tx-22
           chosen=None
-          for size in range(28,17,-1):
+          for size in range(19,12,-1):
               tf=ImageFont.truetype(font_path,size)
               lines=[]; cur=''
               for ch in TITLE:
                   cand=cur+ch
-                  if d.textbbox((0,0),cand,font=tf)[2] <= maxw-22:
+                  if d.textbbox((0,0),cand,font=tf)[2] <= maxw-12:
                       cur=cand
                   else:
                       if cur: lines.append(cur)
@@ -70,16 +72,17 @@ jobs:
               if len(lines)<=2:
                   chosen=(tf,lines); break
           if chosen is None:
-              tf=ImageFont.truetype(font_path,18); lines=[TITLE[:31],TITLE[31:62]]
+              tf=ImageFont.truetype(font_path,13)
+              lines=[TITLE[:28],TITLE[28:56]]
           else:
               tf,lines=chosen
-          y=14
+          y=9
           for line in lines[:2]:
-              d.text((18,y),line,font=tf,fill=(20,26,34))
-              y=d.textbbox((18,y),line,font=tf)[3]
+              d.text((12,y),line,font=tf,fill=(20,26,34))
+              y=d.textbbox((12,y),line,font=tf)[3]
 
-          nf=ImageFont.truetype(reg_path,18)
-          d.text((20,H-29),NAME,font=nf,fill=(72,79,91))
+          nf=ImageFont.truetype(reg_path,13)
+          d.text((13,H-21),NAME,font=nf,fill=(72,79,91))
           img.save(out,'PNG',optimize=True)
           print('saved',out,img.size)
           PY
@@ -89,5 +92,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/note-paste-test/thin-card.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Generate compact thin paste test card'
+          git commit -m 'Generate sub-620px thin paste test card'
           git push
