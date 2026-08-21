@@ -1,0 +1,156 @@
+name: Build top10 note link test assets
+
+on:
+  push:
+    branches:
+      - top10-link-test-20260821
+    paths-ignore:
+      - tmp-note-top10/**
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install selenium pillow
+      - name: Capture top 10 cards
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, re, time
+          from io import BytesIO
+          from PIL import Image, ImageOps
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+
+          TARGET='https://note.com/ss_yr/portal'
+          OUT='tmp-note-top10'
+          os.makedirs(OUT, exist_ok=True)
+
+          opts=Options()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          opts.add_argument('--window-size=1536,2200')
+          opts.add_argument('--lang=ja-JP')
+          opts.add_argument('--force-device-scale-factor=1')
+          opts.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36')
+          driver=webdriver.Chrome(options=opts)
+
+          def normalize(img):
+              img=img.convert('RGB')
+              # Preserve the complete card; scale to fit inside 1536x427, then center on white.
+              fitted=ImageOps.contain(img, (1536,427), method=Image.Resampling.LANCZOS)
+              canvas=Image.new('RGB',(1536,427),'white')
+              x=(1536-fitted.width)//2
+              y=(427-fitted.height)//2
+              canvas.paste(fitted,(x,y))
+              return canvas
+
+          try:
+              driver.get(TARGET)
+              time.sleep(8)
+              # Make sure the first screen and a bit below are fully loaded.
+              driver.execute_script('window.scrollTo(0, 700)')
+              time.sleep(2)
+              driver.execute_script('window.scrollTo(0, 0)')
+              time.sleep(1)
+
+              anchors=driver.find_elements(By.CSS_SELECTOR, 'main a[href], a[href]')
+              picked=[]; seen=set()
+              for a in anchors:
+                  href=a.get_attribute('href') or ''
+                  m=re.match(r'^https://note\.com/ss_yr/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
+                  if not m:
+                      continue
+                  clean=f'https://note.com/ss_yr/n/{m.group(1)}'
+                  if clean in seen:
+                      continue
+                  seen.add(clean)
+                  picked.append((a,clean,m.group(1)))
+                  if len(picked)>=10:
+                      break
+
+              print('TOP10_COUNT=',len(picked))
+              manifest=[]
+              for idx,(a,url,key) in enumerate(picked,1):
+                  try:
+                      driver.execute_script("arguments[0].scrollIntoView({block:'center'});", a)
+                      time.sleep(0.8)
+
+                      card=driver.execute_script('''
+                        let a=arguments[0];
+                        let el=a, fallback=a;
+                        while(el && el!==document.body){
+                          const r=el.getBoundingClientRect();
+                          const t=(el.innerText||'').trim();
+                          if(r.width>700 && r.height>150 && r.height<700 && t.length>20){
+                            fallback=el;
+                            if(r.width>850 && r.height>220) return el;
+                          }
+                          el=el.parentElement;
+                        }
+                        return fallback;
+                      ''',a)
+
+                      title=(a.text or '').strip()
+                      if not title:
+                          title=driver.execute_script("return (arguments[0].innerText||'').trim()", card).split('\n')[0][:160]
+
+                      raw=card.screenshot_as_png
+                      im=Image.open(BytesIO(raw))
+                      norm=normalize(im)
+                      fname=f'{idx:02d}_{key}.jpg'
+                      norm.save(os.path.join(OUT,fname), quality=92, optimize=True)
+                      print(f'{idx:02d}', key, 'raw=', im.size, 'title=', title[:80])
+                      manifest.append({'no':idx,'key':key,'url':url,'title':title,'file':fname,'raw_size':list(im.size)})
+                  except Exception as e:
+                      print('CARD_ERROR',idx,url,repr(e))
+                      manifest.append({'no':idx,'key':key,'url':url,'title':'','file':'','error':repr(e)})
+
+              with open(os.path.join(OUT,'manifest.json'),'w',encoding='utf-8') as f:
+                  json.dump(manifest,f,ensure_ascii=False,indent=2)
+
+              # Test page: each image is already wrapped in its exact article URL.
+              cards=[]
+              for item in manifest:
+                  if not item.get('file'): continue
+                  raw_url=f'https://raw.githubusercontent.com/mumei-s/note-insight/top10-link-test-20260821/{OUT}/{item["file"]}'
+                  title=item.get('title','').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
+                  url=item['url']
+                  cards.append(f'''<section class="card" data-url="{url}"><div class="num">{item['no']:02d}</div><a class="linked" href="{url}" target="_blank"><img src="{raw_url}" alt="{title}"></a><div class="meta"><div class="title">{title}</div><button onclick="copyRich(this)">画像＋リンクをコピー</button><button onclick="navigator.clipboard.writeText('{url}')">URLをコピー</button><a href="{url}" target="_blank">元記事を開く</a></div></section>''')
+
+              html='''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>noteリンク貼付テスト Top10</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f4f5f6;margin:0;padding:18px}.wrap{max-width:1100px;margin:auto}.card{background:#fff;padding:14px;margin:0 0 20px;border-radius:14px;box-shadow:0 2px 10px #0001}.num{font-weight:800;margin-bottom:8px}.linked img{display:block;width:100%;height:auto;border:1px solid #ddd}.meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}.title{flex:1 1 100%;font-weight:700}button,a{font-size:16px}button{padding:10px 14px}.meta a{padding:10px}</style></head><body><div class="wrap"><h1>noteリンク付き画像テスト Top10</h1><p>各画像と記事URLは取得時点で1対1固定。まず「画像＋リンクをコピー」→サブ垢のnote本文へ貼り付けて、画像クリック時のリンクが保持されるか確認。</p>'''+''.join(cards)+'''</div><script>
+              async function copyRich(btn){
+                const card=btn.closest('.card'); const a=card.querySelector('.linked'); const img=a.querySelector('img'); const url=card.dataset.url;
+                const html=`<a href="${url}"><img src="${img.src}" alt=""></a>`;
+                try{
+                  if(navigator.clipboard && window.ClipboardItem){
+                    const item=new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([url],{type:'text/plain'})});
+                    await navigator.clipboard.write([item]); btn.textContent='コピー済み'; return;
+                  }
+                }catch(e){}
+                const box=document.createElement('div'); box.contentEditable='true'; box.style.position='fixed'; box.style.left='-9999px'; box.innerHTML=html; document.body.appendChild(box);
+                const range=document.createRange(); range.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); document.execCommand('copy'); sel.removeAllRanges(); box.remove(); btn.textContent='コピー済み';
+              }
+              </script></body></html>'''
+              with open(os.path.join(OUT,'test-page.html'),'w',encoding='utf-8') as f: f.write(html)
+          finally:
+              driver.quit()
+          PY
+      - name: Save generated assets to temporary branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- tmp-note-top10
+          git diff --cached --quiet && exit 0
+          git commit -m "Generate top10 note link test assets [skip ci]"
+          git push
