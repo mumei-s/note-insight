@@ -6,56 +6,34 @@
 <meta name="robots" content="noindex,nofollow,noarchive">
 <title>note 極薄リンク画像テスト</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:980px;margin:auto;padding:22px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555}.preview{margin-top:14px;border:1px solid #ddd;border-radius:12px;padding:8px;background:#fafafa}.preview canvas{display:block;width:100%;height:auto;border-radius:10px}.actions{display:grid;gap:10px;margin-top:16px}button{border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:800;background:#111;color:#fff}.status{min-height:26px;margin-top:12px;font-weight:700;font-size:14px}
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:980px;margin:auto;padding:22px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555}.preview{margin-top:14px;border:1px solid #ddd;border-radius:12px;padding:8px;background:#fafafa}.preview img{display:block;width:100%;height:auto;border-radius:10px}.actions{display:grid;gap:10px;margin-top:16px}button{border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:800;background:#111;color:#fff}.status{min-height:26px;margin-top:12px;font-weight:700;font-size:14px}
 </style>
 </head>
 <body>
 <div class="wrap"><div class="box">
 <h2 style="margin:0 0 6px">極薄リンク付き画像テスト</h2>
-<p class="note">今度は横幅ではなく、画像そのものを <b>1500×180（約8.3:1）</b> にしています。タイトル＋本物サムネ＋クリエイター名だけです。</p>
-<div class="preview"><canvas id="card" width="1500" height="180"></canvas></div>
+<p class="note">今回はブラウザ内で画像加工しません。GitHub側で作成済みの <b>1500×180</b> 極薄PNGを、そのまま元記事リンク付きでコピーします。</p>
+<div class="preview"><img id="card" src="./thin-card.png?v=180" alt="極薄記事カード"></div>
 <div class="actions"><button id="copy">極薄リンク付き画像をコピー</button></div>
-<div class="status" id="status">画像を生成中…</div>
+<div class="status" id="status">準備完了</div>
 </div></div>
 <script>
 const URL='https://note.com/ss_yr/n/nc14eb3f2ea9f';
-const IMG='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=1280';
-const TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』';
-const NAME='無名 S note';
-const canvas=document.getElementById('card'),ctx=canvas.getContext('2d'),status=document.getElementById('status');
-let dataURL='';
-function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();ctx.stroke()}
-function wrapText(text,maxWidth,maxLines){
-  let lines=[],cur='';
-  for(const ch of text){const t=cur+ch;if(ctx.measureText(t).width<=maxWidth)cur=t;else{lines.push(cur);cur=ch}}
-  if(cur)lines.push(cur);return lines.slice(0,maxLines)
-}
-async function build(){
- try{
-  const im=new Image();im.crossOrigin='anonymous';
-  await new Promise((ok,ng)=>{im.onload=ok;im.onerror=ng;im.src=IMG});
-  ctx.fillStyle='#f5f5f5';ctx.fillRect(0,0,1500,180);
-  ctx.fillStyle='#fff';ctx.strokeStyle='#e4e4e4';ctx.lineWidth=2;rr(2,2,1496,176,18);
-  const bx=1060,by=10,bw=426,bh=160;
-  const s=Math.min(bw/im.width,bh/im.height),dw=im.width*s,dh=im.height*s;
-  ctx.save();ctx.beginPath();ctx.roundRect(bx,by,bw,bh,10);ctx.clip();ctx.fillStyle='#fff';ctx.fillRect(bx,by,bw,bh);ctx.drawImage(im,bx+(bw-dw)/2,by+(bh-dh)/2,dw,dh);ctx.restore();
-  let fs=38;ctx.fillStyle='#151a21';ctx.font=`700 ${fs}px -apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif`;
-  let lines=wrapText(TITLE,995,2);while(lines.length>2&&fs>24){fs-=2;ctx.font=`700 ${fs}px sans-serif`;lines=wrapText(TITLE,995,2)}
-  let y=30;for(const line of lines){ctx.fillText(line,28,y);y+=fs+8}
-  ctx.fillStyle='#555d69';ctx.font='24px -apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif';ctx.fillText(NAME,30,153);
-  dataURL=canvas.toDataURL('image/jpeg',0.86);status.textContent='✅ 極薄画像を生成しました。';
- }catch(e){status.textContent='⚠️ 画像生成に失敗しました: '+e.message}
-}
+const IMG=new URL('./thin-card.png?v=180',location.href).href;
+const TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖';
+const status=document.getElementById('status');
 async function copyThin(){
- if(!dataURL) return;
- try{
-   const html=`<a href="${URL}"><img src="${dataURL}" alt="${TITLE}" width="1500" height="180" style="display:block;max-width:100%;height:auto"></a>`;
-   const blob=await (await fetch(dataURL)).blob();
-   const item=new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([URL],{type:'text/plain'}),'image/jpeg':blob});
-   await navigator.clipboard.write([item]);
-   status.textContent='✅ コピーしました。noteへ貼り付けてください。';
- }catch(e){status.textContent='⚠️ コピー失敗: '+e.message}
+  try{
+    if(!navigator.clipboard || !window.ClipboardItem) throw new Error('このブラウザではリッチコピーに対応していません');
+    const html=`<a href="${URL}"><img src="${IMG}" alt="${TITLE}" width="1500" height="180" style="display:block;max-width:100%;height:auto"></a>`;
+    const item=new ClipboardItem({
+      'text/html':new Blob([html],{type:'text/html'}),
+      'text/plain':new Blob([URL],{type:'text/plain'})
+    });
+    await navigator.clipboard.write([item]);
+    status.textContent='✅ コピーしました。noteへ貼り付けてください。';
+  }catch(e){status.textContent='⚠️ コピー失敗: '+e.message}
 }
-document.getElementById('copy').onclick=copyThin;build();
+document.getElementById('copy').onclick=copyThin;
 </script>
 </body></html>
