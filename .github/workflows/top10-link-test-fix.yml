@@ -1,0 +1,208 @@
+name: Build corrected top10 note link test assets
+
+on:
+  push:
+    branches:
+      - top10-link-test-fix-20260821
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies and Japanese font
+        run: |
+          pip install requests pillow beautifulsoup4
+          sudo apt-get update -y
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Build corrected assets
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, re, csv, json, html
+          from io import BytesIO
+          from datetime import datetime
+          import requests
+          from bs4 import BeautifulSoup
+          from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+          CREATOR='ss_yr'
+          BASE='https://note.com'
+          OUT='top10_note_test_fixed'
+          os.makedirs(OUT, exist_ok=True)
+          S=requests.Session()
+          S.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36','Accept-Language':'ja-JP,ja;q=0.9'})
+
+          def get_json(url):
+              r=S.get(url,timeout=30); r.raise_for_status(); return r.json()
+
+          # Newest public notes only. This intentionally does NOT inject a pinned/self-introduction article.
+          notes=[]; seen=set(); page=1
+          while len(notes)<10 and page<=5:
+              j=get_json(f'{BASE}/api/v2/creators/{CREATOR}/contents?kind=note&page={page}&sort=new')
+              arr=(j.get('data') or {}).get('contents') or []
+              if not arr: break
+              for x in arr:
+                  key=x.get('key')
+                  if key and key not in seen:
+                      seen.add(key); notes.append(x)
+                      if len(notes)>=10: break
+              page+=1
+          notes=notes[:10]
+          print('TOP10_COUNT=',len(notes))
+          for i,x in enumerate(notes,1): print(i,x.get('key'),x.get('publishAt'),x.get('name'))
+
+          # Profile icon: try creator API, then creator page metadata/images.
+          avatar_url=None
+          creator_name='無名S note'
+          for u in [f'{BASE}/api/v2/creators/{CREATOR}', f'{BASE}/api/v1/creators/{CREATOR}']:
+              try:
+                  j=get_json(u); d=j.get('data',j) if isinstance(j,dict) else {}
+                  if isinstance(d,dict):
+                      creator_name=d.get('nickname') or d.get('name') or creator_name
+                      for k in ['profileImageUrl','profile_image_url','profileImage','profile_image','avatarUrl','avatar_url']:
+                          v=d.get(k)
+                          if isinstance(v,str) and v.startswith('http'): avatar_url=v; break
+                  if avatar_url: break
+              except Exception as e: print('creator api fallback',u,e)
+          if not avatar_url:
+              r=S.get(f'{BASE}/{CREATOR}',timeout=30); r.raise_for_status(); soup=BeautifulSoup(r.text,'html.parser')
+              # Prefer obvious avatar/profile image candidates over article thumbnails.
+              for img in soup.find_all('img'):
+                  src=img.get('src') or img.get('data-src') or ''
+                  alt=(img.get('alt') or '').lower()
+                  if src.startswith('//'): src='https:'+src
+                  if src.startswith('http') and any(t in (src.lower()+alt) for t in ['profile','avatar','creator']):
+                      avatar_url=src; break
+              if not avatar_url:
+                  og=soup.find('meta',attrs={'property':'og:image'})
+                  if og and og.get('content'): avatar_url=og['content']
+          print('CREATOR_NAME=',creator_name)
+          print('AVATAR_URL=',avatar_url)
+
+          def download_image(url):
+              if not url: return None
+              try:
+                  r=S.get(url,timeout=30); r.raise_for_status(); return Image.open(BytesIO(r.content)).convert('RGB')
+              except Exception as e:
+                  print('image err',url,e); return None
+
+          avatar=download_image(avatar_url)
+          if avatar:
+              avatar=ImageOps.fit(avatar,(92,92),method=Image.Resampling.LANCZOS)
+
+          font_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
+          bold_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
+          if not os.path.exists(bold_path): bold_path=font_path
+          F_TITLE=ImageFont.truetype(bold_path,54)
+          F_META=ImageFont.truetype(font_path,38)
+          F_SMALL=ImageFont.truetype(font_path,30)
+          F_HEART=ImageFont.truetype(bold_path,64)
+
+          def article_meta(x):
+              key=x.get('key'); url=f'{BASE}/{CREATOR}/n/{key}'
+              title=(x.get('name') or '').strip()
+              likes=x.get('likeCount') or 0
+              pub=x.get('publishAt') or ''
+              img_url=None
+              # API variants first.
+              for k in ['eyecatch','eyecatchUrl','eyecatch_url','imageUrl','image_url']:
+                  v=x.get(k)
+                  if isinstance(v,str) and v.startswith('http'): img_url=v; break
+              if not img_url:
+                  try:
+                      r=S.get(url,timeout=30); r.raise_for_status(); soup=BeautifulSoup(r.text,'html.parser')
+                      og=soup.find('meta',attrs={'property':'og:image'})
+                      if og and og.get('content'): img_url=og['content']
+                      ot=soup.find('meta',attrs={'property':'og:title'})
+                      if ot and ot.get('content'): title=ot['content'].strip()
+                  except Exception as e: print('article meta err',url,e)
+              return {'key':key,'url':url,'title':title,'likes':likes,'publishAt':pub,'thumbUrl':img_url}
+
+          metas=[article_meta(x) for x in notes]
+
+          def wrap_text(draw,text,font,max_width,max_lines=2):
+              out=[]; cur=''
+              for ch in text:
+                  test=cur+ch
+                  if draw.textbbox((0,0),test,font=font)[2] <= max_width:
+                      cur=test
+                  else:
+                      if cur: out.append(cur)
+                      cur=ch
+                      if len(out)>=max_lines: break
+              if len(out)<max_lines and cur: out.append(cur)
+              if len(out)==max_lines:
+                  # Ensure ellipsis if text was truncated.
+                  joined=''.join(out)
+                  if len(joined)<len(text):
+                      line=out[-1]
+                      while line and draw.textbbox((0,0),line+'…',font=font)[2]>max_width: line=line[:-1]
+                      out[-1]=line+'…'
+              return out
+
+          def date_label(pub):
+              if not pub: return ''
+              try:
+                  dt=datetime.fromisoformat(pub)
+                  return f'{dt.month}/{dt.day}'
+              except: return pub[:10]
+
+          manifest=[]
+          html_cards=[]
+          for i,m in enumerate(metas,1):
+              W,H=1536,427
+              canvas=Image.new('RGB',(W,H),'white'); d=ImageDraw.Draw(canvas)
+              # Thumbnail on right.
+              thumb=download_image(m['thumbUrl'])
+              if thumb:
+                  thumb=ImageOps.fit(thumb,(500,250),method=Image.Resampling.LANCZOS)
+                  canvas.paste(thumb,(1015,18))
+              else:
+                  d.rounded_rectangle((1015,18,1515,268),radius=18,fill=(242,242,242))
+
+              # Title left/top, 2 lines maximum.
+              lines=wrap_text(d,m['title'],F_TITLE,930,2)
+              y=28
+              for line in lines:
+                  d.text((45,y),line,font=F_TITLE,fill=(20,26,32)); y+=78
+
+              # Bottom metadata row.
+              d.text((46,305),'♥',font=F_HEART,fill=(211,53,82))
+              d.text((155,318),str(m['likes']),font=F_META,fill=(211,53,82))
+              # Creator icon always shown.
+              if avatar:
+                  mask=Image.new('L',(92,92),0); md=ImageDraw.Draw(mask); md.ellipse((0,0,91,91),fill=255)
+                  canvas.paste(avatar,(500,292),mask)
+              else:
+                  d.ellipse((500,292,592,384),fill=(170,185,195))
+              d.text((620,317),creator_name,font=F_SMALL,fill=(85,91,97))
+              d.text((1185,317),date_label(m['publishAt']),font=F_META,fill=(105,110,115))
+
+              fname=f'{i:02d}_{m["key"]}.png'
+              path=os.path.join(OUT,fname); canvas.save(path,optimize=True)
+              manifest.append({**m,'no':i,'file':fname,'creatorName':creator_name,'creatorIconUrl':avatar_url or ''})
+              html_cards.append(f'''<section class="card"><a href="{html.escape(m['url'])}" target="_blank"><img src="{fname}" alt="{html.escape(m['title'])}"></a><div class="actions"><button onclick="copyCard(this)">画像＋リンクをコピー</button><button onclick="navigator.clipboard.writeText('{html.escape(m['url'])}')">URLだけコピー</button><a href="{html.escape(m['url'])}" target="_blank">元記事を確認</a></div><code>{html.escape(m['url'])}</code></section>''')
+
+          with open(os.path.join(OUT,'manifest.csv'),'w',newline='',encoding='utf-8-sig') as f:
+              w=csv.DictWriter(f,fieldnames=['no','key','title','url','likes','publishAt','thumbUrl','creatorName','creatorIconUrl','file']); w.writeheader(); w.writerows(manifest)
+          with open(os.path.join(OUT,'manifest.json'),'w',encoding='utf-8') as f: json.dump(manifest,f,ensure_ascii=False,indent=2)
+          page='''<!doctype html><meta charset="utf-8"><title>note top10 link test</title><style>body{font-family:sans-serif;max-width:1000px;margin:auto;padding:20px;background:#f5f5f5}.card{background:#fff;padding:14px;margin:0 0 22px;border-radius:14px}.card img{width:100%;height:auto;display:block}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}button,a{font-size:16px;padding:8px 12px}code{word-break:break-all}</style><h1>無名S note 上から10本・サブ垢テスト</h1><p>各画像は元記事URLと1対1固定。画像自体をクリックしても元記事へ移動します。</p>'''+''.join(html_cards)+'''<script>async function copyCard(btn){const s=btn.closest('.card');const a=s.querySelector('a');const img=s.querySelector('img');const h=`<a href="${a.href}"><img src="${img.src}" alt="${img.alt}"></a>`;const p=s.querySelector('code').textContent;try{await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([h],{type:'text/html'}),'text/plain':new Blob([p],{type:'text/plain'})})]);btn.textContent='コピー済み';}catch(e){alert('このブラウザではリンク付きコピーが使えません。URLだけコピーを使ってください。');}}</script>'''
+          with open(os.path.join(OUT,'test-page.html'),'w',encoding='utf-8') as f: f.write(page)
+          print('DONE_FILES=',os.listdir(OUT))
+          PY
+      - name: Upload corrected test assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: top10-note-link-test-fixed
+          path: top10_note_test_fixed
+          if-no-files-found: error
