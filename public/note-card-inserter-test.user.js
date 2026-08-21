@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.6.0
-// @description  note自身の画像アップロード入力へ極薄カードを直接渡す1枚テスト
+// @version      0.7.0
+// @description  note自身の画像アップロード入力へ高精細な極薄カードを1回だけ渡す1枚テスト
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -12,11 +12,12 @@
 (function () {
   'use strict';
 
-  const CARD_IMAGE = 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png';
+  const CARD_IMAGE = 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png?v=hd2x';
   const BUTTON_ID = 'mumei-thin-card-inserter-test';
   const PANEL_ID = 'mumei-thin-card-panel-test';
 
   let armed = false;
+  let consumed = false;
   let preparedFile = null;
   let beforeFileInputs = new Set();
   let beforeEditorImages = new Set();
@@ -61,6 +62,7 @@
 
   function disarm(message, bad = false) {
     armed = false;
+    consumed = false;
     preparedFile = null;
     beforeFileInputs = new Set();
     if (disarmTimer) clearTimeout(disarmTimer);
@@ -82,33 +84,42 @@
   }
 
   function injectIntoFileInput(input) {
-    if (!armed || !preparedFile || !isImageFileInput(input)) return false;
-    // 既に存在していた別用途のfile inputは触らない。
+    if (!armed || consumed || !preparedFile || !isImageFileInput(input)) return false;
     if (beforeFileInputs.has(input)) return false;
+
+    // 最重要：最初の1回を掴んだ瞬間に消費済みにして、observerとinput.clickの二重発火を防ぐ。
+    consumed = true;
+    armed = false;
+    if (disarmTimer) clearTimeout(disarmTimer);
+    disarmTimer = null;
+    const fileToSend = preparedFile;
+    preparedFile = null;
 
     try {
       const dt = new DataTransfer();
-      dt.items.add(preparedFile);
+      dt.items.add(fileToSend);
       input.files = dt.files;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      setStatus('noteへ画像ファイルを渡しました。アップロード確認中…');
+      setStatus('1枚だけnoteへ渡しました。アップロード確認中…');
 
       setTimeout(async () => {
         const ok = await verifyBodyImage();
-        if (ok) disarm('✅ 極薄カード画像を本文へ挿入できました');
-        else disarm('⚠️ noteの画像入力には渡せましたが、本文への表示を確認できませんでした', true);
+        consumed = false;
+        beforeFileInputs = new Set();
+        if (ok) setStatus('✅ 1枚だけ挿入できました（高精細版）');
+        else setStatus('⚠️ noteの画像入力には渡せましたが、本文表示を確認できませんでした', true);
       }, 300);
       return true;
     } catch (e) {
+      consumed = false;
       setStatus('⚠️ ファイル注入失敗: ' + (e?.message || String(e)), true);
       return false;
     }
   }
 
-  // noteが動的に作る file input を捕まえる。
   const observer = new MutationObserver(mutations => {
-    if (!armed) return;
+    if (!armed || consumed) return;
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (!(node instanceof Element)) continue;
@@ -127,10 +138,9 @@
   }
   startObserver();
 
-  // noteが input.click() でOSファイル選択を開く場合も横取りする。
   const nativeInputClick = HTMLInputElement.prototype.click;
   HTMLInputElement.prototype.click = function (...args) {
-    if (armed && isImageFileInput(this) && !beforeFileInputs.has(this)) {
+    if (armed && !consumed && isImageFileInput(this) && !beforeFileInputs.has(this)) {
       if (injectIntoFileInput(this)) return;
     }
     return nativeInputClick.apply(this, args);
@@ -143,15 +153,17 @@
       const editor = getEditor();
       if (!editor) throw new Error('note本文欄が見つかりません');
 
-      setStatus('極薄カードを準備中…');
+      disarm();
+      setStatus('高精細カードを準備中…');
       const blob = await requestBlob(CARD_IMAGE);
-      preparedFile = new File([blob], 'mumei-thin-card.png', { type: 'image/png' });
+      preparedFile = new File([blob], 'mumei-thin-card-hd.png', { type: 'image/png' });
 
       beforeFileInputs = new Set(document.querySelectorAll('input[type="file"]'));
       beforeEditorImages = new Set(editor.querySelectorAll('img'));
+      consumed = false;
       armed = true;
 
-      setStatus('準備OK。本文の入れたい行をタップ → noteの「＋」→「画像」を押してください');
+      setStatus('準備OK。本文の入れたい行をタップ → noteの「＋」→「画像」を1回押してください');
       disarmTimer = setTimeout(() => {
         if (armed) disarm('時間切れ。もう一度「極薄カード準備」を押してください', true);
       }, 45000);
