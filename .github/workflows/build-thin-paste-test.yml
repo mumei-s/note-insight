@@ -38,8 +38,6 @@ jobs:
           r=s.get(THUMB,timeout=30); r.raise_for_status()
           thumb=Image.open(io.BytesIO(r.content)).convert('RGB')
 
-          # This test article has a long title, so 900px is enough.
-          # Production version will calculate width per title (short titles get shorter cards).
           W,H=900,140
           img=Image.new('RGB',(W,H),(255,255,255))
           d=ImageDraw.Draw(img)
@@ -47,7 +45,6 @@ jobs:
           font_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
           reg_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
 
-          # Full real thumbnail on right; preserve every part of the original thumbnail.
           tw,th=320,112
           thumb_fit=ImageOps.contain(thumb,(tw,th),Image.Resampling.LANCZOS)
           tx=W-14-tw; ty=(H-th)//2
@@ -57,7 +54,6 @@ jobs:
           ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=8,fill=255)
           img.paste(bg,(tx,ty),mask)
 
-          # Title: max 2 lines.
           maxw=tx-32
           chosen=None
           for size in range(28,17,-1):
@@ -82,7 +78,6 @@ jobs:
               d.text((18,y),line,font=tf,fill=(20,26,34))
               y=d.textbbox((18,y),line,font=tf)[3]
 
-          # Creator name only. No heart/date/icon.
           nf=ImageFont.truetype(reg_path,18)
           d.text((20,H-29),NAME,font=nf,fill=(72,79,91))
           img.save(out,'PNG',optimize=True)
@@ -94,5 +89,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/note-paste-test/thin-card.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Generate compact thin paste test card [skip ci]'
+          git commit -m 'Generate compact thin paste test card'
           git push
