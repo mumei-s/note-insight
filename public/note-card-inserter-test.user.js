@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.4.0
-// @description  note編集画面へ極薄カード画像を直接挿入する1枚テスト
+// @version      0.5.0
+// @description  note編集画面へ極薄カード画像を直接挿入する1枚テスト（画像挿入のみ）
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -13,25 +13,13 @@
   'use strict';
 
   const CARD_IMAGE = 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png';
-  const ARTICLE_URL = 'https://note.com/ss_yr/n/nc14eb3f2ea9f';
   const BUTTON_ID = 'mumei-thin-card-inserter-test';
   const PANEL_ID = 'mumei-thin-card-panel-test';
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  function visible(el) {
-    if (!el || !el.isConnected) return false;
-    const s = getComputedStyle(el);
-    if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-
   function getEditor() {
-    return document.querySelector('.ProseMirror[contenteditable="true"]') ||
-           document.querySelector('.ProseMirror') ||
-           document.querySelector('[contenteditable="true"][role="textbox"]') ||
-           document.querySelector('[contenteditable="true"]');
+    return document.querySelector('.ProseMirror');
   }
 
   function setStatus(text, bad = false) {
@@ -58,101 +46,47 @@
     });
   }
 
-  function selectionPoint(editor) {
-    try {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        if (editor.contains(range.commonAncestorContainer)) {
-          const r = range.getBoundingClientRect();
-          if (r && Number.isFinite(r.left) && Number.isFinite(r.top)) {
-            return { x: r.left + 2, y: r.top + 2 };
-          }
-        }
-      }
-    } catch (_) {}
-    const r = editor.getBoundingClientRect();
-    return { x: r.left + 24, y: r.top + 24 };
-  }
-
-  async function waitForNewImage(editor, before, timeout = 12000) {
+  async function waitForNewImage(editor, before, timeout = 20000) {
     const end = Date.now() + timeout;
     while (Date.now() < end) {
       const imgs = [...editor.querySelectorAll('img')];
       const added = imgs.find(img => !before.has(img));
-      if (added && visible(added)) return added;
+      if (added) return added;
       await sleep(250);
     }
     return null;
   }
 
-  function exactLinkedImage(img) {
-    const a = img.closest('a[href]');
-    if (!a) return false;
-    try {
-      return new URL(a.href, location.href).href === new URL(ARTICLE_URL).href;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  async function setExactImageLink(img) {
-    img.scrollIntoView({ block: 'center', behavior: 'instant' });
-    await sleep(250);
-
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNode(img);
-    sel.removeAllRanges();
-    sel.addRange(range);
-
-    try { document.execCommand('createLink', false, ARTICLE_URL); } catch (_) {}
-    await sleep(700);
-    if (exactLinkedImage(img)) return true;
-
-    const current = img.closest('a[href]');
-    if (current) {
-      let isExact = false;
-      try { isExact = new URL(current.href, location.href).href === new URL(ARTICLE_URL).href; } catch (_) {}
-      if (!isExact && current.parentNode) current.replaceWith(img);
-    }
-
-    sel.removeAllRanges();
-    return false;
-  }
-
   async function insertCard() {
     const btn = document.getElementById(BUTTON_ID);
     if (btn) btn.disabled = true;
+
     try {
       const editor = getEditor();
-      if (!editor) throw new Error('本文欄がまだ出ていません。本文を1回タップしてからもう一度押してください');
+      if (!editor) throw new Error('本文エディタが見つかりません');
 
       editor.focus();
-      setStatus('1/3 画像を取得中…');
+      setStatus('1/2 画像を取得中…');
       const blob = await requestBlob(CARD_IMAGE);
 
-      setStatus('2/3 note本文へ挿入中…');
+      setStatus('2/2 note本文へ貼り付け中…');
       const before = new Set(editor.querySelectorAll('img'));
       const file = new File([blob], 'mumei-thin-card.png', { type: blob.type || 'image/png' });
       const dt = new DataTransfer();
       dt.items.add(file);
-      const p = selectionPoint(editor);
-      editor.dispatchEvent(new DragEvent('drop', {
+
+      const pasteEvent = new ClipboardEvent('paste', {
         bubbles: true,
         cancelable: true,
-        clientX: p.x,
-        clientY: p.y,
-        dataTransfer: dt
-      }));
+        clipboardData: dt
+      });
+      editor.dispatchEvent(pasteEvent);
 
       const img = await waitForNewImage(editor, before);
       if (!img) throw new Error('画像挿入を確認できませんでした');
 
-      setStatus('3/3 この画像だけに元記事リンクを設定中…');
-      const linked = await setExactImageLink(img);
-      if (linked) setStatus('✅ 画像挿入＋正しい記事URLを確認しました');
-      else setStatus('⚠️ 画像は挿入できました。リンクは安全確認できないため付けずに止めました', true);
+      img.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setStatus('✅ 画像挿入できました。今回はリンク設定はまだしていません');
     } catch (e) {
       setStatus('⚠️ ' + (e?.message || String(e)), true);
     } finally {
@@ -163,7 +97,7 @@
   function makePanel() {
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.textContent = '本文の入れたい位置をタップ → 極薄カード挿入';
+    panel.textContent = '本文を1回タップ → 極薄カード挿入';
     Object.assign(panel.style, {
       position: 'fixed', right: '12px', bottom: '74px', zIndex: '2147483646',
       maxWidth: '290px', padding: '9px 11px', borderRadius: '10px',
