@@ -143,6 +143,12 @@ jobs:
           finally:
               driver.quit()
           PY
+      - name: Upload test assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: top10-note-link-test-assets
+          path: tmp-note-top10
+          if-no-files-found: error
       - name: Save generated assets to temporary branch
         if: github.event_name == 'push'
         run: |
