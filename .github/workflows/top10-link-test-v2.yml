@@ -1,0 +1,126 @@
+name: Build top10 compact note cards v2
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install selenium requests
+      - name: Build compact cards
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, html, json, os, re, time
+          from pathlib import Path
+          import requests
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+
+          USER='ss_yr'
+          PAGE=f'https://note.com/{USER}'
+          API=f'https://note.com/api/v2/creators/{USER}/contents?kind=note&page={{}}'
+          PROFILE=f'https://note.com/api/v2/creators/{USER}'
+          OUT=Path('tmp-note-top10-v2')
+          OUT.mkdir(exist_ok=True)
+
+          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36','Accept-Language':'ja-JP,ja;q=0.9'}
+          s=requests.Session(); s.headers.update(headers)
+
+          # Creator profile.
+          p=s.get(PROFILE,timeout=30); p.raise_for_status(); pd=p.json()['data']
+          nickname=pd.get('nickname') or USER
+          avatar=pd.get('profileImageUrl') or ''
+
+          # Browser only used to determine the pinned article at the very top of the public creator page.
+          opts=Options(); opts.add_argument('--headless=new'); opts.add_argument('--no-sandbox'); opts.add_argument('--disable-dev-shm-usage'); opts.add_argument('--window-size=1536,1800'); opts.add_argument('--lang=ja-JP'); opts.add_argument('--user-agent='+headers['User-Agent'])
+          driver=webdriver.Chrome(options=opts)
+          pinned_key=None
+          try:
+              driver.get(PAGE); time.sleep(8)
+              for a in driver.find_elements(By.CSS_SELECTOR,'main a[href], a[href]'):
+                  href=a.get_attribute('href') or ''
+                  m=re.match(rf'^https://note\.com/{USER}/n/(n[0-9a-z]+)(?:[?#].*)?$',href,re.I)
+                  if m:
+                      pinned_key=m.group(1); break
+          finally:
+              driver.quit()
+          print('PINNED_KEY=',pinned_key)
+
+          # Fetch enough creator contents to cover the pinned article plus 9 newest articles.
+          contents=[]
+          for page in range(1,4):
+              r=s.get(API.format(page),timeout=30); r.raise_for_status()
+              data=r.json()['data']; contents.extend(data.get('contents',[]))
+              if data.get('isLastPage'): break
+
+          by_key={x.get('key'):x for x in contents if x.get('key')}
+          ordered=[]; used=set()
+          if pinned_key and pinned_key in by_key:
+              ordered.append(by_key[pinned_key]); used.add(pinned_key)
+          elif pinned_key:
+              # Detail API fallback if pinned item is older than fetched pages.
+              rr=s.get(f'https://note.com/api/v3/notes/{pinned_key}',timeout=30); rr.raise_for_status(); d=rr.json().get('data',{})
+              item={'key':pinned_key,'name':d.get('name',''),'likeCount':d.get('likeCount',0),'publishAt':d.get('publishAt',''),'eyecatch':d.get('eyecatch',''),'thumbnailExternalUrl':d.get('thumbnailExternalUrl','')}
+              ordered.append(item); used.add(pinned_key)
+          for x in contents:
+              k=x.get('key')
+              if not k or k in used: continue
+              ordered.append(x); used.add(k)
+              if len(ordered)>=10: break
+          ordered=ordered[:10]
+          print('ORDERED_COUNT=',len(ordered))
+
+          # Render each card in Chromium as an exact 1536x427 image.
+          ropts=Options(); ropts.add_argument('--headless=new'); ropts.add_argument('--no-sandbox'); ropts.add_argument('--disable-dev-shm-usage'); ropts.add_argument('--window-size=1536,427'); ropts.add_argument('--force-device-scale-factor=1'); ropts.add_argument('--hide-scrollbars'); ropts.add_argument('--lang=ja-JP')
+          browser=webdriver.Chrome(options=ropts)
+          manifest=[]
+          try:
+              for i,x in enumerate(ordered,1):
+                  key=x.get('key',''); title=x.get('name') or ''
+                  likes=x.get('likeCount') or 0
+                  publish=x.get('publishAt') or ''
+                  date=publish[:10].replace('-','/') if publish else ''
+                  thumb=x.get('eyecatch') or x.get('thumbnailExternalUrl') or ''
+                  url=f'https://note.com/{USER}/n/{key}'
+                  title_h=html.escape(title); nick_h=html.escape(nickname)
+                  thumb_h=html.escape(thumb,quote=True); avatar_h=html.escape(avatar,quote=True)
+                  card=f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>*{{box-sizing:border-box}}html,body{{margin:0;width:1536px;height:427px;overflow:hidden;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",Meiryo,sans-serif;color:#101820}}.card{{position:relative;width:1536px;height:427px;padding:34px 38px 32px 42px;background:#fff}}.title{{position:absolute;left:42px;top:30px;width:940px;max-height:190px;overflow:hidden;font-size:48px;line-height:1.42;font-weight:700;letter-spacing:.2px}}.thumb{{position:absolute;right:34px;top:18px;width:490px;height:270px;object-fit:cover;border-radius:18px;background:#eee}}.bottom{{position:absolute;left:42px;right:38px;bottom:30px;height:86px;display:flex;align-items:center;gap:28px}}.heart{{font-size:64px;line-height:1;color:#d63b5c}}.likes{{font-size:56px;color:#d63b5c;margin-right:30px}}.avatar{{width:68px;height:68px;border-radius:50%;object-fit:cover;background:#ddd}}.creator{{max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:30px;color:#6e7478}}.date{{margin-left:auto;font-size:42px;color:#73787d}}</style></head><body><div class="card"><div class="title">{title_h}</div><img class="thumb" src="{thumb_h}"><div class="bottom"><div class="heart">♥</div><div class="likes">{likes}</div><img class="avatar" src="{avatar_h}"><div class="creator">{nick_h}</div><div class="date">{date}</div></div></div></body></html>'''
+                  fp=OUT/f'card_{i:02d}.html'; fp.write_text(card,encoding='utf-8')
+                  browser.get(fp.resolve().as_uri()); time.sleep(1.2)
+                  out=OUT/f'{i:02d}_{key}.png'; browser.save_screenshot(str(out))
+                  manifest.append({'no':i,'key':key,'url':url,'title':title,'likes':likes,'publishAt':publish,'thumbnail':thumb,'file':out.name})
+                  print(f'{i:02d}',key,title[:70])
+          finally:
+              browser.quit()
+
+          (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Self-contained paste-test page: image + exact URL are inseparable in each block.
+          blocks=[]
+          for item in manifest:
+              img_bytes=(OUT/item['file']).read_bytes()
+              data='data:image/png;base64,'+base64.b64encode(img_bytes).decode('ascii')
+              t=html.escape(item['title']); u=item['url']
+              blocks.append(f'''<section class="item" data-url="{u}"><div class="n">{item['no']:02d}</div><a class="linked" href="{u}" target="_blank"><img src="{data}" alt="{t}"></a><div class="ttl">{t}</div><div class="btns"><button onclick="copyRich(this)">画像＋リンクをコピー</button><button onclick="copyUrl(this)">URLだけコピー</button><a href="{u}" target="_blank">元記事を確認</a></div></section>''')
+          test='''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>note貼付テスト Top10</title><style>body{margin:0;padding:16px;background:#f4f5f6;font-family:system-ui,-apple-system,sans-serif}.wrap{max-width:1100px;margin:auto}.item{background:#fff;border-radius:14px;padding:14px;margin:0 0 20px;box-shadow:0 2px 12px #0001}.n{font-weight:800;margin-bottom:8px}.linked img{display:block;width:100%;height:auto;border:1px solid #ddd}.ttl{font-weight:700;margin:10px 0}.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}button,.btns a{font-size:16px;padding:10px 12px}</style></head><body><div class="wrap"><h1>note貼付テスト Top10</h1><p>各画像と記事URLは同じ取得データから固定済みです。まず「画像＋リンクをコピー」→サブ垢のnote編集画面へ貼り付けてください。</p>'''+''.join(blocks)+'''</div><script>async function copyRich(btn){const item=btn.closest('.item'),a=item.querySelector('.linked'),img=a.querySelector('img'),url=item.dataset.url;const h=`<a href="${url}"><img src="${img.src}" alt=""></a>`;try{if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([h],{type:'text/html'}),'text/plain':new Blob([url],{type:'text/plain'})})]);btn.textContent='コピー済み';return}}catch(e){}const b=document.createElement('div');b.contentEditable='true';b.style.position='fixed';b.style.left='-9999px';b.innerHTML=h;document.body.appendChild(b);const r=document.createRange();r.selectNodeContents(b);const s=window.getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('copy');s.removeAllRanges();b.remove();btn.textContent='コピー済み'}async function copyUrl(btn){const u=btn.closest('.item').dataset.url;try{await navigator.clipboard.writeText(u);btn.textContent='コピー済み'}catch(e){prompt('URL',u)}}</script></body></html>'''
+          (OUT/'test-page.html').write_text(test,encoding='utf-8')
+          PY
+      - name: Upload v2 test assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: top10-note-link-test-v2
+          path: tmp-note-top10-v2
+          if-no-files-found: error
