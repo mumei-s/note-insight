@@ -6,45 +6,47 @@
 <meta name="robots" content="noindex,nofollow,noarchive">
 <title>note 極薄リンク画像テスト</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:680px;margin:auto;padding:20px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555;margin:6px 0 14px}.preview{display:inline-block;border:1px solid #ddd;border-radius:12px;padding:7px;background:#fafafa;max-width:100%}.preview img{display:block;width:580px;max-width:100%;height:auto;border-radius:9px}.actions{margin-top:16px}.copybtn{display:block;width:100%;max-width:580px;border:0;border-radius:12px;padding:17px 14px;font-size:17px;font-weight:800;background:#111;color:#fff;touch-action:manipulation;cursor:pointer;position:relative;z-index:20}.copybtn:active{transform:scale(.99)}.status{min-height:28px;margin-top:12px;font-weight:700;font-size:14px}.hint{font-size:13px;color:#666;line-height:1.7;margin-top:10px}
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:680px;margin:auto;padding:20px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555;margin:6px 0 14px}.preview{display:inline-block;border:1px solid #ddd;border-radius:12px;padding:7px;background:#fafafa;max-width:100%}.preview a{display:block}.preview img{display:block;width:580px;max-width:100%;height:auto;border-radius:9px}.actions{margin-top:16px}.copybtn{display:block;width:100%;max-width:580px;border:0;border-radius:12px;padding:17px 14px;font-size:17px;font-weight:800;background:#111;color:#fff;touch-action:manipulation;cursor:pointer}.copybtn:active{transform:scale(.99)}.status{min-height:28px;margin-top:12px;font-weight:700;font-size:14px}.hint{font-size:13px;color:#666;line-height:1.7;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="wrap"><div class="box">
 <h2 style="margin:0 0 4px">580×96 極薄リンク画像</h2>
-<p class="note">最初に動いたコピー処理へ戻しました。画像はChrome描画に変更したので絵文字も崩れにくくしています。</p>
-<div class="preview"><img id="card" src="./thin-card.png?v=emoji96" width="580" height="96" alt="極薄記事カード"></div>
-<div class="actions"><button class="copybtn" type="button" onclick="copyImage()">リンク付き画像をコピー</button></div>
+<p class="note">Androidで画像＋リンクまで入った「選択コピー方式」に戻しました。</p>
+<div class="preview" id="copySource">
+  <a href="https://note.com/ss_yr/n/nc14eb3f2ea9f">
+    <img id="card" src="./thin-card.png?v=emoji96b" width="580" height="96" alt="【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖">
+  </a>
+</div>
+<div class="actions"><button class="copybtn" type="button" id="copyBtn">リンク付き画像をコピー</button></div>
 <div class="status" id="status">画像が表示されたらボタンを押してください。</div>
-<p class="hint">貼り付け後、画像をタップして元記事へ飛べれば成功です。</p>
+<p class="hint">成功すると「コピーしました」と表示されます。そのままnote本文へ貼り付けてください。</p>
 </div></div>
 <script>
-const URL='https://note.com/ss_yr/n/nc14eb3f2ea9f';
-const IMG=new URL('./thin-card.png?v=emoji96',location.href).href;
-const TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖';
 const status=document.getElementById('status');
 const card=document.getElementById('card');
+const source=document.getElementById('copySource');
+const btn=document.getElementById('copyBtn');
 card.onload=()=>status.textContent='✅ 画像表示OK。コピーできます。';
-card.onerror=()=>status.textContent='⚠️ 画像更新中です。少し待って再読み込みしてください。';
-async function writeRich(html,plain){
-  if(!navigator.clipboard || !window.ClipboardItem) throw new Error('このブラウザではリッチコピーに対応していません');
-  const item=new ClipboardItem({
-    'text/html':new Blob([html],{type:'text/html'}),
-    'text/plain':new Blob([plain],{type:'text/plain'})
-  });
-  await navigator.clipboard.write([item]);
-}
-async function copyImage(){
+card.onerror=()=>status.textContent='⚠️ 画像更新中です。再読み込みしてください。';
+function copySelection(){
   status.textContent='コピー中…';
   try{
-    const esc=TITLE.replaceAll('&','&amp;').replaceAll('"','&quot;');
-    const html=`<a href="${URL}"><img src="${IMG}" alt="${esc}" width="580" height="96" style="display:block;width:580px;height:96px;max-width:580px"></a>`;
-    await writeRich(html,URL);
+    const sel=window.getSelection();
+    sel.removeAllRanges();
+    const range=document.createRange();
+    range.selectNodeContents(source);
+    sel.addRange(range);
+    const ok=document.execCommand('copy');
+    sel.removeAllRanges();
+    if(!ok) throw new Error('ブラウザがコピーを拒否しました');
     status.textContent='✅ コピーしました。noteへ貼り付けてください。';
   }catch(e){
+    try{window.getSelection().removeAllRanges()}catch(_){}
     status.textContent='⚠️ コピー失敗: '+e.message;
   }
 }
+btn.addEventListener('click',copySelection);
 </script>
 </body>
 </html>
