@@ -6,39 +6,39 @@
 <meta name="robots" content="noindex,nofollow,noarchive">
 <title>note リンク付き画像コピーテスト</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:900px;margin:auto;padding:24px 14px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:18px;box-shadow:0 8px 30px #0000000a}h1{font-size:22px;margin:0 0 8px}.note{font-size:14px;line-height:1.7;color:#555;margin:0 0 18px}.preview{border:1px solid #ddd;border-radius:14px;padding:12px;background:#fafafa}.preview a{display:block;text-decoration:none;color:inherit}.preview img{display:block;width:100%;height:auto;border-radius:10px}.title{font-size:18px;font-weight:800;line-height:1.5;margin:12px 2px 8px}.creator{font-size:14px;color:#666;margin:0 2px}.actions{display:grid;gap:10px;margin-top:18px}button{border:0;border-radius:12px;padding:15px 12px;font-size:16px;font-weight:800;background:#111;color:#fff}button.secondary{background:#e8eaed;color:#111}.status{min-height:26px;margin-top:12px;font-size:14px;font-weight:700}.steps{margin-top:22px;padding:16px;background:#fff;border-radius:14px;border:1px solid #ddd;font-size:15px;line-height:1.8}.steps b{color:#d92353}
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:900px;margin:auto;padding:24px 14px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:18px;box-shadow:0 8px 30px #0000000a}h1{font-size:22px;margin:0 0 8px}.note{font-size:14px;line-height:1.7;color:#555;margin:0 0 18px}.preview{border:1px solid #ddd;border-radius:14px;padding:12px;background:#fafafa;text-align:center}.preview a{display:inline-block;text-decoration:none;color:inherit}.preview img{display:block;width:360px;max-width:100%;height:auto;border-radius:10px;margin:auto}.title{font-size:18px;font-weight:800;line-height:1.5;margin:12px 2px 8px;text-align:left}.creator{font-size:14px;color:#666;margin:0 2px;text-align:left}.actions{display:grid;gap:10px;margin-top:18px}button{border:0;border-radius:12px;padding:15px 12px;font-size:16px;font-weight:800;background:#111;color:#fff}button.medium{background:#30343b}button.secondary{background:#e8eaed;color:#111}.status{min-height:26px;margin-top:12px;font-size:14px;font-weight:700}.steps{margin-top:22px;padding:16px;background:#fff;border-radius:14px;border:1px solid #ddd;font-size:15px;line-height:1.8}.steps b{color:#d92353}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="box">
     <h1>リンク付き画像 → note 貼り付けテスト</h1>
-    <p class="note">無名S note自身の記事で試します。下のボタンは、画像を元記事URLで囲んだ「リッチHTML」としてクリップボードへコピーします。</p>
+    <p class="note">リンク保持はそのままに、貼り付け画像の横幅を固定して小さくします。まず360pxを試してください。</p>
     <div class="preview" id="preview">
       <a id="articleLink" href="https://note.com/ss_yr/n/nc14eb3f2ea9f" target="_blank" rel="noopener">
-        <img id="thumb" src="https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=1280" alt="【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』">
+        <img id="thumb" src="https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=640" alt="【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』">
       </a>
       <div class="title">【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖</div>
       <div class="creator">無名 S note</div>
     </div>
     <div class="actions">
-      <button id="copyImage">① リンク付き画像をコピー</button>
-      <button id="copyCard" class="secondary">② リンク付きカード全体をコピー</button>
+      <button id="copySmall">① 360pxでリンク付き画像をコピー</button>
+      <button id="copyMedium" class="medium">② 480pxでリンク付き画像をコピー</button>
+      <button id="copyCard" class="secondary">③ リンク付きカード全体をコピー</button>
     </div>
     <div class="status" id="status"></div>
   </div>
   <div class="steps">
     <b>テスト手順</b><br>
-    1. まず「① リンク付き画像をコピー」を押す<br>
-    2. サブ垢のnote編集画面を開く<br>
-    3. 本文へ「貼り付け」<br>
-    4. 貼られた画像をタップし、元記事へのリンクが残っているか確認<br><br>
-    ①で画像が入らない場合だけ②を試してください。
+    1. まず「① 360px」をコピー<br>
+    2. サブ垢のnote本文へ貼り付け<br>
+    3. 画像サイズとリンク保持を確認<br>
+    4. 小さすぎる場合だけ「② 480px」を試す
   </div>
 </div>
 <script>
 const URL='https://note.com/ss_yr/n/nc14eb3f2ea9f';
-const IMG='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=1280';
+const IMG='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=640';
 const TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖';
 const status=document.getElementById('status');
 async function writeRich(html,plain){
@@ -49,18 +49,20 @@ async function writeRich(html,plain){
   });
   await navigator.clipboard.write([item]);
 }
-document.getElementById('copyImage').onclick=async()=>{
-  try{
-    const html=`<a href="${URL}"><img src="${IMG}" alt="${TITLE.replaceAll('&','&amp;').replaceAll('"','&quot;')}" style="max-width:100%;height:auto"></a>`;
-    await writeRich(html,URL);
-    status.textContent='✅ コピーしました。サブ垢noteへ貼り付けてください。';
-  }catch(e){status.textContent='⚠️ '+e.message;}
-};
+function esc(s){return s.replaceAll('&','&amp;').replaceAll('"','&quot;')}
+async function copySized(width){
+  const height=Math.round(width*9/16);
+  const html=`<a href="${URL}"><img src="${IMG}" alt="${esc(TITLE)}" width="${width}" height="${height}" style="display:block;width:${width}px;height:auto;max-width:${width}px"></a>`;
+  await writeRich(html,URL);
+  status.textContent=`✅ ${width}pxでコピーしました。noteへ貼り付けてください。`;
+}
+document.getElementById('copySmall').onclick=async()=>{try{await copySized(360)}catch(e){status.textContent='⚠️ '+e.message}};
+document.getElementById('copyMedium').onclick=async()=>{try{await copySized(480)}catch(e){status.textContent='⚠️ '+e.message}};
 document.getElementById('copyCard').onclick=async()=>{
   try{
-    const html=`<div><a href="${URL}"><img src="${IMG}" alt="${TITLE.replaceAll('&','&amp;').replaceAll('"','&quot;')}" style="max-width:100%;height:auto"></a><p><strong>${TITLE}</strong></p><p>無名 S note</p></div>`;
+    const html=`<div style="max-width:480px"><a href="${URL}"><img src="${IMG}" alt="${esc(TITLE)}" width="480" style="display:block;width:480px;height:auto;max-width:480px"></a><p><strong>${TITLE}</strong></p><p>無名 S note</p></div>`;
     await writeRich(html,`${TITLE}\n無名 S note\n${URL}`);
-    status.textContent='✅ カード全体をコピーしました。サブ垢noteへ貼り付けてください。';
+    status.textContent='✅ カード全体をコピーしました。';
   }catch(e){status.textContent='⚠️ '+e.message;}
 };
 </script>
