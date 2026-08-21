@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入（URL自動）
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.9.0
-// @description  高精細カードを1枚挿入し、画像ツールバーの鎖ボタンを特定して記事URLを自動設定
+// @version      1.0.0
+// @description  高精細カードを1枚挿入し、画像の鎖ボタン→新しく出たURL入力欄へ記事URLを自動入力して確定
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -12,17 +12,18 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_THIN_CARD_AUTO_V09__) return;
-  window.__MUMEI_THIN_CARD_AUTO_V09__ = true;
+  if (window.__MUMEI_THIN_CARD_AUTO_V100__) return;
+  window.__MUMEI_THIN_CARD_AUTO_V100__ = true;
 
   const CARD_IMAGE = 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png?v=hd2x';
   const ARTICLE_URL = 'https://note.com/ss_yr/n/nc14eb3f2ea9f';
-  const BUTTON_ID = 'mumei-thin-card-auto-v09';
-  const PANEL_ID = 'mumei-thin-card-auto-panel-v09';
+  const BUTTON_ID = 'mumei-thin-card-auto-v100';
+  const PANEL_ID = 'mumei-thin-card-auto-panel-v100';
   const OLD_IDS = [
     'mumei-thin-card-inserter-test','mumei-thin-card-panel-test',
     'mumei-thin-card-autolink-btn','mumei-toast',
-    'mumei-thin-card-auto-v08','mumei-thin-card-auto-panel-v08'
+    'mumei-thin-card-auto-v08','mumei-thin-card-auto-panel-v08',
+    'mumei-thin-card-auto-v09','mumei-thin-card-auto-panel-v09'
   ];
 
   let armed = false;
@@ -100,10 +101,9 @@
     return Math.min(a.right,b.right) - Math.max(a.left,b.left) > 20;
   }
 
-  // スクショで確認できた現行note UI：
-  // [鎖] [ALT] [拡大] [配置] [削除] が画像直上に並ぶ。
-  // ALTを目印に「その画像のツールバー」を特定し、左端だけを鎖ボタンとして使う。
-  function findToolbarFromAlt(img) {
+  // 現行note UI: [鎖] [ALT] [拡大] [配置] [削除]
+  // ALTを目印に、その画像のツールバーを特定して左端の鎖だけを使う。
+  function findLinkButtonFromAlt(img) {
     const ir = img.getBoundingClientRect();
     const altCandidates = [...document.querySelectorAll('button,[role="button"],span,div')]
       .filter(visible)
@@ -114,101 +114,139 @@
       for (let depth = 0; depth < 6 && node; depth++, node = node.parentElement) {
         const buttons = [...node.querySelectorAll('button,[role="button"]')].filter(visible);
         if (buttons.length < 4 || buttons.length > 7) continue;
-
         const nr = node.getBoundingClientRect();
         const gap = ir.top - nr.bottom;
-        const plausible = horizontalOverlap(nr, ir) && gap >= -25 && gap <= 180 && nr.height <= 140;
-        if (!plausible) continue;
+        if (!(horizontalOverlap(nr,ir) && gap >= -25 && gap <= 180 && nr.height <= 140)) continue;
 
         buttons.sort((a,b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
         const altIndex = buttons.findIndex(b => (b.textContent || '').trim() === 'ALT');
-        if (altIndex === 1 && buttons[0]) return { toolbar: node, linkButton: buttons[0] };
+        if (altIndex === 1 && buttons[0]) return buttons[0];
 
-        // ALTがbuttonでなくspan内の場合でも、スクショどおり左端→ALTの順なら採用。
-        const altRect = alt.getBoundingClientRect();
-        const leftButtons = buttons.filter(b => b.getBoundingClientRect().right <= altRect.left + 8);
-        if (leftButtons.length === 1) return { toolbar: node, linkButton: leftButtons[0] };
+        const ar = alt.getBoundingClientRect();
+        const leftButtons = buttons.filter(b => b.getBoundingClientRect().right <= ar.left + 8);
+        if (leftButtons.length === 1) return leftButtons[0];
       }
     }
     return null;
   }
 
-  async function openImageToolbar(img) {
-    img.scrollIntoView({block:'center', behavior:'instant'});
-    await sleep(250);
+  function tap(el) {
+    try { el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',isPrimary:true})); } catch(_) {}
+    try { el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch',isPrimary:true})); } catch(_) {}
+    try { el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true})); } catch(_) {}
+    try { el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true})); } catch(_) {}
+    try { el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); } catch(_) {}
+  }
 
-    // 実際の指タップに近い順序で1回だけ選択。
-    img.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',isPrimary:true}));
-    img.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch',isPrimary:true}));
-    img.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+  async function selectImageAndGetLinkButton(img) {
+    img.scrollIntoView({block:'center',behavior:'instant'});
+    await sleep(250);
+    tap(img);
     await sleep(700);
-
-    for (let i=0;i<10;i++) {
-      const found = findToolbarFromAlt(img);
-      if (found) return found.linkButton;
+    for (let i=0;i<12;i++) {
+      const btn = findLinkButtonFromAlt(img);
+      if (btn) return btn;
       await sleep(200);
     }
     return null;
   }
 
-  function setInputValue(input, value) {
-    const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto,'value')?.set;
-    if (setter) setter.call(input,value); else input.value = value;
-    input.dispatchEvent(new Event('input',{bubbles:true}));
-    input.dispatchEvent(new Event('change',{bubbles:true}));
+  function isTextEntry(el) {
+    if (!el || !visible(el)) return false;
+    if (el instanceof HTMLInputElement) return !['file','button','submit','checkbox','radio','range','color'].includes((el.type||'text').toLowerCase());
+    if (el instanceof HTMLTextAreaElement) return true;
+    return el.getAttribute?.('contenteditable') === 'true' && !el.classList?.contains('ProseMirror');
   }
 
-  async function findLinkInput(beforeInputs) {
-    for (let i=0;i<20;i++) {
-      const inputs = [...document.querySelectorAll('input,textarea')].filter(visible);
-      let input = inputs.find(el => /(url|リンク|link|http)/i.test([
-        el.type, el.placeholder, el.getAttribute('aria-label'), el.name
-      ].filter(Boolean).join(' ')));
-      if (!input) input = inputs.find(el => !beforeInputs.has(el));
-      if (input) return input;
-      await sleep(200);
+  function allTextEntries() {
+    return [...document.querySelectorAll('input,textarea,[contenteditable="true"]')].filter(isTextEntry);
+  }
+
+  async function findFreshFocusedUrlEntry(beforeEntries) {
+    for (let i=0;i<25;i++) {
+      const active = document.activeElement;
+      if (isTextEntry(active) && !beforeEntries.has(active)) return active;
+
+      const entries = allTextEntries();
+      const fresh = entries.filter(el => !beforeEntries.has(el));
+      if (fresh.length === 1) return fresh[0];
+      if (fresh.length > 1) {
+        const focused = fresh.find(el => el === document.activeElement);
+        if (focused) return focused;
+        // URL欄は通常、鎖クリック直後に新しく現れる小さめの入力欄。
+        fresh.sort((a,b) => {
+          const ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
+          return (ar.width*ar.height) - (br.width*br.height);
+        });
+        return fresh[0];
+      }
+      await sleep(160);
     }
     return null;
   }
 
-  async function attachExactLink(img, url) {
-    const linkBtn = await openImageToolbar(img);
+  function setEntryValue(el, value) {
+    el.focus();
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto,'value')?.set;
+      if (setter) setter.call(el,value); else el.value = value;
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+      return;
+    }
+    el.textContent = value;
+    el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}));
+  }
+
+  function pressEnter(el) {
+    el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+    el.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+    el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+  }
+
+  async function attachExactLink(img,url) {
+    const linkBtn = await selectImageAndGetLinkButton(img);
     if (!linkBtn) {
-      setStatus('⚠️ 画像ツールバーの鎖ボタンを見つけられませんでした', true);
+      setStatus('⚠️ 鎖ボタンを見つけられませんでした',true);
       return false;
     }
 
-    const beforeInputs = new Set([...document.querySelectorAll('input,textarea')].filter(visible));
-    linkBtn.click();
-    await sleep(450);
-
-    const input = await findLinkInput(beforeInputs);
-    if (!input) {
-      setStatus('⚠️ 鎖ボタンは押せましたが、URL入力欄を見つけられませんでした', true);
-      return false;
-    }
-
-    input.focus();
-    setInputValue(input,url);
+    const beforeEntries = new Set(allTextEntries());
+    tap(linkBtn);
     await sleep(250);
 
-    // noteのリンク入力はEnter確定を優先。
-    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
-    input.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+    const urlEntry = await findFreshFocusedUrlEntry(beforeEntries);
+    if (!urlEntry) {
+      setStatus('⚠️ 鎖は押せましたが、新しく出たURL入力欄を取得できませんでした',true);
+      return false;
+    }
+
+    setEntryValue(urlEntry,url);
+    await sleep(250);
+
+    // 入力が実際に入ったか確認してからEnter。
+    const current = urlEntry instanceof HTMLInputElement || urlEntry instanceof HTMLTextAreaElement
+      ? urlEntry.value
+      : urlEntry.textContent;
+    if ((current || '').trim() !== url) {
+      setStatus('⚠️ URL欄は見つかりましたが、文字入力が反映されませんでした',true);
+      return false;
+    }
+
+    pressEnter(urlEntry);
     await sleep(900);
 
-    // DOMでa要素になれば確定。見えない内部状態の場合は入力欄が閉じたことも成功候補。
+    // URL欄が閉じればnote側で確定されたと判断。
+    if (!visible(urlEntry)) return true;
+
+    // DOMにリンクが現れる場合は厳密確認。
     const a = img.closest('a[href]') || img.parentElement?.closest('a[href]');
     if (a) {
-      try {
-        if (new URL(a.href,location.href).href === new URL(url).href) return true;
-      } catch(_) {}
+      try { return new URL(a.href,location.href).href === new URL(url).href; } catch(_) {}
     }
 
-    const stillVisible = [...document.querySelectorAll('input,textarea')].filter(visible)
-      .some(el => (el.value || '').trim() === url);
-    return !stillVisible;
+    return false;
   }
 
   async function injectIntoFileInput(input) {
@@ -233,7 +271,7 @@
       const img = await waitForInsertedImage();
       if (!img) throw new Error('画像挿入を確認できませんでした');
 
-      setStatus('2/2 画像ツールバーの鎖ボタンからURLを設定中…');
+      setStatus('2/2 鎖→URL入力→Enter を自動実行中…');
       const linked = await attachExactLink(img,ARTICLE_URL);
       consumed = false;
       beforeFileInputs = new Set();
