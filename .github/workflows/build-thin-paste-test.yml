@@ -18,79 +18,45 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: |
-          pip install pillow requests
-          sudo apt-get update -qq
-          sudo apt-get install -y fonts-noto-cjk
-      - name: Build sub-620px ultra-thin PNG from real note thumbnail
+      - name: Prepare fonts and real thumbnail
         run: |
+          pip install requests
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
           python - <<'PY'
-          import io, os, requests
-          from PIL import Image, ImageDraw, ImageFont, ImageOps
-
-          THUMB='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=90&width=1280'
-          TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'
-          NAME='無名 S note'
-          out='public/note-paste-test/thin-card.png'
-          os.makedirs(os.path.dirname(out), exist_ok=True)
-
-          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          r=s.get(THUMB,timeout=30); r.raise_for_status()
-          thumb=Image.open(io.BytesIO(r.content)).convert('RGB')
-
-          # IMPORTANT: stay below note's 620px body-image expansion threshold.
-          W,H=580,96
-          img=Image.new('RGB',(W,H),(255,255,255))
-          d=ImageDraw.Draw(img)
-          d.rounded_rectangle((1,1,W-2,H-2),radius=11,fill=(255,255,255),outline=(225,225,225),width=1)
-          font_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
-          reg_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
-
-          # Preserve the entire real thumbnail; no crop inside it.
-          tw,th=220,78
-          thumb_fit=ImageOps.contain(thumb,(tw,th),Image.Resampling.LANCZOS)
-          tx=W-9-tw; ty=(H-th)//2
-          bg=Image.new('RGB',(tw,th),'white')
-          bg.paste(thumb_fit,((tw-thumb_fit.width)//2,(th-thumb_fit.height)//2))
-          mask=Image.new('L',(tw,th),0)
-          ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=6,fill=255)
-          img.paste(bg,(tx,ty),mask)
-
-          maxw=tx-22
-          chosen=None
-          for size in range(19,12,-1):
-              tf=ImageFont.truetype(font_path,size)
-              lines=[]; cur=''
-              for ch in TITLE:
-                  cand=cur+ch
-                  if d.textbbox((0,0),cand,font=tf)[2] <= maxw-12:
-                      cur=cand
-                  else:
-                      if cur: lines.append(cur)
-                      cur=ch
-              if cur: lines.append(cur)
-              if len(lines)<=2:
-                  chosen=(tf,lines); break
-          if chosen is None:
-              tf=ImageFont.truetype(font_path,13)
-              lines=[TITLE[:28],TITLE[28:56]]
-          else:
-              tf,lines=chosen
-          y=9
-          for line in lines[:2]:
-              d.text((12,y),line,font=tf,fill=(20,26,34))
-              y=d.textbbox((12,y),line,font=tf)[3]
-
-          nf=ImageFont.truetype(reg_path,13)
-          d.text((13,H-21),NAME,font=nf,fill=(72,79,91))
-          img.save(out,'PNG',optimize=True)
-          print('saved',out,img.size)
+          import requests, pathlib
+          url='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=90&width=1280'
+          p=pathlib.Path('/tmp/thumb.jpg')
+          r=requests.get(url,headers={'User-Agent':'Mozilla/5.0'},timeout=30)
+          r.raise_for_status(); p.write_bytes(r.content)
+          print('thumb',len(r.content))
           PY
+      - name: Render 580x96 card with Chrome
+        run: |
+          cat >/tmp/card.html <<'HTML'
+          <!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
+          *{box-sizing:border-box}html,body{margin:0;width:580px;height:96px;overflow:hidden;background:white}
+          body{font-family:"Noto Sans CJK JP","Noto Color Emoji",sans-serif}
+          .card{width:580px;height:96px;border:1px solid #ddd;border-radius:11px;background:#fff;display:flex;align-items:stretch;overflow:hidden}
+          .left{width:351px;padding:8px 9px 7px 11px;display:flex;flex-direction:column;justify-content:space-between}
+          .title{font-size:14px;line-height:1.3;font-weight:800;color:#151a21;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+          .creator{font-size:11px;line-height:1.2;color:#555d69;white-space:nowrap}
+          .thumbWrap{width:229px;height:96px;padding:9px 9px 9px 0;display:flex;align-items:center;justify-content:center}
+          .thumb{width:220px;height:78px;border-radius:6px;object-fit:contain;background:#fff;display:block}
+          </style></head><body>
+          <div class="card">
+            <div class="left"><div class="title">【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖</div><div class="creator">無名 S note</div></div>
+            <div class="thumbWrap"><img class="thumb" src="file:///tmp/thumb.jpg"></div>
+          </div>
+          </body></html>
+          HTML
+          google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=580,96 --screenshot=public/note-paste-test/thin-card.png file:///tmp/card.html
+          file public/note-paste-test/thin-card.png
       - name: Commit generated PNG
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/note-paste-test/thin-card.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Generate sub-620px thin paste test card'
+          git commit -m 'Generate emoji-safe 580x96 thin paste card'
           git push
