@@ -1,0 +1,112 @@
+name: Extract summer magazine URLs
+
+on:
+  push:
+    branches:
+      - extract-summer-magazine-20260821
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Selenium
+        run: pip install selenium
+      - name: Extract all article URLs
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          import time
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+
+          TARGET = 'https://note.com/ai_naoyuki/m/m7ffeddfdfb3c'
+
+          opts = Options()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          opts.add_argument('--disable-gpu')
+          opts.add_argument('--window-size=1440,5000')
+          opts.add_argument('--lang=ja-JP')
+          opts.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36')
+
+          driver = webdriver.Chrome(options=opts)
+          wait = WebDriverWait(driver, 20)
+          try:
+              driver.get(TARGET)
+              time.sleep(5)
+
+              seen = []
+              seen_set = set()
+              stable = 0
+
+              for turn in range(60):
+                  # Collect currently loaded note article URLs.
+                  for a in driver.find_elements(By.CSS_SELECTOR, 'a[href]'):
+                      href = a.get_attribute('href') or ''
+                      m = re.match(r'^https://note\.com/([^/?#]+)/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
+                      if m:
+                          clean = f'https://note.com/{m.group(1)}/n/{m.group(2)}'
+                          if clean not in seen_set:
+                              seen_set.add(clean)
+                              seen.append(clean)
+
+                  before = len(seen)
+
+                  # Click every visible "もっとみる" control if present.
+                  clicked = False
+                  candidates = driver.find_elements(By.XPATH, "//*[self::button or self::a or @role='button'][contains(normalize-space(.), 'もっとみる')]")
+                  for el in candidates:
+                      try:
+                          if el.is_displayed() and el.is_enabled():
+                              driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                              time.sleep(0.4)
+                              driver.execute_script('arguments[0].click();', el)
+                              clicked = True
+                              time.sleep(2.5)
+                      except Exception:
+                          pass
+
+                  # Also trigger lazy/infinite loading by scrolling to the bottom.
+                  driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+                  time.sleep(2)
+
+                  # Recollect after click/scroll.
+                  for a in driver.find_elements(By.CSS_SELECTOR, 'a[href]'):
+                      href = a.get_attribute('href') or ''
+                      m = re.match(r'^https://note\.com/([^/?#]+)/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
+                      if m:
+                          clean = f'https://note.com/{m.group(1)}/n/{m.group(2)}'
+                          if clean not in seen_set:
+                              seen_set.add(clean)
+                              seen.append(clean)
+
+                  after = len(seen)
+                  print(f'TURN {turn+1}: urls={after}, clicked_more={clicked}')
+
+                  if after == before and not clicked:
+                      stable += 1
+                  else:
+                      stable = 0
+
+                  # Page says 43 articles; stop once all unique article URLs are loaded.
+                  if after >= 43:
+                      break
+                  if stable >= 5:
+                      break
+
+              print('===RESULT_START===')
+              print(f'COUNT={len(seen)}')
+              for u in seen:
+                  print(u)
+              print('===RESULT_END===')
+          finally:
+              driver.quit()
+          PY
