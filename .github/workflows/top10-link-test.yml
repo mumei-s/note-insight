@@ -6,6 +6,9 @@ on:
       - top10-link-test-20260821
     paths-ignore:
       - tmp-note-top10/**
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -47,7 +50,6 @@ jobs:
 
           def normalize(img):
               img=img.convert('RGB')
-              # Preserve the complete card; scale to fit inside 1536x427, then center on white.
               fitted=ImageOps.contain(img, (1536,427), method=Image.Resampling.LANCZOS)
               canvas=Image.new('RGB',(1536,427),'white')
               x=(1536-fitted.width)//2
@@ -58,7 +60,6 @@ jobs:
           try:
               driver.get(TARGET)
               time.sleep(8)
-              # Make sure the first screen and a bit below are fully loaded.
               driver.execute_script('window.scrollTo(0, 700)')
               time.sleep(2)
               driver.execute_script('window.scrollTo(0, 0)')
@@ -85,7 +86,6 @@ jobs:
                   try:
                       driver.execute_script("arguments[0].scrollIntoView({block:'center'});", a)
                       time.sleep(0.8)
-
                       card=driver.execute_script('''
                         let a=arguments[0];
                         let el=a, fallback=a;
@@ -100,11 +100,9 @@ jobs:
                         }
                         return fallback;
                       ''',a)
-
                       title=(a.text or '').strip()
                       if not title:
                           title=driver.execute_script("return (arguments[0].innerText||'').trim()", card).split('\n')[0][:160]
-
                       raw=card.screenshot_as_png
                       im=Image.open(BytesIO(raw))
                       norm=normalize(im)
@@ -119,7 +117,6 @@ jobs:
               with open(os.path.join(OUT,'manifest.json'),'w',encoding='utf-8') as f:
                   json.dump(manifest,f,ensure_ascii=False,indent=2)
 
-              # Test page: each image is already wrapped in its exact article URL.
               cards=[]
               for item in manifest:
                   if not item.get('file'): continue
@@ -147,6 +144,7 @@ jobs:
               driver.quit()
           PY
       - name: Save generated assets to temporary branch
+        if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
