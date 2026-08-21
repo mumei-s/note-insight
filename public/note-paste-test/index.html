@@ -6,52 +6,38 @@
 <meta name="robots" content="noindex,nofollow,noarchive">
 <title>note 極薄リンク画像テスト</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:980px;margin:auto;padding:20px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555;margin:6px 0 14px}.preview{display:inline-block;max-width:100%;border:1px solid #ddd;border-radius:12px;padding:7px;background:#fafafa}.preview img{display:block;max-width:100%;width:auto;height:auto;border-radius:9px}.actions{display:grid;gap:10px;margin-top:16px;max-width:520px}button{border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:800;background:#111;color:#fff}button.alt{background:#e8eaed;color:#111}.status{min-height:26px;margin-top:12px;font-weight:700;font-size:14px}.hint{font-size:13px;color:#666;line-height:1.7;margin-top:12px}
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}.wrap{max-width:760px;margin:auto;padding:20px 12px 60px}.box{background:#fff;border:1px solid #ddd;border-radius:18px;padding:16px}.note{font-size:14px;line-height:1.7;color:#555;margin:6px 0 14px}.preview{display:inline-block;max-width:100%;border:1px solid #ddd;border-radius:12px;padding:7px;background:#fafafa}.preview img{display:block;width:580px;max-width:100%;height:auto;border-radius:9px}.actions{display:grid;gap:10px;margin-top:16px;max-width:580px}button{border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:800;background:#111;color:#fff}.status{min-height:26px;margin-top:12px;font-weight:700;font-size:14px}.hint{font-size:13px;color:#666;line-height:1.7;margin-top:12px}
 </style>
 </head>
 <body>
 <div class="wrap"><div class="box">
 <h2 style="margin:0 0 4px">極薄リンク付き画像テスト</h2>
-<p class="note">カード自体を <b>900×140</b> に変更。サムネイルは全体を残しています。量産版はタイトル長で横幅を自動調整します。</p>
-<div class="preview"><img id="card" src="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png?v=900x140" alt="極薄記事カード"></div>
-<div class="actions">
-<button id="copyCompat">① リンク付き画像をコピー</button>
-<button id="copyRich" class="alt">② ①がダメな時の予備コピー</button>
-</div>
-<div class="status" id="status">画像が表示されてからコピーしてください。</div>
-<p class="hint">①は選択コピー方式、②は最初に成功したリッチHTML方式です。どちらも画像保存やURL後付けは不要です。</p>
+<p class="note">前回②で画像＋リンクが入った方式だけを残しました。カード本体を <b>580×96px</b> にして、noteで本文幅いっぱいに拡大されにくいサイズへ変更しています。</p>
+<div class="preview"><img id="card" src="./thin-card.png?v=580x96" width="580" height="96" alt="極薄記事カード"></div>
+<div class="actions"><button id="copy">リンク付き極薄画像をコピー</button></div>
+<div class="status" id="status">画像が表示されてから押してください。</div>
+<p class="hint">画像保存・URL後付けは不要。貼り付け後、画像をタップして元記事へ飛べるかも確認してください。</p>
 </div></div>
 <script>
 const URL='https://note.com/ss_yr/n/nc14eb3f2ea9f';
-const IMG='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png?v=900x140';
+const IMG=new URL('./thin-card.png?v=580x96',location.href).href;
 const TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖';
 const status=document.getElementById('status');
 const visible=document.getElementById('card');
-visible.onload=()=>status.textContent='✅ 画像表示OK。①を押してください。';
-visible.onerror=()=>status.textContent='⚠️ 画像の読み込みに失敗。ページを再読み込みしてください。';
-
-function compatCopy(){
-  const holder=document.createElement('div');
-  holder.contentEditable='true';
-  holder.style.position='fixed';holder.style.left='-99999px';holder.style.top='0';
-  holder.innerHTML=`<a href="${URL}"><img src="${IMG}" alt="${TITLE}" width="900" height="140"></a>`;
-  document.body.appendChild(holder);
-  const range=document.createRange();range.selectNodeContents(holder);
-  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
-  const ok=document.execCommand('copy');
-  sel.removeAllRanges();holder.remove();
-  if(!ok) throw new Error('選択コピーに失敗しました');
+visible.onload=()=>status.textContent='✅ 画像表示OK。コピーできます。';
+visible.onerror=()=>status.textContent='⚠️ 画像がまだ更新されていません。少し待って再読み込みしてください。';
+async function copyRich(){
+  try{
+    if(!navigator.clipboard || !window.ClipboardItem) throw new Error('このブラウザではリッチコピーに対応していません');
+    const html=`<a href="${URL}"><img src="${IMG}" alt="${TITLE}" width="580" height="96" style="display:block;width:580px;height:96px;max-width:580px"></a>`;
+    const item=new ClipboardItem({
+      'text/html':new Blob([html],{type:'text/html'}),
+      'text/plain':new Blob([URL],{type:'text/plain'})
+    });
+    await navigator.clipboard.write([item]);
+    status.textContent='✅ コピーしました。noteへ貼り付けてください。';
+  }catch(e){status.textContent='⚠️ コピー失敗: '+e.message;}
 }
-async function richCopy(){
-  if(!navigator.clipboard || !window.ClipboardItem) throw new Error('このブラウザではリッチコピーに対応していません');
-  const html=`<a href="${URL}"><img src="${IMG}" alt="${TITLE}" width="900" height="140"></a>`;
-  const item=new ClipboardItem({
-    'text/html':new Blob([html],{type:'text/html'}),
-    'text/plain':new Blob([URL],{type:'text/plain'})
-  });
-  await navigator.clipboard.write([item]);
-}
-document.getElementById('copyCompat').onclick=()=>{try{compatCopy();status.textContent='✅ コピーしました。noteへ貼り付けてください。';}catch(e){status.textContent='⚠️ '+e.message+'。②を試してください。';}};
-document.getElementById('copyRich').onclick=async()=>{try{await richCopy();status.textContent='✅ 予備方式でコピーしました。noteへ貼り付けてください。';}catch(e){status.textContent='⚠️ '+e.message;}};
+document.getElementById('copy').onclick=copyRich;
 </script>
 </body></html>
