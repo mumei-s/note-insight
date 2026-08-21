@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.2.0
-// @description  note編集画面へ極薄カード画像を直接挿入し、その画像だけを元記事URLへリンクする1枚テスト
+// @version      0.3.0
+// @description  note新規記事・既存記事の編集画面へ極薄カード画像を直接挿入する1枚テスト
 // @match        https://note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -65,14 +65,14 @@
         const range = sel.getRangeAt(0);
         if (editor.contains(range.commonAncestorContainer)) {
           const r = range.getBoundingClientRect();
-          if (r && Number.isFinite(r.left) && Number.isFinite(r.top) && (r.width || r.height)) {
-            return { x: r.left + Math.max(2, r.width / 2), y: r.top + Math.max(2, r.height / 2) };
+          if (r && Number.isFinite(r.left) && Number.isFinite(r.top)) {
+            return { x: r.left + 2, y: r.top + 2 };
           }
         }
       }
     } catch (_) {}
     const r = editor.getBoundingClientRect();
-    return { x: r.left + Math.min(30, Math.max(10, r.width / 4)), y: r.top + Math.min(30, Math.max(10, r.height / 8)) };
+    return { x: r.left + 24, y: r.top + 24 };
   }
 
   async function waitForNewImage(editor, before, timeout = 12000) {
@@ -97,7 +97,6 @@
   }
 
   async function setExactImageLink(img, editor) {
-    // Never guess toolbar buttons. Only operate on the image inserted by this run.
     img.scrollIntoView({ block: 'center', behavior: 'instant' });
     await sleep(250);
 
@@ -107,39 +106,19 @@
     sel.removeAllRanges();
     sel.addRange(range);
 
-    let commandWorked = false;
-    try {
-      commandWorked = document.execCommand('createLink', false, ARTICLE_URL);
-    } catch (_) {}
+    try { document.execCommand('createLink', false, ARTICLE_URL); } catch (_) {}
     await sleep(700);
+    if (exactLinkedImage(img)) return true;
 
-    if (exactLinkedImage(img)) return { ok: true, method: 'createLink' };
-
-    // Some ProseMirror builds normalize the DOM after execCommand. Try one scoped DOM mutation
-    // and immediately verify. If the editor rejects it, remove it and report failure.
-    let wrapper = null;
-    try {
-      wrapper = document.createElement('a');
-      wrapper.href = ARTICLE_URL;
-      wrapper.setAttribute('data-mumei-thin-card-link', '1');
-      img.parentNode.insertBefore(wrapper, img);
-      wrapper.appendChild(img);
-      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'formatCreateLink' }));
-      await sleep(900);
-      if (exactLinkedImage(img)) return { ok: true, method: commandWorked ? 'createLink+verify' : 'scoped-wrap' };
-    } catch (_) {}
-
-    // Safety rollback: never leave an unverified or wrong link around the image.
     const current = img.closest('a[href]');
     if (current) {
       let isExact = false;
       try { isExact = new URL(current.href, location.href).href === new URL(ARTICLE_URL).href; } catch (_) {}
       if (!isExact && current.parentNode) current.replaceWith(img);
     }
-    if (wrapper && wrapper.isConnected && wrapper.parentNode) wrapper.replaceWith(img);
 
     sel.removeAllRanges();
-    return { ok: false };
+    return false;
   }
 
   async function insertCard() {
@@ -147,8 +126,9 @@
     if (btn) btn.disabled = true;
     try {
       const editor = getEditor();
-      if (!editor) throw new Error('note本文エディタが見つかりません。編集画面を開いてください');
+      if (!editor) throw new Error('本文欄がまだ出ていません。本文を1回タップしてからもう一度押してください');
 
+      editor.focus();
       setStatus('1/3 画像を取得中…');
       const blob = await requestBlob(CARD_IMAGE);
 
@@ -171,11 +151,8 @@
 
       setStatus('3/3 この画像だけに元記事リンクを設定中…');
       const linked = await setExactImageLink(img, editor);
-      if (linked.ok && exactLinkedImage(img)) {
-        setStatus('✅ 画像挿入＋正しい記事URLを確認しました');
-      } else {
-        setStatus('⚠️ 画像は挿入できましたが、リンクは安全に設定できなかったので付けずに止めました', true);
-      }
+      if (linked) setStatus('✅ 画像挿入＋正しい記事URLを確認しました');
+      else setStatus('⚠️ 画像は挿入できました。リンクは安全確認できないため付けずに止めました', true);
     } catch (e) {
       setStatus('⚠️ ' + (e?.message || String(e)), true);
     } finally {
@@ -183,19 +160,20 @@
     }
   }
 
-  function mount() {
-    if (document.getElementById(BUTTON_ID)) return;
-
+  function makePanel() {
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.textContent = 'note編集画面で本文の入れたい位置をタップしてから実行';
+    panel.textContent = '本文の入れたい位置をタップ → 極薄カード挿入';
     Object.assign(panel.style, {
       position: 'fixed', right: '12px', bottom: '74px', zIndex: '2147483646',
       maxWidth: '290px', padding: '9px 11px', borderRadius: '10px',
       background: '#111827', color: '#fff', fontSize: '12px', lineHeight: '1.45',
-      boxShadow: '0 4px 18px rgba(0,0,0,.25)'
+      boxShadow: '0 4px 18px rgba(0,0,0,.25)', pointerEvents: 'none'
     });
+    return panel;
+  }
 
+  function makeButton() {
     const btn = document.createElement('button');
     btn.id = BUTTON_ID;
     btn.type = 'button';
@@ -207,10 +185,19 @@
       boxShadow: '0 5px 20px rgba(0,0,0,.30)', touchAction: 'manipulation'
     });
     btn.addEventListener('click', insertCard);
-
-    document.body.append(panel, btn);
+    return btn;
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
-  else mount();
+  function ensureMounted() {
+    if (!document.body) return;
+    if (!document.getElementById(PANEL_ID)) document.body.appendChild(makePanel());
+    if (!document.getElementById(BUTTON_ID)) document.body.appendChild(makeButton());
+  }
+
+  // noteはSPAなので、新規記事へ移動すると画面だけ差し替わりボタンが消えることがある。
+  // そのため新規記事・既存記事を問わず定期的に復活させる。
+  ensureMounted();
+  setInterval(ensureMounted, 1000);
+  window.addEventListener('popstate', () => setTimeout(ensureMounted, 100));
+  window.addEventListener('pageshow', () => setTimeout(ensureMounted, 100));
 })();
