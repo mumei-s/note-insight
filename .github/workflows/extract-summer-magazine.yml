@@ -7,6 +7,9 @@ on:
     paths-ignore:
       - magazine-urls.txt
       - magazine-extract-debug.txt
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -113,6 +116,7 @@ jobs:
               driver.quit()
           PY
       - name: Save result to temporary branch
+        if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
