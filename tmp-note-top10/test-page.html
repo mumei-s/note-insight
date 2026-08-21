@@ -1,0 +1,14 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>noteリンク貼付テスト Top10</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f4f5f6;margin:0;padding:18px}.wrap{max-width:1100px;margin:auto}.card{background:#fff;padding:14px;margin:0 0 20px;border-radius:14px;box-shadow:0 2px 10px #0001}.num{font-weight:800;margin-bottom:8px}.linked img{display:block;width:100%;height:auto;border:1px solid #ddd}.meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}.title{flex:1 1 100%;font-weight:700}button,a{font-size:16px}button{padding:10px 14px}.meta a{padding:10px}</style></head><body><div class="wrap"><h1>noteリンク付き画像テスト Top10</h1><p>各画像と記事URLは取得時点で1対1固定。まず「画像＋リンクをコピー」→サブ垢のnote本文へ貼り付けて、画像クリック時のリンクが保持されるか確認。</p><section class="card" data-url="https://note.com/ss_yr/n/n204cd14b9c1d"><div class="num">01</div><a class="linked" href="https://note.com/ss_yr/n/n204cd14b9c1d" target="_blank"><img src="https://raw.githubusercontent.com/mumei-s/note-insight/top10-link-test-20260821/tmp-note-top10/01_n204cd14b9c1d.jpg" alt="仕事依頼"></a><div class="meta"><div class="title">仕事依頼</div><button onclick="copyRich(this)">画像＋リンクをコピー</button><button onclick="navigator.clipboard.writeText('https://note.com/ss_yr/n/n204cd14b9c1d')">URLをコピー</button><a href="https://note.com/ss_yr/n/n204cd14b9c1d" target="_blank">元記事を開く</a></div></section></div><script>
+    async function copyRich(btn){
+      const card=btn.closest('.card'); const a=card.querySelector('.linked'); const img=a.querySelector('img'); const url=card.dataset.url;
+      const html=`<a href="${url}"><img src="${img.src}" alt=""></a>`;
+      try{
+        if(navigator.clipboard && window.ClipboardItem){
+          const item=new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([url],{type:'text/plain'})});
+          await navigator.clipboard.write([item]); btn.textContent='コピー済み'; return;
+        }
+      }catch(e){}
+      const box=document.createElement('div'); box.contentEditable='true'; box.style.position='fixed'; box.style.left='-9999px'; box.innerHTML=html; document.body.appendChild(box);
+      const range=document.createRange(); range.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); document.execCommand('copy'); sel.removeAllRanges(); box.remove(); btn.textContent='コピー済み';
+    }
+    </script></body></html>
