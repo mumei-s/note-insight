@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         無名S note 極薄カード挿入テスト
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      0.5.0
-// @description  note編集画面へ極薄カード画像を直接挿入する1枚テスト（画像挿入のみ）
+// @version      0.6.0
+// @description  note自身の画像アップロード入力へ極薄カードを直接渡す1枚テスト
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
-// @run-at       document-idle
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {
@@ -16,10 +16,17 @@
   const BUTTON_ID = 'mumei-thin-card-inserter-test';
   const PANEL_ID = 'mumei-thin-card-panel-test';
 
+  let armed = false;
+  let preparedFile = null;
+  let beforeFileInputs = new Set();
+  let beforeEditorImages = new Set();
+  let disarmTimer = null;
+
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   function getEditor() {
-    return document.querySelector('.ProseMirror');
+    return document.querySelector('.ProseMirror[contenteditable="true"]') ||
+           document.querySelector('.ProseMirror');
   }
 
   function setStatus(text, bad = false) {
@@ -46,49 +53,110 @@
     });
   }
 
-  async function waitForNewImage(editor, before, timeout = 20000) {
-    const end = Date.now() + timeout;
-    while (Date.now() < end) {
-      const imgs = [...editor.querySelectorAll('img')];
-      const added = imgs.find(img => !before.has(img));
-      if (added) return added;
-      await sleep(250);
-    }
-    return null;
+  function isImageFileInput(input) {
+    if (!(input instanceof HTMLInputElement) || input.type !== 'file') return false;
+    const accept = (input.accept || '').toLowerCase();
+    return !accept || accept.includes('image') || accept.includes('.png') || accept.includes('.jpg') || accept.includes('.jpeg');
   }
 
-  async function insertCard() {
-    const btn = document.getElementById(BUTTON_ID);
-    if (btn) btn.disabled = true;
+  function disarm(message, bad = false) {
+    armed = false;
+    preparedFile = null;
+    beforeFileInputs = new Set();
+    if (disarmTimer) clearTimeout(disarmTimer);
+    disarmTimer = null;
+    if (message) setStatus(message, bad);
+  }
+
+  async function verifyBodyImage() {
+    const editor = getEditor();
+    if (!editor) return false;
+    const end = Date.now() + 15000;
+    while (Date.now() < end) {
+      const imgs = [...editor.querySelectorAll('img')];
+      const added = imgs.find(img => !beforeEditorImages.has(img));
+      if (added) return true;
+      await sleep(300);
+    }
+    return false;
+  }
+
+  function injectIntoFileInput(input) {
+    if (!armed || !preparedFile || !isImageFileInput(input)) return false;
+    // 既に存在していた別用途のfile inputは触らない。
+    if (beforeFileInputs.has(input)) return false;
 
     try {
-      const editor = getEditor();
-      if (!editor) throw new Error('本文エディタが見つかりません');
-
-      editor.focus();
-      setStatus('1/2 画像を取得中…');
-      const blob = await requestBlob(CARD_IMAGE);
-
-      setStatus('2/2 note本文へ貼り付け中…');
-      const before = new Set(editor.querySelectorAll('img'));
-      const file = new File([blob], 'mumei-thin-card.png', { type: blob.type || 'image/png' });
       const dt = new DataTransfer();
-      dt.items.add(file);
+      dt.items.add(preparedFile);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      setStatus('noteへ画像ファイルを渡しました。アップロード確認中…');
 
-      const pasteEvent = new ClipboardEvent('paste', {
-        bubbles: true,
-        cancelable: true,
-        clipboardData: dt
-      });
-      editor.dispatchEvent(pasteEvent);
-
-      const img = await waitForNewImage(editor, before);
-      if (!img) throw new Error('画像挿入を確認できませんでした');
-
-      img.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      setStatus('✅ 画像挿入できました。今回はリンク設定はまだしていません');
+      setTimeout(async () => {
+        const ok = await verifyBodyImage();
+        if (ok) disarm('✅ 極薄カード画像を本文へ挿入できました');
+        else disarm('⚠️ noteの画像入力には渡せましたが、本文への表示を確認できませんでした', true);
+      }, 300);
+      return true;
     } catch (e) {
-      setStatus('⚠️ ' + (e?.message || String(e)), true);
+      setStatus('⚠️ ファイル注入失敗: ' + (e?.message || String(e)), true);
+      return false;
+    }
+  }
+
+  // noteが動的に作る file input を捕まえる。
+  const observer = new MutationObserver(mutations => {
+    if (!armed) return;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (isImageFileInput(node) && injectIntoFileInput(node)) return;
+        const inputs = node.querySelectorAll ? node.querySelectorAll('input[type="file"]') : [];
+        for (const input of inputs) {
+          if (isImageFileInput(input) && injectIntoFileInput(input)) return;
+        }
+      }
+    }
+  });
+
+  function startObserver() {
+    if (!document.documentElement) return setTimeout(startObserver, 50);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  startObserver();
+
+  // noteが input.click() でOSファイル選択を開く場合も横取りする。
+  const nativeInputClick = HTMLInputElement.prototype.click;
+  HTMLInputElement.prototype.click = function (...args) {
+    if (armed && isImageFileInput(this) && !beforeFileInputs.has(this)) {
+      if (injectIntoFileInput(this)) return;
+    }
+    return nativeInputClick.apply(this, args);
+  };
+
+  async function armNativeUpload() {
+    const btn = document.getElementById(BUTTON_ID);
+    if (btn) btn.disabled = true;
+    try {
+      const editor = getEditor();
+      if (!editor) throw new Error('note本文欄が見つかりません');
+
+      setStatus('極薄カードを準備中…');
+      const blob = await requestBlob(CARD_IMAGE);
+      preparedFile = new File([blob], 'mumei-thin-card.png', { type: 'image/png' });
+
+      beforeFileInputs = new Set(document.querySelectorAll('input[type="file"]'));
+      beforeEditorImages = new Set(editor.querySelectorAll('img'));
+      armed = true;
+
+      setStatus('準備OK。本文の入れたい行をタップ → noteの「＋」→「画像」を押してください');
+      disarmTimer = setTimeout(() => {
+        if (armed) disarm('時間切れ。もう一度「極薄カード準備」を押してください', true);
+      }, 45000);
+    } catch (e) {
+      disarm('⚠️ ' + (e?.message || String(e)), true);
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -97,10 +165,10 @@
   function makePanel() {
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.textContent = '本文を1回タップ → 極薄カード挿入';
+    panel.textContent = '本文をタップしてから「極薄カード準備」';
     Object.assign(panel.style, {
       position: 'fixed', right: '12px', bottom: '74px', zIndex: '2147483646',
-      maxWidth: '290px', padding: '9px 11px', borderRadius: '10px',
+      maxWidth: '310px', padding: '9px 11px', borderRadius: '10px',
       background: '#111827', color: '#fff', fontSize: '12px', lineHeight: '1.45',
       boxShadow: '0 4px 18px rgba(0,0,0,.25)', pointerEvents: 'none'
     });
@@ -111,14 +179,14 @@
     const btn = document.createElement('button');
     btn.id = BUTTON_ID;
     btn.type = 'button';
-    btn.textContent = '極薄カード挿入';
+    btn.textContent = '極薄カード準備';
     Object.assign(btn.style, {
       position: 'fixed', right: '12px', bottom: '16px', zIndex: '2147483647',
       border: '0', borderRadius: '12px', padding: '14px 18px',
       background: '#111', color: '#fff', fontSize: '16px', fontWeight: '800',
       boxShadow: '0 5px 20px rgba(0,0,0,.30)', touchAction: 'manipulation'
     });
-    btn.addEventListener('click', insertCard);
+    btn.addEventListener('click', armNativeUpload);
     return btn;
   }
 
@@ -128,8 +196,15 @@
     if (!document.getElementById(BUTTON_ID)) document.body.appendChild(makeButton());
   }
 
-  ensureMounted();
-  setInterval(ensureMounted, 1000);
-  window.addEventListener('popstate', () => setTimeout(ensureMounted, 100));
-  window.addEventListener('pageshow', () => setTimeout(ensureMounted, 100));
+  function mountLoop() {
+    ensureMounted();
+    setTimeout(mountLoop, 1000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureMounted, { once: true });
+  } else {
+    ensureMounted();
+  }
+  mountLoop();
 })();
