@@ -18,70 +18,72 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pillow requests
-      - name: Build thin PNG from real note assets
+      - run: |
+          pip install pillow requests
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Build ultra-thin PNG from real note thumbnail
         run: |
           python - <<'PY'
           import io, os, requests
           from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-          THUMB='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=1280'
-          ICON='https://assets.st-note.com/production/uploads/images/280421627/profile_54172438db482342de0ca9ef8c6395ec.jpg?fit=bounds&format=jpeg&quality=85&width=330'
+          THUMB='https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=90&width=1280'
           TITLE='【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'
           NAME='無名 S note'
           out='public/note-paste-test/thin-card.png'
           os.makedirs(os.path.dirname(out), exist_ok=True)
 
           s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          thumb=Image.open(io.BytesIO(s.get(THUMB,timeout=30).content)).convert('RGB')
-          icon=Image.open(io.BytesIO(s.get(ICON,timeout=30).content)).convert('RGB')
+          r=s.get(THUMB,timeout=30); r.raise_for_status()
+          thumb=Image.open(io.BytesIO(r.content)).convert('RGB')
 
-          W,H=1500,240
+          W,H=1500,180
           img=Image.new('RGB',(W,H),(255,255,255))
           d=ImageDraw.Draw(img)
-          d.rounded_rectangle((2,2,W-3,H-3),radius=22,fill=(255,255,255),outline=(225,225,225),width=2)
+          d.rounded_rectangle((1,1,W-2,H-2),radius=18,fill=(255,255,255),outline=(225,225,225),width=2)
           font_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
           reg_path='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
 
-          # right thumbnail: preserve entire real thumbnail, no cropping
-          tw,th=520,198
+          # Full real thumbnail on right. Never crop inside it.
+          tw,th=455,154
           thumb_fit=ImageOps.contain(thumb,(tw,th),Image.Resampling.LANCZOS)
-          tx=W-24-tw; ty=(H-th)//2
+          tx=W-16-tw; ty=(H-th)//2
           bg=Image.new('RGB',(tw,th),'white')
           bg.paste(thumb_fit,((tw-thumb_fit.width)//2,(th-thumb_fit.height)//2))
-          mask=Image.new('L',(tw,th),0); ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=12,fill=255)
+          mask=Image.new('L',(tw,th),0)
+          ImageDraw.Draw(mask).rounded_rectangle((0,0,tw-1,th-1),radius=9,fill=255)
           img.paste(bg,(tx,ty),mask)
 
-          # title, max two lines
-          maxw=tx-64
-          size=44
-          while size>=24:
-              f=ImageFont.truetype(font_path,size)
-              lines=[]; cur=''
+          # Title: max 2 lines, fit left area.
+          maxw=tx-50
+          f=None; lines=[]
+          for size in range(36,21,-2):
+              tf=ImageFont.truetype(font_path,size)
+              ls=[]; cur=''
               for ch in TITLE:
                   cand=cur+ch
-                  if d.textbbox((0,0),cand,font=f)[2] <= maxw:
+                  if d.textbbox((0,0),cand,font=tf)[2] <= maxw-28:
                       cur=cand
                   else:
-                      lines.append(cur); cur=ch
-              if cur: lines.append(cur)
-              if len(lines)<=2: break
-              size-=2
-          y=32
+                      if cur: ls.append(cur)
+                      cur=ch
+              if cur: ls.append(cur)
+              if len(ls)<=2:
+                  f=tf; lines=ls; break
+          if f is None:
+              f=ImageFont.truetype(font_path,22)
+              lines=[TITLE[:30],TITLE[30:60]]
+          y=18
           for line in lines[:2]:
-              d.text((34,y),line,font=f,fill=(20,26,34))
-              y=d.textbbox((34,y),line,font=f)[3]+4
+              d.text((26,y),line,font=f,fill=(20,26,34))
+              y=d.textbbox((26,y),line,font=f)[3]+1
 
-          # avatar + creator
-          avs=52
-          av=ImageOps.fit(icon,(avs,avs),Image.Resampling.LANCZOS)
-          am=Image.new('L',(avs,avs),0); ImageDraw.Draw(am).ellipse((0,0,avs-1,avs-1),fill=255)
-          ay=H-24-avs
-          img.paste(av,(36,ay),am)
-          nf=ImageFont.truetype(reg_path,27)
-          d.text((36+avs+15,ay+8),NAME,font=nf,fill=(72,79,91))
-          img.save(out,optimize=True)
-          print(out)
+          # Creator name only, no heart/date/icon.
+          nf=ImageFont.truetype(reg_path,22)
+          d.text((28,H-38),NAME,font=nf,fill=(72,79,91))
+          img.save(out,'PNG',optimize=True)
+          print('saved',out,img.size)
           PY
       - name: Commit generated PNG
         run: |
@@ -89,5 +91,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/note-paste-test/thin-card.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Generate thin paste test card [skip ci]'
+          git commit -m 'Generate ultra-thin paste test card [skip ci]'
           git push
