@@ -4,123 +4,109 @@ on:
   push:
     branches:
       - extract-summer-magazine-20260821
-    paths-ignore:
-      - magazine-urls.txt
-      - magazine-extract-debug.txt
   pull_request:
     branches:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   extract:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout temporary branch
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install Selenium
-        run: pip install selenium
-      - name: Extract all article URLs
+      - name: Install dependencies
+        run: pip install selenium requests
+      - name: Verify live count and extract URLs
         shell: bash
         run: |
           python - <<'PY'
+          import json
           import re
           import time
+          import requests
           from selenium import webdriver
           from selenium.webdriver.chrome.options import Options
           from selenium.webdriver.common.by import By
 
           TARGET = 'https://note.com/ai_naoyuki/m/m7ffeddfdfb3c'
-          RESULT = 'magazine-urls.txt'
-          DEBUG = 'magazine-extract-debug.txt'
+          META = 'https://note.com/api/v1/magazines/m7ffeddfdfb3c'
+
+          s = requests.Session()
+          s.headers.update({'User-Agent':'Mozilla/5.0 Chrome/138 Safari/537.36','Accept-Language':'ja-JP,ja;q=0.9'})
+          r = s.get(META, timeout=30)
+          print('META_STATUS=', r.status_code)
+          try:
+              j = r.json()
+              d = j.get('data', j) if isinstance(j, dict) else {}
+              print('API_NOTE_COUNT=', d.get('note_count'))
+              print('API_NAME=', d.get('name'))
+              print('API_KEY=', d.get('key'))
+          except Exception as e:
+              print('META_JSON_ERROR=', repr(e))
+              print(r.text[:1000])
 
           opts = Options()
           opts.add_argument('--headless=new')
           opts.add_argument('--no-sandbox')
           opts.add_argument('--disable-dev-shm-usage')
-          opts.add_argument('--disable-gpu')
           opts.add_argument('--window-size=1440,5000')
           opts.add_argument('--lang=ja-JP')
           opts.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36')
-
           driver = webdriver.Chrome(options=opts)
-          seen = []
-          seen_set = set()
-          debug = []
-
-          def collect():
-              for a in driver.find_elements(By.CSS_SELECTOR, 'a[href]'):
-                  href = a.get_attribute('href') or ''
-                  m = re.match(r'^https://note\.com/([^/?#]+)/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
-                  if m:
-                      clean = f'https://note.com/{m.group(1)}/n/{m.group(2)}'
-                      if clean not in seen_set:
-                          seen_set.add(clean)
-                          seen.append(clean)
-
           try:
               driver.get(TARGET)
-              time.sleep(5)
-              stable = 0
+              time.sleep(8)
+              body = driver.find_element(By.TAG_NAME, 'body').text
+              print('BODY_COUNT_CANDIDATES=', re.findall(r'(?m)^\s*(\d+)本\s*$', body)[:10])
+              print('BODY_HEAD=', repr(body[:1200]))
 
-              for turn in range(60):
-                  collect()
-                  before = len(seen)
-                  clicked = False
-
-                  candidates = driver.find_elements(By.XPATH, "//*[self::button or self::a or @role='button'][contains(normalize-space(.), 'もっとみる')]")
-                  for el in candidates:
-                      try:
-                          if el.is_displayed() and el.is_enabled():
-                              driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-                              time.sleep(0.4)
-                              driver.execute_script('arguments[0].click();', el)
-                              clicked = True
-                              time.sleep(2.5)
-                      except Exception as e:
-                          debug.append(f'click error: {e}')
-
-                  driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-                  time.sleep(2)
-                  collect()
-                  after = len(seen)
-                  line = f'TURN {turn+1}: urls={after}, clicked_more={clicked}'
-                  print(line)
-                  debug.append(line)
-
-                  if after == before and not clicked:
-                      stable += 1
-                  else:
-                      stable = 0
-                  if after >= 43 or stable >= 5:
+              # Trigger any lazy content without following links.
+              for i in range(8):
+                  old_h = driver.execute_script('return document.body.scrollHeight')
+                  driver.execute_script('window.scrollTo(0, document.body.scrollHeight)')
+                  time.sleep(1.5)
+                  new_h = driver.execute_script('return document.body.scrollHeight')
+                  if new_h == old_h:
                       break
 
-              with open(RESULT, 'w', encoding='utf-8') as f:
-                  f.write('\n'.join(seen) + ('\n' if seen else ''))
-              with open(DEBUG, 'w', encoding='utf-8') as f:
-                  f.write(f'COUNT={len(seen)}\n')
-                  f.write('\n'.join(debug) + '\n')
+              urls=[]; seen=set()
+              for a in driver.find_elements(By.CSS_SELECTOR, 'a[href]'):
+                  href=a.get_attribute('href') or ''
+                  m=re.match(r'^https://note\.com/([^/?#]+)/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
+                  if m:
+                      clean=f'https://note.com/{m.group(1)}/n/{m.group(2)}'
+                      if clean not in seen:
+                          seen.add(clean); urls.append(clean)
 
-              print('===RESULT_START===')
-              print(f'COUNT={len(seen)}')
-              for u in seen:
-                  print(u)
-              print('===RESULT_END===')
+              # Article-heading links only, for comparison.
+              hurls=[]; hseen=set()
+              for h in driver.find_elements(By.CSS_SELECTOR, 'h2,h3,h4'):
+                  try:
+                      a = h.find_element(By.XPATH, './ancestor-or-self::a[1]')
+                  except Exception:
+                      try:
+                          a = h.find_element(By.CSS_SELECTOR, 'a[href]')
+                      except Exception:
+                          continue
+                  href=a.get_attribute('href') or ''
+                  m=re.match(r'^https://note\.com/([^/?#]+)/n/(n[0-9a-z]+)(?:[?#].*)?$', href, re.I)
+                  if m:
+                      clean=f'https://note.com/{m.group(1)}/n/{m.group(2)}'
+                      if clean not in hseen:
+                          hseen.add(clean); hurls.append((clean,h.text.strip()))
+
+              print('ALL_UNIQUE_COUNT=', len(urls))
+              print('HEADING_UNIQUE_COUNT=', len(hurls))
+              print('===ALL_URLS_START===')
+              for u in urls: print(u)
+              print('===ALL_URLS_END===')
+              print('===HEADING_URLS_START===')
+              for u,t in hurls: print(u+'\t'+t.replace('\n',' '))
+              print('===HEADING_URLS_END===')
           finally:
               driver.quit()
           PY
-      - name: Save result to temporary branch
-        if: github.event_name == 'push'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- magazine-urls.txt magazine-extract-debug.txt
-          git diff --cached --quiet && exit 0
-          git commit -m "Save magazine URL extraction result [skip ci]"
-          git push
