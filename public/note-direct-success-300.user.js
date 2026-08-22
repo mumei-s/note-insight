@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.12.0
-// @description  成功済みDIRECT URL設定＋note公式POST /api/v1/embedを10件通す通知テスト＋一括削除
+// @version      3.13.0
+// @description  成功済みDIRECT URL設定＋note自身の実リクエストを1回捕獲して残り9件を同形式で公式埋め込みする10件通知テスト
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -10,8 +10,8 @@
 
 (function(){
 'use strict';
-if(window.__MUMEI_DIRECT_SUCCESS_3120__) return;
-window.__MUMEI_DIRECT_SUCCESS_3120__=true;
+if(window.__MUMEI_DIRECT_SUCCESS_3130__) return;
+window.__MUMEI_DIRECT_SUCCESS_3130__=true;
 
 const URLS=[
 'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -27,10 +27,10 @@ const URLS=[
 ];
 const PANEL='mumei-direct-success-panel',BTN='mumei-direct-success-btn';
 const N_PANEL='mumei-notify-test-panel',N_BTN='mumei-notify-test-btn',N_CLEAN='mumei-notify-clean-btn';
-const TEMPLATE_KEY='mumei_notify_template_v10';
-const REGISTRY_KEY='mumei_notify_registry_v12';
-const SEED_PENDING='mumei_notify_seed_pending_v12';
-let busy=false,notifyBusy=false;
+const CAPTURE_KEY='mumei_embed_request_capture_v13';
+const TEMPLATE_KEY='mumei_notify_template_v13';
+const REGISTRY_KEY='mumei_notify_registry_v13';
+let busy=false,notifyBusy=false,captureArmed=false,replaying=false,watching=false;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function editor(){return document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror')}
@@ -39,14 +39,17 @@ function nstatus(t,bad=false){const p=document.getElementById(N_PANEL);if(!p)ret
 function emit(name,detail={}){document.dispatchEvent(new CustomEvent(name,{detail}))}
 function norm(u){try{const x=new URL(u,location.href);x.search='';x.hash='';return x.href}catch(_){return String(u||'')}}
 function sameSrc(a,b){const A=norm(a),B=norm(b);if(A===B)return true;const pa=A.split('/').pop(),pb=B.split('/').pop();return !!pa&&!!pb&&(pa===pb||pa.split('?')[0]===pb.split('?')[0])}
-function getTemplate(){try{return JSON.parse(localStorage.getItem(TEMPLATE_KEY)||'null')}catch(_){return null}}
-function saveTemplate(v){localStorage.setItem(TEMPLATE_KEY,JSON.stringify(v))}
-function getRegistry(){try{const a=JSON.parse(localStorage.getItem(REGISTRY_KEY)||'[]');return Array.isArray(a)?a.filter(x=>x&&x.url&&x.type):[]}catch(_){return[]}}
-function saveRegistry(a){const out=[],seen=new Set();for(const x of a){if(!x?.url||!x?.type)continue;const k=x.url+'|'+x.type;if(seen.has(k))continue;seen.add(k);out.push({url:x.url,type:x.type})}localStorage.setItem(REGISTRY_KEY,JSON.stringify(out));return out}
+function getJson(key,def=null){try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??def}catch(_){return def}}
+function setJson(key,v){if(v==null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(v))}
+function getCapture(){return getJson(CAPTURE_KEY,null)}
+function getTemplate(){return getJson(TEMPLATE_KEY,null)}
+function saveTemplate(v){setJson(TEMPLATE_KEY,v)}
+function getRegistry(){const a=getJson(REGISTRY_KEY,[]);return Array.isArray(a)?a.filter(x=>x&&x.url&&x.type):[]}
+function saveRegistry(a){const out=[],seen=new Set();for(const x of a){if(!x?.url||!x?.type)continue;const k=x.url+'|'+x.type;if(seen.has(k))continue;seen.add(k);out.push({url:x.url,type:x.type})}setJson(REGISTRY_KEY,out);return out}
 function rememberNotify(url,type){const a=getRegistry().filter(x=>x.url!==url);a.push({url,type});return saveRegistry(a)}
+
 function isThinImage(img){if(!(img instanceof HTMLImageElement))return false;const r=img.getBoundingClientRect(),w=img.naturalWidth||r.width,h=img.naturalHeight||r.height;return h>0&&w/h>4.5}
 function cards(){const root=editor();if(!root)return[];return [...root.querySelectorAll('img')].filter(isThinImage).slice(-10)}
-
 function looksLikeView(v){try{return !!v&&typeof v==='object'&&v.state&&v.state.doc&&v.state.schema&&typeof v.dispatch==='function'&&v.dom&&typeof v.posAtDOM==='function'}catch(_){return false}}
 function findView(){
  const root=editor();if(!root)return null;const seeds=[];let n=root;for(let i=0;i<6&&n;i++,n=n.parentElement)seeds.push(n);
@@ -69,7 +72,7 @@ function parentCandidates(view,pos){const out=[];try{const $p=view.state.doc.res
 function nodeList(view,img){const hit=findNodeForImg(view,img);return hit?[hit,...parentCandidates(view,hit.pos)]:[]}
 function alreadyLinked(view,img,url){return nodeList(view,img).some(c=>nodeHasLink(c.node,url))}
 function setDirect(view,img,url){const list=nodeList(view,img);if(!list.length)return{ok:false};for(const c of list)if(trySetAttr(view,c.pos,c.node,url))return{ok:true};for(const c of list)if(trySetMark(view,c.pos,c.node,url))return{ok:true};return{ok:false}}
-async function ensureLinks(view,imgs){let ok=0;for(let i=0;i<10;i++){if(alreadyLinked(view,imgs[i],URLS[i])){ok++;continue}status(`URL書き込み ${i+1}/10…`);let r={ok:false};for(let a=0;a<3;a++){r=setDirect(view,imgs[i],URLS[i]);if(r.ok)break;await sleep(300)}if(!r.ok)return{ok:false,index:i+1};ok++;await sleep(80)}return{ok:true}}
+async function ensureLinks(view,imgs){for(let i=0;i<10;i++){if(alreadyLinked(view,imgs[i],URLS[i]))continue;status(`URL書き込み ${i+1}/10…`);let r={ok:false};for(let a=0;a<3;a++){r=setDirect(view,imgs[i],URLS[i]);if(r.ok)break;await sleep(300)}if(!r.ok)return{ok:false,index:i+1};await sleep(80)}return{ok:true}}
 async function run(){if(busy)return;busy=true;const b=document.getElementById(BTN);if(b)b.disabled=true;try{const imgs=cards();if(imgs.length!==10){status(`カード ${imgs.length}/10`,true);emit('mumei-direct-stopped',{index:0,ok:0,reason:'cards'});return}const view=findView();if(!view){status('DIRECT停止：EditorViewなし',true);return}const r=await ensureLinks(view,imgs);if(!r.ok){status(`URL ${r.index}/10で停止 → 同じボタンで再開`,true);emit('mumei-direct-stopped',{index:r.index,reason:'link'});return}status('URL完了 10/10 ✅');emit('mumei-direct-success-done',{ok:10})}catch(e){status('DIRECTエラー：'+(e?.message||String(e)),true)}finally{busy=false;if(b)b.disabled=false}}
 
 function nodeCarriesUrl(node,url){try{const s=JSON.stringify(node.toJSON?node.toJSON():node.attrs||{});return s.includes(url)||s.includes(url.split('/').pop())}catch(_){return false}}
@@ -80,57 +83,99 @@ function findRealNotify(view,url,typeName=null){return realNotifyCandidates(view
 function deleteExactUrlParagraph(view,url){try{const hits=[];view.state.doc.descendants((node,pos)=>{if(node.isTextblock&&(node.textContent||'').trim()===url)hits.push({node,pos})});let tr=view.state.tr;for(const h of hits.sort((a,b)=>b.pos-a.pos))tr=tr.delete(h.pos,h.pos+h.node.nodeSize);if(hits.length)view.dispatch(tr)}catch(_){}}
 function setSelectionAtEnd(view){try{const Sel=view.state.selection.constructor;view.dispatch(view.state.tr.setSelection(Sel.atEnd(view.state.doc)));view.focus()}catch(_){}}
 function updateCleanButton(){const c=document.getElementById(N_CLEAN);if(!c)return;const n=getRegistry().length;c.textContent=n?`通知カード一括削除（${n}件）`:'通知カード一括削除';c.style.display=n?'block':'none'}
-function currentNoteKey(){const m=location.pathname.match(/\/notes\/(n[0-9a-f]+)\/edit/i);return m?m[1]:null}
 function findFirstEmbKey(v){let hit=null;const walk=x=>{if(hit)return;if(typeof x==='string'){const m=x.match(/emb[0-9a-z]+/i);if(m)hit=m[0];return}if(Array.isArray(x)){for(const y of x)walk(y);return}if(x&&typeof x==='object')for(const y of Object.values(x))walk(y)};walk(v);return hit}
 function deepReplace(v,repls){if(typeof v==='string'){let s=v;for(const [a,b] of repls)if(a)s=s.split(a).join(b);return s}if(Array.isArray(v))return v.map(x=>deepReplace(x,repls));if(v&&typeof v==='object'){const o={};for(const [k,x] of Object.entries(v))o[k]=deepReplace(x,repls);return o}return v}
-function csrfToken(){const m=document.querySelector('meta[name="csrf-token"],meta[name="csrf_token"]');if(m?.content)return m.content;for(const part of document.cookie.split(';')){const [k,...rest]=part.trim().split('=');if(/csrf|xsrf/i.test(k))return decodeURIComponent(rest.join('='))}return ''}
-async function createOfficialEmbed(url){
- const embeddableKey=currentNoteKey();if(!embeddableKey)throw new Error('編集中記事のnキーを取得できません');
- const fd=new FormData();fd.append('url',url);fd.append('height','211');fd.append('embeddable_type','Note');fd.append('embeddable_key',embeddableKey);
- const headers={Accept:'application/json'};const csrf=csrfToken();if(csrf)headers['X-CSRF-Token']=csrf;
- const r=await fetch('https://note.com/api/v1/embed',{method:'POST',body:fd,credentials:'include',headers});
- let data=null;try{data=await r.json()}catch(_){}
- if(!r.ok)throw new Error(`埋め込みAPI ${r.status}${data?.message?'：'+data.message:''}`);
- const e=data?.data?.embedded_content;if(!e?.key||!e?.url)throw new Error('埋め込みAPI応答にembedded_contentがありません');
- return e
+
+function headersToObject(h){const out={};try{new Headers(h||{}).forEach((v,k)=>out[k]=v)}catch(_){}return out}
+function bodySnapshot(body){
+ if(body instanceof FormData)return{type:'formdata',fields:[...body.entries()].filter(([,v])=>typeof v==='string')};
+ if(body instanceof URLSearchParams)return{type:'urlsearch',fields:[...body.entries()]};
+ if(typeof body==='string'){try{return{type:'json',value:JSON.parse(body)}}catch(_){return{type:'text',value:body}}}
+ if(body&&typeof body==='object')return{type:'unknown'};
+ return{type:'none'}
 }
-function buildNodeJsonFromOfficial(template,official,targetUrl){
- const sourceUrl=template.sourceUrl||URLS[0];const sourceKey=sourceUrl.split('/').pop();const targetKey=(official.identifier||targetUrl.split('/').pop());const oldEmb=findFirstEmbKey(template.json);
- const repls=[[sourceUrl,official.url||targetUrl],[sourceKey,targetKey]];if(oldEmb)repls.push([oldEmb,official.key]);
- return deepReplace(template.json,repls)
+function isEmbedRequest(url,method){return /\/api\/v1\/embed(?:\?|$)/.test(String(url||''))&&String(method||'GET').toUpperCase()==='POST'}
+function saveCapture(c){if(!c)return;setJson(CAPTURE_KEY,c);captureArmed=false;nstatus('note実リクエスト捕獲 ✅ → 残り9件を同じ形式で生成中…');document.dispatchEvent(new CustomEvent('mumei-embed-captured'))}
+
+const nativeFetch=window.fetch.bind(window);
+window.fetch=async function(input,init){
+ const url=input instanceof Request?input.url:String(input);const method=(init&&init.method)||(input instanceof Request?input.method:'GET');
+ const should=captureArmed&&!replaying&&isEmbedRequest(url,method);let snap=null;
+ if(should){
+  if(init&&'body'in init)snap={transport:'fetch',endpoint:url,method:String(method).toUpperCase(),headers:headersToObject(init.headers),credentials:init.credentials||'include',mode:init.mode||null,...bodySnapshot(init.body)};
+  else if(input instanceof Request){try{const clone=input.clone(),ct=clone.headers.get('content-type')||'';let b={type:'none'};if(ct.includes('multipart/form-data')){const fd=await clone.formData();b={type:'formdata',fields:[...fd.entries()].filter(([,v])=>typeof v==='string')}}else if(ct.includes('application/json'))b={type:'json',value:await clone.json()};else{const text=await clone.text();b=bodySnapshot(text)}snap={transport:'fetch',endpoint:url,method:String(method).toUpperCase(),headers:headersToObject(input.headers),credentials:input.credentials||'include',mode:input.mode||null,...b}}catch(_){}}
+ }
+ const res=await nativeFetch(input,init);
+ if(should&&res.ok&&snap)saveCapture(snap);
+ return res
+};
+
+const XHR=XMLHttpRequest.prototype,nativeOpen=XHR.open,nativeSend=XHR.send,nativeSetHeader=XHR.setRequestHeader;
+XHR.open=function(method,url,...rest){this.__mumeiReq={method:String(method||'GET').toUpperCase(),url:String(url||''),headers:{}};return nativeOpen.call(this,method,url,...rest)};
+XHR.setRequestHeader=function(k,v){if(this.__mumeiReq)this.__mumeiReq.headers[String(k).toLowerCase()]=String(v);return nativeSetHeader.call(this,k,v)};
+XHR.send=function(body){
+ const meta=this.__mumeiReq;const should=captureArmed&&!replaying&&meta&&isEmbedRequest(meta.url,meta.method);let snap=null;
+ if(should)snap={transport:'xhr',endpoint:meta.url,method:meta.method,headers:meta.headers||{},withCredentials:!!this.withCredentials,...bodySnapshot(body)};
+ if(should&&snap)this.addEventListener('load',()=>{if(this.status>=200&&this.status<300)saveCapture(snap)},{once:true});
+ return nativeSend.call(this,body)
+};
+
+function buildReplayBody(c,url){
+ if(c.type==='formdata'){const fd=new FormData();for(const [k,v] of c.fields||[])fd.append(k,k==='url'?url:v);return fd}
+ if(c.type==='urlsearch'){const p=new URLSearchParams();for(const [k,v] of c.fields||[])p.append(k,k==='url'?url:v);return p}
+ if(c.type==='json'){const v=structuredClone(c.value||{});if(v&&typeof v==='object')v.url=url;return JSON.stringify(v)}
+ if(c.type==='text'){return String(c.value||'').replace(URLS[0],url)}
+ return undefined
+}
+function replayHeaders(c){const h={...(c.headers||{})};if(c.type==='formdata')for(const k of Object.keys(h))if(k.toLowerCase()==='content-type')delete h[k];return h}
+async function replayOfficial(url){
+ const c=getCapture();if(!c)throw new Error('note実リクエスト未捕獲');replaying=true;
+ try{
+  let statusCode=0,data=null;
+  if(c.transport==='xhr'){
+   const text=await new Promise((resolve,reject)=>{const x=new XMLHttpRequest();nativeOpen.call(x,c.method||'POST',c.endpoint,true);x.withCredentials=c.withCredentials;for(const [k,v] of Object.entries(replayHeaders(c)))try{nativeSetHeader.call(x,k,v)}catch(_){}x.onload=()=>{statusCode=x.status;resolve(x.responseText||'')};x.onerror=()=>reject(new Error('埋め込み通信失敗'));nativeSend.call(x,buildReplayBody(c,url))});
+   try{data=JSON.parse(text)}catch(_){}
+  }else{
+   const r=await nativeFetch(c.endpoint,{method:c.method||'POST',body:buildReplayBody(c,url),headers:replayHeaders(c),credentials:c.credentials||'include',mode:c.mode||undefined});statusCode=r.status;try{data=await r.json()}catch(_){}
+  }
+  if(statusCode<200||statusCode>=300){const msg=data?.error?.message||data?.message||'';throw new Error(`note実形式API ${statusCode}${msg?'：'+msg:''}`)}
+  const e=data?.data?.embedded_content;if(!e?.key)throw new Error('note応答にembedded_content.keyなし');return e
+ }finally{replaying=false}
+}
+function buildNodeJson(template,official,targetUrl){
+ const sourceUrl=template.sourceUrl||URLS[0],sourceKey=sourceUrl.split('/').pop(),targetKey=official.identifier||targetUrl.split('/').pop(),oldEmb=findFirstEmbKey(template.json);
+ const repls=[[sourceUrl,official.url||targetUrl],[sourceKey,targetKey]];if(oldEmb)repls.push([oldEmb,official.key]);return deepReplace(template.json,repls)
 }
 async function insertOfficialNode(view,url,official){
- const t=getTemplate();if(!t?.json)return null;const json=buildNodeJsonFromOfficial(t,official,url);let node;try{node=view.state.schema.nodeFromJSON(json)}catch(e){throw new Error('標準カード構造の復元失敗')}
- const pos=view.state.doc.content.size;view.dispatch(view.state.tr.insert(pos,node));
- const end=Date.now()+7000;while(Date.now()<end){const hit=findRealNotify(view,url);if(hit)return hit;await sleep(250)}return null
+ const t=getTemplate();if(!t?.json)throw new Error('本物カード構造なし');let node;try{node=view.state.schema.nodeFromJSON(buildNodeJson(t,official,url))}catch(_){throw new Error('標準カード構造の復元失敗')}
+ const pos=view.state.doc.content.size;view.dispatch(view.state.tr.insert(pos,node));const end=Date.now()+7000;while(Date.now()<end){const h=findRealNotify(view,url);if(h)return h;await sleep(250)}return null
 }
-async function learnSeedIfNeeded(view){
- const existing=findRealNotify(view,URLS[0]);if(existing){saveTemplate({sourceUrl:URLS[0],type:existing.node.type.name,json:existing.node.toJSON()});localStorage.removeItem(SEED_PENDING);return existing}
- if(getTemplate())return true;
- if(!localStorage.getItem(SEED_PENDING)){
-  deleteExactUrlParagraph(view,URLS[0]);const p=view.state.schema.nodes.paragraph;if(!p)throw new Error('paragraphなし');const start=view.state.doc.content.size;view.dispatch(view.state.tr.insert(start,p.create(null,view.state.schema.text(URLS[0]))));setSelectionAtEnd(view);localStorage.setItem(SEED_PENDING,'1');nstatus('初回だけ：末尾URLでEnterを1回 → 本物カードが出たら青ボタンをもう一度');return false
+async function buildRemaining(view){
+ const seed=findRealNotify(view,URLS[0]);if(!seed)throw new Error('1件目の本物カードなし');if(!getTemplate())saveTemplate({sourceUrl:URLS[0],type:seed.node.type.name,json:seed.node.toJSON()});rememberNotify(URLS[0],seed.node.type.name);updateCleanButton();
+ for(let i=1;i<10;i++){
+  const existing=findRealNotify(view,URLS[i]);if(existing){rememberNotify(URLS[i],existing.node.type.name);nstatus(`公式通知カード ${i+1}/10（既存）`);continue}
+  nstatus(`note実形式 ${i+1}/10 → 公式カード生成中…`);const official=await replayOfficial(URLS[i]);const hit=await insertOfficialNode(view,URLS[i],official);if(!hit)throw new Error(`公式カード ${i+1}/10 表示失敗`);rememberNotify(URLS[i],hit.node.type.name);updateCleanButton();await sleep(150)
  }
- nstatus('本物カード待ち。末尾URLでEnterを1回 → カードが出たら青ボタンをもう一度',true);return false
+ nstatus('公式通知カード 10/10 ✅ 公開して通知確認')
+}
+async function watchSeedAndCapture(view){
+ if(watching)return;watching=true;
+ try{const end=Date.now()+45000;while(Date.now()<end){const seed=findRealNotify(view,URLS[0]),cap=getCapture();if(seed&&cap){saveTemplate({sourceUrl:URLS[0],type:seed.node.type.name,json:seed.node.toJSON()});await buildRemaining(view);return}await sleep(250)}nstatus('停止：Enter後の本物カード/実リクエストを捕獲できませんでした',true)}catch(e){nstatus('停止：'+(e?.message||String(e)),true)}finally{watching=false;notifyBusy=false;const b=document.getElementById(N_BTN);if(b)b.disabled=false}
 }
 async function notify10(){
- if(notifyBusy)return;notifyBusy=true;const b=document.getElementById(N_BTN);if(b)b.disabled=true;
+ if(notifyBusy||watching)return;notifyBusy=true;const b=document.getElementById(N_BTN);if(b)b.disabled=true;
  try{
-  const view=findView();if(!view){nstatus('停止：EditorViewなし',true);return}const imgs=cards();if(imgs.length!==10){nstatus(`極薄画像 ${imgs.length}/10。先に緑の「10枚 COMPLETE 6.3」`,true);return}
-  const links=await ensureLinks(view,imgs);if(!links.ok){nstatus(`極薄URL ${links.index}/10で停止`,true);return}
-  const seedReady=await learnSeedIfNeeded(view);if(!seedReady)return;
-  saveRegistry([]);updateCleanButton();
-  for(let i=0;i<10;i++){
-   const url=URLS[i];const already=findRealNotify(view,url);if(already){rememberNotify(url,already.node.type.name);updateCleanButton();nstatus(`公式通知カード ${i+1}/10（既存）`);continue}
-   nstatus(`公式埋め込みAPI ${i+1}/10 → カード生成中…`);const official=await createOfficialEmbed(url);const hit=await insertOfficialNode(view,url,official);if(!hit){nstatus(`公式カード ${i+1}/10で停止`,true);return}rememberNotify(url,hit.node.type.name);updateCleanButton();await sleep(150)
-  }
-  localStorage.removeItem(SEED_PENDING);nstatus('公式通知カード 10/10 ✅ 公開して通知確認')
- }catch(e){nstatus('通知10件停止：'+(e?.message||String(e)),true)}finally{notifyBusy=false;if(b)b.disabled=false}
+  const view=findView();if(!view){nstatus('停止：EditorViewなし',true);notifyBusy=false;if(b)b.disabled=false;return}const imgs=cards();if(imgs.length!==10){nstatus(`極薄画像 ${imgs.length}/10。先に緑の「10枚 COMPLETE 6.3」`,true);notifyBusy=false;if(b)b.disabled=false;return}
+  const links=await ensureLinks(view,imgs);if(!links.ok){nstatus(`極薄URL ${links.index}/10で停止`,true);notifyBusy=false;if(b)b.disabled=false;return}
+  const seed=findRealNotify(view,URLS[0]);if(seed&&getCapture()){if(!getTemplate())saveTemplate({sourceUrl:URLS[0],type:seed.node.type.name,json:seed.node.toJSON()});await buildRemaining(view);notifyBusy=false;if(b)b.disabled=false;return}
+  setJson(CAPTURE_KEY,null);setJson(TEMPLATE_KEY,null);saveRegistry([]);updateCleanButton();deleteExactUrlParagraph(view,URLS[0]);const p=view.state.schema.nodes.paragraph;if(!p)throw new Error('paragraphなし');const start=view.state.doc.content.size;view.dispatch(view.state.tr.insert(start,p.create(null,view.state.schema.text(URLS[0]))));setSelectionAtEnd(view);captureArmed=true;nstatus('1件目だけ：末尾URLでEnterを1回。note自身の実リクエストを捕獲して残り9件を自動生成');watchSeedAndCapture(view)
+ }catch(e){captureArmed=false;notifyBusy=false;if(b)b.disabled=false;nstatus('通知10件停止：'+(e?.message||String(e)),true)}
 }
 function cleanAllNotifyCards(){const c=document.getElementById(N_CLEAN);if(c)c.disabled=true;try{const view=findView();if(!view){nstatus('削除停止：EditorViewなし',true);return}const reg=getRegistry();if(!reg.length){nstatus('削除対象 0件');return}const hits=[];for(const rec of reg){const h=findRealNotify(view,rec.url,rec.type);if(h)hits.push(h)}if(!hits.length){nstatus('削除対象カードなし',true);return}let tr=view.state.tr;for(const h of hits.sort((a,b)=>b.pos-a.pos))tr=tr.delete(h.pos,h.pos+h.node.nodeSize);view.dispatch(tr);saveRegistry([]);updateCleanButton();nstatus(`通知カード ${hits.length}/${hits.length} 一括削除 ✅ 極薄10枚は残しました`)}catch(e){nstatus('削除停止：'+(e?.message||String(e)),true)}finally{if(c)c.disabled=false}}
 
-function mountNotify(){if(!document.body)return;let p=document.getElementById(N_PANEL);if(!p){p=document.createElement('div');p.id=N_PANEL;p.textContent='公式10件通知テスト';document.body.appendChild(p)}Object.assign(p.style,{position:'fixed',right:'8px',bottom:'170px',zIndex:'2147483645',maxWidth:'310px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
- let b=document.getElementById(N_BTN);if(!b){b=document.createElement('button');b.id=N_BTN;b.type='button';b.textContent='公式通知カード10件';b.addEventListener('click',notify10);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'125px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#2563eb',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
+function mountNotify(){if(!document.body)return;let p=document.getElementById(N_PANEL);if(!p){p=document.createElement('div');p.id=N_PANEL;p.textContent='実リクエスト10件通知テスト';document.body.appendChild(p)}Object.assign(p.style,{position:'fixed',right:'8px',bottom:'170px',zIndex:'2147483645',maxWidth:'320px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
+ let b=document.getElementById(N_BTN);if(!b){b=document.createElement('button');b.id=N_BTN;b.type='button';b.textContent='実形式 通知カード10件';b.addEventListener('click',notify10);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'125px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#2563eb',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
  let c=document.getElementById(N_CLEAN);if(!c){c=document.createElement('button');c.id=N_CLEAN;c.type='button';c.addEventListener('click',cleanAllNotifyCards);document.body.appendChild(c)}Object.assign(c.style,{position:'fixed',right:'8px',bottom:'80px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'9px 12px',background:'#b45309',color:'#fff',fontSize:'12px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});updateCleanButton()}
-function mount(){if(!document.body)return;if(!document.getElementById(PANEL)){const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.12';Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',zIndex:'2147483646',maxWidth:'340px',padding:'6px 8px',borderRadius:'8px',background:'#065f46',color:'#fff',fontSize:'11px',lineHeight:'1.3',boxShadow:'0 4px 12px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)}if(!document.getElementById(BTN)){const b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='DIRECT SUCCESS 3.0';Object.assign(b.style,{position:'fixed',right:'8px',top:'110px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});b.addEventListener('click',run);document.body.appendChild(b)}mountNotify()}
+function mount(){if(!document.body)return;if(!document.getElementById(PANEL)){const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.13';Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',zIndex:'2147483646',maxWidth:'340px',padding:'6px 8px',borderRadius:'8px',background:'#065f46',color:'#fff',fontSize:'11px',lineHeight:'1.3',boxShadow:'0 4px 12px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)}if(!document.getElementById(BTN)){const b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='DIRECT SUCCESS 3.0';Object.assign(b.style,{position:'fixed',right:'8px',top:'110px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});b.addEventListener('click',run);document.body.appendChild(b)}mountNotify()}
 setInterval(mount,800);mount();
 })();
