@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 10枚 COMPLETE BRIDGE 6.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      6.1.0
+// @version      6.1.1
 // @description  成功済み10枚一括挿入方式＋DIRECT SUCCESS 3.0自動呼出し
 // @match        https://editor.note.com/*
 // @run-at       document-start
@@ -42,9 +42,9 @@ function hideDirectUI(){for(const id of [DIRECT_BTN,DIRECT_PANEL]){const el=docu
 function mount(){
  if(!document.body)return;hideDirectUI();
  let p=document.getElementById(PANEL);if(!p){p=document.createElement('div');p.id=PANEL;p.textContent='COMPLETE 6.1｜860×140固定';document.body.appendChild(p)}
- Object.assign(p.style,{position:'fixed',right:'10px',top:'72px',zIndex:'2147483646',maxWidth:'230px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
+ Object.assign(p.style,{position:'fixed',right:'8px',top:'42%',bottom:'auto',zIndex:'2147483646',maxWidth:'220px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
  let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='10枚 COMPLETE 6.1';b.addEventListener('click',arm);document.body.appendChild(b)}
- Object.assign(b.style,{position:'fixed',right:'10px',top:'112px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
+ Object.assign(b.style,{position:'fixed',right:'8px',top:'48%',bottom:'auto',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
 }
 function xhr(url,responseType='text'){return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,responseType,timeout:25000,onload:r=>r.status>=200&&r.status<300?resolve(r.response):reject(new Error('取得失敗 '+r.status)),onerror:()=>reject(new Error('通信失敗')),ontimeout:()=>reject(new Error('通信タイムアウト'))}))}
 function imageInput(input){if(!(input instanceof HTMLInputElement)||input.type!=='file')return false;const a=(input.accept||'').toLowerCase();return !a||a.includes('image')||a.includes('.png')||a.includes('.jpg')||a.includes('.jpeg')}
