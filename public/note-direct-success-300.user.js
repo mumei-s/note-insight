@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.18.0
-// @description  投稿済み記事対応＋実入力Enterで公式カード10件生成＋記事別ON/OFF＋通知カード一括削除
+// @version      3.19.0
+// @description  投稿済み記事対応＋実入力Enter1回を残り9件へ再利用＋記事別ON/OFF＋通知カード一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3180__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3180__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3190__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3190__ = true;
 
   const URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -34,7 +34,7 @@
   const N_CLEAN = 'mumei-notify-clean-btn';
   const TOGGLE = 'mumei-card-system-toggle';
   const ACTIVE_ARTICLES = 'mumei_note_card_active_articles_v1';
-  const REG_PREFIX = 'mumei_registry_v318';
+  const REG_PREFIX = 'mumei_registry_v319';
   const PREVIOUS_REG = 'mumei_registry_v316';
   const LEGACY_REG = 'mumei_registry_v315';
   const LEGACY_CAP = 'mumei_capture_v315';
@@ -223,7 +223,7 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.18｜この記事だけON';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.19｜この記事だけON';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
@@ -254,7 +254,7 @@
     if (!notifyPanel) {
       notifyPanel = document.createElement('div');
       notifyPanel.id = N_PANEL;
-      notifyPanel.textContent = '投稿済み記事OK｜実入力Enter 10件 READY';
+      notifyPanel.textContent = '投稿済み記事OK｜実入力Enter 1回 READY';
       document.body.appendChild(notifyPanel);
     }
     Object.assign(notifyPanel.style, {
@@ -270,7 +270,7 @@
       notifyButton = document.createElement('button');
       notifyButton.id = N_BTN;
       notifyButton.type = 'button';
-      notifyButton.textContent = '正規カード10件（Enter×10）';
+      notifyButton.textContent = '正規カード10件（Enter 1回）';
       notifyButton.addEventListener('click', notify10);
       document.body.appendChild(notifyButton);
     }
@@ -806,23 +806,48 @@
     setCursorAtEnd(view);
   }
 
-  // 通知成功が実証済みの「人が押したEnter」だけを受け付ける。
-  // Userscriptが作るKeyboardEventは isTrusted=false なので、ここでは使わない。
+  function nativeCardProof(view, url) {
+    const hit = findNotify(view, url);
+    if (!hit) return { ok: false, reason: '本文カードなし' };
+    const targetKey = url.split('/').pop();
+    const json = JSON.stringify(hit.node.toJSON ? hit.node.toJSON() : hit.node.attrs || {});
+    if (!json.includes(url) && !json.includes(targetKey)) {
+      return { ok: false, reason: '本文URL不一致' };
+    }
+    return { ok: true, hit };
+  }
+
+  async function waitForNativeCard(view, url, timeout = 25000) {
+    const deadline = Date.now() + timeout;
+    let last = { ok: false, reason: '待機中' };
+    while (Date.now() < deadline) {
+      last = nativeCardProof(view, url);
+      if (last.ok) return last;
+      await sleep(250);
+    }
+    return last;
+  }
+
+  // 通知成功が実証済みの「人が押したEnter」を1回だけ取得する。
+  // 同じ実イベントを残りのURLでnote自身のEditor handlerへ渡す。
   function waitForTrustedEnter(view, token, timeout = 180000) {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let settleTimer = null;
+      const captured = [];
       const cleanup = () => {
         view.dom.removeEventListener('keydown', onInput, true);
         view.dom.removeEventListener('beforeinput', onInput, true);
         document.removeEventListener('mumei-card-system-cancel', onCancel);
         clearTimeout(timer);
+        if (settleTimer) clearTimeout(settleTimer);
       };
-      const finish = (error = null) => {
+      const finish = (error = null, value = null) => {
         if (settled) return;
         settled = true;
         cleanup();
         if (error) reject(error);
-        else resolve();
+        else resolve(value);
       };
       const onInput = (event) => {
         if (!event.isTrusted) return;
@@ -834,7 +859,13 @@
           finish(new Error('システムOFFで中止'));
           return;
         }
-        finish();
+        if (!captured.some((item) => item.type === event.type)) {
+          captured.push({ type: event.type, event });
+        }
+        // keydownとbeforeinputの両方が来る端末では、同じ1回分をまとめて保存する。
+        if (!settleTimer) {
+          settleTimer = setTimeout(() => finish(null, { events: captured }), 120);
+        }
       };
       const onCancel = () => finish(new Error('システムOFFで中止'));
       const timer = setTimeout(() => finish(new Error('Enter待機時間切れ')), timeout);
@@ -845,32 +876,69 @@
     });
   }
 
-  async function waitForOfficialProof(view, url, timeout = 25000) {
-    const deadline = Date.now() + timeout;
-    let last = { ok: false, reason: '待機中' };
-    while (Date.now() < deadline) {
-      last = officialProof(view, url);
-      if (last.ok) return last;
-      await sleep(250);
+  function invokeCapturedEnter(view, captured) {
+    const events = Array.isArray(captured?.events) ? captured.events : [];
+    if (!events.length) throw new Error('実入力Enterを保存できません');
+    const preferred = events.find((item) => item.event.defaultPrevented) ||
+      events.find((item) => item.type === 'keydown') || events[0];
+    const ordered = [preferred, ...events.filter((item) => item !== preferred)];
+    const before = view.state.doc;
+    let called = false;
+
+    for (const item of ordered) {
+      try {
+        if (item.type === 'keydown' && typeof view.someProp === 'function') {
+          const handled = view.someProp('handleKeyDown', (handler) => {
+            called = true;
+            return handler(view, item.event);
+          });
+          if (handled || !view.state.doc.eq(before)) break;
+        } else if (item.type === 'beforeinput' && typeof view.someProp === 'function') {
+          const handled = view.someProp('handleDOMEvents', (handlers) => {
+            if (typeof handlers?.beforeinput !== 'function') return false;
+            called = true;
+            return handlers.beforeinput(view, item.event);
+          });
+          if (handled || !view.state.doc.eq(before)) break;
+        }
+      } catch (_) {}
     }
-    return last;
+    if (!called) throw new Error('noteのEnter処理を取得できません');
   }
 
-  async function createNativeCard(view, url, index, token) {
+  async function createFirstNativeCard(view, url, token) {
     const unregistered = findNotify(view, url);
     if (unregistered) deleteBlocks(view, [unregistered]);
     officialEmbeds.delete(normalizeUrl(url));
     insertUrlParagraph(view, url);
-    nstatus(`${index}/10 URLセット済み → キーボードのEnterを1回`);
-    await waitForTrustedEnter(view, token);
-    nstatus(`${index}/10 実入力Enter確認 → note公式カードを検証中…`);
+    nstatus('1/10 URLセット済み → Enterを1回だけ押す');
+    const captured = await waitForTrustedEnter(view, token);
+    nstatus('1/10 実入力Enterを保存 → 最初の正規カードを確認中…');
 
-    const proof = await waitForOfficialProof(view, url);
+    const proof = await waitForNativeCard(view, url);
     if (!proof.ok) {
       removeRawUrls(view, url);
-      throw new Error(`${index}/10 ${proof.reason}`);
+      throw new Error(`1/10 ${proof.reason}`);
     }
 
+    removeRawUrls(view, url);
+    remember(url, proof.hit.node.type.name);
+    return captured;
+  }
+
+  async function createFromCapturedEnter(view, url, index, captured) {
+    const existing = findNotify(view, url);
+    if (existing) deleteBlocks(view, [existing]);
+    officialEmbeds.delete(normalizeUrl(url));
+    insertUrlParagraph(view, url);
+    nstatus(`${index}/10 保存した実Enterで自動カード化…`);
+    invokeCapturedEnter(view, captured);
+
+    const proof = await waitForNativeCard(view, url);
+    if (!proof.ok) {
+      removeRawUrls(view, url);
+      throw new Error(`${index}/10 実Enter再利用：${proof.reason}`);
+    }
     removeRawUrls(view, url);
     remember(url, proof.hit.node.type.name);
     return proof.hit;
@@ -884,7 +952,7 @@
     if (button) button.disabled = true;
 
     try {
-      nstatus('投稿済み記事で実入力Enter方式を開始…');
+      nstatus('投稿済み記事でEnter 1回方式を開始…');
       const view = findView();
       if (!view) throw new Error('EditorViewなし');
       const images = cards();
@@ -895,18 +963,21 @@
 
       officialEmbeds.clear();
       const removed = clearFailedCards(view);
-      if (removed) nstatus(`旧カード ${removed}件を除去 → 公式検証生成中…`);
+      if (removed) nstatus(`旧カード ${removed}件を除去 → Enter 1回方式を準備中…`);
 
-      for (let i = 0; i < URLS.length; i += 1) {
+      const captured = await createFirstNativeCard(view, URLS[0], token);
+      nstatus('正規カード 1/10 ✅ 保存した実Enterで残り9件を自動生成…');
+
+      for (let i = 1; i < URLS.length; i += 1) {
         if (token !== runToken || !isEnabled()) throw new Error('システムOFFで中止');
-        await createNativeCard(view, URLS[i], i + 1, token);
-        nstatus(`正規カード ${i + 1}/10 検証済み ✅ 次を準備中…`);
+        await createFromCapturedEnter(view, URLS[i], i + 1, captured);
+        nstatus(`正規カード ${i + 1}/10 ✅`);
         await sleep(350);
       }
 
-      const count = URLS.filter((url) => officialProof(view, url).ok).length;
-      if (count !== 10) throw new Error(`公式EMBED KEY確認 ${count}/10`);
-      nstatus('実入力Enter・正規カード 10/10 ✅ 投稿済み記事を更新して通知確認');
+      const count = URLS.filter((url) => nativeCardProof(view, url).ok).length;
+      if (count !== 10) throw new Error(`正規カード確認 ${count}/10`);
+      nstatus('実Enter 1回＋自動9件・正規カード 10/10 ✅ 更新して通知確認');
     } catch (error) {
       if (token === runToken) {
         nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
