@@ -1,370 +1,60 @@
 // ==UserScript==
-// @name         無名S note 極薄カード挿入（URL自動）
+// @name         無名S note 極薄カード10枚一括完全自動
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      1.0.0
-// @description  高精細カードを1枚挿入し、画像の鎖ボタン→新しく出たURL入力欄へ記事URLを自動入力して確定
+// @version      2.0.0
+// @description  上位10記事の極薄カードをその場で高精細生成し、1回の画像操作で一括挿入、その後各画像へ対応URLを順番に自動設定
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
-// @connect      raw.githubusercontent.com
+// @connect      note.com
+// @connect      assets.st-note.com
 // @run-at       document-start
 // ==/UserScript==
 
 (function () {
   'use strict';
-
-  if (window.__MUMEI_THIN_CARD_AUTO_V100__) return;
-  window.__MUMEI_THIN_CARD_AUTO_V100__ = true;
-
-  const CARD_IMAGE = 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-paste-test/thin-card.png?v=hd2x';
-  const ARTICLE_URL = 'https://note.com/ss_yr/n/nc14eb3f2ea9f';
-  const BUTTON_ID = 'mumei-thin-card-auto-v100';
-  const PANEL_ID = 'mumei-thin-card-auto-panel-v100';
-  const OLD_IDS = [
-    'mumei-thin-card-inserter-test','mumei-thin-card-panel-test',
-    'mumei-thin-card-autolink-btn','mumei-toast',
-    'mumei-thin-card-auto-v08','mumei-thin-card-auto-panel-v08',
-    'mumei-thin-card-auto-v09','mumei-thin-card-auto-panel-v09'
-  ];
-
-  let armed = false;
-  let consumed = false;
-  let preparedFile = null;
-  let beforeFileInputs = new Set();
-  let beforeEditorImages = new Set();
-  let disarmTimer = null;
-
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-  function getEditor() {
-    return document.querySelector('.ProseMirror[contenteditable="true"]') || document.querySelector('.ProseMirror');
-  }
-
-  function setStatus(text, bad = false) {
-    const el = document.getElementById(PANEL_ID);
-    if (!el) return;
-    el.textContent = text;
-    el.style.background = bad ? '#7f1d1d' : '#111827';
-  }
-
-  function visible(el) {
-    if (!el || !el.isConnected) return false;
-    const s = getComputedStyle(el);
-    if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-
-  function requestBlob(url) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method:'GET', url, responseType:'blob', timeout:20000,
-        onload:res => {
-          if (res.status >= 200 && res.status < 300 && res.response) resolve(res.response);
-          else reject(new Error('画像取得失敗 HTTP ' + res.status));
-        },
-        onerror:() => reject(new Error('画像取得に失敗')),
-        ontimeout:() => reject(new Error('画像取得がタイムアウト'))
-      });
-    });
-  }
-
-  function isImageFileInput(input) {
-    if (!(input instanceof HTMLInputElement) || input.type !== 'file') return false;
-    const accept = (input.accept || '').toLowerCase();
-    return !accept || accept.includes('image') || accept.includes('.png') || accept.includes('.jpg') || accept.includes('.jpeg');
-  }
-
-  function resetState(message, bad = false) {
-    armed = false;
-    consumed = false;
-    preparedFile = null;
-    beforeFileInputs = new Set();
-    if (disarmTimer) clearTimeout(disarmTimer);
-    disarmTimer = null;
-    if (message) setStatus(message, bad);
-  }
-
-  async function waitForInsertedImage(timeout = 15000) {
-    const editor = getEditor();
-    if (!editor) return null;
-    const end = Date.now() + timeout;
-    while (Date.now() < end) {
-      const imgs = [...editor.querySelectorAll('img')];
-      const added = imgs.find(img => !beforeEditorImages.has(img));
-      if (added) return added;
-      await sleep(300);
-    }
-    return null;
-  }
-
-  function horizontalOverlap(a,b) {
-    return Math.min(a.right,b.right) - Math.max(a.left,b.left) > 20;
-  }
-
-  // 現行note UI: [鎖] [ALT] [拡大] [配置] [削除]
-  // ALTを目印に、その画像のツールバーを特定して左端の鎖だけを使う。
-  function findLinkButtonFromAlt(img) {
-    const ir = img.getBoundingClientRect();
-    const altCandidates = [...document.querySelectorAll('button,[role="button"],span,div')]
-      .filter(visible)
-      .filter(el => (el.textContent || '').trim() === 'ALT');
-
-    for (const alt of altCandidates) {
-      let node = alt;
-      for (let depth = 0; depth < 6 && node; depth++, node = node.parentElement) {
-        const buttons = [...node.querySelectorAll('button,[role="button"]')].filter(visible);
-        if (buttons.length < 4 || buttons.length > 7) continue;
-        const nr = node.getBoundingClientRect();
-        const gap = ir.top - nr.bottom;
-        if (!(horizontalOverlap(nr,ir) && gap >= -25 && gap <= 180 && nr.height <= 140)) continue;
-
-        buttons.sort((a,b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        const altIndex = buttons.findIndex(b => (b.textContent || '').trim() === 'ALT');
-        if (altIndex === 1 && buttons[0]) return buttons[0];
-
-        const ar = alt.getBoundingClientRect();
-        const leftButtons = buttons.filter(b => b.getBoundingClientRect().right <= ar.left + 8);
-        if (leftButtons.length === 1) return leftButtons[0];
-      }
-    }
-    return null;
-  }
-
-  function tap(el) {
-    try { el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',isPrimary:true})); } catch(_) {}
-    try { el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch',isPrimary:true})); } catch(_) {}
-    try { el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true})); } catch(_) {}
-    try { el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true})); } catch(_) {}
-    try { el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); } catch(_) {}
-  }
-
-  async function selectImageAndGetLinkButton(img) {
-    img.scrollIntoView({block:'center',behavior:'instant'});
-    await sleep(250);
-    tap(img);
-    await sleep(700);
-    for (let i=0;i<12;i++) {
-      const btn = findLinkButtonFromAlt(img);
-      if (btn) return btn;
-      await sleep(200);
-    }
-    return null;
-  }
-
-  function isTextEntry(el) {
-    if (!el || !visible(el)) return false;
-    if (el instanceof HTMLInputElement) return !['file','button','submit','checkbox','radio','range','color'].includes((el.type||'text').toLowerCase());
-    if (el instanceof HTMLTextAreaElement) return true;
-    return el.getAttribute?.('contenteditable') === 'true' && !el.classList?.contains('ProseMirror');
-  }
-
-  function allTextEntries() {
-    return [...document.querySelectorAll('input,textarea,[contenteditable="true"]')].filter(isTextEntry);
-  }
-
-  async function findFreshFocusedUrlEntry(beforeEntries) {
-    for (let i=0;i<25;i++) {
-      const active = document.activeElement;
-      if (isTextEntry(active) && !beforeEntries.has(active)) return active;
-
-      const entries = allTextEntries();
-      const fresh = entries.filter(el => !beforeEntries.has(el));
-      if (fresh.length === 1) return fresh[0];
-      if (fresh.length > 1) {
-        const focused = fresh.find(el => el === document.activeElement);
-        if (focused) return focused;
-        // URL欄は通常、鎖クリック直後に新しく現れる小さめの入力欄。
-        fresh.sort((a,b) => {
-          const ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
-          return (ar.width*ar.height) - (br.width*br.height);
-        });
-        return fresh[0];
-      }
-      await sleep(160);
-    }
-    return null;
-  }
-
-  function setEntryValue(el, value) {
-    el.focus();
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(proto,'value')?.set;
-      if (setter) setter.call(el,value); else el.value = value;
-      el.dispatchEvent(new Event('input',{bubbles:true}));
-      el.dispatchEvent(new Event('change',{bubbles:true}));
-      return;
-    }
-    el.textContent = value;
-    el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}));
-  }
-
-  function pressEnter(el) {
-    el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
-    el.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
-    el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
-  }
-
-  async function attachExactLink(img,url) {
-    const linkBtn = await selectImageAndGetLinkButton(img);
-    if (!linkBtn) {
-      setStatus('⚠️ 鎖ボタンを見つけられませんでした',true);
-      return false;
-    }
-
-    const beforeEntries = new Set(allTextEntries());
-    tap(linkBtn);
-    await sleep(250);
-
-    const urlEntry = await findFreshFocusedUrlEntry(beforeEntries);
-    if (!urlEntry) {
-      setStatus('⚠️ 鎖は押せましたが、新しく出たURL入力欄を取得できませんでした',true);
-      return false;
-    }
-
-    setEntryValue(urlEntry,url);
-    await sleep(250);
-
-    // 入力が実際に入ったか確認してからEnter。
-    const current = urlEntry instanceof HTMLInputElement || urlEntry instanceof HTMLTextAreaElement
-      ? urlEntry.value
-      : urlEntry.textContent;
-    if ((current || '').trim() !== url) {
-      setStatus('⚠️ URL欄は見つかりましたが、文字入力が反映されませんでした',true);
-      return false;
-    }
-
-    pressEnter(urlEntry);
-    await sleep(900);
-
-    // URL欄が閉じればnote側で確定されたと判断。
-    if (!visible(urlEntry)) return true;
-
-    // DOMにリンクが現れる場合は厳密確認。
-    const a = img.closest('a[href]') || img.parentElement?.closest('a[href]');
-    if (a) {
-      try { return new URL(a.href,location.href).href === new URL(url).href; } catch(_) {}
-    }
-
-    return false;
-  }
-
-  async function injectIntoFileInput(input) {
-    if (!armed || consumed || !preparedFile || !isImageFileInput(input)) return false;
-    if (beforeFileInputs.has(input)) return false;
-
-    consumed = true;
-    armed = false;
-    if (disarmTimer) clearTimeout(disarmTimer);
-    disarmTimer = null;
-    const fileToSend = preparedFile;
-    preparedFile = null;
-
-    try {
-      const dt = new DataTransfer();
-      dt.items.add(fileToSend);
-      input.files = dt.files;
-      input.dispatchEvent(new Event('input',{bubbles:true}));
-      input.dispatchEvent(new Event('change',{bubbles:true}));
-      setStatus('1/2 高精細カードを1枚挿入中…');
-
-      const img = await waitForInsertedImage();
-      if (!img) throw new Error('画像挿入を確認できませんでした');
-
-      setStatus('2/2 鎖→URL入力→Enter を自動実行中…');
-      const linked = await attachExactLink(img,ARTICLE_URL);
-      consumed = false;
-      beforeFileInputs = new Set();
-      if (linked) setStatus('✅ 1枚挿入＋URL自動設定まで完了');
-      else if (!document.getElementById(PANEL_ID)?.textContent?.includes('⚠️')) setStatus('⚠️ URL設定だけ確認できませんでした',true);
-      return true;
-    } catch(e) {
-      consumed = false;
-      setStatus('⚠️ ' + (e?.message || String(e)),true);
-      return false;
-    }
-  }
-
-  const observer = new MutationObserver(mutations => {
-    if (!armed || consumed) return;
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (!(node instanceof Element)) continue;
-        if (isImageFileInput(node) && injectIntoFileInput(node)) return;
-        const inputs = node.querySelectorAll ? node.querySelectorAll('input[type="file"]') : [];
-        for (const input of inputs) if (isImageFileInput(input) && injectIntoFileInput(input)) return;
-      }
-    }
-  });
-
-  function startObserver() {
-    if (!document.documentElement) return setTimeout(startObserver,50);
-    observer.observe(document.documentElement,{childList:true,subtree:true});
-  }
-  startObserver();
-
-  const nativeInputClick = HTMLInputElement.prototype.click;
-  HTMLInputElement.prototype.click = function(...args) {
-    if (armed && !consumed && isImageFileInput(this) && !beforeFileInputs.has(this)) {
-      if (injectIntoFileInput(this)) return;
-    }
-    return nativeInputClick.apply(this,args);
-  };
-
-  async function armUpload() {
-    const btn = document.getElementById(BUTTON_ID);
-    if (btn) btn.disabled = true;
-    try {
-      const editor = getEditor();
-      if (!editor) throw new Error('note本文欄が見つかりません');
-      resetState();
-      setStatus('高精細カードを準備中…');
-      const blob = await requestBlob(CARD_IMAGE);
-      preparedFile = new File([blob],'mumei-thin-card-hd.png',{type:'image/png'});
-      beforeFileInputs = new Set(document.querySelectorAll('input[type="file"]'));
-      beforeEditorImages = new Set(editor.querySelectorAll('img'));
-      consumed = false;
-      armed = true;
-      setStatus('準備OK。本文の入れたい行をタップ → noteの「＋」→「画像」を1回押してください');
-      disarmTimer = setTimeout(() => {
-        if (armed) resetState('時間切れ。もう一度「極薄カード準備」を押してください',true);
-      },45000);
-    } catch(e) {
-      resetState('⚠️ ' + (e?.message || String(e)),true);
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  function removeOldUi() {
-    for (const id of OLD_IDS) {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    }
-  }
-
-  function ensureMounted() {
-    if (!document.body) return;
-    removeOldUi();
-    if (!document.getElementById(PANEL_ID)) {
-      const p = document.createElement('div');
-      p.id = PANEL_ID;
-      p.textContent = '本文をタップしてから「極薄カード準備」';
-      Object.assign(p.style,{position:'fixed',right:'12px',bottom:'74px',zIndex:'2147483646',maxWidth:'330px',padding:'9px 11px',borderRadius:'10px',background:'#111827',color:'#fff',fontSize:'12px',lineHeight:'1.45',boxShadow:'0 4px 18px rgba(0,0,0,.25)',pointerEvents:'none'});
-      document.body.appendChild(p);
-    }
-    if (!document.getElementById(BUTTON_ID)) {
-      const b = document.createElement('button');
-      b.id = BUTTON_ID;
-      b.type = 'button';
-      b.textContent = '極薄カード準備';
-      Object.assign(b.style,{position:'fixed',right:'12px',bottom:'16px',zIndex:'2147483647',border:'0',borderRadius:'12px',padding:'14px 18px',background:'#111',color:'#fff',fontSize:'16px',fontWeight:'800',boxShadow:'0 5px 20px rgba(0,0,0,.30)',touchAction:'manipulation'});
-      b.addEventListener('click',armUpload);
-      document.body.appendChild(b);
-    }
-  }
-
-  function loop(){ ensureMounted(); setTimeout(loop,700); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',ensureMounted,{once:true}); else ensureMounted();
-  loop();
+  const BUTTON_ID='mumei-batch10-full-auto-v2',PANEL_ID='mumei-batch10-full-auto-panel-v2',CREATOR='無名S note';
+  const ITEMS=[
+    ['https://note.com/ss_yr/n/nc14eb3f2ea9f','【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
+    ['https://note.com/ss_yr/n/na8cf287a7152','忘れたくない夏を、ひとつ増やした。【#あいびよりあそび】'],
+    ['https://note.com/ss_yr/n/nafb8a53d1fe7','『営業パパ クリエイター図鑑』│無名S note【クリエイター名鑑〇〇編】'],
+    ['https://note.com/ss_yr/n/nca7a49a69d3c','【時を閉じ込める番人】│コングラ◯◯冠⁉️『クリエイター名鑑』'],
+    ['https://note.com/ss_yr/n/n752f333ddd80','鬼もほどける艶ポーズ👹【スイ式 AI創作レシピ】で描くヨガ道場 📔貼り付け小さくしてみた。'],
+    ['https://note.com/ss_yr/n/n426982b5d60b','彗星、縫ってます。☄️そのフォロー外し… 見えてるよ🧐'],
+    ['https://note.com/ss_yr/n/n20f58cb3ec59','【TEnGU】'],
+    ['https://note.com/ss_yr/n/n5cda670acdcf','【書いた言葉が、朝の部屋から飛び立つまで】 210000PV＆32000スキ達成'],
+    ['https://note.com/ss_yr/n/n2dfac2d0b184',"( 'ω'o[おしらせ]o【業界保有数No.1⁉️】"],
+    ['https://note.com/ss_yr/n/na51322616876','【企画📝】あなたが、まだ名前をつけていないもの。 共同マガジンの引き継ぎのお知らせ']
+  ].map(([url,title],i)=>({url,title,index:i+1}));
+  let armed=false,consumed=false,files=[],beforeInputs=new Set(),beforeImages=new Set(),timeoutId=null;
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  function getEditor(){return document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror')}
+  function visible(el){if(!el||!el.isConnected)return false;const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>0&&r.height>0}
+  function status(text,bad=false){const p=document.getElementById(PANEL_ID);if(!p)return;p.textContent=text;p.style.background=bad?'#7f1d1d':'#111827'}
+  function xhr(url,responseType='text'){return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,responseType,timeout:25000,onload:r=>r.status>=200&&r.status<300?resolve(r.response):reject(new Error('取得失敗 '+r.status)),onerror:()=>reject(new Error('通信失敗')),ontimeout:()=>reject(new Error('通信タイムアウト'))}))}
+  function imageInput(input){if(!(input instanceof HTMLInputElement)||input.type!=='file')return false;const a=(input.accept||'').toLowerCase();return !a||a.includes('image')||a.includes('.png')||a.includes('.jpg')||a.includes('.jpeg')}
+  function metaContent(html,property){const doc=new DOMParser().parseFromString(html,'text/html');return doc.querySelector(`meta[property="${property}"]`)?.content||doc.querySelector(`meta[name="${property}"]`)?.content||''}
+  async function getThumb(url){const html=await xhr(url,'text'),thumb=metaContent(html,'og:image');if(!thumb)throw new Error('サムネ取得失敗');return thumb}
+  async function blobToBitmap(blob){if('createImageBitmap'in window)return await createImageBitmap(blob);return await new Promise((resolve,reject)=>{const img=new Image(),u=URL.createObjectURL(blob);img.onload=()=>{URL.revokeObjectURL(u);resolve(img)};img.onerror=()=>{URL.revokeObjectURL(u);reject(new Error('画像読込失敗'))};img.src=u})}
+  function roundRect(c,x,y,w,h,r){const rr=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+rr,y);c.arcTo(x+w,y,x+w,y+h,rr);c.arcTo(x+w,y+h,x,y+h,rr);c.arcTo(x,y+h,x,y,rr);c.arcTo(x,y,x+w,y,rr);c.closePath()}
+  function fitTextLines(c,text,maxWidth,maxLines){const chars=[...text],lines=[];let line='';for(const ch of chars){const test=line+ch;if(c.measureText(test).width>maxWidth&&line){lines.push(line);line=ch;if(lines.length===maxLines-1)break}else line=test}if(lines.length<maxLines&&line){const used=lines.join('').length;let rest=[...text].slice(used).join('');if(c.measureText(rest).width>maxWidth){while(rest&&c.measureText(rest+'…').width>maxWidth)rest=rest.slice(0,-1);rest+='…'}lines.push(rest)}return lines.slice(0,maxLines)}
+  async function makeCard(item){const thumbUrl=await getThumb(item.url),thumbBlob=await xhr(thumbUrl,'blob'),bmp=await blobToBitmap(thumbBlob),W=1160,H=192,canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,H);c.strokeStyle='#ddd';c.lineWidth=2;roundRect(c,1,1,W-2,H-2,20);c.stroke();const leftW=700;c.fillStyle='#151a21';c.font='700 28px system-ui, sans-serif';c.textBaseline='top';fitTextLines(c,item.title,leftW-44,2).forEach((line,i)=>c.fillText(line,24,18+i*38));c.fillStyle='#555d69';c.font='22px system-ui, sans-serif';c.fillText(CREATOR,24,148);const bx=718,by=18,bw=424,bh=156;c.fillStyle='#fff';c.fillRect(bx,by,bw,bh);const iw=bmp.width||bmp.naturalWidth,ih=bmp.height||bmp.naturalHeight,scale=Math.min(bw/iw,bh/ih),dw=iw*scale,dh=ih*scale;c.drawImage(bmp,bx+(bw-dw)/2,by+(bh-dh)/2,dw,dh);if(bmp.close)bmp.close();const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('カード生成失敗')),'image/png',1));return new File([blob],String(item.index).padStart(2,'0')+'.png',{type:'image/png'})}
+  async function prepare(){const out=[];for(let i=0;i<ITEMS.length;i++){status(`カード準備中 ${i+1}/10…`);out.push(await makeCard(ITEMS[i]))}return out}
+  function reset(msg,bad=false){armed=false;consumed=false;files=[];beforeInputs=new Set();if(timeoutId)clearTimeout(timeoutId);timeoutId=null;if(msg)status(msg,bad)}
+  async function waitNewImages(timeout=45000){const ed=getEditor();if(!ed)return[];const end=Date.now()+timeout;while(Date.now()<end){const added=[...ed.querySelectorAll('img')].filter(x=>!beforeImages.has(x));if(added.length>=10)return added;await sleep(400)}return [...ed.querySelectorAll('img')].filter(x=>!beforeImages.has(x))}
+  function tap(el){if(!el)return;try{el.scrollIntoView({block:'center',behavior:'instant'})}catch(_){}for(const type of ['pointerdown','pointerup']){try{el.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerType:'touch',isPrimary:true}))}catch(_){}}for(const type of ['mousedown','mouseup','click']){try{el.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true}))}catch(_){}}try{if(typeof el.click==='function')el.click()}catch(_){}}
+  function altToolbar(img){const ir=img.getBoundingClientRect(),alts=[...document.querySelectorAll('button,[role="button"],span,div')].filter(visible).filter(e=>(e.textContent||'').trim()==='ALT');for(const alt of alts){let n=alt;for(let d=0;d<7&&n;d++,n=n.parentElement){const bs=[...n.querySelectorAll('button,[role="button"]')].filter(visible);if(bs.length<4||bs.length>8)continue;const nr=n.getBoundingClientRect(),gap=ir.top-nr.bottom,overlap=Math.min(nr.right,ir.right)-Math.max(nr.left,ir.left)>15;if(!overlap||gap<-40||gap>220||nr.height>150)continue;bs.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);const ar=alt.getBoundingClientRect(),left=bs.filter(b=>b.getBoundingClientRect().right<=ar.left+10);if(left.length===1)return left[0];const idx=bs.findIndex(b=>(b.textContent||'').trim()==='ALT');if(idx===1)return bs[0]}}return null}
+  async function selectAndFindLink(img){const targets=[img,img.closest('figure'),img.parentElement,img.parentElement?.parentElement,img.closest('[data-node-view-wrapper]')].filter(Boolean);for(const t of targets){tap(t);await sleep(500);for(let k=0;k<5;k++){const b=altToolbar(img);if(b)return b;await sleep(150)}}return null}
+  function textEntries(){return [...document.querySelectorAll('input,textarea,[contenteditable="true"]')].filter(el=>{if(!visible(el))return false;if(el instanceof HTMLInputElement)return !['file','button','submit','checkbox','radio','range','color'].includes((el.type||'text').toLowerCase());if(el instanceof HTMLTextAreaElement)return true;return el.getAttribute('contenteditable')==='true'&&!el.classList.contains('ProseMirror')})}
+  async function freshEntry(before){for(let i=0;i<30;i++){const a=document.activeElement;if(a&&!before.has(a)&&textEntries().includes(a))return a;const fresh=textEntries().filter(x=>!before.has(x));if(fresh.length===1)return fresh[0];if(fresh.length>1){const f=fresh.find(x=>x===document.activeElement);if(f)return f;return fresh[fresh.length-1]}await sleep(120)}return null}
+  function setValue(el,v){el.focus();if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){const p=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,s=Object.getOwnPropertyDescriptor(p,'value')?.set;if(s)s.call(el,v);else el.value=v;el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:v}));el.dispatchEvent(new Event('change',{bubbles:true}))}else{el.textContent=v;el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:v}))}}
+  function enter(el){for(const type of ['keydown','keypress','keyup'])el.dispatchEvent(new KeyboardEvent(type,{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}))}
+  async function linkOne(img,url,n){status(`URL設定中 ${n}/10…`);const btn=await selectAndFindLink(img);if(!btn)return false;const before=new Set(textEntries());tap(btn);await sleep(250);const input=await freshEntry(before);if(!input)return false;setValue(input,url);await sleep(180);enter(input);await sleep(650);return true}
+  async function linkAll(imgs){let ok=0;for(let i=0;i<Math.min(10,imgs.length);i++){if(await linkOne(imgs[i],ITEMS[i].url,i+1))ok++;await sleep(250)}return ok}
+  async function inject(input){if(!armed||consumed||!files.length||!imageInput(input)||beforeInputs.has(input))return false;consumed=true;armed=false;if(timeoutId)clearTimeout(timeoutId);timeoutId=null;const send=files;files=[];try{const dt=new DataTransfer();send.forEach(f=>dt.items.add(f));input.files=dt.files;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));status('10枚を一括挿入中…');const imgs=await waitNewImages();if(!imgs.length)throw new Error('画像挿入を確認できませんでした');if(imgs.length<10)status(`画像は${imgs.length}/10枚。入った分へURL設定中…`,true);const linked=await linkAll(imgs);consumed=false;status(`完了：画像 ${imgs.length}/10枚、URL自動設定 ${linked}/${Math.min(10,imgs.length)}枚${linked===10?' ✅':''}`,linked<Math.min(10,imgs.length));return true}catch(e){consumed=false;status('⚠️ '+(e?.message||String(e)),true);return false}}
+  const observer=new MutationObserver(ms=>{if(!armed||consumed)return;for(const m of ms)for(const node of m.addedNodes){if(!(node instanceof Element))continue;if(imageInput(node)){inject(node);return}for(const input of node.querySelectorAll?.('input[type="file"]')||[]){if(imageInput(input)){inject(input);return}}}});
+  function startObs(){if(!document.documentElement)return setTimeout(startObs,50);observer.observe(document.documentElement,{childList:true,subtree:true})}startObs();
+  const nativeClick=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(...args){if(armed&&!consumed&&imageInput(this)&&!beforeInputs.has(this)){inject(this);return}return nativeClick.apply(this,args)};
+  async function arm(){const b=document.getElementById(BUTTON_ID);if(b)b.disabled=true;try{const ed=getEditor();if(!ed)throw new Error('note本文欄が見つかりません');reset();beforeImages=new Set(ed.querySelectorAll('img'));files=await prepare();beforeInputs=new Set(document.querySelectorAll('input[type="file"]'));armed=true;consumed=false;status('準備OK。本文をタップ → noteの「＋」→「画像」を1回だけ押してください');timeoutId=setTimeout(()=>{if(armed)reset('時間切れ。もう一度「10枚一括自動」を押してください',true)},60000)}catch(e){reset('⚠️ '+(e?.message||String(e)),true)}finally{if(b)b.disabled=false}}
+  function mount(){if(!document.body)return;if(!document.getElementById(PANEL_ID)){const p=document.createElement('div');p.id=PANEL_ID;p.textContent='本文をタップ →「10枚一括自動」';Object.assign(p.style,{position:'fixed',right:'12px',bottom:'74px',zIndex:'2147483646',maxWidth:'330px',padding:'9px 11px',borderRadius:'10px',background:'#111827',color:'#fff',fontSize:'12px',lineHeight:'1.45',boxShadow:'0 4px 18px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)}if(!document.getElementById(BUTTON_ID)){const b=document.createElement('button');b.id=BUTTON_ID;b.type='button';b.textContent='10枚一括自動';Object.assign(b.style,{position:'fixed',right:'12px',bottom:'16px',zIndex:'2147483647',border:'0',borderRadius:'12px',padding:'14px 18px',background:'#0f766e',color:'#fff',fontSize:'16px',fontWeight:'800',boxShadow:'0 5px 20px rgba(0,0,0,.30)',touchAction:'manipulation'});b.addEventListener('click',arm);document.body.appendChild(b)}}
+  function loop(){mount();setTimeout(loop,1000)}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loop,{once:true});else loop();
 })();
