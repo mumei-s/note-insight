@@ -3,6 +3,8 @@ import path from 'node:path';
 import process from 'node:process';
 import sharp from 'sharp';
 
+// Build revision 2: run from the latest Direct notification verifier commit.
+
 const ROOT = process.cwd();
 const URL_FILE = path.join(ROOT, 'data', 'note-summer-magazine-107-urls.txt');
 const OUT_DIR = path.join(ROOT, 'public', 'note-summer-107');
