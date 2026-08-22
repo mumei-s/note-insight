@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.17.0
-// @description  新規未公開記事限定＋note公式embed応答キー10件実測照合＋通知カード一括削除
+// @version      3.18.0
+// @description  投稿済み記事対応＋実入力Enterで公式カード10件生成＋記事別ON/OFF＋通知カード一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3170__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3170__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3180__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3180__ = true;
 
   const URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -32,12 +32,16 @@
   const N_PANEL = 'mumei-notify-test-panel';
   const N_BTN = 'mumei-notify-test-btn';
   const N_CLEAN = 'mumei-notify-clean-btn';
-  const REG = 'mumei_registry_v317';
+  const TOGGLE = 'mumei-card-system-toggle';
+  const ACTIVE_ARTICLES = 'mumei_note_card_active_articles_v1';
+  const REG_PREFIX = 'mumei_registry_v318';
   const PREVIOUS_REG = 'mumei_registry_v316';
   const LEGACY_REG = 'mumei_registry_v315';
   const LEGACY_CAP = 'mumei_capture_v315';
   let busy = false;
   let notifyBusy = false;
+  let observerInstalled = false;
+  let runToken = 0;
   const officialEmbeds = new Map();
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,7 +84,7 @@
   }
 
   function registry() {
-    const value = getJSON(REG, []);
+    const value = getJSON(`${REG_PREFIX}:${sourceNoteKey() || 'unknown'}`, []);
     return Array.isArray(value) ? value : [];
   }
 
@@ -94,7 +98,7 @@
       seen.add(key);
       output.push({ url: item.url, type: item.type });
     }
-    setJSON(REG, output);
+    setJSON(`${REG_PREFIX}:${sourceNoteKey() || 'unknown'}`, output);
     updateCleanButton();
     return output;
   }
@@ -142,8 +146,76 @@
       : [];
   }
 
+  function activeArticleKeys() {
+    const value = getJSON(ACTIVE_ARTICLES, []);
+    return new Set(Array.isArray(value) ? value.filter(Boolean) : []);
+  }
+
+  function isEnabled() {
+    const key = sourceNoteKey();
+    return Boolean(key && activeArticleKeys().has(key));
+  }
+
+  function setEnabled(enabled) {
+    const key = sourceNoteKey();
+    if (!key) return false;
+    // 同時にONにできる編集記事は1本だけ。別記事では自動的にOFFになる。
+    setJSON(ACTIVE_ARTICLES, enabled ? [key] : []);
+    return true;
+  }
+
+  function hideWorkingUi() {
+    for (const id of [PANEL, BTN, N_PANEL, N_BTN, N_CLEAN]) {
+      const element = document.getElementById(id);
+      if (element) element.style.display = 'none';
+    }
+  }
+
+  function toggleSystem() {
+    const next = !isEnabled();
+    if (!setEnabled(next)) return;
+    if (!next) {
+      runToken += 1;
+      officialEmbeds.clear();
+      hideWorkingUi();
+      document.dispatchEvent(new CustomEvent('mumei-card-system-cancel'));
+    } else {
+      installOfficialEmbedObserver();
+    }
+    document.dispatchEvent(new CustomEvent('mumei-card-system-toggle', {
+      detail: { enabled: next, articleKey: sourceNoteKey() }
+    }));
+    mount();
+  }
+
   function mount() {
     if (!document.body) return;
+
+    let toggle = document.getElementById(TOGGLE);
+    if (!toggle) {
+      toggle = document.createElement('button');
+      toggle.id = TOGGLE;
+      toggle.type = 'button';
+      toggle.addEventListener('click', toggleSystem);
+      document.body.appendChild(toggle);
+    }
+    const enabled = isEnabled();
+    toggle.textContent = enabled ? '通知システム ON' : '通知システム OFF';
+    Object.assign(toggle.style, {
+      position: 'fixed', right: '8px', bottom: '18px', zIndex: '2147483647',
+      border: '0', borderRadius: '999px', padding: '8px 12px',
+      background: enabled ? '#047857' : '#4b5563', color: '#fff',
+      fontSize: '12px', fontWeight: '800',
+      boxShadow: '0 4px 14px rgba(0,0,0,.28)', touchAction: 'manipulation',
+      display: 'block', visibility: 'visible', opacity: '1'
+    });
+
+    if (!enabled) {
+      hideWorkingUi();
+      return;
+    }
+    installOfficialEmbedObserver();
+    const bridgeControlsLinks = Boolean(document.getElementById('mumei-bridge610-btn'));
 
     let panel = document.getElementById(PANEL);
     if (!panel) {
@@ -151,13 +223,13 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.17';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.18｜この記事だけON';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
       background: '#065f46', color: '#fff', fontSize: '11px',
       lineHeight: '1.3', boxShadow: '0 4px 12px rgba(0,0,0,.25)',
-      pointerEvents: 'none', display: 'block'
+      pointerEvents: 'none', display: bridgeControlsLinks ? 'none' : 'block'
     });
 
     let linkButton = document.getElementById(BTN);
@@ -174,14 +246,15 @@
       border: '0', borderRadius: '10px', padding: '10px 13px',
       background: '#059669', color: '#fff', fontSize: '13px',
       fontWeight: '800', boxShadow: '0 4px 14px rgba(0,0,0,.28)',
-      touchAction: 'manipulation'
+      touchAction: 'manipulation', display: bridgeControlsLinks ? 'none' : 'block',
+      pointerEvents: bridgeControlsLinks ? 'none' : 'auto'
     });
 
     let notifyPanel = document.getElementById(N_PANEL);
     if (!notifyPanel) {
       notifyPanel = document.createElement('div');
       notifyPanel.id = N_PANEL;
-      notifyPanel.textContent = '新規記事限定・公式EMBED 10件 READY';
+      notifyPanel.textContent = '投稿済み記事OK｜実入力Enter 10件 READY';
       document.body.appendChild(notifyPanel);
     }
     Object.assign(notifyPanel.style, {
@@ -197,7 +270,7 @@
       notifyButton = document.createElement('button');
       notifyButton.id = N_BTN;
       notifyButton.type = 'button';
-      notifyButton.textContent = '通知カード10件 公式検証生成';
+      notifyButton.textContent = '正規カード10件（Enter×10）';
       notifyButton.addEventListener('click', notify10);
       document.body.appendChild(notifyButton);
     }
@@ -222,7 +295,7 @@
       border: '0', borderRadius: '10px', padding: '9px 12px',
       background: '#b45309', color: '#fff', fontSize: '12px',
       fontWeight: '800', boxShadow: '0 4px 14px rgba(0,0,0,.28)',
-      touchAction: 'manipulation'
+      touchAction: 'manipulation', display: 'block'
     });
     updateCleanButton();
   }
@@ -234,7 +307,7 @@
     button.textContent = count
       ? `通知カード一括削除（${count}件）`
       : '通知カード一括削除';
-    button.style.display = count ? 'block' : 'none';
+    button.style.display = isEnabled() ? 'block' : 'none';
   }
 
   mount();
@@ -242,50 +315,6 @@
 
   function sourceNoteKey() {
     return location.pathname.match(/(?:^|\/)(n[a-z0-9]{8,})(?:\/|$)/i)?.[1] || '';
-  }
-
-  function deepValues(value, output = []) {
-    if (Array.isArray(value)) {
-      value.forEach((item) => deepValues(item, output));
-    } else if (value && typeof value === 'object') {
-      Object.entries(value).forEach(([key, item]) => {
-        output.push([key, item]);
-        deepValues(item, output);
-      });
-    }
-    return output;
-  }
-
-  async function ensureUnpublishedSource() {
-    const key = sourceNoteKey();
-    if (!key) throw new Error('編集中の記事キーを取得できません');
-    let response;
-    try {
-      response = await fetch(`https://note.com/api/v3/notes/${key}`, {
-        method: 'GET', credentials: 'include', headers: { accept: 'application/json' }
-      });
-    } catch (_) {
-      throw new Error('新規未公開記事か確認できません');
-    }
-    if (response.status === 404) return key;
-    if (!response.ok) throw new Error(`記事状態確認 ${response.status}`);
-    let data;
-    try { data = await response.json(); } catch (_) {
-      throw new Error('記事状態の応答を読めません');
-    }
-    const values = deepValues(data);
-    const statuses = values
-      .filter(([name, value]) => /^(status|note_status)$/i.test(name) && typeof value === 'string')
-      .map(([, value]) => value.toLowerCase());
-    const publishedFlag = values.some(([name, value]) =>
-      /^(is_published|published)$/i.test(name) && value === true);
-    const publishDate = values.some(([name, value]) =>
-      /^(publish_at|published_at)$/i.test(name) && typeof value === 'string' && value.length > 0);
-    if (publishedFlag || publishDate || statuses.includes('published')) {
-      throw new Error('既公開記事です。通知は再テストせず、新規記事で実行');
-    }
-    if (statuses.some((value) => /draft|reserved|unpublished/.test(value))) return key;
-    throw new Error('未公開状態を確定できません。新規記事で実行');
   }
 
   function isEmbedEndpoint(url, method = 'GET') {
@@ -312,6 +341,7 @@
   }
 
   function recordOfficialEmbed(fields, json) {
+    if (!isEnabled()) return;
     const embedded = embedPayload(json);
     if (!embedded?.key) return;
     const url = normalizeUrl(embedded.url || fields.url || '');
@@ -330,6 +360,8 @@
   let originalXhrOpen;
   let originalXhrSend;
   function installOfficialEmbedObserver() {
+    if (observerInstalled) return;
+    observerInstalled = true;
     originalFetch = window.fetch.bind(window);
     window.fetch = async function observedFetch(input, init) {
       const url = input instanceof Request ? input.url : String(input);
@@ -350,11 +382,11 @@
     originalXhrOpen = proto.open;
     originalXhrSend = proto.send;
     proto.open = function observedOpen(method, url, ...rest) {
-      this.__mumei317 = { method: String(method || 'GET'), url: String(url || '') };
+      this.__mumei318 = { method: String(method || 'GET'), url: String(url || '') };
       return originalXhrOpen.call(this, method, url, ...rest);
     };
     proto.send = function observedSend(body) {
-      const request = this.__mumei317;
+      const request = this.__mumei318;
       if (request && isEmbedEndpoint(request.url, request.method)) {
         const fields = bodyFields(body);
         this.addEventListener('load', () => {
@@ -366,7 +398,7 @@
     };
   }
 
-  installOfficialEmbedObserver();
+  if (isEnabled()) installOfficialEmbedObserver();
 
   function looksLikeView(value) {
     try {
@@ -551,6 +583,7 @@
     for (let i = 0; i < 10; i += 1) {
       if (alreadyLinked(view, images[i], URLS[i])) continue;
       status(`URL書き込み ${i + 1}/10…`);
+      emit('mumei-direct-progress', { index: i + 1 });
       let ok = false;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         ok = setDirect(view, images[i], URLS[i]);
@@ -564,7 +597,7 @@
   }
 
   async function runLinks() {
-    if (busy) return;
+    if (busy || !isEnabled()) return;
     busy = true;
     const button = document.getElementById(BTN);
     if (button) button.disabled = true;
@@ -572,22 +605,26 @@
       const images = cards();
       if (images.length !== 10) {
         status(`カード ${images.length}/10`, true);
+        emit('mumei-direct-stopped', { index: 0, reason: `カード ${images.length}/10` });
         return;
       }
       const view = findView();
       if (!view) {
         status('DIRECT停止：EditorViewなし', true);
+        emit('mumei-direct-stopped', { index: 0, reason: 'EditorViewなし' });
         return;
       }
       const error = await ensureLinks(view, images);
       if (error) {
         status(`URL ${error.index}/10で停止`, true);
+        emit('mumei-direct-stopped', { index: error.index, reason: 'URL書き込み停止' });
         return;
       }
       status('URL完了 10/10 ✅');
       emit('mumei-direct-success-done', { ok: 10 });
     } catch (error) {
       status(`DIRECTエラー：${error?.message || String(error)}`, true);
+      emit('mumei-direct-stopped', { index: 0, reason: error?.message || String(error) });
     } finally {
       busy = false;
       if (button) button.disabled = false;
@@ -706,6 +743,20 @@
     return findNotify(view, item.url, item.type);
   }
 
+  function allTargetCardHits(view) {
+    const output = [];
+    const seen = new Set();
+    for (const url of URLS) {
+      for (const hit of notifyHits(view, url)) {
+        const key = `${hit.pos}:${hit.node.nodeSize}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        output.push(hit);
+      }
+    }
+    return output;
+  }
+
   function normalizeRegistry(view) {
     return saveRegistry(registry().filter((item) => registeredHit(view, item)));
   }
@@ -755,66 +806,43 @@
     setCursorAtEnd(view);
   }
 
-  function keyEvent(type) {
-    return new KeyboardEvent(type, {
-      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13,
-      bubbles: true, cancelable: true, composed: true
+  // 通知成功が実証済みの「人が押したEnter」だけを受け付ける。
+  // Userscriptが作るKeyboardEventは isTrusted=false なので、ここでは使わない。
+  function waitForTrustedEnter(view, token, timeout = 180000) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        view.dom.removeEventListener('keydown', onInput, true);
+        view.dom.removeEventListener('beforeinput', onInput, true);
+        document.removeEventListener('mumei-card-system-cancel', onCancel);
+        clearTimeout(timer);
+      };
+      const finish = (error = null) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve();
+      };
+      const onInput = (event) => {
+        if (!event.isTrusted) return;
+        const keyboardEnter = event.type === 'keydown' && event.key === 'Enter';
+        const mobileEnter = event.type === 'beforeinput' &&
+          /^(insertParagraph|insertLineBreak)$/i.test(event.inputType || '');
+        if (!keyboardEnter && !mobileEnter) return;
+        if (token !== runToken || !isEnabled()) {
+          finish(new Error('システムOFFで中止'));
+          return;
+        }
+        finish();
+      };
+      const onCancel = () => finish(new Error('システムOFFで中止'));
+      const timer = setTimeout(() => finish(new Error('Enter待機時間切れ')), timeout);
+      view.dom.addEventListener('keydown', onInput, true);
+      view.dom.addEventListener('beforeinput', onInput, true);
+      document.addEventListener('mumei-card-system-cancel', onCancel, { once: true });
+      view.focus();
     });
-  }
-
-  function inputEvent(type) {
-    try {
-      return new InputEvent(type, {
-        inputType: 'insertParagraph', data: null,
-        bubbles: true, cancelable: true, composed: true
-      });
-    } catch (_) {
-      return new Event(type, { bubbles: true, cancelable: true });
-    }
-  }
-
-  // 手動Enterと同じ順番で、EditorViewのDOMイベント経路を通す。
-  // API直送やカードJSON複製は一切行わない。
-  async function runNativeEnter(view) {
-    view.focus();
-    await sleep(120);
-
-    const before = view.state.doc;
-    const down = keyEvent('keydown');
-    view.dom.dispatchEvent(down);
-
-    // 通常のDOM経路が合成イベントを無視した場合だけ、同じEditorViewに
-    // 登録されているhandleKeyDownを直接呼ぶ。カードを組み立てる処理ではなく、
-    // 手動Enter時にEditorViewが使うコマンド経路そのものを実行する。
-    if (!down.defaultPrevented && view.state.doc.eq(before) &&
-      typeof view.someProp === 'function') {
-      try {
-        const handled = view.someProp('handleKeyDown', (handler) =>
-          handler(view, down));
-        if (handled) down.preventDefault();
-      } catch (_) {}
-    }
-
-    // Androidのソフトキーボードはkeydownではなくbeforeinputが本経路になる場合がある。
-    if (!down.defaultPrevented && view.state.doc.eq(before)) {
-      const beforeInput = inputEvent('beforeinput');
-      view.dom.dispatchEvent(beforeInput);
-      if (!beforeInput.defaultPrevented && view.state.doc.eq(before) &&
-        typeof view.someProp === 'function') {
-        try {
-          view.someProp('handleDOMEvents', (handlers) => {
-            if (typeof handlers?.beforeinput !== 'function') return false;
-            return handlers.beforeinput(view, beforeInput);
-          });
-        } catch (_) {}
-      }
-      if (!beforeInput.defaultPrevented && view.state.doc.eq(before) &&
-        typeof document.execCommand === 'function') {
-        document.execCommand('insertParagraph', false, null);
-      }
-    }
-
-    view.dom.dispatchEvent(keyEvent('keyup'));
   }
 
   async function waitForOfficialProof(view, url, timeout = 25000) {
@@ -828,15 +856,14 @@
     return last;
   }
 
-  async function createNativeCard(view, url, index) {
-    const saved = registry().find((item) => item.url === url);
-    if (saved && officialProof(view, url).ok) return officialProof(view, url).hit;
+  async function createNativeCard(view, url, index, token) {
     const unregistered = findNotify(view, url);
     if (unregistered) deleteBlocks(view, [unregistered]);
     officialEmbeds.delete(normalizeUrl(url));
     insertUrlParagraph(view, url);
-    nstatus(`公式embed検証 ${index}/10…`);
-    await runNativeEnter(view);
+    nstatus(`${index}/10 URLセット済み → キーボードのEnterを1回`);
+    await waitForTrustedEnter(view, token);
+    nstatus(`${index}/10 実入力Enter確認 → note公式カードを検証中…`);
 
     const proof = await waitForOfficialProof(view, url);
     if (!proof.ok) {
@@ -850,14 +877,14 @@
   }
 
   async function notify10() {
-    if (notifyBusy) return;
+    if (notifyBusy || !isEnabled()) return;
     notifyBusy = true;
+    const token = ++runToken;
     const button = document.getElementById(N_BTN);
     if (button) button.disabled = true;
 
     try {
-      nstatus('新規未公開記事か確認中…');
-      await ensureUnpublishedSource();
+      nstatus('投稿済み記事で実入力Enter方式を開始…');
       const view = findView();
       if (!view) throw new Error('EditorViewなし');
       const images = cards();
@@ -871,16 +898,17 @@
       if (removed) nstatus(`旧カード ${removed}件を除去 → 公式検証生成中…`);
 
       for (let i = 0; i < URLS.length; i += 1) {
-        await createNativeCard(view, URLS[i], i + 1);
-        nstatus(`公式EMBED KEY ${i + 1}/10 検証済み ✅`);
-        await sleep(700);
+        if (token !== runToken || !isEnabled()) throw new Error('システムOFFで中止');
+        await createNativeCard(view, URLS[i], i + 1, token);
+        nstatus(`正規カード ${i + 1}/10 検証済み ✅ 次を準備中…`);
+        await sleep(350);
       }
 
       const count = URLS.filter((url) => officialProof(view, url).ok).length;
       if (count !== 10) throw new Error(`公式EMBED KEY確認 ${count}/10`);
-      nstatus('新規記事・公式EMBED KEY 10/10 ✅ この1回を公開');
+      nstatus('実入力Enter・正規カード 10/10 ✅ 投稿済み記事を更新して通知確認');
     } catch (error) {
-      nstatus(`停止：${error?.message || String(error)}（同じ青ボタンで再開）`, true);
+      nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
     } finally {
       notifyBusy = false;
       if (button) button.disabled = false;
@@ -888,20 +916,19 @@
   }
 
   function cleanCards() {
+    if (!isEnabled()) return;
     const button = document.getElementById(N_CLEAN);
     if (button) button.disabled = true;
     try {
       const view = findView();
       if (!view) throw new Error('EditorViewなし');
-      const hits = [];
-      for (const item of registry()) {
-        const hit = registeredHit(view, item);
-        if (hit) hits.push(hit);
-      }
+      // 記録が消えた旧版カードも、対象10URLの標準カードなら復旧削除する。
+      // notifyHitsは極薄画像を必ず除外するため、860×140画像は残る。
+      const hits = allTargetCardHits(view);
       if (!hits.length) throw new Error('削除対象カードなし');
       const removed = deleteBlocks(view, hits);
       saveRegistry([]);
-      nstatus(`通知カード ${removed}/${removed} 一括削除 ✅ 極薄10枚は残しました`);
+      nstatus(`通知カード ${removed}件 一括削除 ✅ 極薄画像は残しました`);
     } catch (error) {
       nstatus(`削除停止：${error?.message || String(error)}`, true);
     } finally {
