@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.0.0
-// @description  実際に成功したProseMirror DIRECT URL設定版を別名で固定復元
+// @version      3.1.0
+// @description  成功済みProseMirror DIRECT URL設定版。進捗表示・途中停止・続きから再開対応
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -10,8 +10,8 @@
 
 (function(){
 'use strict';
-if(window.__MUMEI_DIRECT_SUCCESS_300__) return;
-window.__MUMEI_DIRECT_SUCCESS_300__=true;
+if(window.__MUMEI_DIRECT_SUCCESS_310__) return;
+window.__MUMEI_DIRECT_SUCCESS_310__=true;
 
 const URLS=[
 'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -28,9 +28,11 @@ const URLS=[
 const PANEL='mumei-direct-success-panel';
 const BTN='mumei-direct-success-btn';
 let busy=false;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function editor(){return document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror')}
 function status(t,bad=false){const p=document.getElementById(PANEL);if(!p)return;p.textContent=t;p.style.background=bad?'#991b1b':'#065f46'}
+function emit(name,detail={}){document.dispatchEvent(new CustomEvent(name,{detail}))}
 function cards(){
   const root=editor();if(!root)return[];
   return [...root.querySelectorAll('img')].filter(img=>{
@@ -132,8 +134,7 @@ function trySetAttr(view,pos,node,url){
   for(const key of keys){
     try{
       const attrs={...node.attrs,[key]:url};
-      const tr=view.state.tr.setNodeMarkup(pos,node.type,attrs,node.marks);
-      view.dispatch(tr);
+      view.dispatch(view.state.tr.setNodeMarkup(pos,node.type,attrs,node.marks));
       const fresh=view.state.doc.nodeAt(pos);
       if(nodeHasLink(fresh,url))return true;
     }catch(_){}
@@ -146,7 +147,7 @@ function trySetMark(view,pos,node,url){
   try{
     const marks=(node.marks||[]).filter(m=>m.type!==type).concat(mark);
     view.dispatch(view.state.tr.setNodeMarkup(pos,node.type,node.attrs,marks));
-    let fresh=view.state.doc.nodeAt(pos);if(nodeHasLink(fresh,url))return true;
+    const fresh=view.state.doc.nodeAt(pos);if(nodeHasLink(fresh,url))return true;
   }catch(_){}
   try{
     view.dispatch(view.state.tr.addMark(pos,pos+node.nodeSize,mark));
@@ -165,32 +166,62 @@ function parentCandidates(view,pos){
   }catch(_){}
   return out;
 }
+function nodeList(view,img){
+  const hit=findNodeForImg(view,img);if(!hit)return [];
+  return [hit,...parentCandidates(view,hit.pos)];
+}
+function alreadyLinked(view,img,url){
+  return nodeList(view,img).some(c=>nodeHasLink(c.node,url));
+}
 function setDirect(view,img,url){
-  const hit=findNodeForImg(view,img);if(!hit)return {ok:false,reason:'node'};
-  const list=[hit,...parentCandidates(view,hit.pos)];
+  const list=nodeList(view,img);if(!list.length)return {ok:false,reason:'node'};
+  const hit=list[0];
   for(const c of list){if(trySetAttr(view,c.pos,c.node,url))return {ok:true,mode:'attr',type:c.node.type.name}}
   for(const c of list){if(trySetMark(view,c.pos,c.node,url))return {ok:true,mode:'mark',type:c.node.type.name}}
   return {ok:false,reason:'schema',type:hit.node.type?.name||'?',attrs:Object.keys(hit.node.attrs||{}),marks:Object.keys(view.state.schema.marks||{})};
 }
+function resetButton(){const b=document.getElementById(BTN);if(b)b.textContent='DIRECT SUCCESS 3.0'}
 async function run(){
   if(busy)return;busy=true;const b=document.getElementById(BTN);if(b)b.disabled=true;
   try{
-    const imgs=cards();if(imgs.length!==10){status(`カード ${imgs.length}/10`,true);return}
+    const imgs=cards();if(imgs.length!==10){status(`カード ${imgs.length}/10`,true);emit('mumei-direct-stopped',{index:0,ok:0,reason:'cards'});return}
     status('EditorViewを探しています…');
     const view=findView();
-    if(!view){status('DIRECT停止：EditorViewを取得できません',true);return}
-    status('DIRECT：1枚目だけURL設定テスト…');
-    const first=setDirect(view,imgs[0],URLS[0]);
-    if(!first.ok){status(`DIRECT停止：${first.reason} / ${first.type||''} / attrs:${(first.attrs||[]).join(',')} / marks:${(first.marks||[]).join(',')}`,true);return}
-    let ok=1;
-    for(let i=1;i<10;i++){
-      status(`DIRECT URL ${i+1}/10…`);
-      const r=setDirect(view,imgs[i],URLS[i]);if(r.ok)ok++;else{status(`DIRECT停止 ${i+1}枚目：${r.reason}`,true);return}
-      await new Promise(r=>setTimeout(r,80));
+    if(!view){status('DIRECT停止：EditorViewを取得できません',true);emit('mumei-direct-stopped',{index:0,ok:0,reason:'view'});return}
+    let ok=0;
+    for(let i=0;i<10;i++){
+      const index=i+1;
+      if(alreadyLinked(view,imgs[i],URLS[i])){
+        ok++;
+        status(`URL書き込み ${index}/10（設定済み）`);
+        emit('mumei-direct-progress',{index,ok,skipped:true});
+        continue;
+      }
+      status(`URL書き込み ${index}/10…`);
+      emit('mumei-direct-progress',{index,ok,skipped:false});
+      let r={ok:false,reason:'unknown'};
+      for(let attempt=1;attempt<=3;attempt++){
+        r=setDirect(view,imgs[i],URLS[i]);
+        if(r.ok)break;
+        if(attempt<3)await sleep(350);
+      }
+      if(!r.ok){
+        status(`URL ${index}/10で停止 → 同じボタンで再開`,true);
+        if(b)b.textContent=`${index}枚目から再開`;
+        emit('mumei-direct-stopped',{index,ok,reason:r.reason||'unknown'});
+        return;
+      }
+      ok++;
+      emit('mumei-direct-progress',{index,ok,skipped:false});
+      await sleep(100);
     }
-    status(`DIRECT完了 ${ok}/10。下書き保存して確認`,ok!==10);
-    document.dispatchEvent(new CustomEvent('mumei-direct-success-done',{detail:{ok}}));
-  }catch(e){status('DIRECTエラー：'+(e?.message||String(e)),true)}finally{busy=false;if(b)b.disabled=false}
+    resetButton();
+    status('URL完了 10/10 ✅');
+    emit('mumei-direct-success-done',{ok:10});
+  }catch(e){
+    status('DIRECTエラー：'+(e?.message||String(e)),true);
+    emit('mumei-direct-stopped',{index:0,ok:0,reason:'exception'});
+  }finally{busy=false;if(b)b.disabled=false}
 }
 function mount(){
   if(!document.body)return;
