@@ -908,7 +908,9 @@
       if (count !== 10) throw new Error(`公式EMBED KEY確認 ${count}/10`);
       nstatus('実入力Enter・正規カード 10/10 ✅ 投稿済み記事を更新して通知確認');
     } catch (error) {
-      nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
+      if (token === runToken) {
+        nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
+      }
     } finally {
       notifyBusy = false;
       if (button) button.disabled = false;
