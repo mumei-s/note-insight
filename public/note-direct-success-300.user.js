@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.16.0
-// @description  極薄10枚DIRECT URL＋note本来のEnter処理で通知カード10件を正規生成＋一括削除
+// @version      3.17.0
+// @description  新規未公開記事限定＋note公式embed応答キー10件実測照合＋通知カード一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3160__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3160__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3170__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3170__ = true;
 
   const URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -32,11 +32,13 @@
   const N_PANEL = 'mumei-notify-test-panel';
   const N_BTN = 'mumei-notify-test-btn';
   const N_CLEAN = 'mumei-notify-clean-btn';
-  const REG = 'mumei_registry_v316';
+  const REG = 'mumei_registry_v317';
+  const PREVIOUS_REG = 'mumei_registry_v316';
   const LEGACY_REG = 'mumei_registry_v315';
   const LEGACY_CAP = 'mumei_capture_v315';
   let busy = false;
   let notifyBusy = false;
+  const officialEmbeds = new Map();
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -149,7 +151,7 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.16';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.17';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
@@ -179,7 +181,7 @@
     if (!notifyPanel) {
       notifyPanel = document.createElement('div');
       notifyPanel.id = N_PANEL;
-      notifyPanel.textContent = '正規通知カード10件 READY';
+      notifyPanel.textContent = '新規記事限定・公式EMBED 10件 READY';
       document.body.appendChild(notifyPanel);
     }
     Object.assign(notifyPanel.style, {
@@ -195,7 +197,7 @@
       notifyButton = document.createElement('button');
       notifyButton.id = N_BTN;
       notifyButton.type = 'button';
-      notifyButton.textContent = '通知カード10件 正規生成';
+      notifyButton.textContent = '通知カード10件 公式検証生成';
       notifyButton.addEventListener('click', notify10);
       document.body.appendChild(notifyButton);
     }
@@ -237,6 +239,134 @@
 
   mount();
   setInterval(mount, 700);
+
+  function sourceNoteKey() {
+    return location.pathname.match(/(?:^|\/)(n[a-z0-9]{8,})(?:\/|$)/i)?.[1] || '';
+  }
+
+  function deepValues(value, output = []) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => deepValues(item, output));
+    } else if (value && typeof value === 'object') {
+      Object.entries(value).forEach(([key, item]) => {
+        output.push([key, item]);
+        deepValues(item, output);
+      });
+    }
+    return output;
+  }
+
+  async function ensureUnpublishedSource() {
+    const key = sourceNoteKey();
+    if (!key) throw new Error('編集中の記事キーを取得できません');
+    let response;
+    try {
+      response = await fetch(`https://note.com/api/v3/notes/${key}`, {
+        method: 'GET', credentials: 'include', headers: { accept: 'application/json' }
+      });
+    } catch (_) {
+      throw new Error('新規未公開記事か確認できません');
+    }
+    if (response.status === 404) return key;
+    if (!response.ok) throw new Error(`記事状態確認 ${response.status}`);
+    let data;
+    try { data = await response.json(); } catch (_) {
+      throw new Error('記事状態の応答を読めません');
+    }
+    const values = deepValues(data);
+    const statuses = values
+      .filter(([name, value]) => /^(status|note_status)$/i.test(name) && typeof value === 'string')
+      .map(([, value]) => value.toLowerCase());
+    const publishedFlag = values.some(([name, value]) =>
+      /^(is_published|published)$/i.test(name) && value === true);
+    const publishDate = values.some(([name, value]) =>
+      /^(publish_at|published_at)$/i.test(name) && typeof value === 'string' && value.length > 0);
+    if (publishedFlag || publishDate || statuses.includes('published')) {
+      throw new Error('既公開記事です。通知は再テストせず、新規記事で実行');
+    }
+    if (statuses.some((value) => /draft|reserved|unpublished/.test(value))) return key;
+    throw new Error('未公開状態を確定できません。新規記事で実行');
+  }
+
+  function isEmbedEndpoint(url, method = 'GET') {
+    return /\/api\/v1\/embed(?:\?|$)/.test(String(url || '')) &&
+      String(method || 'GET').toUpperCase() === 'POST';
+  }
+
+  function bodyFields(body) {
+    const output = {};
+    try {
+      if (body instanceof FormData || body instanceof URLSearchParams) {
+        for (const [key, value] of body.entries()) {
+          if (typeof value === 'string') output[key] = value;
+        }
+      } else if (typeof body === 'string') {
+        try { Object.assign(output, JSON.parse(body)); } catch (_) {}
+      }
+    } catch (_) {}
+    return output;
+  }
+
+  function embedPayload(json) {
+    return json?.data?.embedded_content || json?.embedded_content || null;
+  }
+
+  function recordOfficialEmbed(fields, json) {
+    const embedded = embedPayload(json);
+    if (!embedded?.key) return;
+    const url = normalizeUrl(embedded.url || fields.url || '');
+    if (!url) return;
+    officialEmbeds.set(url, {
+      url,
+      key: String(embedded.key),
+      identifier: String(embedded.identifier || url.split('/').pop() || ''),
+      service: String(embedded.service || ''),
+      embeddableType: String(embedded.embeddable_type || fields.embeddable_type || ''),
+      sourceKey: String(fields.embeddable_key || '')
+    });
+  }
+
+  let originalFetch;
+  let originalXhrOpen;
+  let originalXhrSend;
+  function installOfficialEmbedObserver() {
+    originalFetch = window.fetch.bind(window);
+    window.fetch = async function observedFetch(input, init) {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      const wanted = isEmbedEndpoint(url, method);
+      let fields = wanted ? bodyFields(init?.body) : {};
+      if (wanted && input instanceof Request && !Object.keys(fields).length) {
+        try { fields = bodyFields(await input.clone().formData()); } catch (_) {}
+      }
+      const response = await originalFetch(input, init);
+      if (wanted && response.ok) {
+        try { recordOfficialEmbed(fields, await response.clone().json()); } catch (_) {}
+      }
+      return response;
+    };
+
+    const proto = XMLHttpRequest.prototype;
+    originalXhrOpen = proto.open;
+    originalXhrSend = proto.send;
+    proto.open = function observedOpen(method, url, ...rest) {
+      this.__mumei317 = { method: String(method || 'GET'), url: String(url || '') };
+      return originalXhrOpen.call(this, method, url, ...rest);
+    };
+    proto.send = function observedSend(body) {
+      const request = this.__mumei317;
+      if (request && isEmbedEndpoint(request.url, request.method)) {
+        const fields = bodyFields(body);
+        this.addEventListener('load', () => {
+          if (this.status < 200 || this.status >= 300) return;
+          try { recordOfficialEmbed(fields, JSON.parse(this.responseText || '{}')); } catch (_) {}
+        }, { once: true });
+      }
+      return originalXhrSend.call(this, body);
+    };
+  }
+
+  installOfficialEmbedObserver();
 
   function looksLikeView(value) {
     try {
@@ -510,6 +640,36 @@
     return notifyHits(view, url, type)[0] || null;
   }
 
+  function officialProof(view, url) {
+    const normalized = normalizeUrl(url);
+    const embed = officialEmbeds.get(normalized);
+    if (!embed) return { ok: false, reason: 'note公式embed応答なし' };
+    const hit = findNotify(view, url);
+    if (!hit) return { ok: false, reason: '本文カードなし' };
+    const targetKey = url.split('/').pop();
+    const sourceKey = sourceNoteKey();
+    const json = JSON.stringify(hit.node.toJSON ? hit.node.toJSON() : hit.node.attrs || {});
+    if (embed.service.toLowerCase() !== 'note') {
+      return { ok: false, reason: 'embed service不一致' };
+    }
+    if (embed.embeddableType.toLowerCase() !== 'note') {
+      return { ok: false, reason: 'embeddable_type不一致' };
+    }
+    if (embed.identifier !== targetKey) {
+      return { ok: false, reason: '対象記事キー不一致' };
+    }
+    if (embed.sourceKey && sourceKey && embed.sourceKey !== sourceKey) {
+      return { ok: false, reason: '埋め込み先記事キー不一致' };
+    }
+    if (!/^emb[a-z0-9]+$/i.test(embed.key) || !json.includes(embed.key)) {
+      return { ok: false, reason: '公式embedded-content-key未保存' };
+    }
+    if (!json.includes(url) && !json.includes(targetKey)) {
+      return { ok: false, reason: '本文URL不一致' };
+    }
+    return { ok: true, hit, embed };
+  }
+
   function exactUrlParagraphs(view, url = null) {
     const output = [];
     view.state.doc.descendants((node, pos) => {
@@ -550,14 +710,16 @@
     return saveRegistry(registry().filter((item) => registeredHit(view, item)));
   }
 
-  function clearFailed315Cards(view) {
+  function clearFailedCards(view) {
     const current = normalizeRegistry(view);
     const keep = new Set(current.map((item) => `${item.url}|${item.type}`));
     const old = getJSON(LEGACY_REG, []);
     const legacy = Array.isArray(old) ? old : [];
+    const previous = getJSON(PREVIOUS_REG, []);
+    const previousItems = Array.isArray(previous) ? previous : [];
     const hits = [];
 
-    for (const item of legacy) {
+    for (const item of [...legacy, ...previousItems]) {
       const hit = findNotify(view, item.url, item.type);
       if (hit && !keep.has(`${item.url}|${item.type}`)) hits.push(hit);
     }
@@ -574,6 +736,7 @@
     removeRawUrls(view);
     setJSON(LEGACY_REG, null);
     setJSON(LEGACY_CAP, null);
+    setJSON(PREVIOUS_REG, null);
     return removed;
   }
 
@@ -654,38 +817,36 @@
     view.dom.dispatchEvent(keyEvent('keyup'));
   }
 
-  async function waitForNativeCard(view, url, timeout = 20000) {
+  async function waitForOfficialProof(view, url, timeout = 25000) {
     const deadline = Date.now() + timeout;
+    let last = { ok: false, reason: '待機中' };
     while (Date.now() < deadline) {
-      const hit = findNotify(view, url);
-      if (hit) return hit;
+      last = officialProof(view, url);
+      if (last.ok) return last;
       await sleep(250);
     }
-    return null;
+    return last;
   }
 
   async function createNativeCard(view, url, index) {
     const saved = registry().find((item) => item.url === url);
-    if (saved) {
-      const existing = registeredHit(view, saved);
-      if (existing) return existing;
-    }
-
+    if (saved && officialProof(view, url).ok) return officialProof(view, url).hit;
     const unregistered = findNotify(view, url);
     if (unregistered) deleteBlocks(view, [unregistered]);
+    officialEmbeds.delete(normalizeUrl(url));
     insertUrlParagraph(view, url);
-    nstatus(`正規Enter処理 ${index}/10…`);
+    nstatus(`公式embed検証 ${index}/10…`);
     await runNativeEnter(view);
 
-    const hit = await waitForNativeCard(view, url);
-    if (!hit) {
+    const proof = await waitForOfficialProof(view, url);
+    if (!proof.ok) {
       removeRawUrls(view, url);
-      throw new Error(`${index}/10 正規カード化失敗`);
+      throw new Error(`${index}/10 ${proof.reason}`);
     }
 
     removeRawUrls(view, url);
-    remember(url, hit.node.type.name);
-    return hit;
+    remember(url, proof.hit.node.type.name);
+    return proof.hit;
   }
 
   async function notify10() {
@@ -695,6 +856,8 @@
     if (button) button.disabled = true;
 
     try {
+      nstatus('新規未公開記事か確認中…');
+      await ensureUnpublishedSource();
       const view = findView();
       if (!view) throw new Error('EditorViewなし');
       const images = cards();
@@ -703,18 +866,19 @@
       const linkError = await ensureLinks(view, images);
       if (linkError) throw new Error(`極薄URL ${linkError.index}/10で停止`);
 
-      const removed = clearFailed315Cards(view);
-      if (removed) nstatus(`旧3.15カード ${removed}件を除去 → 正規生成中…`);
+      officialEmbeds.clear();
+      const removed = clearFailedCards(view);
+      if (removed) nstatus(`旧カード ${removed}件を除去 → 公式検証生成中…`);
 
       for (let i = 0; i < URLS.length; i += 1) {
         await createNativeCard(view, URLS[i], i + 1);
-        nstatus(`正規通知カード ${i + 1}/10 ✅`);
+        nstatus(`公式EMBED KEY ${i + 1}/10 検証済み ✅`);
         await sleep(700);
       }
 
-      const count = registry().filter((item) => registeredHit(view, item)).length;
-      if (count !== 10) throw new Error(`正規カード確認 ${count}/10`);
-      nstatus('正規通知カード 10/10 ✅ 公開して通知確認');
+      const count = URLS.filter((url) => officialProof(view, url).ok).length;
+      if (count !== 10) throw new Error(`公式EMBED KEY確認 ${count}/10`);
+      nstatus('新規記事・公式EMBED KEY 10/10 ✅ この1回を公開');
     } catch (error) {
       nstatus(`停止：${error?.message || String(error)}（同じ青ボタンで再開）`, true);
     } finally {
