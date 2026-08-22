@@ -88,17 +88,26 @@ function noteKey(url) {
 }
 
 async function article(url, index) {
+  const key = noteKey(url);
+  let apiNote = null;
+  try {
+    const payload = JSON.parse(await fetchRetry(`https://note.com/api/v3/notes/${key}`));
+    apiNote = payload?.data || payload;
+  } catch (_) {}
+
   const html = await fetchRetry(url);
   const meta = metas(html);
-  const creator = (meta.get('author') || meta.get('note:creator') ||
+  const apiCreator = apiNote?.user?.nickname || apiNote?.user?.name || '';
+  const creator = (apiCreator || meta.get('author') || meta.get('note:creator') ||
     meta.get('twitter:data2') || new URL(url).pathname.split('/')[1]).trim();
-  const rawTitle = meta.get('og:title') || meta.get('twitter:title') || '';
-  const title = stripTitleSuffix(rawTitle, creator);
-  const thumbUrl = meta.get('og:image') || meta.get('twitter:image') || '';
+  const rawTitle = apiNote?.name || meta.get('og:title') || meta.get('twitter:title') || '';
+  const title = apiNote?.name ? rawTitle.trim() : stripTitleSuffix(rawTitle, creator);
+  const thumbUrl = apiNote?.eyecatch_url || apiNote?.eyecatch ||
+    meta.get('og:image') || meta.get('twitter:image') || '';
   if (!title) throw new Error(`${index}: タイトル取得失敗 ${url}`);
   if (!creator) throw new Error(`${index}: クリエイター取得失敗 ${url}`);
   if (!thumbUrl) throw new Error(`${index}: サムネ取得失敗 ${url}`);
-  return { index, key: noteKey(url), url, title, creator, thumbUrl };
+  return { index, key, url, title, creator, thumbUrl };
 }
 
 function escapeXml(value) {
