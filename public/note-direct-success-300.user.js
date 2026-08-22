@@ -23,7 +23,6 @@ const URLS=[
 'https://note.com/ss_yr/n/n20f58cb3ec59',
 'https://note.com/ss_yr/n/n5cda670acdcf',
 'https://note.com/ss_yr/n/n2dfac2d0b184',
-'https://note.com/ss_yr/n/n2dfac2d0b184',
 'https://note.com/ss_yr/n/na51322616876'
 ];
 const TEST_URL=URLS[0];
