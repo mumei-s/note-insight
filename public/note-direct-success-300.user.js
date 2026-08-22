@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.1.0
-// @description  成功済みProseMirror DIRECT URL設定版。進捗表示・途中停止・続きから再開対応
+// @version      3.2.0
+// @description  成功済みProseMirror DIRECT URL設定版。進捗・再開＋note公式埋め込み通知1件テスト
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -10,8 +10,8 @@
 
 (function(){
 'use strict';
-if(window.__MUMEI_DIRECT_SUCCESS_310__) return;
-window.__MUMEI_DIRECT_SUCCESS_310__=true;
+if(window.__MUMEI_DIRECT_SUCCESS_320__) return;
+window.__MUMEI_DIRECT_SUCCESS_320__=true;
 
 const URLS=[
 'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -27,11 +27,17 @@ const URLS=[
 ];
 const PANEL='mumei-direct-success-panel';
 const BTN='mumei-direct-success-btn';
+const N_PANEL='mumei-notify-test-panel';
+const N_BTN='mumei-notify-test-btn';
+const N_CLEAN='mumei-notify-clean-btn';
+const TEST_URL=URLS[0];
+const TEST_KEY='mumei_notify_test_v1';
 let busy=false;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function editor(){return document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror')}
 function status(t,bad=false){const p=document.getElementById(PANEL);if(!p)return;p.textContent=t;p.style.background=bad?'#991b1b':'#065f46'}
+function nstatus(t,bad=false){const p=document.getElementById(N_PANEL);if(!p)return;p.textContent=t;p.style.background=bad?'#991b1b':'#1f2937';p.style.display='block'}
 function emit(name,detail={}){document.dispatchEvent(new CustomEvent(name,{detail}))}
 function cards(){
   const root=editor();if(!root)return[];
@@ -170,9 +176,7 @@ function nodeList(view,img){
   const hit=findNodeForImg(view,img);if(!hit)return [];
   return [hit,...parentCandidates(view,hit.pos)];
 }
-function alreadyLinked(view,img,url){
-  return nodeList(view,img).some(c=>nodeHasLink(c.node,url));
-}
+function alreadyLinked(view,img,url){return nodeList(view,img).some(c=>nodeHasLink(c.node,url))}
 function setDirect(view,img,url){
   const list=nodeList(view,img);if(!list.length)return {ok:false,reason:'node'};
   const hit=list[0];
@@ -192,47 +196,107 @@ async function run(){
     for(let i=0;i<10;i++){
       const index=i+1;
       if(alreadyLinked(view,imgs[i],URLS[i])){
-        ok++;
-        status(`URL書き込み ${index}/10（設定済み）`);
-        emit('mumei-direct-progress',{index,ok,skipped:true});
-        continue;
+        ok++;status(`URL書き込み ${index}/10（設定済み）`);emit('mumei-direct-progress',{index,ok,skipped:true});continue
       }
-      status(`URL書き込み ${index}/10…`);
-      emit('mumei-direct-progress',{index,ok,skipped:false});
+      status(`URL書き込み ${index}/10…`);emit('mumei-direct-progress',{index,ok,skipped:false});
       let r={ok:false,reason:'unknown'};
-      for(let attempt=1;attempt<=3;attempt++){
-        r=setDirect(view,imgs[i],URLS[i]);
-        if(r.ok)break;
-        if(attempt<3)await sleep(350);
-      }
-      if(!r.ok){
-        status(`URL ${index}/10で停止 → 同じボタンで再開`,true);
-        if(b)b.textContent=`${index}枚目から再開`;
-        emit('mumei-direct-stopped',{index,ok,reason:r.reason||'unknown'});
-        return;
-      }
-      ok++;
-      emit('mumei-direct-progress',{index,ok,skipped:false});
-      await sleep(100);
+      for(let attempt=1;attempt<=3;attempt++){r=setDirect(view,imgs[i],URLS[i]);if(r.ok)break;if(attempt<3)await sleep(350)}
+      if(!r.ok){status(`URL ${index}/10で停止 → 同じボタンで再開`,true);if(b)b.textContent=`${index}枚目から再開`;emit('mumei-direct-stopped',{index,ok,reason:r.reason||'unknown'});return}
+      ok++;emit('mumei-direct-progress',{index,ok,skipped:false});await sleep(100)
     }
-    resetButton();
-    status('URL完了 10/10 ✅');
-    emit('mumei-direct-success-done',{ok:10});
-  }catch(e){
-    status('DIRECTエラー：'+(e?.message||String(e)),true);
-    emit('mumei-direct-stopped',{index:0,ok:0,reason:'exception'});
-  }finally{busy=false;if(b)b.disabled=false}
+    resetButton();status('URL完了 10/10 ✅');emit('mumei-direct-success-done',{ok:10});
+  }catch(e){status('DIRECTエラー：'+(e?.message||String(e)),true);emit('mumei-direct-stopped',{index:0,ok:0,reason:'exception'})}
+  finally{busy=false;if(b)b.disabled=false}
+}
+
+function nodeCarriesUrl(node,url){
+  if(!node||!node.attrs)return false;
+  const key=url.split('/').pop();
+  try{const s=JSON.stringify(node.attrs);return s.includes(url)||s.includes(key)}catch(_){return false}
+}
+function findEmbed(view,url,typeName=null){
+  let hit=null;
+  view.state.doc.descendants((node,pos)=>{
+    if(hit)return false;
+    if(typeName&&node.type?.name!==typeName)return;
+    if(nodeCarriesUrl(node,url)&&!node.isTextblock&&!/image|picture|photo/i.test(node.type?.name||'')){hit={node,pos};return false}
+  });
+  return hit;
+}
+function setSelectionAtEnd(view){
+  try{const Sel=view.state.selection.constructor;view.dispatch(view.state.tr.setSelection(Sel.atEnd(view.state.doc)));return true}catch(_){return false}
+}
+async function waitEmbed(view,url,ms=8000){
+  const end=Date.now()+ms;
+  while(Date.now()<end){const hit=findEmbed(view,url);if(hit)return hit;await sleep(250)}
+  return null;
+}
+async function notifyTest(){
+  const nb=document.getElementById(N_BTN);if(nb)nb.disabled=true;
+  try{
+    const view=findView();if(!view){nstatus('通知テスト停止：EditorViewなし',true);return}
+    const old=findEmbed(view,TEST_URL);if(old){localStorage.setItem(TEST_KEY,JSON.stringify({url:TEST_URL,type:old.node.type.name}));nstatus('通知カード1/1 すでに有り ✅');return}
+    const p=view.state.schema.nodes.paragraph;if(!p){nstatus('通知テスト停止：paragraphなし',true);return}
+    nstatus('通知カード 1/1 作成中…');
+    const start=view.state.doc.content.size;
+    view.dispatch(view.state.tr.insert(start,p.create(null,view.state.schema.text(TEST_URL))));
+    setSelectionAtEnd(view);view.focus();await sleep(120);
+    view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+    let hit=await waitEmbed(view,TEST_URL,2500);
+    if(!hit){
+      try{
+        const pos=Math.min(start+1+TEST_URL.length,view.state.doc.content.size);
+        const Sel=view.state.selection.constructor;
+        if(typeof Sel.near==='function')view.dispatch(view.state.tr.setSelection(Sel.near(view.state.doc.resolve(pos),-1)));
+      }catch(_){}
+      view.focus();
+      try{view.dom.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertParagraph',bubbles:true,cancelable:true}))}catch(_){}
+      hit=await waitEmbed(view,TEST_URL,5500);
+    }
+    if(!hit){nstatus('末尾URLの後で改行を1回押して',true);return}
+    localStorage.setItem(TEST_KEY,JSON.stringify({url:TEST_URL,type:hit.node.type.name}));
+    nstatus('通知カード 1/1 ✅ この状態で公開して通知確認');
+    const cb=document.getElementById(N_CLEAN);if(cb)cb.style.display='block';
+  }catch(e){nstatus('通知テスト停止：'+(e?.message||String(e)),true)}
+  finally{if(nb)nb.disabled=false}
+}
+function cleanNotifyTest(){
+  try{
+    const view=findView();if(!view){nstatus('削除停止：EditorViewなし',true);return}
+    let saved=null;try{saved=JSON.parse(localStorage.getItem(TEST_KEY)||'null')}catch(_){}
+    if(!saved?.type){nstatus('削除対象が記録されていません',true);return}
+    const hits=[];
+    view.state.doc.descendants((node,pos)=>{if(node.type?.name===saved.type&&nodeCarriesUrl(node,saved.url))hits.push({node,pos})});
+    if(!hits.length){nstatus('通知カードは見つかりません');return}
+    let tr=view.state.tr;
+    for(const h of hits.sort((a,b)=>b.pos-a.pos))tr=tr.delete(h.pos,h.pos+h.node.nodeSize);
+    view.dispatch(tr);localStorage.removeItem(TEST_KEY);
+    nstatus('通知カード削除 ✅ 極薄カードだけ残しました');
+    const cb=document.getElementById(N_CLEAN);if(cb)cb.style.display='none';
+  }catch(e){nstatus('削除停止：'+(e?.message||String(e)),true)}
+}
+function mountNotify(){
+  if(!document.body)return;
+  let p=document.getElementById(N_PANEL);if(!p){p=document.createElement('div');p.id=N_PANEL;p.textContent='通知方式テスト';document.body.appendChild(p)}
+  Object.assign(p.style,{position:'fixed',right:'8px',bottom:'170px',zIndex:'2147483645',maxWidth:'250px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
+  let b=document.getElementById(N_BTN);if(!b){b=document.createElement('button');b.id=N_BTN;b.type='button';b.textContent='通知テスト 1件';b.addEventListener('click',notifyTest);document.body.appendChild(b)}
+  Object.assign(b.style,{position:'fixed',right:'8px',bottom:'125px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#2563eb',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
+  let c=document.getElementById(N_CLEAN);if(!c){c=document.createElement('button');c.id=N_CLEAN;c.type='button';c.textContent='通知カード削除';c.addEventListener('click',cleanNotifyTest);document.body.appendChild(c)}
+  Object.assign(c.style,{position:'fixed',right:'8px',bottom:'80px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'9px 12px',background:'#b45309',color:'#fff',fontSize:'12px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
+  let saved=null;try{saved=JSON.parse(localStorage.getItem(TEST_KEY)||'null')}catch(_){}
+  c.style.display=saved?.type?'block':'none';
 }
 function mount(){
   if(!document.body)return;
   if(!document.getElementById(PANEL)){
-    const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.0';
+    const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.2';
     Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',zIndex:'2147483646',maxWidth:'340px',padding:'6px 8px',borderRadius:'8px',background:'#065f46',color:'#fff',fontSize:'11px',lineHeight:'1.3',boxShadow:'0 4px 12px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)
   }
   if(!document.getElementById(BTN)){
     const b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='DIRECT SUCCESS 3.0';
     Object.assign(b.style,{position:'fixed',right:'8px',top:'110px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});b.addEventListener('click',run);document.body.appendChild(b)
   }
+  mountNotify();
 }
 setInterval(mount,800);mount();
 })();
