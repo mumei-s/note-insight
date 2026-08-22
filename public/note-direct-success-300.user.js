@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.7.0
-// @description  成功済みDIRECT URL設定＋note標準カード初回学習/自動再生成/一括削除
+// @version      3.8.0
+// @description  成功済みDIRECT URL設定＋note標準カード初回学習/自動再生成/一括削除。既存表示カードを学習対象に修正
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -131,7 +131,19 @@ async function finishCombinedTest(img){
  if(testBusy||learning)return;testBusy=true;const nb=document.getElementById(N_BTN);if(nb)nb.disabled=true;
  try{const view=findView();if(!view){nstatus('完成形テスト停止：EditorViewなし',true);return}if(!img){nstatus('完成形テスト停止：極薄画像が見つかりません',true);return}
   if(!alreadyLinked(view,img,TEST_URL)){nstatus('極薄画像 1/1 ✅ → 画像URL設定中…');let r={ok:false};for(let a=0;a<3;a++){r=setDirect(view,img,TEST_URL);if(r.ok)break;await sleep(300)}if(!r.ok){nstatus('画像URL設定に失敗',true);return}}
-  const existing=findCard(view,TEST_URL,img);if(existing){nstatus('本物の標準カードが既にあります。公開して通知確認');return}
+  const existing=findCard(view,TEST_URL,img);
+  if(existing&&!getTemplate()){
+   nstatus('本物の標準カードを検出 → このカードを学習中…');
+   forgetNotifyUrl(TEST_URL);updateCleanButton();
+   const clone=await verifyLearnedClone(view,existing,img);
+   if(!clone){nstatus('学習は取得したが、自動再生成に失敗。ここで止めます',true);return}
+   nstatus('学習成功 ✅ 手動カードを削除→自動再生成済み。公開して通知確認');
+   emit('mumei-combined-test-complete',{url:TEST_URL,type:clone.node.type.name});return;
+  }
+  if(existing&&getTemplate()){
+   if(!getRegistry().some(x=>x.url===TEST_URL&&x.type===existing.node.type.name))rememberNotify(TEST_URL,existing.node.type.name);
+   updateCleanButton();nstatus('学習済み標準カードを検出 ✅ 公開して通知確認');emit('mumei-combined-test-complete',{url:TEST_URL,type:existing.node.type.name});return;
+  }
   if(getTemplate()){
    nstatus('学習済み構造から標準カードを自動生成中…');forgetNotifyUrl(TEST_URL);const hit=await autoInsertFromTemplate(view,TEST_URL,img);if(!hit){nstatus('学習済み構造の自動生成に失敗。学習データを消して再学習します',true);localStorage.removeItem(TEMPLATE_KEY);return}
    rememberNotify(TEST_URL,hit.node.type.name);updateCleanButton();nstatus('自動生成成功 ✅ 極薄画像＋標準カード。公開して通知確認');emit('mumei-combined-test-complete',{url:TEST_URL,type:hit.node.type.name});return;
@@ -148,6 +160,6 @@ document.addEventListener('mumei-combined-test-armed',()=>{testArmed=false;nstat
 document.addEventListener('mumei-combined-test-image-ready',e=>{const src=e.detail?.src||'';const img=wideImages().find(x=>src&&sameSrc(x.src,src))||wideImages().slice(-1)[0];finishCombinedTest(img)});
 
 function mountNotify(){if(!document.body)return;let p=document.getElementById(N_PANEL);if(!p){p=document.createElement('div');p.id=N_PANEL;p.textContent='完成形通知テスト';document.body.appendChild(p)}Object.assign(p.style,{position:'fixed',right:'8px',bottom:'170px',zIndex:'2147483645',maxWidth:'300px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});let b=document.getElementById(N_BTN);if(!b){b=document.createElement('button');b.id=N_BTN;b.type='button';b.textContent='画像＋通知テスト 1件';b.addEventListener('click',startCombinedTest);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'125px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#2563eb',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});let c=document.getElementById(N_CLEAN);if(!c){c=document.createElement('button');c.id=N_CLEAN;c.type='button';c.addEventListener('click',cleanAllNotifyCards);document.body.appendChild(c)}Object.assign(c.style,{position:'fixed',right:'8px',bottom:'80px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'9px 12px',background:'#b45309',color:'#fff',fontSize:'12px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});updateCleanButton()}
-function mount(){if(!document.body)return;if(!document.getElementById(PANEL)){const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.7';Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',zIndex:'2147483646',maxWidth:'340px',padding:'6px 8px',borderRadius:'8px',background:'#065f46',color:'#fff',fontSize:'11px',lineHeight:'1.3',boxShadow:'0 4px 12px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)}if(!document.getElementById(BTN)){const b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='DIRECT SUCCESS 3.0';Object.assign(b.style,{position:'fixed',right:'8px',top:'110px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});b.addEventListener('click',run);document.body.appendChild(b)}mountNotify()}
+function mount(){if(!document.body)return;if(!document.getElementById(PANEL)){const p=document.createElement('div');p.id=PANEL;p.textContent='DIRECT SUCCESS 3.8';Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',zIndex:'2147483646',maxWidth:'340px',padding:'6px 8px',borderRadius:'8px',background:'#065f46',color:'#fff',fontSize:'11px',lineHeight:'1.3',boxShadow:'0 4px 12px rgba(0,0,0,.25)',pointerEvents:'none'});document.body.appendChild(p)}if(!document.getElementById(BTN)){const b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='DIRECT SUCCESS 3.0';Object.assign(b.style,{position:'fixed',right:'8px',top:'110px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});b.addEventListener('click',run);document.body.appendChild(b)}mountNotify()}
 setInterval(mount,800);mount();
 })();
