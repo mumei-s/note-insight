@@ -1,19 +1,21 @@
 // ==UserScript==
 // @name         無名S note DIRECT URL 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-link
-// @version      4.0.1
+// @version      4.0.2
 // @description  極薄カード10枚を固定サイズで一括生成・一括挿入し、ProseMirrorへ対応URLをDIRECT直書きする完成統合版
 // @match        https://editor.note.com/*
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @connect      note.com
 // @connect      assets.st-note.com
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-direct-link-v300.user.js
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-direct-link-v300.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-if(window.__MUMEI_CARD_COMPLETE_401__) return;
-window.__MUMEI_CARD_COMPLETE_401__=true;
+if(window.__MUMEI_CARD_COMPLETE_402__) return;
+window.__MUMEI_CARD_COMPLETE_402__=true;
 
 const ITEMS=[
  ['https://note.com/ss_yr/n/nc14eb3f2ea9f','【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -75,6 +77,7 @@ HTMLInputElement.prototype.click=function(...args){if(armed&&!consumed&&imageInp
 
 async function arm(){if(busy)return;busy=true;showButton(false);try{hideOld();const root=editor();if(!root)throw new Error('note本文欄が見つかりません');beforeImages=new Set(root.querySelectorAll('img'));status('固定サイズカード10枚を準備中…');preparedFiles=await prepare();beforeInputs=new Set(document.querySelectorAll('input[type="file"]'));armed=true;consumed=false;status('準備OK → 本文をタップ →「＋」→「画像」を1回');timer=setTimeout(()=>{if(armed){armed=false;preparedFiles=[];status('時間切れ。もう一度押して',true);showButton(true)}},60000)}catch(e){armed=false;preparedFiles=[];status('停止：'+(e?.message||String(e)),true);showButton(true)}finally{busy=false}}
 
-function mount(){if(!document.body)return;hideOld();let p=document.getElementById(PANEL);if(!p){p=document.createElement('div');p.id=PANEL;document.body.appendChild(p);p.textContent='完成版 4.0.1：860×140固定'}Object.assign(p.style,{position:'fixed',right:'8px',bottom:'56px',zIndex:'2147483646',maxWidth:'220px',padding:'5px 7px',borderRadius:'7px',background:'#065f46',color:'#fff',fontSize:'10px',lineHeight:'1.25',boxShadow:'0 3px 10px rgba(0,0,0,.22)',pointerEvents:'none'});let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='10枚 完成版 4.0.1';document.body.appendChild(b);b.addEventListener('click',arm)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'10px',zIndex:'2147483647',border:'0',borderRadius:'9px',padding:'9px 12px',background:'#059669',color:'#fff',fontSize:'12px',fontWeight:'800',boxShadow:'0 3px 12px rgba(0,0,0,.25)',touchAction:'manipulation'})}
-setInterval(mount,800);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
+function mount(){if(!document.body)return;hideOld();let p=document.getElementById(PANEL);if(!p){p=document.createElement('div');p.id=PANEL;document.body.appendChild(p);p.textContent='完成版 4.0.2：860×140固定'}Object.assign(p.style,{position:'fixed',right:'8px',top:'72px',bottom:'auto',zIndex:'2147483646',maxWidth:'210px',padding:'5px 7px',borderRadius:'7px',background:'#065f46',color:'#fff',fontSize:'10px',lineHeight:'1.25',boxShadow:'0 3px 10px rgba(0,0,0,.22)',pointerEvents:'none'});let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='10枚 完成版 4.0.2';document.body.appendChild(b);b.addEventListener('click',arm)}Object.assign(b.style,{position:'fixed',right:'8px',top:'108px',bottom:'auto',zIndex:'2147483647',border:'0',borderRadius:'9px',padding:'9px 12px',background:'#059669',color:'#fff',fontSize:'12px',fontWeight:'800',boxShadow:'0 3px 12px rgba(0,0,0,.25)',touchAction:'manipulation'})}
+setInterval(mount,800);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
