@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 10枚 COMPLETE BRIDGE 6.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      6.1.1
-// @description  成功済み10枚一括挿入方式＋DIRECT SUCCESS 3.0自動呼出し
+// @version      6.2.0
+// @description  成功済み10枚一括挿入方式＋DIRECT SUCCESS自動呼出し。進捗・途中再開対応
 // @match        https://editor.note.com/*
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
@@ -12,8 +12,8 @@
 
 (function(){
 'use strict';
-if(window.__MUMEI_BATCH_BRIDGE_610__) return;
-window.__MUMEI_BATCH_BRIDGE_610__=true;
+if(window.__MUMEI_BATCH_BRIDGE_620__) return;
+window.__MUMEI_BATCH_BRIDGE_620__=true;
 
 const ITEMS=[
  ['https://note.com/ss_yr/n/nc14eb3f2ea9f','【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -32,18 +32,19 @@ const CREATOR='無名S note';
 const W=860,H=140;
 const BTN='mumei-bridge610-btn',PANEL='mumei-bridge610-panel';
 const DIRECT_BTN='mumei-direct-success-btn',DIRECT_PANEL='mumei-direct-success-panel';
-let armed=false,consumed=false,busy=false,files=[],beforeInputs=new Set(),beforeImages=new Set(),timer=null;
+let armed=false,consumed=false,busy=false,files=[],beforeInputs=new Set(),beforeImages=new Set(),timer=null,retryMode=false,retryIndex=0;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function editor(){return document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror')}
 function status(t,bad=false){const p=document.getElementById(PANEL);if(!p)return;p.textContent=t;p.style.background=bad?'#991b1b':'#111827';p.style.display='block'}
 function showButton(v=true){const b=document.getElementById(BTN);if(b)b.style.display=v?'block':'none'}
+function buttonText(t){const b=document.getElementById(BTN);if(b)b.textContent=t}
 function hideDirectUI(){for(const id of [DIRECT_BTN,DIRECT_PANEL]){const el=document.getElementById(id);if(el){el.style.display='none';el.style.pointerEvents='none'}}}
 function mount(){
  if(!document.body)return;hideDirectUI();
- let p=document.getElementById(PANEL);if(!p){p=document.createElement('div');p.id=PANEL;p.textContent='COMPLETE 6.1｜860×140固定';document.body.appendChild(p)}
- Object.assign(p.style,{position:'fixed',right:'8px',top:'42%',bottom:'auto',zIndex:'2147483646',maxWidth:'220px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
- let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='10枚 COMPLETE 6.1';b.addEventListener('click',arm);document.body.appendChild(b)}
+ let p=document.getElementById(PANEL);if(!p){p=document.createElement('div');p.id=PANEL;p.textContent='COMPLETE 6.2｜860×140固定';document.body.appendChild(p)}
+ Object.assign(p.style,{position:'fixed',right:'8px',top:'42%',bottom:'auto',zIndex:'2147483646',maxWidth:'240px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});
+ let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='10枚 COMPLETE 6.2';b.addEventListener('click',mainAction);document.body.appendChild(b)}
  Object.assign(b.style,{position:'fixed',right:'8px',top:'48%',bottom:'auto',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});
 }
 function xhr(url,responseType='text'){return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,responseType,timeout:25000,onload:r=>r.status>=200&&r.status<300?resolve(r.response):reject(new Error('取得失敗 '+r.status)),onerror:()=>reject(new Error('通信失敗')),ontimeout:()=>reject(new Error('通信タイムアウト'))}))}
@@ -56,8 +57,12 @@ function lines(c,text,max,maxLines){const out=[];let line='';for(const ch of [..
 async function makeCard(item){
  const u=await getThumb(item.url),bl=await xhr(u,'blob'),im=await bitmap(bl),cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
  c.fillStyle='#fff';c.fillRect(0,0,W,H);c.strokeStyle='#d9dde3';c.lineWidth=1.5;rr(c,1,1,W-2,H-2,12);c.stroke();
- const tw=220,th=124,tx=W-tw-8,ty=8,x=16,textW=tx-x-14;c.textBaseline='top';c.fillStyle='#171b21';c.font='700 20px system-ui,-apple-system,sans-serif';lines(c,item.title,textW,2).forEach((s,i)=>c.fillText(s,x,14+i*27));c.fillStyle='#626975';c.font='15px system-ui,-apple-system,sans-serif';c.fillText(CREATOR,x,108);
- const iw=im.width||im.naturalWidth,ih=im.height||im.naturalHeight,sc=Math.min(tw/iw,th/ih),dw=iw*sc,dh=ih*sc;c.fillStyle='#f7f8fa';rr(c,tx,ty,tw,th,8);c.fill();c.save();rr(c,tx,ty,tw,th,8);c.clip();c.drawImage(im,tx+(tw-dw)/2,ty+(th-dh)/2,dw,dh);c.restore();if(im.close)im.close();
+ const tw=320,th=124,tx=W-tw-8,ty=8,x=16,textW=tx-x-12;
+ c.textBaseline='top';c.fillStyle='#171b21';c.font='700 18px system-ui,-apple-system,sans-serif';
+ lines(c,item.title,textW,3).forEach((s,i)=>c.fillText(s,x,12+i*24));
+ c.fillStyle='#626975';c.font='14px system-ui,-apple-system,sans-serif';c.fillText(CREATOR,x,110);
+ const iw=im.width||im.naturalWidth,ih=im.height||im.naturalHeight,sc=Math.min(tw/iw,th/ih),dw=iw*sc,dh=ih*sc;
+ c.fillStyle='#f7f8fa';rr(c,tx,ty,tw,th,8);c.fill();c.save();rr(c,tx,ty,tw,th,8);c.clip();c.drawImage(im,tx+(tw-dw)/2,ty+(th-dh)/2,dw,dh);c.restore();if(im.close)im.close();
  const out=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('カード生成失敗')),'image/png',1));return new File([out],String(item.index).padStart(2,'0')+'_compact.png',{type:'image/png'});
 }
 async function prepare(){const a=[];for(let i=0;i<10;i++){status(`カード準備 ${i+1}/10…`);a.push(await makeCard(ITEMS[i]))}return a}
@@ -65,7 +70,7 @@ async function waitNew(timeout=45000){const ed=editor();if(!ed)return[];const en
 async function triggerDirect(){
  for(let i=0;i<30;i++){
    const b=document.getElementById(DIRECT_BTN);
-   if(b){status('10枚挿入完了 → URL直書き中…');b.click();return true}
+   if(b){status('URL書き込み 1/10…');b.click();return true}
    await sleep(200);
  }
  throw new Error('DIRECT SUCCESSが見つかりません');
@@ -79,11 +84,25 @@ const obs=new MutationObserver(ms=>{if(!armed||consumed)return;for(const m of ms
 function startObs(){if(!document.documentElement)return setTimeout(startObs,50);obs.observe(document.documentElement,{childList:true,subtree:true})}startObs();
 const nativeClick=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(...a){if(armed&&!consumed&&imageInput(this)&&!beforeInputs.has(this)){inject(this);return}return nativeClick.apply(this,a)};
 
-document.addEventListener('mumei-direct-success-done',e=>{const ok=e.detail?.ok||0;consumed=false;status(`完成：画像10/10・URL ${ok}/10 ✅`,ok!==10);showButton(true);hideDirectUI()});
+document.addEventListener('mumei-direct-progress',e=>{const i=e.detail?.index||0;if(i)status(`URL書き込み ${i}/10…`)});
+document.addEventListener('mumei-direct-stopped',e=>{
+ const i=e.detail?.index||0;consumed=false;retryMode=true;retryIndex=i;
+ status(i?`URL ${i}/10で停止 → ここから再開できます`:'URL処理で停止 → 再開できます',true);
+ buttonText(i?`URL ${i}枚目から再開`:'URL再開');showButton(true);hideDirectUI();
+});
+document.addEventListener('mumei-direct-success-done',e=>{
+ const ok=e.detail?.ok||0;consumed=false;retryMode=false;retryIndex=0;
+ status(`完成：画像10/10・URL ${ok}/10 ✅`,ok!==10);buttonText('10枚 COMPLETE 6.2');showButton(true);hideDirectUI();
+});
 
+async function retryDirect(){
+ const d=document.getElementById(DIRECT_BTN);if(!d){status('DIRECT SUCCESSが見つかりません',true);return}
+ showButton(false);status(retryIndex?`URL ${retryIndex}/10から再開…`:'URL再開…');d.click();
+}
 async function arm(){
  if(busy)return;busy=true;showButton(false);
- try{const ed=editor();if(!ed)throw new Error('note本文欄が見つかりません');const d=document.getElementById(DIRECT_BTN);if(!d)throw new Error('先にDIRECT SUCCESS 3.0を入れてください');beforeImages=new Set(ed.querySelectorAll('img'));status('固定カード10枚を準備中…');files=await prepare();beforeInputs=new Set(document.querySelectorAll('input[type="file"]'));armed=true;consumed=false;status('準備OK → 本文タップ →「＋」→「画像」を1回');hideDirectUI();timer=setTimeout(()=>{if(armed){armed=false;files=[];status('時間切れ。もう一度押して',true);showButton(true)}},60000)}catch(e){armed=false;files=[];status('停止：'+(e?.message||String(e)),true);showButton(true)}finally{busy=false}
+ try{const ed=editor();if(!ed)throw new Error('note本文欄が見つかりません');const d=document.getElementById(DIRECT_BTN);if(!d)throw new Error('先にDIRECT SUCCESS 3.0を入れてください');beforeImages=new Set(ed.querySelectorAll('img'));status('固定カード10枚を準備中…');files=await prepare();beforeInputs=new Set(document.querySelectorAll('input[type="file"]'));armed=true;consumed=false;retryMode=false;retryIndex=0;status('準備OK → 本文タップ →「＋」→「画像」を1回');hideDirectUI();timer=setTimeout(()=>{if(armed){armed=false;files=[];status('時間切れ。もう一度押して',true);showButton(true)}},60000)}catch(e){armed=false;files=[];status('停止：'+(e?.message||String(e)),true);showButton(true)}finally{busy=false}
 }
+function mainAction(){if(retryMode)return retryDirect();return arm()}
 setInterval(mount,700);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
