@@ -4,6 +4,8 @@
 // @version      3.23.0
 // @description  note正規URLコマンドで10/107件を完全自動カード化＋記事別収納＋一括削除
 // @match        https://editor.note.com/*
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-direct-success-300.user.js
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-direct-success-300.user.js
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
