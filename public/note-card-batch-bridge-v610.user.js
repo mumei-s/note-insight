@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 本番107枚 COMPLETE BRIDGE 6.7
+// @name         無名S note 通知確定 COMPLETE 7.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      7.0.0
-// @description  note標準の画像追加と画像リンク処理を1件ずつ実行する10/107件完全自動化
+// @version      7.1.0
+// @description  極薄画像リンクとnote正規紹介カードを1件ずつ生成し、サーバー保存完了まで確認する10/107件自動化
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -18,8 +18,8 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_IMAGE_LINK_COMPLETE_7000__) return;
-  page.__MUMEI_IMAGE_LINK_COMPLETE_7000__ = true;
+  if (page.__MUMEI_NOTIFY_COMPLETE_7100__) return;
+  page.__MUMEI_NOTIFY_COMPLETE_7100__ = true;
   // 旧2本の処理は本版に統合済み。重複ロードと旧通知カード処理を起動させない。
   page.__MUMEI_BATCH_BRIDGE_680__ = true;
   page.__MUMEI_BATCH_BRIDGE_670__ = true;
@@ -28,19 +28,18 @@
   page.__MUMEI_DIRECT_SUCCESS_3220__ = true;
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '7.0';
+  const VERSION = '7.1';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
   const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_image_link_active_article_v700';
-  const RUN_PREFIX = 'mumei_image_link_run_v700';
-  const LINK_PROOF = 'note-standard-image-link-v700';
-  const TOGGLE = 'mumei-image-link-toggle-v700';
-  const PANEL = 'mumei-image-link-panel-v700';
-  const STATUS = 'mumei-image-link-status-v700';
-  const LIST = 'mumei-image-link-list-v700';
-  const STYLE = 'mumei-image-link-style-v700';
+  const ACTIVE_KEY = 'mumei_notify_active_article_v710';
+  const RUN_PREFIX = 'mumei_notify_run_v710';
+  const COMPLETE_PROOF = 'note-image-link-official-card-saved-v710';
+  const TOGGLE = 'mumei-notify-toggle-v710';
+  const PANEL = 'mumei-notify-panel-v710';
+  const STATUS = 'mumei-notify-status-v710';
+  const STYLE = 'mumei-notify-style-v710';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -79,7 +78,9 @@
   function setJSON(key, value) {
     if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value));
   }
-  function enabled() { return Boolean(articleKey() && openedArticle === articleKey()); }
+  function isEditPage() { return /^\/notes\/n[a-z0-9]{8,}\/edit\/?$/i.test(location.pathname); }
+  function isPublishPage() { return /\/publish\/?$/i.test(location.pathname); }
+  function enabled() { return Boolean(isEditPage() && articleKey() && openedArticle === articleKey()); }
   function stateKey(selectedMode = mode) {
     return `${RUN_PREFIX}:${articleKey() || 'unknown'}:${selectedMode || 'none'}`;
   }
@@ -91,7 +92,7 @@
     if (!mode || !rows.length) return;
     setJSON(stateKey(), rows.map((row) => ({
       url: row.url, status: row.status, nodeId: row.nodeId || '',
-      owned: Boolean(row.owned), proof: row.proof || '', error: row.error || ''
+      owned: Boolean(row.owned), cardKey: row.cardKey || '', proof: row.proof || '', error: row.error || ''
     })));
   }
   function normalizeUrl(value) {
@@ -100,46 +101,14 @@
       url.search = ''; url.hash = ''; return url.href;
     } catch (_) { return String(value || ''); }
   }
-  function escapeHtml(value) {
-    return String(value || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-  }
   function setStatus(text, bad = false) {
     const element = document.getElementById(STATUS);
     if (!element) return;
     element.textContent = text;
     element.dataset.bad = bad ? '1' : '0';
   }
-  function labelFor(row) {
-    return ({ done: '⛓ 完了', uploading: '画像追加中', linking: '⛓ 設定中',
-      failed: '失敗', deleted: '削除済', ready: '待機' })[row.status] || '待機';
-  }
   function renderList() {
-    const list = document.getElementById(LIST);
-    if (!list) return;
-    if (!rows.length) {
-      list.innerHTML = '<div class="mumei-empty">10件または107件を選ぶと、画像とURLの処理一覧が出ます。</div>';
-      return;
-    }
-    const existing = [...list.querySelectorAll('.mumei-row')];
-    if (existing.length === rows.length) {
-      existing.forEach((element, index) => {
-        const row = rows[index];
-        element.dataset.state = row.status;
-        element.querySelector('.mumei-state').textContent = labelFor(row);
-        element.querySelector('[data-action="retry"]').disabled = running;
-        element.querySelector('[data-action="delete"]').disabled = running || !row.nodeId || !row.owned;
-      });
-      return;
-    }
-    list.innerHTML = rows.map((row, index) => `
-      <div class="mumei-row" data-state="${escapeHtml(row.status)}">
-        <span class="mumei-num">${String(index + 1).padStart(rows.length > 10 ? 3 : 2, '0')}</span>
-        <span class="mumei-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</span>
-        <span class="mumei-state">${escapeHtml(labelFor(row))}</span>
-        <button type="button" data-action="retry" data-index="${index}" ${running ? 'disabled' : ''}>再</button>
-        <button type="button" data-action="delete" data-index="${index}" ${running || !row.nodeId || !row.owned ? 'disabled' : ''}>削除</button>
-      </div>`).join('');
+    // 記事を隠さないよう、詳細一覧は表示せず内部にだけ保持する。
   }
   function updateButtons() {
     const panel = document.getElementById(PANEL);
@@ -147,10 +116,8 @@
     panel.querySelectorAll('[data-main-action]').forEach((button) => { button.disabled = running; });
     const stop = panel.querySelector('[data-action="stop"]');
     const retry = panel.querySelector('[data-action="retry-failed"]');
-    const clean = panel.querySelector('[data-action="clean-old-cards"]');
     if (stop) stop.disabled = !running;
-    if (retry) retry.disabled = running || !rows.some((row) => row.status === 'failed');
-    if (clean) clean.disabled = running;
+    if (retry) retry.disabled = running || !rows.length || !rows.some((row) => row.status !== 'done');
   }
   function updateUi() { renderList(); updateButtons(); }
 
@@ -162,34 +129,26 @@
       #mumei-card-system-toggle,#mumei-direct-success-panel,#mumei-direct-success-btn,
       #mumei-notify-test-panel,#mumei-notify-test-btn,#mumei-notify-clean-btn,
       #mumei-bridge610-panel,#mumei-bridge610-btn,#mumei-bridge107-btn{display:none!important}
-      #${TOGGLE}{position:fixed;right:-30px;bottom:18px;z-index:2147483647;border:0;border-radius:999px;
-        padding:9px 8px;min-width:46px;background:#4b5563;color:#fff;font:800 10px/1 system-ui;
-        box-shadow:0 4px 14px rgba(0,0,0,.3);touch-action:manipulation}
-      #${TOGGLE}[data-open="1"]{right:8px;background:#047857;font-size:12px;padding:9px 13px}
-      #${PANEL}{position:fixed;right:8px;top:70px;z-index:2147483646;width:min(370px,calc(100vw - 16px));
-        max-height:70vh;display:none;flex-direction:column;overflow:hidden;border:1px solid #374151;border-radius:12px;
-        background:#111827;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4);font-family:system-ui,-apple-system,sans-serif}
+      #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
+        border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
+        box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
+      #${TOGGLE}[data-open="1"]{display:none}
+      #${PANEL}{position:fixed;right:4px;bottom:76px;z-index:2147483647;display:none;align-items:center;gap:3px;
+        height:36px;padding:3px;border-radius:10px;background:#111827;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.32);
+        font-family:system-ui,-apple-system,sans-serif}
       #${PANEL}[data-open="1"]{display:flex}
-      #${PANEL} .mumei-head{padding:9px 10px 7px;font-size:12px;font-weight:800;background:#0f172a}
-      #${PANEL} .mumei-actions{display:flex;gap:6px;flex-wrap:wrap;padding:8px}
-      #${PANEL} button{border:0;border-radius:8px;padding:7px 9px;color:#fff;background:#374151;font-weight:800;font-size:11px;touch-action:manipulation}
+      #${PANEL} button{height:30px;min-width:30px;border:0;border-radius:7px;padding:0 7px;color:#fff;background:#374151;
+        font:800 10px/30px system-ui;touch-action:manipulation}
       #${PANEL} button[data-main-action="10"]{background:#2563eb}
       #${PANEL} button[data-main-action="107"]{background:#059669}
-      #${PANEL} button:disabled{opacity:.38}
-      #${STATUS}{margin:0 8px 7px;padding:7px 8px;border-radius:8px;background:#064e3b;font-size:11px;line-height:1.35}
+      #${PANEL} button[data-action="close"]{padding:0;width:30px}
+      #${PANEL} button:disabled{opacity:.35}
+      #${STATUS}{position:fixed;right:4px;bottom:116px;z-index:2147483647;display:none;max-width:min(250px,calc(100vw - 16px));
+        padding:5px 7px;border-radius:7px;background:#064e3b;color:#fff;font:700 10px/1.35 system-ui;
+        box-shadow:0 2px 8px rgba(0,0,0,.25)}
+      #${PANEL}[data-open="1"] #${STATUS}{display:block}
       #${STATUS}[data-bad="1"]{background:#991b1b}
-      #${LIST}{overflow:auto;overscroll-behavior:contain;border-top:1px solid #374151;background:#0b1220}
-      #${LIST} .mumei-empty{padding:14px;color:#cbd5e1;font-size:11px;line-height:1.5}
-      #${LIST} .mumei-row{display:grid;grid-template-columns:27px minmax(0,1fr) 58px 28px 38px;gap:4px;
-        align-items:center;padding:5px 7px;border-bottom:1px solid #243044;font-size:10px}
-      #${LIST} .mumei-row[data-state="done"]{background:#052e2b}
-      #${LIST} .mumei-row[data-state="failed"]{background:#3f1118}
-      #${LIST} .mumei-num{color:#94a3b8;font-variant-numeric:tabular-nums}
-      #${LIST} .mumei-title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-      #${LIST} .mumei-state{color:#d1fae5;text-align:right;white-space:nowrap}
-      #${LIST} .mumei-row[data-state="failed"] .mumei-state{color:#fecaca}
-      #${LIST} button{padding:5px 2px;border-radius:6px;font-size:10px}
-      @media(max-width:600px){#${PANEL}{top:58px;max-height:67vh}}
+      body[data-mumei-note-publish="1"] #${TOGGLE},body[data-mumei-note-publish="1"] #${PANEL}{display:none!important}
     `;
     document.head.appendChild(style);
   }
@@ -197,45 +156,44 @@
     runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '0';
-    if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '画像⛓'; }
+    if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '⛓'; }
     updateButtons();
   }
   function openTool() {
     const key = articleKey();
-    if (!key) { setStatus('記事が保存され、編集URLになってから開いてください', true); return; }
+    if (!isEditPage() || !key) return;
     openedArticle = key; setJSON(ACTIVE_KEY, key);
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
-    if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '画像⛓をしまう'; }
-    setStatus('完全自動7.0｜10件または107件を選択（＋操作不要）');
+    if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
+    setStatus('通知確定7.1｜正規カード生成＋保存確認');
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
   function mount() {
-    if (!document.body) return;
+    if (!document.body || !isEditPage()) return;
+    document.body.dataset.mumeiNotePublish = '0';
     installStyle();
     let toggle = document.getElementById(TOGGLE);
     if (!toggle) {
       toggle = document.createElement('button');
-      Object.assign(toggle, { id: TOGGLE, type: 'button', textContent: '画像⛓' });
+      Object.assign(toggle, { id: TOGGLE, type: 'button', textContent: '⛓', title: '通知ツール' });
       toggle.dataset.open = '0'; toggle.addEventListener('click', toggleTool); document.body.appendChild(toggle);
     }
     let panel = document.getElementById(PANEL);
     if (!panel) {
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
-      panel.innerHTML = `<div class="mumei-head">note標準 画像追加＋⛓リンク COMPLETE ${VERSION}</div>
-        <div class="mumei-actions"><button type="button" data-main-action="10">10件を作り直して通知確認</button>
-        <button type="button" data-main-action="107">本番107件</button>
-        <button type="button" data-action="retry-failed">失敗だけ再実行</button>
-        <button type="button" data-action="clean-old-cards">旧通知カード削除</button>
-        <button type="button" data-action="stop" disabled>停止</button></div>
-        <div id="${STATUS}" data-bad="0">完全自動7.0｜10件または107件を選択（＋操作不要）</div>
-        <div id="${LIST}"><div class="mumei-empty">画像とURLの処理一覧がここに出ます。</div></div>`;
+      panel.innerHTML = `<button type="button" data-main-action="10" title="10件通知テスト">10</button>
+        <button type="button" data-main-action="107" title="本番107件">107</button>
+        <button type="button" data-action="retry-failed" title="失敗だけ再開">再</button>
+        <button type="button" data-action="stop" title="停止" disabled>止</button>
+        <button type="button" data-action="close" title="しまう">×</button>
+        <div id="${STATUS}" data-bad="0">通知確定7.1</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
     if (storedActive === articleKey()) {
       openedArticle = storedActive; panel.dataset.open = '1'; toggle.dataset.open = '1';
-      toggle.textContent = '画像⛓をしまう';
+      toggle.textContent = '⛓';
     }
   }
   async function onPanelClick(event) {
@@ -245,11 +203,7 @@
     if (button.dataset.mainAction === '107') return startMode('final107');
     if (button.dataset.action === 'stop') return stopRun();
     if (button.dataset.action === 'retry-failed') return retryFailed();
-    if (button.dataset.action === 'clean-old-cards') return deleteOldCards();
-    const index = Number(button.dataset.index);
-    if (!Number.isInteger(index) || !rows[index]) return;
-    if (button.dataset.action === 'retry') return retryOne(index);
-    if (button.dataset.action === 'delete') return deleteOne(index);
+    if (button.dataset.action === 'close') return closeTool();
   }
 
   function xhr(url, responseType = 'text') {
@@ -372,18 +326,27 @@
   function core() {
     if (coreCache) return coreCache;
     const require = webpackRequire(); if (!require) throw new FatalError('note内部処理を取得できません。画面を再読込してください');
-    let editorModule, stateModule; try { editorModule = require(94928); } catch (_) {} try { stateModule = require(44044); } catch (_) {}
-    let upload = editorModule?.CwN, link = editorModule?.$2m;
-    const NodeSelection = stateModule?.qv, Selection = stateModule?.Y1;
+    let editorModule, stateModule, schemaModule, htmlModule;
+    try { editorModule = require(94928); } catch (_) {}
+    try { stateModule = require(44044); } catch (_) {}
+    try { schemaModule = require(35130); } catch (_) {}
+    try { htmlModule = require(51910); } catch (_) {}
+    let upload = editorModule?.CwN, link = editorModule?.$2m, embed = editorModule?.fjT;
+    const NodeSelection = stateModule?.qv, Selection = stateModule?.Y1, TextSelection = stateModule?.Bs;
+    const serialize = schemaModule?.BF, normalizeDOM = htmlModule?.zc, cleanHTML = htmlModule?.jF;
     const exports = Object.values(require.c || {}).flatMap((entry) => Object.values(entry?.exports || {}));
     if (typeof upload !== 'function') upload = exports.find((value) => typeof value === 'function' &&
       Function.prototype.toString.call(value).includes('imageUploading') && Function.prototype.toString.call(value).includes('Array.from'));
     if (typeof link !== 'function') link = exports.find((value) => typeof value === 'function' &&
       Function.prototype.toString.call(value).includes('selection.node') && Function.prototype.toString.call(value).includes('nodes.image.create') &&
       Function.prototype.toString.call(value).includes('link:'));
-    if (typeof upload !== 'function' || typeof link !== 'function' || typeof NodeSelection?.create !== 'function' ||
-      typeof Selection?.atEnd !== 'function') throw new FatalError('note標準の画像追加・⛓処理が見つかりません。公開・更新しないでください');
-    return (coreCache = { upload, link, NodeSelection, Selection });
+    if (typeof upload !== 'function' || typeof link !== 'function' || typeof embed !== 'function' ||
+      typeof NodeSelection?.create !== 'function' || typeof Selection?.atEnd !== 'function' ||
+      typeof TextSelection?.create !== 'function' || typeof serialize !== 'function' ||
+      typeof normalizeDOM !== 'function' || typeof cleanHTML !== 'function') {
+      throw new FatalError('note正規の画像・⛓・カード・保存処理が揃いません。公開・更新しないでください');
+    }
+    return (coreCache = { upload, link, embed, NodeSelection, Selection, TextSelection, serialize, normalizeDOM, cleanHTML });
   }
   function imageNodes(view) {
     const output = [];
@@ -397,12 +360,33 @@
     const wanted = normalizeUrl(url);
     return imageNodes(view).find((entry) => normalizeUrl(entry.node.attrs?.link) === wanted) || null;
   }
+  function embedNodes(view) {
+    const output = [];
+    view.state.doc.descendants((node, pos) => { if (node.type?.name === 'embed') output.push({ node, pos }); });
+    return output;
+  }
+  function findOfficialCard(view, url) {
+    const wanted = normalizeUrl(url);
+    return embedNodes(view).find((entry) => normalizeUrl(entry.node.attrs?.src) === wanted &&
+      Boolean(entry.node.attrs?.htmlForEmbed) && Boolean(entry.node.attrs?.embeddedContentKey)) || null;
+  }
+  function findFallbackLink(view, url) {
+    const wanted = normalizeUrl(url); let found = null;
+    view.state.doc.descendants((node, pos) => {
+      if (found || node.type?.name !== 'paragraph' || node.textContent !== url) return;
+      const mark = node.firstChild?.marks?.find((value) => value.type?.name === 'link');
+      if (normalizeUrl(mark?.attrs?.href) === wanted) found = { node, pos };
+    });
+    return found;
+  }
   function remoteImage(node) {
     const src = String(node?.attrs?.src || ''); return /^https:\/\//i.test(src) && !/^https:\/\/editor\.note\.com\/icons\//i.test(src);
   }
-  function ensureEndParagraph(view) {
+  function ensureFreshParagraph(view) {
     const paragraph = view.state.schema.nodes.paragraph; if (!paragraph) throw new FatalError('本文paragraphなし');
-    if (view.state.doc.lastChild?.type !== paragraph) view.dispatch(view.state.tr.insert(view.state.doc.content.size, paragraph.create()));
+    if (view.state.doc.lastChild?.type !== paragraph || view.state.doc.lastChild.textContent !== '') {
+      view.dispatch(view.state.tr.insert(view.state.doc.content.size, paragraph.create()));
+    }
     view.dispatch(view.state.tr.setSelection(core().Selection.atEnd(view.state.doc)).scrollIntoView()); view.focus();
   }
   async function waitFor(test, timeout, interval = 120) {
@@ -411,7 +395,7 @@
     return null;
   }
   async function uploadOne(view, file, token) {
-    ensureEndParagraph(view);
+    ensureFreshParagraph(view);
     const before = new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')));
     if (!core().upload(view, [file], view.state.selection.head)) throw new Error('note標準画像追加が拒否されました');
     const created = await waitFor(() => {
@@ -449,10 +433,77 @@
     return verified;
   }
 
+  async function createOfficialCard(view, url, token) {
+    const existing = findOfficialCard(view, url);
+    if (existing) return existing;
+    ensureFreshParagraph(view);
+    let transaction = view.state.tr.insertText(url);
+    transaction = transaction.setSelection(core().TextSelection.create(transaction.doc, transaction.selection.head));
+    view.dispatch(transaction.scrollIntoView()); view.focus();
+    if (!core().embed(url)(view.state, (next) => view.dispatch(next), view)) {
+      throw new Error('note正規URL→Enter処理が拒否されました');
+    }
+    const result = await waitFor(() => {
+      if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+      const card = findOfficialCard(view, url); if (card) return { card };
+      const fallback = findFallbackLink(view, url); if (fallback) return { fallback };
+      return null;
+    }, 90000, 180);
+    if (!result) throw new Error('note正規カード生成が90秒以内に完了しませんでした');
+    if (result.fallback) throw new Error('URLが通常リンクになり、通知対象カードになりませんでした');
+    return result.card;
+  }
+
+  function serializedBody(view) {
+    const fragment = core().serialize(view.state), holder = document.createElement('div');
+    holder.appendChild(fragment); core().normalizeDOM(holder);
+    return core().cleanHTML(holder.innerHTML);
+  }
+  function verifyCompleteDocument(view) {
+    const missing = [];
+    for (const row of rows) {
+      const image = findById(view, row.nodeId) || findByLink(view, row.url);
+      const imageOK = image && remoteImage(image.node) && normalizeUrl(image.node.attrs?.link) === normalizeUrl(row.url);
+      const card = findOfficialCard(view, row.url);
+      if (!imageOK || !card) missing.push(row.index);
+    }
+    if (missing.length) throw new FatalError(`文書内の画像リンク＋正規カード不足: ${missing.slice(0, 8).join(',')}`);
+    const body = serializedBody(view), parsed = new DOMParser().parseFromString(body, 'text/html');
+    const hrefs = [...parsed.querySelectorAll('a[href]')].map((node) => normalizeUrl(node.getAttribute('href')));
+    const sources = [...parsed.querySelectorAll('figure[src],figure[data-src],figure[embedded-service]')]
+      .flatMap((node) => [node.getAttribute('src'), node.getAttribute('data-src'), node.innerHTML])
+      .filter(Boolean).map((value) => String(value));
+    const absent = rows.filter((row) => !hrefs.includes(normalizeUrl(row.url)) ||
+      (!sources.some((value) => value.includes(row.url)) && !body.includes(row.url)));
+    if (absent.length) throw new FatalError(`保存HTMLのURL不足: ${absent.slice(0, 8).map((row) => row.index).join(',')}`);
+    return body;
+  }
+  async function saveToServer(view, token) {
+    if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
+    verifyCompleteDocument(view);
+    setStatus(`${rows.length}/${rows.length}｜サーバーに保存中…`);
+    const save = await waitFor(() => typeof page.noteEditor?.registerNoteDraft === 'function' ?
+      page.noteEditor.registerNoteDraft : null, 12000, 200);
+    if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+    if (save) {
+      const result = await save('auto');
+      if (!result || result.result !== true) throw new FatalError('サーバーが下書き保存の成功を返しませんでした');
+    } else {
+      const button = [...document.querySelectorAll('button')].find((node) => node.textContent?.trim() === '一時保存');
+      if (!button || button.disabled) throw new FatalError('noteの保存処理を取得できませんでした');
+      button.click();
+      await sleep(6500);
+    }
+    if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+    verifyCompleteDocument(view);
+    rows.forEach((row) => { row.proof = COMPLETE_PROOF; row.status = 'done'; row.error = ''; });
+    saveRows();
+  }
+
   function rowFrom(item, stored) {
-    const proven = stored?.status === 'done' && stored?.proof === LINK_PROOF;
+    const proven = stored?.status === 'done' && stored?.proof === COMPLETE_PROOF;
     return { ...item, status: proven ? 'done' : 'ready', nodeId: stored?.nodeId || '',
-      owned: Boolean(stored?.owned), proof: proven ? LINK_PROOF : '', error: stored?.error || '' };
+      owned: Boolean(stored?.owned), cardKey: stored?.cardKey || '', proof: proven ? COMPLETE_PROOF : '', error: stored?.error || '' };
   }
   async function prepareMode(selectedMode) {
     mode = selectedMode; items = selectedMode === 'final107' ? await loadFinalItems() : TEST_ITEMS;
@@ -462,8 +513,10 @@
     if (view) for (const row of rows) {
       const owned = findById(view, row.nodeId);
       const linked = owned && normalizeUrl(owned.node.attrs?.link) === normalizeUrl(row.url) ? owned : findByLink(view, row.url);
-      if (linked && row.proof === LINK_PROOF) {
+      const card = findOfficialCard(view, row.url);
+      if (linked && remoteImage(linked.node) && card) {
         row.status = 'done'; if (owned) row.nodeId = String(linked.node.attrs?.id || row.nodeId);
+        row.cardKey = String(card.node.attrs?.embeddedContentKey || '');
       }
       else if (row.status === 'done') row.status = 'ready';
     }
@@ -473,18 +526,28 @@
     if (token !== runToken || !enabled()) throw new FatalError('停止しました');
     const row = rows[index], view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
     let hit = findById(view, row.nodeId);
-    if (hit && normalizeUrl(hit.node.attrs?.link) === normalizeUrl(row.url) && remoteImage(hit.node)) {
-      row.status = 'done'; row.proof = LINK_PROOF; row.error = ''; saveRows(); updateUi(); return;
-    }
+    if (!hit) hit = findByLink(view, row.url);
     if (!hit) {
-      row.status = 'uploading'; row.error = ''; updateUi(); setStatus(`${index + 1}/${rows.length}｜画像を1枚だけnote標準追加中…`);
+      row.status = 'uploading'; row.error = ''; updateUi(); setStatus(`${index + 1}/${rows.length}｜極薄画像を1枚追加中…`);
       const file = await fileFor(row); if (token !== runToken || !enabled()) throw new FatalError('停止しました');
       hit = await uploadOne(view, file, token); row.nodeId = String(hit.node.attrs?.id || ''); row.owned = true; saveRows();
+    } else if (!remoteImage(hit.node)) {
+      const id = String(hit.node.attrs?.id || '');
+      hit = await waitFor(() => {
+        if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+        const current = findById(view, id); return current && remoteImage(current.node) ? current : null;
+      }, 70000, 180);
+      if (!hit) throw new Error('既存画像のアップロード完了を確認できませんでした');
     }
-    row.status = 'linking'; updateUi(); setStatus(`${index + 1}/${rows.length}｜画像を選択してnote標準⛓にURL設定中…`);
-    const linked = await applyStandardLink(view, hit, row.url);
-    row.nodeId = String(linked.node.attrs?.id || row.nodeId); row.status = 'done'; row.proof = LINK_PROOF; row.error = '';
-    saveRows(); updateUi(); setStatus(`${index + 1}/${rows.length}｜画像追加・標準⛓URL一致 ✅`); await sleep(450);
+    if (normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) {
+      row.status = 'linking'; updateUi(); setStatus(`${index + 1}/${rows.length}｜極薄画像に⛓URL確定中…`);
+      hit = await applyStandardLink(view, hit, row.url);
+    }
+    row.nodeId = String(hit.node.attrs?.id || row.nodeId);
+    row.status = 'embedding'; updateUi(); setStatus(`${index + 1}/${rows.length}｜URL→Enterの正規通知カード生成中…`);
+    const card = await createOfficialCard(view, row.url, token);
+    row.cardKey = String(card.node.attrs?.embeddedContentKey || ''); row.status = 'ready'; row.proof = ''; row.error = '';
+    saveRows(); updateUi(); setStatus(`${index + 1}/${rows.length}｜画像⛓＋正規カード ✅`); await sleep(350);
   }
   async function runIndexes(indexes) {
     if (running || !enabled()) return;
@@ -506,10 +569,16 @@
     }
     if (token === runToken) {
       running = false;
-      const done = rows.filter((row) => row.status === 'done').length, failed = rows.filter((row) => row.status === 'failed').length;
+      const currentView = findView();
+      const done = currentView ? rows.filter((row) => Boolean(findByLink(currentView, row.url) && findOfficialCard(currentView, row.url))).length : 0;
+      const failed = rows.filter((row) => row.status === 'failed').length;
+      if (!fatal && !failed) {
+        try { await saveToServer(currentView, token); }
+        catch (error) { fatal = error instanceof FatalError ? error : new FatalError(error?.message || String(error)); }
+      }
       if (fatal) setStatus(`停止：${fatal.message}（公開・更新しない）`, true);
       else if (failed) setStatus(`標準画像＋⛓ ${done}/${rows.length}｜失敗${failed}件だけ再実行できます`, true);
-      else setStatus(`標準画像追加＋標準⛓ ${done}/${rows.length} ✅ ここで公開・更新してください`);
+      else setStatus(`${rows.length}/${rows.length}｜正規カード＋サーバー保存 ✅ 公開に進めます`);
       updateUi();
     }
   }
@@ -519,9 +588,12 @@
       setStatus(selectedMode === 'final107' ? '107件一覧を読込中…' : '10件一覧を準備中…');
       await prepareMode(selectedMode); core();
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
-      if (selectedMode === 'test10') resetTestImages(view);
       const indexes = rows.map((_, index) => index).filter((index) => rows[index].status !== 'done');
-      if (!indexes.length) { setStatus(`標準画像追加＋標準⛓ ${rows.length}/${rows.length} ✅ 追加対象なし`); return; }
+      if (!indexes.length) {
+        const token = ++runToken; running = true; updateUi();
+        await saveToServer(view, token); running = false; updateUi();
+        setStatus(`${rows.length}/${rows.length}｜正規カード＋サーバー保存 ✅ 公開に進めます`); return;
+      }
       runIndexes(indexes);
     } catch (error) { setStatus(`開始停止：${error?.message || String(error)}（公開・更新しない）`, true); running = false; updateUi(); }
   }
@@ -530,69 +602,23 @@
     setStatus('現在の1件を止めています…完了済みは保持します', true);
     updateUi();
   }
-  async function retryOne(index) {
-    if (running || !rows[index]) return;
-    rows[index].status = 'ready'; rows[index].error = ''; saveRows(); updateUi(); runIndexes([index]);
-  }
   async function retryFailed() {
     if (running) return;
-    const indexes = rows.map((row, index) => row.status === 'failed' ? index : -1).filter((index) => index >= 0);
+    const indexes = rows.map((row, index) => row.status !== 'done' ? index : -1).filter((index) => index >= 0);
     if (!indexes.length) return;
     indexes.forEach((index) => { rows[index].status = 'ready'; rows[index].error = ''; }); saveRows(); updateUi(); runIndexes(indexes);
   }
-  async function deleteOne(index) {
-    if (running || !rows[index]) return;
-    const row = rows[index];
-    try {
-      if (!row.owned || !row.nodeId) throw new Error('この自動化が追加した画像ではありません');
-      const view = findView(); if (!view) throw new FatalError('EditorViewなし');
-      const hit = findById(view, row.nodeId); if (!hit) throw new Error('削除対象画像なし');
-      view.dispatch(view.state.tr.delete(hit.pos, hit.pos + hit.node.nodeSize));
-      row.status = 'deleted'; row.nodeId = ''; row.owned = false; row.proof = ''; row.error = ''; saveRows();
-      setStatus(`${index + 1}/${rows.length} を記事から削除しました。再ボタンでその1件だけ追加できます`); updateUi();
-    } catch (error) { setStatus(`削除停止：${error?.message || String(error)}`, true); }
-  }
-  function resetTestImages(view) {
-    const targets = new Set(TEST_ITEMS.map((item) => normalizeUrl(item.url)));
-    const hits = imageNodes(view).filter((hit) => targets.has(normalizeUrl(hit.node.attrs?.link)));
-    if (hits.length) {
-      let transaction = view.state.tr;
-      hits.sort((a, b) => b.pos - a.pos).forEach((hit) => {
-        transaction = transaction.delete(hit.pos, hit.pos + hit.node.nodeSize);
-      });
-      view.dispatch(transaction);
-    }
-    rows.forEach((row) => {
-      row.status = 'ready'; row.nodeId = ''; row.owned = false; row.proof = ''; row.error = '';
-    });
-    saveRows(); updateUi();
-    if (hits.length) setStatus(`旧方式の同URL画像 ${hits.length}枚を除去 → 1枚ずつ作り直します`);
-  }
-  async function deleteOldCards() {
-    if (running) return;
-    try {
-      const view = findView(); if (!view) throw new FatalError('EditorViewなし');
-      const targets = new Set((items.length ? items : TEST_ITEMS).map((item) => normalizeUrl(item.url)));
-      const hits = [];
-      view.state.doc.descendants((node, pos) => {
-        if (node.type?.name === 'image') return;
-        const src = normalizeUrl(node.attrs?.src || '');
-        const service = String(node.attrs?.embeddedService || '').toLowerCase();
-        if (targets.has(src) && (node.type?.name === 'embed' || service === 'note')) hits.push({ node, pos });
-      });
-      if (!hits.length) { setStatus('削除対象の旧通知カードはありません'); return; }
-      let transaction = view.state.tr;
-      hits.sort((a, b) => b.pos - a.pos).forEach((hit) => {
-        transaction = transaction.delete(hit.pos, hit.pos + hit.node.nodeSize);
-      });
-      view.dispatch(transaction);
-      setStatus(`旧通知カード ${hits.length}件を削除しました。極薄画像は残しています`);
-    } catch (error) { setStatus(`旧通知カード削除停止：${error?.message || String(error)}`, true); }
-  }
   function routeCheck() {
+    if (!document.body) return;
+    document.body.dataset.mumeiNotePublish = isPublishPage() ? '1' : '0';
+    if (!isEditPage()) return;
     if (openedArticle && openedArticle !== articleKey()) closeTool();
     if (!document.getElementById(PANEL) || !document.getElementById(TOGGLE)) mount();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true }); else mount();
-  setInterval(routeCheck, 1800);
+  document.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('button');
+    if (button?.textContent?.trim() === '公開に進む' && document.body) document.body.dataset.mumeiNotePublish = '1';
+  }, true);
+  setInterval(routeCheck, 500);
 })();
