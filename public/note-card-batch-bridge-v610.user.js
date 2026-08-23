@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 本番107枚 COMPLETE BRIDGE 6.6
+// @name         無名S note 本番107枚 COMPLETE BRIDGE 6.7
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      6.6.0
+// @version      6.7.0
 // @description  準備済み107枚一括挿入＋URL107件自動付与＋記事別ON/OFF
 // @match        https://editor.note.com/*
 // @run-at       document-start
@@ -13,8 +13,8 @@
 
 (function(){
 'use strict';
-if(window.__MUMEI_BATCH_BRIDGE_660__) return;
-window.__MUMEI_BATCH_BRIDGE_660__=true;
+if(window.__MUMEI_BATCH_BRIDGE_670__) return;
+window.__MUMEI_BATCH_BRIDGE_670__=true;
 
 const ITEMS=[
  ['https://note.com/ss_yr/n/nc14eb3f2ea9f','【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -46,11 +46,11 @@ function status(t,bad=false){const p=document.getElementById(PANEL);if(!p)return
 function showButton(v=true){const b=document.getElementById(BTN);if(b)b.style.display=v&&enabled()?'block':'none'}
 function buttonText(t){const b=document.getElementById(BTN);if(b)b.textContent=t}
 function hideDirectUI(){for(const id of [DIRECT_BTN,DIRECT_PANEL]){const el=document.getElementById(id);if(el){el.style.display='none';el.style.pointerEvents='none'}}}
-function mount(){if(!document.body)return;const on=enabled(),oldPanel=document.getElementById(PANEL),oldButton=document.getElementById(BTN);if(!on){if(oldPanel)oldPanel.style.display='none';if(oldButton)oldButton.style.display='none';return}hideDirectUI();let p=oldPanel;if(!p){p=document.createElement('div');p.id=PANEL;p.textContent='FINAL 6.6｜この記事だけON';document.body.appendChild(p)}Object.assign(p.style,{position:'fixed',right:'8px',top:'42%',zIndex:'2147483646',maxWidth:'270px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none',display:'block'});let b=oldButton;if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='本番107枚 COMPLETE 6.6';b.addEventListener('click',mainAction);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',top:'48%',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation',display:'block'})}
+function mount(){if(!document.body)return;const on=enabled(),oldPanel=document.getElementById(PANEL),oldButton=document.getElementById(BTN);if(!on){if(oldPanel)oldPanel.style.display='none';if(oldButton)oldButton.style.display='none';return}hideDirectUI();let p=oldPanel;if(!p){p=document.createElement('div');p.id=PANEL;p.textContent='FINAL 6.7｜この記事だけON';document.body.appendChild(p)}Object.assign(p.style,{position:'fixed',right:'8px',top:'42%',zIndex:'2147483646',maxWidth:'270px',padding:'6px 8px',borderRadius:'8px',background:'#111827',color:'#fff',fontSize:'10px',lineHeight:'1.3',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none',display:'block'});let b=oldButton;if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.textContent='本番107枚 COMPLETE 6.7';b.addEventListener('click',mainAction);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',top:'48%',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'10px 13px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'800',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation',display:'block'})}
 function xhr(url,responseType='text'){return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,responseType,timeout:25000,onload:r=>r.status>=200&&r.status<300?resolve(r.response):reject(new Error('取得失敗 '+r.status)),onerror:()=>reject(new Error('通信失敗')),ontimeout:()=>reject(new Error('通信タイムアウト'))}))}
 function validateFinal(m){const items=Array.isArray(m?.items)?m.items:[],urls=items.map(x=>x?.url).filter(Boolean);if(m?.count!==107||m?.width!==860||m?.height!==140||items.length!==107||new Set(urls).size!==107||items.some((x,i)=>x.index!==i+1||x.width!==860||x.height!==140||!x.title||!x.creator||!x.cardPath))throw new Error('最終107件データ不整合');return items}
 async function loadFinal(){if(finalManifest){validateFinal(finalManifest);return finalManifest}const raw=await xhr(FINAL_MANIFEST,'text'),m=JSON.parse(raw),items=validateFinal(m),urls=items.map(x=>x.url);finalManifest=m;window.__MUMEI_SUMMER_107_MANIFEST__=m;if(document.documentElement)document.documentElement.dataset.mumeiFinal107Urls=JSON.stringify(urls);document.dispatchEvent(new CustomEvent('mumei-final-107-ready',{detail:{count:107,width:860,height:140,items,urls}}));return m}
-async function preflightFinal(){if(!enabled()||finalChecked)return;finalChecked=true;try{await loadFinal();if(!busy&&!armed&&!consumed&&mode==='idle')status('本番107枚 READY｜新規記事で開始')}catch(e){finalChecked=false;if(!busy&&!armed&&!consumed&&mode==='idle')status('最終107枚の確認停止：'+(e?.message||String(e)),true)}}
+async function preflightFinal(){if(!enabled()||finalChecked)return;finalChecked=true;try{await loadFinal();if(!busy&&!armed&&!consumed&&mode==='idle')status('本番107枚 READY｜公開前・投稿済み記事どちらも対応')}catch(e){finalChecked=false;if(!busy&&!armed&&!consumed&&mode==='idle')status('最終107枚の確認停止：'+(e?.message||String(e)),true)}}
 function imageInput(input){if(!(input instanceof HTMLInputElement)||input.type!=='file')return false;const a=(input.accept||'').toLowerCase();return !a||a.includes('image')||a.includes('.png')||a.includes('.jpg')||a.includes('.jpeg')}
 function metaContent(html,property){const d=new DOMParser().parseFromString(html,'text/html');return d.querySelector(`meta[property="${property}"]`)?.content||d.querySelector(`meta[name="${property}"]`)?.content||''}
 async function getThumb(url){const html=await xhr(url,'text'),thumb=metaContent(html,'og:image');if(!thumb)throw new Error('サムネ取得失敗');return thumb}
@@ -76,7 +76,7 @@ const nativeClick=HTMLInputElement.prototype.click;HTMLInputElement.prototype.cl
 
 document.addEventListener('mumei-direct-progress',e=>{const i=e.detail?.index||0,total=e.detail?.total||retryTotal;if(i)status(`URL書き込み ${i}/${total}…`)});
 document.addEventListener('mumei-direct-stopped',e=>{const i=e.detail?.index||0,total=e.detail?.total||retryTotal;retryTotal=total;consumed=false;retryMode=true;retryIndex=i;status(i?`URL ${i}/${total}で停止 → ここから再開できます`:'URL処理で停止 → 再開できます',true);buttonText(i?`URL ${i}枚目から再開`:'URL再開');showButton(true);hideDirectUI()});
-document.addEventListener('mumei-direct-success-done',e=>{if(!enabled())return;const ok=e.detail?.ok||0,total=e.detail?.total||ok||107;consumed=false;retryMode=false;retryIndex=0;retryTotal=total;status(`完成：画像${total}/${total}・URL ${ok}/${total} ✅`,ok!==total);buttonText(total===107?'本番107枚 COMPLETE 6.6':'10枚 COMPLETE');showButton(true);hideDirectUI()});
+document.addEventListener('mumei-direct-success-done',e=>{if(!enabled())return;const ok=e.detail?.ok||0,total=e.detail?.total||ok||107;consumed=false;retryMode=false;retryIndex=0;retryTotal=total;status(`完成：画像${total}/${total}・URL ${ok}/${total} ✅`,ok!==total);buttonText(total===107?'本番107枚 COMPLETE 6.7':'10枚 COMPLETE');showButton(true);hideDirectUI()});
 document.addEventListener('mumei-combined-test-complete',()=>status('完成形テスト 1/1 ✅ 公開して通知確認'));
 
 document.addEventListener('mumei-combined-test-request',()=>armCombinedTest());
