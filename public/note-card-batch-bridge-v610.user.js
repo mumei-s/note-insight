@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         無名S note 10/107 COMPLETE BRIDGE 6.8
+// @name         無名S note 本番107枚 COMPLETE BRIDGE 6.7
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
 // @version      6.8.0
 // @description  10件検証/107件本番の選択＋一括画像・URL・note正規通知カード自動化
