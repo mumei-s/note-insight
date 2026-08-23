@@ -4,6 +4,8 @@
 // @version      6.8.0
 // @description  10件検証/107件本番の選択＋一括画像・URL・note正規通知カード自動化
 // @match        https://editor.note.com/*
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @connect      note.com
