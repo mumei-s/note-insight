@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.19.0
-// @description  投稿済み記事対応＋実入力Enter1回を残り9件へ再利用＋記事別ON/OFF＋通知カード一括削除
+// @version      3.20.0
+// @description  実貼付1回＋実Enter1回を残り9件へ再利用＋記事別ON/OFF＋通知カード一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3190__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3190__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3200__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3200__ = true;
 
   const URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -26,6 +26,9 @@
     'https://note.com/ss_yr/n/n2dfac2d0b184',
     'https://note.com/ss_yr/n/na51322616876'
   ];
+  // 前回1件だけ通知確認に使った先頭URLを最後へ回し、今回の実貼付は別URLで行う。
+  // 極薄画像へのリンク順は上のURLSを維持する。
+  const NOTIFY_URLS = [...URLS.slice(1), URLS[0]];
 
   const PANEL = 'mumei-direct-success-panel';
   const BTN = 'mumei-direct-success-btn';
@@ -223,7 +226,7 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.19｜この記事だけON';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.20｜この記事だけON';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
@@ -254,7 +257,7 @@
     if (!notifyPanel) {
       notifyPanel = document.createElement('div');
       notifyPanel.id = N_PANEL;
-      notifyPanel.textContent = '投稿済み記事OK｜実入力Enter 1回 READY';
+      notifyPanel.textContent = '実貼付1回＋実Enter1回｜10件 READY';
       document.body.appendChild(notifyPanel);
     }
     Object.assign(notifyPanel.style, {
@@ -270,7 +273,7 @@
       notifyButton = document.createElement('button');
       notifyButton.id = N_BTN;
       notifyButton.type = 'button';
-      notifyButton.textContent = '正規カード10件（Enter 1回）';
+      notifyButton.textContent = '正規カード10件（貼付1回＋Enter1回）';
       notifyButton.addEventListener('click', notify10);
       document.body.appendChild(notifyButton);
     }
@@ -797,13 +800,45 @@
     view.focus();
   }
 
-  function insertUrlParagraph(view, url) {
-    removeRawUrls(view, url);
+  function appendBlankParagraph(view) {
     const paragraph = view.state.schema.nodes.paragraph;
     if (!paragraph) throw new Error('paragraphなし');
-    const node = paragraph.create(null, view.state.schema.text(url));
+    const node = paragraph.create();
     view.dispatch(view.state.tr.insert(view.state.doc.content.size, node));
     setCursorAtEnd(view);
+  }
+
+  async function copyText(text) {
+    // 青ボタンのユーザー操作権限が残っている間に、まず同期コピーを試す。
+    const active = document.activeElement;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    Object.assign(textarea.style, {
+      position: 'fixed', left: '-9999px', top: '0', opacity: '0'
+    });
+    document.body.appendChild(textarea);
+    let copied = false;
+    try {
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      copied = Boolean(document.execCommand?.('copy'));
+    } catch (_) {
+      copied = false;
+    } finally {
+      textarea.remove();
+      try { active?.focus?.(); } catch (_) {}
+    }
+    if (copied) return true;
+
+    try {
+      if (!navigator.clipboard?.writeText) return false;
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function nativeCardProof(view, url) {
@@ -828,8 +863,51 @@
     return last;
   }
 
-  // 通知成功が実証済みの「人が押したEnter」を1回だけ取得する。
-  // 同じ実イベントを残りのURLでnote自身のEditor handlerへ渡す。
+  // 通知成功が実証済みの「人が貼り付けたURL」を1回だけ取得する。
+  // 同じ実PasteEventを残りのURLでnote自身の貼り付け処理へ渡す。
+  function waitForTrustedPaste(view, url, token, timeout = 180000) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let settleTimer = null;
+      const cleanup = () => {
+        view.dom.removeEventListener('paste', onPaste, true);
+        document.removeEventListener('mumei-card-system-cancel', onCancel);
+        clearTimeout(timer);
+        if (settleTimer) clearTimeout(settleTimer);
+      };
+      const finish = (error = null, value = null) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const onPaste = (event) => {
+        if (!event.isTrusted) return;
+        if (token !== runToken || !isEnabled()) {
+          finish(new Error('システムOFFで中止'));
+          return;
+        }
+        const text = String(event.clipboardData?.getData('text/plain') || '').trim();
+        const matched = text.split(/\s+/).some((value) =>
+          normalizeUrl(value) === normalizeUrl(url));
+        if (!matched) {
+          event.preventDefault();
+          finish(new Error('貼り付けURLが違います。青ボタンからやり直してください'));
+          return;
+        }
+        // capture listenerの後でnote本体にも同じPasteEventを処理させてから保存する。
+        settleTimer = setTimeout(() => finish(null, { event, text }), 180);
+      };
+      const onCancel = () => finish(new Error('システムOFFで中止'));
+      const timer = setTimeout(() => finish(new Error('貼り付け待機時間切れ')), timeout);
+      view.dom.addEventListener('paste', onPaste, true);
+      document.addEventListener('mumei-card-system-cancel', onCancel, { once: true });
+      view.focus();
+    });
+  }
+
+  // 「人が押したEnter」も1回だけ取得し、同じ実イベントを残りへ渡す。
   function waitForTrustedEnter(view, token, timeout = 180000) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -906,14 +984,34 @@
     if (!called) throw new Error('noteのEnter処理を取得できません');
   }
 
+  function invokeCapturedPaste(view, url, captured) {
+    if (!captured?.event?.isTrusted) throw new Error('実貼り付けを保存できません');
+    if (typeof view.pasteText !== 'function') {
+      throw new Error('noteの貼り付け処理を取得できません');
+    }
+    removeRawUrls(view, url);
+    appendBlankParagraph(view);
+    const before = view.state.doc;
+    const handled = view.pasteText(url, captured.event);
+    if (!handled && view.state.doc.eq(before)) {
+      throw new Error('noteの貼り付け処理がURLを受け付けません');
+    }
+  }
+
   async function createFirstNativeCard(view, url, token) {
     const unregistered = findNotify(view, url);
     if (unregistered) deleteBlocks(view, [unregistered]);
     officialEmbeds.delete(normalizeUrl(url));
-    insertUrlParagraph(view, url);
-    nstatus('1/10 URLセット済み → Enterを1回だけ押す');
-    const captured = await waitForTrustedEnter(view, token);
-    nstatus('1/10 実入力Enterを保存 → 最初の正規カードを確認中…');
+    removeRawUrls(view, url);
+    appendBlankParagraph(view);
+    nstatus('1/10 URLコピー済み → 本文で「貼り付け」を1回');
+    const paste = await waitForTrustedPaste(view, url, token);
+    if (!exactUrlParagraphs(view, url).length) {
+      throw new Error('実貼り付けURLを本文で確認できません');
+    }
+    nstatus('1/10 実貼り付け確認 ✅ → Enterを1回');
+    const enter = await waitForTrustedEnter(view, token);
+    nstatus('1/10 実貼り付け＋実Enterを保存 → 正規カード確認中…');
 
     const proof = await waitForNativeCard(view, url);
     if (!proof.ok) {
@@ -923,21 +1021,26 @@
 
     removeRawUrls(view, url);
     remember(url, proof.hit.node.type.name);
-    return captured;
+    return { paste, enter };
   }
 
-  async function createFromCapturedEnter(view, url, index, captured) {
+  async function createFromCapturedInput(view, url, index, captured) {
     const existing = findNotify(view, url);
     if (existing) deleteBlocks(view, [existing]);
     officialEmbeds.delete(normalizeUrl(url));
-    insertUrlParagraph(view, url);
-    nstatus(`${index}/10 保存した実Enterで自動カード化…`);
-    invokeCapturedEnter(view, captured);
+    nstatus(`${index}/10 保存した実貼り付けをnoteへ再入力…`);
+    invokeCapturedPaste(view, url, captured.paste);
+    await sleep(200);
+    if (!exactUrlParagraphs(view, url).length && !nativeCardProof(view, url).ok) {
+      throw new Error(`${index}/10 実貼り付けURLを確認できません`);
+    }
+    nstatus(`${index}/10 保存した実Enterで正規カード化…`);
+    invokeCapturedEnter(view, captured.enter);
 
     const proof = await waitForNativeCard(view, url);
     if (!proof.ok) {
       removeRawUrls(view, url);
-      throw new Error(`${index}/10 実Enter再利用：${proof.reason}`);
+      throw new Error(`${index}/10 実貼付＋実Enter再利用：${proof.reason}`);
     }
     removeRawUrls(view, url);
     remember(url, proof.hit.node.type.name);
@@ -952,7 +1055,9 @@
     if (button) button.disabled = true;
 
     try {
-      nstatus('投稿済み記事でEnter 1回方式を開始…');
+      nstatus('最初のURLをクリップボードへコピー中…');
+      const copied = await copyText(NOTIFY_URLS[0]);
+      if (!copied) throw new Error('URLをコピーできません。ブラウザのクリップボード許可を確認');
       const view = findView();
       if (!view) throw new Error('EditorViewなし');
       const images = cards();
@@ -963,21 +1068,21 @@
 
       officialEmbeds.clear();
       const removed = clearFailedCards(view);
-      if (removed) nstatus(`旧カード ${removed}件を除去 → Enter 1回方式を準備中…`);
+      if (removed) nstatus(`旧カード ${removed}件を除去 → 実貼り付け1回を準備中…`);
 
-      const captured = await createFirstNativeCard(view, URLS[0], token);
-      nstatus('正規カード 1/10 ✅ 保存した実Enterで残り9件を自動生成…');
+      const captured = await createFirstNativeCard(view, NOTIFY_URLS[0], token);
+      nstatus('正規カード 1/10 ✅ 実貼り付け＋実Enterで残り9件を自動生成…');
 
-      for (let i = 1; i < URLS.length; i += 1) {
+      for (let i = 1; i < NOTIFY_URLS.length; i += 1) {
         if (token !== runToken || !isEnabled()) throw new Error('システムOFFで中止');
-        await createFromCapturedEnter(view, URLS[i], i + 1, captured);
+        await createFromCapturedInput(view, NOTIFY_URLS[i], i + 1, captured);
         nstatus(`正規カード ${i + 1}/10 ✅`);
         await sleep(350);
       }
 
       const count = URLS.filter((url) => nativeCardProof(view, url).ok).length;
       if (count !== 10) throw new Error(`正規カード確認 ${count}/10`);
-      nstatus('実Enter 1回＋自動9件・正規カード 10/10 ✅ 更新して通知確認');
+      nstatus('実貼付1回＋実Enter1回・正規カード 10/10 ✅ 更新して通知確認');
     } catch (error) {
       if (token === runToken) {
         nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
