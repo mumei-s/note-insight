@@ -684,11 +684,6 @@
       runIndexes(indexes);
     } catch (error) { setStatus(`開始停止：${error?.message || String(error)}（公開・更新しない）`, true); running = false; updateUi(); }
   }
-  function thinImage(node) {
-    const width = Number(node?.attrs?.width || 0), height = Number(node?.attrs?.height || 0);
-    if (!width || !height) return false;
-    return Math.abs((width / height) - (W / H)) < 0.35;
-  }
   async function resetForNotification() {
     if (running || !mode || !rows.length || !enabled()) return;
     running = true; const token = ++runToken; updateUi();
@@ -697,20 +692,15 @@
       const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
       const trackedIds = new Set(rows.map((row) => String(row.nodeId || '')).filter(Boolean));
       const deletions = [];
-      const unlink = [];
       for (const hit of imageNodes(view)) {
         const id = String(hit.node.attrs?.id || ''), linked = normalizeUrl(hit.node.attrs?.link);
-        if (trackedIds.has(id) || (targets.has(linked) && thinImage(hit.node))) deletions.push(hit);
-        else if (targets.has(linked)) unlink.push(hit);
+        if (trackedIds.has(id) || targets.has(linked)) deletions.push(hit);
       }
       rows.forEach((row) => {
         deletions.push(...officialCards(view, row.url));
         deletions.push(...exactUrlParagraphs(view, row.url));
       });
       let transaction = view.state.tr;
-      unlink.forEach((hit) => {
-        transaction = transaction.setNodeMarkup(hit.pos, undefined, { ...hit.node.attrs, link: null }, hit.node.marks);
-      });
       const unique = new Map();
       deletions.forEach((hit) => unique.set(`${hit.pos}:${hit.node.nodeSize}`, hit));
       [...unique.values()].sort((a, b) => b.pos - a.pos).forEach((hit) => {
