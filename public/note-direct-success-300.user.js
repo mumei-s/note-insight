@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.21.0
+// @version      3.22.0
 // @description  コピー不要・URL自動配置＋実Enter1回で10/107件カード化＋記事別ON/OFF＋一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3210__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3210__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3220__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3220__ = true;
 
   const TEST_URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -272,7 +272,7 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.21｜コピー不要・この記事だけON';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.22｜コピー不要・この記事だけON';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
@@ -1043,7 +1043,7 @@
 
       const confirmed = urls.filter((url) => nativeCardProof(view, url).ok).length;
       if (confirmed !== count) throw new Error(`正規カード確認 ${confirmed}/${count}`);
-      nstatus(`実Enter1回・正規カード ${count}/${count} ✅ 本番記事を初回公開`);
+      nstatus(`実Enter1回・正規カード ${count}/${count} ✅ 公開・更新して通知確認`);
     } catch (error) {
       if (token === runToken) {
         nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
