@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note DIRECT SUCCESS 3.0
 // @namespace    https://github.com/mumei-s/note-insight/direct-success-300
-// @version      3.22.0
-// @description  コピー不要・URL自動配置＋実Enter1回で10/107件カード化＋記事別ON/OFF＋一括削除
+// @version      3.23.0
+// @description  note正規URLコマンドで10/107件を完全自動カード化＋記事別収納＋一括削除
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        none
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  if (window.__MUMEI_DIRECT_SUCCESS_3220__) return;
-  window.__MUMEI_DIRECT_SUCCESS_3220__ = true;
+  if (window.__MUMEI_DIRECT_SUCCESS_3230__) return;
+  window.__MUMEI_DIRECT_SUCCESS_3230__ = true;
 
   const TEST_URLS = [
     'https://note.com/ss_yr/n/nc14eb3f2ea9f',
@@ -40,11 +40,14 @@
   const PREVIOUS_REG = 'mumei_registry_v316';
   const LEGACY_REG = 'mumei_registry_v315';
   const LEGACY_CAP = 'mumei_capture_v315';
+  const REQUESTED_BATCH = 'mumeiRequestedBatch';
+  const OFFICIAL_PROOF = 'note-ePJ-v323';
   let busy = false;
   let notifyBusy = false;
   let observerInstalled = false;
   let runToken = 0;
   const officialEmbeds = new Map();
+  let noteUrlCommand = null;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -98,17 +101,23 @@
       const key = `${item.url}|${item.type}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      output.push({ url: item.url, type: item.type });
+      output.push({
+        url: item.url,
+        type: item.type,
+        ...(item.key ? { key: String(item.key) } : {}),
+        ...(item.sourceKey ? { sourceKey: String(item.sourceKey) } : {}),
+        ...(item.proof ? { proof: String(item.proof) } : {})
+      });
     }
     setJSON(`${REG_PREFIX}:${sourceNoteKey() || 'unknown'}`, output);
     updateCleanButton();
     return output;
   }
 
-  function remember(url, type) {
+  function remember(url, type, proof = {}) {
     return saveRegistry([
       ...registry().filter((item) => item.url !== url),
-      { url, type }
+      { url, type, ...proof }
     ]);
   }
 
@@ -169,6 +178,13 @@
   function currentBatch() {
     const images = thinCards();
     const final = finalUrls();
+    const requested = document.documentElement?.dataset?.[REQUESTED_BATCH] || '';
+    if (requested === '107' && final.length === 107) {
+      return { urls: final, images: images.slice(-107), count: 107, final: true };
+    }
+    if (requested === '10') {
+      return { urls: TEST_URLS, images: images.slice(-10), count: 10, final: false };
+    }
     if (final.length === 107 && images.length >= 107) {
       return { urls: final, images: images.slice(-107), count: 107, final: true };
     }
@@ -230,6 +246,7 @@
       document.dispatchEvent(new CustomEvent('mumei-card-system-cancel'));
     } else {
       installOfficialEmbedObserver();
+      prefetchFinalUrls();
     }
     document.dispatchEvent(new CustomEvent('mumei-card-system-toggle', {
       detail: { enabled: next, articleKey: sourceNoteKey() }
@@ -249,12 +266,14 @@
       document.body.appendChild(toggle);
     }
     const enabled = isEnabled();
-    toggle.textContent = enabled ? '通知システム ON' : '通知システム OFF';
+    toggle.textContent = enabled ? '通知ツールをしまう' : '通知';
+    toggle.title = enabled ? 'この画面の通知ツールをしまう' : 'この記事で通知ツールを開く';
     Object.assign(toggle.style, {
-      position: 'fixed', right: '8px', bottom: '18px', zIndex: '2147483647',
-      border: '0', borderRadius: '999px', padding: '8px 12px',
+      position: 'fixed', right: enabled ? '8px' : '-28px', bottom: '18px',
+      zIndex: '2147483647', minWidth: enabled ? 'auto' : '42px',
+      border: '0', borderRadius: '999px', padding: enabled ? '8px 12px' : '8px 7px',
       background: enabled ? '#047857' : '#4b5563', color: '#fff',
-      fontSize: '12px', fontWeight: '800',
+      fontSize: enabled ? '12px' : '10px', fontWeight: '800',
       boxShadow: '0 4px 14px rgba(0,0,0,.28)', touchAction: 'manipulation',
       display: 'block', visibility: 'visible', opacity: '1'
     });
@@ -272,7 +291,7 @@
       panel.id = PANEL;
       document.body.appendChild(panel);
     }
-    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.22｜コピー不要・この記事だけON';
+    panel.textContent = panel.textContent || 'DIRECT SUCCESS 3.23｜この記事だけ展開中';
     Object.assign(panel.style, {
       position: 'fixed', right: '8px', top: '72px', zIndex: '2147483646',
       maxWidth: '340px', padding: '6px 8px', borderRadius: '8px',
@@ -303,7 +322,7 @@
     if (!notifyPanel) {
       notifyPanel = document.createElement('div');
       notifyPanel.id = N_PANEL;
-      notifyPanel.textContent = 'URL自動配置＋実Enter1回｜10/107件対応';
+      notifyPanel.textContent = 'note正規処理を直接実行｜コピー・Enter不要';
       document.body.appendChild(notifyPanel);
     }
     Object.assign(notifyPanel.style, {
@@ -324,7 +343,7 @@
     }
     if (!notifyBusy) {
       const count = currentBatch().count;
-      notifyButton.textContent = `通知カード${count}件（Enter 1回）`;
+      notifyButton.textContent = `通知カード${count}件（完全自動）`;
     }
     Object.assign(notifyButton.style, {
       position: 'fixed', right: '8px', bottom: '125px', zIndex: '2147483647',
@@ -369,7 +388,7 @@
     if (validFinalUrls(urls)) finalUrlsCache = urls;
     mount();
   });
-  prefetchFinalUrls();
+  if (isEnabled()) prefetchFinalUrls();
 
   function sourceNoteKey() {
     return location.pathname.match(/(?:^|\/)(n[a-z0-9]{8,})(?:\/|$)/i)?.[1] || '';
@@ -503,6 +522,48 @@
       }
     }
     return null;
+  }
+
+  // noteエディタ自身がURL→Enter/Pasteで呼ぶ正規コマンド。
+  // 現行エディタの webpack module 94928 / export fjT は、URLごとに
+  // /api/v1/embed を実行し、新しい embeddedContentKey を持つembedを挿入する。
+  function webpackRequire() {
+    const chunks = window.webpackChunk_N_E;
+    if (!chunks || typeof chunks.push !== 'function') return null;
+    let require = null;
+    const chunkId = 930000000 + Math.floor(Math.random() * 60000000);
+    try {
+      chunks.push([[chunkId], {}, (runtimeRequire) => {
+        require = runtimeRequire;
+      }]);
+    } catch (_) {}
+    return require;
+  }
+
+  function noteUrlCommandFactory() {
+    if (typeof noteUrlCommand === 'function') return noteUrlCommand;
+    const require = webpackRequire();
+    if (!require) throw new Error('note内部処理を取得できません');
+    let module;
+    try { module = require(94928); } catch (_) {}
+    let candidate = typeof module?.fjT === 'function' ? module.fjT : null;
+    const looksRight = (value) => {
+      if (typeof value !== 'function') return false;
+      let source = '';
+      try { source = Function.prototype.toString.call(value); } catch (_) {}
+      return source.includes('state.selection') && source.includes('nodeBefore') &&
+        source.includes('replaceRangeWith') && source.includes('.then');
+    };
+    if (!looksRight(candidate)) {
+      const loaded = Object.values(require.c || {}).flatMap((entry) =>
+        Object.values(entry?.exports || {}));
+      candidate = loaded.find(looksRight) || null;
+    }
+    if (typeof candidate !== 'function') {
+      throw new Error('note正規URLコマンドが見つかりません');
+    }
+    noteUrlCommand = candidate;
+    return noteUrlCommand;
   }
 
   function findNodeForImage(view, image) {
@@ -805,7 +866,12 @@
   }
 
   function registeredHit(view, item) {
-    return findNotify(view, item.url, item.type);
+    if (item?.proof !== OFFICIAL_PROOF || !item?.key) return null;
+    if (item.sourceKey && item.sourceKey !== sourceNoteKey()) return null;
+    const hit = findNotify(view, item.url, item.type);
+    if (!hit) return null;
+    const json = JSON.stringify(hit.node.toJSON ? hit.node.toJSON() : hit.node.attrs || {});
+    return json.includes(item.key) ? hit : null;
   }
 
   function allTargetCardHits(view, urls = knownTargetUrls()) {
@@ -824,6 +890,13 @@
 
   function normalizeRegistry(view) {
     return saveRegistry(registry().filter((item) => registeredHit(view, item)));
+  }
+
+  function storedOfficialProof(view, url) {
+    const item = registry().find((entry) => entry.url === url &&
+      entry.proof === OFFICIAL_PROOF && entry.key);
+    const hit = item ? registeredHit(view, item) : null;
+    return hit ? { ok: true, item, hit } : { ok: false };
   }
 
   function clearFailedCards(view, urls) {
@@ -893,118 +966,43 @@
     return last;
   }
 
-  // 「人が押したEnter」を1回だけ取得し、同じnote内部処理を残りへ渡す。
-  function waitForTrustedEnter(view, token, timeout = 180000) {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      let settleTimer = null;
-      const captured = [];
-      const cleanup = () => {
-        view.dom.removeEventListener('keydown', onInput, true);
-        view.dom.removeEventListener('beforeinput', onInput, true);
-        document.removeEventListener('mumei-card-system-cancel', onCancel);
-        clearTimeout(timer);
-        if (settleTimer) clearTimeout(settleTimer);
-      };
-      const finish = (error = null, value = null) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (error) reject(error);
-        else resolve(value);
-      };
-      const onInput = (event) => {
-        if (!event.isTrusted) return;
-        const keyboardEnter = event.type === 'keydown' && event.key === 'Enter';
-        const mobileEnter = event.type === 'beforeinput' &&
-          /^(insertParagraph|insertLineBreak)$/i.test(event.inputType || '');
-        if (!keyboardEnter && !mobileEnter) return;
-        if (token !== runToken || !isEnabled()) {
-          finish(new Error('システムOFFで中止'));
-          return;
-        }
-        if (!captured.some((item) => item.type === event.type)) {
-          captured.push({ type: event.type, event });
-        }
-        // keydownとbeforeinputの両方が来る端末では、同じ1回分をまとめて保存する。
-        if (!settleTimer) {
-          settleTimer = setTimeout(() => finish(null, { events: captured }), 120);
-        }
-      };
-      const onCancel = () => finish(new Error('システムOFFで中止'));
-      const timer = setTimeout(() => finish(new Error('Enter待機時間切れ')), timeout);
-      view.dom.addEventListener('keydown', onInput, true);
-      view.dom.addEventListener('beforeinput', onInput, true);
-      document.addEventListener('mumei-card-system-cancel', onCancel, { once: true });
-      view.focus();
-    });
-  }
-
-  function invokeCapturedEnter(view, captured) {
-    const events = Array.isArray(captured?.events) ? captured.events : [];
-    if (!events.length) throw new Error('実入力Enterを保存できません');
-    const preferred = events.find((item) => item.event.defaultPrevented) ||
-      events.find((item) => item.type === 'keydown') || events[0];
-    const ordered = [preferred, ...events.filter((item) => item !== preferred)];
-    const before = view.state.doc;
-    let called = false;
-
-    for (const item of ordered) {
-      try {
-        if (item.type === 'keydown' && typeof view.someProp === 'function') {
-          const handled = view.someProp('handleKeyDown', (handler) => {
-            called = true;
-            return handler(view, item.event);
-          });
-          if (handled || !view.state.doc.eq(before)) break;
-        } else if (item.type === 'beforeinput' && typeof view.someProp === 'function') {
-          const handled = view.someProp('handleDOMEvents', (handlers) => {
-            if (typeof handlers?.beforeinput !== 'function') return false;
-            called = true;
-            return handlers.beforeinput(view, item.event);
-          });
-          if (handled || !view.state.doc.eq(before)) break;
-        }
-      } catch (_) {}
+  async function waitForOfficialCard(view, url, timeout = 45000) {
+    const deadline = Date.now() + timeout;
+    let last = { ok: false, reason: 'note正規登録待機中' };
+    while (Date.now() < deadline) {
+      last = officialProof(view, url);
+      if (last.ok) return last;
+      await sleep(250);
     }
-    if (!called) throw new Error('noteのEnter処理を取得できません');
+    return last;
   }
 
-  async function createFirstNativeCard(view, url, token, total) {
-    const unregistered = findNotify(view, url);
-    if (unregistered) deleteBlocks(view, [unregistered]);
-    officialEmbeds.delete(normalizeUrl(url));
-    insertUrlParagraph(view, url);
-    nstatus(`1/${total} URL自動配置済み → Enterを1回だけ押す`);
-    const captured = await waitForTrustedEnter(view, token);
-    nstatus(`1/${total} 実Enterを保存 → 最初の正規カード確認中…`);
-
-    const proof = await waitForNativeCard(view, url);
-    if (!proof.ok) {
-      removeRawUrls(view, url);
-      throw new Error(`1/${total} ${proof.reason}`);
-    }
-
-    removeRawUrls(view, url);
-    remember(url, proof.hit.node.type.name);
-    return captured;
-  }
-
-  async function createFromCapturedEnter(view, url, index, total, captured) {
+  async function createOfficialCard(view, url, index, total) {
     const existing = findNotify(view, url);
     if (existing) deleteBlocks(view, [existing]);
     officialEmbeds.delete(normalizeUrl(url));
     insertUrlParagraph(view, url);
-    nstatus(`${index}/${total} URL自動配置 → 保存した実Enterで正規カード化…`);
-    invokeCapturedEnter(view, captured);
+    nstatus(`${index}/${total} note正規URLコマンド実行中…`);
 
-    const proof = await waitForNativeCard(view, url);
+    const factory = noteUrlCommandFactory();
+    const command = factory(url);
+    const handled = command(view.state, (transaction) => view.dispatch(transaction), view);
+    if (!handled) {
+      removeRawUrls(view, url);
+      throw new Error(`${index}/${total} note正規URLコマンド未処理`);
+    }
+
+    const proof = await waitForOfficialCard(view, url);
     if (!proof.ok) {
       removeRawUrls(view, url);
-      throw new Error(`${index}/${total} 実Enter再利用：${proof.reason}`);
+      throw new Error(`${index}/${total} ${proof.reason}`);
     }
     removeRawUrls(view, url);
-    remember(url, proof.hit.node.type.name);
+    remember(url, proof.hit.node.type.name, {
+      key: proof.embed.key,
+      sourceKey: sourceNoteKey(),
+      proof: OFFICIAL_PROOF
+    });
     return proof.hit;
   }
 
@@ -1027,32 +1025,42 @@
       const linkError = await ensureLinks(view, images, urls);
       if (linkError) throw new Error(`極薄URL ${linkError.index}/${count}で停止`);
 
+      noteUrlCommandFactory();
       officialEmbeds.clear();
       const removed = clearFailedCards(view, urls);
-      if (removed) nstatus(`旧カード ${removed}件を除去 → Enter 1回方式を準備中…`);
+      if (removed) nstatus(`通知対象外の旧カード ${removed}件を除去 → 正規登録開始…`);
 
-      const captured = await createFirstNativeCard(view, urls[0], token, count);
-      nstatus(`正規カード 1/${count} ✅ 保存した実Enterで残り${count - 1}件を自動生成…`);
-
-      for (let i = 1; i < urls.length; i += 1) {
+      for (let i = 0; i < urls.length; i += 1) {
         if (token !== runToken || !isEnabled()) throw new Error('システムOFFで中止');
-        await createFromCapturedEnter(view, urls[i], i + 1, count, captured);
-        nstatus(`正規カード ${i + 1}/${count} ✅`);
-        await sleep(count === 107 ? 650 : 350);
+        if (storedOfficialProof(view, urls[i]).ok) {
+          nstatus(`note正規登録 ${i + 1}/${count} ✅（確認済みを保持）`);
+        } else {
+          await createOfficialCard(view, urls[i], i + 1, count);
+          nstatus(`note正規登録 ${i + 1}/${count} ✅`);
+        }
+        emit('mumei-notify-progress', { index: i + 1, total: count });
+        await sleep(count === 107 ? 900 : 500);
       }
 
-      const confirmed = urls.filter((url) => nativeCardProof(view, url).ok).length;
-      if (confirmed !== count) throw new Error(`正規カード確認 ${confirmed}/${count}`);
-      nstatus(`実Enter1回・正規カード ${count}/${count} ✅ 公開・更新して通知確認`);
+      const confirmed = urls.filter((url) => storedOfficialProof(view, url).ok).length;
+      if (confirmed !== count) throw new Error(`note正規登録確認 ${confirmed}/${count}`);
+      nstatus(`note正規登録 ${count}/${count} ✅ 公開・更新して通知確認`);
+      emit('mumei-notify-done', { ok: count, total: count });
     } catch (error) {
       if (token === runToken) {
         nstatus(`停止：${error?.message || String(error)}（公開・更新しない）`, true);
+        emit('mumei-notify-stopped', {
+          reason: error?.message || String(error),
+          total: currentBatch().count
+        });
       }
     } finally {
       notifyBusy = false;
       if (button) button.disabled = false;
     }
   }
+
+  document.addEventListener('mumei-notify-run-request', () => notifyAll());
 
   function cleanCards() {
     if (!isEnabled()) return;
