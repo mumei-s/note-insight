@@ -88,6 +88,10 @@
     const value = getJSON(stateKey(selectedMode), []);
     return Array.isArray(value) ? value : [];
   }
+  function legacyRows(selectedMode) {
+    const value = getJSON(`mumei_image_link_run_v700:${articleKey() || 'unknown'}:${selectedMode || 'none'}`, []);
+    return Array.isArray(value) ? value : [];
+  }
   function saveRows() {
     if (!mode || !rows.length) return;
     setJSON(stateKey(), rows.map((row) => ({
@@ -507,7 +511,8 @@
   }
   async function prepareMode(selectedMode) {
     mode = selectedMode; items = selectedMode === 'final107' ? await loadFinalItems() : TEST_ITEMS;
-    const stored = new Map(storedRows(selectedMode).map((row) => [row.url, row]));
+    const stored = new Map(legacyRows(selectedMode).map((row) => [row.url, row]));
+    storedRows(selectedMode).forEach((row) => stored.set(row.url, row));
     rows = items.map((item) => rowFrom(item, stored.get(item.url)));
     const view = findView();
     if (view) for (const row of rows) {
