@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 通知確定 COMPLETE 8.2
+// @name         無名S note 通知確定 COMPLETE 8.3
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      8.2.0
+// @version      8.3.0
 // @description  成功済みの実Enterを必ず通す通知カード10/107件＋復旧可能な削除・極薄画像一括工程
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -18,21 +18,21 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTIFY_COMPLETE_8200__) return;
+  if (page.__MUMEI_NOTIFY_COMPLETE_8300__) return;
   const OLD_FLAGS = [
-    '__MUMEI_NOTIFY_COMPLETE_8100__', '__MUMEI_NOTIFY_FINAL_8000__', '__MUMEI_NOTIFY_COMPLETE_8000__',
+    '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
+    '__MUMEI_NOTIFY_FINAL_8000__', '__MUMEI_NOTIFY_COMPLETE_8000__',
     '__MUMEI_NOTIFY_COMPLETE_7200__', '__MUMEI_NOTIFY_COMPLETE_7100__', '__MUMEI_NOTIFY_COMPLETE_7000__',
     '__MUMEI_BATCH_BRIDGE_680__', '__MUMEI_BATCH_BRIDGE_670__', '__MUMEI_BATCH_BRIDGE_650__',
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  const preexistingConflict = OLD_FLAGS.some((key) => Boolean(page[key]));
-  page.__MUMEI_NOTIFY_COMPLETE_8200__ = true;
+  page.__MUMEI_NOTIFY_COMPLETE_8300__ = true;
   // 本版より後に読み込まれる旧版は、本文・入力・画像選択へ介入させない。
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '8.2';
+  const VERSION = '8.3';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -211,7 +211,7 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus('通知確定8.2｜URL自動配置→実Enter1回');
+    setStatus('通知確定8.3｜旧版OFF不要・URL配置→実Enter1回');
     restoreLastMode();
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
@@ -235,7 +235,7 @@
         <button type="button" data-action="delete" title="通知後：カードだけ一括削除">削</button>
         <button type="button" data-action="images" title="削除後：＋画像1回で極薄画像を一括完成">画</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">通知確定8.2</div>`;
+        <div id="${STATUS}" data-bad="0">通知確定8.3</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
@@ -749,7 +749,6 @@
   async function startMode(selectedMode) {
     if (running) return;
     try {
-      if (preexistingConflict) throw new FatalError('旧通知/画像スクリプトが先に作動しています。TampermonkeyはCOMPLETE 8.2だけON→再読込');
       setStatus(selectedMode === 'final107' ? '107件一覧を読込中…' : '10件一覧を準備中…');
       await prepareMode(selectedMode); core();
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
