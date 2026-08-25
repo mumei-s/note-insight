@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         無名S note 極薄ワンタップ COMPLETE 14.1
+// @name         無名S note 極薄ワンタップ COMPLETE 14.2
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      14.1.0
+// @version      14.2.0
 // @description  実験2枚／指定326枚を画像1回で一括挿入＋URL自動付与し、note正規URLコマンドで標準カードも自動生成
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.1.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.1.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.2.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.2.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_THIN_BATCH_14100__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_14200__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_THIN_BATCH_14100__',
     '__MUMEI_NOTE_THIN_BATCH_14000__',
     '__MUMEI_NOTE_THIN_BATCH_13200__',
     '__MUMEI_NOTE_THIN_BATCH_13100__',
@@ -37,11 +38,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_THIN_BATCH_14100__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_14200__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '14.1';
+  const VERSION = '14.2';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -63,10 +64,10 @@
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
   // Do not prefix these IDs with "mumei-". Legacy scripts broadly scan that prefix
   // and programmatically click every close button they find.
-  const TOGGLE = 'ntb-one-tap-toggle-v1410';
-  const PANEL = 'ntb-one-tap-panel-v1410';
-  const STATUS = 'ntb-one-tap-status-v1410';
-  const STYLE = 'ntb-one-tap-style-v1410';
+  const TOGGLE = 'ntb-one-tap-toggle-v1420';
+  const PANEL = 'ntb-one-tap-panel-v1420';
+  const STATUS = 'ntb-one-tap-status-v1420';
+  const STYLE = 'ntb-one-tap-style-v1420';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -100,6 +101,7 @@
   let inputObserver = null;
   let nativeInputClick = null;
   let imageChoiceClickListener = null;
+  let imageChoicePointerListener = null;
   let waitCancel = null;
   let routeTimer = null;
   let noteApiOriginCache = '';
@@ -202,7 +204,9 @@
       #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210,
       #mumei-thin-toggle-v1300,#mumei-thin-panel-v1300,
       #ntb-one-tap-toggle-v1400,#ntb-one-tap-panel-v1400,
-      #ntb-one-tap-status-v1400{display:none!important}
+      #ntb-one-tap-status-v1400,
+      #ntb-one-tap-toggle-v1410,#ntb-one-tap-panel-v1410,
+      #ntb-one-tap-status-v1410{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;top:42%;bottom:auto;z-index:2147483647;width:30px;height:30px;border:0;
         border-radius:999px;padding:0;background:#0f766e;color:#fff;font:800 14px/30px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -248,7 +252,9 @@
       'mumei-thin-toggle-v1300', 'mumei-thin-panel-v1300',
       'mumei-thin-status-v1300', 'mumei-thin-style-v1300',
       'ntb-one-tap-toggle-v1400', 'ntb-one-tap-panel-v1400',
-      'ntb-one-tap-status-v1400', 'ntb-one-tap-style-v1400'
+      'ntb-one-tap-status-v1400', 'ntb-one-tap-style-v1400',
+      'ntb-one-tap-toggle-v1410', 'ntb-one-tap-panel-v1410',
+      'ntb-one-tap-status-v1410', 'ntb-one-tap-style-v1410'
     ];
     ids.forEach((id) => document.getElementById(id)?.remove());
   }
@@ -383,7 +389,7 @@
     const config = BATCHES[selectedMode];
     if (!config) throw new FatalError(`未対応モード: ${selectedMode}`);
     if (manifestCache.has(selectedMode)) return validateManifest(manifestCache.get(selectedMode), selectedMode);
-    const parsed = JSON.parse(await xhr(`${config.manifest}?v=14.1.0`, 'text'));
+    const parsed = JSON.parse(await xhr(`${config.manifest}?v=14.2.0`, 'text'));
     const values = validateManifest(parsed, selectedMode);
     manifestCache.set(selectedMode, parsed);
     return values;
@@ -449,7 +455,7 @@
     const config = BATCHES[mode];
     if (!config) throw new FatalError(`画像モード不正: ${mode}`);
     const name = `${String(item.index).padStart(3, '0')}.png`;
-    const blob = await xhr(`${new URL(`./cards/${name}`, config.manifest).href}?v=14.1.0`, 'blob');
+    const blob = await xhr(`${new URL(`./cards/${name}`, config.manifest).href}?v=14.2.0`, 'blob');
     if (!blob || blob.size < 100) throw new Error('画像取得失敗');
     const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
     const png = bytes.length === 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -1201,10 +1207,15 @@
   function markNativeImageMenuReady(roots) {
     const arm = imageArm;
     if (!arm || arm.consumed || arm.imageChoiceSelected || arm.nativeMenuReady) return false;
-    const found = roots.some((root) => findVisibleImageChoice(root));
+    let found = null;
+    for (const root of roots) {
+      found = findVisibleImageChoice(root);
+      if (found) break;
+    }
     if (!found) return false;
     arm.nativeMenuReady = true;
-    setStatus(`${arm.files.length}枚｜＋パネル表示OK。「画像」を1回だけ`);
+    arm.nativeImageChoice = found;
+    arm.menuOpenedAt = page.performance?.now?.() || Date.now();
     return true;
   }
   function scheduleNativeMenuProbe(roots = [document.body]) {
@@ -1241,6 +1252,10 @@
       document.removeEventListener('click', imageChoiceClickListener, true);
       imageChoiceClickListener = null;
     }
+    if (imageChoicePointerListener) {
+      document.removeEventListener('pointerdown', imageChoicePointerListener, true);
+      imageChoicePointerListener = null;
+    }
     if (nativeInputClick && page.HTMLInputElement?.prototype) {
       try { page.HTMLInputElement.prototype.click = nativeInputClick; } catch (_) {}
     }
@@ -1252,8 +1267,38 @@
     uninstallImageInputBridge();
     if (reason && arm?.reject) arm.reject(new FatalError(reason));
   }
+  function installNativeInputInterceptor() {
+    if (nativeInputClick) return;
+    const prototype = page.HTMLInputElement?.prototype;
+    if (!prototype) return;
+    nativeInputClick = prototype.click;
+    prototype.click = function interceptedImageClick(...args) {
+      const arm = imageArm;
+      if (arm && arm.imageChoiceSelected && imageInput(this)) {
+        if (!arm.consumed) injectImageInput(this);
+        return;
+      }
+      return nativeInputClick.apply(this, args);
+    };
+  }
   function installImageInputBridge() {
-    if (inputObserver || nativeInputClick || !document.documentElement) return;
+    if (inputObserver || !document.documentElement) return;
+    // Selection is accepted on pointerdown, not click. note can open its menu
+    // during the ＋ pointerdown and expose the image label before that same
+    // tap's click fires. Using click here would misread the first ＋ tap as the
+    // later image-choice tap and immediately close the menu.
+    imageChoicePointerListener = (event) => {
+      const arm = imageArm;
+      if (!arm || arm.consumed || arm.imageChoiceSelected || !event.isTrusted || !arm.nativeMenuReady) return;
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+      const trigger = path.find((node) => exactImageChoice(node));
+      if (!trigger || !arm.nativeImageChoice ||
+        !(path.includes(arm.nativeImageChoice) || arm.nativeImageChoice.contains?.(event.target))) return;
+      arm.imageChoiceSelected = true;
+      installNativeInputInterceptor();
+      setStatus(`${arm.files.length}枚｜「画像」を選択。自動接続中…`);
+    };
+    document.addEventListener('pointerdown', imageChoicePointerListener, true);
     imageChoiceClickListener = (event) => {
       const arm = imageArm; if (!arm || arm.consumed) return;
       const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
@@ -1261,16 +1306,7 @@
       if (arm.imageChoiceSelected && directInput) {
         event.preventDefault(); event.stopPropagation(); injectImageInput(directInput); return;
       }
-      // Stage 2 only: the native menu must already have appeared, and this
-      // must be the user's later tap on its exact visible image option.
-      // The first ＋ tap can therefore never be mistaken for image selection.
-      const trigger = path.find((node) => exactImageChoice(node));
-      if (!event.isTrusted || !arm.nativeMenuReady || !trigger) {
-        if (event.isTrusted && !arm.nativeMenuReady) scheduleNativeMenuProbe([document.body]);
-        return;
-      }
-      arm.imageChoiceSelected = true;
-      setStatus(`${arm.files.length}枚｜「画像」だけを接続中…`);
+      if (event.isTrusted && !arm.nativeMenuReady) scheduleNativeMenuProbe([document.body]);
     };
     document.addEventListener('click', imageChoiceClickListener, true);
     inputObserver = new MutationObserver((mutations) => {
@@ -1293,17 +1329,6 @@
       }
     });
     inputObserver.observe(document.documentElement, { childList: true, subtree: true });
-    const prototype = page.HTMLInputElement?.prototype;
-    if (!prototype) return;
-    nativeInputClick = prototype.click;
-    prototype.click = function interceptedImageClick(...args) {
-      const arm = imageArm;
-      if (arm && arm.imageChoiceSelected && imageInput(this)) {
-        if (!arm.consumed) injectImageInput(this);
-        return;
-      }
-      return nativeInputClick.apply(this, args);
-    };
   }
   async function waitBatchImages(arm, timeout = 1800000) {
     const result = await waitFor(() => {
@@ -1447,7 +1472,7 @@
     const completion = new Promise((resolve, reject) => {
       imageArm = {
         token, view, workRows, files, resolve, reject, consumed: false, linked: false,
-        nativeMenuReady: false, menuProbeScheduled: false,
+        nativeMenuReady: false, nativeImageChoice: null, menuProbeScheduled: false, menuOpenedAt: 0,
         imageChoiceSelected: false, input: null, kind,
         beforeIds: new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')).filter(Boolean)),
         beforeInputs: new Set(document.querySelectorAll('input[type="file"]')), timer: null
