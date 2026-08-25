@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         無名S note 極薄ワンタップ COMPLETE 13.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      13.0.0
+// @version      13.1.0
 // @description  10枚／全107枚を画像選択1回で一括挿入し、各画像へ対応URLを自動付与。小型パネルは×以外で消えない
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.0.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.0.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.1.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.1.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_THIN_BATCH_13000__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_13100__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_THIN_BATCH_13000__',
     '__MUMEI_NOTE_NEW10_SEND_12100__', '__MUMEI_NOTE_NEW10_SEND_12000__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11100__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11000__',
@@ -33,11 +34,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_THIN_BATCH_13000__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_13100__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '13.0';
+  const VERSION = '13.1';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -52,10 +53,12 @@
   const NEW10_ROWS_PREFIX = 'mumei_new10_rows_v120';
   const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1100';
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
-  const TOGGLE = 'mumei-thin-toggle-v1300';
-  const PANEL = 'mumei-thin-panel-v1300';
-  const STATUS = 'mumei-thin-status-v1300';
-  const STYLE = 'mumei-thin-style-v1300';
+  // Do not prefix these IDs with "mumei-". Legacy scripts broadly scan that prefix
+  // and programmatically click every close button they find.
+  const TOGGLE = 'ntb-one-tap-toggle-v1310';
+  const PANEL = 'ntb-one-tap-panel-v1310';
+  const STATUS = 'ntb-one-tap-status-v1310';
+  const STYLE = 'ntb-one-tap-style-v1310';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -185,7 +188,8 @@
       #mumei-notify-toggle-v1000,#mumei-notify-panel-v1000,
       #mumei-notify-toggle-v1100,#mumei-notify-panel-v1100,
       #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200,
-      #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210{display:none!important}
+      #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210,
+      #mumei-thin-toggle-v1300,#mumei-thin-panel-v1300{display:none!important}
       #${TOGGLE}{position:fixed;right:5px;bottom:73px;z-index:2147483647;width:30px;height:30px;border:0;
         border-radius:999px;padding:0;background:#0f766e;color:#fff;font:800 14px/30px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -227,7 +231,9 @@
       'mumei-notify-toggle-v1000', 'mumei-notify-panel-v1000',
       'mumei-notify-toggle-v1100', 'mumei-notify-panel-v1100',
       'mumei-notify-toggle-v1200', 'mumei-notify-panel-v1200',
-      'mumei-notify-toggle-v1210', 'mumei-notify-panel-v1210'
+      'mumei-notify-toggle-v1210', 'mumei-notify-panel-v1210',
+      'mumei-thin-toggle-v1300', 'mumei-thin-panel-v1300',
+      'mumei-thin-status-v1300', 'mumei-thin-style-v1300'
     ];
     ids.forEach((id) => document.getElementById(id)?.remove());
   }
@@ -293,7 +299,11 @@
     if (!toggle) {
       toggle = document.createElement('button');
       Object.assign(toggle, { id: TOGGLE, type: 'button', textContent: '画', title: '極薄画像ツール' });
-      toggle.dataset.open = '0'; toggle.addEventListener('click', toggleTool); document.body.appendChild(toggle);
+      toggle.dataset.open = '0';
+      toggle.addEventListener('click', (event) => {
+        event.preventDefault(); event.stopPropagation(); toggleTool();
+      });
+      document.body.appendChild(toggle);
     }
     let panel = document.getElementById(PANEL);
     if (!panel) {
@@ -314,6 +324,7 @@
   }
 
   async function onPanelClick(event) {
+    event.preventDefault(); event.stopPropagation();
     const button = event.target.closest('button');
     if (!button || !enabled()) return;
     if (running && button.dataset.action !== 'close') return;
