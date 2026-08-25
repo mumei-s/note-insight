@@ -123,7 +123,6 @@ async function article(url, index) {
     .filter((value, position, all) => /^https?:\/\//i.test(value) && all.indexOf(value) === position);
   if (!title) throw new Error(`${index}: タイトル取得失敗 ${url}`);
   if (!creator) throw new Error(`${index}: クリエイター取得失敗 ${url}`);
-  if (!thumbUrls.length) throw new Error(`${index}: サムネ候補取得失敗 ${url}`);
   return { index, key, url, title, creator, thumbUrls };
 }
 
@@ -174,24 +173,32 @@ async function makeCard(item) {
       failures.push(`${candidate} (${error?.message || error})`);
     }
   }
-  if (!thumb) throw new Error(`${item.index}: 実在サムネなし ${item.url}\n${failures.join('\n')}`);
+  const thumbnailFallback = !thumb;
   const titleSvg = wrap(item.title).map((line, i) =>
     `<text x="16" y="${30 + i * 24}" class="title">${escapeXml(line)}</text>`).join('');
+  const thumbArea = thumbnailFallback ?
+    `<rect x="532" y="8" width="320" height="124" rx="8" fill="#f1f3f5"/>
+     <text x="692" y="72" text-anchor="middle" class="fallback">note</text>
+     <text x="692" y="97" text-anchor="middle" class="fallbackSub">画像なし</text>` :
+    `<rect x="532" y="8" width="320" height="124" rx="8" fill="#f7f8fa"/>`;
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
     <rect x="1" y="1" width="858" height="138" rx="12" fill="#fff" stroke="#d9dde3" stroke-width="1.5"/>
-    <style>.title{font-family:'Noto Sans CJK JP','Noto Sans JP',sans-serif;font-size:18px;font-weight:700;fill:#171b21}.creator{font-family:'Noto Sans CJK JP','Noto Sans JP',sans-serif;font-size:14px;fill:#626975}</style>
+    <style>.title{font-family:'Noto Sans CJK JP','Noto Sans JP',sans-serif;font-size:18px;font-weight:700;fill:#171b21}.creator{font-family:'Noto Sans CJK JP','Noto Sans JP',sans-serif;font-size:14px;fill:#626975}.fallback{font-family:system-ui,sans-serif;font-size:30px;font-weight:800;fill:#6b7280}.fallbackSub{font-family:'Noto Sans CJK JP',sans-serif;font-size:12px;fill:#9ca3af}</style>
     ${titleSvg}<text x="16" y="125" class="creator">${escapeXml(item.creator)}</text>
-    <rect x="532" y="8" width="320" height="124" rx="8" fill="#f7f8fa"/>
+    ${thumbArea}
   </svg>`);
   const name = `${String(item.index).padStart(3, '0')}.png`;
   const outputPath = path.join(CARD_DIR, name);
-  await sharp(svg).composite([{ input: thumb, left: 532, top: 8 }]).png({ compressionLevel: 9, palette: false }).toFile(outputPath);
+  const pipeline = sharp(svg);
+  if (thumb) pipeline.composite([{ input: thumb, left: 532, top: 8 }]);
+  await pipeline.png({ compressionLevel: 9, palette: false }).toFile(outputPath);
   const info = await sharp(outputPath).metadata();
   if (info.width !== WIDTH || info.height !== HEIGHT || info.format !== 'png') {
     throw new Error(`${item.index}: 出力不正 ${info.format} ${info.width}x${info.height}`);
   }
   const { thumbUrls, ...publicItem } = item;
-  return { ...publicItem, thumbUrl, width: WIDTH, height: HEIGHT, cardPath: `${PUBLIC_PREFIX}/cards/${name}` };
+  return { ...publicItem, thumbUrl: thumbUrl || null, thumbnailFallback, width: WIDTH, height: HEIGHT,
+    cardPath: `${PUBLIC_PREFIX}/cards/${name}` };
 }
 
 async function main() {
