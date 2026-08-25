@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         無名S note 新10送＋極薄 COMPLETE 12.0
+// @name         無名S note 新10送＋極薄 COMPLETE 12.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      12.0.0
-// @description  新規記事で画像リンク10件を一括完成し、note純正APIカード10件を一括生成・通知確認後にカードだけ削除
+// @version      12.1.0
+// @description  認証済みnote APIホストを事前確認し、画像リンク10件＋純正カード10件を安全に一括生成・削除
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=12.1.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=12.1.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_NEW10_SEND_12000__) return;
+  if (page.__MUMEI_NOTE_NEW10_SEND_12100__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_NEW10_SEND_12000__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11100__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11000__',
     '__MUMEI_NOTE_LIST_FALLBACK_10000__',
@@ -32,11 +33,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_NEW10_SEND_12000__ = true;
+  page.__MUMEI_NOTE_NEW10_SEND_12100__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '12.0';
+  const VERSION = '12.1';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -51,10 +52,10 @@
   const NEW10_ROWS_PREFIX = 'mumei_new10_rows_v120';
   const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1100';
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
-  const TOGGLE = 'mumei-notify-toggle-v1200';
-  const PANEL = 'mumei-notify-panel-v1200';
-  const STATUS = 'mumei-notify-status-v1200';
-  const STYLE = 'mumei-notify-style-v1200';
+  const TOGGLE = 'mumei-notify-toggle-v1210';
+  const PANEL = 'mumei-notify-panel-v1210';
+  const STATUS = 'mumei-notify-status-v1210';
+  const STYLE = 'mumei-notify-style-v1210';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -89,6 +90,7 @@
   let nativeInputClick = null;
   let waitCancel = null;
   let routeTimer = null;
+  let noteApiOriginCache = '';
   let notificationShutdown = false;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
@@ -186,7 +188,8 @@
       #mumei-notify-toggle-v820,#mumei-notify-panel-v820,
       #mumei-notify-toggle-v900,#mumei-notify-panel-v900,
       #mumei-notify-toggle-v1000,#mumei-notify-panel-v1000,
-      #mumei-notify-toggle-v1100,#mumei-notify-panel-v1100{display:none!important}
+      #mumei-notify-toggle-v1100,#mumei-notify-panel-v1100,
+      #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
         border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -770,6 +773,59 @@
     return key;
   }
 
+  function firstValidStorageValue(exactKey, keyPattern, valuePattern) {
+    try {
+      const exact = localStorage.getItem(exactKey) || '';
+      if (valuePattern.test(exact)) return exact;
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index) || '';
+        if (!keyPattern.test(key)) continue;
+        const value = localStorage.getItem(key) || '';
+        if (valuePattern.test(value)) return value;
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function nativeApiHeaders() {
+    const headers = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    const clientCode = firstValidStorageValue('note-client-code', /note.*client.*code/i, /^[a-f0-9]{64}$/i);
+    const csrf = document.querySelector('meta[name="csrf-token"],meta[name="csrf_token"],meta[name="xsrf-token"]')
+      ?.getAttribute('content') || firstValidStorageValue('csrf-token', /(?:csrf|xsrf)/i, /^.{16,512}$/);
+    if (clientCode) headers['X-Note-Client-Code'] = clientCode;
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return headers;
+  }
+
+  async function probeNoteApiOrigin(origin) {
+    try {
+      const response = await page.fetch(`${origin}/api/v2/current_user`, {
+        method: 'GET', credentials: 'include', cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      });
+      if (!response.ok) return { origin, ok: false, status: response.status };
+      const json = await response.json();
+      const user = json?.data;
+      return { origin, ok: Boolean(user && typeof user === 'object'), status: response.status };
+    } catch (_) {
+      return { origin, ok: false, status: '通信不可' };
+    }
+  }
+
+  async function resolveNoteApiOrigins() {
+    if (noteApiOriginCache) return [noteApiOriginCache];
+    const candidates = [...new Set([location.origin, 'https://note.com'])];
+    const results = [];
+    for (const candidate of candidates) {
+      const result = await probeNoteApiOrigin(candidate);
+      results.push(result);
+    }
+    const authenticated = results.filter((item) => item.ok).map((item) => item.origin);
+    if (authenticated.length) return authenticated;
+    throw new FatalError(`noteログイン確認失敗 ${results.map((item) =>
+      `${new URL(item.origin).host}:${item.status}`).join(' / ')}`);
+  }
+
   function makeNativeEmbedForm(targetUrl, hostKey) {
     const form = new page.FormData();
     form.append('url', targetUrl);
@@ -780,16 +836,21 @@
   }
 
   async function fetchNativeEmbed(targetUrl, hostKey) {
-    const endpoints = ['/api/v1/embed', 'https://note.com/api/v1/embed'];
-    let lastError = null;
-    for (let index = 0; index < endpoints.length; index += 1) {
+    const apiOrigins = await resolveNoteApiOrigins();
+    const failures = [];
+    for (let index = 0; index < apiOrigins.length; index += 1) {
+      const apiOrigin = apiOrigins[index], endpoint = `${apiOrigin}/api/v1/embed`;
       try {
-        const response = await page.fetch(endpoints[index], {
+        const response = await page.fetch(endpoint, {
           method: 'POST', credentials: 'include', body: makeNativeEmbedForm(targetUrl, hostKey),
-          headers: { Accept: 'application/json' }
+          headers: nativeApiHeaders()
         });
         if (response.status === 429) throw new FatalError('note側429。カード生成を停止します');
-        if (response.status === 401 || response.status === 403) throw new FatalError(`note認証エラー ${response.status}`);
+        if (response.status === 401 || response.status === 403) {
+          failures.push(`${new URL(apiOrigin).host}:${response.status}`);
+          if (index < apiOrigins.length - 1) continue;
+          throw new FatalError(`note認証エラー ${failures.join(' / ')}`);
+        }
         if (response.status === 400 || response.status === 422) throw new FatalError(`note埋め込みpayload不整合 ${response.status}`);
         if (!response.ok) throw new Error(`embed HTTP ${response.status}`);
         const json = await response.json();
@@ -800,14 +861,16 @@
         if (embedded?.url && normalizeUrl(embedded.url) !== normalizeUrl(targetUrl)) {
           throw new Error('embedded_content.url不一致');
         }
+        noteApiOriginCache = apiOrigin;
         return { url: targetUrl, key, html };
       } catch (error) {
-        lastError = error;
         if (error instanceof FatalError) throw error;
-        if (index === endpoints.length - 1) break;
+        failures.push(`${new URL(apiOrigin).host}:${error?.message || String(error)}`);
+        if (index < apiOrigins.length - 1) continue;
       }
     }
-    throw new FatalError(`note純正埋め込み取得失敗: ${lastError?.message || String(lastError)}`);
+    noteApiOriginCache = '';
+    throw new FatalError(`note純正埋め込み取得失敗: ${failures.join(' / ')}`);
   }
 
   function buildEmbedAttrs(embedType, data) {
