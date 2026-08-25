@@ -1,13 +1,14 @@
 // ==UserScript==
-// @name         無名S note 通知確定 COMPLETE 8.3
+// @name         無名S note 通知確定 MANUAL QUEUE 9.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      8.3.0
-// @description  成功済みの実Enterを必ず通す通知カード10/107件＋復旧可能な削除・極薄画像一括工程
+// @version      9.0.0
+// @description  URLを順番に自動コピー→実貼付＋実Enterで確実通知、カード/URL一括削除、極薄画像10/107枚一括完成
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setClipboard
 // @grant        unsafeWindow
 // @connect      note.com
 // @connect      assets.st-note.com
@@ -18,36 +19,36 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTIFY_COMPLETE_8300__) return;
+  if (page.__MUMEI_NOTIFY_MANUAL_QUEUE_9000__) return;
   const OLD_FLAGS = [
-    '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
+    '__MUMEI_NOTIFY_COMPLETE_8300__', '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
     '__MUMEI_NOTIFY_FINAL_8000__', '__MUMEI_NOTIFY_COMPLETE_8000__',
     '__MUMEI_NOTIFY_COMPLETE_7200__', '__MUMEI_NOTIFY_COMPLETE_7100__', '__MUMEI_NOTIFY_COMPLETE_7000__',
     '__MUMEI_BATCH_BRIDGE_680__', '__MUMEI_BATCH_BRIDGE_670__', '__MUMEI_BATCH_BRIDGE_650__',
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTIFY_COMPLETE_8300__ = true;
+  page.__MUMEI_NOTIFY_MANUAL_QUEUE_9000__ = true;
   // 本版より後に読み込まれる旧版は、本文・入力・画像選択へ介入させない。
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '8.3';
+  const VERSION = '9.0';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
   const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_notify_active_article_v820';
-  const RUN_PREFIX = 'mumei_notify_run_v820';
-  const MODE_PREFIX = 'mumei_notify_mode_v820';
-  const RESET_PREFIX = 'mumei_notify_reset_v820';
-  const COMPLETE_PROOF = 'real-enter-dom-path-card-only-saved-v820';
-  const DELETE_PROOF = 'notification-cards-deleted-v820';
-  const FINAL_PROOF = 'batch-thin-image-linked-saved-v820';
-  const TOGGLE = 'mumei-notify-toggle-v820';
-  const PANEL = 'mumei-notify-panel-v820';
-  const STATUS = 'mumei-notify-status-v820';
-  const STYLE = 'mumei-notify-style-v820';
+  const ACTIVE_KEY = 'mumei_notify_active_article_v900';
+  const RUN_PREFIX = 'mumei_notify_run_v900';
+  const MODE_PREFIX = 'mumei_notify_mode_v900';
+  const RESET_PREFIX = 'mumei_notify_reset_v900';
+  const COMPLETE_PROOF = 'manual-paste-enter-card-only-saved-v900';
+  const DELETE_PROOF = 'notification-cards-and-urls-deleted-v900';
+  const FINAL_PROOF = 'batch-thin-image-linked-saved-v900';
+  const TOGGLE = 'mumei-notify-toggle-v900';
+  const PANEL = 'mumei-notify-panel-v900';
+  const STATUS = 'mumei-notify-status-v900';
+  const STYLE = 'mumei-notify-style-v900';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -71,7 +72,6 @@
   let coreCache = null;
   let viewCache = null;
   let finalManifest = null;
-  let trustedInput = null;
   let imageArm = null;
   let inputObserver = null;
   let nativeInputClick = null;
@@ -162,7 +162,8 @@
       #mumei-final800-toggle,#mumei-final800-panel,
       #mumei-notify-toggle-v710,#mumei-notify-panel-v710,
       #mumei-notify-toggle-v720,#mumei-notify-panel-v720,
-      #mumei-notify-toggle-v810,#mumei-notify-panel-v810{display:none!important}
+      #mumei-notify-toggle-v810,#mumei-notify-panel-v810,
+      #mumei-notify-toggle-v820,#mumei-notify-panel-v820{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
         border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -192,7 +193,7 @@
   function closeTool() {
     runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
     if (waitCancel) waitCancel('ツールを閉じたため停止');
-    waitCancel = null; trustedInput = null; cancelImageArm();
+    waitCancel = null; cancelImageArm();
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '0';
     if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '⛓'; }
@@ -211,7 +212,7 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus('通知確定8.3｜旧版OFF不要・URL配置→実Enter1回');
+    setStatus('MANUAL QUEUE 9.0｜URL自動コピー→貼付＋Enter');
     restoreLastMode();
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
@@ -235,7 +236,7 @@
         <button type="button" data-action="delete" title="通知後：カードだけ一括削除">削</button>
         <button type="button" data-action="images" title="削除後：＋画像1回で極薄画像を一括完成">画</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">通知確定8.3</div>`;
+        <div id="${STATUS}" data-bad="0">MANUAL QUEUE 9.0</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
@@ -524,7 +525,7 @@
     verifier(view);
   }
   async function saveNotificationToServer(view, token) {
-    await saveDraftToServer(view, token, verifyNotificationDocument, `${rows.length}/${rows.length}｜カードだけをサーバー保存中…`);
+    await saveDraftToServer(view, token, verifyNotificationDocument, `${rows.length}/${rows.length}｜実操作カードだけを通常保存中…`);
     rows.forEach((row) => { row.proof = COMPLETE_PROOF; row.status = 'done'; row.error = ''; });
     saveRows();
   }
@@ -557,62 +558,6 @@
     }
     saveRows(); updateUi();
   }
-  function waitTrustedEnter(view, token, timeout = 180000) {
-    return new Promise((resolve, reject) => {
-      let settled = false, timer = null, settleTimer = null;
-      const captured = [];
-      const cleanup = () => {
-        view.dom.removeEventListener('keydown', onInput, true);
-        view.dom.removeEventListener('beforeinput', onInput, true);
-        if (timer) clearTimeout(timer); if (settleTimer) clearTimeout(settleTimer);
-        if (waitCancel === cancel) waitCancel = null;
-      };
-      const finish = (error, value) => {
-        if (settled) return; settled = true; cleanup();
-        if (error) reject(error); else resolve(value);
-      };
-      const cancel = (reason = '停止しました') => finish(new FatalError(reason));
-      const onInput = (event) => {
-        if (!event.isTrusted) return;
-        const keyboard = event.type === 'keydown' && event.key === 'Enter';
-        const mobile = event.type === 'beforeinput' && /^(insertParagraph|insertLineBreak)$/i.test(event.inputType || '');
-        if (!keyboard && !mobile) return;
-        if (token !== runToken || !enabled()) return cancel();
-        if (!captured.some((item) => item.type === event.type)) captured.push({ type: event.type, event });
-        if (!settleTimer) settleTimer = setTimeout(() => finish(null, { events: captured }), 160);
-      };
-      timer = setTimeout(() => finish(new Error('Enter待機が3分を超えました')), timeout);
-      waitCancel = cancel;
-      view.dom.addEventListener('keydown', onInput, true);
-      view.dom.addEventListener('beforeinput', onInput, true);
-      view.focus();
-    });
-  }
-  function invokeTrustedEnter(view, captured) {
-    const events = Array.isArray(captured?.events) ? captured.events : [];
-    if (!events.length || typeof view.someProp !== 'function') throw new Error('noteの実Enter経路を保存できません');
-    const preferred = events.find((item) => item.event.defaultPrevented) ||
-      events.find((item) => item.type === 'keydown') || events[0];
-    const ordered = [preferred, ...events.filter((item) => item !== preferred)];
-    const before = view.state.doc; let called = false;
-    for (const item of ordered) {
-      try {
-        if (item.type === 'keydown') {
-          const handled = view.someProp('handleKeyDown', (handler) => {
-            called = true; return handler(view, item.event);
-          });
-          if (handled || !view.state.doc.eq(before)) break;
-        } else {
-          const handled = view.someProp('handleDOMEvents', (handlers) => {
-            if (typeof handlers?.beforeinput !== 'function') return false;
-            called = true; return handlers.beforeinput(view, item.event);
-          });
-          if (handled || !view.state.doc.eq(before)) break;
-        }
-      } catch (_) {}
-    }
-    if (!called) throw new Error('noteのEnter処理を取得できません');
-  }
   async function waitOfficialCard(view, url, token, timeout = 30000) {
     const result = await waitFor(() => {
       if (token !== runToken || !enabled()) throw new FatalError('停止しました');
@@ -621,88 +566,83 @@
     if (!result) throw new Error('note正規カード生成を確認できませんでした');
     return result;
   }
-  function insertRawUrl(view, url) {
-    deleteBlocks(view, exactUrlParagraphs(view, url));
+  function copyQueueUrl(url) {
+    try {
+      if (typeof GM_setClipboard !== 'function') return false;
+      GM_setClipboard(url, 'text'); return true;
+    } catch (_) { return false; }
+  }
+  function waitManualPasteEnter(view, row, index, token, timeout = 300000) {
+    return new Promise((resolve, reject) => {
+      let settled = false, pasted = false, timer = null, settleTimer = null;
+      const cleanup = () => {
+        view.dom.removeEventListener('paste', onPaste, true);
+        view.dom.removeEventListener('keydown', onEnter, true);
+        view.dom.removeEventListener('beforeinput', onEnter, true);
+        view.dom.removeEventListener('input', onEnter, true);
+        if (timer) clearTimeout(timer); if (settleTimer) clearTimeout(settleTimer);
+        if (waitCancel === cancel) waitCancel = null;
+      };
+      const finish = (error, value) => {
+        if (settled) return; settled = true; cleanup();
+        if (error) reject(error); else resolve(value);
+      };
+      const cancel = (reason = '停止しました') => finish(new FatalError(reason));
+      const onPaste = (event) => {
+        if (!event.isTrusted || pasted) return;
+        if (token !== runToken || !enabled()) return cancel();
+        const text = String(event.clipboardData?.getData('text/plain') || '').trim();
+        if (normalizeUrl(text) !== normalizeUrl(row.url)) {
+          event.preventDefault();
+          return finish(new Error(`${index + 1}件目と違うURLです。「再」でやり直してください`));
+        }
+        pasted = true;
+        setStatus(`${index + 1}/${rows.length}｜実貼り付け確認 ✅ そのままEnter`);
+      };
+      const onEnter = (event) => {
+        if (!event.isTrusted) return;
+        if ((event.type === 'beforeinput' || event.type === 'input') && event.inputType === 'insertFromPaste') {
+          pasted = true;
+          setStatus(`${index + 1}/${rows.length}｜実貼り付け確認 ✅ そのままEnter`);
+          return;
+        }
+        if (!pasted) return;
+        const keyboard = event.type === 'keydown' && event.key === 'Enter';
+        const mobile = event.type === 'beforeinput' && /^(insertParagraph|insertLineBreak)$/i.test(event.inputType || '');
+        if (!keyboard && !mobile) return;
+        if (token !== runToken || !enabled()) return cancel();
+        if (!settleTimer) settleTimer = setTimeout(() => finish(null, true), 220);
+      };
+      timer = setTimeout(() => finish(new Error(`${index + 1}件目の貼り付け＋Enter待機が5分を超えました`)), timeout);
+      waitCancel = cancel;
+      view.dom.addEventListener('paste', onPaste, true);
+      view.dom.addEventListener('keydown', onEnter, true);
+      view.dom.addEventListener('beforeinput', onEnter, true);
+      view.dom.addEventListener('input', onEnter, true);
+      view.focus();
+    });
+  }
+  async function createManualCard(view, row, index, token) {
     ensureFreshParagraph(view);
-    view.dispatch(view.state.tr.insertText(url).scrollIntoView());
-    view.focus();
-    if (!exactUrlParagraphs(view, url).length) throw new Error('URLを本文末尾へ配置できません');
-  }
-  function syntheticKeyboardEvent(source) {
-    const event = new page.KeyboardEvent(source.type || 'keydown', {
-      key: 'Enter', code: source.code || 'Enter', location: source.location || 0,
-      ctrlKey: Boolean(source.ctrlKey), shiftKey: Boolean(source.shiftKey),
-      altKey: Boolean(source.altKey), metaKey: Boolean(source.metaKey),
-      repeat: false, bubbles: true, cancelable: true, composed: true
-    });
-    for (const [key, value] of [['keyCode', 13], ['which', 13], ['charCode', 13]]) {
-      try { Object.defineProperty(event, key, { configurable: true, get: () => value }); } catch (_) {}
-    }
-    return event;
-  }
-  function syntheticBeforeInput(source) {
-    if (typeof page.InputEvent === 'function') return new page.InputEvent('beforeinput', {
-      inputType: source.inputType || 'insertParagraph', data: null,
-      bubbles: true, cancelable: true, composed: true
-    });
-    const event = new page.Event('beforeinput', { bubbles: true, cancelable: true });
-    try { Object.defineProperty(event, 'inputType', { configurable: true, get: () => source.inputType || 'insertParagraph' }); } catch (_) {}
-    return event;
-  }
-  async function dispatchDomEnter(view, captured) {
-    const sourceEvents = Array.isArray(captured?.events) ? captured.events : [];
-    if (!sourceEvents.length) throw new Error('実Enterの入力経路がありません');
-    const ordered = [
-      ...sourceEvents.filter((item) => item.type === 'keydown'),
-      ...sourceEvents.filter((item) => item.type === 'beforeinput')
-    ];
-    const before = view.state.doc; let handled = false;
-    for (const item of ordered) {
-      const event = item.type === 'keydown' ? syntheticKeyboardEvent(item.event) : syntheticBeforeInput(item.event);
-      const accepted = view.dom.dispatchEvent(event);
-      if (!accepted || event.defaultPrevented || !view.state.doc.eq(before)) handled = true;
-      if (handled) break;
-    }
-    if (!handled && view.state.doc.eq(before)) invokeTrustedEnter(view, captured);
-    try { view.dom.dispatchEvent(new page.KeyboardEvent('keyup', {
-      key: 'Enter', code: 'Enter', bubbles: true, cancelable: true, composed: true
-    })); } catch (_) {}
-  }
-  async function createTrustedSeed(view, row, index, token) {
-    insertRawUrl(view, row.url);
-    setStatus(`${index + 1}/${rows.length}｜URLを末尾へ配置済み → スマホのEnterを1回`);
-    const enter = await waitTrustedEnter(view, token);
-    const card = await waitOfficialCard(view, row.url, token);
-    return { card, captured: { enter } };
-  }
-  async function createFromTrustedInput(view, row, index, token, captured) {
-    if (!captured?.enter) {
-      trustedInput = null; throw new FatalError('実Enter経路がありません。「再」でEnterを1回取り直してください');
-    }
-    insertRawUrl(view, row.url);
-    setStatus(`${index + 1}/${rows.length}｜DOMのEnter経路を順番に実行中…`);
-    await dispatchDomEnter(view, captured.enter);
+    if (!copyQueueUrl(row.url)) throw new FatalError('URLをクリップボードへコピーできません');
+    setStatus(`${index + 1}/${rows.length}｜コピー済み → 本文で「貼り付け→Enter」`);
+    await waitManualPasteEnter(view, row, index, token);
     return waitOfficialCard(view, row.url, token);
   }
-  async function processRow(index, token, captured) {
+  async function processRow(index, token) {
     if (token !== runToken || !enabled()) throw new FatalError('停止しました');
     const row = rows[index], view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
     const existing = findOfficialCard(view, row.url);
     if (existing && row.trusted && String(existing.node.attrs?.embeddedContentKey || '') === String(row.cardKey || '')) {
-      row.status = 'ready'; row.error = ''; saveRows(); return captured;
+      row.status = 'ready'; row.error = ''; saveRows(); return;
     }
     row.status = 'embedding'; row.error = ''; updateUi();
-    let card;
-    if (!captured) {
-      const seed = await createTrustedSeed(view, row, index, token);
-      card = seed.card; captured = seed.captured; trustedInput = captured;
-    } else card = await createFromTrustedInput(view, row, index, token, captured);
+    const card = await createManualCard(view, row, index, token);
     row.cardKey = String(card.node.attrs?.embeddedContentKey || ''); row.trusted = true;
     row.status = 'ready'; row.proof = ''; row.error = '';
     saveRows(); updateUi();
-    setStatus(`${index + 1}/${rows.length}｜正規カード完了・通知間隔6.5秒を確保中…`);
-    await sleep(6500);
-    return captured;
+    setStatus(`${index + 1}/${rows.length}｜実貼り付け＋実Enterカード ✅ 次を準備中…`);
+    await sleep(1800);
   }
   function contaminatedRows(view) {
     return rows.filter((row) => {
@@ -715,10 +655,10 @@
   }
   async function runIndexes(indexes) {
     if (running || !enabled()) return;
-    running = true; const token = ++runToken; updateUi(); let fatal = null, captured = trustedInput;
+    running = true; const token = ++runToken; updateUi(); let fatal = null;
     for (const index of indexes) {
       if (token !== runToken || !enabled()) break;
-      try { captured = await processRow(index, token, captured); }
+      try { await processRow(index, token); }
       catch (error) {
         rows[index].status = 'failed'; rows[index].error = error?.message || String(error); saveRows(); updateUi();
         fatal = error instanceof FatalError ? error : new FatalError(`${index + 1}/${rows.length}｜${rows[index].error}`);
@@ -742,7 +682,7 @@
       running = false;
       if (fatal) setStatus(`停止：${fatal.message}（公開・更新しない）`, true);
       else if (failed) setStatus(`正規カード ${done}/${rows.length}｜失敗${failed}件だけ再実行できます`, true);
-      else setStatus(`${rows.length}/${rows.length}｜実Enter＋DOM経路カード・通常保存 ✅ 公開に進めます`);
+      else setStatus(`${rows.length}/${rows.length}｜全件 実貼付＋実Enter・通常保存 ✅ 公開に進めます`);
       updateUi();
     }
   }
@@ -766,7 +706,7 @@
       if (!indexes.length) {
         const token = ++runToken; running = true; updateUi();
         await saveNotificationToServer(view, token); running = false; updateUi();
-        setStatus(`${rows.length}/${rows.length}｜実Enter＋DOM経路カード・通常保存 ✅ 公開に進めます`); return;
+        setStatus(`${rows.length}/${rows.length}｜全件 実貼付＋実Enter・通常保存 ✅ 公開に進めます`); return;
       }
       runIndexes(indexes);
     } catch (error) { setStatus(`開始停止：${error?.message || String(error)}（公開・更新しない）`, true); running = false; updateUi(); }
@@ -775,7 +715,7 @@
     if (running || !mode || !rows.length || !enabled()) return;
     running = true; const token = ++runToken; updateUi();
     try {
-      trustedInput = null; cancelImageArm();
+      cancelImageArm();
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
       const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
       const trackedIds = new Set(rows.map((row) => String(row.nodeId || '')).filter(Boolean));
