@@ -98,21 +98,19 @@ async function article(url, index) {
     apiNote = payload?.data || payload;
   } catch (_) {}
 
-  let creator = String(apiNote?.user?.nickname || apiNote?.user?.name || '').trim();
-  let title = String(apiNote?.name || '').trim();
-  let thumbUrl = String(apiNote?.eyecatch_url || apiNote?.eyecatch || '').trim();
-  if (!creator || !title || !thumbUrl) {
-    const meta = metas(await fetchRetry(url));
-    creator ||= String(meta.get('author') || meta.get('note:creator') || meta.get('twitter:data2') || new URL(url).pathname.split('/')[1]).trim();
-    const rawTitle = meta.get('og:title') || meta.get('twitter:title') || '';
-    title ||= stripTitleSuffix(rawTitle, creator);
-    thumbUrl ||= String(meta.get('og:image') || meta.get('twitter:image') || '').trim();
-  }
-  if (thumbUrl.startsWith('//')) thumbUrl = `https:${thumbUrl}`;
+  const meta = metas(await fetchRetry(url));
+  const creator = String(apiNote?.user?.nickname || apiNote?.user?.name || meta.get('author') ||
+    meta.get('note:creator') || meta.get('twitter:data2') || new URL(url).pathname.split('/')[1]).trim();
+  const rawTitle = meta.get('og:title') || meta.get('twitter:title') || '';
+  const title = String(apiNote?.name || stripTitleSuffix(rawTitle, creator)).trim();
+  const thumbUrls = [apiNote?.eyecatch_url, apiNote?.eyecatch, meta.get('og:image'), meta.get('twitter:image'),
+    apiNote?.user?.profile_image_url, apiNote?.user?.profile_image].map((value) => String(value || '').trim())
+    .map((value) => value.startsWith('//') ? `https:${value}` : value)
+    .filter((value, position, all) => /^https?:\/\//i.test(value) && all.indexOf(value) === position);
   if (!title) throw new Error(`${index}: タイトル取得失敗 ${url}`);
   if (!creator) throw new Error(`${index}: クリエイター取得失敗 ${url}`);
-  if (!/^https?:\/\//i.test(thumbUrl)) throw new Error(`${index}: サムネ取得失敗 ${url}`);
-  return { index, key, url, title, creator, thumbUrl };
+  if (!thumbUrls.length) throw new Error(`${index}: サムネ候補取得失敗 ${url}`);
+  return { index, key, url, title, creator, thumbUrls };
 }
 
 function escapeXml(value) {
@@ -149,8 +147,20 @@ function wrap(text, maxUnits = 27, maxLines = 3) {
 }
 
 async function makeCard(item) {
-  const source = await fetchRetry(item.thumbUrl, true);
-  const thumb = await sharp(source).rotate().resize(320, 124, { fit: 'contain', background: '#f7f8fa' }).png().toBuffer();
+  let thumb = null;
+  let thumbUrl = '';
+  const failures = [];
+  for (const candidate of item.thumbUrls) {
+    try {
+      const source = await fetchRetry(candidate, true);
+      thumb = await sharp(source).rotate().resize(320, 124, { fit: 'contain', background: '#f7f8fa' }).png().toBuffer();
+      thumbUrl = candidate;
+      break;
+    } catch (error) {
+      failures.push(`${candidate} (${error?.message || error})`);
+    }
+  }
+  if (!thumb) throw new Error(`${item.index}: 実在サムネなし ${item.url}\n${failures.join('\n')}`);
   const titleSvg = wrap(item.title).map((line, i) =>
     `<text x="16" y="${30 + i * 24}" class="title">${escapeXml(line)}</text>`).join('');
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
@@ -166,7 +176,8 @@ async function makeCard(item) {
   if (info.width !== WIDTH || info.height !== HEIGHT || info.format !== 'png') {
     throw new Error(`${item.index}: 出力不正 ${info.format} ${info.width}x${info.height}`);
   }
-  return { ...item, width: WIDTH, height: HEIGHT, cardPath: `${PUBLIC_PREFIX}/cards/${name}` };
+  const { thumbUrls, ...publicItem } = item;
+  return { ...publicItem, thumbUrl, width: WIDTH, height: HEIGHT, cardPath: `${PUBLIC_PREFIX}/cards/${name}` };
 }
 
 async function main() {
