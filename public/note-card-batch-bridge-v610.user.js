@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 通知確定 MANUAL QUEUE 9.0
+// @name         無名S note URL一覧＋極薄 COMPLETE 10.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      9.0.0
-// @description  URLを順番に自動コピー→実貼付＋実Enterで確実通知、カード/URL一括削除、極薄画像10/107枚一括完成
+// @version      10.0.0
+// @description  10/107 URL一覧を1回コピー、カード/URL一覧を一括削除、極薄画像を＋画像1回で一括完成
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTIFY_MANUAL_QUEUE_9000__) return;
+  if (page.__MUMEI_NOTE_LIST_FALLBACK_10000__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTIFY_MANUAL_QUEUE_9000__',
     '__MUMEI_NOTIFY_COMPLETE_8300__', '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
     '__MUMEI_NOTIFY_FINAL_8000__', '__MUMEI_NOTIFY_COMPLETE_8000__',
     '__MUMEI_NOTIFY_COMPLETE_7200__', '__MUMEI_NOTIFY_COMPLETE_7100__', '__MUMEI_NOTIFY_COMPLETE_7000__',
@@ -28,27 +29,27 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTIFY_MANUAL_QUEUE_9000__ = true;
+  page.__MUMEI_NOTE_LIST_FALLBACK_10000__ = true;
   // 本版より後に読み込まれる旧版は、本文・入力・画像選択へ介入させない。
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '9.0';
+  const VERSION = '10.0';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
   const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_notify_active_article_v900';
-  const RUN_PREFIX = 'mumei_notify_run_v900';
-  const MODE_PREFIX = 'mumei_notify_mode_v900';
-  const RESET_PREFIX = 'mumei_notify_reset_v900';
-  const COMPLETE_PROOF = 'manual-paste-enter-card-only-saved-v900';
-  const DELETE_PROOF = 'notification-cards-and-urls-deleted-v900';
-  const FINAL_PROOF = 'batch-thin-image-linked-saved-v900';
-  const TOGGLE = 'mumei-notify-toggle-v900';
-  const PANEL = 'mumei-notify-panel-v900';
-  const STATUS = 'mumei-notify-status-v900';
-  const STYLE = 'mumei-notify-style-v900';
+  const ACTIVE_KEY = 'mumei_notify_active_article_v1000';
+  const RUN_PREFIX = 'mumei_notify_run_v1000';
+  const MODE_PREFIX = 'mumei_notify_mode_v1000';
+  const RESET_PREFIX = 'mumei_notify_reset_v1000';
+  const COMPLETE_PROOF = 'manual-url-list-card-saved-v1000';
+  const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1000';
+  const FINAL_PROOF = 'batch-thin-image-linked-saved-v1000';
+  const TOGGLE = 'mumei-notify-toggle-v1000';
+  const PANEL = 'mumei-notify-panel-v1000';
+  const STATUS = 'mumei-notify-status-v1000';
+  const STYLE = 'mumei-notify-style-v1000';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -144,8 +145,8 @@
     if (!panel) return;
     const retry = panel.querySelector('[data-action="retry-failed"]');
     if (retry) {
-      retry.textContent = running ? '止' : '再';
-      retry.title = running ? '停止' : '失敗・未完了だけ再開';
+      retry.textContent = running ? '止' : '複';
+      retry.title = running ? '停止' : '同じURL一覧をもう一度コピー';
     }
     panel.querySelectorAll('button').forEach((button) => { button.disabled = false; });
   }
@@ -163,7 +164,8 @@
       #mumei-notify-toggle-v710,#mumei-notify-panel-v710,
       #mumei-notify-toggle-v720,#mumei-notify-panel-v720,
       #mumei-notify-toggle-v810,#mumei-notify-panel-v810,
-      #mumei-notify-toggle-v820,#mumei-notify-panel-v820{display:none!important}
+      #mumei-notify-toggle-v820,#mumei-notify-panel-v820,
+      #mumei-notify-toggle-v900,#mumei-notify-panel-v900{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
         border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -212,7 +214,7 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus('MANUAL QUEUE 9.0｜URL自動コピー→貼付＋Enter');
+    setStatus('LIST 10.0｜10/107でURL一覧を1回コピー');
     restoreLastMode();
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
@@ -229,14 +231,14 @@
     let panel = document.getElementById(PANEL);
     if (!panel) {
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
-      panel.innerHTML = `<button type="button" data-main-action="10" title="10件通知テスト">10</button>
-        <button type="button" data-main-action="107" title="本番107件">107</button>
-        <button type="button" data-action="retry-failed" title="失敗だけ再開">再</button>
+      panel.innerHTML = `<button type="button" data-main-action="10" title="10件URL一覧をコピー">10</button>
+        <button type="button" data-main-action="107" title="107件URL一覧をコピー">107</button>
+        <button type="button" data-action="retry-failed" title="同じURL一覧をもう一度コピー">複</button>
         <button type="button" data-action="reset" title="既存URLを全消去して通知を初期化">初</button>
-        <button type="button" data-action="delete" title="通知後：カードだけ一括削除">削</button>
+        <button type="button" data-action="delete" title="通知後：カードとURL一覧を一括削除">削</button>
         <button type="button" data-action="images" title="削除後：＋画像1回で極薄画像を一括完成">画</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">MANUAL QUEUE 9.0</div>`;
+        <div id="${STATUS}" data-bad="0">LIST 10.0</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
@@ -252,9 +254,9 @@
     if (running && button.dataset.action !== 'retry-failed' && button.dataset.action !== 'close') {
       setStatus('処理中です。「止」で止めてから別の操作をしてください', true); return;
     }
-    if (button.dataset.mainAction === '10') return startMode('test10');
-    if (button.dataset.mainAction === '107') return startMode('final107');
-    if (button.dataset.action === 'retry-failed') return running ? stopRun() : retryFailed();
+    if (button.dataset.mainAction === '10') return copyUrlListMode('test10');
+    if (button.dataset.mainAction === '107') return copyUrlListMode('final107');
+    if (button.dataset.action === 'retry-failed') return running ? stopRun() : copyCurrentList();
     if (button.dataset.action === 'reset') return resetForNotification();
     if (button.dataset.action === 'delete') return deleteNotificationCards();
     if (button.dataset.action === 'images') return armBatchImages();
@@ -428,6 +430,17 @@
     });
     return output;
   }
+  function targetUrlTextblocks(view) {
+    const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
+    const output = [];
+    view.state.doc.descendants((node, pos) => {
+      if (!node.isTextblock) return;
+      const text = node.textBetween(0, node.content.size, '\n', '\n').trim();
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length && tokens.every((value) => targets.has(normalizeUrl(value)))) output.push({ node, pos });
+    });
+    return output;
+  }
   function deleteBlocks(view, hits) {
     const unique = new Map();
     hits.forEach((hit) => hit?.node && unique.set(`${hit.pos}:${hit.node.nodeSize}`, hit));
@@ -491,6 +504,7 @@
       const imageOK = image && remoteImage(image.node) && normalizeUrl(image.node.attrs?.link) === normalizeUrl(row.url);
       if (!imageOK || officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length) invalid.push(row.index);
     }
+    if (targetUrlTextblocks(view).length) throw new FatalError('最終本文にURL一覧が残っています。先に「削」');
     if (invalid.length) throw new FatalError(`最終画像リンクまたはカード削除の不一致: ${invalid.slice(0, 8).join(',')}`);
     const body = serializedBody(view), parsed = new DOMParser().parseFromString(body, 'text/html');
     const imageHrefs = [...parsed.querySelectorAll('figure a[href] img')]
@@ -505,6 +519,7 @@
       if (officialCards(view, row.url).length || findByLink(view, row.url) || exactUrlParagraphs(view, row.url).length ||
         (row.nodeId && findById(view, row.nodeId))) remaining.push(row.index);
     }
+    if (targetUrlTextblocks(view).length) throw new FatalError('通知リセット後もURL一覧が残っています');
     if (remaining.length) throw new FatalError(`通知リセット残り: ${remaining.slice(0, 8).join(',')}`);
     return serializedBody(view);
   }
@@ -557,6 +572,31 @@
       row.status = 'ready'; row.proof = '';
     }
     saveRows(); updateUi();
+  }
+  function copyPreparedUrlList() {
+    if (!rows.length || typeof GM_setClipboard !== 'function') throw new FatalError('URL一覧をコピーできません');
+    GM_setClipboard(rows.map((row) => row.url).join('\n\n'), 'text');
+    rows.forEach((row) => { row.status = 'ready'; row.error = ''; });
+    saveRows();
+    setStatus(`${rows.length}件URL一覧コピー済み ✅ 本文へ1回貼付→各URL末尾でEnter`);
+  }
+  async function copyUrlListMode(selectedMode) {
+    if (running || !enabled()) return;
+    running = true; ++runToken; updateUi();
+    try {
+      setStatus(selectedMode === 'final107' ? '107件URL一覧を読込中…' : '10件URL一覧を準備中…');
+      await prepareMode(selectedMode);
+      copyPreparedUrlList();
+    } catch (error) {
+      setStatus(`一覧コピー停止：${error?.message || String(error)}`, true);
+    } finally { running = false; updateUi(); }
+  }
+  async function copyCurrentList() {
+    const selectedMode = mode || getJSON(modeKey(), '');
+    if (!['test10', 'final107'].includes(selectedMode)) {
+      setStatus('先に「10」または「107」を押してください', true); return;
+    }
+    return copyUrlListMode(selectedMode);
   }
   async function waitOfficialCard(view, url, token, timeout = 30000) {
     const result = await waitFor(() => {
@@ -726,8 +766,8 @@
       }
       rows.forEach((row) => {
         deletions.push(...officialCards(view, row.url));
-        deletions.push(...exactUrlParagraphs(view, row.url));
       });
+      deletions.push(...targetUrlTextblocks(view));
       let transaction = view.state.tr;
       const unique = new Map();
       deletions.forEach((hit) => unique.set(`${hit.pos}:${hit.node.nodeSize}`, hit));
@@ -748,8 +788,8 @@
     } finally { running = false; updateUi(); }
   }
   function verifyCardsDeleted(view) {
-    const invalid = rows.filter((row) => officialCards(view, row.url).length ||
-      exactUrlParagraphs(view, row.url).length);
+    const invalid = rows.filter((row) => officialCards(view, row.url).length);
+    if (targetUrlTextblocks(view).length) throw new FatalError('一括削除後もURL一覧が残っています');
     if (invalid.length) throw new FatalError(`カード削除後の対象URL残り: ${invalid.slice(0, 8).map((row) => row.index).join(',')}`);
     return serializedBody(view);
   }
@@ -759,12 +799,13 @@
     running = true; const token = ++runToken; updateUi();
     try {
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
-      const hits = rows.flatMap((row) => [...officialCards(view, row.url), ...exactUrlParagraphs(view, row.url)]);
+      const hits = rows.flatMap((row) => officialCards(view, row.url));
+      hits.push(...targetUrlTextblocks(view));
       const removed = deleteBlocks(view, hits);
-      await saveDraftToServer(view, token, verifyCardsDeleted, `通知カード${removed}件を一括削除・保存中…`);
+      await saveDraftToServer(view, token, verifyCardsDeleted, `カード/URL一覧 ${removed}ブロックを一括削除・保存中…`);
       rows.forEach((row) => { row.status = 'done'; row.proof = DELETE_PROOF; row.cardKey = ''; row.error = ''; });
       saveRows();
-      setStatus(removed ? `通知カード${removed}件 一括削除＋保存 ✅ 次は「画」` : '対象カードは既に0件 ✅ 次は「画」');
+      setStatus(removed ? `カード/URL一覧 ${removed}ブロック 一括削除＋保存 ✅ 次は「画」` : '対象カード/URL一覧は既に0件 ✅ 次は「画」');
     } catch (error) {
       setStatus(`カード削除停止：${error?.message || String(error)}（公開・更新しないで「削」を再実行）`, true);
     } finally { running = false; updateUi(); }
@@ -937,8 +978,11 @@
     running = true; const token = ++runToken; updateUi();
     try {
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
-      const blocking = rows.filter((row) => officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length);
-      if (blocking.length) throw new FatalError(`通知カード/URLが残っています(${blocking.slice(0, 8).map((row) => row.index).join(',')})。先に「削」`);
+      const blockingCards = rows.flatMap((row) => officialCards(view, row.url));
+      const blockingUrls = targetUrlTextblocks(view);
+      if (blockingCards.length || blockingUrls.length) {
+        throw new FatalError(`通知カード/URL一覧が残っています(${blockingCards.length + blockingUrls.length}ブロック)。先に「削」`);
+      }
       rows.forEach((row) => {
         if (row.proof !== FINAL_PROOF) { row.status = 'done'; row.proof = DELETE_PROOF; }
       });
