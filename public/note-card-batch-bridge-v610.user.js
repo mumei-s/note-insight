@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note URL一覧＋極薄 COMPLETE 10.0
+// @name         無名S note CLEAN通知＋極薄 COMPLETE 11.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      10.0.0
-// @description  10/107 URL一覧を1回コピー、カード/URL一覧を一括削除、極薄画像を＋画像1回で一括完成
+// @version      11.0.0
+// @description  URL一覧コピー直後に全通知ツールを完全停止、再読込後にカード/URL一括削除と極薄画像10/107枚を一括完成
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_LIST_FALLBACK_10000__) return;
+  if (page.__MUMEI_NOTE_CLEAN_NOTIFY_11000__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_LIST_FALLBACK_10000__',
     '__MUMEI_NOTIFY_MANUAL_QUEUE_9000__',
     '__MUMEI_NOTIFY_COMPLETE_8300__', '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
     '__MUMEI_NOTIFY_FINAL_8000__', '__MUMEI_NOTIFY_COMPLETE_8000__',
@@ -29,27 +30,26 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_LIST_FALLBACK_10000__ = true;
+  page.__MUMEI_NOTE_CLEAN_NOTIFY_11000__ = true;
   // 本版より後に読み込まれる旧版は、本文・入力・画像選択へ介入させない。
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '10.0';
+  const VERSION = '11.0';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
   const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_notify_active_article_v1000';
-  const RUN_PREFIX = 'mumei_notify_run_v1000';
-  const MODE_PREFIX = 'mumei_notify_mode_v1000';
-  const RESET_PREFIX = 'mumei_notify_reset_v1000';
-  const COMPLETE_PROOF = 'manual-url-list-card-saved-v1000';
-  const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1000';
-  const FINAL_PROOF = 'batch-thin-image-linked-saved-v1000';
-  const TOGGLE = 'mumei-notify-toggle-v1000';
-  const PANEL = 'mumei-notify-panel-v1000';
-  const STATUS = 'mumei-notify-status-v1000';
-  const STYLE = 'mumei-notify-style-v1000';
+  const ACTIVE_KEY = 'mumei_notify_active_article_v1100';
+  const RUN_PREFIX = 'mumei_notify_run_v1100';
+  const MODE_PREFIX = 'mumei_notify_mode_v1100';
+  const RESET_PREFIX = 'mumei_notify_reset_v1100';
+  const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1100';
+  const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
+  const TOGGLE = 'mumei-notify-toggle-v1100';
+  const PANEL = 'mumei-notify-panel-v1100';
+  const STATUS = 'mumei-notify-status-v1100';
+  const STYLE = 'mumei-notify-style-v1100';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -77,6 +77,8 @@
   let inputObserver = null;
   let nativeInputClick = null;
   let waitCancel = null;
+  let routeTimer = null;
+  let notificationShutdown = false;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -165,7 +167,8 @@
       #mumei-notify-toggle-v720,#mumei-notify-panel-v720,
       #mumei-notify-toggle-v810,#mumei-notify-panel-v810,
       #mumei-notify-toggle-v820,#mumei-notify-panel-v820,
-      #mumei-notify-toggle-v900,#mumei-notify-panel-v900{display:none!important}
+      #mumei-notify-toggle-v900,#mumei-notify-panel-v900,
+      #mumei-notify-toggle-v1000,#mumei-notify-panel-v1000{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
         border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -192,6 +195,29 @@
     `;
     document.head.appendChild(style);
   }
+  function forceCloseLegacyTools() {
+    const containers = [...document.querySelectorAll('[id^="mumei-"]')]
+      .filter((node) => node.id !== PANEL && node.id !== TOGGLE && node.id !== STATUS && node.id !== STYLE);
+    for (const container of containers) {
+      const close = [...container.querySelectorAll?.('button') || []].find((button) =>
+        button.dataset?.action === 'close' || button.title === 'しまう' || button.textContent?.trim() === '×');
+      try { close?.click(); } catch (_) {}
+    }
+  }
+  function shutdownForManualNotification(count) {
+    notificationShutdown = true;
+    runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
+    if (waitCancel) waitCancel('通知工程へ移行');
+    waitCancel = null; cancelImageArm();
+    forceCloseLegacyTools();
+    document.removeEventListener('click', publishClickHandler, true);
+    if (routeTimer) clearInterval(routeTimer);
+    routeTimer = null;
+    document.getElementById(PANEL)?.remove();
+    document.getElementById(TOGGLE)?.remove();
+    page.__MUMEI_NOTE_MANUAL_NOTIFICATION_CLEAN__ = true;
+    page.alert(`${count}件URL一覧コピー済み。\n通知工程では現行・旧版ツールを完全停止しました。\n\n本文へ1回貼付 → 各URL末尾でEnter。\n通知確認後は編集画面を再読み込み →「削」→「画」。`);
+  }
   function closeTool() {
     runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
     if (waitCancel) waitCancel('ツールを閉じたため停止');
@@ -214,14 +240,15 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus('LIST 10.0｜10/107でURL一覧を1回コピー');
+    setStatus('CLEAN 11.0｜一覧コピー後にツール完全停止');
     restoreLastMode();
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
   function mount() {
-    if (!document.body || !isEditPage()) return;
+    if (notificationShutdown || !document.body || !isEditPage()) return;
     document.body.dataset.mumeiNotePublish = '0';
     installStyle();
+    forceCloseLegacyTools();
     let toggle = document.getElementById(TOGGLE);
     if (!toggle) {
       toggle = document.createElement('button');
@@ -238,7 +265,7 @@
         <button type="button" data-action="delete" title="通知後：カードとURL一覧を一括削除">削</button>
         <button type="button" data-action="images" title="削除後：＋画像1回で極薄画像を一括完成">画</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">LIST 10.0</div>`;
+        <div id="${STATUS}" data-bad="0">CLEAN 11.0</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
@@ -412,11 +439,6 @@
     view.state.doc.descendants((node, pos) => { if (node.type?.name === 'embed') output.push({ node, pos }); });
     return output;
   }
-  function findOfficialCard(view, url) {
-    const wanted = normalizeUrl(url);
-    return embedNodes(view).find((entry) => normalizeUrl(entry.node.attrs?.src) === wanted &&
-      Boolean(entry.node.attrs?.htmlForEmbed) && Boolean(entry.node.attrs?.embeddedContentKey)) || null;
-  }
   function officialCards(view, url) {
     const wanted = normalizeUrl(url);
     return embedNodes(view).filter((entry) => normalizeUrl(entry.node.attrs?.src) === wanted &&
@@ -453,15 +475,6 @@
     ensureFreshParagraph(view);
     return unique.size;
   }
-  function findFallbackLink(view, url) {
-    const wanted = normalizeUrl(url); let found = null;
-    view.state.doc.descendants((node, pos) => {
-      if (found || node.type?.name !== 'paragraph' || node.textContent !== url) return;
-      const mark = node.firstChild?.marks?.find((value) => value.type?.name === 'link');
-      if (normalizeUrl(mark?.attrs?.href) === wanted) found = { node, pos };
-    });
-    return found;
-  }
   function remoteImage(node) {
     const src = String(node?.attrs?.src || ''); return /^https:\/\//i.test(src) && !/^https:\/\/editor\.note\.com\/icons\//i.test(src);
   }
@@ -481,21 +494,6 @@
     const fragment = core().serialize(view.state), holder = document.createElement('div');
     holder.appendChild(fragment); core().normalizeDOM(holder);
     return core().cleanHTML(holder.innerHTML);
-  }
-  function verifyNotificationDocument(view) {
-    const invalid = [];
-    for (const row of rows) {
-      const cards = officialCards(view, row.url);
-      const linkedImage = findByLink(view, row.url);
-      const raw = exactUrlParagraphs(view, row.url);
-      const trackedImage = findById(view, row.nodeId);
-      if (cards.length !== 1 || linkedImage || raw.length || trackedImage) invalid.push(row.index);
-    }
-    if (invalid.length) throw new FatalError(`カード以外の重複URLまたはカード不足: ${invalid.slice(0, 8).join(',')}`);
-    const body = serializedBody(view);
-    const absent = rows.filter((row) => !body.includes(row.url));
-    if (absent.length) throw new FatalError(`保存HTMLの正規カードURL不足: ${absent.slice(0, 8).map((row) => row.index).join(',')}`);
-    return body;
   }
   function verifyFinalDocument(view) {
     const invalid = [];
@@ -539,14 +537,8 @@
     if (token !== runToken || !enabled()) throw new FatalError('停止しました');
     verifier(view);
   }
-  async function saveNotificationToServer(view, token) {
-    await saveDraftToServer(view, token, verifyNotificationDocument, `${rows.length}/${rows.length}｜実操作カードだけを通常保存中…`);
-    rows.forEach((row) => { row.proof = COMPLETE_PROOF; row.status = 'done'; row.error = ''; });
-    saveRows();
-  }
-
   function rowFrom(item, stored) {
-    const proof = [COMPLETE_PROOF, DELETE_PROOF, FINAL_PROOF].includes(stored?.proof) ? stored.proof : '';
+    const proof = [DELETE_PROOF, FINAL_PROOF].includes(stored?.proof) ? stored.proof : '';
     return { ...item, status: proof ? 'done' : 'ready', nodeId: stored?.nodeId || '',
       owned: Boolean(stored?.owned), trusted: Boolean(stored?.trusted), cardKey: stored?.cardKey || '',
       proof, error: stored?.error || '' };
@@ -560,9 +552,6 @@
     const view = findView();
     if (view) for (const row of rows) {
       const cards = officialCards(view, row.url);
-      const provenCard = cards.length === 1 && String(cards[0].node.attrs?.embeddedContentKey || '') === String(row.cardKey || '');
-      if (row.proof === COMPLETE_PROOF && provenCard && row.trusted && !findByLink(view, row.url) &&
-        !exactUrlParagraphs(view, row.url).length) continue;
       if (row.proof === DELETE_PROOF && !cards.length && !exactUrlParagraphs(view, row.url).length) continue;
       if (row.proof === FINAL_PROOF) {
         const image = findById(view, row.nodeId) || findByLink(view, row.url);
@@ -587,6 +576,7 @@
       setStatus(selectedMode === 'final107' ? '107件URL一覧を読込中…' : '10件URL一覧を準備中…');
       await prepareMode(selectedMode);
       copyPreparedUrlList();
+      shutdownForManualNotification(rows.length);
     } catch (error) {
       setStatus(`一覧コピー停止：${error?.message || String(error)}`, true);
     } finally { running = false; updateUi(); }
@@ -597,159 +587,6 @@
       setStatus('先に「10」または「107」を押してください', true); return;
     }
     return copyUrlListMode(selectedMode);
-  }
-  async function waitOfficialCard(view, url, token, timeout = 30000) {
-    const result = await waitFor(() => {
-      if (token !== runToken || !enabled()) throw new FatalError('停止しました');
-      return findOfficialCard(view, url);
-    }, timeout, 180);
-    if (!result) throw new Error('note正規カード生成を確認できませんでした');
-    return result;
-  }
-  function copyQueueUrl(url) {
-    try {
-      if (typeof GM_setClipboard !== 'function') return false;
-      GM_setClipboard(url, 'text'); return true;
-    } catch (_) { return false; }
-  }
-  function waitManualPasteEnter(view, row, index, token, timeout = 300000) {
-    return new Promise((resolve, reject) => {
-      let settled = false, pasted = false, timer = null, settleTimer = null;
-      const cleanup = () => {
-        view.dom.removeEventListener('paste', onPaste, true);
-        view.dom.removeEventListener('keydown', onEnter, true);
-        view.dom.removeEventListener('beforeinput', onEnter, true);
-        view.dom.removeEventListener('input', onEnter, true);
-        if (timer) clearTimeout(timer); if (settleTimer) clearTimeout(settleTimer);
-        if (waitCancel === cancel) waitCancel = null;
-      };
-      const finish = (error, value) => {
-        if (settled) return; settled = true; cleanup();
-        if (error) reject(error); else resolve(value);
-      };
-      const cancel = (reason = '停止しました') => finish(new FatalError(reason));
-      const onPaste = (event) => {
-        if (!event.isTrusted || pasted) return;
-        if (token !== runToken || !enabled()) return cancel();
-        const text = String(event.clipboardData?.getData('text/plain') || '').trim();
-        if (normalizeUrl(text) !== normalizeUrl(row.url)) {
-          event.preventDefault();
-          return finish(new Error(`${index + 1}件目と違うURLです。「再」でやり直してください`));
-        }
-        pasted = true;
-        setStatus(`${index + 1}/${rows.length}｜実貼り付け確認 ✅ そのままEnter`);
-      };
-      const onEnter = (event) => {
-        if (!event.isTrusted) return;
-        if ((event.type === 'beforeinput' || event.type === 'input') && event.inputType === 'insertFromPaste') {
-          pasted = true;
-          setStatus(`${index + 1}/${rows.length}｜実貼り付け確認 ✅ そのままEnter`);
-          return;
-        }
-        if (!pasted) return;
-        const keyboard = event.type === 'keydown' && event.key === 'Enter';
-        const mobile = event.type === 'beforeinput' && /^(insertParagraph|insertLineBreak)$/i.test(event.inputType || '');
-        if (!keyboard && !mobile) return;
-        if (token !== runToken || !enabled()) return cancel();
-        if (!settleTimer) settleTimer = setTimeout(() => finish(null, true), 220);
-      };
-      timer = setTimeout(() => finish(new Error(`${index + 1}件目の貼り付け＋Enter待機が5分を超えました`)), timeout);
-      waitCancel = cancel;
-      view.dom.addEventListener('paste', onPaste, true);
-      view.dom.addEventListener('keydown', onEnter, true);
-      view.dom.addEventListener('beforeinput', onEnter, true);
-      view.dom.addEventListener('input', onEnter, true);
-      view.focus();
-    });
-  }
-  async function createManualCard(view, row, index, token) {
-    ensureFreshParagraph(view);
-    if (!copyQueueUrl(row.url)) throw new FatalError('URLをクリップボードへコピーできません');
-    setStatus(`${index + 1}/${rows.length}｜コピー済み → 本文で「貼り付け→Enter」`);
-    await waitManualPasteEnter(view, row, index, token);
-    return waitOfficialCard(view, row.url, token);
-  }
-  async function processRow(index, token) {
-    if (token !== runToken || !enabled()) throw new FatalError('停止しました');
-    const row = rows[index], view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
-    const existing = findOfficialCard(view, row.url);
-    if (existing && row.trusted && String(existing.node.attrs?.embeddedContentKey || '') === String(row.cardKey || '')) {
-      row.status = 'ready'; row.error = ''; saveRows(); return;
-    }
-    row.status = 'embedding'; row.error = ''; updateUi();
-    const card = await createManualCard(view, row, index, token);
-    row.cardKey = String(card.node.attrs?.embeddedContentKey || ''); row.trusted = true;
-    row.status = 'ready'; row.proof = ''; row.error = '';
-    saveRows(); updateUi();
-    setStatus(`${index + 1}/${rows.length}｜実貼り付け＋実Enterカード ✅ 次を準備中…`);
-    await sleep(1800);
-  }
-  function contaminatedRows(view) {
-    return rows.filter((row) => {
-      if (findByLink(view, row.url) || findById(view, row.nodeId) || exactUrlParagraphs(view, row.url).length) return true;
-      const cards = officialCards(view, row.url);
-      if (!cards.length) return false;
-      return cards.length !== 1 || !row.trusted || !row.cardKey ||
-        String(cards[0].node.attrs?.embeddedContentKey || '') !== String(row.cardKey);
-    });
-  }
-  async function runIndexes(indexes) {
-    if (running || !enabled()) return;
-    running = true; const token = ++runToken; updateUi(); let fatal = null;
-    for (const index of indexes) {
-      if (token !== runToken || !enabled()) break;
-      try { await processRow(index, token); }
-      catch (error) {
-        rows[index].status = 'failed'; rows[index].error = error?.message || String(error); saveRows(); updateUi();
-        fatal = error instanceof FatalError ? error : new FatalError(`${index + 1}/${rows.length}｜${rows[index].error}`);
-        break;
-      }
-    }
-    if (token !== runToken) {
-      running = false;
-      if (enabled()) setStatus('停止しました。完了済みは保持し、残りだけ再開できます', true);
-      updateUi();
-      return;
-    }
-    if (token === runToken) {
-      const currentView = findView();
-      const done = currentView ? rows.filter((row) => officialCards(currentView, row.url).length === 1).length : 0;
-      const failed = rows.filter((row) => row.status === 'failed').length;
-      if (!fatal && !failed) {
-        try { await saveNotificationToServer(currentView, token); }
-        catch (error) { fatal = error instanceof FatalError ? error : new FatalError(error?.message || String(error)); }
-      }
-      running = false;
-      if (fatal) setStatus(`停止：${fatal.message}（公開・更新しない）`, true);
-      else if (failed) setStatus(`正規カード ${done}/${rows.length}｜失敗${failed}件だけ再実行できます`, true);
-      else setStatus(`${rows.length}/${rows.length}｜全件 実貼付＋実Enter・通常保存 ✅ 公開に進めます`);
-      updateUi();
-    }
-  }
-  async function startMode(selectedMode) {
-    if (running) return;
-    try {
-      setStatus(selectedMode === 'final107' ? '107件一覧を読込中…' : '10件一覧を準備中…');
-      await prepareMode(selectedMode); core();
-      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
-      const resetState = getJSON(resetKey(), null);
-      if (resetState?.state && resetState.state !== 'submitted') {
-        throw new FatalError('初期化本文は保存済みです。先に公開更新を完了し、編集画面を開き直してください');
-      }
-      if (resetState?.state === 'submitted') setJSON(resetKey(), null);
-      if (rows.some((row) => row.proof === DELETE_PROOF || row.proof === FINAL_PROOF)) {
-        throw new FatalError('前回の削除/画像工程です。再通知は「初」→公開更新→編集へ戻って実行');
-      }
-      const dirty = contaminatedRows(view);
-      if (dirty.length) throw new FatalError(`既存URLあり(${dirty.slice(0, 8).map((row) => row.index).join(',')})。「初」→公開更新→戻って${selectedMode === 'final107' ? '107' : '10'}`);
-      const indexes = rows.map((_, index) => index).filter((index) => rows[index].status !== 'done');
-      if (!indexes.length) {
-        const token = ++runToken; running = true; updateUi();
-        await saveNotificationToServer(view, token); running = false; updateUi();
-        setStatus(`${rows.length}/${rows.length}｜全件 実貼付＋実Enter・通常保存 ✅ 公開に進めます`); return;
-      }
-      runIndexes(indexes);
-    } catch (error) { setStatus(`開始停止：${error?.message || String(error)}（公開・更新しない）`, true); running = false; updateUi(); }
   }
   async function resetForNotification() {
     if (running || !mode || !rows.length || !enabled()) return;
@@ -1022,23 +859,18 @@
     setStatus('現在の1件を止めています…完了済みは保持します', true);
     updateUi();
   }
-  async function retryFailed() {
-    if (running) return;
-    const indexes = rows.map((row, index) => row.status !== 'done' ? index : -1).filter((index) => index >= 0);
-    if (!indexes.length) return;
-    indexes.forEach((index) => { rows[index].status = 'ready'; rows[index].error = ''; }); saveRows(); updateUi(); runIndexes(indexes);
-  }
   function routeCheck() {
-    if (!document.body) return;
+    if (notificationShutdown || !document.body) return;
     document.body.dataset.mumeiNotePublish = isPublishPage() ? '1' : '0';
     if (!isEditPage()) return;
+    forceCloseLegacyTools();
     if (openedArticle && openedArticle !== articleKey()) {
       closeTool(); mode = ''; items = []; rows = []; coreCache = null; viewCache = null;
     }
     if (!document.getElementById(PANEL) || !document.getElementById(TOGGLE)) mount();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true }); else mount();
-  document.addEventListener('click', (event) => {
+  function publishClickHandler(event) {
     const button = event.target?.closest?.('button');
     const label = button?.textContent?.trim() || '';
     if (label === '公開に進む' && document.body) {
@@ -1052,6 +884,7 @@
         setJSON(resetKey(), { ...reset, state: 'submitted', at: Date.now() });
       }
     }
-  }, true);
-  setInterval(routeCheck, 500);
+  }
+  document.addEventListener('click', publishClickHandler, true);
+  routeTimer = setInterval(routeCheck, 500);
 })();
