@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         無名S note 極薄ワンタップ COMPLETE 13.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      13.1.0
-// @description  10枚／全107枚を画像選択1回で一括挿入し、各画像へ対応URLを自動付与。小型パネルは×以外で消えない
+// @version      13.2.0
+// @description  10枚／全107枚を画像1回で一括挿入＋URL自動付与し、note正規URLコマンドで標準カードも自動生成
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.1.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.1.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.2.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.2.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_THIN_BATCH_13100__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_13200__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_THIN_BATCH_13100__',
     '__MUMEI_NOTE_THIN_BATCH_13000__',
     '__MUMEI_NOTE_NEW10_SEND_12100__', '__MUMEI_NOTE_NEW10_SEND_12000__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11100__',
@@ -34,11 +35,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_THIN_BATCH_13100__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_13200__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '13.1';
+  const VERSION = '13.2';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -91,9 +92,11 @@
   let imageArm = null;
   let inputObserver = null;
   let nativeInputClick = null;
+  let imageChoiceClickListener = null;
   let waitCancel = null;
   let routeTimer = null;
   let noteApiOriginCache = '';
+  let noteUrlCommand = null;
   let notificationShutdown = false;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
@@ -190,15 +193,15 @@
       #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200,
       #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210,
       #mumei-thin-toggle-v1300,#mumei-thin-panel-v1300{display:none!important}
-      #${TOGGLE}{position:fixed;right:5px;bottom:73px;z-index:2147483647;width:30px;height:30px;border:0;
+      #${TOGGLE}{position:fixed;right:4px;top:42%;bottom:auto;z-index:2147483647;width:30px;height:30px;border:0;
         border-radius:999px;padding:0;background:#0f766e;color:#fff;font:800 14px/30px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
       #${TOGGLE}[data-open="1"]{display:none}
-      #${PANEL}{position:fixed;right:5px;bottom:72px;z-index:2147483647;display:none;align-items:center;gap:2px;
-        height:34px;padding:2px;border-radius:9px;background:#111827;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.32);
+      #${PANEL}{position:fixed;right:4px;top:34%;bottom:auto;z-index:2147483647;display:none;flex-direction:column;align-items:center;gap:2px;
+        width:38px;height:auto;padding:2px;border-radius:9px;background:#111827;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.32);
         font-family:system-ui,-apple-system,sans-serif}
       #${PANEL}[data-open="1"]{display:flex}
-      #${PANEL} button{height:30px;min-width:30px;border:0;border-radius:7px;padding:0 6px;color:#fff;background:#374151;
+      #${PANEL} button{height:30px;width:34px;min-width:34px;border:0;border-radius:7px;padding:0 2px;color:#fff;background:#374151;
         font:800 10px/30px system-ui;white-space:nowrap;touch-action:manipulation}
       #${PANEL} button[data-main-action="10"]{background:#2563eb}
       #${PANEL} button[data-main-action="107"]{background:#059669}
@@ -207,7 +210,7 @@
       #${PANEL} button[data-action="send-new10"]{background:#dc2626}
       #${PANEL} button[data-action="close"]{padding:0;width:28px;min-width:28px}
       #${PANEL} button:disabled{opacity:.55}
-      #${STATUS}{position:fixed;right:5px;bottom:110px;z-index:2147483647;display:none;max-width:min(300px,calc(100vw - 16px));
+      #${STATUS}{position:fixed;right:46px;top:34%;bottom:auto;z-index:2147483647;display:none;max-width:min(270px,calc(100vw - 64px));
         padding:5px 7px;border-radius:7px;background:#064e3b;color:#fff;font:700 10px/1.35 system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.25)}
       #${PANEL}[data-open="1"] #${STATUS}{display:block}
@@ -310,7 +313,7 @@
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
       panel.innerHTML = `<button type="button" data-main-action="10" title="10枚を一括準備。次に＋→画像を1回">10画</button>
         <button type="button" data-main-action="107" title="全107枚を一括準備。次に＋→画像を1回">全画</button>
-        <button type="button" data-action="send-new10" title="通知用URL一覧をコピーしてツールを完全停止">送</button>
+        <button type="button" data-action="send-new10" title="note正規URLコマンドで標準カードを全件自動生成">送</button>
         <button type="button" data-action="delete" title="対象のURLカードと生URLだけを一括削除">削</button>
         <button type="button" data-action="reset" title="対象画像・カード・URLを全消去して初期化">初</button>
         <button type="button" data-action="close" title="しまう">×</button>
@@ -331,7 +334,7 @@
     if (button.dataset.mainAction === '10') return startFreshImageBatch('test10');
     if (button.dataset.mainAction === '107') return startFreshImageBatch('final107');
     if (button.dataset.action === 'reset') return resetCurrentTargets();
-    if (button.dataset.action === 'send-new10') return prepareManualNotification();
+    if (button.dataset.action === 'send-new10') return autoGenerateOfficialCards();
     if (button.dataset.action === 'delete') return deleteCurrentNotificationBlocks();
     if (button.dataset.action === 'close') return closeTool();
   }
@@ -460,6 +463,29 @@
     let require = null; const id = 970000000 + Math.floor(Math.random() * 20000000);
     try { chunks.push([[id], {}, (runtimeRequire) => { require = runtimeRequire; }]); } catch (_) {}
     return require;
+  }
+  function noteUrlCommandFactory() {
+    if (typeof noteUrlCommand === 'function') return noteUrlCommand;
+    const require = webpackRequire();
+    if (!require) throw new FatalError('note内部URL処理を取得できません。画面を再読込してください');
+    let module;
+    try { module = require(94928); } catch (_) {}
+    let candidate = typeof module?.fjT === 'function' ? module.fjT : null;
+    const looksRight = (value) => {
+      if (typeof value !== 'function') return false;
+      let source = '';
+      try { source = Function.prototype.toString.call(value); } catch (_) {}
+      return source.includes('state.selection') && source.includes('nodeBefore') &&
+        source.includes('replaceRangeWith') && source.includes('.then');
+    };
+    if (!looksRight(candidate)) {
+      const loaded = Object.values(require.c || {}).flatMap((entry) =>
+        Object.values(entry?.exports || {}));
+      candidate = loaded.find(looksRight) || null;
+    }
+    if (!looksRight(candidate)) throw new FatalError('note正規URLコマンドが見つかりません');
+    noteUrlCommand = candidate;
+    return noteUrlCommand;
   }
   function core() {
     if (coreCache) return coreCache;
@@ -1096,6 +1122,10 @@
   function uninstallImageInputBridge() {
     try { inputObserver?.disconnect(); } catch (_) {}
     inputObserver = null;
+    if (imageChoiceClickListener) {
+      document.removeEventListener('click', imageChoiceClickListener, true);
+      imageChoiceClickListener = null;
+    }
     if (nativeInputClick && page.HTMLInputElement?.prototype) {
       try { page.HTMLInputElement.prototype.click = nativeInputClick; } catch (_) {}
     }
@@ -1109,8 +1139,23 @@
   }
   function installImageInputBridge() {
     if (inputObserver || nativeInputClick || !document.documentElement) return;
-    inputObserver = new MutationObserver((mutations) => {
+    imageChoiceClickListener = (event) => {
       const arm = imageArm; if (!arm || arm.consumed) return;
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+      const directInput = path.find((node) => imageInput(node));
+      if (arm.imageChoiceSelected && directInput) {
+        event.preventDefault(); event.stopPropagation(); injectImageInput(directInput); return;
+      }
+      const trigger = path.find((node) => node instanceof Element &&
+        node.matches?.('button,[role="button"],label,[role="menuitem"],li'));
+      const label = String(trigger?.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/^(?:画像|写真|画像を追加|写真を追加)$/.test(label)) return;
+      arm.imageChoiceSelected = true;
+      setStatus(`${arm.files.length}枚｜「画像」だけを接続中…`);
+    };
+    document.addEventListener('click', imageChoiceClickListener, true);
+    inputObserver = new MutationObserver((mutations) => {
+      const arm = imageArm; if (!arm || arm.consumed || !arm.imageChoiceSelected) return;
       for (const mutation of mutations) for (const node of mutation.addedNodes) {
         if (!(node instanceof Element)) continue;
         if (imageInput(node)) { injectImageInput(node); return; }
@@ -1125,7 +1170,7 @@
     nativeInputClick = prototype.click;
     prototype.click = function interceptedImageClick(...args) {
       const arm = imageArm;
-      if (arm && imageInput(this)) {
+      if (arm && arm.imageChoiceSelected && imageInput(this)) {
         if (!arm.consumed) injectImageInput(this);
         return;
       }
@@ -1257,7 +1302,8 @@
     }
     const completion = new Promise((resolve, reject) => {
       imageArm = {
-        token, view, workRows, files, resolve, reject, consumed: false, linked: false, input: null, kind,
+        token, view, workRows, files, resolve, reject, consumed: false, linked: false,
+        imageChoiceSelected: false, input: null, kind,
         beforeIds: new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')).filter(Boolean)),
         beforeInputs: new Set(document.querySelectorAll('input[type="file"]')), timer: null
       };
@@ -1338,7 +1384,7 @@
       setStatus(`${rows.length}枚検査OK${removed ? `｜旧対象${removed}ブロック整理済み` : ''}｜本文→＋→画像を1回`);
       await armImagesForRows(rows, 'normal', files);
       verifyFinalDocument(view);
-      setStatus(`${rows.length}/${rows.length}枚｜860×140・URL自動付与・余白除去・保存 完了 ✅`);
+      setStatus(`${rows.length}/${rows.length}枚｜URL自動付与・保存 完了 ✅ 次は「送」`);
     } catch (error) {
       setStatus(`画像貼付け停止：${error?.message || String(error)}（完成扱いにしていません）`, true);
     } finally {
@@ -1369,9 +1415,90 @@
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
       const removed = deleteBlocks(view, collectTargetHits(view, false));
       await saveDraftToServer(view, token, verifyCardsDeleted, `URLカード／生URL ${removed}ブロックを削除・保存中…`);
+      rows.forEach((row) => { row.cardKey = ''; }); saveRows();
       setStatus(`URLカード／生URL ${removed}ブロック削除 ✅ 画像は保持`);
     } catch (error) {
       setStatus(`削除停止：${error?.message || String(error)}（完成扱いにしていません）`, true);
+    } finally { running = false; updateUi(); }
+  }
+
+  function insertUrlParagraphForCard(view, url) {
+    deleteBlocks(view, exactUrlParagraphs(view, url));
+    const paragraph = view.state.schema.nodes.paragraph;
+    if (!paragraph) throw new FatalError('URLカード用paragraphなし');
+    const node = paragraph.create(null, view.state.schema.text(url));
+    view.dispatch(view.state.tr.insert(view.state.doc.content.size, node));
+    view.dispatch(view.state.tr.setSelection(core().Selection.atEnd(view.state.doc)).scrollIntoView());
+    view.focus();
+  }
+
+  function validOfficialCard(view, row) {
+    const cards = officialCards(view, row.url);
+    if (cards.length !== 1) return null;
+    const card = cards[0];
+    const key = String(card.node.attrs?.embeddedContentKey || '');
+    const html = String(card.node.attrs?.htmlForEmbed || '');
+    if (!/^emb[a-z0-9]+$/i.test(key) || !html.includes('note-embed')) return null;
+    return { ...card, key };
+  }
+
+  async function createOfficialCardWithNote(view, row, index, total, token) {
+    const existing = validOfficialCard(view, row);
+    if (existing) {
+      row.cardKey = existing.key; row.trusted = true; saveRows(); return existing;
+    }
+    const old = officialCards(view, row.url);
+    if (old.length) deleteBlocks(view, old);
+    insertUrlParagraphForCard(view, row.url);
+    setStatus(`note正規カード ${index}/${total} 生成中…`);
+    const command = noteUrlCommandFactory()(row.url);
+    const handled = command(view.state, (transaction) => view.dispatch(transaction), view);
+    if (!handled) {
+      deleteBlocks(view, exactUrlParagraphs(view, row.url));
+      throw new FatalError(`${index}/${total} note正規URLコマンド未処理`);
+    }
+    const proof = await waitFor(() => {
+      if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+      return validOfficialCard(view, row);
+    }, 45000, 250);
+    if (!proof) {
+      deleteBlocks(view, exactUrlParagraphs(view, row.url));
+      throw new FatalError(`${index}/${total} note正規カード確認タイムアウト`);
+    }
+    deleteBlocks(view, exactUrlParagraphs(view, row.url));
+    row.cardKey = proof.key; row.trusted = true; saveRows();
+    return proof;
+  }
+
+  function verifyOfficialCardDocument(view) {
+    const invalid = [];
+    for (const row of rows) {
+      const card = validOfficialCard(view, row);
+      if (!card || exactUrlParagraphs(view, row.url).length) invalid.push(row.index);
+    }
+    if (invalid.length) throw new FatalError(`note正規カード不一致: ${invalid.slice(0, 8).join(',')}`);
+    return serializedBody(view);
+  }
+
+  async function autoGenerateOfficialCards() {
+    if (running || !enabled()) return;
+    running = true; const token = ++runToken; updateUi();
+    try {
+      await prepareMode(selectedImageMode());
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      noteUrlCommandFactory();
+      for (let index = 0; index < rows.length; index += 1) {
+        if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+        await createOfficialCardWithNote(view, rows[index], index + 1, rows.length, token);
+        setStatus(`note正規カード ${index + 1}/${rows.length} ✅`);
+        if (index < rows.length - 1) await sleep(rows.length === 107 ? 900 : 500);
+      }
+      verifyOfficialCardDocument(view);
+      await saveDraftToServer(view, token, verifyOfficialCardDocument,
+        `note正規カード ${rows.length}/${rows.length} を保存中…`);
+      setStatus(`note正規カード ${rows.length}/${rows.length} 自動生成・保存 完了 ✅`);
+    } catch (error) {
+      setStatus(`カード自動生成停止：${error?.message || String(error)}（「送」で続きから再開）`, true);
     } finally { running = false; updateUi(); }
   }
 
