@@ -1,0 +1,34 @@
+{
+  "batchId": "notify-test-2",
+  "sourceUrlFile": "data/note-notify-test-2-urls.txt",
+  "count": 2,
+  "width": 860,
+  "height": 140,
+  "generatedAt": "2026-08-25T13:37:18.019Z",
+  "items": [
+    {
+      "index": 1,
+      "key": "n14ce8520eae5",
+      "url": "https://note.com/fuku444/n/n14ce8520eae5",
+      "title": "980円note📕で月1万円を残すには13部。では、13人をどこから連れてくる？",
+      "creator": "実績の算数│3日半で0→1達成",
+      "thumbUrl": "https://assets.st-note.com/img/1784991729-W86AEGcyTiqmK0xQFLuwb9Ba.jpg",
+      "thumbnailFallback": false,
+      "width": 860,
+      "height": 140,
+      "cardPath": "/note-notify-test-2/cards/001.png"
+    },
+    {
+      "index": 2,
+      "key": "nc14eb3f2ea9f",
+      "url": "https://note.com/ss_yr/n/nc14eb3f2ea9f",
+      "title": "【言葉と行動、その間にあるもの】  第2回スキ動画コンテスト『夏の陣』🏖",
+      "creator": "【無名 S note】18日でフォロワー1000名🚨連続収益中！48マガ・13共マガ運営 参加72🙆",
+      "thumbUrl": "https://assets.st-note.com/production/uploads/images/304306897/rectangle_large_type_2_78560e8d4aac7e4a80edf19e8682fb7b.jpeg?fit=bounds&quality=85&width=1280",
+      "thumbnailFallback": false,
+      "width": 860,
+      "height": 140,
+      "cardPath": "/note-notify-test-2/cards/002.png"
+    }
+  ]
+}
