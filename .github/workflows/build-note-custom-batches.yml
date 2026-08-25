@@ -1,0 +1,61 @@
+name: Build note custom batches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - data/note-notify-test-2-urls.txt
+      - data/note-today-batch-urls.txt
+      - scripts/build-note-batch-cards.mjs
+      - .github/workflows/build-note-custom-batches.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: note-custom-batches
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install image and Japanese font support
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          npm install --no-save --ignore-scripts=false sharp@0.34.3
+      - name: Generate and verify 2-card notification test
+        run: node scripts/build-note-batch-cards.mjs data/note-notify-test-2-urls.txt public/note-notify-test-2 2 notify-test-2
+      - name: Generate and verify 326-card full batch
+        run: node scripts/build-note-batch-cards.mjs data/note-today-batch-urls.txt public/note-today-batch 326 today-batch-326
+      - name: Verify manifests and every PNG
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          for (const [dir, expected] of [['public/note-notify-test-2', 2], ['public/note-today-batch', 326]]) {
+            const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+            if (manifest.count !== expected || manifest.items.length !== expected || new Set(manifest.items.map(x => x.url)).size !== expected) throw new Error(`${dir}: manifest mismatch`);
+            for (let i = 1; i <= expected; i += 1) {
+              const file = path.join(dir, 'cards', `${String(i).padStart(3, '0')}.png`);
+              const bytes = fs.readFileSync(file).subarray(0, 24);
+              const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20);
+              if (bytes.toString('hex', 0, 8) !== '89504e470d0a1a0a' || width !== 860 || height !== 140) throw new Error(`${file}: invalid PNG ${width}x${height}`);
+            }
+          }
+          NODE
+      - name: Commit prepared cards
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/note-notify-test-2 public/note-today-batch
+          git diff --cached --quiet && exit 0
+          git commit -m "Prepare 2 and 326 note card batches"
+          git push
