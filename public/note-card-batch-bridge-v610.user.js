@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note CLEAN通知＋極薄 COMPLETE 11.0
+// @name         無名S note CLEAN通知＋極薄 COMPLETE 11.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      11.0.0
-// @description  URL一覧コピー直後に全通知ツールを完全停止、再読込後にカード/URL一括削除と極薄画像10/107枚を一括完成
+// @version      11.1.0
+// @description  3件原因切り分け＋10/107通知一覧コピー。通知工程は全ツール停止、極薄画像は一括挿入・URL付与・余白除去
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_CLEAN_NOTIFY_11000__) return;
+  if (page.__MUMEI_NOTE_CLEAN_NOTIFY_11100__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_CLEAN_NOTIFY_11000__',
     '__MUMEI_NOTE_LIST_FALLBACK_10000__',
     '__MUMEI_NOTIFY_MANUAL_QUEUE_9000__',
     '__MUMEI_NOTIFY_COMPLETE_8300__', '__MUMEI_NOTIFY_COMPLETE_8200__', '__MUMEI_NOTIFY_COMPLETE_8100__',
@@ -30,12 +31,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_CLEAN_NOTIFY_11000__ = true;
-  // 本版より後に読み込まれる旧版は、本文・入力・画像選択へ介入させない。
+  page.__MUMEI_NOTE_CLEAN_NOTIFY_11100__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '11.0';
+  const VERSION = '11.1';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -44,6 +44,7 @@
   const RUN_PREFIX = 'mumei_notify_run_v1100';
   const MODE_PREFIX = 'mumei_notify_mode_v1100';
   const RESET_PREFIX = 'mumei_notify_reset_v1100';
+  const DIAG_PREFIX = 'mumei_notify_diag3_v1110';
   const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1100';
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
   const TOGGLE = 'mumei-notify-toggle-v1100';
@@ -63,6 +64,12 @@
     ['https://note.com/ss_yr/n/n2dfac2d0b184', "( 'ω'o[おしらせ]o【業界保有数No.1⁉️】"],
     ['https://note.com/ss_yr/n/na51322616876', '【企画📝】あなたが、まだ名前をつけていないもの。 共同マガジンの引き継ぎのお知らせ']
   ].map(([url, title], index) => ({ index: index + 1, url, title, width: W, height: H }));
+
+  const DIAG_ITEMS = [
+    ['https://note.com/ss_yr/n/nbeaa82005066', 'ちび創作大賞🏆 結果発表‼️＆〖告知〗', 'clean'],
+    ['https://note.com/ss_yr/n/n5dec637983d0', '100円noteでつながる購入応援企画‼️高評価noteも紹介📔〖Monetize Crew〗💰', 'image-live'],
+    ['https://note.com/ss_yr/n/n40a631eb54c4', '結果発表🎙️#noteスキ動画コンテスト👑', 'image-history']
+  ].map(([url, title, diagRole], index) => ({ index: index + 1, url, title, diagRole, width: W, height: H }));
 
   let openedArticle = '';
   let mode = '';
@@ -97,11 +104,12 @@
   function isEditPage() { return /^\/notes\/n[a-z0-9]{8,}\/edit\/?$/i.test(location.pathname); }
   function isPublishPage() { return /\/publish\/?$/i.test(location.pathname); }
   function enabled() { return Boolean(isEditPage() && articleKey() && openedArticle === articleKey()); }
-  function stateKey(selectedMode = mode) {
-    return `${RUN_PREFIX}:${articleKey() || 'unknown'}:${selectedMode || 'none'}`;
-  }
+  function stateKey(selectedMode = mode) { return `${RUN_PREFIX}:${articleKey() || 'unknown'}:${selectedMode || 'none'}`; }
   function modeKey() { return `${MODE_PREFIX}:${articleKey() || 'unknown'}`; }
   function resetKey() { return `${RESET_PREFIX}:${articleKey() || 'unknown'}:${mode || getJSON(modeKey(), 'none')}`; }
+  function diagKey() { return `${DIAG_PREFIX}:${articleKey() || 'unknown'}`; }
+  function diagState() { return getJSON(diagKey(), { stage: 'start', at: 0 }); }
+  function setDiagStage(stage, extra = {}) { setJSON(diagKey(), { stage, at: Date.now(), ...extra }); }
   function storedRows(selectedMode) {
     const value = getJSON(stateKey(selectedMode), []);
     return Array.isArray(value) ? value : [];
@@ -139,9 +147,7 @@
     element.textContent = text;
     element.dataset.bad = bad ? '1' : '0';
   }
-  function renderList() {
-    // 記事を隠さないよう、詳細一覧は表示せず内部にだけ保持する。
-  }
+  function renderList() {}
   function updateButtons() {
     const panel = document.getElementById(PANEL);
     if (!panel) return;
@@ -179,6 +185,7 @@
       #${PANEL}[data-open="1"]{display:flex}
       #${PANEL} button{height:30px;min-width:30px;border:0;border-radius:7px;padding:0 7px;color:#fff;background:#374151;
         font:800 10px/30px system-ui;touch-action:manipulation}
+      #${PANEL} button[data-main-action="3"]{background:#d97706}
       #${PANEL} button[data-main-action="10"]{background:#2563eb}
       #${PANEL} button[data-main-action="107"]{background:#059669}
       #${PANEL} button[data-action="reset"]{background:#92400e}
@@ -186,7 +193,7 @@
       #${PANEL} button[data-action="images"]{background:#0e7490}
       #${PANEL} button[data-action="close"]{padding:0;width:30px}
       #${PANEL} button:disabled{opacity:1}
-      #${STATUS}{position:fixed;right:4px;bottom:116px;z-index:2147483647;display:none;max-width:min(250px,calc(100vw - 16px));
+      #${STATUS}{position:fixed;right:4px;bottom:116px;z-index:2147483647;display:none;max-width:min(290px,calc(100vw - 16px));
         padding:5px 7px;border-radius:7px;background:#064e3b;color:#fff;font:700 10px/1.35 system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.25)}
       #${PANEL}[data-open="1"] #${STATUS}{display:block}
@@ -195,6 +202,7 @@
     `;
     document.head.appendChild(style);
   }
+
   function forceCloseLegacyTools() {
     const containers = [...document.querySelectorAll('[id^="mumei-"]')]
       .filter((node) => node.id !== PANEL && node.id !== TOGGLE && node.id !== STATUS && node.id !== STYLE);
@@ -204,7 +212,8 @@
       try { close?.click(); } catch (_) {}
     }
   }
-  function shutdownForManualNotification(count) {
+
+  function shutdownForManualNotification(count, diag = false) {
     notificationShutdown = true;
     runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
     if (waitCancel) waitCancel('通知工程へ移行');
@@ -216,8 +225,13 @@
     document.getElementById(PANEL)?.remove();
     document.getElementById(TOGGLE)?.remove();
     page.__MUMEI_NOTE_MANUAL_NOTIFICATION_CLEAN__ = true;
-    page.alert(`${count}件URL一覧コピー済み。\n通知工程では現行・旧版ツールを完全停止しました。\n\n本文へ1回貼付 → 各URL末尾でEnter。\n通知確認後は編集画面を再読み込み →「削」→「画」。`);
+    if (diag) {
+      page.alert(`3件切り分け準備完了。URL3件をコピーしました。\n\n① 完全クリーン\n② 画像🔗を残した状態\n③ 画像🔗を一度保存・更新後に削除済み\n\nツールは完全停止済みです。\n本文末尾へ3件を貼付 → 各URL末尾で実Enter → 更新 → 通知確認。`);
+    } else {
+      page.alert(`${count}件URL一覧コピー済み。\n通知工程では現行・旧版ツールを完全停止しました。\n\n本文へ1回貼付 → 各URL末尾でEnter。\n通知確認後は編集画面を再読み込み →「削」→「画」。`);
+    }
   }
+
   function closeTool() {
     runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
     if (waitCancel) waitCancel('ツールを閉じたため停止');
@@ -227,12 +241,16 @@
     if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '⛓'; }
     updateButtons();
   }
+
   function restoreLastMode() {
     if (running || mode || rows.length) return;
     const last = getJSON(modeKey(), '');
-    if (!['test10', 'final107'].includes(last)) return;
-    prepareMode(last).catch((error) => setStatus(`再開準備停止：${error?.message || String(error)}`, true));
+    if (!['diag3', 'test10', 'final107'].includes(last)) return;
+    prepareMode(last).then(() => {
+      if (last === 'diag3') setDiagStatus();
+    }).catch((error) => setStatus(`再開準備停止：${error?.message || String(error)}`, true));
   }
+
   function openTool() {
     const key = articleKey();
     if (!isEditPage() || !key) return;
@@ -240,10 +258,11 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus('CLEAN 11.0｜一覧コピー後にツール完全停止');
+    setStatus(`CLEAN ${VERSION}｜3件切分 / 10 / 107`);
     restoreLastMode();
   }
   function toggleTool() { if (enabled()) closeTool(); else openTool(); }
+
   function mount() {
     if (notificationShutdown || !document.body || !isEditPage()) return;
     document.body.dataset.mumeiNotePublish = '0';
@@ -258,35 +277,39 @@
     let panel = document.getElementById(PANEL);
     if (!panel) {
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
-      panel.innerHTML = `<button type="button" data-main-action="10" title="10件URL一覧をコピー">10</button>
+      panel.innerHTML = `<button type="button" data-main-action="3" title="通知原因3件切り分け">3</button>
+        <button type="button" data-main-action="10" title="10件URL一覧をコピー">10</button>
         <button type="button" data-main-action="107" title="107件URL一覧をコピー">107</button>
         <button type="button" data-action="retry-failed" title="同じURL一覧をもう一度コピー">複</button>
-        <button type="button" data-action="reset" title="既存URLを全消去して通知を初期化">初</button>
+        <button type="button" data-action="reset" title="対象URLを全消去して初期化">初</button>
         <button type="button" data-action="delete" title="通知後：カードとURL一覧を一括削除">削</button>
-        <button type="button" data-action="images" title="削除後：＋画像1回で極薄画像を一括完成">画</button>
+        <button type="button" data-action="images" title="10/107：削除後に極薄画像を一括完成">画</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">CLEAN 11.0</div>`;
+        <div id="${STATUS}" data-bad="0">CLEAN ${VERSION}</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
     const storedActive = getJSON(ACTIVE_KEY, '');
     if (storedActive === articleKey()) {
       openedArticle = storedActive; panel.dataset.open = '1'; toggle.dataset.open = '1';
-      toggle.textContent = '⛓';
-      restoreLastMode();
+      toggle.textContent = '⛓'; restoreLastMode();
     }
   }
+
   async function onPanelClick(event) {
     const button = event.target.closest('button');
     if (!button || !enabled()) return;
     if (running && button.dataset.action !== 'retry-failed' && button.dataset.action !== 'close') {
       setStatus('処理中です。「止」で止めてから別の操作をしてください', true); return;
     }
+    if (button.dataset.mainAction === '3') return runDiag3();
     if (button.dataset.mainAction === '10') return copyUrlListMode('test10');
     if (button.dataset.mainAction === '107') return copyUrlListMode('final107');
     if (button.dataset.action === 'retry-failed') return running ? stopRun() : copyCurrentList();
-    if (button.dataset.action === 'reset') return resetForNotification();
+    if (button.dataset.action === 'reset') return mode === 'diag3' ? resetDiag3(true) : resetForNotification();
     if (button.dataset.action === 'delete') return deleteNotificationCards();
-    if (button.dataset.action === 'images') return armBatchImages();
+    if (button.dataset.action === 'images') return mode === 'diag3'
+      ? setStatus('3件切り分けでは「画」は使いません。「3」で段階を進めます', true)
+      : armBatchImages();
     if (button.dataset.action === 'close') return closeTool();
   }
 
@@ -368,7 +391,6 @@
     return new page.File([output], `${String(item.index).padStart(2, '0')}_compact.png`, { type: 'image/png' });
   }
   async function finalFile(item) {
-    // manifestのcardPathはサイトルート表記のため、実ファイルはmanifestと同階層のcardsを使う。
     const name = `${String(item.index).padStart(3, '0')}.png`;
     const blob = await xhr(new URL(`./cards/${name}`, FINAL_MANIFEST).href, 'blob');
     if (!blob || blob.size < 100) throw new Error('画像取得失敗');
@@ -476,7 +498,8 @@
     return unique.size;
   }
   function remoteImage(node) {
-    const src = String(node?.attrs?.src || ''); return /^https:\/\//i.test(src) && !/^https:\/\/editor\.note\.com\/icons\//i.test(src);
+    const src = String(node?.attrs?.src || '');
+    return /^https:\/\//i.test(src) && !/^https:\/\/editor\.note\.com\/icons\//i.test(src);
   }
   function ensureFreshParagraph(view) {
     const paragraph = view.state.schema.nodes.paragraph; if (!paragraph) throw new FatalError('本文paragraphなし');
@@ -495,6 +518,7 @@
     holder.appendChild(fragment); core().normalizeDOM(holder);
     return core().cleanHTML(holder.innerHTML);
   }
+
   function verifyFinalDocument(view) {
     const invalid = [];
     for (const row of rows) {
@@ -521,34 +545,64 @@
     if (remaining.length) throw new FatalError(`通知リセット残り: ${remaining.slice(0, 8).join(',')}`);
     return serializedBody(view);
   }
+  function verifyDiagBase(view) {
+    for (const row of rows) {
+      if (officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length || findByLink(view, row.url)) {
+        throw new FatalError(`3件初期化残り: ${row.index}`);
+      }
+    }
+    if (targetUrlTextblocks(view).length) throw new FatalError('3件URL一覧が残っています');
+    return serializedBody(view);
+  }
+  function verifyDiagImages(view) {
+    const one = rows[0], two = rows[1], three = rows[2];
+    if (findByLink(view, one.url)) throw new FatalError('①に画像リンクが残っています');
+    if (!findByLink(view, two.url)) throw new FatalError('②の画像リンクがありません');
+    if (!findByLink(view, three.url)) throw new FatalError('③の画像リンクがありません');
+    if (rows.some((row) => officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length) || targetUrlTextblocks(view).length) {
+      throw new FatalError('3件準備中に標準カード/URLが混在しています');
+    }
+    return serializedBody(view);
+  }
+  function verifyDiagReady(view) {
+    const one = rows[0], two = rows[1], three = rows[2];
+    if (findByLink(view, one.url)) throw new FatalError('①は完全クリーンではありません');
+    if (!findByLink(view, two.url)) throw new FatalError('②の画像🔗がありません');
+    if (findByLink(view, three.url)) throw new FatalError('③の画像🔗がまだ残っています');
+    if (rows.some((row) => officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length) || targetUrlTextblocks(view).length) {
+      throw new FatalError('標準カード/URLが先に入っています');
+    }
+    return serializedBody(view);
+  }
+
   async function saveDraftToServer(view, token, verifier, progressText) {
     if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
     verifier(view);
     setStatus(progressText);
-    // note内部APIを直呼びせず、通常編集と同じ自動保存時間を通す。
     await sleep(4200);
     if (token !== runToken || !enabled()) throw new FatalError('停止しました');
     const button = [...document.querySelectorAll('button')].find((node) =>
       node.textContent?.trim() === '一時保存' && node.getClientRects().length);
-    if (button && !button.disabled) {
-      button.click();
-    }
+    if (button && !button.disabled) button.click();
     await sleep(6500);
     if (token !== runToken || !enabled()) throw new FatalError('停止しました');
     verifier(view);
   }
+
   function rowFrom(item, stored) {
     const proof = [DELETE_PROOF, FINAL_PROOF].includes(stored?.proof) ? stored.proof : '';
     return { ...item, status: proof ? 'done' : 'ready', nodeId: stored?.nodeId || '',
       owned: Boolean(stored?.owned), trusted: Boolean(stored?.trusted), cardKey: stored?.cardKey || '',
       proof, error: stored?.error || '' };
   }
+
   async function prepareMode(selectedMode) {
     mode = selectedMode; setJSON(modeKey(), selectedMode);
-    items = selectedMode === 'final107' ? await loadFinalItems() : TEST_ITEMS;
+    items = selectedMode === 'final107' ? await loadFinalItems() : selectedMode === 'diag3' ? DIAG_ITEMS : TEST_ITEMS;
     const stored = new Map(legacyRows(selectedMode).map((row) => [row.url, row]));
     storedRows(selectedMode).forEach((row) => stored.set(row.url, row));
     rows = items.map((item) => rowFrom(item, stored.get(item.url)));
+    if (selectedMode === 'diag3') { saveRows(); updateUi(); return; }
     const view = findView();
     if (view) for (const row of rows) {
       const cards = officialCards(view, row.url);
@@ -562,6 +616,7 @@
     }
     saveRows(); updateUi();
   }
+
   function copyPreparedUrlList() {
     if (!rows.length || typeof GM_setClipboard !== 'function') throw new FatalError('URL一覧をコピーできません');
     GM_setClipboard(rows.map((row) => row.url).join('\n\n'), 'text');
@@ -569,6 +624,7 @@
     saveRows();
     setStatus(`${rows.length}件URL一覧コピー済み ✅ 本文へ1回貼付→各URL末尾でEnter`);
   }
+
   async function copyUrlListMode(selectedMode) {
     if (running || !enabled()) return;
     running = true; ++runToken; updateUi();
@@ -581,13 +637,16 @@
       setStatus(`一覧コピー停止：${error?.message || String(error)}`, true);
     } finally { running = false; updateUi(); }
   }
+
   async function copyCurrentList() {
     const selectedMode = mode || getJSON(modeKey(), '');
+    if (selectedMode === 'diag3') return runDiag3();
     if (!['test10', 'final107'].includes(selectedMode)) {
-      setStatus('先に「10」または「107」を押してください', true); return;
+      setStatus('先に「3」「10」「107」のどれかを押してください', true); return;
     }
     return copyUrlListMode(selectedMode);
   }
+
   async function resetForNotification() {
     if (running || !mode || !rows.length || !enabled()) return;
     running = true; const token = ++runToken; updateUi();
@@ -601,9 +660,7 @@
         const id = String(hit.node.attrs?.id || ''), linked = normalizeUrl(hit.node.attrs?.link);
         if (trackedIds.has(id) || targets.has(linked)) deletions.push(hit);
       }
-      rows.forEach((row) => {
-        deletions.push(...officialCards(view, row.url));
-      });
+      rows.forEach((row) => deletions.push(...officialCards(view, row.url)));
       deletions.push(...targetUrlTextblocks(view));
       let transaction = view.state.tr;
       const unique = new Map();
@@ -624,15 +681,17 @@
       setStatus(`初期化停止：${error?.message || String(error)}（公開・更新しない）`, true);
     } finally { running = false; updateUi(); }
   }
+
   function verifyCardsDeleted(view) {
     const invalid = rows.filter((row) => officialCards(view, row.url).length);
     if (targetUrlTextblocks(view).length) throw new FatalError('一括削除後もURL一覧が残っています');
     if (invalid.length) throw new FatalError(`カード削除後の対象URL残り: ${invalid.slice(0, 8).map((row) => row.index).join(',')}`);
     return serializedBody(view);
   }
+
   async function deleteNotificationCards() {
     if (running) { setStatus('処理中です。「止」で止めてから削除してください', true); return; }
-    if (!mode || !rows.length || !enabled()) { setStatus('先に「10」または「107」で対象を読み込んでください', true); return; }
+    if (!mode || !rows.length || !enabled()) { setStatus('先に「3」「10」「107」で対象を読み込んでください', true); return; }
     running = true; const token = ++runToken; updateUi();
     try {
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
@@ -642,11 +701,16 @@
       await saveDraftToServer(view, token, verifyCardsDeleted, `カード/URL一覧 ${removed}ブロックを一括削除・保存中…`);
       rows.forEach((row) => { row.status = 'done'; row.proof = DELETE_PROOF; row.cardKey = ''; row.error = ''; });
       saveRows();
-      setStatus(removed ? `カード/URL一覧 ${removed}ブロック 一括削除＋保存 ✅ 次は「画」` : '対象カード/URL一覧は既に0件 ✅ 次は「画」');
+      if (mode === 'diag3') {
+        setStatus(removed ? `3件テストカード/URL ${removed}ブロック削除済み ✅ 全テスト跡を消すなら「初」` : '3件テストカード/URLは0件 ✅ 全テスト跡を消すなら「初」');
+      } else {
+        setStatus(removed ? `カード/URL一覧 ${removed}ブロック 一括削除＋保存 ✅ 次は「画」` : '対象カード/URL一覧は既に0件 ✅ 次は「画」');
+      }
     } catch (error) {
       setStatus(`カード削除停止：${error?.message || String(error)}（公開・更新しないで「削」を再実行）`, true);
     } finally { running = false; updateUi(); }
   }
+
   function imageInput(input) {
     if (!input || input.tagName !== 'INPUT' || input.type !== 'file') return false;
     const accept = String(input.accept || '').toLowerCase();
@@ -753,8 +817,7 @@
     let transaction = arm.view.state.tr;
     created.forEach((hit, index) => {
       const row = arm.workRows[index];
-      transaction = transaction.setNodeMarkup(hit.pos, hit.node.type,
-        { ...hit.node.attrs, link: row.url }, hit.node.marks);
+      transaction = transaction.setNodeMarkup(hit.pos, hit.node.type, { ...hit.node.attrs, link: row.url }, hit.node.marks);
       row.nodeId = String(hit.node.attrs?.id || ''); row.owned = true;
     });
     arm.view.dispatch(transaction);
@@ -773,10 +836,15 @@
     setStatus(`${created.length}/${arm.workRows.length}枚アップロード済み｜URL一括付与＋余白除去中…`);
     await linkAndCompactImages(arm, created);
     arm.linked = true;
-    await saveDraftToServer(arm.view, arm.token, verifyFinalDocument,
-      `${rows.length}枚の極薄リンクを通常保存中…`);
-    rows.forEach((row) => { row.status = 'done'; row.proof = FINAL_PROOF; row.error = ''; });
-    saveRows();
+    if (arm.kind === 'diag') {
+      await saveDraftToServer(arm.view, arm.token, verifyDiagImages, '②③の画像🔗を保存中…');
+      setDiagStage('images_saved');
+      page.alert('②③の画像🔗を保存しました。\n\n次に「公開に進む」→「更新」。\n編集へ戻ったら、もう一度「3」を押してください。');
+    } else {
+      await saveDraftToServer(arm.view, arm.token, verifyFinalDocument, `${rows.length}枚の極薄リンクを通常保存中…`);
+      rows.forEach((row) => { row.status = 'done'; row.proof = FINAL_PROOF; row.error = ''; });
+      saveRows();
+    }
   }
   function removeFreshArmImages(arm) {
     if (!arm?.view) return 0;
@@ -809,10 +877,32 @@
     }
     return true;
   }
+
+  async function armImagesForRows(workRows, kind = 'normal') {
+    const token = runToken;
+    const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+    const files = await mapLimit(workRows, 6, async (row, index) => {
+      if (token !== runToken || !enabled()) throw new FatalError('停止しました');
+      const file = await fileFor(row);
+      setStatus(`画像準備 ${index + 1}/${workRows.length}…`); return file;
+    });
+    const completion = new Promise((resolve, reject) => {
+      imageArm = {
+        token, view, workRows, files, resolve, reject, consumed: false, linked: false, input: null, kind,
+        beforeIds: new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')).filter(Boolean)),
+        beforeInputs: new Set(document.querySelectorAll('input[type="file"]')), timer: null
+      };
+    });
+    installImageInputBridge();
+    imageArm.timer = setTimeout(() => imageArm?.reject(new Error('画像選択待機が3分を超えました')), 180000);
+    setStatus(`準備OK｜本文をタップ→「＋」→「画像」を1回だけ`);
+    await completion;
+  }
+
   async function armBatchImages() {
     if (running) { setStatus('処理中です。「止」で止めてから画像工程へ進んでください', true); return; }
     if (!mode || !rows.length || !enabled()) { setStatus('先に「10」または「107」で対象を読み込んでください', true); return; }
-    running = true; const token = ++runToken; updateUi();
+    running = true; ++runToken; updateUi();
     try {
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
       const blockingCards = rows.flatMap((row) => officialCards(view, row.url));
@@ -820,45 +910,136 @@
       if (blockingCards.length || blockingUrls.length) {
         throw new FatalError(`通知カード/URL一覧が残っています(${blockingCards.length + blockingUrls.length}ブロック)。先に「削」`);
       }
-      rows.forEach((row) => {
-        if (row.proof !== FINAL_PROOF) { row.status = 'done'; row.proof = DELETE_PROOF; }
-      });
+      rows.forEach((row) => { if (row.proof !== FINAL_PROOF) { row.status = 'done'; row.proof = DELETE_PROOF; } });
       saveRows();
       const workRows = missingImageRows(view);
       if (!workRows.length) {
-        await saveDraftToServer(view, token, verifyFinalDocument, `${rows.length}枚の極薄リンクを通常保存中…`);
+        await saveDraftToServer(view, runToken, verifyFinalDocument, `${rows.length}枚の極薄リンクを通常保存中…`);
         rows.forEach((row) => { row.status = 'done'; row.proof = FINAL_PROOF; }); saveRows();
         setStatus(`${rows.length}/${rows.length}枚｜極薄画像＋URLは完成済み ✅`); return;
       }
       setStatus(`${workRows.length}枚の極薄画像を並列準備中…`);
-      const files = await mapLimit(workRows, 6, async (row, index) => {
-        if (token !== runToken || !enabled()) throw new FatalError('停止しました');
-        const file = await fileFor(row);
-        setStatus(`画像準備 ${index + 1}/${workRows.length}…`); return file;
-      });
-      const completion = new Promise((resolve, reject) => {
-        imageArm = {
-          token, view, workRows, files, resolve, reject, consumed: false, linked: false, input: null,
-          beforeIds: new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')).filter(Boolean)),
-          beforeInputs: new Set(document.querySelectorAll('input[type="file"]')), timer: null
-        };
-      });
-      installImageInputBridge();
-      imageArm.timer = setTimeout(() => imageArm?.reject(new Error('画像選択待機が3分を超えました')), 180000);
-      setStatus(`準備OK｜本文をタップ→「＋」→「画像」を1回だけ`);
-      await completion;
+      await armImagesForRows(workRows, 'normal');
       setStatus(`${rows.length}/${rows.length}枚を一括挿入＋URL付与＋余白除去＋保存 ✅`);
     } catch (error) {
       setStatus(`画像工程停止：${error?.message || String(error)}（途中分は「画」で再開）`, true);
     } finally { cancelImageArm(); running = false; updateUi(); }
   }
+
+  function setDiagStatus() {
+    const stage = diagState().stage;
+    const map = {
+      start: '3件切り分け｜次の「3」で3URLを完全初期化',
+      base_saved: '3件初期化を保存済み｜先に公開→更新して戻る',
+      base_updated: '①クリーン確定｜次の「3」で②③画像準備',
+      images_saved: '②③画像🔗保存済み｜先に公開→更新して戻る',
+      images_updated: '画像🔗履歴確定｜次の「3」で③だけ削除',
+      third_deleted_saved: '③画像削除保存済み｜先に公開→更新して戻る',
+      third_deleted_updated: '①②③条件完成｜次の「3」でURLコピー＋完全停止',
+      cards_pending: '3件URLコピー済み｜貼付＋実Enter＋更新＋通知確認',
+      cleanup_saved: '3件テスト跡を削除保存済み｜公開→更新で後片付け完了',
+      cleanup_updated: '3件テスト後片付け完了'
+    };
+    setStatus(map[stage] || `3件切り分け｜${stage}`);
+  }
+
+  async function resetDiag3(userRequested = false) {
+    if (running && !userRequested) return;
+    if (mode !== 'diag3' || !rows.length) await prepareMode('diag3');
+    running = true; const token = ++runToken; updateUi();
+    try {
+      cancelImageArm();
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
+      const trackedIds = new Set(rows.map((row) => String(row.nodeId || '')).filter(Boolean));
+      const deletions = [];
+      for (const hit of imageNodes(view)) {
+        const id = String(hit.node.attrs?.id || ''), linked = normalizeUrl(hit.node.attrs?.link);
+        if (trackedIds.has(id) || targets.has(linked)) deletions.push(hit);
+      }
+      rows.forEach((row) => deletions.push(...officialCards(view, row.url), ...exactUrlParagraphs(view, row.url)));
+      deletions.push(...targetUrlTextblocks(view));
+      deleteBlocks(view, deletions);
+      rows.forEach((row) => { row.nodeId = ''; row.proof = ''; row.error = ''; }); saveRows();
+      await saveDraftToServer(view, token, verifyDiagBase, '3件の既存画像🔗・カード・URLを完全初期化して保存中…');
+      setDiagStage(userRequested ? 'cleanup_saved' : 'base_saved');
+      if (userRequested) {
+        page.alert('3件テストの画像・カード・URLを削除しました。\n「公開に進む」→「更新」で後片付け完了です。');
+      } else {
+        page.alert('3件を完全クリーンにして保存しました。\n\n次に「公開に進む」→「更新」。\n編集へ戻ったら、もう一度「3」を押してください。');
+      }
+      setDiagStatus();
+    } catch (error) {
+      setStatus(`3件初期化停止：${error?.message || String(error)}（公開・更新しない）`, true);
+    } finally { running = false; updateUi(); }
+  }
+
+  async function prepareDiagImages() {
+    running = true; ++runToken; updateUi();
+    try {
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      verifyDiagBase(view);
+      const workRows = [rows[1], rows[2]];
+      setStatus('②③の極薄画像2枚を準備中…');
+      await armImagesForRows(workRows, 'diag');
+      setDiagStatus();
+    } catch (error) {
+      setStatus(`②③画像準備停止：${error?.message || String(error)}`, true);
+    } finally { cancelImageArm(); running = false; updateUi(); }
+  }
+
+  async function deleteThirdDiagImage() {
+    running = true; const token = ++runToken; updateUi();
+    try {
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      verifyDiagImages(view);
+      const hit = findByLink(view, rows[2].url) || findById(view, rows[2].nodeId);
+      if (!hit) throw new FatalError('③の削除対象画像がありません');
+      deleteBlocks(view, [hit]); rows[2].nodeId = ''; saveRows();
+      await saveDraftToServer(view, token, verifyDiagReady, '③だけ画像🔗を削除して保存中…');
+      setDiagStage('third_deleted_saved');
+      page.alert('③の画像🔗だけ削除して保存しました。\n②の画像🔗は残っています。\n\n次に「公開に進む」→「更新」。\n編集へ戻ったら、もう一度「3」を押してください。');
+      setDiagStatus();
+    } catch (error) {
+      setStatus(`③画像削除停止：${error?.message || String(error)}`, true);
+    } finally { running = false; updateUi(); }
+  }
+
+  async function runDiag3() {
+    if (running || !enabled()) return;
+    try {
+      if (mode !== 'diag3' || !rows.length) await prepareMode('diag3');
+      const stage = diagState().stage;
+      if (stage === 'start' || stage === 'cleanup_updated') return resetDiag3(false);
+      if (stage === 'base_saved') { setStatus('先に「公開に進む」→「更新」してください。更新前には進めません', true); return; }
+      if (stage === 'base_updated') return prepareDiagImages();
+      if (stage === 'images_saved') { setStatus('先に「公開に進む」→「更新」してください。画像🔗履歴を確定させます', true); return; }
+      if (stage === 'images_updated') return deleteThirdDiagImage();
+      if (stage === 'third_deleted_saved') { setStatus('先に「公開に進む」→「更新」してください。③削除履歴を確定させます', true); return; }
+      if (stage === 'third_deleted_updated') {
+        const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+        verifyDiagReady(view);
+        copyPreparedUrlList(); setDiagStage('cards_pending');
+        shutdownForManualNotification(3, true); return;
+      }
+      if (stage === 'cards_pending') {
+        copyPreparedUrlList(); shutdownForManualNotification(3, true); return;
+      }
+      if (stage === 'cleanup_saved') { setStatus('後片付けは保存済み。公開→更新で完了です', true); return; }
+      setStatus(`3件テスト状態を確認できません: ${stage}`, true);
+    } catch (error) {
+      setStatus(`3件切り分け停止：${error?.message || String(error)}`, true);
+    }
+  }
+
   function stopRun() {
     runToken += 1;
     if (waitCancel) waitCancel('停止しました'); waitCancel = null;
     cancelImageArm('停止しました');
-    setStatus('現在の1件を止めています…完了済みは保持します', true);
+    setStatus('現在の処理を停止しています…完了済みは保持します', true);
     updateUi();
   }
+
   function routeCheck() {
     if (notificationShutdown || !document.body) return;
     document.body.dataset.mumeiNotePublish = isPublishPage() ? '1' : '0';
@@ -869,7 +1050,9 @@
     }
     if (!document.getElementById(PANEL) || !document.getElementById(TOGGLE)) mount();
   }
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true }); else mount();
+
   function publishClickHandler(event) {
     const button = event.target?.closest?.('button');
     const label = button?.textContent?.trim() || '';
@@ -883,8 +1066,17 @@
       if (reset?.state === 'prepared' || reset?.state === 'publish-page') {
         setJSON(resetKey(), { ...reset, state: 'submitted', at: Date.now() });
       }
+      const diag = diagState();
+      const next = {
+        base_saved: 'base_updated',
+        images_saved: 'images_updated',
+        third_deleted_saved: 'third_deleted_updated',
+        cleanup_saved: 'cleanup_updated'
+      }[diag.stage];
+      if (next) setDiagStage(next, { submittedFrom: diag.stage });
     }
   }
+
   document.addEventListener('click', publishClickHandler, true);
   routeTimer = setInterval(routeCheck, 500);
 })();
