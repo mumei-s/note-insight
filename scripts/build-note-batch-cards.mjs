@@ -63,6 +63,12 @@ function stripTitleSuffix(title, creator) {
   return value;
 }
 
+function assetImageUrls(value) {
+  const normalized = decodeHtml(String(value || '')).replace(/\\u002f/gi, '/').replace(/\\\//g, '/');
+  const matches = normalized.match(/https:\/\/assets\.st-note\.com\/(?:img|production\/uploads\/images)\/[^"'<>\\\s)]+/gi) || [];
+  return matches.map((url) => url.replace(/[},;]+$/, ''));
+}
+
 async function fetchRetry(url, asBuffer = false) {
   let last;
   for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -98,13 +104,16 @@ async function article(url, index) {
     apiNote = payload?.data || payload;
   } catch (_) {}
 
-  const meta = metas(await fetchRetry(url));
+  const html = await fetchRetry(url);
+  const meta = metas(html);
   const creator = String(apiNote?.user?.nickname || apiNote?.user?.name || meta.get('author') ||
     meta.get('note:creator') || meta.get('twitter:data2') || new URL(url).pathname.split('/')[1]).trim();
   const rawTitle = meta.get('og:title') || meta.get('twitter:title') || '';
   const title = String(apiNote?.name || stripTitleSuffix(rawTitle, creator)).trim();
+  const inlineImages = [...assetImageUrls(apiNote?.body), ...assetImageUrls(html)];
   const thumbUrls = [apiNote?.eyecatch_url, apiNote?.eyecatch, meta.get('og:image'), meta.get('twitter:image'),
-    apiNote?.user?.profile_image_url, apiNote?.user?.profile_image].map((value) => String(value || '').trim())
+    ...inlineImages, apiNote?.user?.profileImageUrl, apiNote?.user?.profile_image_url, apiNote?.user?.profile_image]
+    .map((value) => String(value || '').trim())
     .map((value) => value.startsWith('//') ? `https:${value}` : value)
     .filter((value, position, all) => /^https?:\/\//i.test(value) && all.indexOf(value) === position);
   if (!title) throw new Error(`${index}: タイトル取得失敗 ${url}`);
