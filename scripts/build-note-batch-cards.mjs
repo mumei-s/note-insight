@@ -80,10 +80,15 @@ async function fetchRetry(url, asBuffer = false) {
         },
         redirect: 'follow'
       });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        const error = new Error(`${response.status} ${response.statusText}`);
+        error.permanent = response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status);
+        throw error;
+      }
       return asBuffer ? Buffer.from(await response.arrayBuffer()) : await response.text();
     } catch (error) {
       last = error;
+      if (error?.permanent) break;
       if (attempt < 5) await sleep(attempt * 1200);
     }
   }
