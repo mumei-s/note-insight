@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         無名S note 極薄ワンタップ COMPLETE 13.0
+// @name         無名S note 極薄ワンタップ COMPLETE 14.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      14.0.0
+// @version      14.1.0
 // @description  実験2枚／指定326枚を画像1回で一括挿入＋URL自動付与し、note正規URLコマンドで標準カードも自動生成
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.0.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.0.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.1.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.1.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_THIN_BATCH_14000__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_14100__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_THIN_BATCH_14000__',
     '__MUMEI_NOTE_THIN_BATCH_13200__',
     '__MUMEI_NOTE_THIN_BATCH_13100__',
     '__MUMEI_NOTE_THIN_BATCH_13000__',
@@ -36,11 +37,11 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_THIN_BATCH_14000__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_14100__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '14.0';
+  const VERSION = '14.1';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
@@ -62,10 +63,10 @@
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
   // Do not prefix these IDs with "mumei-". Legacy scripts broadly scan that prefix
   // and programmatically click every close button they find.
-  const TOGGLE = 'ntb-one-tap-toggle-v1400';
-  const PANEL = 'ntb-one-tap-panel-v1400';
-  const STATUS = 'ntb-one-tap-status-v1400';
-  const STYLE = 'ntb-one-tap-style-v1400';
+  const TOGGLE = 'ntb-one-tap-toggle-v1410';
+  const PANEL = 'ntb-one-tap-panel-v1410';
+  const STATUS = 'ntb-one-tap-status-v1410';
+  const STYLE = 'ntb-one-tap-style-v1410';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -199,7 +200,9 @@
       #mumei-notify-toggle-v1100,#mumei-notify-panel-v1100,
       #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200,
       #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210,
-      #mumei-thin-toggle-v1300,#mumei-thin-panel-v1300{display:none!important}
+      #mumei-thin-toggle-v1300,#mumei-thin-panel-v1300,
+      #ntb-one-tap-toggle-v1400,#ntb-one-tap-panel-v1400,
+      #ntb-one-tap-status-v1400{display:none!important}
       #${TOGGLE}{position:fixed;right:4px;top:42%;bottom:auto;z-index:2147483647;width:30px;height:30px;border:0;
         border-radius:999px;padding:0;background:#0f766e;color:#fff;font:800 14px/30px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
@@ -243,7 +246,9 @@
       'mumei-notify-toggle-v1200', 'mumei-notify-panel-v1200',
       'mumei-notify-toggle-v1210', 'mumei-notify-panel-v1210',
       'mumei-thin-toggle-v1300', 'mumei-thin-panel-v1300',
-      'mumei-thin-status-v1300', 'mumei-thin-style-v1300'
+      'mumei-thin-status-v1300', 'mumei-thin-style-v1300',
+      'ntb-one-tap-toggle-v1400', 'ntb-one-tap-panel-v1400',
+      'ntb-one-tap-status-v1400', 'ntb-one-tap-style-v1400'
     ];
     ids.forEach((id) => document.getElementById(id)?.remove());
   }
@@ -340,6 +345,10 @@
     event.preventDefault(); event.stopPropagation();
     const button = event.target.closest('button');
     if (!button || !enabled()) return;
+    // The tool's × must only react to a real finger/mouse tap.  This blocks
+    // legacy scripts (or synthetic events) from closing the panel while the
+    // native note ＋ menu is opening.
+    if (button.dataset.action === 'close' && !event.isTrusted) return;
     if (running && button.dataset.action !== 'close') return;
     if (BATCHES[button.dataset.mainAction]) return startFreshImageBatch(button.dataset.mainAction);
     if (button.dataset.action === 'reset') return resetCurrentTargets();
@@ -374,7 +383,7 @@
     const config = BATCHES[selectedMode];
     if (!config) throw new FatalError(`未対応モード: ${selectedMode}`);
     if (manifestCache.has(selectedMode)) return validateManifest(manifestCache.get(selectedMode), selectedMode);
-    const parsed = JSON.parse(await xhr(`${config.manifest}?v=14.0.0`, 'text'));
+    const parsed = JSON.parse(await xhr(`${config.manifest}?v=14.1.0`, 'text'));
     const values = validateManifest(parsed, selectedMode);
     manifestCache.set(selectedMode, parsed);
     return values;
@@ -440,7 +449,7 @@
     const config = BATCHES[mode];
     if (!config) throw new FatalError(`画像モード不正: ${mode}`);
     const name = `${String(item.index).padStart(3, '0')}.png`;
-    const blob = await xhr(`${new URL(`./cards/${name}`, config.manifest).href}?v=14.0.0`, 'blob');
+    const blob = await xhr(`${new URL(`./cards/${name}`, config.manifest).href}?v=14.1.0`, 'blob');
     if (!blob || blob.size < 100) throw new Error('画像取得失敗');
     const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
     const png = bytes.length === 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -561,6 +570,51 @@
     });
     return output;
   }
+  function pushMap(map, key, value) {
+    if (!key) return;
+    const values = map.get(key);
+    if (values) values.push(value); else map.set(key, [value]);
+  }
+  // A 326-item document must be traversed once per verification, not once per
+  // row.  The old per-row findBy*/officialCards calls caused quadratic work on
+  // Android near the end of the full batch.
+  function buildTargetIndex(view) {
+    const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
+    const imagesById = new Map();
+    const imagesByLink = new Map();
+    const cardsByUrl = new Map();
+    const paragraphsByUrl = new Map();
+    const targetTextblocks = [];
+    view.state.doc.descendants((node, pos) => {
+      const hit = { node, pos };
+      if (node.type?.name === 'image') {
+        const id = String(node.attrs?.id || '');
+        const link = normalizeUrl(node.attrs?.link);
+        if (id && !imagesById.has(id)) imagesById.set(id, hit);
+        if (targets.has(link)) pushMap(imagesByLink, link, hit);
+      }
+      if (node.type?.name === 'embed') {
+        const src = normalizeUrl(node.attrs?.src);
+        if (targets.has(src) && node.attrs?.htmlForEmbed && node.attrs?.embeddedContentKey) {
+          pushMap(cardsByUrl, src, hit);
+        }
+      }
+      if (!node.isTextblock) return;
+      const raw = (node.textContent || '').trim();
+      const exact = normalizeUrl(raw);
+      if (targets.has(exact)) pushMap(paragraphsByUrl, exact, hit);
+      const text = node.textBetween(0, node.content.size, '\n', '\n').trim();
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length && tokens.every((value) => targets.has(normalizeUrl(value)))) {
+        targetTextblocks.push(hit);
+      }
+    });
+    return { imagesById, imagesByLink, cardsByUrl, paragraphsByUrl, targetTextblocks };
+  }
+  function indexedImage(index, row) {
+    return (row.nodeId && index.imagesById.get(String(row.nodeId))) ||
+      index.imagesByLink.get(normalizeUrl(row.url))?.[0] || null;
+  }
   function deleteBlocks(view, hits) {
     const unique = new Map();
     hits.forEach((hit) => hit?.node && unique.set(`${hit.pos}:${hit.node.nodeSize}`, hit));
@@ -596,28 +650,34 @@
   }
 
   function verifyFinalDocument(view) {
+    const index = buildTargetIndex(view);
     const invalid = [];
     for (const row of rows) {
-      const image = findById(view, row.nodeId) || findByLink(view, row.url);
+      const url = normalizeUrl(row.url);
+      const image = indexedImage(index, row);
       const imageOK = image && remoteImage(image.node) && normalizeUrl(image.node.attrs?.link) === normalizeUrl(row.url);
-      if (!imageOK || officialCards(view, row.url).length || exactUrlParagraphs(view, row.url).length) invalid.push(row.index);
+      if (!imageOK || index.cardsByUrl.get(url)?.length || index.paragraphsByUrl.get(url)?.length) invalid.push(row.index);
     }
-    if (targetUrlTextblocks(view).length) throw new FatalError('最終本文にURL一覧が残っています。先に「削」');
+    if (index.targetTextblocks.length) throw new FatalError('最終本文にURL一覧が残っています。先に「削」');
     if (invalid.length) throw new FatalError(`最終画像リンクまたはカード削除の不一致: ${invalid.slice(0, 8).join(',')}`);
     const body = serializedBody(view), parsed = new DOMParser().parseFromString(body, 'text/html');
-    const imageHrefs = [...parsed.querySelectorAll('figure a[href] img')]
-      .map((image) => normalizeUrl(image.closest('a[href]')?.getAttribute('href')));
-    const absent = rows.filter((row) => !imageHrefs.includes(normalizeUrl(row.url)));
+    const imageHrefs = new Set([...parsed.querySelectorAll('figure a[href] img')]
+      .map((image) => normalizeUrl(image.closest('a[href]')?.getAttribute('href'))));
+    const absent = rows.filter((row) => !imageHrefs.has(normalizeUrl(row.url)));
     if (absent.length) throw new FatalError(`保存HTMLの極薄リンク不足: ${absent.slice(0, 8).map((row) => row.index).join(',')}`);
     return body;
   }
   function verifyResetDocument(view) {
+    const index = buildTargetIndex(view);
     const remaining = [];
     for (const row of rows) {
-      if (officialCards(view, row.url).length || findByLink(view, row.url) || exactUrlParagraphs(view, row.url).length ||
-        (row.nodeId && findById(view, row.nodeId))) remaining.push(row.index);
+      const url = normalizeUrl(row.url);
+      if (index.cardsByUrl.get(url)?.length || index.imagesByLink.get(url)?.length ||
+        index.paragraphsByUrl.get(url)?.length || (row.nodeId && index.imagesById.has(String(row.nodeId)))) {
+        remaining.push(row.index);
+      }
     }
-    if (targetUrlTextblocks(view).length) throw new FatalError('通知リセット後もURL一覧が残っています');
+    if (index.targetTextblocks.length) throw new FatalError('通知リセット後もURL一覧が残っています');
     if (remaining.length) throw new FatalError(`通知リセット残り: ${remaining.slice(0, 8).join(',')}`);
     return serializedBody(view);
   }
@@ -680,13 +740,16 @@
     storedRows(selectedMode).forEach((row) => stored.set(row.url, row));
     rows = items.map((item) => rowFrom(item, stored.get(item.url)));
     const view = findView();
+    const index = view ? buildTargetIndex(view) : null;
     if (view) for (const row of rows) {
-      const cards = officialCards(view, row.url);
-      if (row.proof === DELETE_PROOF && !cards.length && !exactUrlParagraphs(view, row.url).length) continue;
+      const url = normalizeUrl(row.url);
+      const cards = index.cardsByUrl.get(url) || [];
+      const paragraphs = index.paragraphsByUrl.get(url) || [];
+      if (row.proof === DELETE_PROOF && !cards.length && !paragraphs.length) continue;
       if (row.proof === FINAL_PROOF) {
-        const image = findById(view, row.nodeId) || findByLink(view, row.url);
+        const image = indexedImage(index, row);
         if (image && remoteImage(image.node) && normalizeUrl(image.node.attrs?.link) === normalizeUrl(row.url) &&
-          !cards.length && !exactUrlParagraphs(view, row.url).length) continue;
+          !cards.length && !paragraphs.length) continue;
       }
       row.status = 'ready'; row.proof = '';
     }
@@ -1088,8 +1151,9 @@
   }
 
   function verifyCardsDeleted(view) {
-    const invalid = rows.filter((row) => officialCards(view, row.url).length);
-    if (targetUrlTextblocks(view).length) throw new FatalError('一括削除後もURL一覧が残っています');
+    const index = buildTargetIndex(view);
+    const invalid = rows.filter((row) => index.cardsByUrl.get(normalizeUrl(row.url))?.length);
+    if (index.targetTextblocks.length) throw new FatalError('一括削除後もURL一覧が残っています');
     if (invalid.length) throw new FatalError(`カード削除後の対象URL残り: ${invalid.slice(0, 8).map((row) => row.index).join(',')}`);
     return serializedBody(view);
   }
@@ -1122,6 +1186,38 @@
     return !accept || accept.includes('image') || accept.includes('.png') ||
       accept.includes('.jpg') || accept.includes('.jpeg') || accept.includes('.webp');
   }
+  const IMAGE_CHOICE_SELECTOR = 'button,[role="button"],label,[role="menuitem"],li';
+  function exactImageChoice(node, visible = true) {
+    if (!(node instanceof Element) || !node.matches?.(IMAGE_CHOICE_SELECTOR)) return false;
+    const label = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!/^(?:画像|写真|画像を追加|写真を追加)$/.test(label)) return false;
+    return !visible || Boolean(node.getClientRects().length);
+  }
+  function findVisibleImageChoice(root) {
+    if (!(root instanceof Element)) return null;
+    if (exactImageChoice(root)) return root;
+    return [...(root.querySelectorAll?.(IMAGE_CHOICE_SELECTOR) || [])].find((node) => exactImageChoice(node)) || null;
+  }
+  function markNativeImageMenuReady(roots) {
+    const arm = imageArm;
+    if (!arm || arm.consumed || arm.imageChoiceSelected || arm.nativeMenuReady) return false;
+    const found = roots.some((root) => findVisibleImageChoice(root));
+    if (!found) return false;
+    arm.nativeMenuReady = true;
+    setStatus(`${arm.files.length}枚｜＋パネル表示OK。「画像」を1回だけ`);
+    return true;
+  }
+  function scheduleNativeMenuProbe(roots = [document.body]) {
+    const arm = imageArm;
+    if (!arm || arm.consumed || arm.imageChoiceSelected || arm.nativeMenuReady || arm.menuProbeScheduled) return;
+    arm.menuProbeScheduled = true;
+    page.requestAnimationFrame(() => {
+      const current = imageArm;
+      if (!current || current !== arm) return;
+      current.menuProbeScheduled = false;
+      markNativeImageMenuReady(roots.filter(Boolean));
+    });
+  }
   async function mapLimit(values, limit, worker) {
     const output = new Array(values.length); let cursor = 0;
     const runners = Array.from({ length: Math.min(limit, values.length) }, async () => {
@@ -1132,8 +1228,9 @@
     await Promise.all(runners); return output;
   }
   function missingImageRows(view) {
+    const index = buildTargetIndex(view);
     return rows.filter((row) => {
-      const hit = findById(view, row.nodeId) || findByLink(view, row.url);
+      const hit = indexedImage(index, row);
       return !(hit && remoteImage(hit.node) && normalizeUrl(hit.node.attrs?.link) === normalizeUrl(row.url));
     });
   }
@@ -1164,18 +1261,31 @@
       if (arm.imageChoiceSelected && directInput) {
         event.preventDefault(); event.stopPropagation(); injectImageInput(directInput); return;
       }
-      const trigger = path.find((node) => node instanceof Element &&
-        node.matches?.('button,[role="button"],label,[role="menuitem"],li'));
-      const label = String(trigger?.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!/^(?:画像|写真|画像を追加|写真を追加)$/.test(label)) return;
+      // Stage 2 only: the native menu must already have appeared, and this
+      // must be the user's later tap on its exact visible image option.
+      // The first ＋ tap can therefore never be mistaken for image selection.
+      const trigger = path.find((node) => exactImageChoice(node));
+      if (!event.isTrusted || !arm.nativeMenuReady || !trigger) {
+        if (event.isTrusted && !arm.nativeMenuReady) scheduleNativeMenuProbe([document.body]);
+        return;
+      }
       arm.imageChoiceSelected = true;
       setStatus(`${arm.files.length}枚｜「画像」だけを接続中…`);
     };
     document.addEventListener('click', imageChoiceClickListener, true);
     inputObserver = new MutationObserver((mutations) => {
-      const arm = imageArm; if (!arm || arm.consumed || !arm.imageChoiceSelected) return;
+      const arm = imageArm; if (!arm || arm.consumed) return;
+      const roots = [];
       for (const mutation of mutations) for (const node of mutation.addedNodes) {
-        if (!(node instanceof Element)) continue;
+        if (node instanceof Element) roots.push(node);
+      }
+      if (!arm.imageChoiceSelected) {
+        // Stage 1 only: observe that note's ＋ menu has really rendered.  Do
+        // not touch its file input yet, otherwise the native menu closes.
+        if (!markNativeImageMenuReady(roots)) scheduleNativeMenuProbe(roots);
+        return;
+      }
+      for (const node of roots) {
         if (imageInput(node)) { injectImageInput(node); return; }
         for (const input of node.querySelectorAll?.('input[type="file"]') || []) {
           if (imageInput(input)) { injectImageInput(input); return; }
@@ -1204,7 +1314,7 @@
       if (fresh.length < arm.workRows.length) return null;
       const selected = fresh.slice(0, arm.workRows.length);
       return selected.every((entry) => remoteImage(entry.node)) ? selected : null;
-    }, timeout, 280);
+    }, timeout, arm.workRows.length > 100 ? 650 : 280);
     if (!result) throw new Error(`画像アップロード完了 ${arm.workRows.length}枚を確認できませんでした`);
     return result;
   }
@@ -1238,18 +1348,32 @@
   }
   async function linkAndCompactImages(arm, created) {
     if (created.length !== arm.workRows.length) throw new FatalError(`新規画像数不一致 ${created.length}/${arm.workRows.length}`);
-    let transaction = arm.view.state.tr;
     created.forEach((hit, index) => {
       const row = arm.workRows[index];
-      transaction = transaction.setNodeMarkup(hit.pos, hit.node.type, { ...hit.node.attrs, link: row.url }, hit.node.marks);
       row.nodeId = String(hit.node.attrs?.id || ''); row.owned = true;
     });
-    arm.view.dispatch(transaction);
+    // Keep the public one-tap workflow, but split the internal ProseMirror
+    // attribute update so Android gets a paint/input opportunity between
+    // chunks instead of locking on one 326-node transaction.
+    const chunkSize = arm.workRows.length > 100 ? 32 : arm.workRows.length;
+    for (let start = 0; start < created.length; start += chunkSize) {
+      let transaction = arm.view.state.tr;
+      const end = Math.min(start + chunkSize, created.length);
+      for (let index = start; index < end; index += 1) {
+        const hit = created[index], row = arm.workRows[index];
+        transaction = transaction.setNodeMarkup(hit.pos, hit.node.type,
+          { ...hit.node.attrs, link: row.url }, hit.node.marks);
+      }
+      arm.view.dispatch(transaction);
+      setStatus(`URL自動付与 ${end}/${created.length}…`);
+      if (end < created.length) await sleep(55);
+    }
     const generatedIds = new Set(arm.workRows.map((row) => String(row.nodeId || '')).filter(Boolean));
     compactGeneratedGaps(arm.view, generatedIds);
     ensureFreshParagraph(arm.view);
+    const index = buildTargetIndex(arm.view);
     const invalid = arm.workRows.filter((row) => {
-      const hit = findById(arm.view, row.nodeId);
+      const hit = indexedImage(index, row);
       return !hit || !remoteImage(hit.node) || normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url);
     });
     if (invalid.length) throw new FatalError(`一括URL付与不一致: ${invalid.slice(0, 8).map((row) => row.index).join(',')}`);
@@ -1323,6 +1447,7 @@
     const completion = new Promise((resolve, reject) => {
       imageArm = {
         token, view, workRows, files, resolve, reject, consumed: false, linked: false,
+        nativeMenuReady: false, menuProbeScheduled: false,
         imageChoiceSelected: false, input: null, kind,
         beforeIds: new Set(imageNodes(view).map((entry) => String(entry.node.attrs?.id || '')).filter(Boolean)),
         beforeInputs: new Set(document.querySelectorAll('input[type="file"]')), timer: null
@@ -1340,8 +1465,9 @@
     running = true; ++runToken; updateUi();
     try {
       const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
-      const blockingCards = rows.flatMap((row) => officialCards(view, row.url));
-      const blockingUrls = targetUrlTextblocks(view);
+      const index = buildTargetIndex(view);
+      const blockingCards = [...index.cardsByUrl.values()].flat();
+      const blockingUrls = index.targetTextblocks;
       if (blockingCards.length || blockingUrls.length) {
         throw new FatalError(`通知カード/URL一覧が残っています(${blockingCards.length + blockingUrls.length}ブロック)。先に「削」`);
       }
@@ -1367,18 +1493,25 @@
   }
 
   function collectTargetHits(view, includeImages) {
+    const index = buildTargetIndex(view);
     const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
     const trackedIds = new Set(rows.map((row) => String(row.nodeId || '')).filter(Boolean));
     const hits = [];
     if (includeImages) {
-      imageNodes(view).forEach((hit) => {
+      const indexedImages = new Map();
+      index.imagesById.forEach((hit) => indexedImages.set(`${hit.pos}:${hit.node.nodeSize}`, hit));
+      index.imagesByLink.forEach((values) => values.forEach((hit) => indexedImages.set(`${hit.pos}:${hit.node.nodeSize}`, hit)));
+      indexedImages.forEach((hit) => {
         const id = String(hit.node.attrs?.id || '');
         const linked = normalizeUrl(hit.node.attrs?.link);
         if (trackedIds.has(id) || targets.has(linked)) hits.push(hit);
       });
     }
-    rows.forEach((row) => hits.push(...officialCards(view, row.url), ...exactUrlParagraphs(view, row.url)));
-    hits.push(...targetUrlTextblocks(view));
+    rows.forEach((row) => {
+      const url = normalizeUrl(row.url);
+      hits.push(...(index.cardsByUrl.get(url) || []), ...(index.paragraphsByUrl.get(url) || []));
+    });
+    hits.push(...index.targetTextblocks);
     return hits;
   }
 
@@ -1454,6 +1587,10 @@
 
   function validOfficialCard(view, row) {
     const cards = officialCards(view, row.url);
+    return validOfficialCardFromList(cards);
+  }
+
+  function validOfficialCardFromList(cards) {
     if (cards.length !== 1) return null;
     const card = cards[0];
     const key = String(card.node.attrs?.embeddedContentKey || '');
@@ -1491,10 +1628,12 @@
   }
 
   function verifyOfficialCardDocument(view) {
+    const index = buildTargetIndex(view);
     const invalid = [];
     for (const row of rows) {
-      const card = validOfficialCard(view, row);
-      if (!card || exactUrlParagraphs(view, row.url).length) invalid.push(row.index);
+      const url = normalizeUrl(row.url);
+      const card = validOfficialCardFromList(index.cardsByUrl.get(url) || []);
+      if (!card || index.paragraphsByUrl.get(url)?.length) invalid.push(row.index);
     }
     if (invalid.length) throw new FatalError(`note正規カード不一致: ${invalid.slice(0, 8).join(',')}`);
     return serializedBody(view);
