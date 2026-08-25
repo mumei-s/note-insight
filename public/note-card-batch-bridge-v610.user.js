@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         無名S note 新10送＋極薄 COMPLETE 12.1
+// @name         無名S note 極薄ワンタップ COMPLETE 13.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      12.1.0
-// @description  認証済みnote APIホストを事前確認し、画像リンク10件＋純正カード10件を安全に一括生成・削除
+// @version      13.0.0
+// @description  10枚／全107枚を画像選択1回で一括挿入し、各画像へ対応URLを自動付与。小型パネルは×以外で消えない
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=12.1.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=12.1.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.0.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.0.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,9 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_NEW10_SEND_12100__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_13000__) return;
   const OLD_FLAGS = [
-    '__MUMEI_NOTE_NEW10_SEND_12000__',
+    '__MUMEI_NOTE_NEW10_SEND_12100__', '__MUMEI_NOTE_NEW10_SEND_12000__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11100__',
     '__MUMEI_NOTE_CLEAN_NOTIFY_11000__',
     '__MUMEI_NOTE_LIST_FALLBACK_10000__',
@@ -33,29 +33,29 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_NEW10_SEND_12100__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_13000__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '12.1';
+  const VERSION = '13.0';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
   const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_notify_active_article_v1100';
-  const RUN_PREFIX = 'mumei_notify_run_v1100';
-  const MODE_PREFIX = 'mumei_notify_mode_v1100';
-  const RESET_PREFIX = 'mumei_notify_reset_v1100';
+  const ACTIVE_KEY = 'mumei_thin_panel_open_v1300';
+  const RUN_PREFIX = 'mumei_thin_run_v1300';
+  const MODE_PREFIX = 'mumei_thin_mode_v1300';
+  const RESET_PREFIX = 'mumei_thin_reset_v1300';
   const DIAG_PREFIX = 'mumei_notify_diag3_v1110';
   const NEW10_MODE = 'new10send';
   const NEW10_STATE_PREFIX = 'mumei_new10_state_v120';
   const NEW10_ROWS_PREFIX = 'mumei_new10_rows_v120';
   const DELETE_PROOF = 'notification-cards-and-url-list-deleted-v1100';
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
-  const TOGGLE = 'mumei-notify-toggle-v1210';
-  const PANEL = 'mumei-notify-panel-v1210';
-  const STATUS = 'mumei-notify-status-v1210';
-  const STYLE = 'mumei-notify-style-v1210';
+  const TOGGLE = 'mumei-thin-toggle-v1300';
+  const PANEL = 'mumei-thin-panel-v1300';
+  const STATUS = 'mumei-thin-status-v1300';
+  const STYLE = 'mumei-thin-style-v1300';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -76,7 +76,7 @@
     ['https://note.com/ss_yr/n/n40a631eb54c4', '結果発表🎙️#noteスキ動画コンテスト👑', 'image-history']
   ].map(([url, title, diagRole], index) => ({ index: index + 1, url, title, diagRole, width: W, height: H }));
 
-  let openedArticle = '';
+  let activeArticle = '';
   let mode = '';
   let items = [];
   let rows = [];
@@ -109,7 +109,7 @@
   }
   function isEditPage() { return /^\/notes\/n[a-z0-9]{8,}\/edit\/?$/i.test(location.pathname); }
   function isPublishPage() { return /\/publish\/?$/i.test(location.pathname); }
-  function enabled() { return Boolean(isEditPage() && articleKey() && openedArticle === articleKey()); }
+  function enabled() { return Boolean(isEditPage() && articleKey()); }
   function stateKey(selectedMode = mode) { return `${RUN_PREFIX}:${articleKey() || 'unknown'}:${selectedMode || 'none'}`; }
   function modeKey() { return `${MODE_PREFIX}:${articleKey() || 'unknown'}`; }
   function resetKey() { return `${RESET_PREFIX}:${articleKey() || 'unknown'}:${mode || getJSON(modeKey(), 'none')}`; }
@@ -162,14 +162,9 @@
   function updateButtons() {
     const panel = document.getElementById(PANEL);
     if (!panel) return;
-    const retry = panel.querySelector('[data-action="retry-failed"]');
-    if (retry) {
-      retry.textContent = running ? '止' : '複';
-      retry.title = running ? '停止' : '同じURL一覧をもう一度コピー';
-    }
-    panel.querySelectorAll('button').forEach((button) => { button.disabled = false; });
-    const send = panel.querySelector('[data-action="send-new10"]');
-    if (send) send.disabled = !isNew10Mode();
+    panel.querySelectorAll('button').forEach((button) => {
+      button.disabled = running && button.dataset.action !== 'close';
+    });
   }
   function updateUi() { renderList(); updateButtons(); }
 
@@ -189,28 +184,26 @@
       #mumei-notify-toggle-v900,#mumei-notify-panel-v900,
       #mumei-notify-toggle-v1000,#mumei-notify-panel-v1000,
       #mumei-notify-toggle-v1100,#mumei-notify-panel-v1100,
-      #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200{display:none!important}
-      #${TOGGLE}{position:fixed;right:4px;bottom:78px;z-index:2147483647;width:32px;height:32px;border:0;
-        border-radius:999px;padding:0;background:#374151;color:#fff;font:800 15px/32px system-ui;
+      #mumei-notify-toggle-v1200,#mumei-notify-panel-v1200,
+      #mumei-notify-toggle-v1210,#mumei-notify-panel-v1210{display:none!important}
+      #${TOGGLE}{position:fixed;right:5px;bottom:73px;z-index:2147483647;width:30px;height:30px;border:0;
+        border-radius:999px;padding:0;background:#0f766e;color:#fff;font:800 14px/30px system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.28);touch-action:manipulation}
       #${TOGGLE}[data-open="1"]{display:none}
-      #${PANEL}{position:fixed;right:4px;bottom:76px;z-index:2147483647;display:none;align-items:center;gap:2px;
-        height:36px;padding:3px;border-radius:10px;background:#111827;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.32);
+      #${PANEL}{position:fixed;right:5px;bottom:72px;z-index:2147483647;display:none;align-items:center;gap:2px;
+        height:34px;padding:2px;border-radius:9px;background:#111827;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.32);
         font-family:system-ui,-apple-system,sans-serif}
       #${PANEL}[data-open="1"]{display:flex}
-      #${PANEL} button{height:30px;min-width:30px;border:0;border-radius:7px;padding:0 7px;color:#fff;background:#374151;
-        font:800 10px/30px system-ui;touch-action:manipulation}
-      #${PANEL} button[data-main-action="3"]{background:#d97706}
-      #${PANEL} button[data-main-action="new10"]{background:#db2777}
+      #${PANEL} button{height:30px;min-width:30px;border:0;border-radius:7px;padding:0 6px;color:#fff;background:#374151;
+        font:800 10px/30px system-ui;white-space:nowrap;touch-action:manipulation}
       #${PANEL} button[data-main-action="10"]{background:#2563eb}
       #${PANEL} button[data-main-action="107"]{background:#059669}
       #${PANEL} button[data-action="reset"]{background:#92400e}
       #${PANEL} button[data-action="delete"]{background:#7c3aed}
-      #${PANEL} button[data-action="images"]{background:#0e7490}
       #${PANEL} button[data-action="send-new10"]{background:#dc2626}
-      #${PANEL} button[data-action="close"]{padding:0;width:30px}
-      #${PANEL} button:disabled{opacity:.32}
-      #${STATUS}{position:fixed;right:4px;bottom:116px;z-index:2147483647;display:none;max-width:min(290px,calc(100vw - 16px));
+      #${PANEL} button[data-action="close"]{padding:0;width:28px;min-width:28px}
+      #${PANEL} button:disabled{opacity:.55}
+      #${STATUS}{position:fixed;right:5px;bottom:110px;z-index:2147483647;display:none;max-width:min(300px,calc(100vw - 16px));
         padding:5px 7px;border-radius:7px;background:#064e3b;color:#fff;font:700 10px/1.35 system-ui;
         box-shadow:0 2px 8px rgba(0,0,0,.25)}
       #${PANEL}[data-open="1"] #${STATUS}{display:block}
@@ -220,22 +213,31 @@
     document.head.appendChild(style);
   }
 
-  function forceCloseLegacyTools() {
-    const containers = [...document.querySelectorAll('[id^="mumei-"]')]
-      .filter((node) => node.id !== PANEL && node.id !== TOGGLE && node.id !== STATUS && node.id !== STYLE);
-    for (const container of containers) {
-      const close = [...container.querySelectorAll?.('button') || []].find((button) =>
-        button.dataset?.action === 'close' || button.title === 'しまう' || button.textContent?.trim() === '×');
-      try { close?.click(); } catch (_) {}
-    }
+  function removeKnownLegacyTools() {
+    const ids = [
+      'mumei-card-system-toggle', 'mumei-direct-success-panel', 'mumei-direct-success-btn',
+      'mumei-notify-test-panel', 'mumei-notify-test-btn', 'mumei-notify-clean-btn',
+      'mumei-bridge610-panel', 'mumei-bridge610-btn', 'mumei-bridge107-btn',
+      'mumei-final800-toggle', 'mumei-final800-panel',
+      'mumei-notify-toggle-v710', 'mumei-notify-panel-v710',
+      'mumei-notify-toggle-v720', 'mumei-notify-panel-v720',
+      'mumei-notify-toggle-v810', 'mumei-notify-panel-v810',
+      'mumei-notify-toggle-v820', 'mumei-notify-panel-v820',
+      'mumei-notify-toggle-v900', 'mumei-notify-panel-v900',
+      'mumei-notify-toggle-v1000', 'mumei-notify-panel-v1000',
+      'mumei-notify-toggle-v1100', 'mumei-notify-panel-v1100',
+      'mumei-notify-toggle-v1200', 'mumei-notify-panel-v1200',
+      'mumei-notify-toggle-v1210', 'mumei-notify-panel-v1210'
+    ];
+    ids.forEach((id) => document.getElementById(id)?.remove());
   }
 
   function shutdownForManualNotification(count, diag = false) {
     notificationShutdown = true;
-    runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
+    runToken += 1; running = false; setJSON(ACTIVE_KEY, false);
     if (waitCancel) waitCancel('通知工程へ移行');
     waitCancel = null; cancelImageArm();
-    forceCloseLegacyTools();
+    removeKnownLegacyTools();
     document.removeEventListener('click', publishClickHandler, true);
     if (routeTimer) clearInterval(routeTimer);
     routeTimer = null;
@@ -245,96 +247,81 @@
     if (diag) {
       page.alert(`3件切り分け準備完了。URL3件をコピーしました。\n\n① 完全クリーン\n② 画像🔗を残した状態\n③ 画像🔗を一度保存・更新後に削除済み\n\nツールは完全停止済みです。\n本文末尾へ3件を貼付 → 各URL末尾で実Enter → 更新 → 通知確認。`);
     } else {
-      page.alert(`${count}件URL一覧コピー済み。\n通知工程では現行・旧版ツールを完全停止しました。\n\n本文へ1回貼付 → 各URL末尾でEnter。\n通知確認後は編集画面を再読み込み →「削」→「画」。`);
+      page.alert(`${count}件URL一覧コピー済み。\n通知工程では現行・旧版ツールを完全停止しました。\n\n本文へ1回貼付 → 各URL末尾で実Enter。\n通知確認後は編集画面を再読み込み →「削」→「10画」。`);
     }
   }
 
   function closeTool() {
-    runToken += 1; running = false; openedArticle = ''; setJSON(ACTIVE_KEY, null);
+    runToken += 1; running = false; setJSON(ACTIVE_KEY, false);
     if (waitCancel) waitCancel('ツールを閉じたため停止');
     waitCancel = null; cancelImageArm();
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '0';
-    if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '⛓'; }
+    if (toggle) { toggle.dataset.open = '0'; toggle.textContent = '画'; }
     updateButtons();
   }
 
   function restoreLastMode() {
     if (running || mode || rows.length) return;
     const last = getJSON(modeKey(), '');
-    if (!['diag3', 'test10', 'final107', NEW10_MODE].includes(last)) return;
-    if (last === NEW10_MODE) {
-      startNew10Mode(true).catch((error) => setStatus(`新10再開停止：${error?.message || String(error)}`, true));
-      return;
-    }
-    prepareMode(last).then(() => {
-      if (last === 'diag3') setDiagStatus();
-    }).catch((error) => setStatus(`再開準備停止：${error?.message || String(error)}`, true));
+    if (!['test10', 'final107'].includes(last)) return;
+    mode = last;
+    setStatus(`${last === 'final107' ? '全107枚' : '10枚'}を選択中｜画像ボタンで貼り直せます`);
   }
 
   function openTool() {
     const key = articleKey();
     if (!isEditPage() || !key) return;
-    openedArticle = key; setJSON(ACTIVE_KEY, key);
+    activeArticle = key; setJSON(ACTIVE_KEY, true);
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
-    if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '⛓'; }
-    setStatus(`新10送 ${VERSION}｜新10→画→送→公開→削`);
+    if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '画'; }
+    setStatus(`極薄 ${VERSION}｜10画／全画 → 本文 → ＋ → 画像（1回）`);
     restoreLastMode();
   }
-  function toggleTool() { if (enabled()) closeTool(); else openTool(); }
+  function toggleTool() {
+    const panel = document.getElementById(PANEL);
+    if (panel?.dataset.open === '1') closeTool(); else openTool();
+  }
 
   function mount() {
     if (notificationShutdown || !document.body || !isEditPage()) return;
     document.body.dataset.mumeiNotePublish = '0';
     installStyle();
-    forceCloseLegacyTools();
+    removeKnownLegacyTools();
     let toggle = document.getElementById(TOGGLE);
     if (!toggle) {
       toggle = document.createElement('button');
-      Object.assign(toggle, { id: TOGGLE, type: 'button', textContent: '⛓', title: '通知ツール' });
+      Object.assign(toggle, { id: TOGGLE, type: 'button', textContent: '画', title: '極薄画像ツール' });
       toggle.dataset.open = '0'; toggle.addEventListener('click', toggleTool); document.body.appendChild(toggle);
     }
     let panel = document.getElementById(PANEL);
     if (!panel) {
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
-      panel.innerHTML = `<button type="button" data-main-action="3" title="通知原因3件切り分け">3</button>
-        <button type="button" data-main-action="new10" title="新規記事10件通知モード">新10</button>
-        <button type="button" data-main-action="10" title="10件URL一覧をコピー">10</button>
-        <button type="button" data-main-action="107" title="107件URL一覧をコピー">107</button>
-        <button type="button" data-action="retry-failed" title="同じURL一覧をもう一度コピー">複</button>
-        <button type="button" data-action="reset" title="対象URLを全消去して初期化">初</button>
-        <button type="button" data-action="send-new10" title="新10：note純正カード10件を生成">送</button>
-        <button type="button" data-action="delete" title="通知後：カードとURL一覧を一括削除">削</button>
-        <button type="button" data-action="images" title="10/107：削除後に極薄画像を一括完成">画</button>
+      panel.innerHTML = `<button type="button" data-main-action="10" title="10枚を一括準備。次に＋→画像を1回">10画</button>
+        <button type="button" data-main-action="107" title="全107枚を一括準備。次に＋→画像を1回">全画</button>
+        <button type="button" data-action="send-new10" title="通知用URL一覧をコピーしてツールを完全停止">送</button>
+        <button type="button" data-action="delete" title="対象のURLカードと生URLだけを一括削除">削</button>
+        <button type="button" data-action="reset" title="対象画像・カード・URLを全消去して初期化">初</button>
         <button type="button" data-action="close" title="しまう">×</button>
-        <div id="${STATUS}" data-bad="0">CLEAN ${VERSION}</div>`;
+        <div id="${STATUS}" data-bad="0">極薄 ${VERSION}</div>`;
       panel.addEventListener('click', onPanelClick); document.body.appendChild(panel);
     }
-    const storedActive = getJSON(ACTIVE_KEY, '');
-    if (storedActive === articleKey()) {
-      openedArticle = storedActive; panel.dataset.open = '1'; toggle.dataset.open = '1';
-      toggle.textContent = '⛓'; restoreLastMode();
+    activeArticle = articleKey();
+    if (getJSON(ACTIVE_KEY, false) === true) {
+      panel.dataset.open = '1'; toggle.dataset.open = '1'; restoreLastMode();
     }
   }
 
   async function onPanelClick(event) {
     const button = event.target.closest('button');
     if (!button || !enabled()) return;
-    if (running && button.dataset.action !== 'retry-failed' && button.dataset.action !== 'close') {
-      setStatus('処理中です。「止」で止めてから別の操作をしてください', true); return;
-    }
-    if (button.dataset.mainAction === '3') return runDiag3();
-    if (button.dataset.mainAction === 'new10') return startNew10Mode();
-    if (button.dataset.mainAction === '10') return copyUrlListMode('test10');
-    if (button.dataset.mainAction === '107') return copyUrlListMode('final107');
-    if (button.dataset.action === 'retry-failed') return running ? stopRun() : copyCurrentList();
-    if (button.dataset.action === 'reset') return mode === 'diag3' ? resetDiag3(true) : resetForNotification();
-    if (button.dataset.action === 'send-new10') return sendNew10Cards();
-    if (button.dataset.action === 'delete') return isNew10Mode() ? deleteNew10CardsOnly() : deleteNotificationCards();
-    if (button.dataset.action === 'images') return mode === 'diag3'
-      ? setStatus('3件切り分けでは「画」は使いません。「3」で段階を進めます', true)
-      : isNew10Mode() ? armNew10Images() : armBatchImages();
+    if (running && button.dataset.action !== 'close') return;
+    if (button.dataset.mainAction === '10') return startFreshImageBatch('test10');
+    if (button.dataset.mainAction === '107') return startFreshImageBatch('final107');
+    if (button.dataset.action === 'reset') return resetCurrentTargets();
+    if (button.dataset.action === 'send-new10') return prepareManualNotification();
+    if (button.dataset.action === 'delete') return deleteCurrentNotificationBlocks();
     if (button.dataset.action === 'close') return closeTool();
   }
 
@@ -350,7 +337,11 @@
     const urls = values.map((item) => item?.url).filter(Boolean);
     if (manifest?.count !== 107 || manifest?.width !== W || manifest?.height !== H || values.length !== 107 ||
       new Set(urls).size !== 107 || values.some((item, index) => item.index !== index + 1 || item.width !== W ||
-        item.height !== H || !item.title || !item.url || !item.cardPath)) throw new FatalError('107件データ不整合');
+        item.height !== H || !item.title || !item.url || !item.cardPath ||
+        !/^https:\/\/note\.com\/[^/]+\/n\/n[a-z0-9]+$/i.test(item.url) ||
+        !new RegExp(`/cards/${String(index + 1).padStart(3, '0')}\\.png$`).test(item.cardPath))) {
+      throw new FatalError('107件データ不整合');
+    }
     return values;
   }
   async function loadFinalItems() {
@@ -419,6 +410,11 @@
     const name = `${String(item.index).padStart(3, '0')}.png`;
     const blob = await xhr(new URL(`./cards/${name}`, FINAL_MANIFEST).href, 'blob');
     if (!blob || blob.size < 100) throw new Error('画像取得失敗');
+    const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+    const png = bytes.length === 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const width = png ? ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0 : 0;
+    const height = png ? ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0 : 0;
+    if (!png || width !== W || height !== H) throw new FatalError(`${name} 寸法不一致 ${width}x${height}`);
     return new page.File([blob], name, { type: blob.type || 'image/png' });
   }
   async function fileFor(item) { return mode === 'final107' ? finalFile(item) : makeTestFile(item); }
@@ -1106,9 +1102,9 @@
       const arm = imageArm; if (!arm || arm.consumed) return;
       for (const mutation of mutations) for (const node of mutation.addedNodes) {
         if (!(node instanceof Element)) continue;
-        if (imageInput(node) && !arm.beforeInputs.has(node)) { injectImageInput(node); return; }
+        if (imageInput(node)) { injectImageInput(node); return; }
         for (const input of node.querySelectorAll?.('input[type="file"]') || []) {
-          if (imageInput(input) && !arm.beforeInputs.has(input)) { injectImageInput(input); return; }
+          if (imageInput(input)) { injectImageInput(input); return; }
         }
       }
     });
@@ -1118,14 +1114,14 @@
     nativeInputClick = prototype.click;
     prototype.click = function interceptedImageClick(...args) {
       const arm = imageArm;
-      if (arm && imageInput(this) && !arm.beforeInputs.has(this)) {
+      if (arm && imageInput(this)) {
         if (!arm.consumed) injectImageInput(this);
         return;
       }
       return nativeInputClick.apply(this, args);
     };
   }
-  async function waitBatchImages(arm, timeout = 300000) {
+  async function waitBatchImages(arm, timeout = 900000) {
     const result = await waitFor(() => {
       if (arm.token !== runToken || !enabled()) throw new FatalError('停止しました');
       const fresh = imageNodes(arm.view).filter((entry) => {
@@ -1215,7 +1211,7 @@
   }
   async function injectImageInput(input) {
     const arm = imageArm;
-    if (!arm || arm.consumed || !imageInput(input) || arm.beforeInputs.has(input)) return false;
+    if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true; arm.input = input;
     try {
       const transfer = new page.DataTransfer();
@@ -1233,14 +1229,21 @@
     return true;
   }
 
-  async function armImagesForRows(workRows, kind = 'normal') {
-    const token = runToken;
-    const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
-    const files = await mapLimit(workRows, 6, async (row, index) => {
+  async function prepareImageFiles(workRows, token = runToken) {
+    return mapLimit(workRows, 6, async (row, index) => {
       if (token !== runToken || !enabled()) throw new FatalError('停止しました');
       const file = await fileFor(row);
-      setStatus(`画像準備 ${index + 1}/${workRows.length}…`); return file;
+      setStatus(`画像検査 ${index + 1}/${workRows.length}（860×140）…`); return file;
     });
+  }
+
+  async function armImagesForRows(workRows, kind = 'normal', preparedFiles = null) {
+    const token = runToken;
+    const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+    const files = preparedFiles || await prepareImageFiles(workRows, token);
+    if (files.length !== workRows.length || files.some((file) => !(file instanceof page.File))) {
+      throw new FatalError(`画像準備数不一致 ${files.length}/${workRows.length}`);
+    }
     const completion = new Promise((resolve, reject) => {
       imageArm = {
         token, view, workRows, files, resolve, reject, consumed: false, linked: false, input: null, kind,
@@ -1249,8 +1252,8 @@
       };
     });
     installImageInputBridge();
-    imageArm.timer = setTimeout(() => imageArm?.reject(new Error('画像選択待機が3分を超えました')), 180000);
-    setStatus(`準備OK｜本文をタップ→「＋」→「画像」を1回だけ`);
+    imageArm.timer = setTimeout(() => imageArm?.reject(new Error('画像選択待機が10分を超えました')), 600000);
+    setStatus(`${files.length}枚 準備OK｜本文→「＋」→「画像」を1回だけ`);
     await completion;
   }
 
@@ -1279,6 +1282,102 @@
     } catch (error) {
       setStatus(`画像工程停止：${error?.message || String(error)}（途中分は「画」で再開）`, true);
     } finally { cancelImageArm(); running = false; updateUi(); }
+  }
+
+  function selectedImageMode(fallback = 'test10') {
+    const value = mode || getJSON(modeKey(), '');
+    return ['test10', 'final107'].includes(value) ? value : fallback;
+  }
+
+  function collectTargetHits(view, includeImages) {
+    const targets = new Set(rows.map((row) => normalizeUrl(row.url)));
+    const trackedIds = new Set(rows.map((row) => String(row.nodeId || '')).filter(Boolean));
+    const hits = [];
+    if (includeImages) {
+      imageNodes(view).forEach((hit) => {
+        const id = String(hit.node.attrs?.id || '');
+        const linked = normalizeUrl(hit.node.attrs?.link);
+        if (trackedIds.has(id) || targets.has(linked)) hits.push(hit);
+      });
+    }
+    rows.forEach((row) => hits.push(...officialCards(view, row.url), ...exactUrlParagraphs(view, row.url)));
+    hits.push(...targetUrlTextblocks(view));
+    return hits;
+  }
+
+  function resetRowTracking() {
+    rows.forEach((row) => {
+      row.status = 'ready'; row.nodeId = ''; row.owned = false; row.trusted = false;
+      row.cardKey = ''; row.proof = ''; row.error = '';
+    });
+    saveRows();
+  }
+
+  async function startFreshImageBatch(selectedMode) {
+    if (running || !enabled()) return;
+    running = true; const token = ++runToken; updateUi();
+    try {
+      setStatus(selectedMode === 'final107' ? 'マガジン107件を検査中…' : '10件を検査中…');
+      await prepareMode(selectedMode);
+      if (token !== runToken) throw new FatalError('停止しました');
+      const files = await prepareImageFiles(rows, token);
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      const removed = deleteBlocks(view, collectTargetHits(view, true));
+      resetRowTracking();
+      setStatus(`${rows.length}枚検査OK${removed ? `｜旧対象${removed}ブロック整理済み` : ''}｜本文→＋→画像を1回`);
+      await armImagesForRows(rows, 'normal', files);
+      verifyFinalDocument(view);
+      setStatus(`${rows.length}/${rows.length}枚｜860×140・URL自動付与・余白除去・保存 完了 ✅`);
+    } catch (error) {
+      setStatus(`画像貼付け停止：${error?.message || String(error)}（完成扱いにしていません）`, true);
+    } finally {
+      cancelImageArm(); running = false; updateUi();
+    }
+  }
+
+  async function resetCurrentTargets() {
+    if (running || !enabled()) return;
+    running = true; const token = ++runToken; updateUi();
+    try {
+      await prepareMode(selectedImageMode());
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      const removed = deleteBlocks(view, collectTargetHits(view, true));
+      resetRowTracking();
+      await saveDraftToServer(view, token, verifyResetDocument, `対象${removed}ブロックを初期化・保存中…`);
+      setStatus(`${rows.length}件の対象画像・カード・URLを初期化済み ✅`);
+    } catch (error) {
+      setStatus(`初期化停止：${error?.message || String(error)}（完成扱いにしていません）`, true);
+    } finally { running = false; updateUi(); }
+  }
+
+  async function deleteCurrentNotificationBlocks() {
+    if (running || !enabled()) return;
+    running = true; const token = ++runToken; updateUi();
+    try {
+      await prepareMode(selectedImageMode());
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      const removed = deleteBlocks(view, collectTargetHits(view, false));
+      await saveDraftToServer(view, token, verifyCardsDeleted, `URLカード／生URL ${removed}ブロックを削除・保存中…`);
+      setStatus(`URLカード／生URL ${removed}ブロック削除 ✅ 画像は保持`);
+    } catch (error) {
+      setStatus(`削除停止：${error?.message || String(error)}（完成扱いにしていません）`, true);
+    } finally { running = false; updateUi(); }
+  }
+
+  async function prepareManualNotification() {
+    if (running || !enabled()) return;
+    running = true; const token = ++runToken; updateUi();
+    try {
+      await prepareMode('test10');
+      const view = findView(); if (!view) throw new FatalError('EditorViewなし。画面を再読込してください'); core();
+      deleteBlocks(view, collectTargetHits(view, true));
+      resetRowTracking();
+      await saveDraftToServer(view, token, verifyResetDocument, '通知前の対象画像・カード・URLを完全初期化して保存中…');
+      copyPreparedUrlList();
+      shutdownForManualNotification(10);
+    } catch (error) {
+      setStatus(`通知準備停止：${error?.message || String(error)}（ツールは停止していません）`, true);
+    } finally { running = false; updateUi(); }
   }
 
   function setDiagStatus() {
@@ -1399,10 +1498,13 @@
     if (notificationShutdown || !document.body) return;
     document.body.dataset.mumeiNotePublish = isPublishPage() ? '1' : '0';
     if (!isEditPage()) return;
-    forceCloseLegacyTools();
-    if (openedArticle && openedArticle !== articleKey()) {
-      closeTool(); mode = ''; items = []; rows = []; coreCache = null; viewCache = null;
+    removeKnownLegacyTools();
+    const key = articleKey();
+    if (activeArticle && key && activeArticle !== key) {
+      runToken += 1; running = false; cancelImageArm();
+      mode = ''; items = []; rows = []; coreCache = null; viewCache = null;
     }
+    activeArticle = key;
     if (!document.getElementById(PANEL) || !document.getElementById(TOGGLE)) mount();
   }
 
@@ -1437,5 +1539,5 @@
   }
 
   document.addEventListener('click', publishClickHandler, true);
-  routeTimer = setInterval(routeCheck, 500);
+  routeTimer = setInterval(routeCheck, 1000);
 })();
