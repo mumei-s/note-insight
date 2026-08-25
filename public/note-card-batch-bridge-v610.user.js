@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         無名S note 極薄ワンタップ COMPLETE 13.0
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      13.2.0
-// @description  10枚／全107枚を画像1回で一括挿入＋URL自動付与し、note正規URLコマンドで標準カードも自動生成
+// @version      14.0.0
+// @description  実験2枚／指定326枚を画像1回で一括挿入＋URL自動付与し、note正規URLコマンドで標準カードも自動生成
 // @match        https://editor.note.com/*
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.2.0
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=13.2.0
+// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.0.0
+// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js?v=14.0.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
@@ -19,8 +19,9 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_NOTE_THIN_BATCH_13200__) return;
+  if (page.__MUMEI_NOTE_THIN_BATCH_14000__) return;
   const OLD_FLAGS = [
+    '__MUMEI_NOTE_THIN_BATCH_13200__',
     '__MUMEI_NOTE_THIN_BATCH_13100__',
     '__MUMEI_NOTE_THIN_BATCH_13000__',
     '__MUMEI_NOTE_NEW10_SEND_12100__', '__MUMEI_NOTE_NEW10_SEND_12000__',
@@ -35,19 +36,24 @@
     '__MUMEI_BATCH_BRIDGE_620__', '__MUMEI_DIRECT_SUCCESS_3230__', '__MUMEI_DIRECT_SUCCESS_3220__',
     '__MUMEI_DIRECT_SUCCESS_3200__'
   ];
-  page.__MUMEI_NOTE_THIN_BATCH_13200__ = true;
+  page.__MUMEI_NOTE_THIN_BATCH_14000__ = true;
   OLD_FLAGS.forEach((key) => { page[key] = true; });
   try { localStorage.setItem('mumei_note_card_active_articles_v1', '[]'); } catch (_) {}
 
-  const VERSION = '13.2';
+  const VERSION = '14.0';
   const W = 860;
   const H = 140;
   const CREATOR = '無名S note';
-  const FINAL_MANIFEST = 'https://mumei-s.github.io/note-insight/note-summer-107/manifest.json';
-  const ACTIVE_KEY = 'mumei_thin_panel_open_v1300';
-  const RUN_PREFIX = 'mumei_thin_run_v1300';
-  const MODE_PREFIX = 'mumei_thin_mode_v1300';
-  const RESET_PREFIX = 'mumei_thin_reset_v1300';
+  const BATCHES = Object.freeze({
+    notify2: Object.freeze({ label: '実験2件', expected: 2, batchId: 'notify-test-2',
+      manifest: 'https://mumei-s.github.io/note-insight/note-notify-test-2/manifest.json' }),
+    today326: Object.freeze({ label: '指定326件', expected: 326, batchId: 'today-batch-326',
+      manifest: 'https://mumei-s.github.io/note-insight/note-today-batch/manifest.json' })
+  });
+  const ACTIVE_KEY = 'mumei_thin_panel_open_v1400';
+  const RUN_PREFIX = 'mumei_thin_run_v1400';
+  const MODE_PREFIX = 'mumei_thin_mode_v1400';
+  const RESET_PREFIX = 'mumei_thin_reset_v1400';
   const DIAG_PREFIX = 'mumei_notify_diag3_v1110';
   const NEW10_MODE = 'new10send';
   const NEW10_STATE_PREFIX = 'mumei_new10_state_v120';
@@ -56,10 +62,10 @@
   const FINAL_PROOF = 'batch-thin-image-linked-saved-v1100';
   // Do not prefix these IDs with "mumei-". Legacy scripts broadly scan that prefix
   // and programmatically click every close button they find.
-  const TOGGLE = 'ntb-one-tap-toggle-v1310';
-  const PANEL = 'ntb-one-tap-panel-v1310';
-  const STATUS = 'ntb-one-tap-status-v1310';
-  const STYLE = 'ntb-one-tap-style-v1310';
+  const TOGGLE = 'ntb-one-tap-toggle-v1400';
+  const PANEL = 'ntb-one-tap-panel-v1400';
+  const STATUS = 'ntb-one-tap-status-v1400';
+  const STYLE = 'ntb-one-tap-style-v1400';
 
   const TEST_ITEMS = [
     ['https://note.com/ss_yr/n/nc14eb3f2ea9f', '【言葉と行動、その間にあるもの】 第2回スキ動画コンテスト『夏の陣』🏖'],
@@ -88,7 +94,7 @@
   let runToken = 0;
   let coreCache = null;
   let viewCache = null;
-  let finalManifest = null;
+  const manifestCache = new Map();
   let imageArm = null;
   let inputObserver = null;
   let nativeInputClick = null;
@@ -98,6 +104,7 @@
   let noteApiOriginCache = '';
   let noteUrlCommand = null;
   let notificationShutdown = false;
+  let legacyCleanupDone = false;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -203,11 +210,11 @@
       #${PANEL}[data-open="1"]{display:flex}
       #${PANEL} button{height:30px;width:34px;min-width:34px;border:0;border-radius:7px;padding:0 2px;color:#fff;background:#374151;
         font:800 10px/30px system-ui;white-space:nowrap;touch-action:manipulation}
-      #${PANEL} button[data-main-action="10"]{background:#2563eb}
-      #${PANEL} button[data-main-action="107"]{background:#059669}
+      #${PANEL} button[data-main-action="notify2"]{background:#2563eb}
+      #${PANEL} button[data-main-action="today326"]{background:#059669}
       #${PANEL} button[data-action="reset"]{background:#92400e}
       #${PANEL} button[data-action="delete"]{background:#7c3aed}
-      #${PANEL} button[data-action="send-new10"]{background:#dc2626}
+      #${PANEL} button[data-action="send"]{background:#dc2626}
       #${PANEL} button[data-action="close"]{padding:0;width:28px;min-width:28px}
       #${PANEL} button:disabled{opacity:.55}
       #${STATUS}{position:fixed;right:46px;top:34%;bottom:auto;z-index:2147483647;display:none;max-width:min(270px,calc(100vw - 64px));
@@ -273,9 +280,9 @@
   function restoreLastMode() {
     if (running || mode || rows.length) return;
     const last = getJSON(modeKey(), '');
-    if (!['test10', 'final107'].includes(last)) return;
+    if (!BATCHES[last]) return;
     mode = last;
-    setStatus(`${last === 'final107' ? '全107枚' : '10枚'}を選択中｜画像ボタンで貼り直せます`);
+    setStatus(`${BATCHES[last].label}を選択中｜同じ画像ボタンで貼り直せます`);
   }
 
   function openTool() {
@@ -285,7 +292,7 @@
     const panel = document.getElementById(PANEL), toggle = document.getElementById(TOGGLE);
     if (panel) panel.dataset.open = '1';
     if (toggle) { toggle.dataset.open = '1'; toggle.textContent = '画'; }
-    setStatus(`極薄 ${VERSION}｜10画／全画 → 本文 → ＋ → 画像（1回）`);
+    setStatus(`極薄 ${VERSION}｜2画／全画 → 本文 → ＋ → 画像（1回）`);
     restoreLastMode();
   }
   function toggleTool() {
@@ -297,7 +304,10 @@
     if (notificationShutdown || !document.body || !isEditPage()) return;
     document.body.dataset.mumeiNotePublish = '0';
     installStyle();
-    removeKnownLegacyTools();
+    if (!legacyCleanupDone) {
+      removeKnownLegacyTools();
+      legacyCleanupDone = true;
+    }
     let toggle = document.getElementById(TOGGLE);
     if (!toggle) {
       toggle = document.createElement('button');
@@ -311,9 +321,9 @@
     let panel = document.getElementById(PANEL);
     if (!panel) {
       panel = document.createElement('section'); panel.id = PANEL; panel.dataset.open = '0';
-      panel.innerHTML = `<button type="button" data-main-action="10" title="10枚を一括準備。次に＋→画像を1回">10画</button>
-        <button type="button" data-main-action="107" title="全107枚を一括準備。次に＋→画像を1回">全画</button>
-        <button type="button" data-action="send-new10" title="note正規URLコマンドで標準カードを全件自動生成">送</button>
+      panel.innerHTML = `<button type="button" data-main-action="notify2" title="実験2枚を一括準備。次に＋→画像を1回">2画</button>
+        <button type="button" data-main-action="today326" title="指定326枚を一括準備。次に＋→画像を1回">全画</button>
+        <button type="button" data-action="send" title="note正規URLコマンドで標準カードを全件自動生成">送</button>
         <button type="button" data-action="delete" title="対象のURLカードと生URLだけを一括削除">削</button>
         <button type="button" data-action="reset" title="対象画像・カード・URLを全消去して初期化">初</button>
         <button type="button" data-action="close" title="しまう">×</button>
@@ -331,10 +341,9 @@
     const button = event.target.closest('button');
     if (!button || !enabled()) return;
     if (running && button.dataset.action !== 'close') return;
-    if (button.dataset.mainAction === '10') return startFreshImageBatch('test10');
-    if (button.dataset.mainAction === '107') return startFreshImageBatch('final107');
+    if (BATCHES[button.dataset.mainAction]) return startFreshImageBatch(button.dataset.mainAction);
     if (button.dataset.action === 'reset') return resetCurrentTargets();
-    if (button.dataset.action === 'send-new10') return autoGenerateOfficialCards();
+    if (button.dataset.action === 'send') return autoGenerateOfficialCards();
     if (button.dataset.action === 'delete') return deleteCurrentNotificationBlocks();
     if (button.dataset.action === 'close') return closeTool();
   }
@@ -346,22 +355,29 @@
       onerror: () => reject(new Error('通信失敗')), ontimeout: () => reject(new Error('通信タイムアウト'))
     }));
   }
-  function validateManifest(manifest) {
+  function validateManifest(manifest, selectedMode) {
+    const config = BATCHES[selectedMode];
+    if (!config) throw new FatalError(`未対応モード: ${selectedMode}`);
     const values = Array.isArray(manifest?.items) ? manifest.items : [];
     const urls = values.map((item) => item?.url).filter(Boolean);
-    if (manifest?.count !== 107 || manifest?.width !== W || manifest?.height !== H || values.length !== 107 ||
-      new Set(urls).size !== 107 || values.some((item, index) => item.index !== index + 1 || item.width !== W ||
+    if (manifest?.batchId !== config.batchId || manifest?.count !== config.expected || manifest?.width !== W ||
+      manifest?.height !== H || values.length !== config.expected ||
+      new Set(urls).size !== config.expected || values.some((item, index) => item.index !== index + 1 || item.width !== W ||
         item.height !== H || !item.title || !item.url || !item.cardPath ||
-        !/^https:\/\/note\.com\/[^/]+\/n\/n[a-z0-9]+$/i.test(item.url) ||
+        !/^https:\/\/note\.com\/[A-Za-z0-9_]+\/n\/n[a-f0-9]{12}$/i.test(item.url) ||
         !new RegExp(`/cards/${String(index + 1).padStart(3, '0')}\\.png$`).test(item.cardPath))) {
-      throw new FatalError('107件データ不整合');
+      throw new FatalError(`${config.label}データ不整合`);
     }
     return values;
   }
-  async function loadFinalItems() {
-    if (finalManifest) return validateManifest(finalManifest);
-    finalManifest = JSON.parse(await xhr(FINAL_MANIFEST, 'text'));
-    return validateManifest(finalManifest);
+  async function loadBatchItems(selectedMode) {
+    const config = BATCHES[selectedMode];
+    if (!config) throw new FatalError(`未対応モード: ${selectedMode}`);
+    if (manifestCache.has(selectedMode)) return validateManifest(manifestCache.get(selectedMode), selectedMode);
+    const parsed = JSON.parse(await xhr(`${config.manifest}?v=14.0.0`, 'text'));
+    const values = validateManifest(parsed, selectedMode);
+    manifestCache.set(selectedMode, parsed);
+    return values;
   }
   function metaContent(html, property) {
     const parsed = new DOMParser().parseFromString(html, 'text/html');
@@ -420,9 +436,11 @@
       value ? resolve(value) : reject(new Error('カード生成失敗')), 'image/png', 1));
     return new page.File([output], `${String(item.index).padStart(2, '0')}_compact.png`, { type: 'image/png' });
   }
-  async function finalFile(item) {
+  async function prebuiltFile(item) {
+    const config = BATCHES[mode];
+    if (!config) throw new FatalError(`画像モード不正: ${mode}`);
     const name = `${String(item.index).padStart(3, '0')}.png`;
-    const blob = await xhr(new URL(`./cards/${name}`, FINAL_MANIFEST).href, 'blob');
+    const blob = await xhr(`${new URL(`./cards/${name}`, config.manifest).href}?v=14.0.0`, 'blob');
     if (!blob || blob.size < 100) throw new Error('画像取得失敗');
     const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
     const png = bytes.length === 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -431,7 +449,7 @@
     if (!png || width !== W || height !== H) throw new FatalError(`${name} 寸法不一致 ${width}x${height}`);
     return new page.File([blob], name, { type: blob.type || 'image/png' });
   }
-  async function fileFor(item) { return mode === 'final107' ? finalFile(item) : makeTestFile(item); }
+  async function fileFor(item) { return prebuiltFile(item); }
 
   function looksLikeView(value) {
     try { return Boolean(value && typeof value === 'object' && value.state?.doc && value.state?.schema &&
@@ -655,12 +673,12 @@
   }
 
   async function prepareMode(selectedMode) {
+    if (!BATCHES[selectedMode]) throw new FatalError(`未対応モード: ${selectedMode}`);
     mode = selectedMode; setJSON(modeKey(), selectedMode);
-    items = selectedMode === 'final107' ? await loadFinalItems() : selectedMode === 'diag3' ? DIAG_ITEMS : TEST_ITEMS;
+    items = await loadBatchItems(selectedMode);
     const stored = new Map(legacyRows(selectedMode).map((row) => [row.url, row]));
     storedRows(selectedMode).forEach((row) => stored.set(row.url, row));
     rows = items.map((item) => rowFrom(item, stored.get(item.url)));
-    if (selectedMode === 'diag3') { saveRows(); updateUi(); return; }
     const view = findView();
     if (view) for (const row of rows) {
       const cards = officialCards(view, row.url);
@@ -1177,7 +1195,7 @@
       return nativeInputClick.apply(this, args);
     };
   }
-  async function waitBatchImages(arm, timeout = 900000) {
+  async function waitBatchImages(arm, timeout = 1800000) {
     const result = await waitFor(() => {
       if (arm.token !== runToken || !enabled()) throw new FatalError('停止しました');
       const fresh = imageNodes(arm.view).filter((entry) => {
@@ -1269,6 +1287,8 @@
     const arm = imageArm;
     if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true; arm.input = input;
+    if (arm.timer) clearTimeout(arm.timer);
+    arm.timer = null;
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
@@ -1341,9 +1361,9 @@
     } finally { cancelImageArm(); running = false; updateUi(); }
   }
 
-  function selectedImageMode(fallback = 'test10') {
+  function selectedImageMode(fallback = 'notify2') {
     const value = mode || getJSON(modeKey(), '');
-    return ['test10', 'final107'].includes(value) ? value : fallback;
+    return BATCHES[value] ? value : fallback;
   }
 
   function collectTargetHits(view, includeImages) {
@@ -1374,7 +1394,7 @@
     if (running || !enabled()) return;
     running = true; const token = ++runToken; updateUi();
     try {
-      setStatus(selectedMode === 'final107' ? 'マガジン107件を検査中…' : '10件を検査中…');
+      setStatus(`${BATCHES[selectedMode]?.label || selectedMode}を検査中…`);
       await prepareMode(selectedMode);
       if (token !== runToken) throw new FatalError('停止しました');
       const files = await prepareImageFiles(rows, token);
@@ -1491,7 +1511,7 @@
         if (token !== runToken || !enabled()) throw new FatalError('停止しました');
         await createOfficialCardWithNote(view, rows[index], index + 1, rows.length, token);
         setStatus(`note正規カード ${index + 1}/${rows.length} ✅`);
-        if (index < rows.length - 1) await sleep(rows.length === 107 ? 900 : 500);
+        if (index < rows.length - 1) await sleep(rows.length > 10 ? 900 : 500);
       }
       verifyOfficialCardDocument(view);
       await saveDraftToServer(view, token, verifyOfficialCardDocument,
@@ -1634,9 +1654,11 @@
 
   function routeCheck() {
     if (notificationShutdown || !document.body) return;
-    document.body.dataset.mumeiNotePublish = isPublishPage() ? '1' : '0';
+    const publishValue = isPublishPage() ? '1' : '0';
+    if (document.body.dataset.mumeiNotePublish !== publishValue) {
+      document.body.dataset.mumeiNotePublish = publishValue;
+    }
     if (!isEditPage()) return;
-    removeKnownLegacyTools();
     const key = articleKey();
     if (activeArticle && key && activeArticle !== key) {
       runToken += 1; running = false; cancelImageArm();
