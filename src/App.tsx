@@ -5,7 +5,6 @@ import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogAdminV2 } from "./catalog-admin-v2";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
-import { CommunityChatPage } from "./community-chat-page";
 import { EvidenceV2 } from "./evidence-v2";
 import { FastInsightV8 } from "./fast-insight-v8";
 import "./fast-insight-v6-override.css";
@@ -36,7 +35,6 @@ export function App() {
   if (route === "access/insight") return <AccessPortal target="insight" />;
   if (route === "access/catalog") return <AccessPortal target="catalog" />;
   if (route === "catalog") return <CatalogIconsPage />;
-  if (route === "community") return <CommunityChatPage />;
   if (route === "battle") return <BattleArenaPage />;
   if (route === "game-admin") return <GameAdminPage />;
   if (route === "evidence") return <EvidenceV2 />;
