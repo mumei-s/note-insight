@@ -68,7 +68,6 @@ export function HubHome() {
         <section style={{ ...wrap, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, paddingBottom: 110 }}>
           <Entrance title="INSIGHT" label="ANALYTICS" copy="note活動を確認・管理・分析します。" href="#access/insight" accent="#b6ff38" />
           <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff" />
-          <Entrance title="界隈会話窓" label="CREATOR LOUNGE" copy="招待・承認済みクリエイターだけで、雑談・作品相談・進捗を共有する会話エリアです。" href="#community" accent="#bb8cff" />
           <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録したカードで遊ぶゲームエリアです。" href="#battle" accent="#ffd76b" />
         </section>
 
