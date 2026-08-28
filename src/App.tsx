@@ -48,13 +48,15 @@ function BottomNav({ route }: { route: string }) {
         })}
       </nav>
       <style>{`
-        .app-route-shell{min-height:100vh;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+        html{scroll-padding-bottom:calc(124px + env(safe-area-inset-bottom,0px))}
+        .app-route-shell{min-height:100vh;padding-bottom:calc(124px + env(safe-area-inset-bottom,0px))}
+        .app-route-shell>*{scroll-margin-bottom:calc(124px + env(safe-area-inset-bottom,0px))}
         .app-route-shell.is-member .iv8-apprefresh{display:none!important}
         .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
         .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
         .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}
         .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
-        @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:420px}.app-route-shell{padding-bottom:84px}}
+        @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:420px}.app-route-shell{padding-bottom:108px}}
       `}</style>
     </>
   );
