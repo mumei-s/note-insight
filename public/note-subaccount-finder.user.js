@@ -1,33 +1,302 @@
 // ==UserScript==
-// @name         note サブ垢探偵｜コスモス条件 v3
+// @name         note サブ垢探偵｜コスモス条件 v3.1
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      3.0.0
-// @description  公開1記事＋その記事を固定＋同じ記事をプロフィール設定した #はじめてのnote を抽出し、文末絵文字反復とべあのスキで順位付けします。
+// @version      3.1.0
+// @description  公開1記事候補から固定・プロフィール設定を確認し、同じ絵文字を別々の文末で3回以上使う候補だけを表示します。
 // @match        https://note.com/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
 (() => {
-'use strict';
-const C={from:'2026-08-01T00:00:00+09:00',likely:'2026-08-22T00:00:00+09:00',to:'2026-08-26T13:32:00+09:00',q:'はじめてのnote',bear:'bear_l_t_puzzle',delay:80,max:1500};
-const $=(s,r=document)=>r.querySelector(s),sleep=m=>new Promise(r=>setTimeout(r,m)),ms=s=>Date.parse(s||'')||0,esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pick=(o,a,d='')=>{for(const k of a)if(o&&o[k]!=null)return o[k];return d},bp=(o,a)=>{for(const k of a)if(o&&typeof o[k]==='boolean')return o[k];return null};
-async function J(u){const r=await fetch(u,{credentials:'include',headers:{accept:'application/json'}});if(!r.ok)throw Error(r.status+' '+u);return r.json()}
-const U=n=>n?.user||n?.creator||n?.note_user||{},K=n=>pick(n,['key','note_key','noteKey','slug']),T=n=>pick(n,['name','title']),P=n=>pick(n,['publish_at','publishAt','published_at','publishedAt','created_at']),N=n=>pick(U(n),['urlname','url_name','username'],pick(n,['urlname'])),NN=n=>pick(U(n),['nickname','name'],pick(n,['nickname'],N(n))),L=n=>Number(pick(n,['like_count','likeCount','likes_count'],0))||0;
-function S(j){const d=j?.data??j??{},x=d.notes||{},a=x.contents||x.notes||d.contents||[];return{a:Array.isArray(a)?a:[],cur:d?.cursor?.note??d.note_cursor??x.next_cursor??x.cursor??null,last:x.is_last_page===true||x.isLastPage===true}}
-async function search(st){let cur='0',pg=0,done=false;const m=new Map(),lo=ms(C.from),hi=ms(C.to);while(pg<C.max&&!done){pg++;st(`① はじめてのnoteを遡り中 ${pg}ページ / 期間内${m.size}件`);const x=S(await J(`/api/v3/searches?context=note&q=${encodeURIComponent(C.q)}&size=20&start=${encodeURIComponent(cur)}&sort=new`));if(!x.a.length)break;let old=Infinity;for(const n of x.a){const t=ms(P(n));if(t)old=Math.min(old,t);if(t>=lo&&t<=hi){const k=K(n);if(k)m.set(k,{key:k,title:T(n),publish:P(n),urlname:N(n),name:NN(n),likes:L(n)})}}if(old<lo||x.last||x.cur==null||String(x.cur)===String(cur))done=true;else cur=String(x.cur);await sleep(C.delay)}return[...m.values()]}
-function archives(j){const d=j?.data??j??[];if(!Array.isArray(d))return null;let s=0,ok=false;for(const y of d){if(Array.isArray(y?.details))for(const z of y.details){const n=Number(z?.num);if(Number.isFinite(n)){s+=n;ok=true}}else{const n=Number(y?.totalNum);if(Number.isFinite(n)){s+=n;ok=true}}}return ok?s:null}
-function contents(j){const d=j?.data??j??{},a=Array.isArray(d.contents)?d.contents:[];return{a,total:Number.isFinite(Number(d.totalCount))?Number(d.totalCount):null}}
-function flag(i,type){if(type==='pin'){const b=bp(i,['isPinned','is_pinned']);if(b!=null)return b?'yes':'no';if(i&&pick(i,['pinnedUserNoteId','pinned_user_note_id'],null)!=null)return'yes'}else{const b=bp(i,['isProfiled','is_profiled']);if(b!=null)return b?'yes':'no'}return'unknown'}
-async function inspect(c,st,i,n){st(`② 1記事＋固定＋プロフィール確認 ${i}/${n}：${c.name||c.urlname}`);try{const [u,l]=await Promise.all([J(`/api/v2/creators/${encodeURIComponent(c.urlname)}`),J(`/api/v2/creators/${encodeURIComponent(c.urlname)}/contents?kind=note&page=1`)]),d=u?.data??u??{},cs=contents(l),it=cs.a.find(x=>K(x)===c.key)||(cs.a.length===1?cs.a[0]:null);c.noteCount=Number.isFinite(Number(d.noteCount??d.note_count))?Number(d.noteCount??d.note_count):null;c.followers=Number.isFinite(Number(d.followerCount??d.follower_count))?Number(d.followerCount??d.follower_count):null;c.item=it;c.same=!!it&&K(it)===c.key;c.pin=flag(it,'pin');c.prof=flag(it,'prof');c.profileTab=bp(d,['isCreatorProfileTabEnabled','is_creator_profile_tab_enabled']);if(c.noteCount>1){c.count='multi';return c}try{c.archive=archives(await J(`/api/v2/creators/${encodeURIComponent(c.urlname)}/archives`))}catch{c.archive=null}if([c.noteCount,c.archive,cs.total].some(v=>Number(v)>1))c.count='multi';else if(c.noteCount===1&&c.archive===1)c.count='one';else if([c.noteCount,c.archive,cs.total].some(v=>Number(v)===1))c.count='maybe';else c.count='unknown';if(c.prof==='unknown'&&c.profileTab===true&&c.same&&(c.count==='one'||c.count==='maybe'))c.prof='maybe';}catch(e){c.err=String(e.message||e);c.count='unknown';c.pin='unknown';c.prof='unknown'}return c}
-const EM=String.raw`(?:\p{Extended_Pictographic}|[\u2600-\u27BF])(?:\uFE0F|\uFE0E)?(?:[\u{1F3FB}-\u{1F3FF}])?(?:\u200D(?:\p{Extended_Pictographic}|[\u2600-\u27BF])(?:\uFE0F|\uFE0E)?(?:[\u{1F3FB}-\u{1F3FF}])?)*`,EG=new RegExp(EM,'gu'),ER=new RegExp(`((?:${EM}\\s*)+)(?:[。．.!！?？…・~〜ーwｗ笑]*[」』）】〉》]*)\\s*$`,'u');
-function estat(html){const d=new DOMParser().parseFromString(`<main>${String(html||'')}</main>`,'text/html'),r=d.querySelector('main'),els=r?[...r.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,blockquote')]:[],blocks=(els.length?els.map(e=>e.textContent||''):(r?.textContent||'').split(/\n+/)).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean),cnt=new Map(),ex=new Map();for(const b of blocks){const parts=b.split(/(?<=[。！？!?])/u).map(x=>x.trim()).filter(Boolean);for(const s of(parts.length?parts:[b])){const m=s.match(ER);if(!m)continue;for(const e of new Set([...m[1].matchAll(EG)].map(x=>x[0]))){cnt.set(e,(cnt.get(e)||0)+1);if(!ex.has(e))ex.set(e,[]);if(ex.get(e).length<5)ex.get(e).push(s.slice(-100))}}}const a=[...cnt].sort((x,y)=>y[1]-x[1]),top=a[0]||['',0];return{em:a,top:top[0],topN:top[1],examples:ex.get(top[0])||[]}}
-function tags(j){const s=new Set(),d=j?.data??j??{},n=d.note||d,a=n.hashtags||d.hashtags||[];for(const h of(Array.isArray(a)?a:[])){const x=typeof h==='string'?h:(h?.name||h?.hashtag||h?.tag);if(x)s.add(String(x).replace(/^#/,''))}return[...s]}
-async function detail(c,st,i,n){st(`③ 固定記事の文末絵文字 ${i}/${n}：${c.name}`);try{const j=await J(`/api/v3/notes/${encodeURIComponent(c.key)}`),d=j?.data??j??{},x=d.note||d;c.title=T(x)||c.title;c.publish=P(x)||c.publish;c.name=NN(x)||c.name;c.likes=L(x)||c.likes;c.tags=tags(j);c.tag=c.tags.includes('はじめてのnote')||c.tags.includes('初めてのnote');Object.assign(c,estat(pick(x,['body','free_body','freeBody','description'],'')))}catch(e){c.detailErr=String(e.message||e);c.em=[];c.topN=0}return c}
-const one=c=>c.count==='one'||c.count==='maybe',pos=x=>x==='yes'||x==='maybe',base=c=>one(c)&&c.same&&pos(c.pin)&&pos(c.prof);
-async function bear(k){for(let p=1;p<=8;p++){try{const j=await J(`/api/v3/notes/${encodeURIComponent(k)}/likes?page=${p}&per_page=100`),d=j?.data??j??{},a=Array.isArray(d)?d:(d.users||d.likes||d.contents||[]);if(a.some(x=>{const u=x?.user||x?.creator||x||{};return(u.urlname||u.url_name||u.username)===C.bear}))return true;if((d.next_page??j?.next_page)==null&&a.length<100)break}catch{break}}return false}
-function score(c){return(c.topN||0)*100+(c.topN>=3?220:c.topN>=2?80:0)+(c.count==='one'?60:0)+(c.pin==='yes'?55:0)+(c.prof==='yes'?70:0)+(c.tag?45:0)+(ms(c.publish)>=ms(C.likely)?25:0)+(c.bear?300:0)}
-function card(c,i){const A=`https://note.com/${encodeURIComponent(c.urlname)}/n/${encodeURIComponent(c.key)}`,P=`https://note.com/${encodeURIComponent(c.urlname)}`,ec=c.em?.length?c.em.slice(0,8).map(([e,n])=>`${e} × ${n}文`).join(' / '):'なし',xs=(c.examples||[]).map(x=>`<div style="font-size:11px;color:#555">「${esc(x)}」</div>`).join(''),ac=c.count==='one'?'✅ 1件確定':c.count==='maybe'?'△ 1件の可能性':c.count==='multi'?'❌ 複数記事':'△ 判定不能',pi=c.pin==='yes'?'✅ 確認':c.pin==='maybe'?'△ 可能性高':c.pin==='no'?'❌ 非固定':'△ 判定不能',pr=c.prof==='yes'?'✅ 記事をプロフィール設定':c.prof==='maybe'?'△ 設定の可能性高':c.prof==='no'?'❌ 未設定':'△ 判定不能';return`<div style="border-top:1px solid #ddd;padding:12px 2px"><div style="display:flex"><b style="font-size:18px">#${i+1} ${esc(c.name)}</b><b style="margin-left:auto">${score(c)}点</b></div><div style="font-size:12px;color:#555">@${esc(c.urlname)} / ${esc(String(c.publish||'').slice(0,16).replace('T',' '))} / スキ${c.likes} / フォロワー${c.followers??'?'}</div><div style="font-size:13px;margin:4px 0"><b>${esc(c.title)}</b></div><div style="background:#f5f7f5;padding:8px;border-radius:9px">記事数：<b>${ac}</b> (noteCount=${c.noteCount??'?'} / archives=${c.archive??'?'})<br>固定：<b>${pi}</b><br>プロフィール：<b>${pr}</b><br>タグ：${c.tag?'✅ #はじめてのnote':c.tags?.length?'❌ 対象タグなし':'△ 判定不能'}<br>${ms(c.publish)>=ms(C.likely)?'🔥 直前帯':'広域候補'}</div><div style="margin-top:6px"><b>文末絵文字：</b>${esc(ec)}</div>${xs}<div style="margin-top:6px"><b>べあ：</b>${c.bear?'★ スキ確認':'未確認／見つからず'}</div><div style="margin-top:7px"><a href="${A}" target="_blank">[記事]</a>　<a href="${P}" target="_blank">[クリエイターページ]</a></div></div>`}
-function ui(){const h=document.createElement('div');h.id='cosmos-finder-v3';h.style.cssText='position:fixed;right:8px;bottom:10px;z-index:2147483647;font-family:system-ui;color:#111';h.innerHTML=`<button id="o" style="border:0;border-radius:999px;padding:12px 15px;background:#111;color:#fff;font-weight:800">🕵️ コスモス探偵 v3</button><div id="p" style="display:none;width:min(96vw,820px);max-height:85vh;overflow:auto;background:#fff;border-radius:15px;box-shadow:0 8px 30px #0006;margin-top:8px;padding:12px"><div style="display:flex;gap:8px;position:sticky;top:-12px;background:#fff;padding:8px 0;z-index:2"><b style="flex:1">1記事＋固定＋プロフィール＋絵文字</b><button id="r">探索</button><button id="x">×</button></div><div id="s" style="font-size:12px;background:#f4f4f4;padding:8px;border-radius:8px">待機中</div><div id="d" style="font-size:11px;background:#fff8dc;padding:7px;border-radius:8px;margin:7px 0"></div><div id="z"></div></div>`;document.body.appendChild(h);const p=$('#p',h),s=$('#s',h),d=$('#d',h),z=$('#z',h),st=x=>s.textContent=x;$('#o',h).onclick=()=>p.style.display=p.style.display==='none'?'block':'none';$('#x',h).onclick=()=>p.style.display='none';$('#r',h).onclick=async e=>{const b=e.currentTarget;b.disabled=true;z.innerHTML='';d.textContent='';try{const raw=await search(st),u=[],seen=new Set();for(const c of raw.sort((a,b)=>ms(b.publish)-ms(a.publish))){if(c.urlname&&!seen.has(c.urlname)){seen.add(c.urlname);u.push(c)}}let multi=0,oneN=0,pinN=0,profN=0;for(let i=0;i<u.length;i++){await inspect(u[i],st,i+1,u.length);if(u[i].count==='multi')multi++;if(one(u[i]))oneN++;if(pos(u[i].pin))pinN++;if(pos(u[i].prof))profN++;if(i%10===0)d.textContent=`検索${raw.length} / ユーザー${u.length} / 1記事${oneN} / 固定${pinN} / プロフィール記事${profN}`;await sleep(C.delay)}const q=u.filter(base);for(let i=0;i<q.length;i++){await detail(q[i],st,i+1,q.length);await sleep(C.delay)}const bt=[...q].sort((a,b)=>(b.topN||0)-(a.topN||0)).slice(0,80);for(let i=0;i<bt.length;i++){st(`④ べあのスキ ${i+1}/${bt.length}：${bt[i].name}`);bt[i].bear=await bear(bt[i].key);await sleep(C.delay)}q.sort((a,b)=>score(b)-score(a));const strong=q.filter(c=>(c.topN||0)>=3),weak=q.filter(c=>(c.topN||0)<3);d.textContent=`検索${raw.length} / ユーザー${u.length} / 複数記事除外${multi} / 1記事${oneN} / 固定${pinN} / プロフィール記事${profN} / 3条件一致${q.length} / 同一絵文字3文以上${strong.length}`;st(`完了：本命${strong.length}人 / 絵文字弱め${weak.length}人`);let H=strong.length?`<h3>★ 本命</h3>${strong.map(card).join('')}`:'<div style="padding:9px;background:#fff0f0"><b>同一絵文字3文以上は0人。</b></div>';if(weak.length)H+=`<details open><summary><b>1記事＋固定＋プロフィール一致・絵文字弱め (${weak.length})</b></summary>${weak.map(card).join('')}</details>`;if(!q.length){const a=u.filter(one).slice(0,30);H+=`<div style="padding:9px;background:#fff0f0"><b>3条件一致0人。監査用に1記事候補を残します。</b></div><details open><summary>1記事候補 ${a.length}</summary>${a.map(card).join('')}</details>`}z.innerHTML=H}catch(err){console.error(err);st('エラー：'+(err.message||err))}finally{b.disabled=false}}}
-if(!document.getElementById('cosmos-finder-v3'))ui();
+  'use strict';
+
+  const C = {
+    from: '2026-08-01T00:00:00+09:00',
+    likely: '2026-08-22T00:00:00+09:00',
+    to: '2026-08-26T13:32:00+09:00',
+    q: 'はじめてのnote',
+    bear: 'bear_l_t_puzzle',
+    delay: 80,
+    maxPages: 1500,
+    minEmojiEnds: 3,
+  };
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const toMs = s => Date.parse(s || '') || 0;
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const pick = (o, keys, fallback = '') => { for (const k of keys) if (o && o[k] != null) return o[k]; return fallback; };
+  const boolPick = (o, keys) => { for (const k of keys) if (o && typeof o[k] === 'boolean') return o[k]; return null; };
+
+  async function getJson(url) {
+    const r = await fetch(url, { credentials: 'include', headers: { accept: 'application/json' } });
+    if (!r.ok) throw new Error(`${r.status} ${url}`);
+    return r.json();
+  }
+
+  const userOf = n => n?.user || n?.creator || n?.note_user || {};
+  const keyOf = n => pick(n, ['key','note_key','noteKey','slug']);
+  const titleOf = n => pick(n, ['name','title']);
+  const publishOf = n => pick(n, ['publish_at','publishAt','published_at','publishedAt','created_at']);
+  const urlnameOf = n => pick(userOf(n), ['urlname','url_name','username'], pick(n, ['urlname']));
+  const nicknameOf = n => pick(userOf(n), ['nickname','name'], pick(n, ['nickname'], urlnameOf(n)));
+  const likesOf = n => Number(pick(n, ['like_count','likeCount','likes_count'], 0)) || 0;
+
+  function normalizeSearch(j) {
+    const d = j?.data ?? j ?? {};
+    const notes = d.notes || {};
+    const arr = notes.contents || notes.notes || d.contents || [];
+    return {
+      arr: Array.isArray(arr) ? arr : [],
+      cursor: d?.cursor?.note ?? d.note_cursor ?? notes.next_cursor ?? notes.cursor ?? null,
+      last: notes.is_last_page === true || notes.isLastPage === true,
+    };
+  }
+
+  async function searchCandidates(status) {
+    let cursor = '0', page = 0, done = false;
+    const lo = toMs(C.from), hi = toMs(C.to), map = new Map();
+    while (page < C.maxPages && !done) {
+      page++;
+      status(`① はじめてのnoteを遡り中 ${page}ページ / 期間内${map.size}件`);
+      const s = normalizeSearch(await getJson(`/api/v3/searches?context=note&q=${encodeURIComponent(C.q)}&size=20&start=${encodeURIComponent(cursor)}&sort=new`));
+      if (!s.arr.length) break;
+      let oldest = Infinity;
+      for (const n of s.arr) {
+        const t = toMs(publishOf(n));
+        if (t) oldest = Math.min(oldest, t);
+        if (t >= lo && t <= hi) {
+          const key = keyOf(n);
+          if (key) map.set(key, { key, title: titleOf(n), publish: publishOf(n), urlname: urlnameOf(n), name: nicknameOf(n), likes: likesOf(n) });
+        }
+      }
+      if (oldest < lo || s.last || s.cursor == null || String(s.cursor) === String(cursor)) done = true;
+      else cursor = String(s.cursor);
+      await sleep(C.delay);
+    }
+    return [...map.values()];
+  }
+
+  function archiveTotal(j) {
+    const d = j?.data ?? j ?? [];
+    if (!Array.isArray(d)) return null;
+    let sum = 0, saw = false;
+    for (const y of d) {
+      if (Array.isArray(y?.details)) {
+        for (const m of y.details) {
+          const n = Number(m?.num);
+          if (Number.isFinite(n)) { sum += n; saw = true; }
+        }
+      } else {
+        const n = Number(y?.totalNum);
+        if (Number.isFinite(n)) { sum += n; saw = true; }
+      }
+    }
+    return saw ? sum : null;
+  }
+
+  function contentsData(j) {
+    const d = j?.data ?? j ?? {};
+    const arr = Array.isArray(d.contents) ? d.contents : [];
+    return { arr, total: Number.isFinite(Number(d.totalCount)) ? Number(d.totalCount) : null };
+  }
+
+  function itemFlag(item, type) {
+    if (!item) return 'unknown';
+    const keys = type === 'pin' ? ['isPinned','is_pinned'] : ['isProfiled','is_profiled'];
+    const b = boolPick(item, keys);
+    if (b != null) return b ? 'yes' : 'no';
+    if (type === 'pin' && pick(item, ['pinnedUserNoteId','pinned_user_note_id'], null) != null) return 'yes';
+    return 'unknown';
+  }
+
+  async function inspectCreator(c, status, i, total) {
+    status(`② 公開1記事・固定・プロフィール確認 ${i}/${total}：${c.name || c.urlname}`);
+    try {
+      const [creatorJ, contentsJ] = await Promise.all([
+        getJson(`/api/v2/creators/${encodeURIComponent(c.urlname)}`),
+        getJson(`/api/v2/creators/${encodeURIComponent(c.urlname)}/contents?kind=note&page=1`),
+      ]);
+      const creator = creatorJ?.data ?? creatorJ ?? {};
+      const cd = contentsData(contentsJ);
+      const item = cd.arr.find(x => keyOf(x) === c.key) || (cd.arr.length === 1 ? cd.arr[0] : null);
+      c.noteCount = Number.isFinite(Number(creator.noteCount ?? creator.note_count)) ? Number(creator.noteCount ?? creator.note_count) : null;
+      c.followers = Number.isFinite(Number(creator.followerCount ?? creator.follower_count)) ? Number(creator.followerCount ?? creator.follower_count) : null;
+      c.same = !!item && keyOf(item) === c.key;
+      c.pin = itemFlag(item, 'pin');
+      c.profile = itemFlag(item, 'profile');
+      c.profileTab = boolPick(creator, ['isCreatorProfileTabEnabled','is_creator_profile_tab_enabled']);
+      try { c.archiveCount = archiveTotal(await getJson(`/api/v2/creators/${encodeURIComponent(c.urlname)}/archives`)); }
+      catch { c.archiveCount = null; }
+      const counts = [c.noteCount, c.archiveCount, cd.total].filter(v => v != null);
+      if (counts.some(v => Number(v) > 1)) c.articleState = 'multi';
+      else if (c.noteCount === 1 && c.archiveCount === 1) c.articleState = 'one';
+      else if (counts.some(v => Number(v) === 1)) c.articleState = 'maybe';
+      else c.articleState = 'unknown';
+      if (c.profile === 'unknown' && c.profileTab === true && c.same) c.profile = 'maybe';
+    } catch (e) {
+      c.creatorError = String(e.message || e);
+      c.articleState = 'unknown'; c.pin = 'unknown'; c.profile = 'unknown';
+    }
+  }
+
+  const EMOJI = String.raw`(?:\p{Extended_Pictographic}|[\u2600-\u27BF])(?:\uFE0F|\uFE0E)?(?:[\u{1F3FB}-\u{1F3FF}])?(?:\u200D(?:\p{Extended_Pictographic}|[\u2600-\u27BF])(?:\uFE0F|\uFE0E)?(?:[\u{1F3FB}-\u{1F3FF}])?)*`;
+  const emojiGlobal = new RegExp(EMOJI, 'gu');
+  const emojiEnd = new RegExp(`((?:${EMOJI}\\s*)+)(?:[。．.!！?？…・~〜ーwｗ笑]*[」』）】〉》]*)\\s*$`, 'u');
+
+  function textLinesFromHtml(html) {
+    const doc = new DOMParser().parseFromString(`<main>${String(html || '')}</main>`, 'text/html');
+    const root = doc.querySelector('main');
+    if (!root) return [];
+    for (const br of [...root.querySelectorAll('br')]) br.replaceWith(doc.createTextNode('\n'));
+    const blocks = [...root.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,blockquote')];
+    const lines = [];
+    const source = blocks.length ? blocks : [root];
+    for (const el of source) {
+      for (const line of String(el.textContent || '').split(/\n+/)) {
+        const s = line.replace(/[\t\u00a0 ]+/g, ' ').trim();
+        if (s) lines.push(s);
+      }
+    }
+    return lines;
+  }
+
+  function emojiStats(html) {
+    const lines = textLinesFromHtml(html), counts = new Map(), examples = new Map();
+    for (const line of lines) {
+      const chunks = line.split(/(?<=[。！？!?])\s*/u).map(s => s.trim()).filter(Boolean);
+      for (const chunk of chunks.length ? chunks : [line]) {
+        const m = chunk.match(emojiEnd);
+        if (!m) continue;
+        const set = new Set([...m[1].matchAll(emojiGlobal)].map(x => x[0]));
+        for (const em of set) {
+          counts.set(em, (counts.get(em) || 0) + 1);
+          if (!examples.has(em)) examples.set(em, []);
+          if (examples.get(em).length < 6) examples.get(em).push(chunk.slice(-120));
+        }
+      }
+    }
+    const ranked = [...counts.entries()].sort((a,b) => b[1] - a[1]);
+    const [topEmoji, topCount] = ranked[0] || ['', 0];
+    return { emojiEnds: ranked, topEmoji, topCount, examples: examples.get(topEmoji) || [], parsedLines: lines.length };
+  }
+
+  function collectTags(j) {
+    const d = j?.data ?? j ?? {}, n = d.note || d, arr = n.hashtags || d.hashtags || [], out = [];
+    for (const h of Array.isArray(arr) ? arr : []) {
+      const x = typeof h === 'string' ? h : (h?.name || h?.hashtag || h?.tag);
+      if (x) out.push(String(x).replace(/^#/, ''));
+    }
+    return out;
+  }
+
+  async function inspectDetail(c, status, i, total) {
+    status(`③ 文末絵文字を全文解析 ${i}/${total}：${c.name}`);
+    try {
+      const j = await getJson(`/api/v3/notes/${encodeURIComponent(c.key)}`);
+      const d = j?.data ?? j ?? {}, n = d.note || d;
+      c.title = titleOf(n) || c.title;
+      c.publish = publishOf(n) || c.publish;
+      c.name = nicknameOf(n) || c.name;
+      c.likes = likesOf(n) || c.likes;
+      c.tags = collectTags(j);
+      c.hasTargetTag = c.tags.includes('はじめてのnote') || c.tags.includes('初めてのnote');
+      const body = pick(n, ['body','free_body','freeBody','description'], '');
+      c.bodyFetched = typeof body === 'string' && body.length > 0;
+      Object.assign(c, emojiStats(body));
+    } catch (e) {
+      c.detailError = String(e.message || e);
+      c.bodyFetched = false; c.topCount = 0; c.examples = []; c.emojiEnds = [];
+    }
+  }
+
+  const oneArticle = c => c.articleState === 'one' || c.articleState === 'maybe';
+  const notNegative = x => x !== 'no';
+  const structuralCandidate = c => oneArticle(c) && c.same && notNegative(c.pin) && notNegative(c.profile);
+  const strongEmoji = c => c.bodyFetched && c.topCount >= C.minEmojiEnds && c.examples.length >= C.minEmojiEnds;
+
+  async function bearLiked(key) {
+    for (let page = 1; page <= 8; page++) {
+      try {
+        const j = await getJson(`/api/v3/notes/${encodeURIComponent(key)}/likes?page=${page}&per_page=100`);
+        const d = j?.data ?? j ?? {}, arr = Array.isArray(d) ? d : (d.users || d.likes || d.contents || []);
+        if (arr.some(x => { const u = x?.user || x?.creator || x || {}; return (u.urlname || u.url_name || u.username) === C.bear; })) return true;
+        if ((d.next_page ?? j?.next_page) == null && arr.length < 100) break;
+      } catch { break; }
+    }
+    return false;
+  }
+
+  function score(c) {
+    return c.topCount * 120 + (c.pin === 'yes' ? 70 : 0) + (c.profile === 'yes' ? 80 : 0) + (c.articleState === 'one' ? 70 : 0) + (c.hasTargetTag ? 40 : 0) + (toMs(c.publish) >= toMs(C.likely) ? 25 : 0) + (c.bear ? 300 : 0);
+  }
+
+  function stateText(c) {
+    const ac = c.articleState === 'one' ? '✅ 1件確定' : c.articleState === 'maybe' ? '△ 1件の可能性' : c.articleState === 'multi' ? '❌ 複数記事' : '△ 判定不能';
+    const pin = c.pin === 'yes' ? '✅ 確認' : c.pin === 'no' ? '❌ 非固定' : '△ 判定不能';
+    const prof = c.profile === 'yes' ? '✅ 設定' : c.profile === 'no' ? '❌ 未設定' : '△ 判定不能';
+    return { ac, pin, prof };
+  }
+
+  function card(c, i) {
+    const s = stateText(c);
+    const article = `https://note.com/${encodeURIComponent(c.urlname)}/n/${encodeURIComponent(c.key)}`;
+    const profile = `https://note.com/${encodeURIComponent(c.urlname)}`;
+    const emo = c.emojiEnds.slice(0,8).map(([e,n]) => `${e} × ${n}文`).join(' / ');
+    const ex = c.examples.slice(0,5).map(x => `<div style="font-size:11px;color:#555">「${esc(x)}」</div>`).join('');
+    return `<div style="border-top:1px solid #ddd;padding:12px 2px">
+      <div style="display:flex"><b style="font-size:18px">#${i+1} ${esc(c.name)}</b><b style="margin-left:auto">${score(c)}点</b></div>
+      <div style="font-size:12px;color:#555">@${esc(c.urlname)} / ${esc(String(c.publish||'').slice(0,16).replace('T',' '))} / スキ${c.likes} / フォロワー${c.followers ?? '?'}</div>
+      <div style="font-size:13px;margin:4px 0"><b>${esc(c.title)}</b></div>
+      <div style="background:#f5f7f5;padding:8px;border-radius:9px">記事数：<b>${s.ac}</b> (noteCount=${c.noteCount ?? '?'} / archives=${c.archiveCount ?? '?'})<br>固定：<b>${s.pin}</b><br>プロフィール記事：<b>${s.prof}</b><br>タグ：${c.hasTargetTag ? '✅ #はじめてのnote' : '△ 検索一致・タグ判定不能/なし'}<br>本文解析：✅ ${c.parsedLines}行</div>
+      <div style="margin-top:7px"><b>文末絵文字：</b>${esc(emo)}</div>${ex}
+      <div style="margin-top:6px"><b>べあ：</b>${c.bear ? '★ スキ確認' : '未確認／見つからず'}</div>
+      <div style="margin-top:7px"><a href="${article}" target="_blank">[記事]</a>　<a href="${profile}" target="_blank">[クリエイターページ]</a></div>
+    </div>`;
+  }
+
+  function makeUI() {
+    const host = document.createElement('div'); host.id = 'cosmos-finder-v31';
+    host.style.cssText = 'position:fixed;right:8px;bottom:10px;z-index:2147483647;font-family:system-ui;color:#111';
+    host.innerHTML = `<button id="open" style="border:0;border-radius:999px;padding:12px 15px;background:#111;color:#fff;font-weight:800">🕵️ コスモス探偵 v3.1</button>
+    <div id="panel" style="display:none;width:min(96vw,820px);max-height:85vh;overflow:auto;background:#fff;border-radius:15px;box-shadow:0 8px 30px #0006;margin-top:8px;padding:12px">
+      <div style="display:flex;gap:8px;position:sticky;top:-12px;background:#fff;padding:8px 0;z-index:2"><b style="flex:1">同一絵文字3文以上だけ表示</b><button id="run">探索</button><button id="close">×</button></div>
+      <div id="status" style="font-size:12px;background:#f4f4f4;padding:8px;border-radius:8px">待機中</div>
+      <div id="debug" style="font-size:11px;background:#fff8dc;padding:7px;border-radius:8px;margin:7px 0"></div>
+      <div id="results"></div>
+    </div>`;
+    document.body.appendChild(host);
+    const panel = $('#panel', host), statusEl = $('#status', host), debug = $('#debug', host), results = $('#results', host);
+    const status = x => statusEl.textContent = x;
+    $('#open', host).onclick = () => panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    $('#close', host).onclick = () => panel.style.display = 'none';
+    $('#run', host).onclick = async e => {
+      const btn = e.currentTarget; btn.disabled = true; results.innerHTML = ''; debug.textContent = '';
+      try {
+        const raw = await searchCandidates(status), users = [], seen = new Set();
+        for (const c of raw.sort((a,b) => toMs(b.publish)-toMs(a.publish))) if (c.urlname && !seen.has(c.urlname)) { seen.add(c.urlname); users.push(c); }
+        let oneN = 0, multiN = 0;
+        for (let i=0;i<users.length;i++) {
+          await inspectCreator(users[i], status, i+1, users.length);
+          if (oneArticle(users[i])) oneN++; if (users[i].articleState === 'multi') multiN++;
+          if (i % 10 === 0) debug.textContent = `検索${raw.length} / ユーザー${users.length} / 1記事${oneN} / 複数記事${multiN}`;
+          await sleep(C.delay);
+        }
+        const structural = users.filter(structuralCandidate);
+        for (let i=0;i<structural.length;i++) { await inspectDetail(structural[i], status, i+1, structural.length); await sleep(C.delay); }
+        const strong = structural.filter(strongEmoji).sort((a,b) => score(b)-score(a));
+        const two = structural.filter(c => c.bodyFetched && c.topCount === 2 && c.examples.length >= 2).sort((a,b) => score(b)-score(a));
+        for (let i=0;i<Math.min(strong.length,80);i++) { status(`④ べあのスキ ${i+1}/${Math.min(strong.length,80)}：${strong[i].name}`); strong[i].bear = await bearLiked(strong[i].key); await sleep(C.delay); }
+        strong.sort((a,b) => score(b)-score(a));
+        debug.textContent = `検索${raw.length} / ユーザー${users.length} / 1記事${oneN} / 構造候補${structural.length} / 同一絵文字3文以上${strong.length} / 2文だけ${two.length}`;
+        status(`完了：本命 ${strong.length}人`);
+        let html = strong.length ? `<h3>★ 同じ絵文字を3文以上の文末で使用</h3>${strong.map(card).join('')}` : '<div style="padding:10px;background:#fff0f0"><b>同一絵文字3文以上の候補は0人。</b><br>絵文字0〜1回の人は表示していません。</div>';
+        if (two.length) html += `<details><summary><b>補欠：同じ絵文字2文だけ (${two.length})</b></summary>${two.map(card).join('')}</details>`;
+        results.innerHTML = html;
+      } catch (err) { console.error(err); status(`エラー：${err.message || err}`); }
+      finally { btn.disabled = false; }
+    };
+  }
+
+  if (!document.getElementById('cosmos-finder-v31')) makeUI();
 })();
