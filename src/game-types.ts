@@ -1,20 +1,29 @@
 export type GameMode = "choice" | "tap" | "puzzle" | "shoot";
+export type BattleResult = "win" | "draw" | "lose";
+
+export type GameCard = { position: number; url: string | null };
 
 export type GameOpponent = {
   id: string;
+  type?: "official";
   name: string;
   job: string;
   rarity: string;
   image_url: string | null;
+  cards?: GameCard[];
   version: number;
 };
 
 export type GameCreator = {
   id: string;
+  type?: "creator";
   note_id: string;
   display_name: string;
+  job?: string;
+  rarity?: string;
   status?: string;
-  images: { position: number; url: string | null }[];
+  battle_opt_in?: boolean;
+  images: GameCard[];
 };
 
 export type CreatorGameData = {
@@ -27,7 +36,7 @@ export type PlayerDirectoryCard = {
   note_id: string;
   display_name: string;
   status: string;
-  cards: { position: number; url: string | null }[];
+  cards: GameCard[];
 };
 
 export function randomInt(min: number, max: number) {
