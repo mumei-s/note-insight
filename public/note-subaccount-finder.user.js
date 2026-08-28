@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note サブ垢探偵｜コスモス条件 v3.3
+// @name         note サブ垢探偵｜コスモス条件 v3.4
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      3.3.0
-// @description  直近7日間の「はじめてのnote」から、その記事が固定＋プロフィール表示され、文末絵文字を複数回使う候補を抽出します。記事総数は条件にしません。
+// @version      3.4.0
+// @description  直近7日間の「はじめてのnote」から、その記事が固定＋プロフィール表示され、同じ絵文字を複数の文末で繰り返す候補を抽出します。過去不正解候補も除外しません。
 // @match        https://note.com/*
 // @grant        none
 // @run-at       document-idle
@@ -16,9 +16,9 @@
     bear: 'bear_l_t_puzzle',
     delay: 80,
     maxPages: 900,
-    minEmojiEnds: 2,
+    minSameEmojiEnds: 2,
     maxBearChecks: 80,
-    excluded: new Set([
+    pastWrong: new Set([
       'nazuki_days','mokushiroku1996','sab3317',
       'nero_notelover','hoshi_yui2027','mute_mimosa375'
     ])
@@ -93,14 +93,15 @@
         if (t) oldest = Math.min(oldest, t);
         if (t >= lo && t <= hi) {
           const key = keyOf(n), urlname = urlnameOf(n);
-          if (key && urlname && !C.excluded.has(urlname)) {
+          if (key && urlname) {
             map.set(key, {
               key,
               title: titleOf(n),
               publish: publishOf(n),
               urlname,
               name: nicknameOf(n),
-              likes: likesOf(n)
+              likes: likesOf(n),
+              wasPastWrong: C.pastWrong.has(urlname)
             });
           }
         }
@@ -164,8 +165,8 @@
   function emojiStats(html) {
     const lines = textLinesFromHtml(html);
     const counts = new Map();
-    const examples = [];
-    let totalEnds = 0;
+    const examplesByEmoji = new Map();
+    let totalEmojiEnds = 0;
 
     for (const line of lines) {
       const chunks = line.split(/(?<=[。！？!?])\s*/u).map(s => s.trim()).filter(Boolean);
@@ -174,21 +175,25 @@
         if (!m) continue;
         const emojis = [...m[1].matchAll(emojiGlobal)].map(x => x[0]);
         if (!emojis.length) continue;
-        totalEnds++;
-        for (const em of new Set(emojis)) counts.set(em, (counts.get(em) || 0) + 1);
-        if (examples.length < 8) examples.push(chunk.slice(-140));
+        totalEmojiEnds++;
+        for (const em of new Set(emojis)) {
+          counts.set(em, (counts.get(em) || 0) + 1);
+          if (!examplesByEmoji.has(em)) examplesByEmoji.set(em, []);
+          const arr = examplesByEmoji.get(em);
+          if (arr.length < 8) arr.push(chunk.slice(-140));
+        }
       }
     }
 
     const ranked = [...counts.entries()].sort((a,b) => b[1] - a[1]);
     const [topEmoji, topCount] = ranked[0] || ['', 0];
     return {
-      totalEmojiEnds: totalEnds,
+      totalEmojiEnds,
       emojiEnds: ranked,
       topEmoji,
       topCount,
       emojiKinds: ranked.length,
-      examples,
+      topExamples: examplesByEmoji.get(topEmoji) || [],
       parsedLines: lines.length
     };
   }
@@ -205,11 +210,10 @@
   }
 
   async function inspectDetail(c, status, i, total) {
-    status(`② はじめてのnote＋文末絵文字 ${i}/${total}：${c.name}`);
+    status(`② 同じ文末絵文字を確認 ${i}/${total}：${c.name}`);
     try {
       const j = await getJson(`/api/v3/notes/${encodeURIComponent(c.key)}`);
       const d = j?.data ?? j ?? {}, n = d.note || d;
-      c.detailJson = j;
       c.title = titleOf(n) || c.title;
       c.publish = publishOf(n) || c.publish;
       c.name = nicknameOf(n) || c.name;
@@ -325,15 +329,15 @@
     return false;
   }
 
-  const emojiCandidate = c => c.bodyFetched && c.totalEmojiEnds >= C.minEmojiEnds;
+  const sameEmojiCandidate = c => c.bodyFetched && c.topCount >= C.minSameEmojiEnds;
   const structureCandidate = c => c.firstNote && c.pin !== 'no' && c.profiled !== 'no';
   const exactStructure = c => c.firstNote && c.pin === 'yes' && c.profiled === 'yes';
 
   function score(c) {
     let s = 0;
-    s += c.totalEmojiEnds * 70;
-    s += c.topCount * 35;
-    s += Math.min(60, c.emojiKinds * 15);
+    s += c.topCount * 220;
+    if (c.topCount >= 3) s += 180;
+    if (c.topCount >= 5) s += 260;
     if (c.pin === 'yes') s += 180;
     if (c.profiled === 'yes') s += 220;
     if (c.firstNote) s += 80;
@@ -346,17 +350,19 @@
     const profile = `https://note.com/${encodeURIComponent(c.urlname)}`;
     const pin = c.pin === 'yes' ? '✅ 固定' : c.pin === 'no' ? '❌ 非固定' : '△ 固定判定不能';
     const prof = c.profiled === 'yes' ? '✅ プロフィール表示' : c.profiled === 'no' ? '❌ プロフィール未設定' : '△ プロフィール判定不能';
-    const em = c.emojiEnds.length ? c.emojiEnds.slice(0,8).map(([e,n]) => `${e}×${n}文末`).join(' / ') : 'なし';
-    const ex = c.examples.slice(0,5).map(x => `<div style="font-size:11px;color:#555">「${esc(x)}」</div>`).join('');
+    const others = c.emojiEnds.filter(([e]) => e !== c.topEmoji).slice(0,7).map(([e,n]) => `${e}×${n}`).join(' / ');
+    const ex = c.topExamples.slice(0,5).map(x => `<div style="font-size:11px;color:#555">「${esc(x)}」</div>`).join('');
     return `<div style="border-top:1px solid #ddd;padding:12px 2px">
       <div style="display:flex;gap:8px"><b style="font-size:18px">#${i+1} ${esc(c.name)}</b><b style="margin-left:auto">${score(c)}点</b></div>
       <div style="font-size:12px;color:#555">@${esc(c.urlname)} / ${esc(String(c.publish || '').slice(0,16).replace('T',' '))} / 記事${c.noteCount ?? '?'} / スキ${c.likes} / フォロワー${c.followers ?? '?'}</div>
       <div style="font-size:13px;margin:4px 0"><b>${esc(c.title)}</b></div>
+      ${c.wasPastWrong ? '<div style="color:#a00;font-size:12px;font-weight:800">※ 過去に不正解扱いした候補（今回は除外せず再判定）</div>' : ''}
       <div style="background:#eef8f0;padding:8px;border-radius:9px">
         ${c.firstNote ? '✅' : '△'} はじめてのnote<br>
         ${pin}<br>${prof}
       </div>
-      <div style="margin-top:6px"><b>文末絵文字：${c.totalEmojiEnds}文 / ${c.emojiKinds}種類</b><br>${esc(em)}</div>
+      <div style="margin-top:7px;font-size:16px"><b>同一絵文字：${esc(c.topEmoji || 'なし')} × ${c.topCount || 0}文末</b></div>
+      <div style="font-size:12px;color:#555">他の文末絵文字：${esc(others || 'なし')}</div>
       ${ex}
       <div style="margin-top:6px"><b>べあ：</b>${c.bear ? '★ スキ確認' : '未確認／見つからず'}</div>
       <div style="margin-top:7px"><a href="${article}" target="_blank">[記事]</a>　<a href="${profile}" target="_blank">[クリエイターページ]</a></div>
@@ -365,13 +371,13 @@
 
   function makeUI() {
     const host = document.createElement('div');
-    host.id = 'cosmos-finder-v33';
+    host.id = 'cosmos-finder-v34';
     host.style.cssText = 'position:fixed;right:8px;bottom:10px;z-index:2147483647;font-family:system-ui,sans-serif;color:#111';
     host.innerHTML = `
-      <button id="cf-open" style="border:0;border-radius:999px;padding:12px 15px;background:#111;color:#fff;font-weight:800">🕵️ コスモス探偵 v3.3</button>
+      <button id="cf-open" style="border:0;border-radius:999px;padding:12px 15px;background:#111;color:#fff;font-weight:800">🕵️ コスモス探偵 v3.4</button>
       <div id="cf-panel" style="display:none;width:min(96vw,820px);max-height:85vh;overflow:auto;background:#fff;border-radius:15px;box-shadow:0 8px 30px #0006;margin-top:8px;padding:12px">
         <div style="display:flex;gap:8px;position:sticky;top:-12px;background:#fff;padding:8px 0;z-index:2">
-          <b style="flex:1">直近7日｜固定＋プロフィール＋文末絵文字</b><button id="cf-run">探索</button><button id="cf-x">×</button>
+          <b style="flex:1">直近7日｜固定＋プロフィール＋同じ絵文字</b><button id="cf-run">探索</button><button id="cf-x">×</button>
         </div>
         <div id="cf-status" style="font-size:12px;background:#f4f4f4;padding:8px;border-radius:8px">待機中</div>
         <div id="cf-debug" style="font-size:11px;background:#fff8dc;padding:7px;border-radius:8px;margin:7px 0"></div>
@@ -392,10 +398,13 @@
       try {
         const raw = await searchCandidates(status);
         const detail = [];
+        let repeated3 = 0, pastWrongSeen = 0;
         for (let i = 0; i < raw.length; i++) {
           await inspectDetail(raw[i], status, i + 1, raw.length);
-          if (raw[i].firstNote && emojiCandidate(raw[i])) detail.push(raw[i]);
-          if (i % 10 === 0) debug.textContent = `検索${raw.length} / 文末絵文字2文以上${detail.length}`;
+          if (raw[i].wasPastWrong) pastWrongSeen++;
+          if (raw[i].firstNote && sameEmojiCandidate(raw[i])) detail.push(raw[i]);
+          if ((raw[i].topCount || 0) >= 3) repeated3++;
+          if (i % 10 === 0) debug.textContent = `検索${raw.length} / 同じ絵文字2回以上${detail.length} / 3回以上${repeated3} / 過去不正解再取得${pastWrongSeen}`;
           await sleep(C.delay);
         }
 
@@ -417,7 +426,7 @@
 
         exact.sort((a,b) => score(b) - score(a));
         uncertain.sort((a,b) => score(b) - score(a));
-        debug.textContent = `検索${raw.length} / 文末絵文字2文以上${detail.length} / 固定＋プロフィール確定${exact.length} / 判定不能含む${uncertain.length}`;
+        debug.textContent = `検索${raw.length} / 同じ絵文字2回以上${detail.length} / 固定＋プロフィール確定${exact.length} / 判定不能含む${uncertain.length} / 過去不正解再取得${pastWrongSeen}`;
         status(`完了：本命${exact.length}人 / 判定不能候補${uncertain.length}人`);
 
         let html = exact.length
@@ -425,10 +434,10 @@
           : `<div style="padding:9px;background:#fff0f0"><b>固定＋プロフィールまで両方確認できた本命は0人。</b></div>`;
 
         if (uncertain.length) {
-          html += `<details><summary><b>△ 固定またはプロフィール判定不能 (${uncertain.length})</b></summary>${uncertain.map(card).join('')}</details>`;
+          html += `<details open><summary><b>△ 固定またはプロフィール判定不能 (${uncertain.length})</b></summary>${uncertain.map(card).join('')}</details>`;
         }
         if (!detail.length) {
-          html += `<div style="padding:9px;background:#fff0f0"><b>直近7日の「はじめてのnote」で、文末絵文字を2文以上使う記事が取得できませんでした。</b></div>`;
+          html += `<div style="padding:9px;background:#fff0f0"><b>直近7日の「はじめてのnote」で、同じ絵文字を2文末以上に使う記事が取得できませんでした。</b></div>`;
         }
         results.innerHTML = html;
       } catch (err) {
@@ -440,5 +449,5 @@
     };
   }
 
-  if (!document.getElementById('cosmos-finder-v33')) makeUI();
+  if (!document.getElementById('cosmos-finder-v34')) makeUI();
 })();
