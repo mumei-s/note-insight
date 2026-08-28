@@ -16,6 +16,8 @@ import { MemberPortal } from "./member-portal";
 import { OwnerGate } from "./owner-gate";
 import { OwnerHub } from "./owner-hub";
 
+const OWNER_KEY = "mumei-unified-owner-token";
+
 function currentRoute() {
   return window.location.hash.replace(/^#\/?/, "") || "home";
 }
@@ -47,6 +49,7 @@ function BottomNav({ route }: { route: string }) {
       </nav>
       <style>{`
         .app-route-shell{min-height:100vh;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+        .app-route-shell.is-member .iv8-apprefresh{display:none!important}
         .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
         .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
         .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}
@@ -84,5 +87,6 @@ export function App() {
   else page = <HubHome />;
 
   const hideBottomNav = route.startsWith("access/") || route === "owner";
-  return <><div className="app-route-shell">{page}</div>{hideBottomNav ? null : <BottomNav route={route} />}</>;
+  const isOwner = Boolean(localStorage.getItem(OWNER_KEY));
+  return <><div className={`app-route-shell ${isOwner ? "is-owner" : "is-member"}`}>{page}</div>{hideBottomNav ? null : <BottomNav route={route} />}</>;
 }
