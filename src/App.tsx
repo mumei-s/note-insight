@@ -22,6 +22,12 @@ function currentRoute() {
   return window.location.hash.replace(/^#\/?/, "") || "home";
 }
 
+function catalogNoteId(route: string) {
+  if (!route.startsWith("catalog/")) return undefined;
+  try { return decodeURIComponent(route.slice("catalog/".length)); }
+  catch { return undefined; }
+}
+
 export function goTo(route: string) {
   window.location.hash = route === "home" ? "" : route;
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -38,7 +44,7 @@ function BottomNav({ route }: { route: string }) {
     <>
       <nav className="app-bottom-nav" aria-label="メインナビゲーション">
         {items.map((item) => {
-          const active = route === item.route || (item.route === "dashboard" && ["evidence", "article-likes"].includes(route));
+          const active = route === item.route || (item.route === "catalog" && route.startsWith("catalog/")) || (item.route === "dashboard" && ["evidence", "article-likes"].includes(route));
           return (
             <button key={item.route} className={active ? "active" : ""} onClick={() => goTo(item.route)}>
               <span aria-hidden="true">{item.icon}</span>
@@ -73,7 +79,7 @@ export function App() {
   let page;
   if (route === "access/insight") page = <AccessPortal target="insight" />;
   else if (route === "access/catalog") page = <AccessPortal target="catalog" />;
-  else if (route === "catalog") page = <CatalogIconsPage />;
+  else if (route === "catalog" || route.startsWith("catalog/")) page = <CatalogIconsPage initialNoteId={catalogNoteId(route)} />;
   else if (route === "battle") page = <BattleArenaPage />;
   else if (route === "game-admin") page = <GameAdminPage />;
   else if (route === "evidence") page = <EvidenceV2 />;

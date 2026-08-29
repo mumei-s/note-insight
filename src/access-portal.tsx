@@ -2,6 +2,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { hasEntrySession, hasMemberSession } from "./api";
 
 type Target = "insight" | "catalog";
+const OWNER_KEY = "mumei-unified-owner-token";
+const OWNER_RETURN_KEY = "mumei-owner-return";
+const OWNER_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 type MemberPayload = {
   member: {
     id: string;
@@ -29,7 +32,33 @@ export function AccessPortal({ target }: { target: Target }) {
     window.location.hash = target === "insight" ? "dashboard" : "catalog";
   }
 
+  function goOwnerAccess() {
+    sessionStorage.setItem(OWNER_RETURN_KEY, target === "insight" ? "dashboard" : "catalog");
+    window.location.hash = "owner";
+  }
+
+  async function hasVerifiedOwnerSession() {
+    const token = localStorage.getItem(OWNER_KEY) || "";
+    if (!token) return false;
+    try {
+      const response = await fetch(OWNER_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Owner-Token": token },
+        body: JSON.stringify({ action: "status" }),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.authenticated === true) return true;
+      localStorage.removeItem(OWNER_KEY);
+    } catch { /* Keep the session during a temporary network failure. */ }
+    return false;
+  }
+
   async function loadMember() {
+    if (await hasVerifiedOwnerSession()) {
+      goService();
+      return;
+    }
     if (!hasEntrySession()) {
       setStage("entry");
       return;
@@ -104,12 +133,20 @@ export function AccessPortal({ target }: { target: Target }) {
         {stage === "loading" ? <div style={box}>ログイン状態を確認しています…</div> : null}
 
         {stage === "entry" ? (
-          <form onSubmit={entryLogin} style={box}>
-            <h2 style={{ marginTop: 0 }}>共通入口</h2>
-            <p style={{ color: "#9ba8bb" }}>サービス共通の入口パスワードを入力します。</p>
-            <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-            <button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "確認中…" : "次へ"}</button>
-          </form>
+          <div style={{ display: "grid", gap: 12 }}>
+            <section style={{ ...box, borderColor: "#6b5725", background: "#17140c" }}>
+              <small style={{ color: "#ffcf5a", fontWeight: 950 }}>OWNER</small>
+              <h2>OWNERはパスワード不要</h2>
+              <p style={{ color: "#b9ad8d", lineHeight: 1.7 }}>管理者noteプロフィールへ一時コードを掲載する本人認証で入れます。</p>
+              <button type="button" onClick={goOwnerAccess} style={{ ...btn, background: "#ffcf5a" }}>OWNER本人認証で入る</button>
+            </section>
+            <form onSubmit={entryLogin} style={box}>
+              <h2 style={{ marginTop: 0 }}>参加者の共通入口</h2>
+              <p style={{ color: "#9ba8bb" }}>参加者へ案内された共通パスワードを入力します。</p>
+              <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              <button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "確認中…" : "次へ"}</button>
+            </form>
+          </div>
         ) : null}
 
         {stage === "member" && member?.status === "pending" && member.noteUrlname ? (

@@ -1,29 +1,151 @@
-import { useEffect, useRef, useState } from "react";
-import { percent, randomInt } from "./game-types";
-import type { BattleResult } from "./game-types";
+import { useState } from "react";
+import {
+  GameCard,
+  GameResultOverlay,
+  HpBar,
+  PreludeOverlay,
+  resultExp,
+  useBattlePrelude,
+  type GameResult,
+  type GameSessionProps,
+} from "./game-ui";
+import { randomInt } from "./game-types";
 
-export function CommandBattle({onFinish}:{onFinish?:(result:BattleResult,score:number)=>void}={}) {
+type ElementKey = "flare" | "aqua" | "volt";
+type Action = "attack" | "defend" | "skill";
+const elements: { key: ElementKey; icon: string; label: string }[] = [
+  { key: "flare", icon: "炎", label: "FLARE" },
+  { key: "aqua", icon: "水", label: "AQUA" },
+  { key: "volt", icon: "雷", label: "VOLT" },
+];
+const beats: Record<ElementKey, ElementKey> = { flare: "volt", volt: "aqua", aqua: "flare" };
+const nextElement = () => elements[randomInt(0, elements.length - 1)].key;
+
+export function CommandBattle(props: GameSessionProps) {
+  const { phase, restartPrelude } = useBattlePrelude();
   const [playerHp, setPlayerHp] = useState(100);
   const [enemyHp, setEnemyHp] = useState(100);
-  const [mp, setMp] = useState(30);
-  const [turn, setTurn] = useState(1);
-  const [log, setLog] = useState("BATTLE START");
-  const sent=useRef(false);
-  const ended = playerHp <= 0 || enemyHp <= 0;
+  const [energy, setEnergy] = useState(38);
+  const [round, setRound] = useState(1);
+  const [element, setElement] = useState<ElementKey>("flare");
+  const [enemyElement, setEnemyElement] = useState<ElementKey>(nextElement);
+  const [log, setLog] = useState("属性を選び、コマンドを決定");
+  const [impact, setImpact] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [score, setScore] = useState(0);
+  const [outcome, setOutcome] = useState<GameResult | null>(null);
 
-  useEffect(()=>{if(!ended||sent.current)return;sent.current=true;const result:BattleResult=enemyHp<=0?"win":"lose";const score=result==="win"?1000+playerHp*10+mp*5:Math.max(0,(100-enemyHp)*5);onFinish?.(result,score)},[ended,enemyHp,playerHp,mp,onFinish]);
-
-  function act(kind: "attack" | "guard" | "special") {
-    if (ended) return;
-    let hit = 0;
-    let counter = 0;
-    let nextMp = mp;
-    if (kind === "attack") {hit = randomInt(14, 22);counter = randomInt(9, 17);nextMp = Math.min(30, mp + 5);setLog(`ATTACK！ ${hit} DAMAGE`);}
-    if (kind === "guard") {hit = randomInt(5, 10);counter = randomInt(2, 7);nextMp = Math.min(30, mp + 3);setLog(`GUARD COUNTER！ ${hit} DAMAGE`);}
-    if (kind === "special") {if (mp < 10) {setLog("MPが足りない！");return;}hit = randomInt(28, 40);counter = randomInt(11, 20);nextMp = mp - 10;setLog(`SPECIAL ART！ ${hit} DAMAGE`);}
-    const nextEnemy = Math.max(0, enemyHp - hit);
-    setEnemyHp(nextEnemy);setMp(nextMp);if (nextEnemy > 0) setPlayerHp((value) => Math.max(0, value - counter));setTurn((value) => value + 1);
+  function finish(nextPlayer: number, nextEnemy: number, nextRound: number, nextScore: number) {
+    if (nextEnemy <= 0 && nextPlayer <= 0) setOutcome("draw");
+    else if (nextEnemy <= 0) setOutcome("win");
+    else if (nextPlayer <= 0) setOutcome("lose");
+    else if (nextRound > 7) setOutcome(nextPlayer === nextEnemy ? "draw" : nextPlayer > nextEnemy ? "win" : "lose");
+    setScore(nextScore);
   }
-  function reset() {sent.current=false;setPlayerHp(100);setEnemyHp(100);setMp(30);setTurn(1);setLog("BATTLE START");}
-  return <div className="command-game"><div className="battle-hud"><div><span>YOU</span><div className="hp"><i style={{ width: percent(playerHp) }} /></div><b>{playerHp} HP</b></div><strong>TURN {turn}</strong><div><span>ENEMY</span><div className="hp enemy"><i style={{ width: percent(enemyHp) }} /></div><b>{enemyHp} HP</b></div></div><div className="battle-log">{ended ? (enemyHp <= 0 ? "VICTORY — 撃破成功！" : "DEFEAT — 再挑戦せよ") : log}</div><div className="command-buttons"><button onClick={() => act("attack")} disabled={ended}><b>⚔</b><span>ATTACK</span><small>通常攻撃</small></button><button onClick={() => act("guard")} disabled={ended}><b>◆</b><span>GUARD</span><small>被ダメ軽減</small></button><button onClick={() => act("special")} disabled={ended || mp < 10}><b>✦</b><span>SPECIAL</span><small>MP {mp}/30</small></button></div>{ended ? <button className="game-retry" onClick={reset}>RETRY</button> : null}</div>;
+
+  function act(kind: Action) {
+    if (phase !== "live" || busy || outcome) return;
+    if (kind === "skill" && energy < 100) {
+      setLog("ULTIMATEゲージが足りない");
+      return;
+    }
+    setBusy(true);
+    const enemyAction: Action = Math.random() < 0.22 ? "defend" : "attack";
+    const advantage = beats[element] === enemyElement;
+    const disadvantage = beats[enemyElement] === element;
+    let hit = kind === "skill" ? randomInt(31, 42) : kind === "defend" ? randomInt(5, 9) : randomInt(15, 23);
+    let retaliation = enemyAction === "defend" ? randomInt(3, 7) : randomInt(11, 18);
+    let critical = false;
+    let counter = false;
+
+    if (advantage) hit = Math.round(hit * 1.35);
+    if (disadvantage && kind !== "skill") hit = Math.round(hit * 0.76);
+    if (enemyAction === "defend" && kind === "attack") hit = Math.round(hit * 0.58);
+    if (kind === "defend") {
+      retaliation = Math.round(retaliation * 0.28);
+      counter = advantage || Math.random() < 0.36;
+      if (counter) hit += randomInt(9, 15);
+    }
+    if ((kind === "attack" || kind === "skill") && Math.random() < (advantage ? 0.34 : 0.18)) {
+      critical = true;
+      hit = Math.round(hit * 1.65);
+    }
+    if (kind === "skill") retaliation = Math.round(retaliation * 0.55);
+
+    const nextEnemy = Math.max(0, enemyHp - hit);
+    const nextPlayer = nextEnemy <= 0 ? playerHp : Math.max(0, playerHp - retaliation);
+    const nextRound = round + 1;
+    const nextScore = score + hit * 140 + (critical ? 1800 : 0) + (counter ? 1200 : 0);
+    const nextEnergy = kind === "skill" ? 8 : Math.min(100, energy + (kind === "defend" ? 36 : 27));
+    const headline = kind === "skill" ? "ULTIMATE BREAK" : critical ? "CRITICAL" : counter ? "COUNTER" : advantage ? "ELEMENT BURST" : "HIT";
+
+    setImpact(headline.toLowerCase().replaceAll(" ", "-"));
+    setLog(`${headline}  ${hit} DAMAGE${retaliation ? ` / 反撃 ${retaliation}` : ""}`);
+    window.setTimeout(() => {
+      setEnemyHp(nextEnemy);
+      setPlayerHp(nextPlayer);
+      setEnergy(nextEnergy);
+      setRound(nextRound);
+      setEnemyElement(nextElement());
+      setImpact("");
+      setBusy(false);
+      finish(nextPlayer, nextEnemy, nextRound, nextScore);
+    }, 520);
+  }
+
+  function reset() {
+    setPlayerHp(100);
+    setEnemyHp(100);
+    setEnergy(38);
+    setRound(1);
+    setElement("flare");
+    setEnemyElement(nextElement());
+    setLog("属性を選び、コマンドを決定");
+    setImpact("");
+    setBusy(false);
+    setScore(0);
+    setOutcome(null);
+    restartPrelude();
+  }
+
+  return (
+    <div className={`g4-game g4-command ${impact ? `impact-${impact}` : ""}`}>
+      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
+      <div className="g4-command-top">
+        <span>ROUND <b>{Math.min(round, 7)}</b> / 7</span>
+        <strong>COMMAND BATTLE</strong>
+        <span>ULTIMATE <b>{energy}%</b></span>
+      </div>
+      <div className="g4-command-stage">
+        <section>
+          <HpBar value={playerHp} />
+          <GameCard src={props.playerArt} name={props.playerName} side="player" />
+        </section>
+        <div className="g4-command-clash">
+          <span className={`element-orb is-${element}`}>{elements.find((x) => x.key === element)?.icon}</span>
+          <b>VS</b>
+          <span className={`element-orb is-${enemyElement}`}>{elements.find((x) => x.key === enemyElement)?.icon}</span>
+          {impact ? <strong>{impact.replaceAll("-", " ")}</strong> : null}
+        </div>
+        <section>
+          <HpBar value={enemyHp} enemy />
+          <GameCard src={props.enemyArt} name={props.enemyName} side="enemy" />
+        </section>
+      </div>
+      <div className="g4-battle-log" aria-live="polite">{log}</div>
+      <div className="g4-element-picker" aria-label="攻撃属性">
+        {elements.map((item) => (
+          <button key={item.key} className={element === item.key ? "active" : ""} onClick={() => setElement(item.key)} disabled={busy || Boolean(outcome)}>
+            <b>{item.icon}</b><span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="g4-command-dock">
+        <button onClick={() => act("attack")} disabled={busy || Boolean(outcome)}><b>⚔</b><span>ATTACK</span><small>属性攻撃</small></button>
+        <button onClick={() => act("defend")} disabled={busy || Boolean(outcome)}><b>⬡</b><span>DEFEND</span><small>軽減・反撃</small></button>
+        <button className={energy >= 100 ? "ready" : ""} onClick={() => act("skill")} disabled={busy || energy < 100 || Boolean(outcome)}><b>✦</b><span>SKILL</span><small>{energy >= 100 ? "必殺技 READY" : `${energy}%`}</small></button>
+      </div>
+      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} /> : null}
+    </div>
+  );
 }
