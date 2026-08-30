@@ -99,6 +99,5 @@ export function HubHome() {
       <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff"><ParticipantRail kind="catalog" people={directory} loading={loadingDirectory} /></Entrance>
       <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録した承認済みカードで遊ぶ、4つのスマホゲーム。" href="#battle" accent="#ffd76b" />
     </section>
-    <section className="hub-owner"><div className="hub-wrap"><article><div><small>OWNER ONLY</small><h2>管理ページ</h2><p>OWNER専用の管理機能。</p></div><a href="#owner">管理ページへ →</a></article></div></section>
   </main></div>;
 }
