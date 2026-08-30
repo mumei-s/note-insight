@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  const DEMO_MUMEI = "https://xxhaerjvrgmnadxjqetz.supabase.co/storage/v1/object/public/creator-images/opponent/4c6396f2-2304-4a73-a4a7-0d04ec634040/ac7f0338-e27c-434b-b9f1-f6c8fd259bcb.webp";
+  const DEMO_CHIBI = "https://xxhaerjvrgmnadxjqetz.supabase.co/storage/v1/object/public/creator-images/opponent/2f315354-5fd1-4583-b8a9-a4aeb4bd7e5c/30febc13-9884-4338-8729-7837c4f6061a.webp";
   const currentRoute = () => location.hash.replace(/^#\/?/, "") || "home";
   const state = () => history.state || {};
   let synthetic = false;
@@ -36,14 +38,6 @@
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-
-    const exit = target.closest(".app-exit-dialog button.danger");
-    if (exit) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      location.replace("./exit.html");
-      return;
-    }
 
     const insightNav = target.closest(".iv3-nav button");
     if (insightNav && currentRoute() === "dashboard" && !synthetic) {
@@ -123,15 +117,39 @@
     }
   }, true);
 
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
   function gameMode(game) {
     if (game.classList.contains("g5-command")) return ["COMMAND", "TACTICAL BATTLE", "choice"];
     if (game.classList.contains("g5-tap")) return ["TAP RUSH", "FEVER DRIVE", "tap"];
     if (game.classList.contains("g5-puzzle")) return ["ARCANE PUZZLE", "MAGIC CHAIN", "puzzle"];
     return ["STAR SHOOTER", "COSMIC LOCK ON", "shoot"];
+  }
+
+  function gameArt(game, side, fallback) {
+    const img = game.querySelector(`.g4-card.${side} img`);
+    return img instanceof HTMLImageElement && img.src ? img.src : fallback;
+  }
+
+  function matchNames(game) {
+    const active = game.closest(".g5-active");
+    const trial = (active?.querySelector(".g5-game-toolbar small")?.textContent || "").includes("TRIAL");
+    if (trial) return ["無名S note", "ちびS"];
+    const names = active?.querySelectorAll(".g4-match-label span");
+    return [names?.[0]?.textContent?.trim() || "PLAYER", names?.[1]?.textContent?.trim() || "RIVAL"];
+  }
+
+  function makeArt(src, className, alt) {
+    const frame = document.createElement("div");
+    frame.className = `v17-opening-character ${className}`;
+    const image = document.createElement("img");
+    image.src = src;
+    image.alt = alt;
+    image.decoding = "async";
+    image.loading = "eager";
+    frame.appendChild(image);
+    const shade = document.createElement("i");
+    shade.className = "v17-art-shade";
+    frame.appendChild(shade);
+    return frame;
   }
 
   function decoratePrelude(root) {
@@ -146,35 +164,26 @@
     if (!(game instanceof HTMLElement)) return;
     const [title, kicker, mode] = gameMode(game);
     const versus = phase === "versus";
-    const rankedEnemy = game.querySelector(".g4-card.enemy img");
-    const mumei = cssVar("--g6-mumei");
-    const chibi = cssVar("--g6-chibi");
-    const enemyImage = rankedEnemy instanceof HTMLImageElement && rankedEnemy.src ? `url(\"${rankedEnemy.src}\")` : chibi;
+    const playerSrc = gameArt(game, "player", DEMO_MUMEI);
+    const rivalSrc = gameArt(game, "enemy", DEMO_CHIBI);
+    const [playerName, rivalName] = matchNames(game);
 
     const layer = document.createElement("div");
     layer.className = `v17-opening-layer mode-${mode} ${versus ? "is-versus" : "is-intro"}`;
 
     const bg = document.createElement("div");
     bg.className = "v17-opening-bg";
+    bg.style.setProperty("--v17-art-bg", `url(\"${playerSrc}\")`);
     layer.appendChild(bg);
 
-    const left = document.createElement("div");
-    left.className = "v17-opening-character v17-mumei";
-    left.style.backgroundImage = mumei;
-    layer.appendChild(left);
-
-    if (versus) {
-      const right = document.createElement("div");
-      right.className = "v17-opening-character v17-rival";
-      right.style.backgroundImage = enemyImage;
-      layer.appendChild(right);
-    }
+    layer.appendChild(makeArt(playerSrc, "v17-mumei", playerName));
+    if (versus) layer.appendChild(makeArt(rivalSrc, "v17-rival", rivalName));
 
     const copy = document.createElement("div");
     copy.className = "v17-opening-copy";
     copy.innerHTML = versus
-      ? `<small>BATTLE ENTRY</small><div><span>無名S note</span><b>VS</b><span>${rankedEnemy ? "RIVAL" : "ちびS"}</span></div><strong>${title}</strong>`
-      : `<small>CREATOR WORLD ORIGINAL · ${kicker}</small><strong>${title}</strong><span>無名S note</span>`;
+      ? `<small>BATTLE ENTRY</small><div><span>${playerName}</span><b>VS</b><span>${rivalName}</span></div><strong>${title}</strong>`
+      : `<small>CREATOR WORLD ORIGINAL · ${kicker}</small><strong>${title}</strong><span>${playerName}</span>`;
     layer.appendChild(copy);
 
     const streak = document.createElement("div");
