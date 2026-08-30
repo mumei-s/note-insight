@@ -84,11 +84,6 @@
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
   }
-  function itemFor(map, url) {
-    return map.get(normalizeUrl(url)) || {
-      index: '?', creator: '不明', title: '不明', url: normalizeUrl(url)
-    };
-  }
   function countMap(urls) {
     const map = new Map();
     (urls || []).forEach((url) => {
@@ -97,39 +92,16 @@
     });
     return map;
   }
-  function rowsHtml(items, kind) {
-    if (!items.length) return '<div class="empty">なし</div>';
-    return items.map(({ item, count }) => `
-      <div class="row ${kind}">
-        <div class="num">#${esc(item.index)}</div>
-        <div class="body">
-          <div class="creator">${esc(item.creator)}${count > 1 ? ` <b>×${count}</b>` : ''}</div>
-          <div class="title">${esc(item.title)}</div>
-        </div>
-      </div>`).join('');
-  }
   function closeOverlay() {
     document.getElementById(OVERLAY)?.remove();
   }
   function showOverlay(state, map) {
     closeOverlay();
 
-    const delCounts = countMap(state.tempUrls);
     const keepCounts = countMap(state.retainedUrls);
-    const duplicateUrls = [...delCounts.keys()].filter((url) => keepCounts.has(url));
-
-    const duplicates = duplicateUrls.map((url) => ({
-      item: itemFor(map, url),
-      del: delCounts.get(url) || 0,
-      keep: keepCounts.get(url) || 0
-    })).sort((a, b) => Number(a.item.index) - Number(b.item.index));
-
-    const deleteItems = [...delCounts.entries()].map(([url, count]) => ({
-      item: itemFor(map, url), count
-    })).sort((a, b) => Number(a.item.index) - Number(b.item.index));
-
     const keepItems = [...keepCounts.entries()].map(([url, count]) => ({
-      item: itemFor(map, url), count
+      item: map.get(url) || { index: '?', creator: '不明', title: '不明', url },
+      count
     })).sort((a, b) => Number(a.item.index) - Number(b.item.index));
 
     const overlay = document.createElement('div');
@@ -142,42 +114,34 @@
         #${OVERLAY} h2{font-size:16px;margin:0 0 5px}
         #${OVERLAY} .summary{font-size:12px;line-height:1.5}
         #${OVERLAY} .scroll{overflow:auto;padding:10px 12px 14px}
-        #${OVERLAY} h3{font-size:13px;margin:12px 0 7px;padding-bottom:4px;border-bottom:1px solid #374151}
-        #${OVERLAY} .warn{background:#7f1d1d;border:1px solid #ef4444;border-radius:9px;padding:9px;margin-bottom:10px}
-        #${OVERLAY} .warn .wrow{font-size:12px;line-height:1.45;margin:5px 0}
-        #${OVERLAY} .row{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #1f2937}
+        #${OVERLAY} .row{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #1f2937}
         #${OVERLAY} .num{flex:0 0 36px;font-size:11px;color:#9ca3af;padding-top:2px}
         #${OVERLAY} .body{min-width:0;flex:1}
-        #${OVERLAY} .creator{font-size:12px;font-weight:800;color:#e5e7eb}
+        #${OVERLAY} .creator{font-size:12px;font-weight:800;color:#bbf7d0}
         #${OVERLAY} .title{font-size:11px;line-height:1.4;color:#d1d5db;margin-top:2px}
-        #${OVERLAY} .delete .creator{color:#fecaca}
-        #${OVERLAY} .keep .creator{color:#bbf7d0}
-        #${OVERLAY} .empty{font-size:12px;color:#9ca3af;padding:6px 0}
+        #${OVERLAY} .empty{font-size:12px;color:#9ca3af;padding:8px 0}
         #${OVERLAY} .foot{padding:10px 12px;border-top:1px solid #374151;background:#0f172a;display:flex;gap:8px;align-items:center}
         #${OVERLAY} .note{font-size:11px;line-height:1.4;flex:1;color:#d1d5db}
         #${OVERLAY} button{border:0;border-radius:8px;background:#059669;color:white;font-weight:900;padding:9px 14px;font-size:12px}
       </style>
       <div class="card">
         <div class="head">
-          <h2>夏の陣107｜投稿前・削除対象の目視確認</h2>
-          <div class="summary">削除予定 <b>${Number(state.tempKeys?.length || 0)}枚</b> ／ 保持 <b>${Number(state.retainedKeys?.length || 0)}枚</b> ／ 同一URL重複 <b>${duplicates.length}記事</b></div>
+          <h2>夏の陣107｜残すカードの確認</h2>
+          <div class="summary">本文内に残すカード <b>${Number(state.retainedKeys?.length || 0)}枚</b></div>
         </div>
         <div class="scroll">
-          <div class="warn">
-            <b>⚠ 同じ記事URLが「削除予定」と「保持」の両方にある記事</b>
-            ${duplicates.length ? duplicates.map(({ item, del, keep }) => `
-              <div class="wrow">#${esc(item.index)} <b>${esc(item.creator)}</b><br>${esc(item.title)}<br>→ 削除予定 ${del}枚 ／ 保持 ${keep}枚</div>`).join('') : '<div class="wrow">なし</div>'}
-          </div>
-
-          <h3>🗑 公開後に削除する「末尾の自動生成カード」</h3>
-          ${rowsHtml(deleteItems, 'delete')}
-
-          <h3>✅ 本文内に残すカード（受賞者欄など）</h3>
-          ${rowsHtml(keepItems, 'keep')}
+          ${keepItems.length ? keepItems.map(({ item, count }) => `
+            <div class="row">
+              <div class="num">#${esc(item.index)}</div>
+              <div class="body">
+                <div class="creator">${esc(item.creator)}${count > 1 ? ` <b>×${count}</b>` : ''}</div>
+                <div class="title">${esc(item.title)}</div>
+              </div>
+            </div>`).join('') : '<div class="empty">保持カードなし</div>'}
         </div>
         <div class="foot">
-          <div class="note">削除判定はURLではなく、確認時に固定した <b>embキー</b>。この一覧で内容を照合してから公開。</div>
-          <button type="button" id="summer107-detail-ok-v153">照合OK</button>
+          <div class="note">ここに表示されたカードは削除対象外。削除は確認時に固定した末尾自動生成カードのembキーだけ。</div>
+          <button type="button" id="summer107-detail-ok-v153">確認OK</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -185,7 +149,7 @@
 
     const status = document.getElementById(STATUS);
     if (status) {
-      status.textContent = `投稿前安全確認 OK ✅ 削除予定${state.tempKeys?.length || 0}枚｜保持${state.retainedKeys?.length || 0}枚｜重複${duplicates.length}記事｜詳細一覧を表示`;
+      status.textContent = `投稿前安全確認 OK ✅ 保持カード${state.retainedKeys?.length || 0}枚｜保持一覧を表示`;
       status.dataset.bad = '0';
       status.dataset.open = '1';
     }
@@ -204,7 +168,7 @@
     } catch (error) {
       const status = document.getElementById(STATUS);
       if (status) {
-        status.textContent = `確認詳細の表示失敗：${error?.message || String(error)}（公開前に確認してください）`;
+        status.textContent = `保持一覧の表示失敗：${error?.message || String(error)}（公開前に確認してください）`;
         status.dataset.bad = '1';
         status.dataset.open = '1';
       }
