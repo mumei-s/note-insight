@@ -25,8 +25,8 @@ export function useBattlePrelude() {
 
   useEffect(() => {
     setPhase("start");
-    const versus = window.setTimeout(() => setPhase("versus"), 620);
-    const live = window.setTimeout(() => setPhase("live"), 1320);
+    const versus = window.setTimeout(() => setPhase("versus"), 1120);
+    const live = window.setTimeout(() => setPhase("live"), 2850);
     return () => {
       window.clearTimeout(versus);
       window.clearTimeout(live);
@@ -61,22 +61,24 @@ export function PreludeOverlay({
   enemyName: string;
 }) {
   if (phase === "live") return null;
-  return (
-    <div className={`g4-prelude is-${phase}`} aria-live="polite">
-      {phase === "start" ? (
-        <>
-          <small>READY FOR COMBAT</small>
-          <strong>BATTLE<br />START</strong>
-        </>
-      ) : (
-        <>
-          <span>{playerName}</span>
-          <strong>VS</strong>
-          <span>{enemyName}</span>
-        </>
-      )}
-    </div>
-  );
+  if (phase === "start") {
+    return <div className="g4-prelude g7-cinematic is-start" aria-live="polite">
+      <div className="g7-filmbar top" />
+      <div className="g7-cinema-host" aria-hidden="true" />
+      <div className="g7-cinema-aura" aria-hidden="true" />
+      <div className="g7-cinema-copy"><small>CREATOR WORLD ORIGINAL</small><strong className="g7-mode-title" /><span>無名S note</span></div>
+      <div className="g7-cinema-streaks" aria-hidden="true" />
+      <div className="g7-filmbar bottom" />
+    </div>;
+  }
+  return <div className="g4-prelude g7-cinematic is-versus" aria-live="polite">
+    <div className="g7-filmbar top" />
+    <div className="g7-versus-host" aria-hidden="true" />
+    <div className="g7-versus-portal" aria-hidden="true" />
+    <div className="g7-vs-names"><span>{playerName}</span><strong>VS</strong><span>{enemyName}</span></div>
+    <div className="g7-vs-flash" aria-hidden="true" />
+    <div className="g7-filmbar bottom" />
+  </div>;
 }
 
 export function PauseOverlay({ paused, onResume }: { paused: boolean; onResume: () => void }) {
