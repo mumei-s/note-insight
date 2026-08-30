@@ -18,6 +18,7 @@ import { OwnerHub } from "./owner-hub";
 
 const OWNER_KEY = "mumei-unified-owner-token";
 const ADMIN_ROUTES = new Set(["owner", "manage", "catalog-admin", "insight-admin", "game-admin"]);
+const INSIGHT_CHILD_ROUTES = new Set(["evidence", "article-likes", "dashboard-legacy"]);
 
 function currentRoute() {
   return window.location.hash.replace(/^#\/?/, "") || "home";
@@ -39,8 +40,21 @@ function routeUrl(route: string) {
   return url.toString();
 }
 
+function backTarget(route: string) {
+  if (route.startsWith("catalog/") || route === "member") return "catalog";
+  if (INSIGHT_CHILD_ROUTES.has(route) || route.startsWith("features/")) return "dashboard";
+  if (route === "dashboard" || route === "catalog" || route === "battle") return "home";
+  if (route.startsWith("access/")) return "home";
+  return "home";
+}
+
 export function goTo(route: string) {
-  window.history.replaceState({ ...(window.history.state || {}), mumeiGuard: true, route }, "", routeUrl(route));
+  const next = route === "" ? "home" : route;
+  if (currentRoute() === next) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+    return;
+  }
+  window.history.pushState({ mumeiGuard: true, route: next }, "", routeUrl(next));
   window.dispatchEvent(new Event("mumei-route"));
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -67,7 +81,7 @@ function BottomNav({ route, onExit }: { route: string; onExit: () => void }) {
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
       {items.map((item) => {
-        const active = route === item.route || (item.route === "catalog" && route.startsWith("catalog/")) || (item.route === "dashboard" && ["evidence", "article-likes"].includes(route));
+        const active = route === item.route || (item.route === "catalog" && (route.startsWith("catalog/") || route === "member")) || (item.route === "dashboard" && (INSIGHT_CHILD_ROUTES.has(route) || route.startsWith("features/")));
         return <button key={item.route} className={active ? "active" : ""} onClick={() => item.route === "home" && route === "home" ? onExit() : goTo(item.route)}>
           <span aria-hidden="true">{item.icon}</span><b>{item.label}</b>
         </button>;
@@ -101,7 +115,12 @@ export function App() {
   useEffect(() => { routeRef.current = route; }, [route]);
 
   useEffect(() => {
-    const update = () => { const next = currentRoute(); routeRef.current = next; setRoute(next); };
+    const update = () => {
+      const next = currentRoute();
+      routeRef.current = next;
+      setRoute(next);
+      if (next !== "home") setExitOpen(false);
+    };
     window.addEventListener("hashchange", update);
     window.addEventListener("mumei-route", update);
 
@@ -114,15 +133,29 @@ export function App() {
       if (exitingRef.current) return;
       const current = routeRef.current;
       if (isAdminRoute(current)) return;
+
+      if (current === "battle") {
+        const gameBack = document.querySelector<HTMLButtonElement>(".g5-active .mode-back");
+        if (gameBack) {
+          window.history.pushState({ mumeiGuard: true, route: "battle" }, "", routeUrl("battle"));
+          gameBack.click();
+          setExitOpen(false);
+          window.scrollTo({ top: 0, behavior: "auto" });
+          return;
+        }
+      }
+
       if (current === "home") {
         setExitOpen(true);
         window.history.pushState({ mumeiGuard: true, route: "home" }, "", routeUrl("home"));
         return;
       }
-      const target = current.startsWith("catalog/") ? "catalog" : ["evidence", "article-likes"].includes(current) ? "dashboard" : "home";
-      window.history.pushState({ mumeiGuard: true, route: target }, "", routeUrl(target));
+
+      const target = backTarget(current);
+      window.history.replaceState({ mumeiGuard: true, route: target }, "", routeUrl(target));
       routeRef.current = target;
       setRoute(target);
+      setExitOpen(false);
       window.scrollTo({ top: 0, behavior: "auto" });
     };
     window.addEventListener("popstate", onPopState);
