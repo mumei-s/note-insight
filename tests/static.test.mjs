@@ -77,21 +77,40 @@ test("OWNER bypasses the participant password with note-profile verification", a
 });
 
 test("the four game modes have distinct live mechanics and shared results", async () => {
+  const arena = await readFile(new URL("../src/battle-arena-page.tsx", import.meta.url), "utf8");
+  const engine = await readFile(new URL("../src/game-card-engine.ts", import.meta.url), "utf8");
   const ui = await readFile(new URL("../src/game-ui.tsx", import.meta.url), "utf8");
   const command = await readFile(new URL("../src/game-command.tsx", import.meta.url), "utf8");
   const tap = await readFile(new URL("../src/game-tap.tsx", import.meta.url), "utf8");
   const puzzle = await readFile(new URL("../src/game-match-view.tsx", import.meta.url), "utf8");
   const shooter = await readFile(new URL("../src/game-target-view.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../public/creator-world-game-v5.css", import.meta.url), "utf8");
+  const spec = await readFile(new URL("../docs/GAME_SPEC.md", import.meta.url), "utf8");
 
   assert.match(ui, /BATTLE<br \/>START/);
   assert.match(ui, /WIN/);
   assert.match(ui, /DRAW/);
   assert.match(ui, /LOSE/);
   assert.match(ui, /EXP/);
-  for (const token of ["ROUND", "ATTACK", "DEFEND", "SKILL", "CRITICAL", "COUNTER"]) assert.match(command, new RegExp(token));
-  for (const token of ["TIME", "COMBO", "FEVER", "onPointerDown"]) assert.match(tap, new RegExp(token));
-  for (const token of ["W = 6", "H = 6", "CHAIN", "ARCANE NOVA", "SKILL GAUGE"]) assert.match(puzzle, new RegExp(token));
-  for (const token of ["onPointerMove", "BOSS CARD", "COMBO", "CRITICAL", "NOVA"]) assert.match(shooter, new RegExp(token));
+  for (const token of ["ROUND", "RIVAL INTENT", "ATTACK", "GUARD", "SIGNATURE", "CRITICAL", "COUNTER"]) assert.match(command, new RegExp(token));
+  for (const token of ["TIME", "COMBO", "FEVER", "PERFECT", "GREAT", "GOOD", "MISS", "onPointerDown"]) assert.match(tap, new RegExp(token));
+  for (const token of ["W = 6", "H = 6", "CHAIN", "ARCANE NOVA", "SHIELD", "onPointerDown", "onPointerUp"]) assert.match(puzzle, new RegExp(token));
+  for (const token of ["onPointerMove", "BOSS CARD", "PILOT SHIELD", "COMBO", "CRITICAL", "NOVA"]) assert.match(shooter, new RegExp(token));
+  assert.match(engine, /deriveCardStats/);
+  assert.match(engine, /balanceRatio/);
+  assert.match(ui, /visibilitychange/);
+  assert.match(ui, /PAUSED/);
+  assert.match(arena, /TRIAL PLAY/);
+  assert.match(arena, /RANKED MATCH/);
+  assert.match(arena, /enemyCardPosition/);
+  assert.match(arena, /playerCard\.url/);
+  assert.match(arena, /row\.playerCard\.url/);
+  assert.match(arena, /row\.opponent\.cardUrl/);
+  assert.match(arena, /row\.byGame/);
+  assert.match(styles, /g5BeatCountdown/);
+  assert.match(styles, /prefers-reduced-motion/);
+  assert.match(spec, /fb2fc687afc18291bcc1dd1fd7472bcdeb624d70/);
+  assert.doesNotMatch(arena + engine + ui + command + tap + puzzle + shooter + spec, /docs\.google|drive\.google|sheets\.google/i);
 });
 
 test("the public participant cache is isolated behind RLS and an edge function", async () => {

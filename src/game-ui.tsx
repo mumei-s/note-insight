@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import type { CardStats } from "./game-card-engine";
+import { vibrate } from "./game-card-engine";
 
 export type GameResult = "win" | "draw" | "lose";
-export type SaveState = "saving" | "saved" | "error";
+export type SaveState = "saving" | "saved" | "error" | "demo";
 
 export type GameSessionProps = {
   playerArt: string;
@@ -9,12 +11,17 @@ export type GameSessionProps = {
   playerName: string;
   enemyName: string;
   playerCardPosition: number;
+  playerStats: CardStats;
+  enemyStats: CardStats;
+  ranked: boolean;
   onComplete: (result: GameResult, score: number) => Promise<unknown>;
 };
 
 export function useBattlePrelude() {
   const [seed, setSeed] = useState(0);
   const [phase, setPhase] = useState<"start" | "versus" | "live">("start");
+  const [manualPaused, setManualPaused] = useState(false);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== "hidden");
 
   useEffect(() => {
     setPhase("start");
@@ -26,7 +33,22 @@ export function useBattlePrelude() {
     };
   }, [seed]);
 
-  return { phase, restartPrelude: () => setSeed((value) => value + 1) };
+  useEffect(() => {
+    const update = () => setPageVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+
+  const paused = phase === "live" && (manualPaused || !pageVisible);
+  return {
+    phase,
+    paused,
+    togglePause: () => setManualPaused((value) => !value),
+    restartPrelude: () => {
+      setManualPaused(false);
+      setSeed((value) => value + 1);
+    },
+  };
 }
 
 export function PreludeOverlay({
@@ -57,26 +79,55 @@ export function PreludeOverlay({
   );
 }
 
+export function PauseOverlay({ paused, onResume }: { paused: boolean; onResume: () => void }) {
+  if (!paused) return null;
+  return (
+    <div className="g5-pause" role="dialog" aria-label="ゲーム一時停止">
+      <small>MATCH SUSPENDED</small>
+      <strong>PAUSED</strong>
+      <p>画面を閉じてもカウントは進みません。</p>
+      <button onClick={onResume}>RESUME</button>
+    </div>
+  );
+}
+
+export function GameTopControls({ paused, onPause }: { paused: boolean; onPause: () => void }) {
+  return <button className="g5-pause-button" onClick={onPause} aria-label={paused ? "ゲームを再開" : "ゲームを一時停止"}>{paused ? "▶" : "Ⅱ"}</button>;
+}
+
 export function GameCard({
   src,
   name,
   side,
   compact = false,
+  stats,
 }: {
   src: string | null;
   name: string;
   side: "player" | "enemy";
   compact?: boolean;
+  stats?: CardStats;
 }) {
   return (
     <article className={`g4-card ${side} ${compact ? "compact" : ""}`}>
       <div className="g4-card-art">
-        {src ? <img src={src} alt={`${name}のカード`} /> : <span>NO CARD</span>}
+        {src ? <img src={src} alt={`${name}のカード`} /> : <span className="g5-sealed-art"><b>{side === "player" ? "P" : "R"}</b><small>TRIAL CARD</small></span>}
         <i className="g4-card-shine" />
         <i className="g4-card-scan" />
       </div>
-      <footer><small>{side === "player" ? "YOU" : "RIVAL"}</small><strong>{name}</strong></footer>
+      <footer><small>{side === "player" ? "YOU" : "RIVAL"}</small><strong>{name}</strong>{stats && !compact ? <em>{stats.signature}</em> : null}</footer>
     </article>
+  );
+}
+
+export function CardStatsStrip({ stats, enemy = false }: { stats: CardStats; enemy?: boolean }) {
+  return (
+    <div className={`g5-card-stats ${enemy ? "enemy" : "player"}`} aria-label={`攻撃${stats.power} 防御${stats.guard} 速度${stats.speed} 集中${stats.focus}`}>
+      <span><small>ATK</small><b>{stats.power}</b></span>
+      <span><small>DEF</small><b>{stats.guard}</b></span>
+      <span><small>SPD</small><b>{stats.speed}</b></span>
+      <span><small>FOC</small><b>{stats.focus}</b></span>
+    </div>
   );
 }
 
@@ -95,24 +146,28 @@ export function GameResultOverlay({
   exp,
   onComplete,
   onRetry,
+  ranked = true,
 }: {
   result: GameResult;
   score: number;
   exp: number;
   onComplete: (result: GameResult, score: number) => Promise<unknown>;
   onRetry: () => void;
+  ranked?: boolean;
 }) {
-  const [save, setSave] = useState<SaveState>("saving");
+  const [save, setSave] = useState<SaveState>(ranked ? "saving" : "demo");
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    vibrate(result === "win" ? [45, 35, 90] : result === "draw" ? [35, 35, 35] : 70);
+    if (!ranked) return;
     void onComplete(result, score).then(
       () => setSave("saved"),
       () => setSave("error"),
     );
-  }, [onComplete, result, score]);
+  }, [onComplete, ranked, result, score]);
 
   const title = result === "win" ? "WIN" : result === "draw" ? "DRAW" : "LOSE";
   return (
@@ -125,7 +180,7 @@ export function GameResultOverlay({
         <span><small>EXP</small><b>+{exp}</b></span>
       </div>
       <p className={`g4-save-state is-${save}`}>
-        {save === "saving" ? "戦績を保存中…" : save === "saved" ? "戦績・EXPを保存しました" : "戦績保存に失敗しました（結果は端末に表示中）"}
+        {save === "demo" ? "TRIAL MODE · 戦績には保存されません" : save === "saving" ? "戦績を保存中…" : save === "saved" ? "戦績・EXPを保存しました" : "戦績保存に失敗しました（結果は端末に表示中）"}
       </p>
       <button onClick={onRetry}>PLAY AGAIN</button>
     </div>
