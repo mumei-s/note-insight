@@ -169,10 +169,7 @@ export function App() {
   function exitApp() {
     exitingRef.current = true;
     setExitOpen(false);
-    window.close();
-    window.setTimeout(() => {
-      if (!window.closed) window.location.replace("about:blank");
-    }, 120);
+    window.location.replace(`${import.meta.env.BASE_URL}exit.html`);
   }
 
   let page;
