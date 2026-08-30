@@ -46,7 +46,8 @@ export function MatchBattle(props: GameSessionProps) {
   const refs = useRef({ player: 100, enemy: 100, shield: 0, score: 0, ended: false });
   const drag = useRef<Drag | null>(null);
   const dragged = useRef(false);
-  const active = phase === "live" && !paused && !outcome && !busy;
+  const running = phase === "live" && !paused && !outcome;
+  const active = running && !busy;
 
   function conclude(player = refs.current.player, enemy = refs.current.enemy) {
     if (refs.current.ended) return;
@@ -55,14 +56,14 @@ export function MatchBattle(props: GameSessionProps) {
   }
 
   useEffect(() => {
-    if (!active) return;
+    if (!running) return;
     const id = window.setInterval(() => setTime((value) => {
       const next = Math.max(0, +(value - 0.1).toFixed(1));
       if (next === 0) conclude();
       return next;
     }), 100);
     return () => window.clearInterval(id);
-  }, [active]);
+  }, [running]);
 
   function resolveDamage(removed: number, linked: number, shieldRunes: number, ultimate = false) {
     const damage = ultimate ? Math.round(32 * ratio) : Math.max(7, Math.round((removed * 1.8 + linked * 5) * ratio));
