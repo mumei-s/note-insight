@@ -30,8 +30,7 @@
   }
 
   function pushChild(kind, route) {
-    const next = withRoute(route, { [kind]: true });
-    history.pushState(next, "", location.href);
+    history.pushState(withRoute(route, { [kind]: true }), "", location.href);
   }
 
   document.addEventListener("click", (event) => {
@@ -92,9 +91,7 @@
   window.addEventListener("popstate", (event) => {
     if (insightIsChild()) {
       event.stopImmediatePropagation();
-      if (currentRoute() !== "dashboard") {
-        history.pushState(withRoute("dashboard"), "", routeUrl("dashboard"));
-      }
+      if (currentRoute() !== "dashboard") history.pushState(withRoute("dashboard"), "", routeUrl("dashboard"));
       setTimeout(() => {
         synthetic = true;
         openInsightTop();
@@ -103,12 +100,9 @@
       return;
     }
 
-    const modal = document.querySelector(".dir-modal");
-    if (modal) {
+    if (document.querySelector(".dir-modal")) {
       event.stopImmediatePropagation();
-      if (currentRoute() !== "catalog") {
-        history.pushState(withRoute("catalog"), "", routeUrl("catalog"));
-      }
+      if (currentRoute() !== "catalog") history.pushState(withRoute("catalog"), "", routeUrl("catalog"));
       setTimeout(() => {
         synthetic = true;
         document.querySelector(".dir-close")?.click();
@@ -120,9 +114,7 @@
     const gameBack = document.querySelector(".g5-active .mode-back");
     if (gameBack) {
       event.stopImmediatePropagation();
-      if (currentRoute() !== "battle") {
-        history.pushState(withRoute("battle"), "", routeUrl("battle"));
-      }
+      if (currentRoute() !== "battle") history.pushState(withRoute("battle"), "", routeUrl("battle"));
       setTimeout(() => {
         synthetic = true;
         gameBack.click();
@@ -144,13 +136,16 @@
 
   function decoratePrelude(root) {
     if (!(root instanceof HTMLElement) || !root.classList.contains("g4-prelude")) return;
+    const phase = root.classList.contains("is-versus") ? "versus" : "intro";
+    if (root.dataset.v17Phase === phase && root.querySelector(".v17-opening-layer")) return;
+    root.dataset.v17Phase = phase;
     root.classList.add("v17-force-opening");
     root.querySelector(".v17-opening-layer")?.remove();
 
     const game = root.closest(".g4-game");
     if (!(game instanceof HTMLElement)) return;
     const [title, kicker, mode] = gameMode(game);
-    const versus = root.classList.contains("is-versus");
+    const versus = phase === "versus";
     const rankedEnemy = game.querySelector(".g4-card.enemy img");
     const mumei = cssVar("--g6-mumei");
     const chibi = cssVar("--g6-chibi");
@@ -189,9 +184,7 @@
   }
 
   const observer = new MutationObserver(() => {
-    document.querySelectorAll(".g4-prelude").forEach((root) => {
-      if (!root.querySelector(".v17-opening-layer")) decoratePrelude(root);
-    });
+    document.querySelectorAll(".g4-prelude").forEach(decoratePrelude);
   });
 
   function startObserver() {
