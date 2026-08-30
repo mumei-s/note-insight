@@ -51,6 +51,25 @@ export function useBattlePrelude() {
   };
 }
 
+function resolveOpeningArt(root: HTMLDivElement | null) {
+  const game = root?.closest(".g4-game");
+  const playerInGame = game?.querySelector<HTMLImageElement>(".g4-card.player img");
+  const enemyInGame = game?.querySelector<HTMLImageElement>(".g4-card.enemy img");
+  const playerSelected = document.querySelector<HTMLImageElement>(".g4-player-deck button.active img");
+  const enemySelected = document.querySelector<HTMLImageElement>(".g5-rival-deck button.active img") || document.querySelector<HTMLImageElement>(".enemy-strip button.active img");
+  return {
+    player: playerInGame?.src || playerSelected?.src || "",
+    enemy: enemyInGame?.src || enemySelected?.src || "",
+  };
+}
+
+function OpeningPortrait({ side, src }: { side: "player" | "enemy"; src: string }) {
+  return <div className={`g8-opening-portrait ${side} ${src ? "has-image" : "fallback"}`}>
+    {src ? <img src={src} alt="" /> : <span aria-hidden="true" />}
+    <i aria-hidden="true" />
+  </div>;
+}
+
 export function PreludeOverlay({
   phase,
   playerName,
@@ -60,26 +79,38 @@ export function PreludeOverlay({
   playerName: string;
   enemyName: string;
 }) {
-  if (phase === "live") return null;
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [art, setArt] = useState({ player: "", enemy: "" });
   const displayPlayer = playerName === "TRIAL CREATOR" ? "無名S note" : playerName;
   const displayEnemy = enemyName === "TRAINING CORE" ? "ちびS" : enemyName;
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setArt(resolveOpeningArt(rootRef.current)));
+    return () => window.cancelAnimationFrame(frame);
+  }, [playerName, enemyName]);
+
+  if (phase === "live") return null;
   if (phase === "start") {
-    return <div className="g4-prelude g7-cinematic is-start" aria-live="polite">
-      <div className="g7-filmbar top" />
-      <div className="g7-cinema-host" aria-hidden="true" />
-      <div className="g7-cinema-aura" aria-hidden="true" />
-      <div className="g7-cinema-copy"><small>CREATOR WORLD ORIGINAL</small><strong className="g7-mode-title" /><span>無名S note</span></div>
-      <div className="g7-cinema-streaks" aria-hidden="true" />
-      <div className="g7-filmbar bottom" />
+    return <div ref={rootRef} className="g4-prelude g8-opening is-start" aria-live="polite">
+      <div className="g8-opening-bg" aria-hidden="true" />
+      <OpeningPortrait side="player" src={art.player} />
+      <div className="g8-opening-copy">
+        <small>CREATOR WORLD ORIGINAL</small>
+        <strong className="g8-mode-name" />
+        <b>{displayPlayer}</b>
+        <span>ILLUSTRATION OPENING</span>
+      </div>
+      <div className="g8-opening-light" aria-hidden="true" />
+      <div className="g8-opening-progress" aria-hidden="true"><i /></div>
     </div>;
   }
-  return <div className="g4-prelude g7-cinematic is-versus" aria-live="polite">
-    <div className="g7-filmbar top" />
-    <div className="g7-versus-host" aria-hidden="true" />
-    <div className="g7-versus-portal" aria-hidden="true" />
-    <div className="g7-vs-names"><span>{displayPlayer}</span><strong>VS</strong><span>{displayEnemy}</span></div>
-    <div className="g7-vs-flash" aria-hidden="true" />
-    <div className="g7-filmbar bottom" />
+  return <div ref={rootRef} className="g4-prelude g8-opening is-versus" aria-live="polite">
+    <div className="g8-opening-bg" aria-hidden="true" />
+    <OpeningPortrait side="player" src={art.player} />
+    <OpeningPortrait side="enemy" src={art.enemy} />
+    <div className="g8-vs-copy"><span>{displayPlayer}</span><strong>VS</strong><span>{displayEnemy}</span></div>
+    <div className="g8-vs-cut" aria-hidden="true" />
+    <div className="g8-opening-progress" aria-hidden="true"><i /></div>
   </div>;
 }
 
