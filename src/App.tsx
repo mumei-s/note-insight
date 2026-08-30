@@ -169,7 +169,32 @@ export function App() {
   function exitApp() {
     exitingRef.current = true;
     setExitOpen(false);
-    window.location.replace(`${import.meta.env.BASE_URL}exit.html`);
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+    } catch { /* optional */ }
+
+    const tryClose = () => {
+      try { window.open("", "_self"); } catch { /* ignored */ }
+      try { window.close(); } catch { /* browser may forbid it */ }
+    };
+
+    tryClose();
+    window.setTimeout(() => {
+      if (window.closed || document.visibilityState === "hidden") return;
+      const backSteps = Math.max(0, window.history.length - 1);
+      if (backSteps > 0) {
+        try { window.history.go(-backSteps); } catch { /* ignored */ }
+      }
+      window.setTimeout(() => {
+        if (window.closed || document.visibilityState === "hidden") return;
+        tryClose();
+        window.setTimeout(() => {
+          if (!window.closed && document.visibilityState !== "hidden") {
+            window.location.replace(`${import.meta.env.BASE_URL}exit.html?close=1`);
+          }
+        }, 180);
+      }, 180);
+    }, 80);
   }
 
   let page;
