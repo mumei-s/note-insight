@@ -130,6 +130,7 @@ export function PreludeOverlay({
     <OpeningPortrait side="enemy" src={art.enemy} />
     <div className="g8-vs-copy"><span>{displayPlayer}</span><strong>VS</strong><span>{displayEnemy}</span></div>
     <div className="g8-vs-cut" aria-hidden="true" />
+    <div className="g9-battle-start"><b>BATTLE<br />START</b></div>
     <div className="g9-opening-particles" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
     <div className="g8-opening-progress" aria-hidden="true"><i /></div>
   </div>;

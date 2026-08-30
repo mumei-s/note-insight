@@ -69,3 +69,19 @@ If Work usage limits appear, stop only after pushing the current compilable stat
 
 ## Current request
 Raise game quality beyond the current build using abundant illustrated backgrounds, character art and animation, while keeping the games truly playable. Add RPG and race modes. Work project should use this repository as durable storage so a Work limit cannot erase progress.
+
+## 2026-08-30 implementation checkpoint
+- GitHub main checkpoint `49f671c` adds a playable CREATOR QUEST and STAR CIRCUIT without replacing the four existing game implementations.
+- The arena now exposes six game cards, six per-mode stat rows, and a six-mode live-game router.
+- Shared gameplay presentation now includes registered-card image parallax, layered particles/light, skill/fever/nova/boost cut-ins, impact shake, direct-art movie openings, and two-card result scenes. Registered participant images remain still image elements.
+- CREATOR QUEST includes ATTACK / GUARD / SKILL, SP, three waves, a boss, haptics, pause, result, score, EXP, retry, and ranked ledger submission.
+- STAR CIRCUIT includes three lanes, button/swipe steering, hazards, energy, BOOST, integrity, live rival distance/position, a 1,000 m finish, haptics, pause, result, score, EXP, retry, and ranked ledger submission.
+- `creator-battle-ledger` accepts `quest` and `race` and returns both modes in safe aggregate rankings; the existing private history format is unchanged.
+
+Remaining release work at this checkpoint:
+1. Confirm the final GitHub Pages deployment and visually check mobile/desktop TRIAL flows; do not expose participant data or credentials.
+
+Verification completed after the checkpoint:
+- TypeScript, production build, and all 7 static test groups pass from a fresh latest-main checkout.
+- `creator-battle-ledger` Edge Function v5 is ACTIVE with `quest` and `race` enabled; its existing custom session/OWNER authentication and `verify_jwt=false` setting were preserved.
+- The production `creator_duels_game_mode_check` constraint now accepts all six modes. Migration `20260830180000_creator_duels_six_games.sql` records the same change.

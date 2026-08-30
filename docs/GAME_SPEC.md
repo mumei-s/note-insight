@@ -20,7 +20,7 @@ INSIGHT member session and approved catalog submission.
 - Card attributes are deterministic from the selected card identity and are used by
   every mode. A profile image is never substituted for a missing card.
 
-## Four separate games
+## Six separate games
 
 1. **COMMAND / tactical duel** — seven-round elemental mind game with telegraphed
    rival intent, attack, guard/counter, an ultimate, shields, critical hits, and
@@ -31,10 +31,25 @@ INSIGHT member session and approved catalog submission.
    cascades, rival countdown attacks, shield rune, skill gauge, and Arcane Nova.
 4. **STAR SHOOTER / aim** — time-limited moving targets with lifetimes, accuracy,
    combo, critical targets, player shield damage, lock-on aim, and Nova Burst.
+5. **CREATOR QUEST / action RPG** — three consecutive enemy waves, visible player
+   and rival card art, attack, guard, SP, animated skill cut-ins, and a final boss.
+6. **STAR CIRCUIT / arcade race** — three-lane steering by buttons or swipe,
+   hazards, energy pickups, machine integrity, boost, a live rival position, and a
+   1,000-metre finish.
 
 Each game supports pause/resume, page-background pause, touch-sized controls,
 reduced-motion mode, haptic feedback where available, a clear result, score, EXP,
 and retry. Result saving starts only after a completed playable match.
+
+## Cinematic presentation
+
+- Every mode uses a full-screen movie opening with the selected registered cards,
+  title reveal, VS transition, light, particles, pan, zoom, and parallax.
+- Gameplay keeps participant artwork as still image elements. Motion is created by
+  camera transforms, layered parallax, UI animation, particles, flashes, cut-ins,
+  impact shake, and skill/fever/nova/boost effects.
+- Results keep both selected card images visible and never substitute a profile
+  avatar for missing art. Trial uses only the official 無名S note / ちびS artwork.
 
 ## Records and privacy
 
@@ -47,8 +62,8 @@ and retry. Result saving starts only after a completed playable match.
 ## Release gates
 
 - TypeScript check, production build, and static tests pass.
-- Only game source, game styles, game tests, and this specification may differ
-  from the baseline.
+- Only game source, game styles, game tests, the game ledger mode allowlist, and
+  this specification may differ from the baseline.
 - Mobile-width and desktop public arena are visually checked after GitHub Pages
   deployment; playable/authenticated behavior is also validated at the function
   boundary without exposing private credentials.

@@ -76,7 +76,7 @@ test("OWNER bypasses the participant password with note-profile verification", a
   assert.match(owner, /nextRoute\(\)/);
 });
 
-test("the four game modes have distinct live mechanics and shared results", async () => {
+test("the six game modes have distinct live mechanics and shared cinematic results", async () => {
   const arena = await readFile(new URL("../src/battle-arena-page.tsx", import.meta.url), "utf8");
   const engine = await readFile(new URL("../src/game-card-engine.ts", import.meta.url), "utf8");
   const ui = await readFile(new URL("../src/game-ui.tsx", import.meta.url), "utf8");
@@ -84,7 +84,12 @@ test("the four game modes have distinct live mechanics and shared results", asyn
   const tap = await readFile(new URL("../src/game-tap.tsx", import.meta.url), "utf8");
   const puzzle = await readFile(new URL("../src/game-match-view.tsx", import.meta.url), "utf8");
   const shooter = await readFile(new URL("../src/game-target-view.tsx", import.meta.url), "utf8");
+  const quest = await readFile(new URL("../src/game-quest.tsx", import.meta.url), "utf8");
+  const race = await readFile(new URL("../src/game-race.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../public/creator-world-game-v5.css", import.meta.url), "utf8");
+  const cinematic = await readFile(new URL("../public/creator-world-game-v9-six.css", import.meta.url), "utf8");
+  const ledger = await readFile(new URL("../supabase/functions/creator-battle-ledger/index.ts", import.meta.url), "utf8");
+  const gameMigration = await readFile(new URL("../supabase/migrations/20260830180000_creator_duels_six_games.sql", import.meta.url), "utf8");
   const spec = await readFile(new URL("../docs/GAME_SPEC.md", import.meta.url), "utf8");
 
   assert.match(ui, /BATTLE<br \/>START/);
@@ -96,6 +101,8 @@ test("the four game modes have distinct live mechanics and shared results", asyn
   for (const token of ["TIME", "COMBO", "FEVER", "PERFECT", "GREAT", "GOOD", "MISS", "onPointerDown"]) assert.match(tap, new RegExp(token));
   for (const token of ["W = 6", "H = 6", "CHAIN", "ARCANE NOVA", "SHIELD", "onPointerDown", "onPointerUp"]) assert.match(puzzle, new RegExp(token));
   for (const token of ["onPointerMove", "BOSS CARD", "PILOT SHIELD", "COMBO", "CRITICAL", "NOVA"]) assert.match(shooter, new RegExp(token));
+  for (const token of ["WAVE_HP", "ATTACK", "GUARD", "SKILL", "SP", "BOSS", "GameResultOverlay", "GameAtmosphere"]) assert.match(quest, new RegExp(token));
+  for (const token of ["FINISH = 1000", "LANE", "BOOST", "ENERGY", "HAZARD", "onPointerDown", "onPointerUp", "GameResultOverlay", "GameAtmosphere"]) assert.match(race, new RegExp(token));
   assert.match(engine, /deriveCardStats/);
   assert.match(engine, /balanceRatio/);
   assert.match(ui, /visibilitychange/);
@@ -107,10 +114,22 @@ test("the four game modes have distinct live mechanics and shared results", asyn
   assert.match(arena, /row\.playerCard\.url/);
   assert.match(arena, /row\.opponent\.cardUrl/);
   assert.match(arena, /row\.byGame/);
+  assert.match(arena, /6つのゲーム/);
+  assert.match(arena, /CreatorQuestBattle/);
+  assert.match(arena, /StarCircuitBattle/);
   assert.match(styles, /g5BeatCountdown/);
   assert.match(styles, /prefers-reduced-motion/);
+  for (const token of ["g9-atmosphere", "g9-cut-in", "g9ScreenShake", "g9-result-cast", "g9-quest", "g9-race", "prefers-reduced-motion"]) assert.match(cinematic, new RegExp(token));
+  assert.match(ui, /playerArt \|\| resolved\.player/);
+  assert.match(ui, /enemyArt \|\| resolved\.enemy/);
+  assert.match(ledger, /"choice", "tap", "puzzle", "shoot", "quest", "race"/);
+  assert.match(ledger, /quest: \{ wins: 0/);
+  assert.match(ledger, /race: \{ wins: 0/);
+  assert.match(gameMigration, /creator_duels_game_mode_check/);
+  assert.match(gameMigration, /'quest'::text/);
+  assert.match(gameMigration, /'race'::text/);
   assert.match(spec, /fb2fc687afc18291bcc1dd1fd7472bcdeb624d70/);
-  assert.doesNotMatch(arena + engine + ui + command + tap + puzzle + shooter + spec, /docs\.google|drive\.google|sheets\.google/i);
+  assert.doesNotMatch(arena + engine + ui + command + tap + puzzle + shooter + quest + race + spec, /docs\.google|drive\.google|sheets\.google/i);
 });
 
 test("the public participant cache is isolated behind RLS and an edge function", async () => {
