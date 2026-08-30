@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v7｜全消し→改行整形→貼付
+// @name         note ポン出し v8｜全消し→整形→貼付
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      7.0.0
-// @description  note編集中画面専用。旧本文を先に完全削除し、空を確認してから、brを生成せず段落・見出しだけ整えて原稿を貼ります。挿絵自動処理なし。
+// @version      8.0.0
+// @description  note編集中画面専用。入力欄を動かさず、旧本文を完全削除してからbrなしで段落・見出しを整えて貼付。挿絵自動処理なし。
 // @author       無名S note
 // @match        https://note.com/*
 // @match        https://editor.note.com/*
@@ -15,11 +15,11 @@
 (() => {
   'use strict';
 
-  const HOST_ID = '__mumei_pon_v7_editor__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v7-backup:';
+  const HOST_ID = '__mumei_pon_v8_editor__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v8-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // 旧ポン出しだけ隠す。夏機能や他スクリプトには触れない。
+  // 過去のポン出しUIだけ隠す。夏機能・カード機能には触れない。
   const LEGACY_IDS = [
     '#mumei-note-pon-dashi-fab',
     '#mumei-note-pon-dashi-panel',
@@ -27,18 +27,20 @@
     '#__mumei_pon_v2_host__',
     '#__mumei_pon_v21_host__',
     '#__mumei_pon_v3_bottom__',
-    '#__mumei_pon_v6_editor__'
+    '#__mumei_pon_v6_editor__',
+    '#__mumei_pon_v7_editor__'
   ];
 
   function installLegacyKiller() {
-    if (document.getElementById('__mumei_pon_v7_legacy_killer__')) return;
+    if (document.getElementById('__mumei_pon_v8_legacy_killer__')) return;
     const s = document.createElement('style');
-    s.id = '__mumei_pon_v7_legacy_killer__';
+    s.id = '__mumei_pon_v8_legacy_killer__';
     s.textContent = `${LEGACY_IDS.join(',')} {display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}`;
     (document.head || document.documentElement).appendChild(s);
   }
   installLegacyKiller();
 
+  // 実際の操作UIは記事編集中の editor.note.com だけ。
   if (location.hostname !== 'editor.note.com') return;
 
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -110,7 +112,7 @@
       .trim();
   }
 
-  // brは一切生成しない。空行が段落の区切り。
+  // <br>は絶対に生成しない。空行だけを段落区切りとして扱う。
   function sourceToHtml(src) {
     const lines = cleanSource(src).split('\n');
     const out = [];
@@ -134,10 +136,7 @@
     for (const raw of lines) {
       const t = raw.trim();
       if (!t) { flushPara(); flushList(); continue; }
-
-      if (/^---+$/.test(t) || /^___+$/.test(t)) {
-        flushPara(); flushList(); out.push('<hr>'); continue;
-      }
+      if (/^---+$/.test(t) || /^___+$/.test(t)) { flushPara(); flushList(); out.push('<hr>'); continue; }
 
       const big = t.match(/^#\s+(.+)$/) || t.match(/^◆【大見出し】\s*(.+)$/);
       const small = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/) || t.match(/^◇【小見出し】\s*(.+)$/);
@@ -166,7 +165,9 @@
 
     flushPara();
     flushList();
-    return out.join('');
+    const html = out.join('');
+    if (/<br\b/i.test(html)) throw new Error('br生成を検出');
+    return html;
   }
 
   function selectContents(editor) {
@@ -218,7 +219,6 @@
   async function hardClear(editor) {
     saveBackup(editor);
 
-    // 1) ProseMirror本体のドキュメントを先に削除。
     const view = findView(editor);
     if (view) {
       try {
@@ -227,38 +227,32 @@
       } catch {}
     }
 
-    // 2) DOM側も選択して削除。古い本文を残さない。
-    await sleep(120);
+    await sleep(140);
     selectContents(editor);
     try { document.execCommand('delete', false); } catch {}
     fireInput(editor, 'deleteContentBackward');
 
-    // 3) まだ文字が残っていたら最後の保険で空にする。
-    await sleep(180);
+    await sleep(200);
     if ((editor.innerText || '').trim()) {
       editor.innerHTML = '';
       fireInput(editor, 'deleteContentBackward');
-      await sleep(150);
+      await sleep(180);
     }
 
     return !(editor.innerText || '').trim();
   }
 
   async function insertCleanHtml(editor, html) {
-    // 空の本文にだけ入れる。
+    if (/<br\b/i.test(html)) throw new Error('br生成を検出');
     selectContents(editor);
     let ok = false;
     try { ok = document.execCommand('insertHTML', false, html); } catch {}
-
     if (!ok || !(editor.innerText || '').trim()) {
       editor.innerHTML = html;
       fireInput(editor, 'insertText');
     } else {
       fireInput(editor, 'insertFromPaste');
     }
-
-    await sleep(150);
-    return !html.toLowerCase().includes('<br');
   }
 
   async function replaceAll(src, show) {
@@ -271,11 +265,12 @@
     if (!empty) return show('❌ 全消しできなかったため、新原稿は貼っていません');
 
     show('② 空を確認。改行を整えて貼付中…');
-    const html = sourceToHtml(src);
-    if (/<br\b/i.test(html)) return show('❌ brを検出したため貼付を中止');
+    let html;
+    try { html = sourceToHtml(src); }
+    catch (e) { return show('❌ brを検出したため貼付を中止'); }
 
     await insertCleanHtml(editor, html);
-    show('✅ 全消し → 段落・見出し整形 → 貼付完了（br生成なし）');
+    show('✅ 全消し → 段落・見出し整形 → 貼付完了（brなし）');
   }
 
   async function restore(show) {
@@ -283,7 +278,6 @@
     if (!editor) return show('本文エディタが見つからない');
     const b = getBackup();
     if (!b) return show('このページのバックアップがない');
-
     await hardClear(editor);
     editor.innerHTML = b.html;
     fireInput(editor, 'insertFromPaste');
@@ -293,62 +287,63 @@
   function buildHost() {
     const host = document.createElement('section');
     host.id = HOST_ID;
-    host.style.cssText = 'display:block!important;position:relative!important;float:none!important;clear:both!important;width:100%!important;max-width:760px!important;margin:24px auto 64px!important;padding:0!important;flex:0 0 100%!important;align-self:stretch!important;';
-    const root = host.attachShadow({mode:'open'});
-    root.innerHTML = `
-      <style>
-        :host{all:initial}*{box-sizing:border-box}
-        .box{font-family:system-ui,-apple-system,sans-serif;background:#07182a;color:#fff;border:1px solid #2fd7c6;border-radius:14px;overflow:hidden}
-        .bar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0b2138;cursor:pointer}.title{font-weight:900;flex:1}.ver{font-size:11px;color:#9ddbd6}
-        .body{display:none;padding:12px}.body.open{display:block}
-        textarea{width:100%;height:38vh;min-height:260px;border:0;border-radius:10px;padding:12px;font-size:15px;line-height:1.55;background:#fff;color:#111;resize:vertical}
-        .hint{font-size:12px;line-height:1.55;color:#c8d9e6;margin:0 0 8px}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-        button{border:0;border-radius:10px;padding:12px;font-size:14px;font-weight:900;cursor:pointer}.main{background:#39e7d2;color:#04202a;flex:1 1 220px}.danger{background:#5a2841;color:#fff;flex:1 1 130px}
-        .status{font-size:12px;color:#9ddbd6;margin-top:8px;min-height:1.4em;white-space:pre-wrap}
-      </style>
-      <div class="box">
-        <div class="bar" id="toggle"><div class="title">📄 ポン出し</div><div class="ver">v7｜単純版</div><div>⌄</div></div>
-        <div class="body" id="body">
-          <p class="hint">旧本文を先に完全全消し → 空を確認 → 新原稿を貼付。brは生成しません。挿絵は手動です。</p>
-          <textarea id="src" placeholder="ここへ完成原稿を丸ごと貼る"></textarea>
-          <div class="row"><button class="main" id="go">🚀 全消し → 整形 → 貼る</button><button class="danger" id="undo">↩️ 元本文へ戻す</button></div>
-          <div class="status" id="status"></div>
+    host.setAttribute('contenteditable','false');
+    host.style.cssText = 'display:block!important;position:relative!important;float:none!important;clear:both!important;width:100%!important;max-width:760px!important;margin:24px auto 64px!important;padding:0!important;flex:0 0 100%!important;align-self:stretch!important;z-index:2!important;pointer-events:auto!important;';
+
+    host.innerHTML = `
+      <div style="font-family:system-ui,-apple-system,sans-serif;background:#07182a;color:#fff;border:1px solid #2fd7c6;border-radius:14px;overflow:hidden;box-sizing:border-box">
+        <div id="mumeiPonToggle" style="display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0b2138;cursor:pointer;user-select:none;box-sizing:border-box">
+          <div style="font-weight:900;flex:1">📄 ポン出し</div><div style="font-size:11px;color:#9ddbd6">v8｜単純版</div><div>⌄</div>
+        </div>
+        <div id="mumeiPonBody" style="display:none;padding:12px;box-sizing:border-box">
+          <div style="font-size:12px;line-height:1.55;color:#c8d9e6;margin:0 0 8px">入力欄をタップして原稿を貼る → 全消し → 空確認 → brなしで貼付。挿絵は手動。</div>
+          <textarea id="mumeiPonSrc" tabindex="0" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="ここをタップ → 原稿を貼り付け" style="display:block!important;width:100%!important;height:38vh!important;min-height:260px!important;border:2px solid #39e7d2!important;border-radius:10px!important;padding:12px!important;font-size:16px!important;line-height:1.55!important;background:#fff!important;color:#111!important;resize:vertical!important;box-sizing:border-box!important;pointer-events:auto!important;touch-action:manipulation!important;user-select:text!important;-webkit-user-select:text!important;caret-color:#111!important;position:relative!important;z-index:5!important"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button id="mumeiPonGo" type="button" style="border:0;border-radius:10px;padding:12px;font-size:14px;font-weight:900;background:#39e7d2;color:#04202a;flex:1 1 220px">🚀 全消し → 整形 → 貼る</button><button id="mumeiPonUndo" type="button" style="border:0;border-radius:10px;padding:12px;font-size:14px;font-weight:900;background:#5a2841;color:#fff;flex:1 1 130px">↩️ 元本文へ戻す</button></div>
+          <div id="mumeiPonStatus" style="font-size:12px;color:#9ddbd6;margin-top:8px;min-height:1.4em;white-space:pre-wrap"></div>
         </div>
       </div>`;
 
-    const q = s => root.querySelector(s);
-    const body = q('#body');
-    const status = q('#status');
+    const body = host.querySelector('#mumeiPonBody');
+    const src = host.querySelector('#mumeiPonSrc');
+    const status = host.querySelector('#mumeiPonStatus');
     const show = msg => { status.textContent = msg; };
-    q('#toggle').onclick = () => body.classList.toggle('open');
-    q('#go').onclick = () => replaceAll(q('#src').value, show);
-    q('#undo').onclick = () => restore(show);
+
+    host.querySelector('#mumeiPonToggle').addEventListener('click', e => {
+      e.stopPropagation();
+      body.style.display = body.style.display === 'block' ? 'none' : 'block';
+      if (body.style.display === 'block') setTimeout(() => src.focus({preventScroll:true}), 80);
+    });
+
+    // note側の編集イベントへ渡さず、スマホでもtextareaに確実にフォーカスを残す。
+    ['pointerdown','mousedown','touchstart','click'].forEach(type => {
+      src.addEventListener(type, e => e.stopPropagation(), {passive:type === 'touchstart'});
+    });
+    src.addEventListener('pointerup', e => { e.stopPropagation(); src.focus(); });
+    src.addEventListener('touchend', e => { e.stopPropagation(); setTimeout(() => src.focus(), 0); }, {passive:true});
+
+    host.querySelector('#mumeiPonGo').addEventListener('click', e => { e.stopPropagation(); replaceAll(src.value, show); });
+    host.querySelector('#mumeiPonUndo').addEventListener('click', e => { e.stopPropagation(); restore(show); });
+
     return host;
   }
 
-  function mount() {
+  function mountOnce() {
+    if (document.getElementById(HOST_ID)) return;
     const editor = findEditor();
     if (!editor) return;
-    let host = document.getElementById(HOST_ID);
-    if (!host) host = buildHost();
     const anchor = findAnchor(editor);
-    if (!host.isConnected || host.previousElementSibling !== anchor) {
-      try { anchor.insertAdjacentElement('afterend', host); } catch {}
-    }
+    const host = buildHost();
+    try { anchor.insertAdjacentElement('afterend', host); } catch { return; }
   }
 
-  let busyMount = false;
-  function scheduleMount() {
-    if (busyMount) return;
-    busyMount = true;
-    requestAnimationFrame(() => { busyMount = false; mount(); });
+  function start() {
+    mountOnce();
+    // 接続中は絶対に動かさない。note側に消された時だけ再設置。
+    setInterval(() => {
+      const host = document.getElementById(HOST_ID);
+      if (!host || !host.isConnected) mountOnce();
+    }, 2500);
   }
-
-  const start = () => {
-    scheduleMount();
-    new MutationObserver(scheduleMount).observe(document.documentElement, {childList:true, subtree:true});
-    setInterval(scheduleMount, 1500);
-  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true});
   else start();
