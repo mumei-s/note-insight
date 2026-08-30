@@ -61,6 +61,8 @@ export function PreludeOverlay({
   enemyName: string;
 }) {
   if (phase === "live") return null;
+  const displayPlayer = playerName === "TRIAL CREATOR" ? "無名S note" : playerName;
+  const displayEnemy = enemyName === "TRAINING CORE" ? "ちびS" : enemyName;
   if (phase === "start") {
     return <div className="g4-prelude g7-cinematic is-start" aria-live="polite">
       <div className="g7-filmbar top" />
@@ -75,7 +77,7 @@ export function PreludeOverlay({
     <div className="g7-filmbar top" />
     <div className="g7-versus-host" aria-hidden="true" />
     <div className="g7-versus-portal" aria-hidden="true" />
-    <div className="g7-vs-names"><span>{playerName}</span><strong>VS</strong><span>{enemyName}</span></div>
+    <div className="g7-vs-names"><span>{displayPlayer}</span><strong>VS</strong><span>{displayEnemy}</span></div>
     <div className="g7-vs-flash" aria-hidden="true" />
     <div className="g7-filmbar bottom" />
   </div>;
