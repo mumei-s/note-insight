@@ -1,12 +1,12 @@
 // ==UserScript==
-// @name         note ポン出し v2｜完全隔離＋挿絵自動
+// @name         note ポン出し v2.1｜本文下＋挿絵自動
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      2.0.0
-// @description  ChatGPT原稿を一括投入。旧本文バックアップ、全消し、見出し整形、挿絵マーカー自動挿入。Shadow DOMで他UIと競合しにくい。
+// @version      2.1.0
+// @description  note本文エディタ直下に通常配置。旧本文バックアップ、全消し、見出し整形、挿絵マーカー自動挿入。固定UIを使わずスクロールと一緒に動きます。
 // @author       無名S note
 // @match        https://note.com/*
 // @grant        none
-// @run-at       document-start
+// @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-dashi.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-dashi.user.js
 // ==/UserScript==
@@ -14,177 +14,345 @@
 (() => {
   'use strict';
 
-  const HOST_ID = '__mumei_pon_v2_host__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v2-backup:';
-  const POS_KEY = 'mumei-note-pon-v2-pos';
-  let host, root, selectedFiles = [];
-
+  const HOST_ID = '__mumei_pon_v21_host__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v21-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const clamp = (v,min,max) => Math.max(min, Math.min(max,v));
 
-  function mountHost() {
-    if (document.getElementById(HOST_ID)) return;
-    host = document.createElement('div');
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+
+  function visible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 80 && r.height > 30 && s.display !== 'none' && s.visibility !== 'hidden';
+  }
+
+  function findEditor() {
+    const selectors = [
+      '.ProseMirror[contenteditable="true"]',
+      '[contenteditable="true"][role="textbox"]',
+      'article [contenteditable="true"]',
+      'main [contenteditable="true"]',
+      'div[contenteditable="true"]'
+    ];
+    const all = [...new Set(selectors.flatMap(sel => [...document.querySelectorAll(sel)]))]
+      .filter(visible)
+      .filter(el => !el.closest(`#${HOST_ID}`));
+    if (!all.length) return null;
+    return all.map(el => {
+      const r = el.getBoundingClientRect();
+      const text = (el.innerText || '').length;
+      let score = r.width * r.height + text * 160;
+      if (String(el.className || '').includes('ProseMirror')) score += 1000000;
+      if (el.getAttribute('role') === 'textbox') score += 300000;
+      return { el, score };
+    }).sort((a, b) => b.score - a.score)[0].el;
+  }
+
+  async function waitEditor(ms = 5000) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const e = findEditor();
+      if (e) return e;
+      await sleep(150);
+    }
+    return null;
+  }
+
+  function chooseAnchor(editor) {
+    if (!editor) return null;
+    const p = editor.parentElement;
+    if (!p) return editor;
+    const pr = p.getBoundingClientRect();
+    const er = editor.getBoundingClientRect();
+    if (pr.width <= er.width * 1.35 && pr.height <= er.height * 1.8) return p;
+    return editor;
+  }
+
+  const backupKey = () => BACKUP_PREFIX + location.pathname;
+  function saveBackup(editor) {
+    try {
+      localStorage.setItem(backupKey(), JSON.stringify({
+        html: editor.innerHTML,
+        text: editor.innerText || '',
+        time: Date.now(),
+        url: location.href
+      }));
+    } catch {}
+  }
+  function getBackup() {
+    try { return JSON.parse(localStorage.getItem(backupKey()) || 'null'); }
+    catch { return null; }
+  }
+
+  function cleanSource(src) {
+    return String(src || '')
+      .replace(/^:::writing\{[^\n]*\}\s*$/gmi, '')
+      .replace(/^:::\s*$/gmi, '')
+      .replace(/^```(?:markdown|md|text)?\s*$/gmi, '')
+      .replace(/^```\s*$/gmi, '')
+      .replace(/\r\n?/g, '\n')
+      .trim();
+  }
+
+  function markdownToHtml(src) {
+    const lines = cleanSource(src).split('\n');
+    const out = [];
+    let para = [], listType = null, listItems = [];
+    const flushPara = () => {
+      if (!para.length) return;
+      out.push(`<p>${inline(para.map(x => x.trim()).join('<br>'))}</p>`);
+      para = [];
+    };
+    const flushList = () => {
+      if (!listType || !listItems.length) return;
+      out.push(`<${listType}>${listItems.map(x => `<li>${inline(x)}</li>`).join('')}</${listType}>`);
+      listType = null; listItems = [];
+    };
+
+    for (const raw of lines) {
+      const line = raw.trimEnd();
+      const t = line.trim();
+      if (!t) { flushPara(); flushList(); continue; }
+      if (/^---+$/.test(t) || /^___+$/.test(t)) { flushPara(); flushList(); out.push('<hr>'); continue; }
+
+      const big = t.match(/^◆【大見出し】\s*(.+)$/) || t.match(/^#\s+(.+)$/);
+      const small = t.match(/^◇【小見出し】\s*(.+)$/) || t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/);
+      if (big) { flushPara(); flushList(); out.push(`<h2>${inline(big[1])}</h2>`); continue; }
+      if (small) { flushPara(); flushList(); out.push(`<h3>${inline(small[1])}</h3>`); continue; }
+
+      const localImg = t.match(/^\[\[挿絵(\d+)\]\]$/);
+      if (localImg) {
+        flushPara(); flushList();
+        out.push(`<p data-mumei-pon-img="${localImg[1]}">[[挿絵${localImg[1]}]]</p>`);
+        continue;
+      }
+      const remoteImg = t.match(/^\[\[IMG:(https?:\/\/[^\]]+)\]\]$/i);
+      if (remoteImg) {
+        flushPara(); flushList();
+        out.push(`<figure data-mumei-pon-remote="1"><img src="${esc(remoteImg[1])}" alt=""></figure>`);
+        continue;
+      }
+      if (/^🔒【ここで有料ライン】/.test(t) || /^\[PAYWALL\]$/i.test(t)) {
+        flushPara(); flushList(); out.push('<p>🔒【ここで有料ライン】</p>'); continue;
+      }
+
+      const ul = t.match(/^[-*・]\s+(.+)$/);
+      if (ul) {
+        flushPara();
+        if (listType && listType !== 'ul') flushList();
+        listType = 'ul'; listItems.push(ul[1]); continue;
+      }
+      const ol = t.match(/^\d+[\.．]\s*(.+)$/);
+      if (ol) {
+        flushPara();
+        if (listType && listType !== 'ol') flushList();
+        listType = 'ol'; listItems.push(ol[1]); continue;
+      }
+      const q = t.match(/^>\s?(.*)$/);
+      if (q) { flushPara(); flushList(); out.push(`<blockquote>${inline(q[1])}</blockquote>`); continue; }
+      para.push(line);
+    }
+    flushPara(); flushList();
+    return out.join('');
+  }
+
+  function selectNodeContents(editor) {
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    editor.focus();
+  }
+
+  function fireInput(editor, inputType = 'insertFromPaste') {
+    try { editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data: null })); }
+    catch { editor.dispatchEvent(new Event('input', { bubbles: true })); }
+    editor.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function replaceEditor(editor, html) {
+    saveBackup(editor);
+    selectNodeContents(editor);
+    let ok = false;
+    try { ok = document.execCommand('insertHTML', false, html); } catch {}
+    if (!ok) {
+      editor.innerHTML = html;
+      fireInput(editor, 'insertText');
+    } else {
+      fireInput(editor);
+    }
+  }
+
+  function selectMarker(marker) {
+    const range = document.createRange();
+    range.selectNode(marker);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  async function pasteImageFile(editor, marker, file) {
+    try {
+      selectMarker(marker);
+      editor.focus();
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+      const before = editor.querySelectorAll('img').length;
+      marker.dispatchEvent(ev);
+      editor.dispatchEvent(ev);
+      for (let i = 0; i < 18; i++) {
+        await sleep(250);
+        const after = editor.querySelectorAll('img').length;
+        if (after > before || !marker.isConnected) return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  async function insertSelectedImages(editor, files) {
+    if (!files?.length) return { ok: 0, fail: 0 };
+    let ok = 0, fail = 0;
+    const sorted = [...files];
+    for (let i = 0; i < sorted.length; i++) {
+      const n = i + 1;
+      const marker = editor.querySelector(`[data-mumei-pon-img="${n}"]`);
+      if (!marker) continue;
+      const done = await pasteImageFile(editor, marker, sorted[i]);
+      if (done) ok++;
+      else {
+        fail++;
+        marker.textContent = `🖼️ 挿絵${n}：自動貼付できなかったのでここへ手動挿入`;
+      }
+      await sleep(350);
+    }
+    fireInput(editor);
+    return { ok, fail };
+  }
+
+  async function restoreBackup(show) {
+    const editor = await waitEditor();
+    if (!editor) return show('本文エディタが見つからない');
+    const b = getBackup();
+    if (!b) return show('このページのバックアップがない');
+    selectNodeContents(editor);
+    let ok = false;
+    try { ok = document.execCommand('insertHTML', false, b.html); } catch {}
+    if (!ok) editor.innerHTML = b.html;
+    fireInput(editor, 'insertText');
+    show('↩️ 元本文へ戻した');
+  }
+
+  function buildHost(anchor) {
+    const host = document.createElement('div');
     host.id = HOST_ID;
-    host.style.cssText = 'all:initial!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important;display:block!important;visibility:visible!important;opacity:1!important;';
-    (document.documentElement || document).appendChild(host);
-    root = host.attachShadow({mode:'closed'});
+    host.style.cssText = 'display:block!important;position:relative!important;inset:auto!important;z-index:auto!important;width:auto!important;max-width:760px!important;margin:24px auto 48px!important;padding:0!important;transform:none!important;';
+    const root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `
       <style>
         :host{all:initial}
-        *{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
-        #fab{position:fixed;left:10px;top:36vh;width:58px;height:58px;border-radius:50%;border:2px solid #39e7d2;background:#07192d;color:#fff;font-weight:900;font-size:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px #0009;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none}
-        #fab.drag{opacity:.75;transform:scale(1.06)}
-        #panel{position:fixed;left:8px;right:8px;top:max(56px,env(safe-area-inset-top));max-width:680px;max-height:calc(100vh - 72px);overflow:auto;margin:auto;background:#081728fa;color:#fff;border:1px solid #37d8ca;border-radius:16px;box-shadow:0 12px 40px #000b;padding:14px;pointer-events:auto}
-        .title{font-size:18px;font-weight:900}.note{font-size:12px;line-height:1.55;color:#cbe0ec;margin-top:5px}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-        button{flex:1;min-width:128px;border:0;border-radius:12px;padding:12px 10px;font-weight:800;font-size:15px}.main{background:#39e7d2;color:#04202a}.sub{background:#17314b;color:#fff;border:1px solid #35546f}.danger{background:#56243a;color:#fff}
-        textarea{width:100%;height:36vh;min-height:210px;margin-top:10px;background:#fff;color:#111;border:0;border-radius:12px;padding:12px;font-size:15px;line-height:1.6;resize:vertical}
-        input[type=file]{display:none}.filelabel{display:block;margin-top:10px;background:#17314b;border:1px solid #35546f;color:#fff;border-radius:12px;padding:11px;text-align:center;font-weight:800}.status{margin-top:8px;font-size:12px;color:#bfeee8;white-space:pre-wrap}
-        #toast{position:fixed;left:50%;top:max(70px,env(safe-area-inset-top));transform:translateX(-50%);background:#061421;color:#fff;border:1px solid #39e7d2;border-radius:999px;padding:10px 16px;font-weight:800;box-shadow:0 6px 24px #0008;max-width:92vw;text-align:center;pointer-events:none}
+        *{box-sizing:border-box}
+        .box{font-family:system-ui,-apple-system,sans-serif;background:#07182a;color:#fff;border:1px solid #2fd7c6;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px #0003}
+        .bar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0b2138;cursor:pointer;user-select:none}
+        .title{font-weight:900;font-size:15px;flex:1}.ver{font-size:11px;color:#9ddbd6}
+        .body{display:none;padding:12px}.body.open{display:block}
+        textarea{width:100%;height:34vh;min-height:220px;border:0;border-radius:10px;padding:12px;font-size:15px;line-height:1.55;background:#fff;color:#111;resize:vertical}
+        .hint{font-size:12px;line-height:1.55;color:#c8d9e6;margin:0 0 8px}
+        .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+        button,.fileLabel{border:0;border-radius:10px;padding:11px 12px;font-size:14px;font-weight:800;cursor:pointer;text-align:center}
+        .main{background:#39e7d2;color:#04202a;flex:1 1 180px}.sub{background:#17314b;color:#fff;border:1px solid #35546f;flex:1 1 150px}.danger{background:#5a2841;color:#fff;flex:1 1 150px}
+        .fileLabel{display:block;background:#17314b;color:#fff;border:1px solid #35546f}.fileLabel input{display:none}
+        .status{font-size:12px;color:#9ddbd6;margin-top:8px;min-height:1.4em}
       </style>
-      <div id="fab">ポン</div>
-      <div id="panel" hidden>
-        <div class="title">📄 note ポン出し v2</div>
-        <div class="note">旧本文をバックアップ→全消し→見出し整形→本文投入→挿絵を指定位置へ自動貼付。<br>挿絵位置は <b>[[挿絵1]]</b> / <b>[[挿絵2]]</b> …。画像は順番どおりまとめて1回選択。<br>URL画像は <b>[[IMG:https://...]]</b> で画像選択不要。</div>
-        <textarea id="text" placeholder="ここへ完成原稿を丸ごと貼る"></textarea>
-        <label class="filelabel" for="files">🖼️ 挿絵をまとめて選ぶ（順番どおり）</label>
-        <input id="files" type="file" accept="image/*" multiple>
-        <div class="status" id="status">挿絵：未選択</div>
-        <div class="row">
-          <button class="main" id="go">🚀 全消し→本文＋挿絵ポン</button>
-          <button class="sub" id="clip">📋 本文をクリップボードから</button>
-          <button class="danger" id="undo">↩️ 元本文へ戻す</button>
-          <button class="sub" id="close">閉じる</button>
+      <div class="box">
+        <div class="bar" id="toggle"><div class="title">📄 ポン出し</div><div class="ver">v2.1｜本文下</div><div>⌄</div></div>
+        <div class="body" id="body">
+          <p class="hint">固定ボタンは廃止。ここは本文と一緒にスクロールします。原稿内の [[挿絵1]] [[挿絵2]]… の順に画像を自動貼付します。</p>
+          <textarea id="src" placeholder="ここへ完成原稿を丸ごと貼る"></textarea>
+          <div class="row">
+            <label class="fileLabel">🖼️ 挿絵をまとめて選択<input id="files" type="file" accept="image/*" multiple></label>
+          </div>
+          <div class="row">
+            <button class="main" id="go">🚀 全消し → 本文＋挿絵ポン</button>
+            <button class="sub" id="clip">📋 クリップボード読込</button>
+            <button class="danger" id="undo">↩️ 元本文へ戻す</button>
+          </div>
+          <div class="status" id="status"></div>
         </div>
-      </div>
-      <div id="toast" hidden></div>`;
+      </div>`;
 
-    bindUi();
-    applyPos();
-  }
-
-  function q(sel){ return root?.querySelector(sel); }
-  function toast(msg, ms=2600){ const t=q('#toast'); if(!t)return; t.textContent=msg; t.hidden=false; clearTimeout(t._tm); t._tm=setTimeout(()=>t.hidden=true,ms); }
-  function openPanel(){ q('#panel').hidden=false; }
-  function closePanel(){ q('#panel').hidden=true; }
-
-  function bindUi(){
-    const fab=q('#fab');
-    let sx=0,sy=0,sl=0,st=0,moved=false,pid=null;
-    fab.addEventListener('pointerdown',e=>{
-      pid=e.pointerId;moved=false;sx=e.clientX;sy=e.clientY;
-      const r=fab.getBoundingClientRect();sl=r.left;st=r.top;
-      fab.setPointerCapture?.(pid);fab.classList.add('drag');e.preventDefault();
-    });
-    fab.addEventListener('pointermove',e=>{
-      if(e.pointerId!==pid)return;const dx=e.clientX-sx,dy=e.clientY-sy;
-      if(Math.abs(dx)+Math.abs(dy)>6)moved=true;if(!moved)return;
-      fab.style.left=clamp(sl+dx,4,Math.max(4,innerWidth-62))+'px';
-      fab.style.top=clamp(st+dy,4,Math.max(4,innerHeight-62))+'px';e.preventDefault();
-    });
-    fab.addEventListener('pointerup',e=>{
-      if(e.pointerId!==pid)return;fab.classList.remove('drag');
-      if(moved)savePos();else openPanel();pid=null;e.preventDefault();
-    });
-    fab.addEventListener('pointercancel',()=>{pid=null;fab.classList.remove('drag')});
-
-    q('#close').onclick=closePanel;
-    q('#undo').onclick=restoreBackup;
-    q('#go').onclick=runPon;
-    q('#clip').onclick=async()=>{
-      try{const s=await navigator.clipboard.readText();if(s){q('#text').value=s;toast('📋 本文を読み込んだ')}else toast('クリップボードが空')}catch{toast('クリップボード読取不可。貼付欄へ直接ペーストしてね')}
+    const q = s => root.querySelector(s);
+    const body = q('#body');
+    const status = q('#status');
+    const show = msg => { status.textContent = msg; };
+    q('#toggle').onclick = () => body.classList.toggle('open');
+    q('#clip').onclick = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text.trim()) return show('クリップボードが空です');
+        q('#src').value = text;
+        show('📋 原稿を読み込んだ');
+      } catch {
+        show('クリップボードを直接読めないので、原稿を貼付欄へ長押し→貼り付け');
+      }
     };
-    q('#files').addEventListener('change',e=>{
-      selectedFiles=[...(e.target.files||[])];
-      q('#status').textContent=selectedFiles.length?`挿絵：${selectedFiles.length}枚選択\n${selectedFiles.map((f,i)=>`${i+1}. ${f.name}`).join('\n')}`:'挿絵：未選択';
-    });
+    q('#undo').onclick = () => restoreBackup(show);
+    q('#go').onclick = async () => {
+      const src = q('#src').value || '';
+      if (!src.trim()) return show('原稿を貼ってから押してね');
+      const editor = await waitEditor();
+      if (!editor) return show('本文エディタが見つからない');
+      show('旧本文をバックアップ中…');
+      replaceEditor(editor, markdownToHtml(src));
+      await sleep(600);
+      const files = q('#files').files;
+      if (files?.length) {
+        show(`本文投入完了。挿絵 ${files.length}枚を貼付中…`);
+        const r = await insertSelectedImages(editor, files);
+        if (r.fail) show(`✅ 本文完了／挿絵 ${r.ok}枚成功・${r.fail}枚は目印を残した`);
+        else show(`✅ 全消し・見出し・本文・挿絵 ${r.ok}枚 完了`);
+      } else {
+        const markers = editor.querySelectorAll('[data-mumei-pon-img]').length;
+        show(markers ? `✅ 本文完了。挿絵目印が ${markers}個あるので画像を選んで再実行` : '✅ 全消し・見出し・本文投入 完了');
+      }
+      editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    if (anchor?.parentNode) anchor.insertAdjacentElement('afterend', host);
+    else document.body.appendChild(host);
+    return host;
   }
 
-  function savePos(){const r=q('#fab').getBoundingClientRect();try{localStorage.setItem(POS_KEY,JSON.stringify({left:r.left,top:r.top}))}catch{}}
-  function applyPos(){try{const p=JSON.parse(localStorage.getItem(POS_KEY)||'null');if(!p)return;const f=q('#fab');f.style.left=clamp(+p.left||10,4,Math.max(4,innerWidth-62))+'px';f.style.top=clamp(+p.top||Math.round(innerHeight*.36),4,Math.max(4,innerHeight-62))+'px'}catch{}}
-
-  function visible(el){const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>80&&r.height>30&&s.display!=='none'&&s.visibility!=='hidden'}
-  function findEditor(){
-    const sels=['.ProseMirror','[contenteditable="true"][role="textbox"]','article [contenteditable="true"]','div[contenteditable="true"]'];
-    const els=[...new Set(sels.flatMap(s=>[...document.querySelectorAll(s)]))].filter(visible);
-    if(!els.length)return null;
-    return els.map(el=>{const r=el.getBoundingClientRect();let score=r.width*r.height+(el.innerText||'').length*150;if(String(el.className).includes('ProseMirror'))score+=1e6;return{el,score}}).sort((a,b)=>b.score-a.score)[0].el;
-  }
-  async function waitEditor(ms=4000){const end=Date.now()+ms;while(Date.now()<end){const e=findEditor();if(e)return e;await sleep(120)}return null}
-
-  const backupKey=()=>BACKUP_PREFIX+location.pathname;
-  function saveBackup(ed){try{localStorage.setItem(backupKey(),JSON.stringify({html:ed.innerHTML,time:Date.now(),url:location.href}))}catch{}}
-  function getBackup(){try{return JSON.parse(localStorage.getItem(backupKey())||'null')}catch{return null}}
-
-  function inlineFormat(s){
-    let x=esc(s);x=x.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/__(.+?)__/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2">$1</a>');return x;
-  }
-  function cleanSource(src){return src.replace(/^:::writing\{[^\n]*\}\s*$/gmi,'').replace(/^:::\s*$/gmi,'').replace(/^```(?:markdown|md|text)?\s*$/gmi,'').replace(/^```\s*$/gmi,'').replace(/\r\n?/g,'\n').trim()}
-
-  function parseSource(src){
-    const urls=[];let localMax=0;
-    const lines=cleanSource(src).split('\n'),out=[];let para=[],listType=null,list=[];
-    const flushP=()=>{if(para.length){out.push(`<p>${inlineFormat(para.map(x=>x.trim()).join('<br>'))}</p>`);para=[]}};
-    const flushL=()=>{if(listType&&list.length)out.push(`<${listType}>${list.map(x=>`<li>${inlineFormat(x)}</li>`).join('')}</${listType}>`);listType=null;list=[]};
-    for(const raw of lines){const line=raw.trimEnd(),t=line.trim();if(!t){flushP();flushL();continue}
-      let m=t.match(/^\[\[挿絵(\d+)\]\]$/);if(m){flushP();flushL();const n=+m[1];localMax=Math.max(localMax,n);out.push(`<p>__MUMEI_IMG_LOCAL_${n}__</p>`);continue}
-      m=t.match(/^\[\[IMG:(https?:\/\/[^\]]+)\]\]$/i)||t.match(/^\[\[挿絵:(https?:\/\/[^\]]+)\]\]$/i);if(m){flushP();flushL();const id=urls.length;urls.push(m[1]);out.push(`<p>__MUMEI_IMG_URL_${id}__</p>`);continue}
-      if(/^---+$/.test(t)||/^___+$/.test(t)){flushP();flushL();out.push('<hr>');continue}
-      const big=t.match(/^◆【大見出し】\s*(.+)$/)||t.match(/^#\s+(.+)$/);const small=t.match(/^◇【小見出し】\s*(.+)$/)||t.match(/^##\s+(.+)$/)||t.match(/^###\s+(.+)$/);
-      if(big){flushP();flushL();out.push(`<h2>${inlineFormat(big[1])}</h2>`);continue}if(small){flushP();flushL();out.push(`<h3>${inlineFormat(small[1])}</h3>`);continue}
-      if(/^🔒【ここで有料ライン】/.test(t)||/^\[PAYWALL\]$/i.test(t)){flushP();flushL();out.push('<p>🔒【ここで有料ライン】</p>');continue}
-      const ul=t.match(/^[-*・]\s+(.+)$/);if(ul){flushP();if(listType&&listType!=='ul')flushL();listType='ul';list.push(ul[1]);continue}
-      const ol=t.match(/^\d+[\.．]\s*(.+)$/);if(ol){flushP();if(listType&&listType!=='ol')flushL();listType='ol';list.push(ol[1]);continue}
-      const qt=t.match(/^>\s?(.*)$/);if(qt){flushP();flushL();out.push(`<blockquote>${inlineFormat(qt[1])}</blockquote>`);continue}
-      para.push(line);
-    }flushP();flushL();return {html:out.join(''),urls,localMax};
-  }
-
-  function selectNodeText(node){const r=document.createRange();r.selectNodeContents(node);const s=getSelection();s.removeAllRanges();s.addRange(r);node.closest('[contenteditable="true"]')?.focus()}
-  function replaceEditorHtml(ed,html){saveBackup(ed);const r=document.createRange();r.selectNodeContents(ed);const s=getSelection();s.removeAllRanges();s.addRange(r);ed.focus();let ok=false;try{ok=document.execCommand('insertHTML',false,html)}catch{}if(!ok){ed.innerHTML=html;ed.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));ed.dispatchEvent(new Event('change',{bubbles:true}))}else ed.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertFromPaste'}));}
-
-  async function urlToFile(url,index){const res=await fetch(url,{mode:'cors'});if(!res.ok)throw new Error('画像取得 '+res.status);const blob=await res.blob();const ext=(blob.type.split('/')[1]||'png').replace('jpeg','jpg');return new File([blob],`pon-${index+1}.${ext}`,{type:blob.type||'image/png'})}
-  async function pasteImageAtMarker(ed,markerText,file){
-    const nodes=[...ed.querySelectorAll('p,div')].filter(n=>(n.textContent||'').trim()===markerText);
-    const marker=nodes[0];if(!marker)return false;
-    selectNodeText(marker);
-    let dispatched=false;
-    try{const dt=new DataTransfer();dt.items.add(file);const ev=new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true});dispatched=marker.dispatchEvent(ev)===false||ev.defaultPrevented}catch{}
-    await sleep(1200);
-    if((marker.textContent||'').trim()===markerText){
-      try{const dataUrl=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file)});selectNodeText(marker);document.execCommand('insertHTML',false,`<img src="${dataUrl}" alt="">`);marker.remove();ed.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertFromPaste'}));await sleep(600);return true}catch{return dispatched}
+  function mount() {
+    const editor = findEditor();
+    if (!editor) return;
+    const anchor = chooseAnchor(editor);
+    let host = document.getElementById(HOST_ID);
+    if (!host) {
+      buildHost(anchor);
+      return;
     }
-    return true;
-  }
-
-  async function runPon(){
-    const src=q('#text').value||'';if(!src.trim()){toast('原稿を貼ってね');return}
-    const ed=await waitEditor();if(!ed){toast('本文エディタが見つからない');return}
-    const parsed=parseSource(src);
-    if(parsed.localMax>selectedFiles.length){toast(`挿絵${parsed.localMax}まで指定あり。画像は${selectedFiles.length}枚だけ`);return}
-    q('#status').textContent='本文を入れています…';
-    replaceEditorHtml(ed,parsed.html);await sleep(700);
-    let done=0,fail=0;
-    for(let i=1;i<=parsed.localMax;i++){
-      q('#status').textContent=`挿絵 ${i}/${parsed.localMax} を挿入中…`;
-      const ok=await pasteImageAtMarker(ed,`__MUMEI_IMG_LOCAL_${i}__`,selectedFiles[i-1]);ok?done++:fail++;
+    if (!host.isConnected || host.previousElementSibling !== anchor) {
+      try { anchor.insertAdjacentElement('afterend', host); } catch {}
     }
-    for(let i=0;i<parsed.urls.length;i++){
-      q('#status').textContent=`URL挿絵 ${i+1}/${parsed.urls.length} を挿入中…`;
-      try{const f=await urlToFile(parsed.urls[i],i);const ok=await pasteImageAtMarker(ed,`__MUMEI_IMG_URL_${i}__`,f);ok?done++:fail++}catch{fail++}
-    }
-    q('#status').textContent=`完了：本文＋挿絵 ${done}枚${fail?` / 失敗 ${fail}枚`:''}`;
-    toast(fail?'⚠️ 本文完了。挿絵に失敗あり':'✅ 本文＋見出し＋挿絵までポン出し完了',4000);
   }
 
-  async function restoreBackup(){const ed=await waitEditor();if(!ed){toast('本文エディタが見つからない');return}const b=getBackup();if(!b){toast('バックアップなし');return}const r=document.createRange();r.selectNodeContents(ed);const s=getSelection();s.removeAllRanges();s.addRange(r);ed.focus();let ok=false;try{ok=document.execCommand('insertHTML',false,b.html)}catch{}if(!ok){ed.innerHTML=b.html;ed.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}))}toast('↩️ 元本文へ戻した')}
+  let ticking = false;
+  const scheduleMount = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; mount(); });
+  };
 
-  function watchdog(){
-    if(!document.getElementById(HOST_ID)) mountHost();
-    setTimeout(watchdog,1200);
-  }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',mountHost,{once:true}); else mountHost();
-  setTimeout(watchdog,1400);
+  scheduleMount();
+  const mo = new MutationObserver(scheduleMount);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  setInterval(scheduleMount, 2000);
 })();
