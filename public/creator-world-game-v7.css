@@ -1,0 +1,46 @@
+/* v7 — static-art cinematic direction. Participant images stay static; only camera/UI layers move. */
+.g7-cinematic{position:absolute!important;z-index:110!important;inset:0!important;overflow:hidden!important;display:block!important;padding:0!important;text-align:left!important;background:#02050b!important;color:#fff!important}
+.g7-filmbar{position:absolute;z-index:12;left:0;right:0;height:8%;background:#010204}.g7-filmbar.top{top:0}.g7-filmbar.bottom{bottom:0}
+.g7-cinema-host,.g7-versus-host{position:absolute;z-index:2;background-image:linear-gradient(90deg,rgba(3,6,12,.04),rgba(3,6,12,.18)),var(--g6-mumei);background-repeat:no-repeat;background-size:cover;background-position:center 34%;filter:saturate(1.08) contrast(1.05)}
+.g7-cinema-host{left:-3%;top:4%;width:64%;height:94%;clip-path:polygon(0 0,100% 0,82% 100%,0 100%);animation:g7HostCamera 1.15s cubic-bezier(.18,.78,.18,1) both}
+.g7-cinema-aura{position:absolute;z-index:3;inset:0;pointer-events:none;background:radial-gradient(circle at 61% 48%,rgba(116,226,255,.38),transparent 19%),linear-gradient(105deg,transparent 37%,rgba(4,8,16,.16) 48%,rgba(2,5,11,.93) 70%)}
+.g7-cinema-streaks{position:absolute;z-index:5;inset:-30%;background:repeating-linear-gradient(115deg,transparent 0 38px,rgba(121,229,255,.12) 39px 41px,transparent 42px 74px);transform:translateX(30%);animation:g7Streak 1.05s ease-out both}
+.g7-cinema-copy{position:absolute;z-index:8;right:6%;top:31%;width:45%;display:grid;gap:7px;text-align:right;text-shadow:0 3px 22px #000}.g7-cinema-copy small{color:#a8edff;font-size:9px;font-weight:950;letter-spacing:.2em}.g7-cinema-copy strong{font-family:Georgia,serif;font-size:clamp(34px,8vw,72px);line-height:.9;letter-spacing:.05em}.g7-cinema-copy span{color:#ffe7a2;font-size:15px;font-weight:950;letter-spacing:.08em}
+.g5-command .g7-mode-title:before{content:"COMMAND"}.g5-tap .g7-mode-title:before{content:"TAP RUSH"}.g5-puzzle .g7-mode-title:before{content:"ARCANE PUZZLE"}.g5-shooter .g7-mode-title:before{content:"STAR SHOOTER"}
+.g5-command .g7-cinema-aura{background:radial-gradient(circle at 62% 45%,rgba(67,204,255,.45),transparent 18%),linear-gradient(105deg,transparent 36%,rgba(0,31,58,.26) 51%,rgba(2,6,13,.96) 72%)}
+.g5-tap .g7-cinema-aura{background:radial-gradient(circle at 65% 44%,rgba(255,55,220,.43),transparent 19%),linear-gradient(105deg,transparent 36%,rgba(77,4,82,.24) 50%,rgba(9,2,19,.96) 72%)}
+.g5-puzzle .g7-cinema-aura{background:radial-gradient(circle at 64% 45%,rgba(186,116,255,.43),transparent 19%),linear-gradient(105deg,transparent 36%,rgba(68,36,111,.2) 50%,rgba(7,4,17,.96) 72%)}
+.g5-shooter .g7-cinema-aura{background:radial-gradient(circle at 65% 43%,rgba(66,217,255,.4),transparent 17%),linear-gradient(105deg,transparent 36%,rgba(8,70,116,.22) 50%,rgba(1,6,17,.97) 72%)}
+.g7-versus-host{left:-8%;top:8%;width:53%;height:84%;clip-path:polygon(0 0,100% 7%,84% 100%,0 100%);animation:g7VsLeft 1.5s ease-out both}
+.g7-versus-portal{position:absolute;right:-6%;top:8%;width:57%;height:84%;clip-path:polygon(16% 7%,100% 0,100% 100%,0 100%);background:radial-gradient(circle at 52% 45%,rgba(255,90,121,.27),transparent 21%),radial-gradient(circle at 58% 50%,rgba(119,89,255,.26),transparent 38%),linear-gradient(135deg,#170714,#050913 70%);animation:g7VsRight 1.5s ease-out both}
+.g7-versus-portal:before,.g7-versus-portal:after{content:"";position:absolute;left:50%;top:50%;border:2px solid rgba(255,138,174,.58);border-radius:50%;transform:translate(-50%,-50%)}.g7-versus-portal:before{width:42%;aspect-ratio:1;box-shadow:0 0 35px rgba(255,88,156,.36)}.g7-versus-portal:after{width:67%;aspect-ratio:1;border-style:dashed;animation:g7Spin 5s linear infinite}
+.g7-vs-names{position:absolute;z-index:8;inset:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:0 6%;text-align:center;text-shadow:0 3px 20px #000}.g7-vs-names span{font-size:clamp(13px,3vw,25px);font-weight:950}.g7-vs-names span:first-child{text-align:right;color:#bcefff}.g7-vs-names span:last-child{text-align:left;color:#ffc0ca}.g7-vs-names strong{font-family:Georgia,serif;font-size:clamp(48px,13vw,104px);color:#ffe8a7;text-shadow:0 0 18px #ff8d58,0 0 55px rgba(255,87,80,.65);animation:g7VsPunch .75s cubic-bezier(.2,1.35,.35,1) both}
+.g7-vs-flash{position:absolute;z-index:7;left:50%;top:0;width:5px;height:100%;background:#fff;box-shadow:0 0 22px #fff,0 0 65px #6ee6ff;transform:skewX(-11deg);animation:g7Flash 1.35s ease-out both}
+
+/* Trial uses the two face references as portraits only. Original costumes/backgrounds are not reused. */
+.g5-tap:has(.g5-demo-backdrop) .g5-accuracy{min-width:128px;padding-left:58px;min-height:52px;justify-content:center}.g5-tap:has(.g5-demo-backdrop) .g5-accuracy:before{content:"";position:absolute;left:0;top:0;width:48px;height:48px;border:2px solid #df78ff;border-radius:50%;background-image:linear-gradient(rgba(3,6,12,.04),rgba(3,6,12,.3)),var(--g6-mumei);background-size:cover;background-position:center;box-shadow:0 0 22px rgba(229,75,255,.45)}
+.g5-shooter:has(.g5-demo-backdrop) .g5-pilot-shield{position:relative;padding-left:55px;min-height:50px}.g5-shooter:has(.g5-demo-backdrop) .g5-pilot-shield:before{content:"";position:absolute;left:0;top:0;width:46px;height:46px;border:2px solid #6ce7ff;border-radius:50%;background-image:linear-gradient(rgba(3,6,12,.04),rgba(3,6,12,.3)),var(--g6-mumei);background-size:cover;background-position:center;box-shadow:0 0 22px rgba(79,218,255,.42)}
+.g5-tap:has(.g5-demo-backdrop) .g5-demo-backdrop,.g5-shooter:has(.g5-demo-backdrop) .g5-demo-backdrop{background-image:linear-gradient(180deg,rgba(3,7,13,.08),rgba(3,7,13,.57)),var(--g6-chibi)!important;background-size:cover!important;background-position:center!important}
+.g5-shooter:has(.g5-demo-backdrop) .g4-boss-hud strong{font-size:0}.g5-shooter:has(.g5-demo-backdrop) .g4-boss-hud strong:after{content:"ちびS";font-size:12px;color:#ffc2cc}
+
+/* Distinct illustrated atmosphere for the four playable scenes. */
+.g5-command{background:radial-gradient(circle at 50% 31%,rgba(54,141,205,.34),transparent 24%),radial-gradient(circle at 14% 70%,rgba(26,103,173,.22),transparent 31%),linear-gradient(180deg,#06101d,#070912 52%,#02050a)!important}
+.g5-tap{background:radial-gradient(circle at 50% 44%,rgba(242,43,255,.24),transparent 27%),radial-gradient(circle at 12% 74%,rgba(70,49,255,.22),transparent 29%),linear-gradient(180deg,#11051e,#080815 55%,#03040a)!important}
+.g5-puzzle{background:radial-gradient(circle at 50% 32%,rgba(153,97,255,.27),transparent 26%),radial-gradient(circle at 83% 67%,rgba(255,171,64,.13),transparent 28%),linear-gradient(180deg,#100b21,#080b18 54%,#03050b)!important}
+.g5-shooter{background:radial-gradient(circle at 50% 37%,rgba(34,151,233,.26),transparent 25%),radial-gradient(circle at 84% 18%,rgba(120,72,255,.2),transparent 25%),linear-gradient(180deg,#02091a,#050b16 55%,#01040b)!important}
+.g5-command .g4-command-stage,.g5-puzzle .g4-puzzle-duel{filter:drop-shadow(0 20px 32px rgba(0,0,0,.42))}
+.g5-tap .g4-tap-field,.g5-shooter .g4-shoot-field{box-shadow:inset 0 0 80px rgba(0,0,0,.52),inset 0 0 0 1px rgba(143,222,255,.08)}
+
+/* Result is also a game scene, not a plain modal. */
+.g4-result:before{content:"";position:absolute;left:5%;bottom:6%;width:112px;height:112px;border:2px solid rgba(255,229,141,.55);border-radius:50%;background-image:linear-gradient(180deg,rgba(3,6,12,.02),rgba(3,6,12,.32)),var(--g6-mumei);background-size:cover;background-position:center;box-shadow:0 0 34px rgba(255,203,91,.28);opacity:.92}.g4-result>*{position:relative;z-index:2}
+
+@keyframes g7HostCamera{from{transform:scale(1.18) translate3d(-4%,1%,0);filter:saturate(.8) brightness(.7)}to{transform:scale(1.04) translate3d(1%,0,0);filter:saturate(1.12) brightness(1.03)}}
+@keyframes g7Streak{from{opacity:0;transform:translateX(38%)}to{opacity:1;transform:translateX(-4%)}}
+@keyframes g7VsLeft{from{transform:translateX(-18%) scale(1.06);opacity:.35}to{transform:none;opacity:1}}
+@keyframes g7VsRight{from{transform:translateX(18%) scale(1.08);opacity:.3}to{transform:none;opacity:1}}
+@keyframes g7VsPunch{0%{opacity:0;transform:scale(2.1) rotate(-9deg)}65%{opacity:1;transform:scale(.88) rotate(2deg)}100%{transform:scale(1)}}
+@keyframes g7Flash{0%{opacity:0;transform:translateX(-50%) skewX(-11deg) scaleX(7)}28%{opacity:1}100%{opacity:.35;transform:translateX(-50%) skewX(-11deg) scaleX(1)}}
+@keyframes g7Spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+@media(max-width:560px){.g7-cinema-host{width:76%;left:-12%}.g7-cinema-copy{right:5%;width:52%;top:34%}.g7-cinema-copy strong{font-size:32px}.g7-cinema-copy span{font-size:12px}.g7-vs-names{grid-template-columns:1fr 54px 1fr;padding:0 4%;gap:5px}.g7-vs-names strong{font-size:45px}.g7-vs-names span{font-size:11px}.g4-result:before{width:76px;height:76px;left:3%;bottom:5%}}
+@media(prefers-reduced-motion:reduce){.g7-cinema-host,.g7-cinema-streaks,.g7-versus-host,.g7-versus-portal,.g7-vs-names strong,.g7-vs-flash,.g7-versus-portal:after{animation:none!important}}
