@@ -43,10 +43,11 @@ export function MatchBattle(props: GameSessionProps) {
   const [burst, setBurst] = useState(false);
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<GameResult | null>(null);
+  const [guide, setGuide] = useState(true);
   const refs = useRef({ player: 100, enemy: 100, shield: 0, score: 0, ended: false });
   const drag = useRef<Drag | null>(null);
   const dragged = useRef(false);
-  const running = phase === "live" && !paused && !outcome;
+  const running = phase === "live" && !paused && !outcome && !guide;
   const active = running && !busy;
 
   function conclude(player = refs.current.player, enemy = refs.current.enemy) {
@@ -146,25 +147,37 @@ export function MatchBattle(props: GameSessionProps) {
     refs.current = { player: 100, enemy: 100, shield: 0, score: 0, ended: false };
     setBoard(cleanBoard()); setSelected(null); setScore(0); setTime(SECONDS); setChain(0);
     setPlayerHp(100); setEnemyHp(100); setShield(0); setThreat(3); setSkill(0);
-    setFlash(""); setBurst(false); setBusy(false); setOutcome(null); restartPrelude();
+    setFlash(""); setBurst(false); setBusy(false); setOutcome(null); setGuide(true); restartPrelude();
   }
 
   return (
     <div className={`g4-game g4-puzzle g5-puzzle ${burst ? "is-burst" : ""}`}>
+      <style>{`
+        .g4-puzzle-guide{position:absolute;z-index:80;inset:60px 10px 12px;display:grid;place-items:center;padding:14px;background:rgba(2,5,12,.86);backdrop-filter:blur(14px)}
+        .g4-puzzle-guide>section{width:min(430px,100%);border:1px solid #7d68d8;border-radius:22px;background:linear-gradient(180deg,#17102a,#090d18);padding:18px;box-shadow:0 22px 70px #000;color:#fff}
+        .g4-puzzle-guide small{color:#bcaeff;font-weight:950;letter-spacing:.14em}.g4-puzzle-guide h3{font-size:24px;margin:5px 0 12px}
+        .g4-puzzle-guide ol{display:grid;gap:8px;padding:0;margin:0;list-style:none;counter-reset:step}.g4-puzzle-guide li{counter-increment:step;display:grid;grid-template-columns:32px 1fr;gap:8px;align-items:center;border:1px solid #30284e;border-radius:12px;background:#0d1220;padding:9px}
+        .g4-puzzle-guide li:before{content:counter(step);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#725de0;color:#fff;font-weight:950}.g4-puzzle-guide li b{display:block;color:#fff}.g4-puzzle-guide li span{color:#9caac0;font-size:11px}
+        .g4-puzzle-guide button{width:100%;min-height:48px;margin-top:13px;border:0;border-radius:12px;background:linear-gradient(90deg,#745df0,#c05df0);color:#fff;font-weight:950;font-size:15px}
+        .g4-puzzle-rulebar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:7px 10px;background:#080d17;border-bottom:1px solid #2e3150}.g4-puzzle-rulebar span{display:grid;place-items:center;min-height:38px;padding:4px;border:1px solid #2d3950;border-radius:8px;color:#aab7c8;font-size:8px;text-align:center}.g4-puzzle-rulebar b{display:block;color:#f4f7ff;font-size:10px}
+        @media(max-width:480px){.g4-puzzle-guide{inset:54px 6px 8px}.g4-puzzle-guide>section{padding:14px}.g4-puzzle-guide h3{font-size:21px}.g4-puzzle-rulebar{padding:5px;gap:3px}.g4-puzzle-rulebar span{font-size:7px}.g4-puzzle-rulebar b{font-size:9px}}
+      `}</style>
       <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
       <PauseOverlay paused={paused} onResume={togglePause} />
       <GameTopControls paused={paused} onPause={togglePause} />
+      {phase === "live" && guide && !outcome ? <div className="g4-puzzle-guide"><section><small>ARCANE PUZZLE · HOW TO PLAY</small><h3>3つ以上そろえて攻撃</h3><ol><li><div><b>隣のルーンと入れ替える</b><span>タップ2回、または上下左右へスワイプ。</span></div></li><li><div><b>同じ記号を縦・横3個以上</b><span>そろったルーンが消えて相手へダメージ。</span></div></li><li><div><b>連鎖と◈が重要</b><span>連鎖でSKILL加速。◈を消すとSHIELDを獲得。</span></div></li><li><div><b>3手ごとに相手が攻撃</b><span>SKILL 100%でARCANE NOVA。45秒でHPが多い方が勝利。</span></div></li></ol><button onClick={() => setGuide(false)}>わかった · ゲーム開始</button></section></div> : null}
       <div className="g4-puzzle-top"><span>TIME <b>{time.toFixed(1)}</b></span><strong>ARCANE PUZZLE</strong><span>CHAIN <b>×{chain}</b></span></div>
+      <div className="g4-puzzle-rulebar"><span><b>① SWAP</b>隣と交換</span><span><b>② MATCH 3+</b>縦横3個以上</span><span><b>◈ SHIELD</b>防御をためる</span><span><b>100% NOVA</b>必殺技</span></div>
       <div className="g4-puzzle-duel">
         <section><GameCard src={props.playerArt} name={props.playerName} side="player" compact /><HpBar value={playerHp} /><div className="g5-shield"><span>SHIELD</span><i><b style={{ width: `${shield * 2}%` }} /></i><strong>{shield}</strong></div></section>
         <div className="g4-arcane-core"><i /><b>{flash || "MATCH 3"}</b><small>SCORE {score.toLocaleString()}</small><em>RIVAL ATTACK {threat}</em></div>
         <section><GameCard src={props.enemyArt} name={props.enemyName} side="enemy" compact /><HpBar value={enemyHp} enemy /></section>
       </div>
-      <div className="g4-rune-board" aria-label="6×6ルーン盤面">
+      <div className="g4-rune-board" aria-label="6×6ルーン盤面。同じ記号を縦または横に3個以上そろえる">
         {board.map((cell, index) => <button key={cell.id} className={selected === index ? "selected" : ""} data-rune={runes.indexOf(cell.rune)} onPointerDown={(event) => dragStart(event, index)} onPointerUp={dragEnd} onClick={() => choose(index)} disabled={!active}><span>{cell.rune}</span></button>)}
       </div>
       <div className="g4-skill-row"><div><span>SKILL GAUGE</span><i><b style={{ width: `${skill}%` }} /></i><strong>{skill}%</strong></div><button className={skill >= 100 ? "ready" : ""} disabled={skill < 100 || !active} onClick={ultimate}>✦ ARCANE NOVA</button></div>
-      <p className="g4-help">タップ交換 / スワイプ対応。◈でSHIELD、連鎖でSKILLを加速。3手ごとに相手が攻撃。</p>
+      <p className="g4-help">隣のルーンを交換 → 同じ記号を縦/横3個以上そろえる。◈でSHIELD、連鎖でSKILL加速。3手ごとに相手が攻撃。</p>
       {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} /> : null}
     </div>
   );
