@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { balanceRatio, vibrate } from "./game-card-engine";
 import {
+  GameAtmosphere,
   GameCard,
   GameResultOverlay,
   GameTopControls,
   HpBar,
   PauseOverlay,
   PreludeOverlay,
+  SkillCutIn,
   resultExp,
   useBattlePrelude,
   type GameResult,
@@ -152,6 +154,7 @@ export function MatchBattle(props: GameSessionProps) {
 
   return (
     <div className={`g4-game g4-puzzle g5-puzzle ${burst ? "is-burst" : ""}`}>
+      <GameAtmosphere mode="puzzle" playerArt={props.playerArt} enemyArt={props.enemyArt} />
       <style>{`
         .g4-puzzle-guide{position:absolute;z-index:80;inset:60px 10px 12px;display:grid;place-items:center;padding:14px;background:rgba(2,5,12,.86);backdrop-filter:blur(14px)}
         .g4-puzzle-guide>section{width:min(430px,100%);border:1px solid #7d68d8;border-radius:22px;background:linear-gradient(180deg,#17102a,#090d18);padding:18px;box-shadow:0 22px 70px #000;color:#fff}
@@ -162,9 +165,10 @@ export function MatchBattle(props: GameSessionProps) {
         .g4-puzzle-rulebar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:7px 10px;background:#080d17;border-bottom:1px solid #2e3150}.g4-puzzle-rulebar span{display:grid;place-items:center;min-height:38px;padding:4px;border:1px solid #2d3950;border-radius:8px;color:#aab7c8;font-size:8px;text-align:center}.g4-puzzle-rulebar b{display:block;color:#f4f7ff;font-size:10px}
         @media(max-width:480px){.g4-puzzle-guide{inset:54px 6px 8px}.g4-puzzle-guide>section{padding:14px}.g4-puzzle-guide h3{font-size:21px}.g4-puzzle-rulebar{padding:5px;gap:3px}.g4-puzzle-rulebar span{font-size:7px}.g4-puzzle-rulebar b{font-size:9px}}
       `}</style>
-      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
+      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} playerArt={props.playerArt} enemyArt={props.enemyArt} mode="puzzle" />
       <PauseOverlay paused={paused} onResume={togglePause} />
       <GameTopControls paused={paused} onPause={togglePause} />
+      <SkillCutIn active={burst && flash.startsWith("ARCANE NOVA")} art={props.playerArt} title="ARCANE NOVA" kicker="RUNE CHAIN MAX" tone="violet" />
       {phase === "live" && guide && !outcome ? <div className="g4-puzzle-guide"><section><small>ARCANE PUZZLE · HOW TO PLAY</small><h3>3つ以上そろえて攻撃</h3><ol><li><div><b>隣のルーンと入れ替える</b><span>タップ2回、または上下左右へスワイプ。</span></div></li><li><div><b>同じ記号を縦・横3個以上</b><span>そろったルーンが消えて相手へダメージ。</span></div></li><li><div><b>連鎖と◈が重要</b><span>連鎖でSKILL加速。◈を消すとSHIELDを獲得。</span></div></li><li><div><b>3手ごとに相手が攻撃</b><span>SKILL 100%でARCANE NOVA。45秒でHPが多い方が勝利。</span></div></li></ol><button onClick={() => setGuide(false)}>わかった · ゲーム開始</button></section></div> : null}
       <div className="g4-puzzle-top"><span>TIME <b>{time.toFixed(1)}</b></span><strong>ARCANE PUZZLE</strong><span>CHAIN <b>×{chain}</b></span></div>
       <div className="g4-puzzle-rulebar"><span><b>① SWAP</b>隣と交換</span><span><b>② MATCH 3+</b>縦横3個以上</span><span><b>◈ SHIELD</b>防御をためる</span><span><b>100% NOVA</b>必殺技</span></div>
@@ -178,7 +182,7 @@ export function MatchBattle(props: GameSessionProps) {
       </div>
       <div className="g4-skill-row"><div><span>SKILL GAUGE</span><i><b style={{ width: `${skill}%` }} /></i><strong>{skill}%</strong></div><button className={skill >= 100 ? "ready" : ""} disabled={skill < 100 || !active} onClick={ultimate}>✦ ARCANE NOVA</button></div>
       <p className="g4-help">隣のルーンを交換 → 同じ記号を縦/横3個以上そろえる。◈でSHIELD、連鎖でSKILL加速。3手ごとに相手が攻撃。</p>
-      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} /> : null}
+      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} playerArt={props.playerArt} enemyArt={props.enemyArt} playerName={props.playerName} enemyName={props.enemyName} mode="puzzle" /> : null}
     </div>
   );
 }

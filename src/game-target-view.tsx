@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { balanceRatio, vibrate } from "./game-card-engine";
 import {
+  GameAtmosphere,
   GameResultOverlay,
   GameTopControls,
   HpBar,
   PauseOverlay,
   PreludeOverlay,
+  SkillCutIn,
   resultExp,
   useBattlePrelude,
   type GameResult,
@@ -142,9 +144,11 @@ export function TargetRushBattle(props: GameSessionProps) {
   const accuracy = shots ? Math.round((landed / shots) * 100) : 100;
   return (
     <div className={`g4-game g4-shooter g5-shooter ${nova ? "is-nova" : ""}`}>
-      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
+      <GameAtmosphere mode="shoot" playerArt={props.playerArt} enemyArt={props.enemyArt} />
+      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} playerArt={props.playerArt} enemyArt={props.enemyArt} mode="shoot" />
       <PauseOverlay paused={paused} onResume={togglePause} />
       <GameTopControls paused={paused} onPause={togglePause} />
+      <SkillCutIn active={nova} art={props.playerArt} title="NOVA BURST" kicker="LOCK-ON COMPLETE" tone="cyan" />
       <div className="g4-shooter-top"><span>SCORE <b>{score.toLocaleString()}</b></span><strong>STAR SHOOTER</strong><span>COMBO <b>×{combo}</b></span></div>
       <div className="g4-boss-hud"><div><small>BOSS CARD · ACC {accuracy}%</small><strong>{props.enemyName}</strong></div><HpBar value={bossHp} enemy /></div>
       <div className="g5-pilot-shield"><small>PILOT SHIELD</small><i><b style={{ width: `${shield}%` }} /></i><strong>{shield}</strong></div>
@@ -158,7 +162,7 @@ export function TargetRushBattle(props: GameSessionProps) {
       </div>
       <div className="g4-shoot-controls"><span>TIME <b>{time.toFixed(2)}</b></span><div><small>ULTIMATE</small><i><b style={{ width: `${ultimate}%` }} /></i></div><button className={ultimate >= 100 ? "ready" : ""} disabled={ultimate < 100 || !active} onClick={fireUltimate}>✦ NOVA</button></div>
       <p className="g4-help">流れる照準で星を撃つ。小型/高速ターゲットはCRITICAL。逃すとSHIELDが減少。</p>
-      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} /> : null}
+      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} playerArt={props.playerArt} enemyArt={props.enemyArt} playerName={props.playerName} enemyName={props.enemyName} mode="shoot" /> : null}
     </div>
   );
 }

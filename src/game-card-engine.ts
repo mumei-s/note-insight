@@ -53,7 +53,9 @@ export function modePower(stats: CardStats, mode: GameMode) {
   if (mode === "choice") return stats.power * 0.44 + stats.guard * 0.34 + stats.focus * 0.22;
   if (mode === "tap") return stats.speed * 0.58 + stats.focus * 0.42;
   if (mode === "puzzle") return stats.focus * 0.56 + stats.guard * 0.44;
-  return stats.speed * 0.44 + stats.power * 0.34 + stats.focus * 0.22;
+  if (mode === "shoot") return stats.speed * 0.44 + stats.power * 0.34 + stats.focus * 0.22;
+  if (mode === "quest") return stats.power * 0.4 + stats.guard * 0.34 + stats.focus * 0.26;
+  return stats.speed * 0.5 + stats.focus * 0.3 + stats.guard * 0.2;
 }
 
 export function balanceRatio(player: CardStats, enemy: CardStats, mode: GameMode) {

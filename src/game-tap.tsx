@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { balanceRatio, vibrate } from "./game-card-engine";
 import {
+  GameAtmosphere,
   GameResultOverlay,
   GameTopControls,
   HpBar,
   PauseOverlay,
   PreludeOverlay,
+  SkillCutIn,
   resultExp,
   useBattlePrelude,
   type GameResult,
@@ -45,6 +47,7 @@ export function TapRushBattle(props: GameSessionProps) {
   const [hits, setHits] = useState(0);
   const [attempts, setAttempts] = useState(0);
   const [lastGrade, setLastGrade] = useState<Grade | null>(null);
+  const [feverCut, setFeverCut] = useState(false);
   const refs = useRef({ hp: 100, sync: 100, score: 0, combo: 0, hits: 0, attempts: 0, ended: false });
   const targetRef = useRef(target);
   const active = phase === "live" && !paused && !outcome;
@@ -115,6 +118,10 @@ export function TapRushBattle(props: GameSessionProps) {
     setEnemyHp(nextHp); setSync(nextSync); setScore(nextScore); setCombo(nextCombo);
     setHits(refs.current.hits); setAttempts(refs.current.attempts); setLastGrade(grade);
     setBursts((value) => [...value.slice(-5), burst]);
+    if (nextCombo === 10) {
+      setFeverCut(true);
+      window.setTimeout(() => setFeverCut(false), 760);
+    }
     const nextTarget = newTarget(props.playerStats.speed, nextCombo, current.serial + 1);
     targetRef.current = nextTarget;
     setTarget(nextTarget);
@@ -131,16 +138,18 @@ export function TapRushBattle(props: GameSessionProps) {
     const nextTarget = newTarget(props.playerStats.speed, 0);
     targetRef.current = nextTarget;
     setTarget(nextTarget); setBursts([]); setOutcome(null);
-    setShake(false); setHits(0); setAttempts(0); setLastGrade(null); restartPrelude();
+    setShake(false); setHits(0); setAttempts(0); setLastGrade(null); setFeverCut(false); restartPrelude();
   }
 
   const gauge = Math.min(100, combo * 10);
   const accuracy = attempts ? Math.round((hits / attempts) * 100) : 100;
   return (
     <div className={`g4-game g4-tap g5-tap ${fever ? "is-fever" : ""} ${shake ? "is-hit" : ""}`}>
-      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
+      <GameAtmosphere mode="tap" playerArt={props.playerArt} enemyArt={props.enemyArt} />
+      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} playerArt={props.playerArt} enemyArt={props.enemyArt} mode="tap" />
       <PauseOverlay paused={paused} onResume={togglePause} />
       <GameTopControls paused={paused} onPause={togglePause} />
+      <SkillCutIn active={feverCut} art={props.playerArt} title="FEVER DRIVE" kicker="RHYTHM LINK ×10" tone="violet" />
       <div className="g4-tap-top"><span><small>TIME</small><b>{time.toFixed(2)}</b></span><strong>TAP RUSH</strong><span><small>SCORE</small><b>{score.toLocaleString()}</b></span></div>
       <div className="g5-dual-meter"><div><small>SYNC</small><HpBar value={sync} /></div><div><small>RIVAL CORE</small><HpBar value={enemyHp} enemy /></div></div>
       <div className="g4-tap-field" onPointerDown={miss}>
@@ -154,7 +163,7 @@ export function TapRushBattle(props: GameSessionProps) {
       </div>
       <div className="g4-fever-meter"><span>FEVER GAUGE</span><i><b style={{ width: `${gauge}%` }} /></i><strong>{fever ? "MAX" : `${Math.round(gauge)}%`}</strong></div>
       <p className="g4-help">輪が縮むほど高評価。PERFECTをつなぎ、FEVER中にRIVAL COREを破壊。</p>
-      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} /> : null}
+      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} playerArt={props.playerArt} enemyArt={props.enemyArt} playerName={props.playerName} enemyName={props.enemyName} mode="tap" /> : null}
     </div>
   );
 }

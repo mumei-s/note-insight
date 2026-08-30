@@ -1,4 +1,4 @@
-export type GameMode = "choice" | "tap" | "puzzle" | "shoot";
+export type GameMode = "choice" | "tap" | "puzzle" | "shoot" | "quest" | "race";
 export type BattleResult = "win" | "draw" | "lose";
 
 export type GameCard = { position: number; url: string | null };

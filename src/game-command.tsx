@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { balanceRatio, vibrate } from "./game-card-engine";
 import {
   CardStatsStrip,
+  GameAtmosphere,
   GameCard,
   GameResultOverlay,
   GameTopControls,
   HpBar,
   PauseOverlay,
   PreludeOverlay,
+  SkillCutIn,
   resultExp,
   useBattlePrelude,
   type GameResult,
@@ -135,9 +137,11 @@ export function CommandBattle(props: GameSessionProps) {
 
   return (
     <div className={`g4-game g4-command g5-command ${impact ? `impact-${impact}` : ""}`}>
-      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} />
+      <GameAtmosphere mode="choice" playerArt={props.playerArt} enemyArt={props.enemyArt} />
+      <PreludeOverlay phase={phase} playerName={props.playerName} enemyName={props.enemyName} playerArt={props.playerArt} enemyArt={props.enemyArt} mode="choice" />
       <PauseOverlay paused={paused} onResume={togglePause} />
       <GameTopControls paused={paused} onPause={togglePause} />
+      <SkillCutIn active={Boolean(impact)} art={props.playerArt} title={impact ? impact.replaceAll("-", " ").toUpperCase() : props.playerStats.signature} tone="gold" />
       <div className="g4-command-top"><span>ROUND <b>{Math.min(round, 7)}</b> / 7</span><strong>COMMAND</strong><span>SIGNATURE <b>{energy}%</b></span></div>
       <div className="g5-intent"><small>RIVAL INTENT</small><b>{actionLabel[intent.action]}</b><span className={`is-${intent.element}`}>{elements.find((x) => x.key === intent.element)?.icon} {intent.element.toUpperCase()}</span></div>
       <div className="g4-command-stage">
@@ -152,7 +156,7 @@ export function CommandBattle(props: GameSessionProps) {
         <button onClick={() => act("defend")} disabled={busy || paused || Boolean(outcome)}><b>⬡</b><span>GUARD</span><small>軽減・反撃</small></button>
         <button className={energy >= 100 ? "ready" : ""} onClick={() => act("skill")} disabled={busy || paused || energy < 100 || Boolean(outcome)}><b>✦</b><span>SIGNATURE</span><small>{energy >= 100 ? props.playerStats.signature : `${energy}%`}</small></button>
       </div>
-      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} /> : null}
+      {outcome ? <GameResultOverlay result={outcome} score={score} exp={resultExp(outcome, score)} onComplete={props.onComplete} onRetry={reset} ranked={props.ranked} playerArt={props.playerArt} enemyArt={props.enemyArt} playerName={props.playerName} enemyName={props.enemyName} mode="choice" /> : null}
     </div>
   );
 }

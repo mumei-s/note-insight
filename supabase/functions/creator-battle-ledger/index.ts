@@ -11,7 +11,7 @@ const CORS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store, max-age=0",
 };
-const modes = ["choice", "tap", "puzzle", "shoot"] as const;
+const modes = ["choice", "tap", "puzzle", "shoot", "quest", "race"] as const;
 const out = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: CORS });
 const publicUrl = (path: string | null | undefined) =>
@@ -83,6 +83,8 @@ function blankByGame() {
     tap: { wins: 0, draws: 0, losses: 0, games: 0, winRate: 0 },
     puzzle: { wins: 0, draws: 0, losses: 0, games: 0, winRate: 0 },
     shoot: { wins: 0, draws: 0, losses: 0, games: 0, winRate: 0 },
+    quest: { wins: 0, draws: 0, losses: 0, games: 0, winRate: 0 },
+    race: { wins: 0, draws: 0, losses: 0, games: 0, winRate: 0 },
   };
 }
 

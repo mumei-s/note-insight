@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CardStats } from "./game-card-engine";
 import { vibrate } from "./game-card-engine";
+import type { GameMode } from "./game-types";
 
 export type GameResult = "win" | "draw" | "lose";
 export type SaveState = "saving" | "saved" | "error" | "demo";
@@ -15,6 +16,15 @@ export type GameSessionProps = {
   enemyStats: CardStats;
   ranked: boolean;
   onComplete: (result: GameResult, score: number) => Promise<unknown>;
+};
+
+const openingTitles: Record<GameMode, string> = {
+  choice: "COMMAND",
+  tap: "TAP RUSH",
+  puzzle: "ARCANE PUZZLE",
+  shoot: "STAR SHOOTER",
+  quest: "CREATOR QUEST",
+  race: "STAR CIRCUIT",
 };
 
 export function useBattlePrelude() {
@@ -74,43 +84,74 @@ export function PreludeOverlay({
   phase,
   playerName,
   enemyName,
+  playerArt,
+  enemyArt,
+  mode = "choice",
 }: {
   phase: "start" | "versus" | "live";
   playerName: string;
   enemyName: string;
+  playerArt?: string | null;
+  enemyArt?: string | null;
+  mode?: GameMode;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [art, setArt] = useState({ player: "", enemy: "" });
+  const [art, setArt] = useState({ player: playerArt || "", enemy: enemyArt || "" });
   const displayPlayer = playerName === "TRIAL CREATOR" ? "無名S note" : playerName;
   const displayEnemy = enemyName === "TRAINING CORE" ? "ちびS" : enemyName;
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setArt(resolveOpeningArt(rootRef.current)));
+    const frame = window.requestAnimationFrame(() => {
+      const resolved = resolveOpeningArt(rootRef.current);
+      setArt({ player: playerArt || resolved.player, enemy: enemyArt || resolved.enemy });
+    });
     return () => window.cancelAnimationFrame(frame);
-  }, [playerName, enemyName]);
+  }, [playerName, enemyName, playerArt, enemyArt]);
 
   if (phase === "live") return null;
   if (phase === "start") {
-    return <div ref={rootRef} className="g4-prelude g8-opening is-start" aria-live="polite">
+    return <div ref={rootRef} className={`g4-prelude g8-opening g9-opening mode-${mode} is-start`} aria-live="polite">
       <div className="g8-opening-bg" aria-hidden="true" />
       <OpeningPortrait side="player" src={art.player} />
       <div className="g8-opening-copy">
         <small>CREATOR WORLD ORIGINAL</small>
-        <strong className="g8-mode-name" />
+        <strong className="g8-mode-name">{openingTitles[mode]}</strong>
         <b>{displayPlayer}</b>
         <span>ILLUSTRATION OPENING</span>
       </div>
       <div className="g8-opening-light" aria-hidden="true" />
+      <div className="g9-opening-particles" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
       <div className="g8-opening-progress" aria-hidden="true"><i /></div>
     </div>;
   }
-  return <div ref={rootRef} className="g4-prelude g8-opening is-versus" aria-live="polite">
+  return <div ref={rootRef} className={`g4-prelude g8-opening g9-opening mode-${mode} is-versus`} aria-live="polite">
     <div className="g8-opening-bg" aria-hidden="true" />
     <OpeningPortrait side="player" src={art.player} />
     <OpeningPortrait side="enemy" src={art.enemy} />
     <div className="g8-vs-copy"><span>{displayPlayer}</span><strong>VS</strong><span>{displayEnemy}</span></div>
     <div className="g8-vs-cut" aria-hidden="true" />
+    <div className="g9-opening-particles" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
     <div className="g8-opening-progress" aria-hidden="true"><i /></div>
+  </div>;
+}
+
+export function GameAtmosphere({ mode, playerArt, enemyArt }: { mode: GameMode; playerArt: string | null; enemyArt: string | null }) {
+  return <div className={`g9-atmosphere mode-${mode}`} aria-hidden="true">
+    <div className="g9-illustrated-depth player">{playerArt ? <img src={playerArt} alt="" /> : <span />}</div>
+    <div className="g9-illustrated-depth enemy">{enemyArt ? <img src={enemyArt} alt="" /> : <span />}</div>
+    <i className="g9-parallax-layer far" />
+    <i className="g9-parallax-layer near" />
+    <div className="g9-particles">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+    <div className="g9-light-sweep" />
+  </div>;
+}
+
+export function SkillCutIn({ active, art, title, kicker = "SPECIAL ARTS", tone = "cyan" }: { active: boolean; art: string | null; title: string; kicker?: string; tone?: "cyan" | "violet" | "gold" | "red" }) {
+  if (!active) return null;
+  return <div className={`g9-cut-in tone-${tone}`} aria-live="polite">
+    <div className={`g9-cut-portrait ${art ? "has-image" : "fallback"}`}>{art ? <img src={art} alt="" /> : <span />}</div>
+    <div className="g9-cut-copy"><small>{kicker}</small><strong>{title}</strong><span>CREATOR DRIVE</span></div>
+    <i className="g9-cut-flash" />
   </div>;
 }
 
@@ -182,6 +223,11 @@ export function GameResultOverlay({
   onComplete,
   onRetry,
   ranked = true,
+  playerArt = null,
+  enemyArt = null,
+  playerName = "CREATOR",
+  enemyName = "RIVAL",
+  mode = "choice",
 }: {
   result: GameResult;
   score: number;
@@ -189,6 +235,11 @@ export function GameResultOverlay({
   onComplete: (result: GameResult, score: number) => Promise<unknown>;
   onRetry: () => void;
   ranked?: boolean;
+  playerArt?: string | null;
+  enemyArt?: string | null;
+  playerName?: string;
+  enemyName?: string;
+  mode?: GameMode;
 }) {
   const [save, setSave] = useState<SaveState>(ranked ? "saving" : "demo");
   const started = useRef(false);
@@ -206,10 +257,15 @@ export function GameResultOverlay({
 
   const title = result === "win" ? "WIN" : result === "draw" ? "DRAW" : "LOSE";
   return (
-    <div className={`g4-result result-${result}`} role="status">
+    <div className={`g4-result g9-result mode-${mode} result-${result}`} role="status">
       <div className="g4-result-rays" />
+      <div className="g9-result-cast" aria-hidden="true">
+        <div className={`player ${playerArt ? "has-image" : "fallback"}`}>{playerArt ? <img src={playerArt} alt="" /> : <span />}</div>
+        <div className={`enemy ${enemyArt ? "has-image" : "fallback"}`}>{enemyArt ? <img src={enemyArt} alt="" /> : <span />}</div>
+      </div>
       <small>BATTLE RESULT</small>
       <strong>{title}</strong>
+      <div className="g9-result-names"><span>{playerName}</span><b>{openingTitles[mode]}</b><span>{enemyName}</span></div>
       <div className="g4-result-rewards">
         <span><small>SCORE</small><b>{Math.round(score).toLocaleString()}</b></span>
         <span><small>EXP</small><b>+{exp}</b></span>
