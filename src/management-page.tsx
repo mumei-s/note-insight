@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const OWNER_ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 const OWNER_KEY = "mumei-unified-owner-token";
 
 type Status = "pending" | "approved" | "active" | "rejected" | "revoked";
@@ -19,6 +20,19 @@ type Application = {
 
 const card = { border: "1px solid #29384b", borderRadius: 18, background: "linear-gradient(180deg,#101722,#0a1018)", padding: 18 } as const;
 const button = { minHeight: 40, borderRadius: 10, padding: "0 12px", fontWeight: 950, cursor: "pointer" } as const;
+
+async function ownerStatus() {
+  const token = localStorage.getItem(OWNER_KEY) || "";
+  if (!token) return false;
+  const response = await fetch(OWNER_ACCESS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Owner-Token": token },
+    body: JSON.stringify({ action: "status" }),
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  return Boolean(response.ok && payload?.authenticated);
+}
 
 async function call(action: string, extra: Record<string, unknown> = {}) {
   const response = await fetch(ACCESS, {
@@ -68,14 +82,35 @@ export function ManagementPage() {
       setItems(Array.isArray(payload.applications) ? payload.applications : []);
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "OWNER_REQUEST_FAILED";
-      if (/OWNER_LOGIN_REQUIRED|OWNER_/.test(code)) { window.location.hash = "owner"; return; }
+      if (code === "OWNER_LOGIN_REQUIRED") {
+        localStorage.removeItem(OWNER_KEY);
+        window.location.hash = "owner";
+        return;
+      }
       setError(code);
     } finally { setLoading(false); }
   }
 
   useEffect(() => {
-    if (!localStorage.getItem(OWNER_KEY)) { window.location.hash = "owner"; return; }
-    void load();
+    let live = true;
+    void (async () => {
+      setLoading(true);
+      try {
+        const authenticated = await ownerStatus();
+        if (!live) return;
+        if (!authenticated) {
+          localStorage.removeItem(OWNER_KEY);
+          window.location.hash = "owner";
+          return;
+        }
+        await load();
+      } catch {
+        if (!live) return;
+        localStorage.removeItem(OWNER_KEY);
+        window.location.hash = "owner";
+      }
+    })();
+    return () => { live = false; };
   }, []);
 
   async function action(app: Application, actionName: "owner-approve" | "owner-reissue" | "owner-reject" | "owner-revoke") {
@@ -96,10 +131,20 @@ export function ManagementPage() {
     catch { setMessage(`本人確認コード: ${code}`); }
   }
 
-  return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f5f8fb", padding: "22px 13px 70px" }}><main style={{ width: "min(1080px,100%)", margin: "0 auto" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><a href="#" style={{ color: "#8feaff", textDecoration: "none", fontWeight: 950 }}>← INSIGHT TOP</a><button onClick={() => { localStorage.removeItem(OWNER_KEY); window.location.hash = "owner"; }} style={{ ...button, border: "1px solid #3a4658", background: "transparent", color: "#a9b6c7" }}>管理ログアウト</button></div>
+  async function logout() {
+    const token = localStorage.getItem(OWNER_KEY) || "";
+    try {
+      await fetch(OWNER_ACCESS, { method: "POST", headers: { "Content-Type": "application/json", "X-Owner-Token": token }, body: JSON.stringify({ action: "logout" }), cache: "no-store" });
+    } catch { /* local logout still proceeds */ }
+    localStorage.removeItem(OWNER_KEY);
+    sessionStorage.removeItem("mumei-owner-insight-view");
+    window.location.hash = "owner";
+  }
 
-    <header style={{ padding: "42px 0 20px" }}><small style={{ color: "#ffcf69", fontWeight: 950, letterSpacing: ".14em" }}>INSIGHT SALES ADMIN</small><h1 style={{ fontSize: "clamp(38px,7vw,62px)", margin: "7px 0" }}>INSIGHT 管理ページ</h1><p style={{ color: "#94a3b7", lineHeight: 1.75, maxWidth: 760 }}>購入者の参加申請だけを管理します。承認すると本人確認パスコードを発行し、購入者がnote自己紹介欄で本人確認を完了すると「利用中」へ移行します。</p></header>
+  return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f5f8fb", padding: "22px 13px 70px" }}><main style={{ width: "min(1080px,100%)", margin: "0 auto" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}><a href="#owner-insight" style={{ color: "#8feaff", textDecoration: "none", fontWeight: 950 }}>← OWNER INSIGHTへ戻る</a><button onClick={() => void logout()} style={{ ...button, border: "1px solid #3a4658", background: "transparent", color: "#a9b6c7" }}>管理ログアウト</button></div>
+
+    <header style={{ padding: "42px 0 20px" }}><small style={{ color: "#ffcf69", fontWeight: 950, letterSpacing: ".14em" }}>INSIGHT SALES ADMIN / OWNER ONLY</small><h1 style={{ fontSize: "clamp(38px,7vw,62px)", margin: "7px 0" }}>INSIGHT 管理ページ</h1><p style={{ color: "#94a3b7", lineHeight: 1.75, maxWidth: 760 }}>ここはOWNER専用です。参加者INSIGHTから管理ページへの導線はありません。購入者の参加申請・承認・本人認証状態・利用停止だけを管理します。</p></header>
 
     {message ? <div style={{ ...card, marginBottom: 12, borderColor: "#426329", color: "#c8ff84" }}>{message}</div> : null}
     {error ? <div style={{ ...card, marginBottom: 12, borderColor: "#773f4a", color: "#ffadb8" }}>{error}</div> : null}
@@ -108,9 +153,9 @@ export function ManagementPage() {
       {[["承認待ち", counts.pending, "#ffcf69"],["本人認証待ち", counts.approved, "#8feaff"],["利用中", counts.active, "#9cffae"],["停止・却下", counts.inactive, "#ff9aa8"]].map(([label,n,color]) => <article key={String(label)} style={{ ...card, padding: "14px 8px", textAlign: "center" }}><small style={{ color: String(color), fontWeight: 900 }}>{label}</small><strong style={{ display: "block", fontSize: 30, marginTop: 3 }}>{Number(n)}</strong></article>)}
     </section>
 
-    <section style={{ ...card, padding: 14, marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}><div><strong>販売用固定URL</strong><div style={{ color: "#8da0b5", fontSize: 12, marginTop: 3 }}>https://mumei-s.github.io/note-insight/</div></div><div style={{ display: "flex", gap: 7 }}><a href="#dashboard" style={{ ...button, display: "inline-flex", alignItems: "center", textDecoration: "none", background: "#b6ff38", color: "#111600" }}>自分のINSIGHT</a><button onClick={() => void load()} style={{ ...button, border: "1px solid #395068", background: "#111c29", color: "#8feaff" }}>一覧更新</button></div></section>
+    <section style={{ ...card, padding: 14, marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}><div><strong>販売用固定URL</strong><div style={{ color: "#8da0b5", fontSize: 12, marginTop: 3 }}>https://mumei-s.github.io/note-insight/</div></div><button onClick={() => void load()} style={{ ...button, border: "1px solid #395068", background: "#111c29", color: "#8feaff" }}>申請一覧を更新</button></section>
 
-    {loading ? <section style={card}>申請を読み込んでいます…</section> : <section style={{ display: "grid", gap: 10 }}>
+    {loading ? <section style={card}>OWNERセッションと申請一覧を確認しています…</section> : <section style={{ display: "grid", gap: 10 }}>
       {items.map(app => <article key={app.id} style={{ ...card, padding: 15, display: "grid", gridTemplateColumns: "50px minmax(0,1fr) auto", gap: 12, alignItems: "center", borderColor: app.status === "pending" ? "#5a4d2c" : app.status === "approved" ? "#31576a" : app.status === "active" ? "#315b3b" : "#493139" }}>
         <Avatar app={app}/><div style={{ minWidth: 0 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><strong style={{ fontSize: 17 }}>{app.displayName || `@${app.noteId}`}</strong><span style={{ color: statusColor[app.status], fontSize: 11, fontWeight: 950 }}>{statusLabel[app.status]}</span></div><a href={`https://note.com/${app.noteId}`} target="_blank" rel="noreferrer" style={{ color: "#69ccff", textDecoration: "none", fontSize: 12 }}>@{app.noteId} ↗</a><div style={{ color: "#718399", fontSize: 11, marginTop: 5 }}>申請 {fmt(app.createdAt)}　承認 {fmt(app.approvedAt)}　本人認証 {fmt(app.verifiedAt)}</div>{app.status === "approved" && app.verificationCode ? <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 9, background: "#05090e", color: "#b6ff38", fontFamily: "monospace", fontWeight: 950, overflowWrap: "anywhere" }}>{app.verificationCode} <button onClick={() => void copyCode(app.verificationCode!)} style={{ marginLeft: 7, border: 0, borderRadius: 7, background: "#183044", color: "#9fe9ff", padding: "5px 8px", fontWeight: 900 }}>コピー</button></div> : null}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 240 }}>
