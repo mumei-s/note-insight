@@ -93,11 +93,10 @@ export function HubHome() {
   }, []);
 
   return <div className="hub-page"><header className="hub-header"><div className="hub-wrap"><a href="#"><span>無名S note</span>CREATOR HUB</a></div></header><main>
-    <section className="hub-hero hub-wrap"><p>MUMEI S NOTE CREATOR SYSTEM</p><h1>無名S note<br />CREATOR HUB</h1><span>INSIGHT・名鑑・ゲームをここから切り替えます。</span></section>
+    <section className="hub-hero hub-wrap"><p>MUMEI S NOTE CREATOR SYSTEM</p><h1>無名S note<br />CREATOR HUB</h1><span>INSIGHT・クリエイター名鑑をここから切り替えます。</span></section>
     <section className="hub-grid hub-wrap">
       <Entrance title="INSIGHT" label="ANALYTICS" copy="note活動を確認・管理・分析します。" href="#access/insight" accent="#b6ff38"><ParticipantRail kind="insight" people={insight} loading={loadingInsight} /></Entrance>
       <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff"><ParticipantRail kind="catalog" people={directory} loading={loadingDirectory} /></Entrance>
-      <Entrance title="ゲームセンター" label="CREATOR WORLD" copy="名鑑に登録した承認済みカードで遊ぶ、4つのスマホゲーム。" href="#battle" accent="#ffd76b" />
     </section>
   </main></div>;
 }
