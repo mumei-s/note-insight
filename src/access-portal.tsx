@@ -1,175 +1,157 @@
 import { FormEvent, useEffect, useState } from "react";
-import { hasEntrySession, hasMemberSession } from "./api";
 
-type Target = "insight" | "catalog";
+const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const OWNER_KEY = "mumei-unified-owner-token";
 const OWNER_RETURN_KEY = "mumei-owner-return";
-const OWNER_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
-type MemberPayload = {
-  member: {
-    id: string;
-    role: "owner" | "member";
-    status: "pending" | "active" | "removed";
-    noteUrlname: string | null;
-    noteNickname: string | null;
-  };
+export const INSIGHT_TOKEN_KEY = "mumei-insight-access-token";
+const APPLICANT_KEY = "mumei-insight-applicant-token";
+const PASSCODE_KEY = "mumei-insight-passcode";
+
+type Application = {
+  id: string;
+  noteId: string;
+  displayName: string | null;
+  imageUrl: string | null;
+  status: "pending" | "approved" | "active" | "rejected" | "revoked";
+  verificationCode?: string | null;
+  approvedAt?: string | null;
+  verifiedAt?: string | null;
 };
 
+type Stage = "loading" | "apply" | "pending" | "approved" | "login" | "active";
 const box = { border: "1px solid #273244", borderRadius: 20, background: "#0e151f", padding: 22 } as const;
-const input = { width: "100%", boxSizing: "border-box" as const, minHeight: 48, borderRadius: 12, border: "1px solid #344257", background: "#080c12", color: "#fff", padding: "0 14px", fontSize: 16 };
-const btn = { width: "100%", minHeight: 48, border: 0, borderRadius: 12, background: "#b6ff38", color: "#101600", fontWeight: 900, cursor: "pointer" } as const;
+const input = { width: "100%", boxSizing: "border-box" as const, minHeight: 50, borderRadius: 12, border: "1px solid #344257", background: "#080c12", color: "#fff", padding: "0 14px", fontSize: 16 };
+const btn = { width: "100%", minHeight: 50, border: 0, borderRadius: 12, background: "#b6ff38", color: "#101600", fontWeight: 950, cursor: "pointer" } as const;
 
-export function AccessPortal({ target }: { target: Target }) {
-  const [stage, setStage] = useState<"entry" | "member" | "loading">("loading");
-  const [password, setPassword] = useState("");
+function errorText(code: string) {
+  const messages: Record<string, string> = {
+    NOTE_ID_INVALID: "note IDまたはクリエイターページURLを確認してください。",
+    NOTE_ACCOUNT_NOT_FOUND: "そのnoteクリエイターを確認できませんでした。",
+    APPLICATION_EXISTS: "このnote IDはすでに申請済みです。同じ端末なら申請状況を再確認してください。",
+    ALREADY_ACTIVE: "このnote IDは参加済みです。下の『別の端末・ブラウザでログイン』を使ってください。",
+    PROFILE_CODE_NOT_FOUND: "自己紹介欄に認証コードがまだ確認できません。コードを入れて保存してから、もう一度押してください。",
+    LOGIN_INVALID: "note IDまたはパスコードが違います。",
+    INSIGHT_SESSION_INVALID: "この端末のログイン期限が切れました。パスコードでログインし直してください。",
+  };
+  return messages[code] ?? code ?? "処理できませんでした。";
+}
+
+async function call(action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
+  const response = await fetch(ACCESS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ action, ...extra }),
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "ACCESS_ERROR");
+  return payload;
+}
+
+function Identity({ app }: { app: Application }) {
+  return <div style={{ display: "flex", gap: 12, alignItems: "center", margin: "14px 0" }}>
+    {app.imageUrl ? <img src={app.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover" }} /> : <span style={{ width: 52, height: 52, borderRadius: "50%", display: "grid", placeItems: "center", background: "#1b2939", color: "#b6ff38", fontWeight: 950 }}>{[...(app.displayName || app.noteId || "n")][0]}</span>}
+    <div><strong style={{ display: "block", fontSize: 18 }}>{app.displayName || `@${app.noteId}`}</strong><small style={{ color: "#8492a5" }}>@{app.noteId}</small></div>
+  </div>;
+}
+
+export function AccessPortal({ target: _target }: { target?: "insight" | "catalog" }) {
+  const [stage, setStage] = useState<Stage>("loading");
+  const [application, setApplication] = useState<Application | null>(null);
   const [noteInput, setNoteInput] = useState("");
-  const [member, setMember] = useState<MemberPayload["member"] | null>(null);
+  const [passcode, setPasscode] = useState(localStorage.getItem(PASSCODE_KEY) || "");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
-  const title = target === "insight" ? "INSIGHT" : "クリエイター名鑑";
 
-  function goService() {
-    window.location.hash = target === "insight" ? "dashboard" : "catalog";
+  function goDashboard() { window.location.hash = "dashboard"; }
+  function goOwner() { sessionStorage.setItem(OWNER_RETURN_KEY, "manage"); window.location.hash = "owner"; }
+
+  async function checkExisting() {
+    const owner = localStorage.getItem(OWNER_KEY) || "";
+    if (owner) { setStage("active"); return; }
+    const member = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+    if (member) {
+      try {
+        const p = await call("session", {}, { "X-Insight-Token": member });
+        setApplication(p.application); setStage("active"); return;
+      } catch { localStorage.removeItem(INSIGHT_TOKEN_KEY); }
+    }
+    const applicant = localStorage.getItem(APPLICANT_KEY) || "";
+    if (applicant) {
+      try {
+        const p = await call("application-status", {}, { "X-Insight-Applicant": applicant });
+        const app = p.application as Application;
+        setApplication(app);
+        if (app.verificationCode) { localStorage.setItem(PASSCODE_KEY, app.verificationCode); setPasscode(app.verificationCode); }
+        setStage(app.status === "approved" ? "approved" : app.status === "active" ? "active" : "pending");
+        return;
+      } catch { /* a removed/reissued application can start fresh */ }
+    }
+    setStage("apply");
   }
 
-  function goOwnerAccess() {
-    sessionStorage.setItem(OWNER_RETURN_KEY, target === "insight" ? "dashboard" : "catalog");
-    window.location.hash = "owner";
-  }
+  useEffect(() => { void checkExisting(); }, []);
 
-  async function hasVerifiedOwnerSession() {
-    const token = localStorage.getItem(OWNER_KEY) || "";
-    if (!token) return false;
+  async function apply(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError(""); setMessage("");
     try {
-      const response = await fetch(OWNER_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Owner-Token": token },
-        body: JSON.stringify({ action: "status" }),
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (response.ok && payload?.authenticated === true) return true;
-      localStorage.removeItem(OWNER_KEY);
-    } catch { /* Keep the session during a temporary network failure. */ }
-    return false;
+      const p = await call("apply", { noteInput });
+      localStorage.setItem(APPLICANT_KEY, p.applicantToken);
+      setApplication(p.application); setNoteInput(""); setStage("pending");
+      setMessage("参加申請を送信しました。OWNERの承認後、この画面に本人確認コードが表示されます。");
+    } catch (e) { setError(errorText(e instanceof Error ? e.message : "ACCESS_ERROR")); }
+    finally { setSaving(false); }
   }
 
-  async function loadMember() {
-    if (await hasVerifiedOwnerSession()) {
-      goService();
-      return;
-    }
-    if (!hasEntrySession()) {
-      setStage("entry");
-      return;
-    }
-    if (!hasMemberSession()) {
-      setStage("member");
-      return;
-    }
-    setStage("loading");
-    try {
-      const response = await fetch("/api/member/me", { cache: "no-store" });
-      if (!response.ok) throw new Error("会員情報を確認できませんでした。");
-      const payload = (await response.json()) as MemberPayload;
-      setMember(payload.member);
-      if (payload.member.status === "active") goService();
-      else setStage("member");
-    } catch {
-      setStage("member");
-    }
-  }
-
-  useEffect(() => { void loadMember(); }, [target]);
-
-  async function entryLogin(event: FormEvent) {
-    event.preventDefault();
+  async function refreshStatus() {
+    const applicant = localStorage.getItem(APPLICANT_KEY) || "";
+    if (!applicant) { setStage("apply"); return; }
     setSaving(true); setError("");
     try {
-      const response = await fetch("/api/access/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error ?? "入口パスワードが違います。");
-      setPassword("");
-      await loadMember();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "ログインできませんでした。");
-    } finally { setSaving(false); }
+      const p = await call("application-status", {}, { "X-Insight-Applicant": applicant });
+      const app = p.application as Application; setApplication(app);
+      if (app.verificationCode) { localStorage.setItem(PASSCODE_KEY, app.verificationCode); setPasscode(app.verificationCode); }
+      setStage(app.status === "approved" ? "approved" : app.status === "active" ? "active" : "pending");
+    } catch (e) { setError(errorText(e instanceof Error ? e.message : "ACCESS_ERROR")); }
+    finally { setSaving(false); }
   }
 
-  async function register(event: FormEvent) {
-    event.preventDefault();
-    setSaving(true); setError("");
+  async function verifyProfile() {
+    const applicant = localStorage.getItem(APPLICANT_KEY) || "";
+    setSaving(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/member/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ noteInput }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error ?? "参加申請できませんでした。");
-      setMember(payload.member ?? null);
-      if (payload.member?.status === "active") goService();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "参加申請できませんでした。");
-    } finally { setSaving(false); }
+      const p = await call("verify-profile", {}, { "X-Insight-Applicant": applicant });
+      localStorage.setItem(INSIGHT_TOKEN_KEY, p.memberToken);
+      setApplication(p.application); setStage("active");
+      setMessage("本人確認が完了しました。noteの自己紹介欄は元に戻して大丈夫です。パスコードは別端末ログイン用に保管してください。");
+    } catch (e) { setError(errorText(e instanceof Error ? e.message : "ACCESS_ERROR")); }
+    finally { setSaving(false); }
   }
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f6f8fb", padding: "24px 14px 60px" }}>
-      <div style={{ width: "min(680px,100%)", margin: "0 auto" }}>
-        <a href="#" style={{ color: "#b6ff38", textDecoration: "none", fontWeight: 900 }}>← TOP</a>
-        <div style={{ margin: "46px 0 24px" }}>
-          <small style={{ color: "#b6ff38", fontWeight: 900, letterSpacing: ".14em" }}>COMMON LOGIN</small>
-          <h1 style={{ fontSize: 42, margin: "8px 0" }}>{title}</h1>
-          <p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>INSIGHTとクリエイター名鑑は同じログインを使います。認証済みなら、次回からこの画面を飛ばして利用画面へ進みます。</p>
-        </div>
+  async function login(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError(""); setMessage("");
+    try {
+      const p = await call("login", { noteInput, passcode });
+      localStorage.setItem(INSIGHT_TOKEN_KEY, p.memberToken);
+      localStorage.setItem(PASSCODE_KEY, passcode);
+      setApplication(p.application); setStage("active");
+      setMessage("この端末でINSIGHTを利用できます。");
+    } catch (e) { setError(errorText(e instanceof Error ? e.message : "ACCESS_ERROR")); }
+    finally { setSaving(false); }
+  }
 
-        {error ? <div style={{ ...box, borderColor: "#7d3d45", color: "#ffb0b8", marginBottom: 14 }}>{error}</div> : null}
-
-        {stage === "loading" ? <div style={box}>ログイン状態を確認しています…</div> : null}
-
-        {stage === "entry" ? (
-          <div style={{ display: "grid", gap: 12 }}>
-            <section style={{ ...box, borderColor: "#6b5725", background: "#17140c" }}>
-              <small style={{ color: "#ffcf5a", fontWeight: 950 }}>OWNER</small>
-              <h2>OWNERはパスワード不要</h2>
-              <p style={{ color: "#b9ad8d", lineHeight: 1.7 }}>管理者noteプロフィールへ一時コードを掲載する本人認証で入れます。</p>
-              <button type="button" onClick={goOwnerAccess} style={{ ...btn, background: "#ffcf5a" }}>OWNER本人認証で入る</button>
-            </section>
-            <form onSubmit={entryLogin} style={box}>
-              <h2 style={{ marginTop: 0 }}>参加者の共通入口</h2>
-              <p style={{ color: "#9ba8bb" }}>参加者へ案内された共通パスワードを入力します。</p>
-              <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-              <button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "確認中…" : "次へ"}</button>
-            </form>
-          </div>
-        ) : null}
-
-        {stage === "member" && member?.status === "pending" && member.noteUrlname ? (
-          <div style={box}>
-            <small style={{ color: "#ffcf5a", fontWeight: 900 }}>承認待ち</small>
-            <h2>{member.noteNickname ?? `@${member.noteUrlname}`}</h2>
-            <p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>管理者の認証後に利用できます。承認後は同じログインのまま{title}へ入れます。</p>
-          </div>
-        ) : null}
-
-        {stage === "member" && (!member || !member.noteUrlname) ? (
-          <form onSubmit={register} style={box}>
-            <h2 style={{ marginTop: 0 }}>{title} 参加申請</h2>
-            <p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>note IDまたはクリエイターページURLを登録します。管理者が認証した方だけ利用できます。</p>
-            <input style={input} value={noteInput} onChange={(e) => setNoteInput(e.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required />
-            <button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "申請中…" : `${title}の参加申請`}</button>
-          </form>
-        ) : null}
-
-        {stage === "member" && member?.status === "removed" ? (
-          <div style={box}><h2>利用停止中</h2><p style={{ color: "#9ba8bb" }}>このアカウントは現在利用できません。</p></div>
-        ) : null}
-      </div>
-    </div>
-  );
+  const code = application?.verificationCode || passcode;
+  return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f6f8fb", padding: "24px 14px 70px" }}><main style={{ width: "min(720px,100%)", margin: "0 auto" }}>
+    <a href="#" style={{ color: "#b6ff38", textDecoration: "none", fontWeight: 900 }}>← INSIGHT TOP</a>
+    <header style={{ padding: "46px 0 20px" }}><small style={{ color: "#b6ff38", fontWeight: 950, letterSpacing: ".14em" }}>PAID MEMBER ACCESS</small><h1 style={{ fontSize: "clamp(38px,8vw,58px)", margin: "8px 0" }}>INSIGHT 参加・本人認証</h1><p style={{ color: "#9ba8bb", lineHeight: 1.75 }}>購入後の参加申請から本人確認まで、このページだけで進めます。共通パスワードは使いません。</p></header>
+    {error ? <section style={{ ...box, borderColor: "#713b45", color: "#ffb0b8", marginBottom: 12 }}>{error}</section> : null}
+    {message ? <section style={{ ...box, borderColor: "#41652a", color: "#b6ff38", marginBottom: 12 }}>{message}</section> : null}
+    {stage === "loading" ? <section style={box}>参加状態を確認しています…</section> : null}
+    {stage === "apply" ? <div style={{ display: "grid", gap: 12 }}><form onSubmit={apply} style={box}><h2 style={{ marginTop: 0 }}>1. 参加申請</h2><p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>購入時に使う本人のnote IDまたはクリエイターページURLを入力してください。申請はOWNER管理ページへ届きます。</p><input style={input} value={noteInput} onChange={e => setNoteInput(e.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "申請中…" : "参加申請を送る"}</button></form><button style={{ ...btn, background: "#172434", color: "#a9e9ff", border: "1px solid #3b546d" }} onClick={() => setStage("login")}>すでに参加済み・別の端末でログイン</button><button style={{ ...btn, background: "transparent", color: "#ffcf5a", border: "1px solid #5b4b24" }} onClick={goOwner}>OWNER管理者入口</button></div> : null}
+    {stage === "pending" && application ? <section style={box}><small style={{ color: "#ffcf5a", fontWeight: 950 }}>OWNER APPROVAL</small><h2>承認待ち</h2><Identity app={application}/><p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>OWNERが購入者として承認すると、本人確認用パスコードが発行されます。</p><button style={btn} disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を更新"}</button></section> : null}
+    {stage === "approved" && application ? <section style={{ ...box, borderColor: "#536d2a" }}><small style={{ color: "#b6ff38", fontWeight: 950 }}>APPROVED / PROFILE CHECK</small><h2>2. note自己紹介欄で本人確認</h2><Identity app={application}/><p style={{ color: "#9ba8bb", lineHeight: 1.75 }}>下のコードをコピーし、noteの<strong style={{ color: "#fff" }}>クリエイターページTOP → 設定 → 名前の下の自己紹介欄</strong>へ一時的に入れて保存してください。</p><code style={{ display: "block", padding: 16, borderRadius: 12, background: "#05080c", color: "#b6ff38", fontSize: 22, fontWeight: 950, letterSpacing: ".05em", overflowWrap: "anywhere" }}>{code}</code><div style={{ display: "grid", gap: 9, marginTop: 12 }}><button style={{ ...btn, background: "#172434", color: "#8feaff", border: "1px solid #35536d" }} onClick={() => { if (code) void navigator.clipboard?.writeText(code); }}>コードをコピー</button><a href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: "none", background: "#172434", color: "#8feaff", border: "1px solid #35536d", boxSizing: "border-box" }}>自分のnoteを開く ↗</a><button style={btn} disabled={saving} onClick={() => void verifyProfile()}>{saving ? "本人確認中…" : "保存したのでINSIGHTで認証"}</button></div><p style={{ color: "#ffcf5a", lineHeight: 1.7, marginBottom: 0 }}>認証成功後は、自己紹介欄からコードを削除して元の文章へ戻してOKです。</p></section> : null}
+    {stage === "login" ? <form onSubmit={login} style={box}><h2 style={{ marginTop: 0 }}>別の端末・ブラウザでログイン</h2><p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>初回本人確認で発行されたnote ID＋パスコードを使います。Android / iPhone / PC、Chrome / Edge / Safariなどで同じ固定URLから利用できます。</p><input style={input} value={noteInput} onChange={e => setNoteInput(e.target.value)} placeholder="note ID" required /><input style={{ ...input, marginTop: 9 }} value={passcode} onChange={e => setPasscode(e.target.value)} placeholder="INSIGHT-XXXXXXXX" autoComplete="current-password" required /><button style={{ ...btn, marginTop: 12 }} disabled={saving}>{saving ? "確認中…" : "INSIGHTへログイン"}</button><button type="button" style={{ ...btn, marginTop: 9, background: "transparent", color: "#9eb0c3", border: "1px solid #344257" }} onClick={() => setStage("apply")}>参加申請へ戻る</button></form> : null}
+    {stage === "active" ? <section style={{ ...box, borderColor: "#397043" }}><small style={{ color: "#88ffad", fontWeight: 950 }}>ACCESS ACTIVE</small><h2>INSIGHT利用可能</h2>{application ? <Identity app={application}/> : null}<p style={{ color: "#9ba8bb", lineHeight: 1.7 }}>{message || "この端末は認証済みです。"}</p><button style={btn} onClick={goDashboard}>INSIGHTを開く →</button></section> : null}
+  </main></div>;
 }
