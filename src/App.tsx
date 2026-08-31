@@ -12,8 +12,9 @@ import { MemberInsightApp } from "./member-insight-app";
 import { OwnerGate } from "./owner-gate";
 
 const OWNER_KEY = "mumei-unified-owner-token";
-const ADMIN_ROUTES = new Set(["owner", "manage"]);
-const INSIGHT_CHILD_ROUTES = new Set(["evidence", "article-likes", "dashboard-legacy"]);
+const OWNER_VIEW_KEY = "mumei-owner-insight-view";
+const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
+const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
 
 function rawRoute() { return window.location.hash.replace(/^#\/?/, "") || "home"; }
@@ -21,7 +22,7 @@ function currentRoute() {
   const route = rawRoute();
   return DETACHED_ROUTES.has(route) || route.startsWith("catalog/") ? "home" : route;
 }
-function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route); }
+function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
 
 export function goTo(route: string) {
@@ -33,12 +34,12 @@ export function goTo(route: string) {
 }
 
 function BottomNav({ route }: { route: string }) {
-  const items = [{ route: "home", label: "TOP", icon: "⌂" }, { route: "dashboard", label: "INSIGHT", icon: "◫" }];
+  const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
   return <>
-    <nav className="app-bottom-nav" aria-label="メインナビゲーション">{items.map(item => {
-      const active = route === item.route || (item.route === "dashboard" && (INSIGHT_CHILD_ROUTES.has(route) || route.startsWith("features/")));
-      return <button key={item.route} className={active ? "active" : ""} onClick={() => goTo(item.route)}><span aria-hidden="true">{item.icon}</span><b>{item.label}</b></button>;
-    })}</nav>
+    <nav className="app-bottom-nav" aria-label="メインナビゲーション">
+      <button className={route === "home" ? "active" : ""} onClick={() => goTo("home")}><span aria-hidden="true">⌂</span><b>TOP</b></button>
+      <button className={insightActive ? "active" : ""} onClick={() => goTo("access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
+    </nav>
     <style>{`
       html{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       .app-route-shell{min-height:100vh;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -58,42 +59,49 @@ export function App() {
   const [route, setRoute] = useState(currentRoute);
 
   useEffect(() => {
-    const detachIfNeeded = () => {
+    const update = () => {
       const raw = rawRoute();
       if (DETACHED_ROUTES.has(raw) || raw.startsWith("catalog/")) {
         window.history.replaceState({ route: "home" }, "", routeUrl("home"));
+        sessionStorage.removeItem(OWNER_VIEW_KEY);
         setRoute("home");
         return;
       }
-      setRoute(currentRoute());
+      const next = currentRoute();
+      if (next === "owner-insight" || next.startsWith("owner-features/")) sessionStorage.setItem(OWNER_VIEW_KEY, "1");
+      if (next === "access/insight" || next === "home") sessionStorage.removeItem(OWNER_VIEW_KEY);
+      setRoute(next);
     };
-    detachIfNeeded();
-    window.addEventListener("hashchange", detachIfNeeded);
-    window.addEventListener("popstate", detachIfNeeded);
-    window.addEventListener("mumei-route", detachIfNeeded);
+    update();
+    window.addEventListener("hashchange", update);
+    window.addEventListener("popstate", update);
+    window.addEventListener("mumei-route", update);
     return () => {
-      window.removeEventListener("hashchange", detachIfNeeded);
-      window.removeEventListener("popstate", detachIfNeeded);
-      window.removeEventListener("mumei-route", detachIfNeeded);
+      window.removeEventListener("hashchange", update);
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("mumei-route", update);
     };
   }, []);
 
-  const isOwner = Boolean(localStorage.getItem(OWNER_KEY));
+  const ownerToken = localStorage.getItem(OWNER_KEY) || "";
+  const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   let page;
   if (route === "access/insight") page = <AccessPortal target="insight" />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
-  else if (route === "dashboard") page = isOwner ? <FastInsightV8 /> : <MemberInsightApp />;
-  else if (route === "evidence") page = isOwner ? <EvidenceV2 /> : <MemberInsightApp />;
-  else if (route === "article-likes") page = isOwner ? <ArticleLikesPageV2 /> : <MemberInsightApp />;
-  else if (route === "dashboard-legacy") page = isOwner ? <CombinedAnalyticsApp /> : <MemberInsightApp />;
-  else if (route.startsWith("features/")) page = isOwner ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightApp />;
+  else if (route === "owner-insight") page = ownerToken ? <FastInsightV8 /> : <OwnerGate />;
+  else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
+  else if (route === "dashboard") page = ownerView ? <FastInsightV8 /> : <MemberInsightApp />;
+  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightApp />;
+  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightApp />;
+  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightApp />;
+  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightApp />;
   else page = <HubHome />;
 
-  const admin = isAdminRoute(route);
+  const admin = isAdminRoute(route) || ownerView;
   const hideBottomNav = route.startsWith("access/") || admin;
   return <>
-    <div className={`app-route-shell ${isOwner ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
+    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
     {hideBottomNav ? null : <BottomNav route={route} />}
   </>;
 }
