@@ -1,325 +1,128 @@
 import { useEffect, useMemo, useState } from "react";
 
-const OWNER_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
-const CATALOG_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-world";
+const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const OWNER_KEY = "mumei-unified-owner-token";
 
-type Submission = {
+type Status = "pending" | "approved" | "active" | "rejected" | "revoked";
+type Application = {
   id: string;
-  note_id: string;
-  display_name: string;
-  status: string;
-  job: string;
-  rarity: string;
-  created_at: string;
+  noteId: string;
+  displayName: string | null;
+  imageUrl: string | null;
+  status: Status;
+  verificationCode?: string | null;
+  approvedAt?: string | null;
+  verifiedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
-async function ownerCall(action: string, extra: Record<string, unknown> = {}) {
-  const response = await fetch(OWNER_ENDPOINT, {
+const card = { border: "1px solid #29384b", borderRadius: 18, background: "linear-gradient(180deg,#101722,#0a1018)", padding: 18 } as const;
+const button = { minHeight: 40, borderRadius: 10, padding: "0 12px", fontWeight: 950, cursor: "pointer" } as const;
+
+async function call(action: string, extra: Record<string, unknown> = {}) {
+  const response = await fetch(ACCESS, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "",
-    },
+    headers: { "Content-Type": "application/json", "X-Owner-Token": localStorage.getItem(OWNER_KEY) || "" },
     body: JSON.stringify({ action, ...extra }),
+    cache: "no-store",
   });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error ?? "管理者認証に失敗しました。");
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "OWNER_REQUEST_FAILED");
   return payload;
 }
 
-async function catalogCall(action: string, extra: Record<string, unknown> = {}) {
-  const response = await fetch(CATALOG_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Owner-Token": localStorage.getItem(OWNER_KEY) ?? "",
-    },
-    body: JSON.stringify({ action, ...extra }),
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error ?? "名鑑管理を読み込めませんでした。");
-  return payload;
+function fmt(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-const card = {
-  border: "1px solid #273244",
-  borderRadius: 20,
-  background: "linear-gradient(180deg,#101722,#0b1017)",
-  padding: 20,
-} as const;
+function Avatar({ app }: { app: Application }) {
+  const name = app.displayName || app.noteId || "n";
+  return app.imageUrl ? <img src={app.imageUrl} alt="" referrerPolicy="no-referrer" style={{ width: 50, height: 50, borderRadius: "50%", objectFit: "cover", border: "1px solid #43627d" }} /> : <span style={{ width: 50, height: 50, borderRadius: "50%", display: "grid", placeItems: "center", background: "#1a2939", color: "#8feaff", fontWeight: 950 }}>{[...name][0]}</span>;
+}
 
-const actionLink = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 44,
-  borderRadius: 12,
-  padding: "0 15px",
-  textDecoration: "none",
-  fontWeight: 900,
-} as const;
+const statusLabel: Record<Status, string> = { pending: "承認待ち", approved: "本人認証待ち", active: "利用中", rejected: "却下", revoked: "利用停止" };
+const statusColor: Record<Status, string> = { pending: "#ffcf69", approved: "#8feaff", active: "#9cffae", rejected: "#ff9aa8", revoked: "#ff9aa8" };
 
 export function ManagementPage() {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [challengeId, setChallengeId] = useState("");
-  const [code, setCode] = useState("");
+  const [items, setItems] = useState<Application[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [error, setError] = useState("");
 
-  const pending = useMemo(
-    () => submissions.filter((item) => item.status === "pending"),
-    [submissions],
-  );
-  const active = useMemo(
-    () => submissions.filter((item) => item.status === "approved"),
-    [submissions],
-  );
+  const counts = useMemo(() => ({
+    pending: items.filter(x => x.status === "pending").length,
+    approved: items.filter(x => x.status === "approved").length,
+    active: items.filter(x => x.status === "active").length,
+    inactive: items.filter(x => x.status === "rejected" || x.status === "revoked").length,
+  }), [items]);
 
-  async function loadCatalogAdmin() {
+  async function load() {
+    setError("");
     try {
-      const payload = await catalogCall("owner-list");
-      setSubmissions(payload.submissions ?? []);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "名鑑管理を読み込めませんでした。");
-    }
+      const payload = await call("owner-list");
+      setItems(Array.isArray(payload.applications) ? payload.applications : []);
+    } catch (caught) {
+      const code = caught instanceof Error ? caught.message : "OWNER_REQUEST_FAILED";
+      if (/OWNER_LOGIN_REQUIRED|OWNER_/.test(code)) { window.location.hash = "owner"; return; }
+      setError(code);
+    } finally { setLoading(false); }
   }
 
   useEffect(() => {
-    if (!localStorage.getItem(OWNER_KEY)) return;
-    ownerCall("status")
-      .then(async (payload) => {
-        if (payload.authenticated) {
-          setAuthenticated(true);
-          await loadCatalogAdmin();
-        }
-      })
-      .catch(() => {});
+    if (!localStorage.getItem(OWNER_KEY)) { window.location.hash = "owner"; return; }
+    void load();
   }, []);
 
-  async function start() {
-    setBusy(true);
-    setMessage("");
+  async function action(app: Application, actionName: "owner-approve" | "owner-reissue" | "owner-reject" | "owner-revoke") {
+    if (actionName === "owner-reissue" && app.status === "active" && !window.confirm("パスコードを再発行すると、現在の全端末ログインを無効化し、本人認証をやり直します。続けますか？")) return;
+    if (actionName === "owner-revoke" && !window.confirm(`${app.displayName || app.noteId} のINSIGHT利用を停止しますか？`)) return;
+    setBusyId(app.id); setError(""); setMessage("");
     try {
-      const payload = await ownerCall("start");
-      setChallengeId(payload.challengeId);
-      setCode(payload.code);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "認証コードを発行できませんでした。");
-    } finally {
-      setBusy(false);
-    }
+      const payload = await call(actionName, { id: app.id });
+      const next = payload.application as Application;
+      setMessage(actionName === "owner-approve" ? `${next.displayName || next.noteId} を承認しました。本人確認コードを発行しました。` : actionName === "owner-reissue" ? "本人確認コードを再発行しました。旧セッションは無効です。" : actionName === "owner-reject" ? "申請を却下しました。" : "利用を停止しました。");
+      await load();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "変更できませんでした。"); }
+    finally { setBusyId(null); }
   }
 
-  async function verify() {
-    setBusy(true);
-    setMessage("");
-    try {
-      const payload = await ownerCall("verify", { challengeId });
-      localStorage.setItem(OWNER_KEY, payload.ownerToken);
-      setAuthenticated(true);
-      setCode("");
-      setChallengeId("");
-      await loadCatalogAdmin();
-      setMessage("管理者本人を確認しました。プロフィールから一時コードを削除して大丈夫です。");
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "確認できませんでした。";
-      setMessage(
-        text === "PROFILE_CODE_NOT_FOUND"
-          ? "noteプロフィールに一時コードがまだ確認できません。保存後にもう一度押してください。"
-          : text,
-      );
-    } finally {
-      setBusy(false);
-    }
+  async function copyCode(code: string) {
+    try { await navigator.clipboard.writeText(code); setMessage("本人確認コードをコピーしました。"); }
+    catch { setMessage(`本人確認コード: ${code}`); }
   }
 
-  async function catalogAction(id: string, next: string) {
-    setBusy(true);
-    setMessage("");
-    try {
-      await catalogCall("owner-action", { id, next });
-      await loadCatalogAdmin();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "変更できませんでした。");
-    } finally {
-      setBusy(false);
-    }
-  }
+  return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f5f8fb", padding: "22px 13px 70px" }}><main style={{ width: "min(1080px,100%)", margin: "0 auto" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><a href="#" style={{ color: "#8feaff", textDecoration: "none", fontWeight: 950 }}>← INSIGHT TOP</a><button onClick={() => { localStorage.removeItem(OWNER_KEY); window.location.hash = "owner"; }} style={{ ...button, border: "1px solid #3a4658", background: "transparent", color: "#a9b6c7" }}>管理ログアウト</button></div>
 
-  async function logout() {
-    try {
-      await ownerCall("logout");
-    } catch {}
-    localStorage.removeItem(OWNER_KEY);
-    setAuthenticated(false);
-    setSubmissions([]);
-  }
+    <header style={{ padding: "42px 0 20px" }}><small style={{ color: "#ffcf69", fontWeight: 950, letterSpacing: ".14em" }}>INSIGHT SALES ADMIN</small><h1 style={{ fontSize: "clamp(38px,7vw,62px)", margin: "7px 0" }}>INSIGHT 管理ページ</h1><p style={{ color: "#94a3b7", lineHeight: 1.75, maxWidth: 760 }}>購入者の参加申請だけを管理します。承認すると本人確認パスコードを発行し、購入者がnote自己紹介欄で本人確認を完了すると「利用中」へ移行します。</p></header>
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f7f9fc", padding: "22px 14px 60px" }}>
-      <div style={{ width: "min(1050px,100%)", margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-          <a href="#" style={{ color: "#ffcf5a", textDecoration: "none", fontWeight: 900 }}>← TOP</a>
-          {authenticated ? (
-            <button
-              onClick={() => void logout()}
-              style={{ background: "transparent", color: "#9ca9bb", border: "1px solid #344156", borderRadius: 10, padding: "8px 11px" }}
-            >
-              管理ログアウト
-            </button>
-          ) : null}
+    {message ? <div style={{ ...card, marginBottom: 12, borderColor: "#426329", color: "#c8ff84" }}>{message}</div> : null}
+    {error ? <div style={{ ...card, marginBottom: 12, borderColor: "#773f4a", color: "#ffadb8" }}>{error}</div> : null}
+
+    <section style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8, marginBottom: 14 }}>
+      {[["承認待ち", counts.pending, "#ffcf69"],["本人認証待ち", counts.approved, "#8feaff"],["利用中", counts.active, "#9cffae"],["停止・却下", counts.inactive, "#ff9aa8"]].map(([label,n,color]) => <article key={String(label)} style={{ ...card, padding: "14px 8px", textAlign: "center" }}><small style={{ color: String(color), fontWeight: 900 }}>{label}</small><strong style={{ display: "block", fontSize: 30, marginTop: 3 }}>{Number(n)}</strong></article>)}
+    </section>
+
+    <section style={{ ...card, padding: 14, marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}><div><strong>販売用固定URL</strong><div style={{ color: "#8da0b5", fontSize: 12, marginTop: 3 }}>https://mumei-s.github.io/note-insight/</div></div><div style={{ display: "flex", gap: 7 }}><a href="#dashboard" style={{ ...button, display: "inline-flex", alignItems: "center", textDecoration: "none", background: "#b6ff38", color: "#111600" }}>自分のINSIGHT</a><button onClick={() => void load()} style={{ ...button, border: "1px solid #395068", background: "#111c29", color: "#8feaff" }}>一覧更新</button></div></section>
+
+    {loading ? <section style={card}>申請を読み込んでいます…</section> : <section style={{ display: "grid", gap: 10 }}>
+      {items.map(app => <article key={app.id} style={{ ...card, padding: 15, display: "grid", gridTemplateColumns: "50px minmax(0,1fr) auto", gap: 12, alignItems: "center", borderColor: app.status === "pending" ? "#5a4d2c" : app.status === "approved" ? "#31576a" : app.status === "active" ? "#315b3b" : "#493139" }}>
+        <Avatar app={app}/><div style={{ minWidth: 0 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><strong style={{ fontSize: 17 }}>{app.displayName || `@${app.noteId}`}</strong><span style={{ color: statusColor[app.status], fontSize: 11, fontWeight: 950 }}>{statusLabel[app.status]}</span></div><a href={`https://note.com/${app.noteId}`} target="_blank" rel="noreferrer" style={{ color: "#69ccff", textDecoration: "none", fontSize: 12 }}>@{app.noteId} ↗</a><div style={{ color: "#718399", fontSize: 11, marginTop: 5 }}>申請 {fmt(app.createdAt)}　承認 {fmt(app.approvedAt)}　本人認証 {fmt(app.verifiedAt)}</div>{app.status === "approved" && app.verificationCode ? <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 9, background: "#05090e", color: "#b6ff38", fontFamily: "monospace", fontWeight: 950, overflowWrap: "anywhere" }}>{app.verificationCode} <button onClick={() => void copyCode(app.verificationCode!)} style={{ marginLeft: 7, border: 0, borderRadius: 7, background: "#183044", color: "#9fe9ff", padding: "5px 8px", fontWeight: 900 }}>コピー</button></div> : null}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 240 }}>
+          {app.status === "pending" || app.status === "rejected" || app.status === "revoked" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-approve")} style={{ ...button, border: 0, background: "#b6ff38", color: "#111600" }}>承認</button> : null}
+          {app.status === "approved" || app.status === "active" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-reissue")} style={{ ...button, border: "1px solid #38566f", background: "#101d2a", color: "#8feaff" }}>コード再発行</button> : null}
+          {app.status === "pending" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-reject")} style={{ ...button, border: "1px solid #69404a", background: "transparent", color: "#ffabb5" }}>却下</button> : null}
+          {app.status === "approved" || app.status === "active" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-revoke")} style={{ ...button, border: "1px solid #69404a", background: "transparent", color: "#ffabb5" }}>利用停止</button> : null}
         </div>
-
-        <header style={{ margin: "48px 0 24px" }}>
-          <small style={{ color: "#ffcf5a", fontWeight: 900, letterSpacing: ".14em" }}>OWNER CONTROL</small>
-          <h1 style={{ fontSize: "clamp(38px,7vw,62px)", margin: "8px 0" }}>管理ページ</h1>
-          <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>
-            管理者noteプロフィールへの一時コード掲載で本人確認します。確認後はこの端末で長期セッションを保持します。
-          </p>
-        </header>
-
-        {message ? <div style={{ ...card, marginBottom: 16, color: "#ffcf5a" }}>{message}</div> : null}
-
-        {!authenticated ? (
-          <section style={card}>
-            <h2 style={{ marginTop: 0 }}>管理者本人を確認</h2>
-            {!code ? (
-              <>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.7 }}>
-                  「コードを発行」を押すと、管理者noteプロフィールに一時掲載するコードが表示されます。
-                </p>
-                <button
-                  disabled={busy}
-                  onClick={() => void start()}
-                  style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "12px 18px", fontWeight: 900 }}
-                >
-                  {busy ? "発行中…" : "本人確認コードを発行"}
-                </button>
-              </>
-            ) : (
-              <>
-                <p style={{ color: "#9ca9bb" }}>
-                  このコードを管理者noteプロフィールへ一時掲載して保存してください。
-                </p>
-                <code style={{ display: "block", padding: 16, borderRadius: 12, background: "#05080c", color: "#ffcf5a", fontSize: 21, fontWeight: 950, letterSpacing: ".05em" }}>
-                  {code}
-                </code>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                  <a href="https://note.com/ss_yr" target="_blank" rel="noreferrer" style={{ color: "#54d8ff", fontWeight: 800 }}>
-                    noteプロフィールを開く ↗
-                  </a>
-                  <button
-                    disabled={busy}
-                    onClick={() => void verify()}
-                    style={{ border: 0, borderRadius: 12, background: "#ffcf5a", color: "#171000", padding: "10px 16px", fontWeight: 900 }}
-                  >
-                    {busy ? "確認中…" : "管理者として確認"}
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-        ) : (
-          <>
-            <section style={{ ...card, marginBottom: 16, borderColor: "#2f6b3d" }}>
-              <small style={{ color: "#7dffad", fontWeight: 900 }}>OWNER VERIFIED</small>
-              <strong style={{ display: "block", marginTop: 6, fontSize: 20 }}>管理者認証済み</strong>
-              <p style={{ color: "#9ca9bb", marginBottom: 0 }}>
-                旧端末や旧OWNERセッションの有無は、管理ページ利用条件にしません。
-              </p>
-            </section>
-
-            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
-              <article style={card}>
-                <small style={{ color: "#b6ff38", fontWeight: 900 }}>自分で使う</small>
-                <h2>自分のINSIGHT</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加者として自分自身のINSIGHTを開きます。</p>
-                <a href="#dashboard" style={{ ...actionLink, background: "#b6ff38", color: "#101600" }}>INSIGHTを開く →</a>
-              </article>
-
-              <article style={card}>
-                <small style={{ color: "#54d8ff", fontWeight: 900 }}>自分で使う</small>
-                <h2>自分のクリエイター名鑑</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>OWNERは参加申請なしで名鑑を利用します。</p>
-                <a href="#catalog" style={{ ...actionLink, background: "#54d8ff", color: "#071016" }}>名鑑を開く →</a>
-              </article>
-
-              <article style={card}>
-                <small style={{ color: "#b6ff38", fontWeight: 900 }}>管理する</small>
-                <h2>INSIGHT管理</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>INSIGHTの参加申請・承認・退会・利用状態を管理します。</p>
-                <a href="#member" style={{ ...actionLink, background: "#17202d", color: "#b6ff38", border: "1px solid #334158" }}>INSIGHT管理へ →</a>
-              </article>
-
-              <article style={card}>
-                <small style={{ color: "#ffcf5a", fontWeight: 900 }}>管理する</small>
-                <h2>クリエイター名鑑管理</h2>
-                <p style={{ color: "#9ca9bb", lineHeight: 1.6 }}>参加申請・承認・掲載状態を管理します。</p>
-                <a href="#catalog-admin" style={{ ...actionLink, background: "#17202d", color: "#ffcf5a", border: "1px solid #4e4322" }}>申請一覧へ ↓</a>
-              </article>
-            </section>
-
-            <section id="catalog-admin" style={{ marginTop: 34, ...card }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "end", flexWrap: "wrap" }}>
-                <div>
-                  <small style={{ color: "#ffcf5a", fontWeight: 900 }}>CREATOR DIRECTORY ADMIN</small>
-                  <h2 style={{ fontSize: 30, margin: "5px 0" }}>クリエイター名鑑管理</h2>
-                </div>
-                <strong>承認待ち {pending.length} / 参加中 {active.length}</strong>
-              </div>
-
-              <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-                {submissions.map((submission) => (
-                  <article
-                    key={submission.id}
-                    style={{ border: "1px solid #2d394c", borderRadius: 14, padding: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}
-                  >
-                    <div>
-                      <strong>{submission.display_name || `@${submission.note_id}`}</strong>
-                      <div style={{ color: "#7f8da1", fontSize: 13 }}>@{submission.note_id} · {submission.status}</div>
-                    </div>
-
-                    {submission.note_id === "ss_yr" ? (
-                      <span style={{ color: "#ffcf5a", fontWeight: 900 }}>OWNER</span>
-                    ) : (
-                      <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-                        {submission.status !== "approved" ? (
-                          <button
-                            disabled={busy}
-                            onClick={() => void catalogAction(submission.id, "approved")}
-                            style={{ border: 0, borderRadius: 9, background: "#b6ff38", padding: "8px 10px", fontWeight: 900 }}
-                          >
-                            承認
-                          </button>
-                        ) : null}
-                        {submission.status === "approved" ? (
-                          <button
-                            disabled={busy}
-                            onClick={() => void catalogAction(submission.id, "unpublished")}
-                            style={{ border: "1px solid #445166", borderRadius: 9, background: "transparent", color: "#fff", padding: "7px 10px" }}
-                          >
-                            非公開
-                          </button>
-                        ) : null}
-                        <button
-                          disabled={busy}
-                          onClick={() => void catalogAction(submission.id, "withdrawn")}
-                          style={{ border: "1px solid #74404a", borderRadius: 9, background: "transparent", color: "#ffb0b8", padding: "7px 10px" }}
-                        >
-                          退会
-                        </button>
-                      </div>
-                    )}
-                  </article>
-                ))}
-                {!submissions.length ? <p style={{ color: "#8f9caf" }}>名鑑申請はまだありません。</p> : null}
-              </div>
-            </section>
-          </>
-        )}
-      </div>
-    </div>
-  );
+      </article>)}
+      {!items.length ? <article style={card}><strong>現在、参加申請はありません。</strong><p style={{ color: "#8999ad", marginBottom: 0 }}>購入者が固定URLから申請すると、ここに表示されます。</p></article> : null}
+    </section>}
+  </main>
+  <style>{`@media(max-width:650px){main>section:nth-of-type(1){grid-template-columns:repeat(2,minmax(0,1fr))!important}}`}</style>
+  </div>;
 }
