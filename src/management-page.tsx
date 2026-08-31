@@ -11,7 +11,6 @@ type Application = {
   displayName: string | null;
   imageUrl: string | null;
   status: Status;
-  verificationCode?: string | null;
   approvedAt?: string | null;
   verifiedAt?: string | null;
   createdAt?: string | null;
@@ -64,6 +63,8 @@ const statusColor: Record<Status, string> = { pending: "#ffcf69", approved: "#8f
 export function ManagementPage() {
   const [items, setItems] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ownerChecked, setOwnerChecked] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -84,6 +85,7 @@ export function ManagementPage() {
       const code = caught instanceof Error ? caught.message : "OWNER_REQUEST_FAILED";
       if (code === "OWNER_LOGIN_REQUIRED") {
         localStorage.removeItem(OWNER_KEY);
+        setAuthorized(false);
         window.location.hash = "owner";
         return;
       }
@@ -100,13 +102,19 @@ export function ManagementPage() {
         if (!live) return;
         if (!authenticated) {
           localStorage.removeItem(OWNER_KEY);
+          setAuthorized(false);
+          setOwnerChecked(true);
           window.location.hash = "owner";
           return;
         }
+        setAuthorized(true);
+        setOwnerChecked(true);
         await load();
       } catch {
         if (!live) return;
         localStorage.removeItem(OWNER_KEY);
+        setAuthorized(false);
+        setOwnerChecked(true);
         window.location.hash = "owner";
       }
     })();
@@ -120,15 +128,10 @@ export function ManagementPage() {
     try {
       const payload = await call(actionName, { id: app.id });
       const next = payload.application as Application;
-      setMessage(actionName === "owner-approve" ? `${next.displayName || next.noteId} を承認しました。本人確認コードを発行しました。` : actionName === "owner-reissue" ? "本人確認コードを再発行しました。旧セッションは無効です。" : actionName === "owner-reject" ? "申請を却下しました。" : "利用を停止しました。");
+      setMessage(actionName === "owner-approve" ? `${next.displayName || next.noteId} を承認しました。本人確認コードは申請者側だけに発行しました。` : actionName === "owner-reissue" ? "本人確認コードを申請者側へ再発行しました。旧セッションは無効です。" : actionName === "owner-reject" ? "申請を却下しました。" : "利用を停止しました。");
       await load();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "変更できませんでした。"); }
     finally { setBusyId(null); }
-  }
-
-  async function copyCode(code: string) {
-    try { await navigator.clipboard.writeText(code); setMessage("本人確認コードをコピーしました。"); }
-    catch { setMessage(`本人確認コード: ${code}`); }
   }
 
   async function logout() {
@@ -139,6 +142,10 @@ export function ManagementPage() {
     localStorage.removeItem(OWNER_KEY);
     sessionStorage.removeItem("mumei-owner-insight-view");
     window.location.hash = "owner";
+  }
+
+  if (!ownerChecked || !authorized) {
+    return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#8d9caf", display: "grid", placeItems: "center", padding: 20 }}><span>{ownerChecked ? "管理者入口へ移動しています…" : "OWNER認証を確認しています…"}</span></div>;
   }
 
   return <div style={{ minHeight: "100vh", background: "#070a0f", color: "#f5f8fb", padding: "22px 13px 70px" }}><main style={{ width: "min(1080px,100%)", margin: "0 auto" }}>
@@ -155,9 +162,9 @@ export function ManagementPage() {
 
     <section style={{ ...card, padding: 14, marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}><div><strong>販売用固定URL</strong><div style={{ color: "#8da0b5", fontSize: 12, marginTop: 3 }}>https://mumei-s.github.io/note-insight/</div></div><button onClick={() => void load()} style={{ ...button, border: "1px solid #395068", background: "#111c29", color: "#8feaff" }}>申請一覧を更新</button></section>
 
-    {loading ? <section style={card}>OWNERセッションと申請一覧を確認しています…</section> : <section style={{ display: "grid", gap: 10 }}>
+    {loading ? <section style={card}>申請一覧を読み込んでいます…</section> : <section style={{ display: "grid", gap: 10 }}>
       {items.map(app => <article key={app.id} style={{ ...card, padding: 15, display: "grid", gridTemplateColumns: "50px minmax(0,1fr) auto", gap: 12, alignItems: "center", borderColor: app.status === "pending" ? "#5a4d2c" : app.status === "approved" ? "#31576a" : app.status === "active" ? "#315b3b" : "#493139" }}>
-        <Avatar app={app}/><div style={{ minWidth: 0 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><strong style={{ fontSize: 17 }}>{app.displayName || `@${app.noteId}`}</strong><span style={{ color: statusColor[app.status], fontSize: 11, fontWeight: 950 }}>{statusLabel[app.status]}</span></div><a href={`https://note.com/${app.noteId}`} target="_blank" rel="noreferrer" style={{ color: "#69ccff", textDecoration: "none", fontSize: 12 }}>@{app.noteId} ↗</a><div style={{ color: "#718399", fontSize: 11, marginTop: 5 }}>申請 {fmt(app.createdAt)}　承認 {fmt(app.approvedAt)}　本人認証 {fmt(app.verifiedAt)}</div>{app.status === "approved" && app.verificationCode ? <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 9, background: "#05090e", color: "#b6ff38", fontFamily: "monospace", fontWeight: 950, overflowWrap: "anywhere" }}>{app.verificationCode} <button onClick={() => void copyCode(app.verificationCode!)} style={{ marginLeft: 7, border: 0, borderRadius: 7, background: "#183044", color: "#9fe9ff", padding: "5px 8px", fontWeight: 900 }}>コピー</button></div> : null}</div>
+        <Avatar app={app}/><div style={{ minWidth: 0 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><strong style={{ fontSize: 17 }}>{app.displayName || `@${app.noteId}`}</strong><span style={{ color: statusColor[app.status], fontSize: 11, fontWeight: 950 }}>{statusLabel[app.status]}</span></div><a href={`https://note.com/${app.noteId}`} target="_blank" rel="noreferrer" style={{ color: "#69ccff", textDecoration: "none", fontSize: 12 }}>@{app.noteId} ↗</a><div style={{ color: "#718399", fontSize: 11, marginTop: 5 }}>申請 {fmt(app.createdAt)}　承認 {fmt(app.approvedAt)}　本人認証 {fmt(app.verifiedAt)}</div></div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 240 }}>
           {app.status === "pending" || app.status === "rejected" || app.status === "revoked" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-approve")} style={{ ...button, border: 0, background: "#b6ff38", color: "#111600" }}>承認</button> : null}
           {app.status === "approved" || app.status === "active" ? <button disabled={busyId === app.id} onClick={() => void action(app, "owner-reissue")} style={{ ...button, border: "1px solid #38566f", background: "#101d2a", color: "#8feaff" }}>コード再発行</button> : null}
