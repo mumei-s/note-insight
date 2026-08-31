@@ -1,102 +1,52 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { INSIGHT_TOKEN_KEY } from "./access-portal";
 import "./hub-home.css";
 
-const DIRECTORY_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-directory-data";
-const ICON_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
-const INSIGHT_PARTICIPANTS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-participants";
-const MEMBER_ORIGIN = "https://note-like-tracker.sabosan0404.chatgpt.site";
-const OWNER_KEY = "mumei-unified-owner-token", MEMBER_KEY = "mumei-note-insight:member", DEVICE_KEY = "mumei-note-insight:device";
-
-type Creator = { id: string; note_id: string; display_name: string };
-type Icon = { noteId: string; image: string | null; profileUrl: string };
-type InsightCreator = { id: string; note_id: string; display_name: string; image_url: string | null };
-type LegacyInsightCreator = { id: string; noteUrlname: string; noteNickname: string; noteImageUrl: string | null };
+const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const OWNER_KEY = "mumei-unified-owner-token";
 type RailPerson = { id: string; noteId: string; name: string; image: string | null; profileUrl: string };
-
-async function syncInsightParticipantsIfOwner() {
-  const owner = localStorage.getItem(OWNER_KEY) || "", member = localStorage.getItem(MEMBER_KEY) || "", device = localStorage.getItem(DEVICE_KEY) || "";
-  if (!owner || !member || !device) return;
-  try {
-    const response = await fetch(`${MEMBER_ORIGIN}/api/member/me`, { headers: { Accept: "application/json", "X-Insight-Member": member, "X-Insight-Device": device }, cache: "no-store" });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload?.isOwner || !Array.isArray(payload?.members)) return;
-    const members = payload.members.filter((value: any) => value && (value.role === "owner" || value.status === "active"));
-    await fetch(INSIGHT_PARTICIPANTS, { method: "POST", headers: { "Content-Type": "application/json", "X-Owner-Token": owner }, body: JSON.stringify({ action: "sync", members }), cache: "no-store" });
-  } catch { /* Public TOP remains available from the last successful sync. */ }
-}
 
 function Initial({ name }: { name: string }) { return <span className="hub-person-fallback">{[...name].slice(0, 1).join("") || "n"}</span>; }
 
-function ParticipantRail({ kind, people, loading }: { kind: "insight" | "catalog"; people: RailPerson[]; loading: boolean }) {
-  const title = kind === "insight" ? "INSIGHT参加クリエイター" : "名鑑参加クリエイター";
-  return <section className={`hub-participants is-${kind}`} aria-label={title}>
-    <div className="hub-participant-heading"><strong>{title} <b>{loading ? "—" : people.length}名</b></strong><small>{kind === "catalog" ? "アイコン→名鑑詳細" : "タップ→note"}</small></div>
-    {loading ? <div className="hub-participant-loading"><i /><i /><i /></div> : people.length ? <div className="hub-participant-rail">{people.map((person) => kind === "insight" ? (
-      <a className="hub-person" key={person.id} href={person.profileUrl} target="_blank" rel="noreferrer" title={`${person.name}のnote`}>
-        {person.image ? <img src={person.image} alt="" referrerPolicy="no-referrer" /> : <Initial name={person.name} />}
-        <span>{person.name}</span>
-      </a>
-    ) : (
-      <div className="hub-person catalog-person" key={person.id}>
-        <a className="hub-person-detail" href={`#catalog/${encodeURIComponent(person.noteId)}`} title={`${person.name}の名鑑詳細`}>
-          {person.image ? <img src={person.image} alt="" referrerPolicy="no-referrer" /> : <Initial name={person.name} />}
-          <span>{person.name}</span>
-        </a>
-        <a className="hub-note-link" href={person.profileUrl} target="_blank" rel="noreferrer" aria-label={`${person.name}のnoteを開く`}>note ↗</a>
-      </div>
-    ))}</div> : <p className="hub-participant-empty">現在、公開中の参加者はいません。</p>}
+function ParticipantRail({ people, loading }: { people: RailPerson[]; loading: boolean }) {
+  return <section className="hub-participants is-insight" aria-label="INSIGHT参加クリエイター">
+    <div className="hub-participant-heading"><strong>INSIGHT参加クリエイター <b>{loading ? "—" : people.length}名</b></strong><small>タップ→本人note</small></div>
+    {loading ? <div className="hub-participant-loading"><i /><i /><i /></div> : people.length ? <div className="hub-participant-rail">{people.map(person => <a className="hub-person" key={person.id} href={person.profileUrl} target="_blank" rel="noreferrer" title={`${person.name}のnote`}>{person.image ? <img src={person.image} alt="" referrerPolicy="no-referrer" /> : <Initial name={person.name} />}<span>{person.name}</span></a>)}</div> : <p className="hub-participant-empty">本人認証済みの参加クリエイターがここに並びます。</p>}
   </section>;
 }
 
-function Entrance({ title, label, copy, href, accent, children }: { title: string; label: string; copy: string; href: string; accent: string; children?: ReactNode }) {
-  return <article className="hub-entrance" style={{ "--hub-accent": accent } as CSSProperties}>
-    <small>{label}</small><h2>{title}</h2><p>{copy}</p>{children}<a className="hub-open" href={href}>開く →</a>
-  </article>;
-}
-
 export function HubHome() {
-  const [directory, setDirectory] = useState<RailPerson[]>([]);
-  const [insight, setInsight] = useState<RailPerson[]>([]);
-  const [loadingDirectory, setLoadingDirectory] = useState(true);
-  const [loadingInsight, setLoadingInsight] = useState(true);
+  const [people, setPeople] = useState<RailPerson[]>([]);
+  const [loading, setLoading] = useState(true);
+  const memberReady = Boolean(localStorage.getItem(INSIGHT_TOKEN_KEY));
+  const ownerReady = Boolean(localStorage.getItem(OWNER_KEY));
 
   useEffect(() => {
     let live = true;
     void (async () => {
       try {
-        const response = await fetch(DIRECTORY_ENDPOINT, { method: "POST", cache: "no-store" });
-        const payload = await response.json();
-        const creators: Creator[] = response.ok && payload?.ok && Array.isArray(payload.creators) ? payload.creators : [];
-        let icons: Record<string, Icon> = {};
-        if (creators.length) {
-          const iconResponse = await fetch(ICON_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteIds: creators.map((creator) => creator.note_id) }), cache: "no-store" });
-          const iconPayload = await iconResponse.json().catch(() => ({}));
-          const items: Icon[] = Array.isArray(iconPayload?.items) ? iconPayload.items : [];
-          icons = Object.fromEntries(items.map((item) => [item.noteId, item]));
-        }
-        if (live) setDirectory(creators.map((creator) => ({ id: creator.id, noteId: creator.note_id, name: creator.display_name || `@${creator.note_id}`, image: icons[creator.note_id]?.image ?? null, profileUrl: icons[creator.note_id]?.profileUrl ?? `https://note.com/${creator.note_id}` })));
-      } catch { if (live) setDirectory([]); }
-      finally { if (live) setLoadingDirectory(false); }
-    })();
-    void (async () => {
-      try {
-        await syncInsightParticipantsIfOwner();
-        const response = await fetch(INSIGHT_PARTICIPANTS, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "public" }), cache: "no-store" });
+        const response = await fetch(ACCESS, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "public-participants" }), cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
-        const legacy: LegacyInsightCreator[] = response.ok && Array.isArray(payload?.items) ? payload.items : [];
-        const rows: InsightCreator[] = response.ok && Array.isArray(payload?.participants) ? payload.participants : legacy.map((person) => ({ id: person.id, note_id: person.noteUrlname, display_name: person.noteNickname, image_url: person.noteImageUrl }));
-        if (live) setInsight(rows.map((person) => ({ id: person.id, noteId: person.note_id, name: person.display_name || `@${person.note_id}`, image: person.image_url, profileUrl: `https://note.com/${person.note_id}` })));
-      } catch { if (live) setInsight([]); }
-      finally { if (live) setLoadingInsight(false); }
+        const rows = response.ok && Array.isArray(payload?.participants) ? payload.participants : [];
+        if (live) setPeople(rows.map((person: any) => ({ id: String(person.member_id || person.id), noteId: String(person.note_id || ""), name: String(person.display_name || `@${person.note_id}`), image: typeof person.image_url === "string" ? person.image_url : null, profileUrl: `https://note.com/${person.note_id}` })));
+      } catch { if (live) setPeople([]); }
+      finally { if (live) setLoading(false); }
     })();
     return () => { live = false; };
   }, []);
 
-  return <div className="hub-page"><header className="hub-header"><div className="hub-wrap"><a href="#"><span>無名S note</span>CREATOR HUB</a></div></header><main>
-    <section className="hub-hero hub-wrap"><p>MUMEI S NOTE CREATOR SYSTEM</p><h1>無名S note<br />CREATOR HUB</h1><span>INSIGHT・クリエイター名鑑をここから切り替えます。</span></section>
-    <section className="hub-grid hub-wrap">
-      <Entrance title="INSIGHT" label="ANALYTICS" copy="note活動を確認・管理・分析します。" href="#access/insight" accent="#b6ff38"><ParticipantRail kind="insight" people={insight} loading={loadingInsight} /></Entrance>
-      <Entrance title="クリエイター名鑑" label="CREATOR DIRECTORY" copy="参加クリエイターのカードや紹介をアルバムのように見る場所です。" href="#catalog" accent="#54d8ff"><ParticipantRail kind="catalog" people={directory} loading={loadingDirectory} /></Entrance>
+  const primaryHref = ownerReady || memberReady ? "#dashboard" : "#access/insight";
+  const primaryLabel = ownerReady || memberReady ? "自分のINSIGHTを開く →" : "参加申請・ログイン →";
+
+  return <div className="hub-page"><header className="hub-header"><div className="hub-wrap"><a href="#"><span>無名S note</span>INSIGHT</a>{ownerReady ? <a href="#manage" style={{ marginLeft: "auto", color: "#ffcf69", fontSize: 12 }}>管理ページ</a> : null}</div></header><main>
+    <section className="hub-hero hub-wrap"><p>NOTE CREATOR ANALYTICS</p><h1>無名S note<br />INSIGHT</h1><span>noteの反応を「誰が・どの記事に・どれだけ応援しているか」まで蓄積して見る、参加制のクリエイター分析ツール。</span></section>
+
+    <section className="hub-wrap" style={{ paddingBottom: 16 }}><article className="hub-entrance" style={{ maxWidth: 900, margin: "0 auto", minHeight: 0, borderColor: "#486522" }}><small style={{ color: "#b6ff38" }}>PAID MEMBER ACCESS</small><h2>INSIGHT</h2><p>購入者は参加申請後、OWNER承認とnote自己紹介欄を使った本人確認を行います。認証後は共通パスワードなしで本人専用INSIGHTを利用できます。</p><ParticipantRail people={people} loading={loading}/><a className="hub-open" href={primaryHref} style={{ background: "#b6ff38" }}>{primaryLabel}</a></article></section>
+
+    <section className="hub-wrap" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10, padding: "8px 0 24px" }}>
+      {[['01','購入・参加申請','販売用URLは固定。購入者が自分のnote IDで参加申請します。'],['02','OWNER承認','申請はINSIGHT専用管理ページに届き、OWNERが購入者を承認します。'],['03','noteで本人確認','発行コードを自己紹介欄へ一時掲載して保存し、INSIGHT側で確認します。'],['04','利用開始','確認後は自己紹介を元に戻せます。本人アイコンがTOP参加者一覧へ追加されます。']].map(([no,title,copy]) => <article key={no} style={{ border: "1px solid #273446", borderRadius: 16, background: "#0d141d", padding: 16 }}><small style={{ color: "#b6ff38", fontWeight: 950 }}>{no}</small><strong style={{ display: "block", margin: "5px 0", fontSize: 16 }}>{title}</strong><p style={{ color: "#8d9caf", fontSize: 12, lineHeight: 1.7, margin: 0 }}>{copy}</p></article>)}
     </section>
+
+    <section className="hub-wrap" style={{ padding: "8px 0 115px" }}><article style={{ border: "1px solid #28394c", borderRadius: 18, background: "#0d141d", padding: 18 }}><small style={{ color: "#8feaff", fontWeight: 950 }}>CROSS PLATFORM</small><h2 style={{ margin: "5px 0" }}>端末・ブラウザを固定しない</h2><p style={{ color: "#8d9caf", lineHeight: 1.75, marginBottom: 0 }}>初回認証後に発行されたnote ID＋パスコードで、別のスマホ・PC・ブラウザからも同じ固定URLへログインできます。参加者画面には「アプリ更新」を用意し、URLを変更せず最新版へ更新できます。</p></article></section>
   </main></div>;
 }
