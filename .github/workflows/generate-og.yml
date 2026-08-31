@@ -1,0 +1,39 @@
+name: Generate INSIGHT Social Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - public/og-insight.svg
+      - .github/workflows/generate-og.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: insight-social-preview
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SVG renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends librsvg2-bin
+      - name: Render 1200x630 PNG
+        run: rsvg-convert -w 1200 -h 630 public/og-insight.svg -o public/og-insight.png
+      - name: Commit rendered preview when changed
+        run: |
+          if [ -z "$(git status --porcelain public/og-insight.png)" ]; then
+            echo "Preview already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/og-insight.png
+          git commit -m "Render INSIGHT social preview PNG"
+          git push
