@@ -1,6 +1,23 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-08-31 JST
+Updated: 2026-09-01 JST
+
+## 2026-09-01 OWNER / PARTICIPANT SEPARATION — CURRENT CHECKPOINT
+The production-facing `note-insight` app remains **INSIGHT only**. OWNER administration is not part of the participant UI.
+
+Current durable checkpoint:
+- Public TOP never reads OWNER state to reveal an admin link.
+- Public TOP never routes to OWNER INSIGHT merely because an OWNER token exists in the browser.
+- Participant navigation remains TOP / INSIGHT only.
+- OWNER entry, OWNER INSIGHT and application management are separate routes and separate session state.
+- `#manage` may be typed directly, but the management UI must not render until `unified-owner-access` confirms the OWNER session server-side. An unauthenticated browser is redirected to the OWNER gate without showing application data.
+- Approval still generates an individual `INSIGHT-XXXXXXXX` code for the applicant's note-profile verification flow.
+- The verification code is for the applicant only. OWNER may approve/reissue but does not need to see or copy the code.
+- Supabase `insight-access` v2 is deployed ACTIVE. OWNER list / approve / reissue responses do not include the applicant verification code. Applicant `application-status` still returns it only through the applicant token while status is `approved`.
+- Deployed `insight-access` v2 source is tracked at `supabase/functions/insight-access/index.ts`.
+- OWNER-token compatibility is handled by `public.is_owner_token`, which accepts the current OWNER session table as well as the legacy credential path.
+- Fixed public URL remains `https://mumei-s.github.io/note-insight/`.
+- Social sharing metadata and the dedicated 1200x630 INSIGHT OG preview are enabled for the fixed URL.
 
 ## 2026-08-31 COMMERCIAL INSIGHT — HIGHEST PRIORITY
 The deployed primary `note-insight` app is now **INSIGHT only**.
@@ -12,15 +29,15 @@ Canonical product scope is `docs/PRIMARY_APP_SCOPE.md`.
 - The primary public URL stays `https://mumei-s.github.io/note-insight/` across releases.
 - There is no Exit/終了 button, exit confirmation, close-window behavior, or browser-back interception.
 - Public navigation is TOP / INSIGHT only.
-- OWNER management is separate at `#manage`.
+- OWNER management is separate at `#manage` and is never linked from the public participant UI.
 
 ## Paid participant flow
 1. Buyer opens the fixed root URL and chooses participation/login.
 2. Buyer submits their note ID/profile URL.
-3. Application is stored in Supabase and appears in the OWNER `#manage` page.
+3. Application is stored in Supabase and appears in the OWNER `#manage` page after OWNER authentication.
 4. OWNER approves.
-5. Approval creates an individual `INSIGHT-XXXXXXXX` passcode.
-6. Buyer temporarily places the code in their public note creator bio/self-introduction and saves it.
+5. Approval creates an individual `INSIGHT-XXXXXXXX` passcode for that applicant.
+6. The applicant sees that code in their own application flow and temporarily places it in their public note creator bio/self-introduction and saves it.
 7. INSIGHT verifies the public profile contains the exact code.
 8. Verification activates the account, issues a long-lived hashed session token and adds the creator to the public participant list.
 9. Buyer restores the original bio.
