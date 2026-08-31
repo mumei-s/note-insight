@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AccessPortal } from "./access-portal";
 import { ArticleLikesPageV2 } from "./article-likes-page-v2";
-import { BattleArenaPage } from "./battle-arena-page";
 import { CatalogAdminV2 } from "./catalog-admin-v2";
 import { CatalogIconsPage } from "./catalog-icons-page";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
@@ -9,7 +8,6 @@ import { EvidenceV2 } from "./evidence-v2";
 import { FastInsightV8 } from "./fast-insight-v8";
 import "./fast-insight-v6-override.css";
 import { FeaturePage } from "./feature-page";
-import { GameAdminPage } from "./game-admin-page";
 import { HubHome } from "./hub-home";
 import { InsightAdminV2 } from "./insight-admin-v2";
 import { MemberPortal } from "./member-portal";
@@ -17,11 +15,13 @@ import { OwnerGate } from "./owner-gate";
 import { OwnerHub } from "./owner-hub";
 
 const OWNER_KEY = "mumei-unified-owner-token";
-const ADMIN_ROUTES = new Set(["owner", "manage", "catalog-admin", "insight-admin", "game-admin"]);
+const ADMIN_ROUTES = new Set(["owner", "manage", "catalog-admin", "insight-admin"]);
 const INSIGHT_CHILD_ROUTES = new Set(["evidence", "article-likes", "dashboard-legacy"]);
+const DETACHED_GAME_ROUTES = new Set(["battle", "game-admin"]);
 
 function currentRoute() {
-  return window.location.hash.replace(/^#\/?/, "") || "home";
+  const route = window.location.hash.replace(/^#\/?/, "") || "home";
+  return DETACHED_GAME_ROUTES.has(route) ? "home" : route;
 }
 
 function isAdminRoute(route: string) {
@@ -43,7 +43,7 @@ function routeUrl(route: string) {
 function backTarget(route: string) {
   if (route.startsWith("catalog/") || route === "member") return "catalog";
   if (INSIGHT_CHILD_ROUTES.has(route) || route.startsWith("features/")) return "dashboard";
-  if (route === "dashboard" || route === "catalog" || route === "battle") return "home";
+  if (route === "dashboard" || route === "catalog") return "home";
   if (route.startsWith("access/")) return "home";
   return "home";
 }
@@ -65,7 +65,7 @@ function ExitDialog({ open, onCancel, onExit }: { open: boolean; onCancel: () =>
     <section className="app-exit-dialog">
       <small>CREATOR HUB</small>
       <h2 id="app-exit-title">終了しますか？</h2>
-      <p>INSIGHT・名鑑・ゲームを終了します。</p>
+      <p>INSIGHT・名鑑を終了します。</p>
       <div><button onClick={onCancel}>キャンセル</button><button className="danger" onClick={onExit}>終了</button></div>
     </section>
   </div>;
@@ -76,7 +76,6 @@ function BottomNav({ route, onExit }: { route: string; onExit: () => void }) {
     { route: "home", label: route === "home" ? "終了" : "TOP", icon: route === "home" ? "×" : "⌂" },
     { route: "dashboard", label: "INSIGHT", icon: "◫" },
     { route: "catalog", label: "名鑑", icon: "▦" },
-    { route: "battle", label: "ゲーム", icon: "◆" },
   ];
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
@@ -93,7 +92,7 @@ function BottomNav({ route, onExit }: { route: string; onExit: () => void }) {
       .app-route-shell>*{scroll-margin-bottom:calc(124px + env(safe-area-inset-bottom,0px))}
       .app-route-shell.is-member .iv8-apprefresh{display:none!important}
       .app-route-shell.is-admin{padding-bottom:24px!important}.app-route-shell.is-admin>*{scroll-margin-bottom:0!important}
-      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
+      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
       .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
       .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}
       .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
@@ -115,6 +114,11 @@ export function App() {
   useEffect(() => { routeRef.current = route; }, [route]);
 
   useEffect(() => {
+    const rawRoute = window.location.hash.replace(/^#\/?/, "") || "home";
+    if (DETACHED_GAME_ROUTES.has(rawRoute)) {
+      window.history.replaceState({ mumeiGuard: true, route: "home" }, "", routeUrl("home"));
+    }
+
     const update = () => {
       const next = currentRoute();
       routeRef.current = next;
@@ -133,17 +137,6 @@ export function App() {
       if (exitingRef.current) return;
       const current = routeRef.current;
       if (isAdminRoute(current)) return;
-
-      if (current === "battle") {
-        const gameBack = document.querySelector<HTMLButtonElement>(".g5-active .mode-back");
-        if (gameBack) {
-          window.history.pushState({ mumeiGuard: true, route: "battle" }, "", routeUrl("battle"));
-          gameBack.click();
-          setExitOpen(false);
-          window.scrollTo({ top: 0, behavior: "auto" });
-          return;
-        }
-      }
 
       if (current === "home") {
         setExitOpen(true);
@@ -201,8 +194,6 @@ export function App() {
   if (route === "access/insight") page = <AccessPortal target="insight" />;
   else if (route === "access/catalog") page = <AccessPortal target="catalog" />;
   else if (route === "catalog" || route.startsWith("catalog/")) page = <CatalogIconsPage initialNoteId={catalogNoteId(route)} />;
-  else if (route === "battle") page = <BattleArenaPage />;
-  else if (route === "game-admin") page = <GameAdminPage />;
   else if (route === "evidence") page = <EvidenceV2 />;
   else if (route === "article-likes") page = <ArticleLikesPageV2 />;
   else if (route === "owner") page = <OwnerGate />;
