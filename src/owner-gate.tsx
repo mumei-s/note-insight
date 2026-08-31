@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 const ENDPOINT="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 const KEY="mumei-unified-owner-token";
 const RETURN_KEY="mumei-owner-return";
-function nextRoute(){const route=sessionStorage.getItem(RETURN_KEY)||"";sessionStorage.removeItem(RETURN_KEY);return route==="dashboard"||route==="catalog"?route:"manage"}
+function nextRoute(){const route=sessionStorage.getItem(RETURN_KEY)||"";sessionStorage.removeItem(RETURN_KEY);return route==="dashboard"?route:"manage"}
 async function call(action:string,extra:Record<string,unknown>={}){const r=await fetch(ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json","X-Owner-Token":localStorage.getItem(KEY)||""},body:JSON.stringify({action,...extra})});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p?.error||"管理者認証に失敗しました");return p}
 
 export function OwnerGate(){
