@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note 巡回BOOST｜タグ検索・スキ・マガジン v4.0
+// @name         note 巡回BOOST｜タグ検索・スキ・マガジン v4.1
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      4.0.0
-// @description  ハッシュタグから記事を抽出し、安全フィルターを通した記事を1件ずつ確認してスキ・保存・マガジン追加できる巡回ツール。新着/人気/急上昇/発掘、履歴・安全カウンター付き。
+// @version      4.1.0
+// @description  タグプリセット＋検索状態保存。ハッシュタグから記事を抽出し、安全フィルター後に1件ずつスキ・保存・マガジン追加できる巡回ツール。
 // @match        https://note.com/*
 // @grant        none
 // @run-at       document-idle
@@ -10,21 +10,23 @@
 (() => {
   'use strict';
 
-  const VERSION = '4.0.0';
+  const VERSION = '4.1.0';
   const K = 'note巡回BOOST_v4';
   const DEFAULTS = {
-    likeHour: 18,
-    likeDay: 80,
-    magHour: 20,
-    magDay: 50,
+    likeHour: 18, likeDay: 80,
+    magHour: 20, magDay: 50,
     followGap: 20,
-    days: 7,
-    count: 50,
-    mode: 'new',
-    tagMode: 'OR',
-    excludeFollowing: false,
-    onePerCreator: true,
+    days: 7, count: 50, mode: 'new', tagMode: 'OR',
+    excludeFollowing: false, onePerCreator: true,
   };
+  const PRESETS = [
+    ['🌱 はじめて', '#はじめてのnote'],
+    ['✍️ エッセイ', '#エッセイ'],
+    ['📖 小説', '#小説'],
+    ['🎨 創作', '#創作'],
+    ['🤖 AI', '#AI #生成AI'],
+    ['📝 note', '#note #note初心者'],
+  ];
   const FIXED_NG = {
     'ギャンブル': [
       /ギャンブル/i,/競馬/i,/競輪/i,/競艇/i,/ボートレース/i,/オートレース/i,
@@ -50,9 +52,40 @@
   const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
   const parseMs = s => Date.parse(s || '') || 0;
   const load = (name, fb) => { try { return JSON.parse(localStorage.getItem(`${K}:${name}`)) ?? fb; } catch { return fb; } };
-  const save = (name, v) => localStorage.setItem(`${K}:${name}`, JSON.stringify(v));
+  const save = (name, v) => { try { localStorage.setItem(`${K}:${name}`, JSON.stringify(v)); } catch (e) { console.warn('[note巡回BOOST] save failed', name, e); } };
   const settings = Object.assign({}, DEFAULTS, load('settings', {}));
+
   let queue = [], index = 0, running = false, currentUser = null, magazines = [];
+  let lastStatus = '待機中';
+  let lastDebug = `固定NG：ギャンブル・アダルト・投資｜フォロー差 +${settings.followGap}以上は自動除外`;
+
+  const oldSession = load('session', null);
+  if (oldSession && Array.isArray(oldSession.queue)) {
+    queue = oldSession.queue;
+    index = Math.max(0, Math.min(Number(oldSession.index) || 0, queue.length));
+    lastStatus = oldSession.status || (queue.length ? `前回の${queue.length}件を復元しました` : '待機中');
+    lastDebug = oldSession.debug || lastDebug;
+  }
+
+  function slim(c) {
+    const { body, profile, ...rest } = c || {};
+    return rest;
+  }
+  function saveSession() {
+    save('session', {
+      queue: queue.map(slim), index,
+      status: lastStatus, debug: lastDebug,
+      savedAt: Date.now(),
+    });
+  }
+  function setStatus(s) {
+    lastStatus = String(s || '');
+    const el = $('#nb-status'); if (el) el.textContent = lastStatus;
+  }
+  function setDebug(s) {
+    lastDebug = String(s || '');
+    const el = $('#nb-debug'); if (el) el.textContent = lastDebug;
+  }
 
   async function api(url, init={}) {
     const headers = Object.assign({accept:'application/json'}, init.headers || {});
@@ -97,7 +130,6 @@
     };
     walk(j); return [...out];
   }
-
   function normalizeSearch(j) {
     const d = j?.data ?? j ?? {}, notes = d.notes || {};
     const arr = notes.contents || notes.notes || d.contents || [];
@@ -107,9 +139,7 @@
       last: notes.is_last_page === true || notes.isLastPage === true
     };
   }
-
   const normalizeTags = raw => [...new Set(String(raw||'').split(/[\s,、]+/).map(x=>x.trim().replace(/^#+/,'')).filter(Boolean))];
-
   function ngReason(text) {
     for (const [label, regs] of Object.entries(FIXED_NG)) if (regs.some(r => r.test(text))) return label;
     return '';
@@ -123,9 +153,7 @@
   function addHistory(name, data={}) {
     const arr = history(name); arr.push(Object.assign({t:Date.now()}, data)); save(name, arr.slice(-500));
   }
-  function usage(name, ms) {
-    const now = Date.now(); return history(name).filter(x => now - x.t < ms).length;
-  }
+  function usage(name, ms) { const now = Date.now(); return history(name).filter(x => now - x.t < ms).length; }
   function remainingAt(name, ms, limit) {
     const arr = history(name).filter(x => Date.now()-x.t < ms).sort((a,b)=>a.t-b.t);
     if (arr.length < limit) return 0;
@@ -153,7 +181,6 @@
       return currentUser;
     } catch { currentUser = null; return null; }
   }
-
   async function getMagazines(noteKey='') {
     try {
       const q = noteKey ? `&note_key=${encodeURIComponent(noteKey)}` : '';
@@ -167,14 +194,14 @@
     return magazines;
   }
 
-  async function rawSearch(tags, days, target, status) {
+  async function rawSearch(tags, days, target) {
     const cutoff = Date.now() - days*86400e3;
     const maxRaw = Math.max(target*4, 80), all = new Map();
     for (const tag of tags) {
       let cursor='0', page=0, done=false;
       while (!done && page < 250 && all.size < maxRaw) {
         page++;
-        status(`検索中 #${tag}｜${page}ページ｜候補${all.size}`);
+        setStatus(`検索中 #${tag}｜${page}ページ｜候補${all.size}`);
         const j = await api(`/api/v3/searches?context=note&q=${encodeURIComponent(tag)}&size=20&start=${encodeURIComponent(cursor)}&sort=new`);
         const s = normalizeSearch(j); if (!s.arr.length) break;
         let oldest = Infinity;
@@ -218,7 +245,8 @@
       c.gap = c.following != null && c.followers != null ? c.following - c.followers : null;
       const lowerTags = c.tags.map(x=>x.toLowerCase());
       const wanted = tags.map(x=>x.toLowerCase());
-      c.tagMatch = tagMode === 'AND' ? wanted.every(t=>lowerTags.includes(t) || (c.matched||[]).map(x=>x.toLowerCase()).includes(t)) : true;
+      const matched = (c.matched||[]).map(x=>x.toLowerCase());
+      c.tagMatch = tagMode === 'AND' ? wanted.every(t=>lowerTags.includes(t) || matched.includes(t)) : true;
       const ageH = Math.max(0.5,(Date.now()-parseMs(c.publish))/3600e3);
       c.velocity = c.likes / Math.max(1, ageH);
       c.discovery = c.likes / Math.max(20, c.followers ?? 100);
@@ -252,28 +280,54 @@
     return {items:out.slice(0,target), skips};
   }
 
-  async function scan(status, debug) {
+  function formState() {
+    return {
+      tags: $('#nb-tags')?.value || '',
+      days: Number($('#nb-days')?.value || settings.days),
+      count: Number($('#nb-count')?.value || settings.count),
+      mode: $('#nb-mode')?.value || settings.mode,
+      tagMode: $('#nb-tagmode')?.value || settings.tagMode,
+    };
+  }
+  function saveForm() {
+    const f=formState();
+    Object.assign(settings,{days:f.days,count:f.count,mode:f.mode,tagMode:f.tagMode});
+    save('settings',settings); save('form',f);
+  }
+
+  async function scan() {
     if (running) return;
-    running=true; queue=[]; index=0; renderCurrent();
+    const f=formState();
+    const tags=normalizeTags(f.tags);
+    if (!tags.length) return toast('#タグを入力してね','bad');
+    saveForm();
+    const previousQueue=queue, previousIndex=index;
+    running=true; renderCurrent();
     try {
-      const tags=normalizeTags($('#nb-tags')?.value); if (!tags.length) throw new Error('#タグを入力してね');
-      const days=Number($('#nb-days').value), target=Number($('#nb-count').value), mode=$('#nb-mode').value, tagMode=$('#nb-tagmode').value;
-      Object.assign(settings,{days,count:target,mode,tagMode}); save('settings',settings);
       await getCurrentUser();
-      const raw = await rawSearch(tags,days,target,status);
+      const raw = await rawSearch(tags,f.days,f.count);
       const inspected=[];
       for (let i=0;i<raw.length;i++) {
-        status(`安全確認 ${i+1}/${raw.length}｜${raw[i].name}`);
-        inspected.push(await inspect(raw[i],tags,tagMode));
-        if (i%5===0) debug(`検索${raw.length} / 確認${i+1}`);
+        setStatus(`安全確認 ${i+1}/${raw.length}｜${raw[i].name}`);
+        inspected.push(await inspect(raw[i],tags,f.tagMode));
+        if (i%5===0) setDebug(`検索${raw.length} / 確認${i+1}`);
         await sleep(70);
       }
-      const f=filterAndSort(inspected,mode,target); queue=f.items;
-      debug(`表示${queue.length}｜NG${f.skips.ng}｜フォロー差${f.skips.gap}｜手動除外${f.skips.black}｜重複${f.skips.dup}`);
-      status(`完了：${queue.length}件。1件ずつ確認して操作できます。`);
-      index=0; await refreshMagSelector(); renderCurrent();
-    } catch(e) { status(`エラー：${e.message||e}`); }
-    finally { running=false; }
+      const filtered=filterAndSort(inspected,f.mode,f.count);
+      queue=filtered.items; index=0;
+      setDebug(`表示${queue.length}｜NG${filtered.skips.ng}｜フォロー差${filtered.skips.gap}｜手動除外${filtered.skips.black}｜重複${filtered.skips.dup}｜取得失敗${filtered.skips.error}`);
+      setStatus(queue.length ? `完了：${queue.length}件。1件ずつ確認できます。` : '完了：表示できる記事は0件でした。黄色欄に除外数を表示しています。');
+      saveSession();
+    } catch(e) {
+      queue=previousQueue; index=previousIndex;
+      setStatus(`エラー：${e.message||e}｜前回結果は保持しました`);
+      saveSession();
+    } finally {
+      running=false;
+      await refreshMagSelector();
+      renderCurrent();
+      saveSession();
+    }
   }
 
   async function like(c) {
@@ -284,8 +338,9 @@
       await api(`/api/v3/notes/${encodeURIComponent(c.key)}/likes`,{
         method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'
       });
-      c.liked=true; addHistory('likes',{key:c.key,urlname:c.urlname}); addHistory('actions',{type:'like',key:c.key,urlname:c.urlname});
-      updateMeters(); toast('❤️ スキしました','ok'); setTimeout(next,250);
+      c.liked=true;
+      addHistory('likes',{key:c.key,urlname:c.urlname}); addHistory('actions',{type:'like',key:c.key,urlname:c.urlname});
+      saveSession(); updateMeters(); toast('❤️ スキしました','ok'); setTimeout(next,250);
     } catch(e) {
       if ([403,429].includes(e.status)) toast(`⛔ note側で制限の可能性。自動停止しました (${e.status})`,'bad');
       else toast(`スキ失敗：${e.message||e}`,'bad');
@@ -318,11 +373,15 @@
     }
   }
 
-  function next(){ if (!queue.length) return; index=Math.min(queue.length,index+1); renderCurrent(); }
-  function prev(){ if (!queue.length) return; index=Math.max(0,index-1); renderCurrent(); }
+  function next(){ if (!queue.length) return; index=Math.min(queue.length,index+1); saveSession(); renderCurrent(); }
+  function prev(){ if (!queue.length) return; index=Math.max(0,index-1); saveSession(); renderCurrent(); }
   function block(c){
     const arr=new Set(load('blacklist',[])); arr.add(c.urlname); save('blacklist',[...arr]);
-    addHistory('actions',{type:'block',urlname:c.urlname}); toast(`🚫 @${c.urlname} を今後除外`); next();
+    addHistory('actions',{type:'block',urlname:c.urlname});
+    queue=queue.filter(x=>x.urlname!==c.urlname);
+    if (index>queue.length) index=queue.length;
+    setStatus(`🚫 @${c.urlname} を今後すべての検索から除外しました`);
+    saveSession(); toast(`🚫 @${c.urlname} を今後除外`,'ok'); renderCurrent();
   }
   function favorite(c){ const a=new Set(load('favorites',[])); a.add(c.urlname); save('favorites',[...a]); toast('⭐ 保存しました','ok'); }
 
@@ -347,11 +406,16 @@
   function renderCurrent() {
     const box=$('#nb-card'); if (!box) return;
     updateMeters();
-    if (running) return box.innerHTML='<div class="nb-empty">検索・安全確認中…</div>';
-    if (!queue.length) return box.innerHTML='<div class="nb-empty">#タグを入れて「巡回開始」</div>';
-    if (index >= queue.length) return box.innerHTML=`<div class="nb-empty"><b>✅ 今回の巡回は終了</b><br>${queue.length}件確認しました。<br><button id="nb-again">先頭へ戻る</button></div>`;
+    if (running) return box.innerHTML='<div class="nb-empty">検索・安全確認中…<br><small>×で閉じても処理・前回結果は消えません</small></div>';
+    if (!queue.length) return box.innerHTML=`<div class="nb-empty">${esc(lastStatus.includes('0件') ? lastStatus : '#タグかプリセットを選んで「巡回開始」')}</div>`;
+    if (index >= queue.length) {
+      box.innerHTML=`<div class="nb-empty"><b>✅ 今回の巡回は終了</b><br>${queue.length}件確認しました。<br><button id="nb-again">先頭へ戻る</button></div>`;
+      $('#nb-again').onclick=()=>{index=0;saveSession();renderCurrent();};
+      return;
+    }
     const c=queue[index], url=`https://note.com/${encodeURIComponent(c.urlname)}/n/${encodeURIComponent(c.key)}`;
     const gap=c.gap==null?'?':(c.gap>=0?`+${c.gap}`:`${c.gap}`);
+    const mode=$('#nb-mode')?.value || settings.mode;
     box.innerHTML=`
       <div class="nb-pos">${index+1}/${queue.length}</div>
       <div class="nb-user"><b>${esc(c.name)}</b> <span>@${esc(c.urlname)}</span></div>
@@ -359,7 +423,7 @@
       <h3>${esc(c.title)}</h3>
       <div class="nb-tags">${(c.tags||[]).slice(0,10).map(t=>`#${esc(t)}`).join(' ')}</div>
       <div class="nb-ex">${esc(c.excerpt || '本文プレビューを取得できませんでした')}</div>
-      <div class="nb-rank">${$('#nb-mode')?.value==='rising'?`🔥 急上昇 ${c.velocity.toFixed(2)}スキ/時`:$('#nb-mode')?.value==='discover'?`🎯 発掘スコア ${c.discovery.toFixed(2)}`:''}</div>
+      <div class="nb-rank">${mode==='rising'?`🔥 急上昇 ${Number(c.velocity||0).toFixed(2)}スキ/時`:mode==='discover'?`🎯 発掘スコア ${Number(c.discovery||0).toFixed(2)}`:''}</div>
       <div class="nb-actions">
         <button id="nb-like" class="heart">${c.liked?'❤️ スキ済み':'♡ スキ'}</button>
         <button id="nb-skip">⏭ 次へ</button>
@@ -374,7 +438,6 @@
       </div>`;
     $('#nb-like').onclick=()=>like(c); $('#nb-skip').onclick=next; $('#nb-magadd').onclick=()=>addMagazine(c);
     $('#nb-fav').onclick=()=>favorite(c); $('#nb-block').onclick=()=>block(c); $('#nb-prev').onclick=prev;
-    $('#nb-again')?.addEventListener('click',()=>{index=0;renderCurrent();});
   }
 
   function toast(msg, kind='') {
@@ -385,21 +448,29 @@
   function openSettings() {
     const h=prompt('スキ安全値：60分,24時間',`${settings.likeHour},${settings.likeDay}`);
     if (h) { const [a,b]=h.split(',').map(Number); if (a>0&&b>0){settings.likeHour=a;settings.likeDay=b;} }
-    const m=prompt('マガジン追加の安全値：60分,24時間（note公式の数値上限ではなく、このツールの安全値）',`${settings.magHour},${settings.magDay}`);
+    const m=prompt('マガジン追加の安全値：60分,24時間（note公式上限ではなく、このツールの安全値）',`${settings.magHour},${settings.magDay}`);
     if (m) { const [a,b]=m.split(',').map(Number); if (a>0&&b>0){settings.magHour=a;settings.magDay=b;} }
     const g=prompt('自動スキップする「フォロー数−フォロワー数」の差',String(settings.followGap));
     if (g && Number(g)>=0) settings.followGap=Number(g);
     save('settings',settings); updateMeters(); toast('設定を保存しました','ok');
   }
 
+  function applyPreset(tags) {
+    const input=$('#nb-tags'); if (!input) return;
+    input.value=tags; saveForm();
+    toast(`${tags} をセットしました`,'ok');
+  }
+
   function makeUI() {
     if ($('#note巡回boost-v4')) return;
+    const form=load('form',{});
     const host=document.createElement('div'); host.id='note巡回boost-v4';
     host.innerHTML=`<style>
       #note巡回boost-v4{position:fixed;right:8px;bottom:10px;z-index:2147483647;font-family:system-ui,-apple-system,sans-serif;color:#151515}
       #nb-open{border:0;border-radius:999px;padding:12px 15px;background:#111;color:#fff;font-weight:900;box-shadow:0 4px 16px #0004}
       #nb-panel{display:none;width:min(96vw,760px);max-height:88vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 10px 34px #0006;padding:12px}
       .nb-head{display:flex;gap:7px;align-items:center;position:sticky;top:-12px;background:#fff;padding:8px 0;z-index:3}.nb-head b{flex:1}.nb-head button{padding:7px 9px}
+      .nb-presets{display:flex;gap:6px;overflow-x:auto;padding:3px 0 8px}.nb-presets button{white-space:nowrap;border:1px solid #ddd;background:#fff;border-radius:999px;padding:8px 10px;font-weight:800}
       .nb-grid{display:grid;grid-template-columns:1fr 100px 118px 90px;gap:6px}.nb-grid input,.nb-grid select{min-width:0;padding:9px;border:1px solid #ccc;border-radius:9px;background:#fff}
       #nb-run{width:100%;margin:8px 0;padding:11px;border:0;border-radius:10px;background:#111;color:#fff;font-weight:900}
       #nb-status,#nb-debug,#nb-meters{font-size:12px;padding:7px 9px;border-radius:8px;margin:5px 0}#nb-status{background:#f2f2f2}#nb-debug{background:#fff5cf}#nb-meters{background:#eef8f0;font-weight:800}
@@ -412,24 +483,30 @@
     <button id="nb-open">💗 note巡回BOOST</button>
     <div id="nb-panel">
       <div class="nb-head"><b>note巡回BOOST v${VERSION}</b><button id="nb-set">⚙</button><button id="nb-x">×</button></div>
+      <div class="nb-presets">${PRESETS.map(([name,tags])=>`<button class="nb-preset" data-tags="${esc(tags)}">${esc(name)}</button>`).join('')}</div>
       <div class="nb-grid">
-        <input id="nb-tags" placeholder="#はじめてのnote  #エッセイ">
+        <input id="nb-tags" placeholder="#はじめてのnote  #エッセイ" value="${esc(form.tags || '')}">
         <select id="nb-tagmode"><option>OR</option><option>AND</option></select>
         <select id="nb-mode"><option value="new">🆕新着</option><option value="popular">🏆人気</option><option value="rising">🔥急上昇</option><option value="discover">🎯発掘</option></select>
         <select id="nb-days"><option value="1">今日</option><option value="3">3日</option><option value="7">7日</option><option value="30">30日</option></select>
         <select id="nb-count"><option>20</option><option>50</option><option>100</option></select>
       </div>
       <button id="nb-run">🔎 巡回開始</button>
-      <div id="nb-status">待機中</div><div id="nb-debug">固定NG：ギャンブル・アダルト・投資｜フォロー差 +${settings.followGap}以上は自動除外</div><div id="nb-meters"></div>
+      <div id="nb-status">${esc(lastStatus)}</div><div id="nb-debug">${esc(lastDebug)}</div><div id="nb-meters"></div>
       <div class="nb-magrow"><select id="nb-mag"><option value="">マガジン選択</option></select><button id="nb-magrefresh">↻</button></div>
       <div id="nb-card"></div><div id="nb-toast" class="nb-toast"></div>
     </div>`;
     document.body.appendChild(host);
-    const panel=$('#nb-panel',host), status=s=>$('#nb-status',host).textContent=s, debug=s=>$('#nb-debug',host).textContent=s;
+    const panel=$('#nb-panel',host);
     $('#nb-open',host).onclick=()=>panel.style.display=panel.style.display==='none'?'block':'none';
-    $('#nb-x',host).onclick=()=>panel.style.display='none'; $('#nb-set',host).onclick=openSettings;
-    $('#nb-run',host).onclick=()=>scan(status,debug); $('#nb-magrefresh',host).onclick=refreshMagSelector;
-    $('#nb-days',host).value=String(settings.days); $('#nb-count',host).value=String(settings.count); $('#nb-mode',host).value=settings.mode; $('#nb-tagmode',host).value=settings.tagMode;
+    $('#nb-x',host).onclick=()=>{ saveForm(); saveSession(); panel.style.display='none'; };
+    $('#nb-set',host).onclick=openSettings;
+    $('#nb-run',host).onclick=scan; $('#nb-magrefresh',host).onclick=refreshMagSelector;
+    $('#nb-days',host).value=String(form.days ?? settings.days); $('#nb-count',host).value=String(form.count ?? settings.count);
+    $('#nb-mode',host).value=form.mode || settings.mode; $('#nb-tagmode',host).value=form.tagMode || settings.tagMode;
+    for (const el of host.querySelectorAll('#nb-tags,#nb-days,#nb-count,#nb-mode,#nb-tagmode')) el.addEventListener('change',saveForm);
+    $('#nb-tags',host).addEventListener('input',()=>save('form',formState()));
+    for (const b of host.querySelectorAll('.nb-preset')) b.onclick=()=>applyPreset(b.dataset.tags || '');
     updateMeters(); refreshMagSelector(); renderCurrent();
   }
 
