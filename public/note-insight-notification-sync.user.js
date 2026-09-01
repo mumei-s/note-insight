@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 通知自動同期
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      1.2.0
-// @description  noteの本物の通知ベルを開いた時だけ、本人通知をINSIGHTへ自動同期します
+// @version      2.0.0
+// @description  noteの通知ベルをINSIGHTへ同期し、登録者の共同マガジン追加通知だけを整理します
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -21,10 +21,31 @@
   const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notifications';
   const TOKEN_KEY='mumei_insight_notification_sync_token_v1';
   const LAST_KEY='mumei_insight_notification_last_signature_v1';
+  const MUTE_KEY='mumei_insight_magazine_mute_ids_v1';
   const KW=/(返信|コメント|スキ|フォロー|マガジン|購入|チップ|サポート|話題|引用|紹介|高評価|ポイント|メンバーシップ|お知らせ|フォロワー)/;
   const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
   const sleep=m=>new Promise(r=>setTimeout(r,m));
   let syncing=false;
+  let filterObserver=null;
+  let revealMuted=false;
+
+  const noteId=value=>{try{const u=new URL(String(value||''),location.origin);if(u.hostname!=='note.com'&&u.hostname!=='www.note.com')return'';const id=u.pathname.split('/').filter(Boolean)[0]||'';return/^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():''}catch{return String(value||'').replace(/^@/,'').trim().toLowerCase().match(/^[a-z0-9_-]+$/)?.[0]||''}};
+  const isMagazineNotice=text=>/(共同)?マガジン/.test(text)&&/(追加|投稿|新しい記事|記事を)/.test(text);
+  async function muteIds(){const raw=await GM_getValue(MUTE_KEY,[]);return new Set((Array.isArray(raw)?raw:[]).map(noteId).filter(Boolean))}
+
+  async function importMuteSettings(){
+    const u=new URL(location.href),encoded=u.searchParams.get('mumei_mute_sync');
+    if(!encoded)return false;
+    try{
+      const base64=encoded.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(encoded.length/4)*4,'=');
+      const json=decodeURIComponent(escape(atob(base64)));
+      const ids=[...new Set((JSON.parse(json)||[]).map(noteId).filter(Boolean))];
+      await GM_setValue(MUTE_KEY,ids);
+      u.searchParams.delete('mumei_mute_sync');history.replaceState(null,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);
+      toast(`通知整理設定：${ids.length}人を同期しました`,'ok');
+      return true;
+    }catch{toast('通知整理設定を読み込めませんでした。INSIGHTからやり直してください。','error',true);return false}
+  }
 
   function toast(text,kind='normal',stay=false){
     let el=document.getElementById('mumei-insight-notify-sync-toast');
@@ -62,13 +83,41 @@
   }
 
   function notificationRoot(){
-    const roots=[...document.querySelectorAll('[role="dialog"],[role="menu"],aside,[data-testid*="notification" i],[class*="notification" i]')].filter(visible);
+    const roots=[...document.querySelectorAll('[role="dialog"],[role="menu"],aside,[data-testid*="notification" i],[class*="notification" i],[class*="Notice" i]')].filter(visible);
     const scored=roots.map(el=>({el,score:(el.querySelectorAll('li,article,[role="listitem"]').length*10)+(KW.test(clean(el.innerText))?5:0)+(getComputedStyle(el).position==='fixed'?3:0)})).sort((a,b)=>b.score-a.score);
     return scored[0]?.score>4?scored[0].el:null;
   }
 
+  function notificationItems(root){
+    let nodes=[...root.querySelectorAll('li,article,[role="listitem"],.m-navbarNoticeItem,[class*="navbarNoticeItem"]')];
+    if(nodes.length<2)nodes=[...root.querySelectorAll('div')].filter(e=>{const x=clean(e.innerText);return x.length>5&&x.length<1800&&KW.test(x)&&e.querySelector('a[href]')});
+    return nodes.filter(e=>!nodes.some(parent=>parent!==e&&parent.contains(e)&&clean(parent.innerText)===clean(e.innerText)));
+  }
+
+  async function applyMuteFilter(root){
+    const ids=await muteIds();let hidden=0;
+    for(const e of notificationItems(root)){
+      const text=clean(e.innerText),actors=[...e.querySelectorAll('a[href]')].map(a=>noteId(a.getAttribute('href'))).filter(Boolean);
+      const muted=isMagazineNotice(text)&&actors.some(id=>ids.has(id));
+      e.dataset.mumeiMagazineMuted=muted?'1':'0';
+      e.style.display=muted&&!revealMuted?'none':'';
+      if(muted)hidden++;
+    }
+    let bar=root.querySelector('#mumei-insight-mute-summary');
+    if(!bar){bar=document.createElement('div');bar.id='mumei-insight-mute-summary';Object.assign(bar.style,{position:'sticky',top:'0',zIndex:'10',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'8px 10px',background:'#101923',color:'#dfeaff',borderBottom:'1px solid #33465c',font:'700 12px/1.4 system-ui,sans-serif'});root.prepend(bar)}
+    bar.replaceChildren();const label=document.createElement('span');label.textContent=hidden?`INSIGHT整理済み ${hidden}件`:`INSIGHT整理：対象なし`;bar.appendChild(label);
+    if(hidden){const button=document.createElement('button');button.type='button';button.textContent=revealMuted?'再び隠す':'一時表示';Object.assign(button.style,{border:'1px solid #4f718c',borderRadius:'7px',background:'#172838',color:'#8feaff',padding:'5px 8px',font:'700 12px system-ui'});button.onclick=()=>{revealMuted=!revealMuted;void applyMuteFilter(root)};bar.appendChild(button)}
+  }
+
+  function watchMuteFilter(){
+    filterObserver?.disconnect();let timer=0;
+    filterObserver=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(()=>{const root=notificationRoot();if(root)void applyMuteFilter(root)},80)});
+    filterObserver.observe(document.documentElement,{childList:true,subtree:true});
+    const root=notificationRoot();if(root)void applyMuteFilter(root);
+  }
+
   function extract(root){
-    const found=new Map();let nodes=[...root.querySelectorAll('li,article,[role="listitem"]')];
+    const found=new Map();let nodes=[...root.querySelectorAll('li,article,[role="listitem"],.m-navbarNoticeItem,[class*="navbarNoticeItem"]')];
     if(nodes.length<2)nodes=[...root.querySelectorAll('div')].filter(e=>{const x=clean(e.innerText);return x.length>5&&x.length<1800&&KW.test(x)&&e.querySelector('a[href]')});
     for(const e of nodes){
       const raw=clean(e.innerText);if(!raw||raw.length<3||raw.length>2400||!KW.test(raw))continue;
@@ -98,12 +147,13 @@
 
   async function launch(){
     const u=new URL(location.href),invoked=u.searchParams.get('mumei_notify')==='1'||u.searchParams.has('mumei_pair');
+    await importMuteSettings();
     const token=await pairIfNeeded();
-    if(invoked){if(!token){toast('INSIGHT通知同期：未連携。INSIGHTの通知画面から初回連携してください。','error',true);return}const opened=await openRealNotifications();if(opened)await ingestOpened(token);return}
-    if(!token)return;
-    document.addEventListener('click',e=>{const bell=strictBell(e.target);if(!bell)return;setTimeout(()=>void ingestOpened(token,true),650)},true);
+    if(invoked){if(!token){toast('INSIGHT通知同期：未連携。INSIGHTの通知画面から初回連携してください。','error',true);return}const opened=await openRealNotifications();if(opened){watchMuteFilter();await ingestOpened(token)}return}
+    document.addEventListener('click',e=>{const bell=strictBell(e.target);if(!bell)return;setTimeout(()=>{watchMuteFilter();if(token)void ingestOpened(token,true)},650)},true);
   }
 
   GM_registerMenuCommand('INSIGHT通知同期を再連携',async()=>{await GM_deleteValue(TOKEN_KEY);await GM_deleteValue(LAST_KEY);toast('連携情報を削除しました。INSIGHTから再連携してください。','normal',true)});
+  GM_registerMenuCommand('INSIGHT通知整理の登録者を全解除',async()=>{await GM_deleteValue(MUTE_KEY);toast('共同マガジン通知の整理設定を解除しました。','normal')});
   void launch();
 })();
