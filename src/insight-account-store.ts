@@ -95,17 +95,18 @@ export function activateStoredInsightAccount(noteId: string) {
 
 export function forgetMemberSession(noteId: string) {
   const id = cleanId(noteId);
-  const accounts = readStoredInsightAccounts().map((item) => item.noteId === id ? { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status, updatedAt: Date.now() } : item);
+  const before = readStoredInsightAccounts();
+  const removed = before.find((item) => item.noteId === id);
+  const accounts = before.map((item) => item.noteId === id ? { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status, updatedAt: Date.now() } : item);
   write(accounts);
-  const current = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
-  const target = accounts.find((item) => item.noteId === id);
-  if (!target?.memberToken || target.memberToken !== current) localStorage.removeItem(INSIGHT_TOKEN_KEY);
+  if (removed?.memberToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === removed.memberToken) localStorage.removeItem(INSIGHT_TOKEN_KEY);
 }
 
 export function forgetInsightAccount(noteId: string) {
   const id = cleanId(noteId);
-  const removed = readStoredInsightAccounts().find((item) => item.noteId === id);
-  write(readStoredInsightAccounts().filter((item) => item.noteId !== id));
+  const before = readStoredInsightAccounts();
+  const removed = before.find((item) => item.noteId === id);
+  write(before.filter((item) => item.noteId !== id));
   if (removed?.memberToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === removed.memberToken) localStorage.removeItem(INSIGHT_TOKEN_KEY);
   if (removed?.applicantToken && localStorage.getItem(APPLICANT_KEY) === removed.applicantToken) localStorage.removeItem(APPLICANT_KEY);
 }
