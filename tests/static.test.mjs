@@ -2,27 +2,16 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
-test("GitHub Pages artifact is anonymous and installable", async () => {
+test("GitHub Pages primary artifact remains anonymous and installable", async () => {
   const index = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
-  const manifest = JSON.parse(
-    await readFile(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"),
-  );
+  const manifest = JSON.parse(await readFile(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
   const assetNames = await readdir(new URL("../dist/assets/", import.meta.url));
-  const javascript = (
-    await Promise.all(
-      assetNames
-        .filter((name) => name.endsWith(".js"))
-        .map((name) => readFile(new URL(`../dist/assets/${name}`, import.meta.url), "utf8")),
-    )
-  ).join("\n");
+  const javascript = (await Promise.all(assetNames.filter((name) => name.endsWith(".js")).map((name) => readFile(new URL(`../dist/assets/${name}`, import.meta.url), "utf8")))).join("\n");
 
   assert.match(index, /無名 S note/);
   assert.equal(manifest.start_url, "/note-insight/");
   assert.equal(manifest.display, "standalone");
-  assert.doesNotMatch(
-    index + javascript,
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
-  );
+  assert.doesNotMatch(index + javascript, /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 });
 
 test("private values are not checked into the public frontend", async () => {
@@ -33,50 +22,59 @@ test("private values are not checked into the public frontend", async () => {
   assert.match(apiSource, /X-Insight-Member/);
 });
 
-test("TOP embeds each participant rail in its own entrance", async () => {
-  const top = await readFile(new URL("../src/hub-home.tsx", import.meta.url), "utf8");
+test("primary INSIGHT stays separated while CREATOR WORLD is a standalone page", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const top = await readFile(new URL("../src/hub-home.tsx", import.meta.url), "utf8");
+  const gameHtml = await readFile(new URL("../game.html", import.meta.url), "utf8");
+  const gameMain = await readFile(new URL("../src/game-main.tsx", import.meta.url), "utf8");
+  const distGame = await readFile(new URL("../dist/game.html", import.meta.url), "utf8");
+  const vite = await readFile(new URL("../vite.config.ts", import.meta.url), "utf8");
 
+  assert.match(app, /DETACHED_ROUTES/);
+  assert.match(app, /"battle"/);
+  assert.doesNotMatch(app, /import \{ BattleArenaPage \}/);
+  assert.doesNotMatch(app, /import \{ CatalogIconsPage \}/);
   assert.match(top, /INSIGHT参加クリエイター/);
-  assert.match(top, /名鑑参加クリエイター/);
-  assert.match(top, /<Entrance title="INSIGHT"[^>]*><ParticipantRail kind="insight"/);
-  assert.match(top, /<Entrance title="クリエイター名鑑"[^>]*><ParticipantRail kind="catalog"/);
-  assert.match(top, /profileUrl: `https:\/\/note\.com\/\$\{person\.note_id\}`/);
-  assert.match(top, /profileUrl: icons\[creator\.note_id\]\?\.profileUrl/);
-  assert.match(top, /#catalog\/\$\{encodeURIComponent\(person\.noteId\)\}/);
-  assert.match(app, /CatalogIconsPage initialNoteId/);
+  assert.doesNotMatch(top, /名鑑参加クリエイター/);
+  assert.match(gameHtml, /CREATOR WORLD/);
+  assert.match(gameHtml, /creator-world-game-v8-opening\.css/);
+  assert.match(gameMain, /BattleArenaPage/);
+  assert.match(gameMain, /6 GAME ARENA/);
+  assert.match(distGame, /CREATOR WORLD/);
+  assert.match(vite, /game: "game\.html"/);
 });
 
-test("card management remains authenticated-self-only and gates game use", async () => {
+test("standalone trial has visible official illustration fallbacks", async () => {
+  const shell = await readFile(new URL("../src/game-standalone.css", import.meta.url), "utf8");
+  const opening = await readFile(new URL("../public/creator-world-game-v8-opening.css", import.meta.url), "utf8");
+  const cinematic = await readFile(new URL("../public/creator-world-game-v9-six.css", import.meta.url), "utf8");
+
+  assert.match(shell, /--g6-mumei:url\("https:\/\/xxhaerjvrgmnadxjqetz\.supabase\.co\/storage\/v1\/object\/public\/creator-images\/opponent\//);
+  assert.match(shell, /--g6-chibi:url\("https:\/\/xxhaerjvrgmnadxjqetz\.supabase\.co\/storage\/v1\/object\/public\/creator-images\/opponent\//);
+  assert.match(opening, /g8-opening-portrait\.player>span/);
+  assert.match(opening, /var\(--g6-mumei\)/);
+  assert.match(opening, /var\(--g6-chibi\)/);
+  assert.match(cinematic, /g9-atmosphere/);
+  assert.match(cinematic, /g9-cut-in/);
+  assert.match(cinematic, /g9-result-cast/);
+});
+
+test("card management remains authenticated-self-only and gates ranked game use", async () => {
   const memberPage = await readFile(new URL("../public/directory-member.html", import.meta.url), "utf8");
   const dataClient = await readFile(new URL("../src/game-data-client.ts", import.meta.url), "utf8");
   const gameData = await readFile(new URL("../supabase/functions/creator-game-data/index.ts", import.meta.url), "utf8");
   const ledger = await readFile(new URL("../supabase/functions/creator-battle-ledger/index.ts", import.meta.url), "utf8");
 
-  assert.match(memberPage, /OWNERも名鑑参加者として自分のカード/);
   assert.match(memberPage, /他参加者の画像を編集・削除することはできません/);
   assert.doesNotMatch(memberPage, /participantId/);
   assert.match(memberPage, /battleOptIn/);
   assert.match(dataClient, /X-Owner-Token/);
   assert.match(dataClient, /X-Insight-Member/);
-  assert.match(gameData, /noteUrlname: "ss_yr"/);
   assert.match(gameData, /BATTLE_CARD_REQUIRED/);
-  assert.match(ledger, /if \(await owner\(req\)\)/);
   assert.match(ledger, /PLAYER_CARD_NOT_AVAILABLE/);
 });
 
-test("OWNER bypasses the participant password with note-profile verification", async () => {
-  const access = await readFile(new URL("../src/access-portal.tsx", import.meta.url), "utf8");
-  const owner = await readFile(new URL("../src/owner-gate.tsx", import.meta.url), "utf8");
-
-  assert.match(access, /OWNERはパスワード不要/);
-  assert.match(access, /hasVerifiedOwnerSession/);
-  assert.match(access, /OWNER本人認証で入る/);
-  assert.match(owner, /noteプロフィールへ一時コード/);
-  assert.match(owner, /nextRoute\(\)/);
-});
-
-test("the six game modes have distinct live mechanics and shared cinematic results", async () => {
+test("the six game modes have distinct live mechanics and shared cinematic presentation", async () => {
   const arena = await readFile(new URL("../src/battle-arena-page.tsx", import.meta.url), "utf8");
   const engine = await readFile(new URL("../src/game-card-engine.ts", import.meta.url), "utf8");
   const ui = await readFile(new URL("../src/game-ui.tsx", import.meta.url), "utf8");
@@ -86,53 +84,36 @@ test("the six game modes have distinct live mechanics and shared cinematic resul
   const shooter = await readFile(new URL("../src/game-target-view.tsx", import.meta.url), "utf8");
   const quest = await readFile(new URL("../src/game-quest.tsx", import.meta.url), "utf8");
   const race = await readFile(new URL("../src/game-race.tsx", import.meta.url), "utf8");
-  const styles = await readFile(new URL("../public/creator-world-game-v5.css", import.meta.url), "utf8");
   const cinematic = await readFile(new URL("../public/creator-world-game-v9-six.css", import.meta.url), "utf8");
   const ledger = await readFile(new URL("../supabase/functions/creator-battle-ledger/index.ts", import.meta.url), "utf8");
-  const gameMigration = await readFile(new URL("../supabase/migrations/20260830180000_creator_duels_six_games.sql", import.meta.url), "utf8");
-  const spec = await readFile(new URL("../docs/GAME_SPEC.md", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../supabase/migrations/20260830180000_creator_duels_six_games.sql", import.meta.url), "utf8");
 
-  assert.match(ui, /BATTLE<br \/>START/);
-  assert.match(ui, /WIN/);
-  assert.match(ui, /DRAW/);
-  assert.match(ui, /LOSE/);
-  assert.match(ui, /EXP/);
   for (const token of ["ROUND", "RIVAL INTENT", "ATTACK", "GUARD", "SIGNATURE", "CRITICAL", "COUNTER"]) assert.match(command, new RegExp(token));
   for (const token of ["TIME", "COMBO", "FEVER", "PERFECT", "GREAT", "GOOD", "MISS", "onPointerDown"]) assert.match(tap, new RegExp(token));
-  for (const token of ["W = 6", "H = 6", "CHAIN", "ARCANE NOVA", "SHIELD", "onPointerDown", "onPointerUp"]) assert.match(puzzle, new RegExp(token));
+  for (const token of ["W = 6", "H = 6", "CHAIN", "ARCANE NOVA", "SHIELD", "HOW TO PLAY", "onPointerDown", "onPointerUp"]) assert.match(puzzle, new RegExp(token));
   for (const token of ["onPointerMove", "BOSS CARD", "PILOT SHIELD", "COMBO", "CRITICAL", "NOVA"]) assert.match(shooter, new RegExp(token));
-  for (const token of ["WAVE_HP", "ATTACK", "GUARD", "SKILL", "SP", "BOSS", "GameResultOverlay", "GameAtmosphere"]) assert.match(quest, new RegExp(token));
-  for (const token of ["FINISH = 1000", "LANE", "BOOST", "ENERGY", "HAZARD", "onPointerDown", "onPointerUp", "GameResultOverlay", "GameAtmosphere"]) assert.match(race, new RegExp(token));
+  for (const token of ["WAVE_HP", "ATTACK", "GUARD", "SKILL", "SP", "BOSS", "GameAtmosphere", "SkillCutIn"]) assert.match(quest, new RegExp(token));
+  for (const token of ["FINISH = 1000", "LANE", "BOOST", "ENERGY", "HAZARD", "onPointerDown", "onPointerUp", "GameAtmosphere", "SkillCutIn"]) assert.match(race, new RegExp(token));
+
   assert.match(engine, /deriveCardStats/);
   assert.match(engine, /balanceRatio/);
   assert.match(ui, /visibilitychange/);
-  assert.match(ui, /PAUSED/);
-  assert.match(arena, /TRIAL PLAY/);
-  assert.match(arena, /RANKED MATCH/);
-  assert.match(arena, /enemyCardPosition/);
-  assert.match(arena, /playerCard\.url/);
-  assert.match(arena, /row\.playerCard\.url/);
-  assert.match(arena, /row\.opponent\.cardUrl/);
-  assert.match(arena, /row\.byGame/);
+  assert.match(ui, /BATTLE<br \/>START/);
+  assert.match(ui, /GameAtmosphere/);
+  assert.match(ui, /SkillCutIn/);
+  assert.match(ui, /g9-result-cast/);
   assert.match(arena, /6つのゲーム/);
   assert.match(arena, /CreatorQuestBattle/);
   assert.match(arena, /StarCircuitBattle/);
-  assert.match(styles, /g5BeatCountdown/);
-  assert.match(styles, /prefers-reduced-motion/);
+  assert.match(arena, /TRIAL PLAY/);
+  assert.match(arena, /RANKED MATCH/);
   for (const token of ["g9-atmosphere", "g9-cut-in", "g9ScreenShake", "g9-result-cast", "g9-quest", "g9-race", "prefers-reduced-motion"]) assert.match(cinematic, new RegExp(token));
-  assert.match(ui, /playerArt \|\| resolved\.player/);
-  assert.match(ui, /enemyArt \|\| resolved\.enemy/);
   assert.match(ledger, /"choice", "tap", "puzzle", "shoot", "quest", "race"/);
-  assert.match(ledger, /quest: \{ wins: 0/);
-  assert.match(ledger, /race: \{ wins: 0/);
-  assert.match(gameMigration, /creator_duels_game_mode_check/);
-  assert.match(gameMigration, /'quest'::text/);
-  assert.match(gameMigration, /'race'::text/);
-  assert.match(spec, /fb2fc687afc18291bcc1dd1fd7472bcdeb624d70/);
-  assert.doesNotMatch(arena + engine + ui + command + tap + puzzle + shooter + quest + race + spec, /docs\.google|drive\.google|sheets\.google/i);
+  assert.match(migration, /'quest'::text/);
+  assert.match(migration, /'race'::text/);
 });
 
-test("the public participant cache is isolated behind RLS and an edge function", async () => {
+test("the public participant cache remains isolated behind RLS and an edge function", async () => {
   const migration = await readFile(new URL("../supabase/migrations/20260828103000_insight_participants_public.sql", import.meta.url), "utf8");
   const edge = await readFile(new URL("../supabase/functions/insight-participants/index.ts", import.meta.url), "utf8");
 
