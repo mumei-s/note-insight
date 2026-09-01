@@ -8,7 +8,7 @@ test("GitHub Pages primary artifact remains anonymous and installable", async ()
   const assetNames = await readdir(new URL("../dist/assets/", import.meta.url));
   const javascript = (await Promise.all(assetNames.filter((name) => name.endsWith(".js")).map((name) => readFile(new URL(`../dist/assets/${name}`, import.meta.url), "utf8")))).join("\n");
 
-  assert.match(index, /無名 S note/);
+  assert.match(index, /無名S note/);
   assert.equal(manifest.start_url, "/note-insight/");
   assert.equal(manifest.display, "standalone");
   assert.doesNotMatch(index + javascript, /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
