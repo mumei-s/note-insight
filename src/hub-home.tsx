@@ -13,11 +13,12 @@ import type { StoredInsightAccount } from "./insight-account-store";
 import "./hub-home.css";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const SELF = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
 type RailPerson = { id: string; noteId: string; name: string; image: string | null; profileUrl: string };
 type ConfirmAction = "logout" | "leave" | null;
 
-async function accessCall(action: string, headers: Record<string, string> = {}) {
-  const response = await fetch(ACCESS, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ action }), cache: "no-store" });
+async function post(endpoint: string, action: string, headers: Record<string, string> = {}) {
+  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ action }), cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "ACCESS_ERROR");
   return payload;
@@ -85,8 +86,9 @@ export function HubHome() {
     const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
     if (!token) return;
     const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
-    void accessCall("session", { "X-Insight-Token": token }).then((payload) => {
+    void post(ACCESS, "session", { "X-Insight-Token": token }).then(async (payload) => {
       rememberMemberSession(payload.application, token, stored?.passcode); refreshAccounts();
+      try { await post(SELF, "touch", { "X-Insight-Token": token }); } catch { /* Session remains usable even if refresh endpoint is temporarily unavailable. */ }
     }).catch((reason) => {
       const code = reason instanceof Error ? reason.message : "";
       if (/INSIGHT_SESSION_INVALID|INSIGHT_MEMBER_INACTIVE|INSIGHT_LOGIN_REQUIRED/.test(code)) {
@@ -102,11 +104,11 @@ export function HubHome() {
     setBusy(true); setAccountMessage("");
     try {
       if (confirm === "leave") {
-        await accessCall("leave", { "X-Insight-Token": token });
+        await post(SELF, "leave", { "X-Insight-Token": token });
         forgetInsightAccount(activeAccount.noteId);
         setAccountMessage(`@${activeAccount.noteId} は退会しました。`);
       } else {
-        try { await accessCall("logout", { "X-Insight-Token": token }); } catch { /* local logout still completes */ }
+        try { await post(SELF, "logout", { "X-Insight-Token": token }); } catch { /* local logout still completes */ }
         forgetMemberSession(activeAccount.noteId);
         setAccountMessage(`@${activeAccount.noteId} をログアウトしました。`);
       }
