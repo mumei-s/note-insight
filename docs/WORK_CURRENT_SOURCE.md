@@ -2,6 +2,16 @@
 
 Updated: 2026-09-01 JST
 
+## 2026-09-02 NOTE NOTIFICATION SYNC 2.1 — CURRENT CHECKPOINT
+
+- `public/note-insight-notification-sync.user.js` v2.1 no longer depends on finding or programmatically clicking a labelled bell button.
+- The adapter watches for the visible `通知` / `お知らせ` tab pair and real notification rows. A manual tap on note's bell therefore starts sync even when the icon has no usable aria-label/title.
+- The old permanent bottom error (`通知ベルを自動で見つけられません`) is removed. If automatic opening is unavailable, the adapter asks for one manual bell tap and keeps watching until the notification view appears.
+- Notification row discovery supports the current mobile layout as well as legacy `.m-navbarNoticeItem`, list-item, dialog and menu layouts.
+- The sync status UI is a right-edge `🔔 同期` pull-out tab. It automatically collapses, can be reopened, and can be closed without covering note's bottom content.
+- Tool-panel UX rule: every persistent note-side tool must provide at least one non-obstructive control—saved drag position, minimization, or edge-tab storage. Existing selector panels retain drag/minimize, 巡回BOOST retains saved drag, DIRECT retains its edge toggle, and ポン出し remains launcher-only until opened.
+- Magazine-notification muting remains exact and safe: visible actor URL + magazine-add text are both required; likes, comments, follows, purchases and tips remain untouched.
+
 ## 2026-09-01 NOTE NOTIFICATION FILTER — CURRENT CHECKPOINT
 
 - `public/note-insight-notification-sync.user.js` v2.0 keeps the existing real-bell capture and INSIGHT ingest flow.

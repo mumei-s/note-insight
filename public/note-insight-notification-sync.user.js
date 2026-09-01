@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 通知自動同期
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.0.0
+// @version      2.1.0
 // @description  noteの通知ベルをINSIGHTへ同期し、登録者の共同マガジン追加通知だけを整理します
 // @match        https://note.com/*
 // @run-at       document-idle
@@ -27,6 +27,9 @@
   const sleep=m=>new Promise(r=>setTimeout(r,m));
   let syncing=false;
   let filterObserver=null;
+  let lifecycleRoot=null;
+  let lifecycleTimer=0;
+  let filterRunning=false;
   let revealMuted=false;
 
   const noteId=value=>{try{const u=new URL(String(value||''),location.origin);if(u.hostname!=='note.com'&&u.hostname!=='www.note.com')return'';const id=u.pathname.split('/').filter(Boolean)[0]||'';return/^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():''}catch{return String(value||'').replace(/^@/,'').trim().toLowerCase().match(/^[a-z0-9_-]+$/)?.[0]||''}};
@@ -47,11 +50,27 @@
     }catch{toast('通知整理設定を読み込めませんでした。INSIGHTからやり直してください。','error',true);return false}
   }
 
+  function statusDock(){
+    let host=document.getElementById('mumei-insight-notify-sync-toast');
+    if(host)return host;
+    host=document.createElement('div');host.id='mumei-insight-notify-sync-toast';
+    Object.assign(host.style,{position:'fixed',right:'0',bottom:'74px',zIndex:'2147483647',display:'flex',alignItems:'stretch',font:'700 12px/1.5 system-ui,sans-serif',transition:'transform .22s ease',filter:'drop-shadow(0 10px 24px rgba(0,0,0,.35))'});
+    host.innerHTML='<button type="button" data-sync-tab aria-label="通知同期の状態を開く" style="width:38px;min-height:58px;border:1px solid #40566f;border-right:0;border-radius:12px 0 0 12px;background:#101923;color:#8feaff;padding:5px;line-height:1.15;font-weight:900;touch-action:manipulation">🔔<br>同期</button><div data-sync-panel style="display:none;width:min(300px,calc(100vw - 48px));padding:10px 11px;border:1px solid #40566f;border-right:0;border-radius:12px 0 0 12px;background:#101923;color:#dfeaff"><div style="display:flex;align-items:flex-start;gap:8px"><span data-sync-message style="flex:1;min-width:0;overflow-wrap:anywhere"></span><button type="button" data-sync-close aria-label="閉じる" style="flex:0 0 30px;width:30px;height:30px;border:1px solid #52667d;border-radius:8px;background:#172838;color:#fff;font-weight:900">×</button></div></div>';
+    const tab=host.querySelector('[data-sync-tab]'),panel=host.querySelector('[data-sync-panel]'),close=host.querySelector('[data-sync-close]');
+    const open=()=>{tab.style.display='none';panel.style.display='block';host.dataset.open='1'};
+    const collapse=()=>{panel.style.display='none';tab.style.display='block';host.dataset.open='0'};
+    tab.addEventListener('click',open);
+    close.addEventListener('click',()=>{collapse();host.style.display='none'});
+    host._open=open;host._collapse=collapse;
+    document.documentElement.appendChild(host);
+    return host;
+  }
+
   function toast(text,kind='normal',stay=false){
-    let el=document.getElementById('mumei-insight-notify-sync-toast');
-    if(!el){el=document.createElement('div');el.id='mumei-insight-notify-sync-toast';Object.assign(el.style,{position:'fixed',right:'12px',bottom:'12px',zIndex:'2147483647',maxWidth:'min(360px,calc(100vw - 24px))',padding:'10px 12px',borderRadius:'12px',font:'700 12px/1.5 system-ui,sans-serif',boxShadow:'0 10px 35px rgba(0,0,0,.28)',transition:'opacity .25s'});document.documentElement.appendChild(el)}
-    el.textContent=text;el.style.background=kind==='error'?'#3a1118':kind==='ok'?'#102a1a':'#101923';el.style.color=kind==='error'?'#ffb3bd':kind==='ok'?'#a7ffc0':'#dfeaff';el.style.border='1px solid '+(kind==='error'?'#70303c':kind==='ok'?'#315f40':'#33465c');el.style.opacity='1';
-    clearTimeout(el._timer);if(!stay)el._timer=setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),300)},4500);
+    const host=statusDock(),panel=host.querySelector('[data-sync-panel]'),tab=host.querySelector('[data-sync-tab]'),message=host.querySelector('[data-sync-message]');
+    const colors=kind==='error'?['#3a1118','#ffb3bd','#70303c']:kind==='ok'?['#102a1a','#a7ffc0','#315f40']:['#101923','#dfeaff','#40566f'];
+    message.textContent=text;panel.style.background=colors[0];panel.style.color=colors[1];panel.style.borderColor=colors[2];tab.style.borderColor=colors[2];host.style.display='flex';host._open();
+    clearTimeout(host._timer);host._timer=setTimeout(()=>host._collapse(),stay?9000:4500);
   }
 
   function request(url,body,headers={}){return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout:30000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300)resolve(p);else reject(Object.assign(new Error(p.error||('HTTP_'+r.status)),{status:r.status}))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}))}
@@ -68,7 +87,14 @@
   }
 
   function visible(el){const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}
-  function strictBell(el){return el?.closest?.('button[aria-label*="通知"],a[aria-label*="通知"],button[title*="通知"],a[title*="通知"]')||null}
+  function strictBell(el){
+    const control=el?.closest?.('button,a,[role="button"]');
+    if(!control||!visible(control))return null;
+    const label=clean([control.getAttribute('aria-label'),control.getAttribute('title'),control.getAttribute('data-testid'),control.textContent].filter(Boolean).join(' '));
+    if(/通知|notice|notification/i.test(label))return control;
+    const r=control.getBoundingClientRect();
+    return r.top<150&&r.right>innerWidth*.45&&r.width<82&&r.height<82&&control.querySelector('svg')?control:null;
+  }
   function notificationBell(){
     const selectors=['button[aria-label*="通知"]','a[aria-label*="通知"]','button[title*="通知"]','a[title*="通知"]'];
     const candidates=selectors.flatMap(s=>[...document.querySelectorAll(s)]).filter(visible);
@@ -77,51 +103,81 @@
     return [...document.querySelectorAll('button,a')].filter(visible).find(el=>{const r=el.getBoundingClientRect(),t=clean(el.textContent||el.getAttribute('aria-label')||el.getAttribute('title'));return r.top<180&&r.left>innerWidth*.35&&(t==='通知'||t.includes('通知を確認'))})||null;
   }
 
-  async function openRealNotifications(){
-    for(let i=0;i<24;i++){const bell=notificationBell();if(bell){bell.click();await sleep(900);return true}await sleep(250)}
-    toast('noteの通知ベルを自動で見つけられません。右上のベルを1回タップしてください。','error',true);return false;
+  function noticeText(el){return clean(el?.innerText||el?.textContent)}
+  function selfAndChildLinks(el){return[...(el?.matches?.('a[href]')?[el]:[]),...(el?.querySelectorAll?.('a[href]')||[])]}
+  function likelyNotice(el){
+    const text=noticeText(el);
+    if(text.length<4||text.length>1400||!KW.test(text)||!selfAndChildLinks(el).length)return false;
+    return el.matches?.('.m-navbarNoticeItem,[class*="navbarNoticeItem"],[role="listitem"],li,article')||Boolean(el.querySelector?.('time[datetime]'))||/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/.test(text);
   }
-
+  function notificationItems(root=document){
+    const known=[...root.querySelectorAll('li,article,[role="listitem"],.m-navbarNoticeItem,[class*="navbarNoticeItem"]')].filter(likelyNotice);
+    const links=[...root.querySelectorAll('a[href]')].filter(likelyNotice);
+    const fallback=known.length+links.length>=2?[]:[...root.querySelectorAll('div,section')].filter(likelyNotice);
+    const nodes=[...new Set([...known,...links,...fallback])];
+    return nodes.filter(el=>!nodes.some(child=>child!==el&&el.contains(child)&&noticeText(child)===noticeText(el)));
+  }
+  function tabByText(value){
+    return[...document.querySelectorAll('[role="tab"],button,a,[tabindex],span,div,p')].filter(visible).find(el=>{const r=el.getBoundingClientRect();return r.top<360&&r.width<innerWidth*.75&&clean(el.textContent)===value})||null;
+  }
+  function tabContext(){
+    const notices=tabByText('通知'),news=tabByText('お知らせ');
+    if(!notices||!news)return null;
+    let node=notices.parentElement;
+    while(node&&node!==document.body){if(node.contains(news))return node;node=node.parentElement}
+    return null;
+  }
   function notificationRoot(){
     const roots=[...document.querySelectorAll('[role="dialog"],[role="menu"],aside,[data-testid*="notification" i],[class*="notification" i],[class*="Notice" i]')].filter(visible);
-    const scored=roots.map(el=>({el,score:(el.querySelectorAll('li,article,[role="listitem"]').length*10)+(KW.test(clean(el.innerText))?5:0)+(getComputedStyle(el).position==='fixed'?3:0)})).sort((a,b)=>b.score-a.score);
-    return scored[0]?.score>4?scored[0].el:null;
+    const tab=tabContext();
+    if(tab){let node=tab;while(node&&node!==document.body){if(notificationItems(node).length)return node;node=node.parentElement}}
+    const scored=roots.map(el=>({el,score:notificationItems(el).length*10+(KW.test(noticeText(el))?5:0)+(getComputedStyle(el).position==='fixed'?3:0)})).sort((a,b)=>b.score-a.score);
+    return scored[0]?.score>9?scored[0].el:null;
   }
 
-  function notificationItems(root){
-    let nodes=[...root.querySelectorAll('li,article,[role="listitem"],.m-navbarNoticeItem,[class*="navbarNoticeItem"]')];
-    if(nodes.length<2)nodes=[...root.querySelectorAll('div')].filter(e=>{const x=clean(e.innerText);return x.length>5&&x.length<1800&&KW.test(x)&&e.querySelector('a[href]')});
-    return nodes.filter(e=>!nodes.some(parent=>parent!==e&&parent.contains(e)&&clean(parent.innerText)===clean(e.innerText)));
+  async function requestNotificationOpen(){
+    if(notificationRoot())return true;
+    for(let i=0;i<8;i++){const bell=notificationBell();if(bell){bell.click();toast('通知を開いています…');await sleep(900);return Boolean(notificationRoot())}await sleep(250)}
+    toast('右上のベルを1回タップしてください。通知が開いたら自動で同期します。','normal',true);return false;
   }
 
   async function applyMuteFilter(root){
-    const ids=await muteIds();let hidden=0;
-    for(const e of notificationItems(root)){
-      const text=clean(e.innerText),actors=[...e.querySelectorAll('a[href]')].map(a=>noteId(a.getAttribute('href'))).filter(Boolean);
-      const muted=isMagazineNotice(text)&&actors.some(id=>ids.has(id));
-      e.dataset.mumeiMagazineMuted=muted?'1':'0';
-      e.style.display=muted&&!revealMuted?'none':'';
-      if(muted)hidden++;
-    }
-    let bar=root.querySelector('#mumei-insight-mute-summary');
-    if(!bar){bar=document.createElement('div');bar.id='mumei-insight-mute-summary';Object.assign(bar.style,{position:'sticky',top:'0',zIndex:'10',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'8px 10px',background:'#101923',color:'#dfeaff',borderBottom:'1px solid #33465c',font:'700 12px/1.4 system-ui,sans-serif'});root.prepend(bar)}
-    bar.replaceChildren();const label=document.createElement('span');label.textContent=hidden?`INSIGHT整理済み ${hidden}件`:`INSIGHT整理：対象なし`;bar.appendChild(label);
-    if(hidden){const button=document.createElement('button');button.type='button';button.textContent=revealMuted?'再び隠す':'一時表示';Object.assign(button.style,{border:'1px solid #4f718c',borderRadius:'7px',background:'#172838',color:'#8feaff',padding:'5px 8px',font:'700 12px system-ui'});button.onclick=()=>{revealMuted=!revealMuted;void applyMuteFilter(root)};bar.appendChild(button)}
+    if(filterRunning)return;filterRunning=true;
+    try{
+      const ids=await muteIds();let hidden=0;
+      for(const e of notificationItems(root)){
+        if(e.id==='mumei-insight-mute-summary')continue;
+        const text=noticeText(e),actors=selfAndChildLinks(e).map(a=>noteId(a.getAttribute('href'))).filter(Boolean);
+        const muted=isMagazineNotice(text)&&actors.some(id=>ids.has(id)),display=muted&&!revealMuted?'none':'';
+        if(e.dataset.mumeiMagazineMuted!==(muted?'1':'0'))e.dataset.mumeiMagazineMuted=muted?'1':'0';
+        if(e.style.display!==display)e.style.display=display;
+        if(muted)hidden++;
+      }
+      let bar=root.querySelector('#mumei-insight-mute-summary');
+      if(!bar){
+        bar=document.createElement('div');bar.id='mumei-insight-mute-summary';Object.assign(bar.style,{position:'sticky',top:'0',zIndex:'10',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'8px 10px',background:'#101923',color:'#dfeaff',borderBottom:'1px solid #33465c',font:'700 12px/1.4 system-ui,sans-serif'});
+        bar.innerHTML='<span data-mumei-mute-label></span><button type="button" data-mumei-mute-toggle style="border:1px solid #4f718c;border-radius:7px;background:#172838;color:#8feaff;padding:5px 8px;font:700 12px system-ui"></button>';
+        bar.querySelector('button').onclick=()=>{revealMuted=!revealMuted;void applyMuteFilter(root)};root.prepend(bar);
+      }
+      const label=bar.querySelector('[data-mumei-mute-label]'),button=bar.querySelector('[data-mumei-mute-toggle]'),labelText=hidden?`INSIGHT整理済み ${hidden}件`:'INSIGHT整理：対象なし',buttonText=revealMuted?'再び隠す':'一時表示';
+      if(label.textContent!==labelText)label.textContent=labelText;
+      button.hidden=!hidden;if(button.textContent!==buttonText)button.textContent=buttonText;
+    }finally{filterRunning=false}
   }
 
   function watchMuteFilter(){
-    filterObserver?.disconnect();let timer=0;
-    filterObserver=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(()=>{const root=notificationRoot();if(root)void applyMuteFilter(root)},80)});
-    filterObserver.observe(document.documentElement,{childList:true,subtree:true});
-    const root=notificationRoot();if(root)void applyMuteFilter(root);
+    filterObserver?.disconnect();
+    const check=()=>{clearTimeout(lifecycleTimer);lifecycleTimer=setTimeout(()=>{const root=notificationRoot();if(!root){lifecycleRoot=null;return}void applyMuteFilter(root);if(root!==lifecycleRoot){lifecycleRoot=root;void onNotificationOpened(root)}},120)};
+    filterObserver=new MutationObserver(check);
+    filterObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-selected','aria-expanded']});
+    check();
   }
 
   function extract(root){
-    const found=new Map();let nodes=[...root.querySelectorAll('li,article,[role="listitem"],.m-navbarNoticeItem,[class*="navbarNoticeItem"]')];
-    if(nodes.length<2)nodes=[...root.querySelectorAll('div')].filter(e=>{const x=clean(e.innerText);return x.length>5&&x.length<1800&&KW.test(x)&&e.querySelector('a[href]')});
-    for(const e of nodes){
+    const found=new Map();
+    for(const e of notificationItems(root)){
       const raw=clean(e.innerText);if(!raw||raw.length<3||raw.length>2400||!KW.test(raw))continue;
-      const links=[...e.querySelectorAll('a[href]')].map(a=>{try{return{u:new URL(a.getAttribute('href'),location.href).href,t:clean(a.innerText)}}catch{return null}}).filter(Boolean);
+      const links=selfAndChildLinks(e).map(a=>{try{return{u:new URL(a.getAttribute('href'),location.href).href,t:clean(a.innerText)}}catch{return null}}).filter(Boolean);
       const actor=links.find(x=>/^https:\/\/note\.com\/[A-Za-z0-9_-]+\/?(?:[?#].*)?$/.test(x.u));
       const target=links.find(x=>x.u.startsWith('https://note.com/')&&x.u!==actor?.u);
       const tm=e.querySelector('time[datetime]')?.getAttribute('datetime')||null;
@@ -142,15 +198,23 @@
   async function ingestOpened(token,quiet=false){
     if(syncing||!token)return;syncing=true;if(!quiet)toast('本人通知をINSIGHTへ同期中…','normal',true);
     try{const found=await collect(),items=[...found.values()];let inserted=0;for(let i=0;i<items.length;i+=100){const p=await request(INGEST,{source:'note-notification-auto-sync',notifications:items.slice(i,i+100)},{'X-Ingest-Token':token});inserted+=Number(p.inserted||0)}const first=[...found.keys()][0];if(first)await GM_setValue(LAST_KEY,first);const u=new URL(location.href);u.searchParams.delete('mumei_pair');u.searchParams.delete('mumei_notify');history.replaceState(null,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);toast(`本人通知：${items.length}件確認 / 新規${inserted}件`,'ok')}
-    catch(e){if(e?.status===401){await GM_deleteValue(TOKEN_KEY);toast('通知連携の期限が切れました。INSIGHTから再連携してください。','error',true)}else if(!quiet)toast('通知同期エラー：'+(e?.message||e),'error',true)}finally{syncing=false}
+    catch(e){if(e?.status===401){await GM_deleteValue(TOKEN_KEY);toast('通知連携の期限が切れました。INSIGHTから再連携してください。','error',true)}else toast('通知同期エラー：'+(e?.message||e),'error',true)}finally{syncing=false}
+  }
+
+  let lifecycleToken='';
+  async function onNotificationOpened(root){
+    if(!root)return;
+    await applyMuteFilter(root);
+    if(lifecycleToken)void ingestOpened(lifecycleToken,true);
   }
 
   async function launch(){
     const u=new URL(location.href),invoked=u.searchParams.get('mumei_notify')==='1'||u.searchParams.has('mumei_pair');
     await importMuteSettings();
     const token=await pairIfNeeded();
-    if(invoked){if(!token){toast('INSIGHT通知同期：未連携。INSIGHTの通知画面から初回連携してください。','error',true);return}const opened=await openRealNotifications();if(opened){watchMuteFilter();await ingestOpened(token)}return}
-    document.addEventListener('click',e=>{const bell=strictBell(e.target);if(!bell)return;setTimeout(()=>{watchMuteFilter();if(token)void ingestOpened(token,true)},650)},true);
+    lifecycleToken=token;watchMuteFilter();
+    if(invoked){if(!token){toast('INSIGHT通知同期：未連携。INSIGHTの通知画面から初回連携してください。','error',true);return}const opened=await requestNotificationOpen();if(opened){const root=notificationRoot();if(root){lifecycleRoot=root;await ingestOpened(token)}}return}
+    document.addEventListener('click',e=>{if(!strictBell(e.target))return;setTimeout(()=>{const root=notificationRoot();if(root){lifecycleRoot=root;void onNotificationOpened(root)}},650)},true);
   }
 
   GM_registerMenuCommand('INSIGHT通知同期を再連携',async()=>{await GM_deleteValue(TOKEN_KEY);await GM_deleteValue(LAST_KEY);toast('連携情報を削除しました。INSIGHTから再連携してください。','normal',true)});
