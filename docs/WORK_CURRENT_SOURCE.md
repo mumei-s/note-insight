@@ -2,6 +2,17 @@
 
 Updated: 2026-09-01 JST
 
+## 2026-09-01 NOTE NOTIFICATION FILTER — CURRENT CHECKPOINT
+
+- `public/note-insight-notification-sync.user.js` v2.0 keeps the existing real-bell capture and INSIGHT ingest flow.
+- `public/notification-import.html` now manages a per-device list of note creator profile URLs.
+- The list is transferred to the note-side userscript without sending note passwords or login cookies to INSIGHT.
+- Filtering is deliberately limited to notifications whose visible text is a magazine/article-add event and whose visible actor profile URL exactly matches a registered note ID.
+- Likes, comments, follows, purchases, tips and all other notification types remain visible.
+- Filtered notification nodes are hidden only in the user's rendered bell panel; note server data is never deleted or modified.
+- The bell panel shows the number organized by INSIGHT and provides a temporary reveal/hide control.
+- Aggregated notices that expose no matching creator URL are not hidden; do not guess actors hidden behind “他N名”.
+
 ## 2026-09-01 OWNER / PARTICIPANT SEPARATION — CURRENT CHECKPOINT
 The production-facing `note-insight` app remains **INSIGHT only**. OWNER administration is not part of the participant UI.
 
