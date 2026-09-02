@@ -1,6 +1,11 @@
-const CACHE_NAME = "mumei-note-insight-v25";
+const CACHE_NAME = "mumei-note-insight-v26";
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg"];
-const ROOT_URL = new URL("./", self.registration.scope).href;
+const ROOT_URL = new URL("./?launch=top", self.registration.scope).href;
+
+function notificationPage(url) {
+  const u = new URL(url);
+  return u.pathname.endsWith("/notification-setup.html") || u.pathname.endsWith("/notification-import.html");
+}
 
 function staleNotificationEntry(url) {
   const u = new URL(url);
@@ -19,10 +24,13 @@ self.addEventListener("activate", (event) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
+
+    // An older Edge/PWA window may still be parked on the notification helper page.
+    // On this release activation, move every such stale window back through the TOP launch entry.
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     await Promise.all(windows.map(async (client) => {
-      if (!staleNotificationEntry(client.url)) return;
-      try { await client.navigate(ROOT_URL); } catch { /* browser may reject navigation while backgrounded */ }
+      if (!notificationPage(client.url)) return;
+      try { await client.navigate(ROOT_URL); } catch { /* Some Android browsers reject background navigation. */ }
     }));
   })());
 });
@@ -30,10 +38,13 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) return;
+
+  // Notification helper pages are only valid when explicitly opened from INSIGHT/setup.
   if (event.request.mode === "navigate" && staleNotificationEntry(requestUrl.href)) {
     event.respondWith(Promise.resolve(Response.redirect(ROOT_URL, 302)));
     return;
   }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
