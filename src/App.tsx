@@ -8,7 +8,7 @@ import "./fast-insight-v6-override.css";
 import { FeaturePage } from "./feature-page";
 import { HubHome } from "./hub-home";
 import { ManagementPage } from "./management-page";
-import { MemberInsightFull } from "./member-insight-full";
+import { MemberInsightLive } from "./member-insight-live";
 import { OwnerGate } from "./owner-gate";
 
 const OWNER_KEY = "mumei-unified-owner-token";
@@ -91,11 +91,11 @@ export function App() {
   else if (route === "manage") page = <ManagementPage />;
   else if (route === "owner-insight") page = ownerToken ? <FastInsightV8 /> : <OwnerGate />;
   else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
-  else if (route === "dashboard") page = ownerView ? <FastInsightV8 /> : <MemberInsightFull />;
-  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightFull />;
-  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightFull />;
-  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightFull />;
-  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightFull />;
+  else if (route === "dashboard") page = ownerView ? <FastInsightV8 /> : <MemberInsightLive />;
+  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightLive />;
+  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightLive />;
+  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightLive />;
+  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightLive />;
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
