@@ -45,6 +45,14 @@
   <body>
     <div id="insight-tool-row"><div><strong>INSIGHTツール</strong><a href="./notification-setup.html?from=insight&role=owner" target="_blank" rel="noopener">本人通知を設定</a><a href="#evidence">ダッシュボード資料庫</a></div></div>
     <div id="root"></div>
+    <script>
+      document.addEventListener("click", function (event) {
+        const target = event.target instanceof Element ? event.target.closest('a[href*="notification-setup.html"]') : null;
+        if (!target || target.target === "_blank") return;
+        event.preventDefault();
+        window.open(target.href, "_blank", "noopener");
+      }, true);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
