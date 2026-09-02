@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AccessPortalV3 } from "./access-portal-v3";
+import { AccessPortalV4 } from "./access-portal-v4";
 import { ArticleLikesPageV2 } from "./article-likes-page-v2";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidenceV2 } from "./evidence-v2";
@@ -86,7 +86,7 @@ export function App() {
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   let page;
-  if (route === "access/insight") page = <AccessPortalV3 />;
+  if (route === "access/insight") page = <AccessPortalV4 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
   else if (route === "owner-insight") page = ownerToken ? <FastInsightV8 /> : <OwnerGate />;
