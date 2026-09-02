@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { INSIGHT_TOKEN_KEY } from "./access-portal";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 
 const API = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 
@@ -23,10 +23,19 @@ const panel = { border: "1px solid #263446", borderRadius: 20, background: "line
 async function api(action: string, extra: Record<string, unknown> = {}) {
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (!token) throw new Error("INSIGHT_LOGIN_REQUIRED");
-  const response = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", "X-Insight-Token": token }, body: JSON.stringify({ action, ...extra }), cache: "no-store" });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "INSIGHT_API_ERROR");
-  return payload;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", "X-Insight-Token": token }, body: JSON.stringify({ action, ...extra }), cache: "no-store", signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "INSIGHT_API_ERROR");
+    return payload;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw new Error("INSIGHT_TIMEOUT");
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function fmt(value: string | null | undefined) {
@@ -57,13 +66,18 @@ export function MemberInsightApp() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"home" | "notifications" | "supporters" | "articles">("home");
+  const initialSyncStarted = useRef(false);
 
   async function load(afterSync = false) {
+    setError("");
     try {
       const payload = await api("dashboard");
       setData(payload as Dashboard);
-      if (!afterSync && !payload.watch?.initialized) {
-        await sync(true);
+      setLoading(false);
+      if (!afterSync && !payload.watch?.initialized && !initialSyncStarted.current) {
+        initialSyncStarted.current = true;
+        setMessage("INSIGHTを表示しました。初回データはバックグラウンドで同期しています。");
+        void sync(true);
       }
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "INSIGHT_API_ERROR";
@@ -72,19 +86,22 @@ export function MemberInsightApp() {
         window.location.hash = "access/insight";
         return;
       }
-      setError(code);
+      setError(code === "INSIGHT_TIMEOUT" ? "読み込みが20秒を超えました。下のボタンでもう一度読み込めます。" : code);
     } finally { setLoading(false); }
   }
 
   async function sync(initial = false) {
-    setSyncing(true); setError(""); setMessage("");
+    setSyncing(true); setError("");
+    if (!initial) setMessage("");
     try {
       const result = await api("sync");
       const next = await api("dashboard");
       setData(next as Dashboard);
       setMessage(initial || result.baseline ? "初回データを保存しました。次回以降、新しい公開反応を差分で通知します。" : `更新完了。新しい公開反応 ${result.newNotifications ?? 0}件`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "同期できませんでした。");
+      const code = caught instanceof Error ? caught.message : "同期できませんでした。";
+      setError(code === "INSIGHT_TIMEOUT" ? "同期が20秒を超えたため一度中断しました。画面はそのまま使えます。必要なら「今すぐ同期」で再実行してください。" : code);
+      if (initial) setMessage("INSIGHT画面は利用できます。初回同期だけ完了していません。");
     } finally { setSyncing(false); }
   }
 
@@ -111,7 +128,7 @@ export function MemberInsightApp() {
   const unread = useMemo(() => data?.notifications.filter(item => !item.is_read).length ?? 0, [data]);
   const topArticles = useMemo(() => [...(data?.articles ?? [])].sort((a,b) => (b.like_count + b.comment_count * 2) - (a.like_count + a.comment_count * 2)), [data]);
 
-  if (loading || !data) return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#070a0f", color: "#fff" }}>{error || "INSIGHTを読み込んでいます…"}</div>;
+  if (loading || !data) return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#070a0f", color: "#fff", padding: 24 }}><div style={{ width: "min(420px,100%)", textAlign: "center" }}><p>{error || "INSIGHTを読み込んでいます…"}</p>{error ? <button onClick={() => { setLoading(true); void load(); }} style={{ minHeight: 48, width: "100%", border: 0, borderRadius: 12, background: "#b6ff38", color: "#101600", fontWeight: 950 }}>もう一度読み込む</button> : null}</div></div>;
 
   return <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 50% -10%,#162333,#070a0f 36%)", color: "#f5f8fb", padding: "18px 12px 100px" }}><main style={{ width: "min(1000px,100%)", margin: "0 auto" }}>
     <header style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr) auto", gap: 12, alignItems: "center", padding: "10px 0 20px" }}>
