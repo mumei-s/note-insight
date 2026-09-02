@@ -7,13 +7,11 @@ import "./styles.css";
 
 const SELF_ACCOUNT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
 const initialUrl = new URL(window.location.href);
-const rawInitialRoute = window.location.hash.replace(/^#\/?/, "");
-const adminDirect = rawInitialRoute === "owner" || rawInitialRoute === "manage" || rawInitialRoute === "owner-insight" || rawInitialRoute.startsWith("owner-features/");
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 
-// Distribution/PWA launches always start at the public TOP.
-// Explicit OWNER deep links remain available when they are opened directly.
-if (pwaTopLaunch || (rawInitialRoute && !adminDirect)) {
+// Only an explicit PWA/distribution launch marker forces the public TOP.
+// Browser back/forward and explicit INSIGHT deep links such as #dashboard must keep their route and session.
+if (pwaTopLaunch) {
   const clean = new URL(window.location.href);
   clean.hash = "";
   clean.searchParams.delete("launch");
