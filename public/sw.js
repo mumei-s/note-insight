@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v27";
+const CACHE_NAME = "mumei-note-insight-v28";
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg"];
 const ROOT_URL = new URL("./?launch=top", self.registration.scope).href;
 
@@ -28,7 +28,7 @@ self.addEventListener("activate", (event) => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     await Promise.all(windows.map(async (client) => {
       if (!notificationPage(client.url)) return;
-      try { await client.navigate(ROOT_URL); } catch { /* Some Android browsers reject background navigation. */ }
+      try { await client.navigate(ROOT_URL); } catch { /* Some browsers reject background navigation. */ }
     }));
   })());
 });
