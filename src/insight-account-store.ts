@@ -138,14 +138,16 @@ export function rememberMemberSession(app: any, memberToken: string, passcode?: 
 
 export function currentStoredInsightAccount() {
   const accounts = readStoredInsightAccounts();
-  const active = activeId();
-  if (active) {
-    const selected = accounts.find((item) => item.noteId === active);
-    if (selected) return selected;
-  }
+  // The actually authenticated member session is the source of truth for the visible current account.
+  // A pending secondary application must never replace the visible logged-in identity merely because it was touched last.
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (token) {
     const selected = accounts.find((item) => item.memberToken === token);
+    if (selected) return selected;
+  }
+  const active = activeId();
+  if (active) {
+    const selected = accounts.find((item) => item.noteId === active);
     if (selected) return selected;
   }
   const applicant = localStorage.getItem(APPLICANT_KEY) || "";
