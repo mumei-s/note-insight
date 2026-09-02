@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v13.1｜追記標準・小型可動
+// @name         note ポン出し v13.2｜追記標準・小型可動
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      13.1.0
-// @description  通常は既存本文・リンクを消さずカーソル位置へ追記。全消しは別ボタン。小型・移動・最小化対応。brなし、---区切り線対応。
+// @version      13.2.0
+// @description  既存本文・リンクを残して追記。全消しは別ボタン。Androidのコピー・選択・切り取りを妨げない。小型・移動・最小化・brなし・---区切り線対応。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,14 +14,14 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v131_root__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v131-backup:';
+  const ROOT_ID = '__mumei_pon_v132_root__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v132-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   [
-    '__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__',
-    '__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__',
-    '__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
+    '__mumei_pon_v131_root__','__mumei_pon_v13_root__','__mumei_pon_v12_root__',
+    '__mumei_pon_v11_root__','__mumei_pon_v10_root__','__mumei_pon_v9_editor__',
+    '__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
   ].forEach(id => document.getElementById(id)?.remove());
   if (document.getElementById(ROOT_ID)) return;
 
@@ -141,26 +141,40 @@
     editor.focus();
   }
 
-  let savedEditorRange = null;
-  const toElement = node => node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-  document.addEventListener('selectionchange', () => {
+  // Androidの長押し選択と干渉しないよう、selectionchangeは監視しない。
+  // 本文内で選択範囲が空（普通のカーソル）の時だけ保存する。
+  let savedCaret = null;
+  function captureCollapsedCaret(editor) {
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const editor = findEditor();
-    if (!editor) return;
+    if (!sel || sel.rangeCount !== 1 || !sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
-    const el = toElement(range.commonAncestorContainer);
-    if (el && (el === editor || editor.contains(el))) savedEditorRange = range.cloneRange();
-  });
+    const node = range.commonAncestorContainer;
+    if (node === editor || editor.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode)) {
+      savedCaret = range.cloneRange();
+    }
+  }
+
+  document.addEventListener('pointerup', e => {
+    const editor = findEditor();
+    if (!editor || !(e.target === editor || editor.contains(e.target))) return;
+    setTimeout(() => captureCollapsedCaret(editor), 0);
+  }, {passive:true});
+
+  document.addEventListener('keyup', e => {
+    const editor = findEditor();
+    if (!editor || !(e.target === editor || editor.contains(e.target))) return;
+    captureCollapsedCaret(editor);
+  }, {passive:true});
 
   function placeCaret(editor) {
     const sel = window.getSelection();
-    if (savedEditorRange) {
-      const el = toElement(savedEditorRange.commonAncestorContainer);
-      if (el && (el === editor || editor.contains(el))) {
+    if (savedCaret) {
+      const node = savedCaret.commonAncestorContainer;
+      const parent = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
+      if (parent && (parent === editor || editor.contains(parent))) {
         try {
           sel.removeAllRanges();
-          sel.addRange(savedEditorRange.cloneRange());
+          sel.addRange(savedCaret.cloneRange());
           editor.focus();
           return;
         } catch {}
@@ -185,7 +199,7 @@
       fireInput(editor, 'deleteContentBackward');
       await sleep(120);
     }
-    savedEditorRange = null;
+    savedCaret = null;
     return !(editor.innerText || '').trim();
   }
 
@@ -215,6 +229,7 @@
     }
     if (!ok) editor.insertAdjacentHTML('beforeend', html);
     fireInput(editor, 'insertFromPaste');
+    setTimeout(() => captureCollapsedCaret(editor), 0);
   }
 
   async function replaceAll(editor, html) {
@@ -230,17 +245,17 @@
 
   const root = document.createElement('div');
   root.id = ROOT_ID;
-  root.style.cssText = 'position:fixed!important;right:8px!important;bottom:72px!important;z-index:2147483647!important;font-family:system-ui,-apple-system,sans-serif!important;pointer-events:auto!important;';
+  root.style.cssText = 'position:fixed!important;right:8px!important;bottom:72px!important;z-index:2147483647!important;font-family:system-ui,-apple-system,sans-serif!important;pointer-events:none!important;';
   root.innerHTML = `
-    <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:7px 10px;background:#0b2138;color:#fff;font-weight:900;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.3);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン</button>
-    <div id="ponPanel" style="display:none;position:fixed;right:6px;bottom:108px;width:min(72vw,320px);max-height:42vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:10px;padding:7px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+    <button id="ponFab" type="button" style="pointer-events:auto;border:0;border-radius:999px;padding:7px 10px;background:#0b2138;color:#fff;font-weight:900;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.3);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン</button>
+    <div id="ponPanel" style="pointer-events:auto;display:none;position:fixed;right:6px;bottom:108px;width:min(68vw,290px);max-height:38vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:10px;padding:7px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
       <div id="ponDrag" style="display:flex;align-items:center;gap:5px;margin:-1px -1px 5px;padding:4px 3px;cursor:move;touch-action:none;user-select:none;border-bottom:1px solid #28445c">
-        <b style="flex:1;font-size:12px">↔️ ポン出し v13.1</b>
+        <b style="flex:1;font-size:12px">↔️ ポン出し v13.2</b>
         <button id="ponMin" type="button" style="border:0;background:#17314b;color:#fff;border-radius:6px;padding:3px 6px;font-size:11px">＿</button>
         <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:6px;padding:3px 6px;font-size:11px">✕</button>
       </div>
-      <div style="font-size:9px;line-height:1.3;color:#c8d9e6;margin-bottom:4px">通常＝既存本文保持。カーソル位置へ追記。#大見出し / ##小見出し / ---区切り線</div>
-      <textarea id="ponSrc" rows="6" placeholder="原稿を貼り付け" style="display:block;width:100%;height:112px;resize:vertical;box-sizing:border-box;border:1px solid #39e7d2;border-radius:7px;padding:7px;background:#fff;color:#111;font:13px/1.35 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
+      <div style="font-size:9px;line-height:1.3;color:#c8d9e6;margin-bottom:4px">通常＝既存本文保持。#大見出し / ##小見出し / ---区切り線</div>
+      <textarea id="ponSrc" rows="6" placeholder="原稿を貼り付け" style="display:block;width:100%;height:104px;resize:vertical;box-sizing:border-box;border:1px solid #39e7d2;border-radius:7px;padding:7px;background:#fff;color:#111;font:13px/1.35 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px">
         <button id="ponClip" type="button" style="border:0;border-radius:7px;padding:7px 4px;background:#17314b;color:#fff;font-weight:800;font-size:10px">📋 読込</button>
         <button id="ponAdd" type="button" style="border:0;border-radius:7px;padding:7px 4px;background:#39e7d2;color:#04202a;font-weight:900;font-size:10px">➕ 追記</button>
@@ -270,7 +285,8 @@
     if (e.target.closest('button')) return;
     const r = panel.getBoundingClientRect();
     moving = {x:e.clientX, y:e.clientY, left:r.left, top:r.top};
-    panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
     try { drag.setPointerCapture(e.pointerId); } catch {}
     e.preventDefault();
   });
@@ -331,7 +347,7 @@
     if (!b?.html) return show('戻せるバックアップなし');
     editor.innerHTML = b.html;
     fireInput(editor, 'insertFromPaste');
-    savedEditorRange = null;
+    savedCaret = null;
     show('↩️ 直前の本文へ戻した');
   });
 })();
