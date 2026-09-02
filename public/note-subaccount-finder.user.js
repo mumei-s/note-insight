@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note 巡回BOOST｜タグ検索・スキ・マガジン v4.6
+// @name         note 巡回BOOST｜タグ検索・スキ・マガジン v4.6.1
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      4.6.0
-// @description  v4.5の巡回・アカウント切替・反応履歴・長押し移動を維持し、現在の検索結果を保有マガジンへ安全値連動で一括整理できる機能を追加。
+// @version      4.6.1
+// @description  v4.5の巡回・アカウント切替・反応履歴・長押し移動を維持し、現在の検索結果を保有マガジンへ安全値連動で一括整理。初回開閉も安定化。
 // @match        https://note.com/*
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/77843a09e9bc671716af5fa0ac0448ef095eabdc/public/note-subaccount-finder.user.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/47874424d2f601f0c9c526d36c7c480860f9ce06/public/note-subaccount-finder-v44-patch.js
@@ -13,5 +13,17 @@
 // ==/UserScript==
 (() => {
   'use strict';
-  // 本体v4.3 + v4.4アカウント/反応 + v4.5長押し移動 + v4.6検索結果マガジン自動整理を固定コミットから読み込む。
+  const normalize = () => {
+    const body = document.getElementById('nb-v46-body');
+    if (!body) return false;
+    if (!body.style.display) body.style.display = 'none';
+    return true;
+  };
+  if (!normalize()) {
+    const mo = new MutationObserver(() => {
+      if (normalize()) mo.disconnect();
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 20000);
+  }
 })();
