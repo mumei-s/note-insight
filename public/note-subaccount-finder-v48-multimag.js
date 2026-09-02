@@ -74,7 +74,10 @@
       j.itemIndex=Number(j.index)||0;
       j.targetIndex=0;
       j.index=j.itemIndex;
-      j.last=`旧1マガジン進捗をそのまま継続：${j.last||'再開待ち'}`;
+      const oldLast=String(j.last||'');
+      j.last=/403/.test(oldLast)
+        ? '安全値で自動停止：v4.8で旧403停止を修復・同じ途中位置から再開待ち'
+        : `旧1マガジン進捗をそのまま継続：${oldLast||'再開待ち'}`;
       putJob(j);
     }
     return j;
