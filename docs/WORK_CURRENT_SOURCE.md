@@ -1,17 +1,29 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-02 JST
+Updated: 2026-09-02 10:28 JST
+
+## 2026-09-02 10:28 CODE-ONLY LOGIN / NON-BLOCKING INITIAL LOAD — LATEST CHECKPOINT
+
+This is the newest checkpoint. Determine future source-of-truth by actual timestamp first, then current GitHub `main`.
+
+- Participant login now requires **only the individual `INSIGHT-XXXXXXXX` code**. A note ID is no longer entered again at login.
+- note ID / creator URL remains required only when creating a new participation application, because that step identifies which public note profile must be verified.
+- `src/access-portal-v3.tsx` is the active participant access screen. `src/App.tsx` routes `#access/insight` to `AccessPortalV3`.
+- Supabase Edge Function `insight-code-login` v1 is ACTIVE. It hashes the submitted individual code, resolves exactly one active application, and issues a long-lived member session. Duplicate-code conflicts fail closed.
+- Saved accounts still switch with one tap and do not log out other saved accounts.
+- The post-login freeze was traced to `MemberInsightApp`: the first dashboard load waited for the full initial `sync` operation before releasing the loading screen.
+- `src/member-insight-app.tsx` now renders the dashboard immediately after the lightweight `dashboard` response and starts first-time sync in the background. React StrictMode duplicate effects are guarded with `initialSyncStarted`.
+- Member API calls now have a 20-second client timeout. A timeout never leaves the user on an infinite spinner; it shows a retry button or leaves the already-rendered INSIGHT usable while sync can be retried manually.
+- Service Worker cache generation is `mumei-note-insight-v21` so browsers do not keep the older two-field login UI.
+- Preserve all 2026-09-02 notification-sync v2.1 behavior below.
 
 ## 2026-09-02 ACCESS / TOP / MULTI-ACCOUNT — CURRENT CHECKPOINT
 
-This checkpoint is newer than the earlier notification checkpoint below. Determine future source-of-truth by actual timestamp first, then current GitHub `main`; do not prefer an older chat merely because of its title.
-
 - The production-facing app remains INSIGHT only. Games and creator directory stay detached.
-- `src/insight-account-store.ts` now keeps multiple INSIGHT accounts on the same device. Each saved account can retain its member session, applicant token, verification passcode and identity metadata independently.
+- `src/insight-account-store.ts` keeps multiple INSIGHT accounts on the same device. Each saved account can retain its member session, applicant token, verification passcode and identity metadata independently.
 - Account switching is **not logout**. Switching to a sub account or another saved account does not revoke the previous account session and does not erase an in-progress application / profile-verification flow.
 - Transient network/API failures must not erase a saved login. A stored member session is removed only when the server explicitly reports an authentication failure such as `INSIGHT_SESSION_INVALID`, `INSIGHT_MEMBER_INACTIVE` or `INSIGHT_LOGIN_REQUIRED`.
-- `src/access-portal.tsx` is the participant login/application/switch screen. It shows saved accounts and lets the user resume pending/approved applications or switch an already logged-in account.
-- Public TOP now has `ログイン`, `参加`, small `ログアウト`, and small `退会` controls. `ログアウト` and `退会` are deliberately less prominent and always require a yes/no confirmation dialog.
+- Public TOP has `ログイン`, `参加`, small `ログアウト`, and small `退会` controls. `ログアウト` and `退会` are deliberately less prominent and always require a yes/no confirmation dialog.
 - Explicit logout revokes only the current account session. Other stored accounts remain available.
 - Explicit leave/退会 revokes all sessions for that participant, marks the application `revoked`, removes it from the active public participant rail and disables its notification-watch profile.
 - Supabase Edge Function `insight-self-account` v1 is ACTIVE. It provides custom-authenticated `touch`, `logout`, and `leave` operations using `X-Insight-Token`.
@@ -19,8 +31,6 @@ This checkpoint is newer than the earlier notification checkpoint below. Determi
 - The duplicate upper `無名S note / INSIGHT` TOP branding was removed. The page starts with the compact account/control bar and the single main `無名S note INSIGHT` hero.
 - Participant-facing TOP/access copy no longer frames participation as a purchase/sale flow.
 - Social preview is replaced by a dedicated readable 1200×630 image served by Supabase Edge Function `insight-og-image` v1 ACTIVE. `index.html` uses it for Open Graph and Twitter preview metadata.
-- Service Worker cache generation is `mumei-note-insight-v20` for this release.
-- Existing `public/note-insight-notification-sync.user.js` v2.1 behavior below must remain intact.
 
 ## 2026-09-02 NOTE NOTIFICATION SYNC 2.1 — CURRENT CHECKPOINT
 
@@ -72,7 +82,7 @@ Canonical product scope is `docs/PRIMARY_APP_SCOPE.md`.
 
 ## Participant flow
 1. Participant opens the fixed root URL and chooses participation/login.
-2. Participant submits their note ID/profile URL.
+2. Participant submits their note ID/profile URL for a new application.
 3. Application is stored in Supabase and appears in the OWNER `#manage` page after OWNER authentication.
 4. OWNER approves.
 5. Approval creates an individual `INSIGHT-XXXXXXXX` passcode for that applicant.
@@ -80,10 +90,11 @@ Canonical product scope is `docs/PRIMARY_APP_SCOPE.md`.
 7. INSIGHT verifies the public profile contains the exact code.
 8. Verification activates the account, issues a long-lived hashed session token and adds the creator to the public participant list.
 9. Participant restores the original bio.
-10. Another browser/device may log in using the verified note ID + individual passcode. No shared participant password is used.
+10. Later login on another browser/device requires only the individual `INSIGHT-XXXXXXXX` code. The code uniquely resolves the verified note account.
 
 ## Backend boundaries
-- `insight-access`: applications, approval, passcode, public-profile verification, session creation/login/revocation, public participants.
+- `insight-access`: applications, approval, passcode, public-profile verification, legacy session creation/login/revocation, public participants.
+- `insight-code-login`: code-only participant login and new session issuance.
 - `insight-self-account`: participant self-service long-session refresh, explicit logout and explicit leave.
 - `insight-member-api`: participant-safe analytics/public-reaction store. Every read/write is scoped to the authenticated application/member UUID and verified note ID.
 - OWNER analytics may continue using OWNER-only legacy/full endpoints, but participants must never receive OWNER `ss_yr` data.
