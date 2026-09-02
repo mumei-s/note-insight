@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v23";
+const CACHE_NAME = "mumei-note-insight-v24";
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg"];
 
 self.addEventListener("install", (event) => {
