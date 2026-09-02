@@ -1,8 +1,9 @@
 {
+  "id": "/note-insight/",
   "name": "無名 S note｜note INSIGHT",
   "short_name": "note INSIGHT",
   "description": "noteの反応を保存し、全記事を差分分析する会員制PWA",
-  "start_url": "/note-insight/",
+  "start_url": "/note-insight/?launch=top",
   "scope": "/note-insight/",
   "display": "standalone",
   "launch_handler": {
