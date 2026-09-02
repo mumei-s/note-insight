@@ -58,7 +58,10 @@ Deno.serve(async (req) => {
     }
 
     if (action === "leave") {
+      const memberId = String(current.app.id);
       await sb.from("insight_member_sessions").update({ revoked_at: now, last_seen_at: now }).eq("application_id", current.app.id).is("revoked_at", null);
+      await sb.from("insight_notification_ingest_tokens").update({ revoked_at: now }).eq("member_id", memberId).is("revoked_at", null);
+      await sb.from("insight_notification_pair_codes").delete().eq("member_id", memberId).is("used_at", null);
       const { data: next, error } = await sb.from("insight_access_applications").update({ status: "revoked", verification_code_plain: null, verification_code_hash: null, revoked_at: now, updated_at: now }).eq("id", current.app.id).select().single();
       if (error) throw error;
       await setPublic(next, false);
