@@ -5,6 +5,9 @@
   "start_url": "/note-insight/",
   "scope": "/note-insight/",
   "display": "standalone",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "background_color": "#050706",
   "theme_color": "#050706",
   "icons": [
