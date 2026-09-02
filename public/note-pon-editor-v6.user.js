@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v11｜貼付後自動終了
+// @name         note ポン出し v12｜区切り線対応・貼付後自動終了
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      11.0.0
-// @description  editor.note.comで右下に表示。原稿貼付→旧本文全消し→brなしで整形→貼付後、ツール本体を自動終了。挿絵自動処理なし。
+// @version      12.0.0
+// @description  editor.note.comで右下に表示。原稿貼付→旧本文全消し→brなしで整形→Markdownの---を区切り線へ変換→貼付後、ツール本体を自動終了。挿絵自動処理なし。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,11 +14,11 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v11_root__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v11-backup:';
+  const ROOT_ID = '__mumei_pon_v12_root__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v12-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  ['__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__']
+  ['__mumei_pon_v11_root__','__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__']
     .forEach(id => document.getElementById(id)?.remove());
 
   if (document.getElementById(ROOT_ID)) return;
@@ -63,6 +63,13 @@
     for (const raw of lines) {
       const t = raw.trim();
       if (!t) { flushPara(); flushList(); continue; }
+
+      if (/^-{3,}$/.test(t)) {
+        flushPara();
+        flushList();
+        out.push('<hr>');
+        continue;
+      }
 
       const h1 = t.match(/^#\s+(.+)$/);
       const h2 = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/);
@@ -131,7 +138,7 @@
 
   function fireInput(editor, type='insertText') {
     try { editor.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:type, data:null})); }
-    catch { editor.dispatchEvent(new Event('input', {bubbles:true})); }
+    catch { editor.dispatchEvent(new Event('input', {bubbles:true}));
     editor.dispatchEvent(new Event('change', {bubbles:true}));
   }
 
@@ -177,8 +184,8 @@
   root.innerHTML = `
     <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:13px 17px;background:#0b2138;color:white;font-weight:900;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,.35);outline:2px solid #39e7d2;touch-action:manipulation">📄 ポン出し</button>
     <div id="ponPanel" style="display:none;position:absolute;right:0;bottom:58px;width:min(92vw,680px);max-height:78vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:14px;padding:12px;box-shadow:0 12px 36px rgba(0,0,0,.45)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="flex:1">📄 ポン出し v11</b><button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:8px;padding:7px 10px">✕</button></div>
-      <div style="font-size:12px;color:#c8d9e6;margin-bottom:8px">原稿を貼る → 旧本文を全消し → 空確認 → 見出し・段落を整えて貼付。成功したらツールは自動で消えます。</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="flex:1">📄 ポン出し v12</b><button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:8px;padding:7px 10px">✕</button></div>
+      <div style="font-size:12px;color:#c8d9e6;margin-bottom:8px">原稿を貼る → 旧本文を全消し → 空確認 → 見出し・段落・区切り線を整えて貼付。#＝大見出し、##＝小見出し、---＝区切り線。成功したらツールは自動で消えます。</div>
       <textarea id="ponSrc" rows="15" placeholder="ここをタップして原稿を貼り付け" style="display:block;width:100%;min-height:260px;box-sizing:border-box;border:2px solid #39e7d2;border-radius:10px;padding:12px;background:#fff;color:#111;font:16px/1.55 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button id="ponClip" type="button" style="flex:1 1 180px;border:0;border-radius:10px;padding:11px;background:#17314b;color:#fff;font-weight:800">📋 クリップボードから読込</button>
