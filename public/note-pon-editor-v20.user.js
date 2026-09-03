@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note URLポン v31.4｜全URL安定カード化
+// @name         note URLポン v31.5｜貼付URL自動カード化
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      31.4.0
-// @description  本文は手動貼付。/m/マガジンURLと/n/固定記事URLだけを検出。各URLをnoteで成功実績のある本文末処理で本物カード化し、そのカードを元URL位置へ戻す。失敗時は末尾の仮URL・仮カードを自動回収。本文・見出し・順番・その他URLには触れない。
+// @version      31.5.0
+// @description  本文に貼った /m/ マガジンURLと /n/ 固定記事URLを自動検出。URL群が安定すると自動でnote純正カード化し、生成カードを元URL位置へ戻す。失敗時は元URLを残して末尾の仮URL・仮カードだけ回収。本文・見出し・順番・その他URLには触れない。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -12,9 +12,11 @@
 // ==/UserScript==
 (() => {
 'use strict';
-if(window.__MUMEI_URL_PON_V314__)return;window.__MUMEI_URL_PON_V314__=true;
-const BTN='mumei-url-pon-v314-btn',ST='mumei-url-pon-v314-status',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+if(window.__MUMEI_URL_PON_V315__)return;window.__MUMEI_URL_PON_V315__=true;
+const BTN='mumei-url-pon-v315-btn',ST='mumei-url-pon-v315-status',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const AUTO_DELAY=1500;
 let busy=false,viewCache=null,cmdCache=null,selectionCache=null;
+let lastSig='',stableSince=0,failedSig='',autoTimer=null;
 const norm=v=>{try{const u=new URL(String(v||'').trim(),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
 const target=v=>/^https:\/\/note\.com\/[A-Za-z0-9_-]+\/(?:m\/m[a-z0-9]+|n\/n[a-z0-9]+)\/?$/i.test(String(v||'').trim());
 const editor=()=>document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror');
@@ -41,8 +43,10 @@ async function generateAtEnd(v,url,before){const command=factory()(url);if(typeo
 function currentOriginal(v,url,originalPos){const a=rows(v).filter(r=>r.url===norm(url)&&r.pos<=originalPos+3);if(!a.length)return null;return a.sort((x,y)=>Math.abs(x.pos-originalPos)-Math.abs(y.pos-originalPos))[0]}
 async function one(v,row){const before=new Set(embeds(v).map(ckey).filter(Boolean)),originalPos=row.pos;let added=false;try{added=insertTemp(v,row.url);const fresh=await generateAtEnd(v,row.url,before);const original=currentOriginal(v,row.url,originalPos);if(!original)throw Error('元URL位置を見失いました');if(fresh.pos<=original.pos)throw Error('生成カード位置が不正です');let tr=v.state.tr;tr=tr.delete(fresh.pos,fresh.pos+fresh.node.nodeSize);tr=tr.replaceWith(original.pos,original.pos+original.node.nodeSize,fresh.node);v.dispatch(tr.scrollIntoView());removeOwnedSpacer(v,added);return fresh}catch(e){cleanupTemp(v,row.url,originalPos,added,before);throw e}}
 function say(t,bad=false){const e=document.getElementById(ST);if(e){e.textContent=t;e.style.background=bad?'#991b1b':'#1f2937'}}
-function refresh(){if(busy)return;const b=document.getElementById(BTN);if(!b)return;const v=view(),n=v?rows(v).length:0;b.textContent=n?`🔗 マガジン＋固定記事 ${n}件 → 全カード化`:'🔗 /m/・/n/ URLをカード化';b.disabled=!n;b.style.opacity=n?'1':'.55'}
-async function run(){if(busy)return;const v=view();if(!v)return say('❌ note編集本文を取得できません',true);const total=rows(v).length;if(!total)return say('対象URLは0件');busy=true;const b=document.getElementById(BTN);if(b)b.disabled=true;try{factory();selectionApi();let done=0;while(true){const a=rows(v);if(!a.length)break;const r=a[0];say(`🔗 ${done+1}/${total} カード化中…\n${r.url}`);await one(v,r);done++;say(`✅ ${done}/${total} 完了`);if(done<total)await sleep(900)}say(`✅ ${done}/${total}件 全部カード化`)}catch(e){say(`❌ 停止｜残り ${rows(v).length}件\n${e?.message||e}`,true)}finally{busy=false;if(b)b.disabled=false;refresh()}}
-function mount(){if(!document.body)return;let s=document.getElementById(ST);if(!s){s=document.createElement('div');s.id=ST;document.body.appendChild(s)}Object.assign(s.style,{position:'fixed',right:'8px',bottom:'68px',zIndex:'2147483646',maxWidth:'320px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'11px',lineHeight:'1.35',whiteSpace:'pre-wrap',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});if(!s.textContent)s.textContent='本文を貼付 → /m/ と /n/ の単独URLだけ判別';let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.addEventListener('click',run);document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'18px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'11px 14px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'900',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});refresh()}
+function signature(v){return rows(v).map(r=>r.url).join('\n')}
+function refresh(){if(busy)return;const b=document.getElementById(BTN);if(!b)return;const v=view(),n=v?rows(v).length:0;b.textContent=n?`⚡ 自動URL→カード ON｜残り ${n}件`:'⚡ 自動URL→カード ON';b.disabled=!n;b.style.opacity=n?'1':'.72'}
+async function run(manual=false){if(busy)return;const v=view();if(!v)return say('❌ note編集本文を取得できません',true);const total=rows(v).length;if(!total)return say('✅ 対象URLは0件');if(manual)failedSig='';busy=true;const b=document.getElementById(BTN);if(b)b.disabled=true;try{factory();selectionApi();let done=0;while(true){const a=rows(v);if(!a.length)break;const r=a[0];say(`⚡ ${done+1}/${total} 自動カード化中…\n${r.url}`);await one(v,r);done++;failedSig='';say(`✅ ${done}/${total} 完了`);if(done<total)await sleep(900)}lastSig='';stableSince=0;say(`✅ ${done}/${total}件 自動カード化完了`)}catch(e){failedSig=signature(v);say(`❌ 停止｜残り ${rows(v).length}件\n${e?.message||e}\n右下ボタンで再試行`,true)}finally{busy=false;if(b)b.disabled=false;refresh()}}
+function autoCheck(){if(busy)return;const v=view();if(!v)return;const sig=signature(v);if(!sig){lastSig='';stableSince=0;failedSig='';refresh();return}if(sig===failedSig){refresh();return}if(sig!==lastSig){lastSig=sig;stableSince=Date.now();say(`⚡ ${rows(v).length}件検出｜自動開始待ち…`);refresh();return}if(!stableSince)stableSince=Date.now();if(Date.now()-stableSince<AUTO_DELAY)return;stableSince=0;run(false)}
+function mount(){if(!document.body)return;let s=document.getElementById(ST);if(!s){s=document.createElement('div');s.id=ST;document.body.appendChild(s)}Object.assign(s.style,{position:'fixed',right:'8px',bottom:'68px',zIndex:'2147483646',maxWidth:'320px',padding:'6px 8px',borderRadius:'8px',background:'#1f2937',color:'#fff',fontSize:'11px',lineHeight:'1.35',whiteSpace:'pre-wrap',boxShadow:'0 3px 12px rgba(0,0,0,.25)',pointerEvents:'none'});if(!s.textContent)s.textContent='本文を貼付 → /m/・/n/ URLを自動検出してカード化';let b=document.getElementById(BTN);if(!b){b=document.createElement('button');b.id=BTN;b.type='button';b.addEventListener('click',()=>run(true));document.body.appendChild(b)}Object.assign(b.style,{position:'fixed',right:'8px',bottom:'18px',zIndex:'2147483647',border:'0',borderRadius:'10px',padding:'11px 14px',background:'#059669',color:'#fff',fontSize:'13px',fontWeight:'900',boxShadow:'0 4px 14px rgba(0,0,0,.28)',touchAction:'manipulation'});refresh();if(!autoTimer)autoTimer=setInterval(autoCheck,500)}
 mount();setInterval(mount,800);
 })();
