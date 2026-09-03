@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note URLポン v31.3｜全URL安定カード化
+// @name         note URLポン v31.4｜全URL安定カード化
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      31.3.0
-// @description  本文は手動貼付。/m/マガジンURLと/n/固定記事URLだけを検出。各URLをnoteで成功実績のある本文末処理で本物カード化し、そのカードを元URL位置へ戻す。本文・見出し・順番・その他URLには触れない。
+// @version      31.4.0
+// @description  本文は手動貼付。/m/マガジンURLと/n/固定記事URLだけを検出。各URLをnoteで成功実績のある本文末処理で本物カード化し、そのカードを元URL位置へ戻す。失敗時は末尾の仮URL・仮カードを自動回収。本文・見出し・順番・その他URLには触れない。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -12,8 +12,8 @@
 // ==/UserScript==
 (() => {
 'use strict';
-if(window.__MUMEI_URL_PON_V313__)return;window.__MUMEI_URL_PON_V313__=true;
-const BTN='mumei-url-pon-v313-btn',ST='mumei-url-pon-v313-status',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+if(window.__MUMEI_URL_PON_V314__)return;window.__MUMEI_URL_PON_V314__=true;
+const BTN='mumei-url-pon-v314-btn',ST='mumei-url-pon-v314-status',sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let busy=false,viewCache=null,cmdCache=null,selectionCache=null;
 const norm=v=>{try{const u=new URL(String(v||'').trim(),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
 const target=v=>/^https:\/\/note\.com\/[A-Za-z0-9_-]+\/(?:m\/m[a-z0-9]+|n\/n[a-z0-9]+)\/?$/i.test(String(v||'').trim());
@@ -30,10 +30,16 @@ const genuine=(h,u)=>curl(h)===norm(u)&&/^emb[a-z0-9]+$/i.test(ckey(h))&&String(
 function ensureEnd(v){const p=v.state.schema.nodes.paragraph;if(!p)throw Error('paragraphなし');let added=false;if(v.state.doc.lastChild?.type!==p||v.state.doc.lastChild.textContent!==''){v.dispatch(v.state.tr.insert(v.state.doc.content.size,p.create()));added=true}v.dispatch(v.state.tr.setSelection(selectionApi().atEnd(v.state.doc)).scrollIntoView());v.focus();return added}
 function insertTemp(v,url){const added=ensureEnd(v),p=v.state.schema.nodes.paragraph;v.dispatch(v.state.tr.insert(v.state.doc.content.size,p.create(null,v.state.schema.text(url))));v.dispatch(v.state.tr.setSelection(selectionApi().atEnd(v.state.doc)).scrollIntoView());v.focus();return added}
 function removeOwnedSpacer(v,added){if(!added)return;const d=v.state.doc,last=d.lastChild,p=v.state.schema.nodes.paragraph;if(last?.type===p&&last.textContent===''){const from=d.content.size-last.nodeSize;try{v.dispatch(v.state.tr.delete(from,d.content.size))}catch{}}}
-function cleanupTemp(v,url,originalPos,added){const temp=rows(v).filter(r=>r.url===norm(url)&&r.pos>originalPos).sort((a,b)=>b.pos-a.pos)[0];if(temp)try{v.dispatch(v.state.tr.delete(temp.pos,temp.pos+temp.node.nodeSize))}catch{}removeOwnedSpacer(v,added)}
+function cleanupTemp(v,url,originalPos,added,before){
+  const temp=rows(v).filter(r=>r.url===norm(url)&&r.pos>originalPos).sort((a,b)=>b.pos-a.pos)[0];
+  if(temp)try{v.dispatch(v.state.tr.delete(temp.pos,temp.pos+temp.node.nodeSize))}catch{}
+  const stray=embeds(v).filter(h=>h.pos>originalPos&&ckey(h)&&!before.has(ckey(h))&&curl(h)===norm(url)).sort((a,b)=>b.pos-a.pos)[0];
+  if(stray)try{v.dispatch(v.state.tr.delete(stray.pos,stray.pos+stray.node.nodeSize))}catch{}
+  removeOwnedSpacer(v,added)
+}
 async function generateAtEnd(v,url,before){const command=factory()(url);if(typeof command!=='function')throw Error('URLコマンド未生成');if(!command(v.state,tr=>v.dispatch(tr),v))throw Error('noteがURLを処理しませんでした');const end=Date.now()+45000;while(Date.now()<end){const hit=embeds(v).find(h=>ckey(h)&&!before.has(ckey(h))&&genuine(h,url));if(hit)return hit;await sleep(250)}throw Error('カード生成を確認できません')}
 function currentOriginal(v,url,originalPos){const a=rows(v).filter(r=>r.url===norm(url)&&r.pos<=originalPos+3);if(!a.length)return null;return a.sort((x,y)=>Math.abs(x.pos-originalPos)-Math.abs(y.pos-originalPos))[0]}
-async function one(v,row){const before=new Set(embeds(v).map(ckey).filter(Boolean)),originalPos=row.pos;let added=false;try{added=insertTemp(v,row.url);const fresh=await generateAtEnd(v,row.url,before);const original=currentOriginal(v,row.url,originalPos);if(!original)throw Error('元URL位置を見失いました');if(fresh.pos<=original.pos)throw Error('生成カード位置が不正です');let tr=v.state.tr;tr=tr.delete(fresh.pos,fresh.pos+fresh.node.nodeSize);tr=tr.replaceWith(original.pos,original.pos+original.node.nodeSize,fresh.node);v.dispatch(tr.scrollIntoView());removeOwnedSpacer(v,added);return fresh}catch(e){cleanupTemp(v,row.url,originalPos,added);throw e}}
+async function one(v,row){const before=new Set(embeds(v).map(ckey).filter(Boolean)),originalPos=row.pos;let added=false;try{added=insertTemp(v,row.url);const fresh=await generateAtEnd(v,row.url,before);const original=currentOriginal(v,row.url,originalPos);if(!original)throw Error('元URL位置を見失いました');if(fresh.pos<=original.pos)throw Error('生成カード位置が不正です');let tr=v.state.tr;tr=tr.delete(fresh.pos,fresh.pos+fresh.node.nodeSize);tr=tr.replaceWith(original.pos,original.pos+original.node.nodeSize,fresh.node);v.dispatch(tr.scrollIntoView());removeOwnedSpacer(v,added);return fresh}catch(e){cleanupTemp(v,row.url,originalPos,added,before);throw e}}
 function say(t,bad=false){const e=document.getElementById(ST);if(e){e.textContent=t;e.style.background=bad?'#991b1b':'#1f2937'}}
 function refresh(){if(busy)return;const b=document.getElementById(BTN);if(!b)return;const v=view(),n=v?rows(v).length:0;b.textContent=n?`🔗 マガジン＋固定記事 ${n}件 → 全カード化`:'🔗 /m/・/n/ URLをカード化';b.disabled=!n;b.style.opacity=n?'1':'.55'}
 async function run(){if(busy)return;const v=view();if(!v)return say('❌ note編集本文を取得できません',true);const total=rows(v).length;if(!total)return say('対象URLは0件');busy=true;const b=document.getElementById(BTN);if(b)b.disabled=true;try{factory();selectionApi();let done=0;while(true){const a=rows(v);if(!a.length)break;const r=a[0];say(`🔗 ${done+1}/${total} カード化中…\n${r.url}`);await one(v,r);done++;say(`✅ ${done}/${total} 完了`);if(done<total)await sleep(900)}say(`✅ ${done}/${total}件 全部カード化`)}catch(e){say(`❌ 停止｜残り ${rows(v).length}件\n${e?.message||e}`,true)}finally{busy=false;if(b)b.disabled=false;refresh()}}
