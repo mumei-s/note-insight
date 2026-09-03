@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v20｜共同マガジンカード修復版
+// @name         note ポン出し v20.1｜共同マガジンカード＋URLリンク修復版
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      20.0.0
-// @description  v19.1の回数整理を維持し、残ったnote生URLを正規カードへ再変換。直接コマンド＋Enter処理＋再試行。
+// @version      20.1.0
+// @description  v19.1の回数整理を維持し、残ったnote生URLを正規カードへ再変換。さらに「マガジンURL」「固定記事URL」のURL部分をタップ可能なリンクにする。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
@@ -16,7 +16,8 @@
 
 (() => {
   'use strict';
-  if (window.__MUMEI_PON_V20__) return;
+  if (window.__MUMEI_PON_V201__) return;
+  window.__MUMEI_PON_V201__ = true;
   window.__MUMEI_PON_V20__ = true;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   let cachedFactory = null;
@@ -112,6 +113,73 @@
     return waitGone(view,item.url,6500);
   }
 
+  function linkMarkType(schema) {
+    if (schema.marks?.link) return schema.marks.link;
+    for (const [name,type] of Object.entries(schema.marks || {})) if (/link/i.test(name)) return type;
+    return null;
+  }
+
+  function linkAttrs(type,url) {
+    const attrs={};
+    const spec=type?.spec?.attrs || {};
+    for (const [name,rule] of Object.entries(spec)) {
+      if (/href|url|link/i.test(name)) attrs[name]=url;
+      else if (name === 'target') attrs[name]='_blank';
+      else if (name === 'rel') attrs[name]='noopener noreferrer';
+      else if (Object.prototype.hasOwnProperty.call(rule || {},'default')) attrs[name]=rule.default;
+      else attrs[name]=null;
+    }
+    if (!Object.keys(attrs).some(name=>/href|url|link/i.test(name))) attrs.href=url;
+    return attrs;
+  }
+
+  function labelRows(view) {
+    const out=[];
+    const re=/^(マガジンURL|固定記事URL)：(https:\/\/note\.com\/[^\s]+)$/i;
+    view.state.doc.descendants((node,pos)=>{
+      if(!node.isTextblock)return true;
+      const text=(node.textContent||'').trim();
+      const m=text.match(re);
+      if(!m)return true;
+      const url=m[2];
+      const startInText=text.indexOf(url);
+      if(startInText<0)return true;
+      out.push({pos,url,start:pos+1+startInText,end:pos+1+startInText+url.length});
+      return true;
+    });
+    return out;
+  }
+
+  function urlAlreadyLinked(view,row,type) {
+    let covered=false;
+    view.state.doc.nodesBetween(row.start,row.end,node=>{
+      if(covered)return false;
+      for(const mark of node.marks||[]){
+        if(mark.type!==type)continue;
+        const vals=Object.values(mark.attrs||{}).map(String);
+        if(vals.includes(row.url)){covered=true;return false;}
+      }
+      return true;
+    });
+    return covered;
+  }
+
+  function linkifyLabelUrls(view) {
+    const type=linkMarkType(view.state.schema);
+    if(!type)return 0;
+    const rows=labelRows(view);
+    if(!rows.length)return 0;
+    let tr=view.state.tr, changed=0;
+    for(const row of rows){
+      if(urlAlreadyLinked(view,row,type))continue;
+      let mark;
+      try{mark=type.create(linkAttrs(type,row.url));}catch{continue;}
+      try{tr=tr.addMark(row.start,row.end,mark);changed+=1;}catch{}
+    }
+    if(changed)view.dispatch(tr);
+    return changed;
+  }
+
   const status=()=>document.getElementById('ponStatus14');
   const say=t=>{const s=status();if(s)s.textContent=t;};
 
@@ -120,11 +188,17 @@
     const btn=document.getElementById('ponRepairCards20'); if(btn)btn.disabled=true;
     try {
       const view=findView(); if(!view)throw Error('EditorViewなし');
-      const list=raws(view); if(!list.length){say('✅ 生URLなし｜カード化済み');return;}
+      const list=raws(view);
+      if(!list.length){
+        const linked=linkifyLabelUrls(view);
+        say(linked?`✅ カード化済み｜URLリンク ${linked}件追加`:'✅ カード化済み｜URLもタップ可能');
+        return;
+      }
       const total=list.length;
       for(let i=0;i<list.length;i++){say(`🃏 カード化 ${i+1}/${total}`);await convert(view,list[i]);await sleep(250);}
       const remain=raws(view).length;
-      say(remain?`⚠️ カード化 ${total-remain}/${total}｜残り ${remain}件 → もう一度カード化`:`✅ カード化完了 ${total}/${total}`);
+      const linked=linkifyLabelUrls(view);
+      say(remain?`⚠️ カード化 ${total-remain}/${total}｜残り ${remain}件｜URLリンク ${linked}件`:`✅ カード化完了 ${total}/${total}｜URLもタップ可能`);
     } catch(e){say('❌ カード修復：'+(e?.message||e));}
     finally {busy=false;if(btn)btn.disabled=false;}
   }
@@ -132,13 +206,20 @@
   function install() {
     const root=document.getElementById('__mumei_pon_v14_root__'); const panel=root?.querySelector('#ponPanel14'); const src=root?.querySelector('#ponSrc14'); const s=status();
     if(!root||!panel||!src||!s)return setTimeout(install,250);
-    const head=root.querySelector('#ponDrag14 b'); if(head)head.textContent='↔️ ポン出し v20';
+    const head=root.querySelector('#ponDrag14 b'); if(head)head.textContent='↔️ ポン出し v20.1';
     document.getElementById('ponRepairCards20')?.remove();
-    const btn=document.createElement('button'); btn.id='ponRepairCards20'; btn.type='button'; btn.textContent='🃏 残りURLをカード化';
+    const btn=document.createElement('button'); btn.id='ponRepairCards20'; btn.type='button'; btn.textContent='🃏 カード化＋🔗URLリンク';
     btn.style.cssText='display:block;width:100%;border:0;border-radius:8px;padding:9px 5px;background:#72f1c9;color:#032b25;font-weight:900;font-size:11px;margin-bottom:5px';
     panel.insertBefore(btn,src); btn.addEventListener('click',repair);
     let timer=null; new MutationObserver(()=>{const t=s.textContent||'';if(/^✅ 完了/.test(t)||/カード生成中/.test(t)){clearTimeout(timer);timer=setTimeout(repair,1200);}}).observe(s,{childList:true,subtree:true,characterData:true});
-    setTimeout(()=>{const v=findView();if(v&&raws(v).length)say(`🃏 生URL ${raws(v).length}件｜「残りURLをカード化」で修復`);},1200);
+    setTimeout(()=>{
+      const v=findView();
+      if(!v)return;
+      const rawCount=raws(v).length;
+      const linked=linkifyLabelUrls(v);
+      if(rawCount)say(`🃏 生URL ${rawCount}件｜カード化＋URLリンクで修復`);
+      else if(linked)say(`🔗 URLリンク ${linked}件追加済み`);
+    },1200);
   }
   install();
 })();
