@@ -20,6 +20,28 @@ test("participant dashboard stays on the restored live full-history INSIGHT", as
   assert.match(full, /revision=0/);
 });
 
+test("likes/comments keep creator avatars and comment heart-close workflow", async () => {
+  const full = await read("src/member-insight-full.tsx");
+  const hotfix = await read("src/member-insight-hotfix.css");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
+
+  assert.match(full, /actor_image_url/);
+  assert.match(full, /loading="lazy" decoding="async"/);
+  assert.match(full, /heart_closed/);
+  assert.match(full, /♡で終了/);
+  assert.match(history, /insight_fast_comment_threads/);
+  assert.match(hotfix, /mif-state\.heart_closed/);
+  assert.match(hotfix, /img\.mif-avatar/);
+});
+
+test("social view has no redundant current button", async () => {
+  const full = await read("src/member-insight-full.tsx");
+  assert.doesNotMatch(full, />現在<\/button>/);
+  assert.match(full, /setMode\("current"\);setDirection\("followers"\)/);
+  assert.match(full, /setMode\("current"\);setDirection\("followings"\)/);
+  assert.match(full, />増減履歴<\/button>/);
+});
+
 test("comments refresh recent and pending threads without rebuilding history", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const note = await read("supabase/functions/insight-member-api/note.ts");
@@ -31,7 +53,8 @@ test("comments refresh recent and pending threads without rebuilding history", a
   assert.match(api, /refreshedCommentThreads/);
   assert.match(api, /x\.parent\?"reply":"comment"/);
   assert.match(note, /page<=20/);
-  assert.match(note, /note_comments\?order=oldest&per_page=100&page=\$\{page\}/);
+  assert.match(note, /latest_creator_reply/);
+  assert.match(note, /commentText/);
   assert.match(history, /noteId==="ss_yr"\?"owner"/);
   assert.match(history, /insight_fast_comment_threads/);
 });
@@ -90,7 +113,7 @@ test("distribution remains browser-neutral with PWA TOP hardening only as a safe
   assert.equal(manifest.id, "/note-insight/");
   assert.equal(manifest.scope, "/note-insight/");
   assert.match(manifest.start_url, /^\/note-insight\/\?launch=top$/);
-  assert.match(sw, /mumei-note-insight-v28/);
+  assert.match(sw, /mumei-note-insight-v29/);
   assert.match(sw, /notification-setup\.html/);
   assert.match(setup, /from.*insight/);
 });
