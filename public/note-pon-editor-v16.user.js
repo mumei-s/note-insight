@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v16｜共同マガジン現行ルール照合版
+// @name         note ポン出し v16.1｜共同マガジン現行ルール照合版
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      16.0.0
-// @description  正本一覧から共同マガジンを取得。オーナー本人の固定記事と紹介欄を別々に照合し、食い違いは両グループ掲載。note標準カードなので後から手動削除可能。
+// @version      16.1.0
+// @description  正本一覧＋保存一覧をマージして欠落防止。紹介欄・オーナー本人固定記事・本人公式案内から投稿上限を照合し、ss_yr所有誌は👑表示。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
@@ -24,13 +24,21 @@ const BLOCK = new Set(['m535c97031825']);
 const SPECIAL = {
   m752f734f7a1c: { fixed: {type:'count', count:4} },
   ma4dad1f25900: { fixed: {type:'count', count:3}, desc: {type:'count', count:2} },
-  m8d6e2d4322c8: { fixed: {type:'count', count:2} }
+  m8d6e2d4322c8: { fixed: {type:'count', count:2} },
+  m95b78222e9b9: { fixed: {type:'count', count:3} },
+  mf7c9271b4e5e: { fixed: {type:'count', count:2} },
+  m16580951510b: { fixed: {type:'count', count:3} },
+  mbe79c0d9105c: { fixed: {type:'count', count:1} },
+  m9f1b6d83fe39: { fixed: {type:'count', count:1} },
+  ma7a2c6649fa2: { fixed: {type:'count', count:1} },
+  m74b154cd7893: { fixed: {type:'count', count:5} }
 };
 
 const key = u => (String(u).match(/\/m\/(m[a-z0-9]+)/i) || [])[1] || '';
 const owner = u => { try { return new URL(u).pathname.split('/').filter(Boolean)[0] || ''; } catch { return ''; } };
+const cleanUrl = (href, base='https://note.com') => { try { return new URL(href, base).href.split('?')[0].split('#')[0]; } catch { return ''; } };
 const get = url => new Promise((resolve, reject) => GM_xmlhttpRequest({
-  method: 'GET', url, timeout: 22000,
+  method: 'GET', url, timeout: 24000,
   onload: r => r.status < 400 ? resolve(r.responseText) : reject(Error('HTTP ' + r.status)),
   onerror: () => reject(Error('通信失敗')),
   ontimeout: () => reject(Error('timeout'))
@@ -51,54 +59,86 @@ async function fallbackRows() {
 
 async function masterRows() {
   const fb = await fallbackRows();
+  let current = [];
   try {
     const html = await get(MASTER);
     const dom = new DOMParser().parseFromString(html, 'text/html');
     const root = dom.querySelector('article') || dom.body;
     const seen = new Set();
-    const rows = [];
     for (const a of root.querySelectorAll('a[href]')) {
-      let url;
-      try { url = new URL(a.getAttribute('href'), 'https://note.com').href.split('?')[0]; } catch { continue; }
+      const url = cleanUrl(a.getAttribute('href'));
       if (!/^https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+$/i.test(url) || seen.has(url)) continue;
       seen.add(url);
       const old = fb.find(x => x.url === url);
-      rows.push({title:old?.title || a.textContent.trim(), url, index:rows.length});
+      current.push({title:old?.title || a.textContent.trim(), url});
     }
-    if (rows.length >= 70) return rows;
   } catch {}
-  return fb;
+
+  const merged = [];
+  const seen = new Set();
+  for (const row of current) {
+    if (!row.url || seen.has(row.url)) continue;
+    seen.add(row.url);
+    merged.push(row);
+  }
+  for (const row of fb) {
+    if (!row.url || seen.has(row.url)) continue;
+    seen.add(row.url);
+    merged.push({title:row.title, url:row.url});
+  }
+  return merged.map((x,index) => ({...x,index}));
 }
 
-function descriptionFromHtml(html, magazineKey) {
+function descriptionFromHtml(html, magazineKey, dom) {
+  const meta = dom?.querySelector('meta[name="description"]')?.content || dom?.querySelector('meta[property="og:description"]')?.content || '';
   const at = html.indexOf(magazineKey);
-  const region = at >= 0 ? html.slice(Math.max(0, at - 90000), Math.min(html.length, at + 140000)) : html;
+  const region = at >= 0 ? html.slice(Math.max(0, at - 100000), Math.min(html.length, at + 160000)) : html;
   const re = /["']description["']\s*:\s*"((?:\\.|[^"\\])*)"/g;
-  let m, best = '';
+  let m, best = meta;
   while ((m = re.exec(region))) {
     try {
       const v = JSON.parse('"' + m[1] + '"');
-      if (v.length > best.length && v.length < 14000) best = v;
+      if (v.length > best.length && v.length < 18000) best = v;
     } catch {}
   }
   return best;
 }
 
-function ownerFixedUrl(dom, ownerName) {
+function articleUrlFromAnchor(a) {
+  const url = cleanUrl(a.getAttribute('href') || '');
+  return /^https:\/\/note\.com\/[A-Za-z0-9_-]+\/n\/n[a-z0-9]+$/i.test(url) ? url : '';
+}
+
+function ownerFixedUrls(dom, ownerName) {
   const nodes = [...dom.querySelectorAll('body *')];
-  const mark = nodes.find(e => e.children.length === 0 && /固定された記事/.test(e.textContent.trim()));
-  if (!mark) return null;
-  const links = [...dom.querySelectorAll('a[href]')];
-  for (const a of links) {
-    if (!(mark.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-    const href = a.getAttribute('href') || '';
-    if (!/\/[A-Za-z0-9_-]+\/n\/n[a-z0-9]+/i.test(href)) continue;
-    let url;
-    try { url = new URL(href, 'https://note.com').href.split('?')[0]; } catch { continue; }
-    if (owner(url) === ownerName) return url;
-    return null;
+  const marks = nodes.filter(e => e.children.length === 0 && /固定された記事/.test((e.textContent || '').trim()));
+  if (!marks.length) return [];
+  const allLinks = [...dom.querySelectorAll('a[href]')];
+  const out = [];
+  const seen = new Set();
+
+  for (const mark of marks) {
+    let found = [];
+    let box = mark.parentElement;
+    for (let depth = 0; depth < 6 && box; depth += 1, box = box.parentElement) {
+      const urls = [...box.querySelectorAll('a[href]')].map(articleUrlFromAnchor).filter(Boolean);
+      const uniq = [...new Set(urls)].filter(u => owner(u) === ownerName);
+      if (uniq.length && uniq.length <= 6) { found = uniq; break; }
+    }
+    if (!found.length) {
+      let articleSeen = 0;
+      for (const a of allLinks) {
+        if (!(mark.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+        const url = articleUrlFromAnchor(a);
+        if (!url) continue;
+        articleSeen += 1;
+        if (owner(url) === ownerName) found.push(url);
+        if (articleSeen >= 6) break;
+      }
+    }
+    for (const u of found) if (!seen.has(u)) { seen.add(u); out.push(u); }
   }
-  return null;
+  return out.slice(0, 6);
 }
 
 function articleText(html) {
@@ -118,13 +158,13 @@ function limit(text) {
     .replace(/\s+/g, ' ');
   const counts = [];
   let m;
-  let re = /(?:1日|一日)(?:あたり|当たり|の)?[^。]{0,48}?(\d+)\s*[〜～~\-]\s*(\d+)\s*(?:本|記事|投稿|回|件)/g;
+  let re = /(?:1日|一日)(?:あたり|当たり|の)?[^。]{0,60}?(\d+)\s*[〜～~\-]\s*(\d+)\s*(?:本|記事|投稿|回|件)/g;
   while ((m = re.exec(t))) counts.push(Math.max(+m[1], +m[2]));
-  re = /(?:1日|一日)(?:あたり|当たり|の)?[^。]{0,48}?(\d+)\s*(?:本|記事|投稿|回|件)/g;
+  re = /(?:1日|一日)(?:あたり|当たり|の)?[^。]{0,60}?(\d+)\s*(?:本|記事|投稿|回|件)/g;
   while ((m = re.exec(t))) counts.push(+m[1]);
   if (counts.length) return {type:'count', count:Math.max(...counts)};
-  if (/(?:1日|一日)[^。]{0,50}?(?:上限|制限)[^。]{0,18}?(?:なし|ありません|ない|無い)/.test(t) ||
-      /(?:投稿数|投稿回数|追加本数|記事追加|投稿|寄稿)[^。]{0,36}?(?:無制限|制限なし|上限なし)/.test(t)) {
+  if (/(?:1日|一日)[^。]{0,60}?(?:上限|制限)[^。]{0,24}?(?:なし|ありません|ない|無い)/.test(t) ||
+      /(?:投稿数|投稿回数|追加本数|記事追加|投稿|寄稿)[^。]{0,40}?(?:無制限|制限なし|上限なし)/.test(t)) {
     return {type:'unlimited'};
   }
   return null;
@@ -132,7 +172,7 @@ function limit(text) {
 
 function paidProhibited(text) {
   const t = digit(text).replace(/\s+/g, ' ');
-  return /(?:有料記事|有料note)[^。]{0,24}(?:禁止|不可|NG|ご遠慮)/i.test(t) || /(?:無料記事のみ|無料の記事のみ)/.test(t);
+  return /(?:有料記事|有料note)[^。]{0,28}(?:禁止|不可|NG|ご遠慮)/i.test(t) || /(?:無料記事のみ|無料の記事のみ)/.test(t);
 }
 
 function sameRule(a, b) {
@@ -146,22 +186,49 @@ function ruleText(r) {
   return '表記なし';
 }
 
+function ownerGuideCandidates(dom, ownerName, fixedSet) {
+  const out = [];
+  const seen = new Set();
+  for (const a of dom.querySelectorAll('a[href]')) {
+    const url = articleUrlFromAnchor(a);
+    if (!url || owner(url) !== ownerName || fixedSet.has(url) || seen.has(url)) continue;
+    const near = ((a.textContent || '') + ' ' + (a.parentElement?.textContent || '')).replace(/\s+/g,' ');
+    if (!/(参加|募集|ルール|投稿|共同運営|マガジン|案内|ガイド|使い方)/.test(near)) continue;
+    seen.add(url);
+    out.push(url);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 async function inspect(row) {
   const k = key(row.url), o = owner(row.url);
-  let title = row.title, fixed = null, desc = '', fixedText = '';
+  let title = row.title, fixed = [], desc = '', fixedText = '', guideText = '';
   try {
     const html = await get(row.url);
     const dom = new DOMParser().parseFromString(html, 'text/html');
     title = [...dom.querySelectorAll('h1')].map(e => e.textContent.trim()).find(Boolean) || title;
-    desc = descriptionFromHtml(html, k);
-    fixed = ownerFixedUrl(dom, o);
-    if (fixed) {
-      try { fixedText = articleText(await get(fixed)); } catch {}
+    desc = descriptionFromHtml(html, k, dom);
+    fixed = ownerFixedUrls(dom, o);
+    if (fixed.length) {
+      const texts = await Promise.all(fixed.map(async u => { try { return articleText(await get(u)); } catch { return ''; } }));
+      fixedText = texts.filter(Boolean).join(' ');
+    }
+    if (!limit(fixedText) && !limit(desc)) {
+      const guides = ownerGuideCandidates(dom, o, new Set(fixed));
+      for (const u of guides) {
+        try {
+          const t = articleText(await get(u));
+          guideText += ' ' + t;
+          if (limit(t)) break;
+        } catch {}
+      }
     }
   } catch {}
 
   let fixedRule = limit(fixedText);
   let descRule = limit(desc);
+  let guideRule = limit(guideText);
   const sp = SPECIAL[k];
   if (!fixedRule && sp?.fixed) fixedRule = sp.fixed;
   if (!descRule && sp?.desc) descRule = sp.desc;
@@ -172,6 +239,7 @@ async function inspect(row) {
   } else {
     if (fixedRule) rules.push(fixedRule);
     if (descRule && !rules.some(r => sameRule(r, descRule))) rules.push(descRule);
+    if (guideRule && !rules.some(r => sameRule(r, guideRule))) rules.push(guideRule);
     if (!rules.length) rules.push({type:'none'});
   }
 
@@ -180,8 +248,8 @@ async function inspect(row) {
     : '';
 
   return {
-    ...row, title, fixed, fixedRule, descRule, rules, conflict,
-    paid: paidProhibited(fixedText) || paidProhibited(desc)
+    ...row, title, fixed, fixedRule, descRule, guideRule, rules, conflict,
+    paid: paidProhibited(fixedText) || paidProhibited(desc) || paidProhibited(guideText)
   };
 }
 
@@ -196,10 +264,10 @@ async function inspectAll(rows, show) {
       show(`取得 ${++done}/${rows.length}`);
     }
   }));
-  return out;
+  return out.filter(Boolean);
 }
 
-const transmissionOrder = title => title === 'トランスミッション' ? 1 : /[２2]$/.test(title) ? 2 : /[３3]$/.test(title) ? 3 : 0;
+const transmissionOrder = title => /^トランスミッション$/.test(title) ? 1 : /トランスミッション[２2]$/.test(title) ? 2 : /トランスミッション[３3]$/.test(title) ? 3 : 0;
 function ordered(items) {
   const a = [...items].sort((x,y) => x.index - y.index);
   const tr = a.filter(x => transmissionOrder(x.title)).sort((x,y) => transmissionOrder(x.title) - transmissionOrder(y.title));
@@ -238,11 +306,13 @@ function buildSource(items) {
   for (const g of order) {
     out.push(`# ${label(g)}`, '');
     for (const item of ordered(groups.get(g))) {
-      out.push(`## ${item.title}`, '');
+      const own = owner(item.url) === 'ss_yr';
+      const displayTitle = own && !/^👑/.test(item.title) ? `👑${item.title}` : item.title;
+      out.push(`## ${displayTitle}`, '');
       if (item.conflict) out.push(item.conflict, '');
       if (item.paid) out.push('有料記事追加不可', '');
       out.push(item.url, '');
-      if (item.fixed) out.push(item.fixed, '');
+      for (const u of item.fixed || []) out.push(u, '');
       out.push('---', '');
     }
   }
@@ -258,12 +328,12 @@ function install() {
   const status = root.querySelector('#ponStatus14');
   const add = root.querySelector('#ponAdd14');
   const head = root.querySelector('#ponDrag14 b');
-  if (head) head.textContent = '↔️ ポン出し v16';
+  if (head) head.textContent = '↔️ ポン出し v16.1';
   if (!panel || panel.querySelector('#ponMags16')) return;
 
   const button = document.createElement('button');
   button.id = 'ponMags16';
-  button.textContent = '📚 共マガ一覧を追記＋全カード化';
+  button.textContent = '📚 正本全件→本数別＋全カード';
   button.style.cssText = 'display:block;width:100%;border:0;border-radius:8px;padding:9px 5px;background:#ffd54a;color:#261f00;font-weight:900;font-size:11px;margin-bottom:5px';
   panel.insertBefore(button, src);
 
@@ -271,12 +341,12 @@ function install() {
     if (button.disabled) return;
     button.disabled = true;
     try {
-      status.textContent = '正本一覧を取得…';
+      status.textContent = '正本＋保存一覧を照合…';
       const rows = await masterRows();
-      if (!rows.length) throw Error('正本一覧を取得できません');
+      if (!rows.length) throw Error('共同マガジン一覧を取得できません');
       const items = await inspectAll(rows, t => status.textContent = t);
       src.value = buildSource(items);
-      status.textContent = `${items.length}誌を追記＋カード化（作成後は各カードを手動削除可）`;
+      status.textContent = `${items.length}誌｜本数別・👑・固定記事を反映`;
       add.click();
     } catch (e) {
       status.textContent = '❌ ' + (e?.message || e);
@@ -284,12 +354,6 @@ function install() {
       button.disabled = false;
     }
   };
-
-  let n = 0;
-  const timer = setInterval(() => {
-    document.getElementById('ponMags15')?.remove();
-    if (++n > 20) clearInterval(timer);
-  }, 500);
 }
 install();
 })();
