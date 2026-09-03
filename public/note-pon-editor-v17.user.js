@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v17.2｜マガジンカード完全生成版
+// @name         note ポン出し v17.3｜本数別＋全カード＋収納対応
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      17.2.0
-// @description  共同マガジン一覧を本数順で作成。マガジンURL＋マガジンカード、固定記事URL＋固定記事カードをそれぞれ自動生成。カードは後から手動削除可能。
+// @version      17.3.0
+// @description  共同マガジン一覧を投稿上限本数別に整理。マガジンURL＋マガジンカード、固定記事URL＋固定記事カードを自動生成。ツールは＿/✕で収納し📄ポンから再表示可能。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
@@ -17,8 +17,8 @@
 
 (() => {
   'use strict';
-  if (window.__MUMEI_PON_V172_ADDON__) return;
-  window.__MUMEI_PON_V172_ADDON__ = true;
+  if (window.__MUMEI_PON_V173_ADDON__) return;
+  window.__MUMEI_PON_V173_ADDON__ = true;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   let noteUrlCommand = null;
@@ -176,10 +176,36 @@
     const add = root.querySelector('#ponAdd14');
     const head = root.querySelector('#ponDrag14 b');
     const status = root.querySelector('#ponStatus14');
-    if (!src || !add || !status) return setTimeout(install, 300);
+    const panel = root.querySelector('#ponPanel14');
+    const fab = root.querySelector('#ponFab14');
+    const min = root.querySelector('#ponMin14');
+    const close = root.querySelector('#ponClose14');
+    if (!src || !add || !status || !panel || !fab) return setTimeout(install, 300);
 
-    if (head) head.textContent = '↔️ ポン出し v17.2';
-    button.textContent = '📚 一覧＋マガジンカード＋固定記事カード';
+    if (head) head.textContent = '↔️ ポン出し v17.3';
+    button.textContent = '📚 本数別一覧＋全マガジン/固定カード';
+
+    // ＿も✕も「ツールを消す」ではなく収納。小さい📄ポンから再表示できる。
+    const stow = e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+      panel.style.display = 'none';
+      fab.style.display = 'block';
+    };
+    if (min && !min.dataset.v173) {
+      min.dataset.v173 = '1';
+      min.title = 'しまう';
+      min.addEventListener('click', stow, true);
+    }
+    if (close && !close.dataset.v173) {
+      close.dataset.v173 = '1';
+      close.title = 'しまう';
+      close.textContent = '▼';
+      close.addEventListener('click', stow, true);
+    }
 
     add.addEventListener('click', () => {
       if (!/#\s/.test(src.value) || !/https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+/i.test(src.value)) return;
