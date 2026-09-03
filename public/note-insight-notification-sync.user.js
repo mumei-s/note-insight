@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 通知自動同期
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.2.0
-// @description  noteの実ログインIDごとに本人通知をINSIGHTへ同期し、登録者の共同マガジン追加通知だけを整理します
+// @version      2.3.0
+// @description  noteの実ログインIDごとに本人通知をINSIGHTへ同期し、通知パネルを開いた時に確実に同期します
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -35,6 +35,7 @@
   let revealMuted=false;
   let lifecycleAccountId='';
   let lifecycleToken='';
+  let clickWatchInstalled=false;
 
   const noteId=value=>{try{const u=new URL(String(value||''),location.origin);if(u.hostname!=='note.com'&&u.hostname!=='www.note.com')return'';const id=u.pathname.split('/').filter(Boolean)[0]||'';return/^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():''}catch{return String(value||'').replace(/^@/,'').trim().toLowerCase().match(/^[a-z0-9_-]+$/)?.[0]||''}};
   const isMagazineNotice=text=>/(共同)?マガジン/.test(text)&&/(追加|投稿|新しい記事|記事を)/.test(text);
@@ -48,6 +49,7 @@
       return{id,name:String(u?.nickname||u?.name||id)};
     }catch{return null}
   }
+  async function currentAccountReady(tries=12){for(let i=0;i<tries;i++){const a=await currentAccount();if(a)return a;await sleep(350)}return null}
   async function tokenFor(id){return id?String(await GM_getValue(accountKey(TOKEN_PREFIX,id),'')||''):''}
   async function setToken(id,token){if(id&&token)await GM_setValue(accountKey(TOKEN_PREFIX,id),token)}
   async function deleteToken(id){if(id)await GM_deleteValue(accountKey(TOKEN_PREFIX,id))}
@@ -93,7 +95,7 @@
     const id=account?.id||'';
     let token=await tokenFor(id);
     if(code){
-      if(!id){toast('noteへログインしてから連携してください。','error',true);return ''}
+      if(!id){toast('noteログインIDの確認に時間がかかっています。ページを再読み込みせず、そのまま数秒お待ちください。','error',true);return ''}
       if(expected&&expected!==id){toast(`連携先は @${expected} ですが、noteログイン中は @${id} です。正しいアカウントへ切り替えてからやり直してください。`,'error',true);return ''}
       toast(`@${id} のINSIGHT通知同期を連携しています…`,'normal',true);
       try{
@@ -104,13 +106,12 @@
         await setToken(id,token);await GM_deleteValue(LEGACY_TOKEN_KEY);
         u.searchParams.delete('mumei_pair');u.searchParams.delete('mumei_account');history.replaceState(null,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);
         toast(`@${id} INSIGHT通知同期：連携完了`,'ok');
-      }catch(e){toast('連携できませんでした。INSIGHTから連携をやり直してください。','error',true);return ''}
+      }catch(e){toast(`連携エラー：${e?.message||e}。INSIGHTの本人通知設定からもう一度連携してください。`,'error',true);return ''}
     }
     return token;
   }
 
   function visible(el){const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}
-  function strictBell(el){const control=el?.closest?.('button,a,[role="button"]');if(!control||!visible(control))return null;const label=clean([control.getAttribute('aria-label'),control.getAttribute('title'),control.getAttribute('data-testid'),control.textContent].filter(Boolean).join(' '));if(/通知|notice|notification/i.test(label))return control;const r=control.getBoundingClientRect();return r.top<150&&r.right>innerWidth*.45&&r.width<82&&r.height<82&&control.querySelector('svg')?control:null}
   function notificationBell(){const selectors=['button[aria-label*="通知"]','a[aria-label*="通知"]','button[title*="通知"]','a[title*="通知"]'];const candidates=selectors.flatMap(s=>[...document.querySelectorAll(s)]).filter(visible);const header=candidates.find(el=>{const r=el.getBoundingClientRect();return r.top<180&&r.left>innerWidth*.35});if(header)return header;return [...document.querySelectorAll('button,a')].filter(visible).find(el=>{const r=el.getBoundingClientRect(),t=clean(el.textContent||el.getAttribute('aria-label')||el.getAttribute('title'));return r.top<180&&r.left>innerWidth*.35&&(t==='通知'||t.includes('通知を確認'))})||null}
   function noticeText(el){return clean(el?.innerText||el?.textContent)}
   function selfAndChildLinks(el){return[...(el?.matches?.('a[href]')?[el]:[]),...(el?.querySelectorAll?.('a[href]')||[])]}
@@ -156,25 +157,32 @@
   }
 
   async function refreshAccountContext(showMissing=false){
-    const account=await currentAccount(),id=account?.id||'';
+    const account=await currentAccountReady(5),id=account?.id||'';
     if(!id){lifecycleAccountId='';lifecycleToken='';if(showMissing)toast('noteにログインしているアカウントを確認できません。','error',true);return null}
     if(id!==lifecycleAccountId){lifecycleAccountId=id;lifecycleToken=await tokenFor(id);revealMuted=false;if(showMissing&&!lifecycleToken)toast(`@${id} はまだINSIGHT本人通知と連携されていません。`,'normal',true)}
     return account;
   }
   async function onNotificationOpened(root){if(!root)return;const account=await refreshAccountContext(false);if(!account)return;await applyMuteFilter(root,account.id);if(lifecycleToken)void ingestOpened(lifecycleToken,account.id,true)}
   function watchMuteFilter(){filterObserver?.disconnect();const check=()=>{clearTimeout(lifecycleTimer);lifecycleTimer=setTimeout(()=>{const root=notificationRoot();if(!root){lifecycleRoot=null;return}if(root!==lifecycleRoot){lifecycleRoot=root;void onNotificationOpened(root)}else void applyMuteFilter(root,lifecycleAccountId)},120)};filterObserver=new MutationObserver(check);filterObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-selected','aria-expanded']});check()}
+  function installClickWatch(){if(clickWatchInstalled)return;clickWatchInstalled=true;document.addEventListener('click',()=>{setTimeout(()=>{const root=notificationRoot();if(root){lifecycleRoot=root;void onNotificationOpened(root)}},650)},true)}
 
   async function launch(){
     const u=new URL(location.href),invoked=u.searchParams.get('mumei_notify')==='1'||u.searchParams.has('mumei_pair');
-    const account=await currentAccount();lifecycleAccountId=account?.id||'';
+    installClickWatch();
+    const account=await currentAccountReady(invoked?14:5);lifecycleAccountId=account?.id||'';
     await importMuteSettings(lifecycleAccountId);
     lifecycleToken=await pairIfNeeded(account);
     watchMuteFilter();
-    if(invoked){if(!account){toast('noteへログインしてからINSIGHT通知同期を連携してください。','error',true);return}if(!lifecycleToken){toast(`@${account.id} は未連携です。INSIGHTの本人通知設定から連携してください。`,'error',true);return}const opened=await requestNotificationOpen();if(opened){const root=notificationRoot();if(root){lifecycleRoot=root;await ingestOpened(lifecycleToken,account.id)}}return}
-    document.addEventListener('click',e=>{if(!strictBell(e.target))return;setTimeout(()=>{const root=notificationRoot();if(root){lifecycleRoot=root;void onNotificationOpened(root)}},650)},true);
+    if(invoked){
+      if(!account){toast('noteログインIDを確認できません。noteへログイン後、このページをもう一度開いてください。','error',true);return}
+      if(!lifecycleToken){toast(`@${account.id} は未連携です。INSIGHTの本人通知設定から連携してください。`,'error',true);return}
+      const opened=await requestNotificationOpen();
+      if(opened){const root=notificationRoot();if(root){lifecycleRoot=root;await ingestOpened(lifecycleToken,account.id)}}
+      else toast('右上ベルを手動で押してください。開いた瞬間に同期します。','normal',true);
+    }
   }
 
-  GM_registerMenuCommand('このnoteアカウントのINSIGHT通知同期を再連携',async()=>{const a=await currentAccount();if(!a)return toast('ログイン中note IDを確認できません','error',true);await deleteToken(a.id);await GM_deleteValue(accountKey(LAST_PREFIX,a.id));if(lifecycleAccountId===a.id)lifecycleToken='';toast(`@${a.id} の連携情報を削除しました。INSIGHTから再連携してください。`,'normal',true)});
-  GM_registerMenuCommand('このnoteアカウントの通知整理を全解除',async()=>{const a=await currentAccount();if(!a)return toast('ログイン中note IDを確認できません','error',true);await GM_deleteValue(accountKey(MUTE_PREFIX,a.id));toast(`@${a.id} の共同マガジン通知整理設定を解除しました。`,'normal')});
+  GM_registerMenuCommand('このnoteアカウントのINSIGHT通知同期を再連携',async()=>{const a=await currentAccountReady(5);if(!a)return toast('ログイン中note IDを確認できません','error',true);await deleteToken(a.id);await GM_deleteValue(accountKey(LAST_PREFIX,a.id));if(lifecycleAccountId===a.id)lifecycleToken='';toast(`@${a.id} の連携情報を削除しました。INSIGHTから再連携してください。`,'normal',true)});
+  GM_registerMenuCommand('このnoteアカウントの通知整理を全解除',async()=>{const a=await currentAccountReady(5);if(!a)return toast('ログイン中note IDを確認できません','error',true);await GM_deleteValue(accountKey(MUTE_PREFIX,a.id));toast(`@${a.id} の共同マガジン通知整理設定を解除しました。`,'normal')});
   void launch();
 })();
