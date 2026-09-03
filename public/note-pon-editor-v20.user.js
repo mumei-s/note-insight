@@ -1,108 +1,56 @@
 // ==UserScript==
-// @name         note ポン出し v31.9｜入力・移動修正版
+// @name         note ポン出し v32.0｜本文内蔵・全カード続行版
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      31.9.0
-// @description  v31.8の見出し・区切り線・純正カード完全生成を維持し、Androidで白い入力欄へカーソルが入らない問題とパネルを移動できない問題を修正。
+// @version      32.0.0
+// @description  完成本文を内蔵データから読み込み、本文・大見出し・小見出し・区切り線を先に生成。その後 /m/・/n/ URLをnote純正カードへ全件処理。1件失敗しても次へ進み、再実行で残りから続行。Androidタッチ移動対応。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @run-at       document-idle
-// @grant        none
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/0f57e541a392b8ee415eb3d00cd6ae4b02207c69/public/note-pon-editor-v20.user.js
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      raw.githubusercontent.com
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-editor-v20.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-editor-v20.user.js
 // ==/UserScript==
 (() => {
 'use strict';
-if(window.__MUMEI_PON_V319_FIX__)return;
-window.__MUMEI_PON_V319_FIX__=true;
-
-function installFix(){
-  const root=document.getElementById('__mumei_pon_v318_root__');
-  if(!root)return false;
-  const fab=root.querySelector('#ponFab318');
-  const panel=root.querySelector('#ponPanel318');
-  const src=root.querySelector('#ponSrc318');
-  const min=root.querySelector('#ponMin318');
-  if(!fab||!panel||!src)return false;
-
-  fab.textContent='📄 ポン v31.9';
-  const head=panel.firstElementChild;
-  const title=head?.querySelector('b');
-  if(title)title.textContent='↔️ 原稿→完全生成 v31.9';
-
-  src.disabled=false;
-  src.readOnly=false;
-  src.tabIndex=0;
-  src.setAttribute('inputmode','text');
-  src.setAttribute('autocomplete','off');
-  Object.assign(src.style,{
-    pointerEvents:'auto',
-    touchAction:'auto',
-    userSelect:'text',
-    WebkitUserSelect:'text',
-    caretColor:'#111',
-    position:'relative',
-    zIndex:'3'
-  });
-
-  const forceFocus=()=>{
-    if(panel.style.display==='none')return;
-    try{src.focus({preventScroll:true})}catch{try{src.focus()}catch{}}
-    try{
-      const p=src.selectionStart??src.value.length;
-      src.setSelectionRange(p,p);
-    }catch{}
-  };
-  ['pointerdown','touchstart','mousedown'].forEach(type=>src.addEventListener(type,e=>e.stopPropagation(),true));
-  src.addEventListener('click',()=>setTimeout(forceFocus,0));
-  src.addEventListener('pointerup',()=>setTimeout(forceFocus,0));
-  src.addEventListener('touchend',()=>setTimeout(forceFocus,0));
-
-  fab.addEventListener('click',()=>setTimeout(forceFocus,80));
-
-  if(head){
-    head.id='ponDrag319';
-    Object.assign(head.style,{
-      cursor:'move',
-      touchAction:'none',
-      userSelect:'none',
-      WebkitUserSelect:'none',
-      padding:'5px 3px',
-      borderBottom:'1px solid #28445c'
-    });
-    let moving=null;
-    head.addEventListener('pointerdown',e=>{
-      if(e.target.closest('button'))return;
-      const r=panel.getBoundingClientRect();
-      moving={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top};
-      panel.style.right='auto';
-      panel.style.bottom='auto';
-      try{head.setPointerCapture(e.pointerId)}catch{}
-      e.preventDefault();
-      e.stopPropagation();
-    });
-    head.addEventListener('pointermove',e=>{
-      if(!moving||e.pointerId!==moving.id)return;
-      const maxLeft=Math.max(0,innerWidth-panel.offsetWidth);
-      const maxTop=Math.max(0,innerHeight-44);
-      panel.style.left=`${Math.min(maxLeft,Math.max(0,moving.left+e.clientX-moving.x))}px`;
-      panel.style.top=`${Math.min(maxTop,Math.max(0,moving.top+e.clientY-moving.y))}px`;
-      e.preventDefault();
-      e.stopPropagation();
-    });
-    const stop=e=>{
-      if(moving&&(!e||e.pointerId===moving.id))moving=null;
-    };
-    head.addEventListener('pointerup',stop);
-    head.addEventListener('pointercancel',stop);
-  }
-
-  if(min)min.title='最小化';
-  return true;
-}
-
-let tries=0;
-const timer=setInterval(()=>{
-  if(installFix()||++tries>40)clearInterval(timer);
-},250);
+const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
+if(page.__MUMEI_PON_V320__)return;page.__MUMEI_PON_V320__=true;
+['__mumei_pon_v318_root__','__mumei_pon_v317_root__','__mumei_pon_v14_root__','__mumei_pon_v320_root__','mumei-url-pon-v314-btn','mumei-url-pon-v314-status','mumei-url-pon-v315-btn','mumei-url-pon-v315-status','mumei-url-pon-v316-btn','mumei-url-pon-v316-status'].forEach(id=>document.getElementById(id)?.remove());
+const ROOT='__mumei_pon_v320_root__',BACK='mumei-note-pon-v320-backup:',BODY_URL='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-magazine-body-v32.txt',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let busy=false,viewCache=null,cmdCache=null,selectionCache=null,savedInsertPos=null,bodyCache='';
+const norm=v=>{try{const u=new URL(String(v||'').trim(),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
+const target=v=>/^https:\/\/note\.com\/[A-Za-z0-9_-]+\/(?:m\/m[a-z0-9]+|n\/n[a-z0-9]+)\/?$/i.test(String(v||'').trim());
+const isGroup=t=>/^(?:♾️ 無制限・制限なし|🔟 1日10記事まで|[1-9]️⃣ 1日\d+記事まで|❓ 制限数の表記を確認できないマガジン)$/.test(String(t||'').trim());
+const editor=()=>document.querySelector('.ProseMirror[contenteditable="true"]')||document.querySelector('.ProseMirror');
+function isView(v){try{return!!(v&&v.state?.doc&&v.state?.schema&&typeof v.dispatch==='function'&&v.dom&&typeof v.posAtDOM==='function')}catch{return false}}
+function view(){if(isView(viewCache)&&viewCache.dom?.isConnected)return viewCache;const root=editor();if(!root)return null;const q=[],seen=new Set();let s=root;for(let i=0;i<7&&s;i++,s=s.parentElement)q.push([s,0]);let n=0;while(q.length&&n++<14000){const[v,d]=q.shift();if(!v||seen.has(v))continue;seen.add(v);if(isView(v))return(viewCache=v);if(d>=6)continue;let ks=[];try{ks=Object.getOwnPropertyNames(v)}catch{continue}for(const k of ks){if(['window','document','ownerDocument','parentNode','children','childNodes','style'].includes(k))continue;let x;try{x=v[k]}catch{continue}if(isView(x))return(viewCache=x);if(x&&(typeof x==='object'||typeof x==='function')&&x!==page&&x!==document)q.push([x,d+1])}}return null}
+function req(){const c=page.webpackChunk_N_E;if(!c||typeof c.push!=='function')return null;let r=null;try{c.push([[993200000+Math.floor(Math.random()*300000)],{},x=>{r=x}])}catch{}return r}
+function selectionApi(){if(selectionCache)return selectionCache;const r=req();if(!r)throw Error('note内部Selectionを取得できません');let m;try{m=r(44044)}catch{}const S=m?.Y1;if(typeof S?.atEnd!=='function')throw Error('note Selection.atEndが見つかりません');return(selectionCache=S)}
+function factory(){if(cmdCache)return cmdCache;const r=req();if(!r)throw Error('note内部URL処理を取得できません');let m;try{m=r(94928)}catch{}const right=f=>{if(typeof f!=='function')return false;let s='';try{s=Function.prototype.toString.call(f)}catch{}return s.includes('state.selection')&&s.includes('nodeBefore')&&s.includes('replaceRangeWith')&&s.includes('.then')};let f=right(m?.fjT)?m.fjT:null;if(!f){const a=Object.values(r.c||{}).flatMap(e=>{const x=e?.exports;return typeof x==='function'?[x]:x&&typeof x==='object'?Object.values(x):[]});f=a.find(right)||null}if(!f)throw Error('note正規URLコマンドが見つかりません');return(cmdCache=f)}
+function getBody(){if(bodyCache)return Promise.resolve(bodyCache);return new Promise((ok,no)=>GM_xmlhttpRequest({method:'GET',url:BODY_URL+'?v=32.0.0-'+Date.now(),timeout:30000,onload:r=>{if(r.status>=200&&r.status<400&&r.responseText.trim()){bodyCache=r.responseText.trim();ok(bodyCache)}else no(Error('本文データ取得 HTTP '+r.status))},onerror:()=>no(Error('本文データ取得失敗')),ontimeout:()=>no(Error('本文データ取得timeout'))}))}
+function parseBody(src){const out=[];for(const raw of String(src).split('\n')){const t=raw.trim();if(!t)continue;if(/^---$/.test(t)){out.push({type:'hr'});continue}let m=t.match(/^#\s+(.+)$/);if(m){out.push({type:'heading',level:2,text:m[1]});continue}m=t.match(/^##\s+(.+)$/);if(m){out.push({type:'heading',level:3,text:m[1]});continue}if(target(t)){out.push({type:'url',url:norm(t)});continue}out.push({type:'paragraph',text:t})}return out}
+const textNode=(s,t)=>t?s.text(t):null;
+function nodeFor(s,t){if(t.type==='heading')return s.nodes.heading.create({level:t.level},textNode(s,t.text));if(t.type==='hr'){const h=s.nodes.horizontal_rule||s.nodes.horizontalRule||s.nodes.hr;if(!h)throw Error('note区切り線ノードが見つかりません');return h.create()}const p=s.nodes.paragraph;if(!p)throw Error('paragraphなし');return p.create(null,textNode(s,t.type==='url'?t.url:t.text))}
+function topRows(v){const a=[];v.state.doc.forEach((node,pos)=>a.push({node,pos,text:(node.textContent||'').trim()}));return a}
+function generatedRange(v){const a=topRows(v);let si=-1;for(let i=0;i<a.length;i++)if(isGroup(a[i].text)){si=i;break}if(si<0)return null;let end=si,lastHr=-1;for(let i=si;i<a.length;i++){const x=a[i],name=x.node.type?.name||'';if(i>si&&name==='heading'&&x.node.attrs?.level===2&&!isGroup(x.text))break;if(/horizontal/i.test(name))lastHr=i;end=i}if(lastHr>=si)end=lastHr;return{from:a[si].pos,to:a[end].pos+a[end].node.nodeSize}}
+function saveBackup(v){try{localStorage.setItem(BACK+location.pathname,JSON.stringify({doc:v.state.doc.toJSON(),time:Date.now()}))}catch{}}
+function restore(v){let d;try{d=JSON.parse(localStorage.getItem(BACK+location.pathname)||'null')}catch{}if(!d?.doc)return false;try{const doc=v.state.schema.nodeFromJSON(d.doc);v.dispatch(v.state.tr.replaceWith(0,v.state.doc.content.size,doc.content));return true}catch{return false}}
+async function insertBody(v){const body=await getBody(),tokens=parseBody(body);if(!tokens.length)throw Error('本文データが空');saveBackup(v);const existing=generatedRange(v);let tr=v.state.tr,start;if(existing){tr=tr.delete(existing.from,existing.to);start=existing.from}else{const max=tr.doc.content.size;start=Number.isInteger(savedInsertPos)?Math.max(0,Math.min(savedInsertPos,max)):max;try{const $p=tr.doc.resolve(start);if($p.parent.isTextblock)start=$p.after($p.depth)}catch{start=max}}let pos=start;for(const t of tokens){const n=nodeFor(tr.doc.type.schema,t);tr=tr.insert(pos,n);pos+=n.nodeSize}v.dispatch(tr.scrollIntoView());v.focus();savedInsertPos=null}
+function rawRows(v){const r=generatedRange(v);if(!r)return[];const a=[];v.state.doc.descendants((node,pos)=>{if(pos<r.from||pos>=r.to||!node.isTextblock)return;const t=(node.textContent||'').trim();if(target(t))a.push({node,pos,url:norm(t)})});return a.sort((x,y)=>x.pos-y.pos)}
+function embeds(v){const a=[];v.state.doc.descendants((node,pos)=>{if(node.type?.name==='embed')a.push({node,pos})});return a}
+const ckey=h=>String(h?.node?.attrs?.embeddedContentKey||''),curl=h=>norm(h?.node?.attrs?.src||'');
+const genuine=(h,u)=>curl(h)===norm(u)&&/^emb[a-z0-9]+$/i.test(ckey(h))&&String(h?.node?.attrs?.htmlForEmbed||'').includes('note-embed');
+function ensureEnd(v){const p=v.state.schema.nodes.paragraph;if(!p)throw Error('paragraphなし');if(v.state.doc.lastChild?.type!==p||v.state.doc.lastChild.textContent!=='')v.dispatch(v.state.tr.insert(v.state.doc.content.size,p.create()));v.dispatch(v.state.tr.setSelection(selectionApi().atEnd(v.state.doc)).scrollIntoView());v.focus()}
+function exactRawAfter(v,url,minPos){const w=norm(url),a=[];v.state.doc.descendants((node,pos)=>{if(pos>=minPos&&node.isTextblock&&norm((node.textContent||'').trim())===w)a.push({node,pos})});return a}
+function del(v,hits){if(!hits.length)return;let tr=v.state.tr;[...hits].sort((a,b)=>b.pos-a.pos).forEach(h=>{tr=tr.delete(h.pos,h.pos+h.node.nodeSize)});v.dispatch(tr)}
+function trimOwnedBlanks(v,minPos){for(let i=0;i<4;i++){const a=[];v.state.doc.forEach((node,pos)=>a.push({node,pos}));const last=a[a.length-1];if(last&&last.pos>=minPos&&last.node?.type?.name==='paragraph'&&!last.node.textContent)del(v,[last]);else break}}
+async function makeCard(v,url){const baseEnd=v.state.doc.content.size,before=new Set(embeds(v).map(ckey).filter(Boolean));ensureEnd(v);const p=v.state.schema.nodes.paragraph;v.dispatch(v.state.tr.insert(v.state.doc.content.size,p.create(null,v.state.schema.text(url))));v.dispatch(v.state.tr.setSelection(selectionApi().atEnd(v.state.doc)).scrollIntoView());v.focus();const command=factory()(url);if(typeof command!=='function')throw Error('URLコマンド未生成');if(!command(v.state,tr=>v.dispatch(tr),v))throw Error('noteがURLを処理しませんでした');const end=Date.now()+45000;let hit=null;while(Date.now()<end){hit=embeds(v).find(h=>ckey(h)&&!before.has(ckey(h))&&genuine(h,url));if(hit)break;await sleep(250)}if(!hit){const stray=embeds(v).filter(h=>h.pos>=baseEnd&&ckey(h)&&!before.has(ckey(h))&&curl(h)===norm(url));del(v,stray);del(v,exactRawAfter(v,url,baseEnd));trimOwnedBlanks(v,baseEnd);throw Error('カード生成タイムアウト')}const node=hit.node;del(v,embeds(v).filter(h=>h.pos>=baseEnd&&ckey(h)===ckey(hit)));del(v,exactRawAfter(v,url,baseEnd));trimOwnedBlanks(v,baseEnd);return node}
+async function convertOne(v,row){let card,last;for(let i=0;i<2;i++){try{card=await makeCard(v,row.url);break}catch(e){last=e;if(i===0)await sleep(700)}}if(!card)throw last||Error('カード生成失敗');const now=rawRows(v).find(x=>x.url===row.url);if(!now)throw Error('元URL位置を見失いました');v.dispatch(v.state.tr.replaceWith(now.pos,now.pos+now.node.nodeSize,card).scrollIntoView());v.focus()}
+function say(t,bad=false){const e=document.getElementById('ponStatus320');if(e){e.textContent=t;e.style.color=bad?'#ffaaaa':'#9ddbd6'}}
+function updateButton(){const b=document.getElementById('ponRun320'),v=view();if(!b||!v)return;const n=rawRows(v).length;b.textContent=n?`▶ 残り${n}件をカード化`:'🚀 完成本文＋全カード作成'}
+async function run(){if(busy)return;const v=view();if(!v)return say('❌ note EditorViewが見つからない',true);busy=true;const b=document.getElementById('ponRun320');if(b)b.disabled=true;try{let rows=rawRows(v);if(!generatedRange(v)){say('本文・見出し・区切り線を先に全部生成…');await insertBody(v);rows=rawRows(v);say(`✅ 本文生成完了｜URL ${rows.length}件をカード化開始`)}else if(!rows.length){say('✅ 本文・全カードとも完成済み');return}selectionApi();factory();let ok=0,fail=0;const initial=rows.length,failed=new Set();while(true){rows=rawRows(v).filter(r=>!failed.has(r.url));if(!rows.length)break;const r=rows[0];say(`🃏 ${ok+fail+1}/${initial}｜成功${ok} 失敗${fail}\n${r.url}`);try{await convertOne(v,r);ok++}catch(e){failed.add(r.url);fail++;say(`⚠️ このURLは生URLで残して次へ｜失敗${fail}\n${r.url}\n${e?.message||e}`,true)}if(rawRows(v).filter(x=>!failed.has(x.url)).length)await sleep(700)}const remain=rawRows(v).length;say(remain?`✅ 一巡完了｜成功${ok}・失敗${fail}｜生URL残り${remain}件\n再実行で残りだけ再試行`:`✅ 完成｜本文・見出し・区切り線・全カード完了`,remain>0)}catch(e){say(`❌ ${e?.message||e}\n本文は消していません`,true)}finally{busy=false;if(b)b.disabled=false;updateButton()}}
+function drag(panel,head){let p=null;const begin=(x,y,id)=>{const r=panel.getBoundingClientRect();p={x,y,left:r.left,top:r.top,id};panel.style.right='auto';panel.style.bottom='auto'};const move=(x,y)=>{if(!p)return;const ml=Math.max(0,innerWidth-panel.offsetWidth),mt=Math.max(0,innerHeight-44);panel.style.left=`${Math.min(ml,Math.max(0,p.left+x-p.x))}px`;panel.style.top=`${Math.min(mt,Math.max(0,p.top+y-p.y))}px`};head.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;begin(e.clientX,e.clientY,e.pointerId);e.preventDefault()});window.addEventListener('pointermove',e=>{if(p&&p.id!=null&&e.pointerId===p.id){move(e.clientX,e.clientY);e.preventDefault()}},{passive:false});window.addEventListener('pointerup',e=>{if(p&&p.id===e.pointerId)p=null});head.addEventListener('touchstart',e=>{if(e.target.closest('button')||!e.touches.length)return;const q=e.touches[0];begin(q.clientX,q.clientY,null);e.preventDefault()},{passive:false});window.addEventListener('touchmove',e=>{if(!p||p.id!=null||!e.touches.length)return;const q=e.touches[0];move(q.clientX,q.clientY);e.preventDefault()},{passive:false});window.addEventListener('touchend',()=>{if(p&&p.id==null)p=null},{passive:true})}
+function mount(){if(document.getElementById(ROOT)||!document.body)return;const root=document.createElement('div');root.id=ROOT;root.style.cssText='position:fixed!important;right:8px!important;bottom:72px!important;z-index:2147483647!important;font-family:system-ui,-apple-system,sans-serif!important;pointer-events:auto!important;';root.innerHTML=`<button id="ponFab320" type="button" style="border:0;border-radius:999px;padding:8px 11px;background:#0b2138;color:#fff;font-weight:900;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.3);outline:1px solid #39e7d2">📄 ポン v32.0</button><div id="ponPanel320" style="display:none;position:fixed;right:6px;bottom:108px;width:min(78vw,330px);background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:10px;padding:7px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><div id="ponDrag320" style="display:flex;align-items:center;gap:5px;padding:7px 4px;margin:-2px -1px 6px;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none;border-bottom:1px solid #28445c"><b style="flex:1;font-size:12px">↔️ ポン v32.0｜ここを掴んで移動</b><button id="ponMin320" type="button" style="border:0;background:#17314b;color:#fff;border-radius:6px;padding:3px 7px">＿</button></div><div style="font-size:10px;line-height:1.35;color:#c8d9e6;margin-bottom:7px">貼付不要。本文を先に全部生成し、カードは失敗を飛ばして最後まで処理。</div><button id="ponRun320" type="button" style="display:block;width:100%;border:0;border-radius:8px;padding:11px 6px;background:#39e7d2;color:#04202a;font-weight:900;font-size:12px">🚀 完成本文＋全カード作成</button><button id="ponUndo320" type="button" style="display:block;width:100%;border:0;border-radius:8px;padding:8px 6px;margin-top:5px;background:#5a2841;color:#fff;font-weight:800;font-size:10px">↩️ 直前へ戻す</button><div id="ponStatus320" style="min-height:1.2em;margin-top:6px;color:#9ddbd6;font-size:9px;line-height:1.3;white-space:pre-wrap"></div></div>`;document.body.appendChild(root);const fab=root.querySelector('#ponFab320'),panel=root.querySelector('#ponPanel320'),head=root.querySelector('#ponDrag320');fab.onclick=()=>{const v=view();savedInsertPos=v&&v.state.selection.empty?v.state.selection.from:null;panel.style.display='block';fab.style.display='none';updateButton()};root.querySelector('#ponMin320').onclick=()=>{panel.style.display='none';fab.style.display='block'};root.querySelector('#ponRun320').onclick=run;root.querySelector('#ponUndo320').onclick=()=>{const v=view();say(v&&restore(v)?'↩️ 直前へ戻した':'戻せるバックアップなし');updateButton()};drag(panel,head);updateButton()}
+mount();setInterval(mount,1000);
 })();
