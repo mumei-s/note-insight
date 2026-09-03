@@ -1,41 +1,55 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-03 22:24 JST
+Updated: 2026-09-04 08:22 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
-## 0. 2026-09-03 comment/reply sync completion checkpoint
+## 0. 2026-09-04 comment/reply + 本人通知 completion checkpoint
 
-This is the newest INSIGHT checkpoint and supersedes the older comment-sync notes below.
+This is the newest INSIGHT checkpoint and supersedes the older comment-sync / notification-sync notes below.
 
 Current production behavior:
 
 - note's current v3 comment API is supported when `data` itself is an array.
-- pagination follows note's `next_page`; do not assume 100 rows are returned simply because `per_page=100` was requested. Current note responses may return 25 rows per page.
-- comment text is extracted from note's structured `comment` JSON tree (`children` / text `value`), not only old string fields.
+- pagination follows note's `next_page`; current note responses can return 25 rows even when `per_page=100` is requested.
+- comment text is extracted from note's structured `comment` JSON tree (`children` / text `value`).
 - `latest_creator_reply` is captured and stored as a child reply of the external root comment.
-- additional reply pages are fetched using `parent_key` when `reply_count` exceeds the embedded creator reply count.
+- additional reply pages are fetched with `parent_key` when `reply_count` exceeds the embedded creator reply count.
 - parent/child relationships are stored in `insight_public_comments.parent_key`.
-- creator replies update the thread state but do not generate false inbound comment notifications.
+- creator replies update thread state but do not generate false inbound notifications.
 - recent articles and pending historical threads are both revisited.
-- public comment/reply refresh also runs independently every 15 minutes; the browser does not need to remain open for reply state to catch up.
+- public comment/reply refresh runs independently every 15 minutes; the browser does not need to remain open.
+- the normal participant live sync and the scheduled comment refresh now share the current structured-comment semantics.
 
 Current functions:
 
-- `insight-member-api` **v7 ACTIVE** — browser/live public reaction sync using the current comment parser.
+- `insight-member-api` **v8 ACTIVE** — browser/live public reaction sync using the current comment parser.
 - `insight-comment-refresh` **v2 ACTIVE** — dedicated scheduled comment/reply refresh using the same current API semantics.
-- pg_cron job `insight-comment-refresh` runs every 15 minutes and calls the dedicated refresh function.
+- pg_cron job `insight-comment-refresh` runs every 15 minutes.
+- `insight-notification-import-token` **v6 ACTIVE** — participant/OWNER notification pairing with paired-state reporting.
+- `insight-notification-ingest-v2` **v2 ACTIVE** — account-ID checked bell notification ingest.
 
-Verified production data after the repair:
+Verified production data after the comment repair:
 
 - comments with stored body text: **4,023**
 - stored child replies: **2,482**
 - stored creator replies: **1,962**
 - latest captured comment/reply timestamp at verification: `2026-09-02 19:33:11.721+00`
 - a recent 100-thread state check returned 97 `replied`, 2 `followup_pending`, 1 `unreplied`.
-- the recently reported thread where the creator had already replied now resolves as `replied`; its latest row is the creator reply.
+- the recently reported thread where the creator had already replied resolves as `replied`; its latest row is the creator reply.
 
 Public comments/replies remain core INSIGHT data. **本人通知 pairing is not required** to identify who commented or to determine whether the creator replied. 本人通知 is only the optional logged-in note-bell extension for bell-only/private events.
+
+### 本人通知 v2.3
+
+- `public/note-insight-notification-sync.user.js` is **v2.3.0**.
+- Actual note login identity is retried for several seconds after moving from INSIGHT to note, preventing early false `未連携` errors while note finishes loading the account session.
+- Pair-exchange errors now show their actual error code instead of only a generic red error.
+- Manual bell synchronization no longer depends on identifying the bell button's DOM/label. A global click watcher plus notification-panel observer starts synchronization whenever the real notification panel appears.
+- If automatic bell opening is unavailable, the user may tap the normal note bell manually; opening the panel triggers synchronization.
+- Account-specific tokens, last signatures and magazine-mute settings remain isolated by actual note ID.
+- Server-side ingest still rejects an account mismatch.
+- At the database check immediately before v2.3 was installed, `ss_yr` had no active private-notification ingest token. Therefore a **one-time re-pair after updating/installing v2.3** is required on the actual note browser. Do not bypass this by issuing a server token without verifying the real note login ID.
 
 ## 1. Production scope
 
@@ -99,7 +113,7 @@ The UI may render 100 rows per screen page for mobile safety; this is **not** a 
 
 Current Supabase functions:
 
-- `insight-member-api` **v7 ACTIVE**
+- `insight-member-api` **v8 ACTIVE**
 - `insight-comment-refresh` **v2 ACTIVE**
 
 Behavior:
@@ -158,7 +172,7 @@ Core INSIGHT must remain usable when the browser cannot run the notification use
 
 Current components/functions:
 
-- `public/note-insight-notification-sync.user.js` v2.2.0
+- `public/note-insight-notification-sync.user.js` **v2.3.0**
 - `public/notification-setup.html`
 - `public/notification-import.html`
 - `insight-notification-import-token` **v6 ACTIVE**
@@ -180,7 +194,7 @@ Pairing:
 - Notification setup clearly shows `連携済み` or `未連携`.
 - If unpaired, the user performs the one-time `このアカウントを連携する` flow.
 - Pair exchange issues the ingest token only after the actual note login ID matches the selected INSIGHT note ID.
-- Once paired, normal use is simply opening note's notification bell; the userscript observes the real notification view and ingests it.
+- Once paired, normal use is simply opening note's notification bell; v2.3 observes the real notification panel and ingests it even when the bell icon itself has no stable selector/label.
 
 Magazine muting remains exact/safe:
 
@@ -255,7 +269,7 @@ These PWA rules are safety measures. They must not alter ordinary browser Back/F
 - `insight-recovery` v1 ACTIVE
 - `insight-self-account` v4 ACTIVE
 - `insight-member-history` v1 ACTIVE
-- `insight-member-api` **v7 ACTIVE**
+- `insight-member-api` **v8 ACTIVE**
 - `insight-comment-refresh` **v2 ACTIVE**
 - `insight-notification-import-token` **v6 ACTIVE**
 - `insight-notification-ingest-v2` v2 ACTIVE
@@ -289,9 +303,9 @@ If any of those regress, Pages deployment must fail before publishing.
 
 ## 12. Latest GitHub state
 
-At this checkpoint, unrelated newer tooling work may advance `main` after the INSIGHT commits. That work must be preserved. Always refetch current `main` before the next edit rather than resetting to an older INSIGHT SHA.
+The v2.3 notification userscript and setup page are committed after unrelated newer tooling work. Preserve all later unrelated commits and always refetch current `main` by timestamp before future edits.
 
-The INSIGHT comment parser / scheduled refresh source is committed in GitHub and deployed to Supabase as listed above.
+Latest functional public release before this documentation commit: `edcaec37b6ef88dfa6507245d10c0da32223a299`; its Pages workflow completed the userscript syntax check, production build, INSIGHT regression test and deploy successfully.
 
 ## 13. Do not regress
 
