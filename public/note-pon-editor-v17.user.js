@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v17.1｜共マガURL＋カード完成版
+// @name         note ポン出し v17.2｜マガジンカード完全生成版
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      17.1.0
-// @description  共同マガジン一覧を本数順で作成し、マガジンURLと固定記事URLを文字で残しつつ、それぞれnote標準カードも自動生成。カードは後から手動削除可能。
+// @version      17.2.0
+// @description  共同マガジン一覧を本数順で作成。マガジンURL＋マガジンカード、固定記事URL＋固定記事カードをそれぞれ自動生成。カードは後から手動削除可能。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
@@ -17,8 +17,11 @@
 
 (() => {
   'use strict';
-  if (window.__MUMEI_PON_V171_ADDON__) return;
-  window.__MUMEI_PON_V171_ADDON__ = true;
+  if (window.__MUMEI_PON_V172_ADDON__) return;
+  window.__MUMEI_PON_V172_ADDON__ = true;
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let noteUrlCommand = null;
 
   function stripOldIntro(text) {
     const s = String(text || '');
@@ -32,23 +35,136 @@
   function addVisibleUrls(text) {
     const lines = stripOldIntro(text).split(/\r?\n/);
     const out = [];
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i].trim();
+    for (const raw of lines) {
+      const line = raw.trim();
       if (/^https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+$/i.test(line)) {
         const prev = out.length ? out[out.length - 1].trim() : '';
         if (prev !== `マガジンURL：${line}`) out.push(`マガジンURL：${line}`);
-        out.push(line); // 裸URLはv14がnote標準カードへ変換
+        out.push(line);
         continue;
       }
       if (/^https:\/\/note\.com\/[^/]+\/n\/n[a-z0-9]+$/i.test(line)) {
         const prev = out.length ? out[out.length - 1].trim() : '';
         if (prev !== `固定記事URL：${line}`) out.push(`固定記事URL：${line}`);
-        out.push(line); // 裸URLはv14がnote標準カードへ変換
+        out.push(line);
         continue;
       }
-      out.push(lines[i]);
+      out.push(raw);
     }
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function looksLikeView(value) {
+    try {
+      return !!(value && typeof value === 'object' && value.state?.doc && value.state?.schema &&
+        typeof value.dispatch === 'function' && value.dom && typeof value.posAtDOM === 'function');
+    } catch { return false; }
+  }
+
+  function findView() {
+    const root = document.querySelector('.ProseMirror[contenteditable="true"]') || document.querySelector('.ProseMirror');
+    if (!root) return null;
+    const queue = [];
+    let node = root;
+    for (let i = 0; i < 7 && node; i += 1, node = node.parentElement) queue.push([node, 0]);
+    const seen = new Set();
+    let steps = 0;
+    while (queue.length && steps++ < 14000) {
+      const [value, depth] = queue.shift();
+      if (!value || (typeof value !== 'object' && typeof value !== 'function') || seen.has(value)) continue;
+      seen.add(value);
+      if (looksLikeView(value)) return value;
+      if (depth >= 5) continue;
+      let keys = [];
+      try { keys = Object.getOwnPropertyNames(value); } catch { continue; }
+      for (const key of keys) {
+        if (['window','document','ownerDocument','parentNode','children','childNodes','style'].includes(key)) continue;
+        let next;
+        try { next = value[key]; } catch { continue; }
+        if (next && (typeof next === 'object' || typeof next === 'function') && !seen.has(next)) queue.push([next, depth + 1]);
+      }
+    }
+    return null;
+  }
+
+  function webpackRequire() {
+    const chunks = window.webpackChunk_N_E;
+    if (!chunks || typeof chunks.push !== 'function') return null;
+    let require = null;
+    try {
+      chunks.push([[970000000 + Math.floor(Math.random() * 20000000)], {}, r => { require = r; }]);
+    } catch {}
+    return require;
+  }
+
+  function cardFactory() {
+    if (typeof noteUrlCommand === 'function') return noteUrlCommand;
+    const require = webpackRequire();
+    if (!require) return null;
+    let module;
+    try { module = require(94928); } catch {}
+    const looksRight = value => {
+      if (typeof value !== 'function') return false;
+      let source = '';
+      try { source = Function.prototype.toString.call(value); } catch {}
+      return source.includes('state.selection') && source.includes('nodeBefore') && source.includes('replaceRangeWith') && source.includes('.then');
+    };
+    let candidate = typeof module?.fjT === 'function' && looksRight(module.fjT) ? module.fjT : null;
+    if (!candidate) {
+      const loaded = Object.values(require.c || {}).flatMap(entry => {
+        const ex = entry?.exports;
+        if (!ex) return [];
+        if (typeof ex === 'function') return [ex];
+        try { return Object.values(ex); } catch { return []; }
+      });
+      candidate = loaded.find(looksRight) || null;
+    }
+    noteUrlCommand = candidate;
+    return candidate;
+  }
+
+  function setCursorAfter(view, pos) {
+    const node = view.state.doc.nodeAt(pos);
+    if (!node) return false;
+    const end = Math.max(1, Math.min(view.state.doc.content.size, pos + node.nodeSize - 1));
+    try {
+      const Sel = view.state.selection.constructor;
+      view.dispatch(view.state.tr.setSelection(Sel.near(view.state.doc.resolve(end), -1)));
+      view.focus();
+      return true;
+    } catch { return false; }
+  }
+
+  function nakedMagazineRows(view) {
+    const rows = [];
+    view.state.doc.descendants((node, pos) => {
+      if (!node.isTextblock) return true;
+      const url = (node.textContent || '').trim();
+      if (/^https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+$/i.test(url)) rows.push({pos, url});
+      return true;
+    });
+    return rows.sort((a,b) => b.pos - a.pos);
+  }
+
+  async function forceMagazineCards(status) {
+    const view = findView();
+    const factory = cardFactory();
+    if (!view || !factory) return;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const rows = nakedMagazineRows(view);
+      if (!rows.length) return;
+      if (status) status.textContent = `マガジンカード再確認 ${rows.length}件`;
+      for (const item of rows) {
+        const node = view.state.doc.nodeAt(item.pos);
+        if (!node || (node.textContent || '').trim() !== item.url || !setCursorAfter(view, item.pos)) continue;
+        try {
+          const command = factory(item.url);
+          if (typeof command === 'function') command(view.state, tr => view.dispatch(tr), view);
+        } catch {}
+        await sleep(500);
+      }
+      await sleep(900);
+    }
   }
 
   function install() {
@@ -59,17 +175,22 @@
     const src = root.querySelector('#ponSrc14');
     const add = root.querySelector('#ponAdd14');
     const head = root.querySelector('#ponDrag14 b');
-    if (!src || !add) return setTimeout(install, 300);
+    const status = root.querySelector('#ponStatus14');
+    if (!src || !add || !status) return setTimeout(install, 300);
 
-    if (head) head.textContent = '↔️ ポン出し v17.1';
-    button.textContent = '📚 一覧＋URL＋全カード';
+    if (head) head.textContent = '↔️ ポン出し v17.2';
+    button.textContent = '📚 一覧＋マガジンカード＋固定記事カード';
 
-    // v14本体が本文へ入れる直前に、表示用URLを追加する。
-    // 裸URLは残すため、v14がマガジン・固定記事ともnote標準カード化する。
     add.addEventListener('click', () => {
       if (!/#\s/.test(src.value) || !/https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+/i.test(src.value)) return;
       src.value = addVisibleUrls(src.value);
     }, true);
+
+    const observer = new MutationObserver(() => {
+      if (!/^✅ 完了/.test(status.textContent || '')) return;
+      setTimeout(() => forceMagazineCards(status), 500);
+    });
+    observer.observe(status, {childList:true, subtree:true, characterData:true});
   }
 
   install();
