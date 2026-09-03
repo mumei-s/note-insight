@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v17｜共同マガジン本文＋一覧完成版
+// @name         note ポン出し v17.1｜共マガURL＋カード完成版
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      17.0.0
-// @description  v16の共同マガジン一覧に、記事本文の導入文を自動追加。見出し・区切り線・note標準カード・手動削除対応。
+// @version      17.1.0
+// @description  共同マガジン一覧を本数順で作成し、マガジンURLと固定記事URLを文字で残しつつ、それぞれnote標準カードも自動生成。カードは後から手動削除可能。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        GM_xmlhttpRequest
@@ -14,23 +14,42 @@
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-editor-v17.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-pon-editor-v17.user.js
 // ==/UserScript==
+
 (() => {
   'use strict';
-  if (window.__MUMEI_PON_V17_ADDON__) return;
-  window.__MUMEI_PON_V17_ADDON__ = true;
+  if (window.__MUMEI_PON_V171_ADDON__) return;
+  window.__MUMEI_PON_V171_ADDON__ = true;
 
-  const INTRO = `共同マガジンが増えすぎて、自分でも投稿上限が分からなくなってきたので一覧にしました🤣
+  function stripOldIntro(text) {
+    const s = String(text || '');
+    if (!s.startsWith('共同マガジンが増えすぎて')) return s;
+    const marker = 'では一覧👇';
+    const p = s.indexOf(marker);
+    if (p < 0) return s;
+    return s.slice(p + marker.length).replace(/^\s+/, '');
+  }
 
-今参加している共同マガジンと、自分で運営している共同マガジンを、1日の投稿上限が多い順に並べています。
-
-数字に幅がある場合は上限側に入れています。固定記事とマガジン紹介欄で数字が違う場合は両方に掲載しています。
-
-有料記事を追加できないものだけ「有料記事追加不可」と表記しています。
-
-では一覧👇`;
-
-  let armed = false;
-  let resetTimer = null;
+  function addVisibleUrls(text) {
+    const lines = stripOldIntro(text).split(/\r?\n/);
+    const out = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i].trim();
+      if (/^https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+$/i.test(line)) {
+        const prev = out.length ? out[out.length - 1].trim() : '';
+        if (prev !== `マガジンURL：${line}`) out.push(`マガジンURL：${line}`);
+        out.push(line); // 裸URLはv14がnote標準カードへ変換
+        continue;
+      }
+      if (/^https:\/\/note\.com\/[^/]+\/n\/n[a-z0-9]+$/i.test(line)) {
+        const prev = out.length ? out[out.length - 1].trim() : '';
+        if (prev !== `固定記事URL：${line}`) out.push(`固定記事URL：${line}`);
+        out.push(line); // 裸URLはv14がnote標準カードへ変換
+        continue;
+      }
+      out.push(lines[i]);
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
 
   function install() {
     const root = document.getElementById('__mumei_pon_v14_root__');
@@ -42,24 +61,14 @@
     const head = root.querySelector('#ponDrag14 b');
     if (!src || !add) return setTimeout(install, 300);
 
-    if (head) head.textContent = '↔️ ポン出し v17';
-    button.textContent = '📚 本文＋共マガ一覧＋全カード';
+    if (head) head.textContent = '↔️ ポン出し v17.1';
+    button.textContent = '📚 一覧＋URL＋全カード';
 
-    button.addEventListener('click', () => {
-      armed = true;
-      clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => { armed = false; }, 180000);
-    }, true);
-
+    // v14本体が本文へ入れる直前に、表示用URLを追加する。
+    // 裸URLは残すため、v14がマガジン・固定記事ともnote標準カード化する。
     add.addEventListener('click', () => {
-      if (!armed) return;
-      armed = false;
-      clearTimeout(resetTimer);
-      const body = String(src.value || '').trim();
-      if (!body) return;
-      if (!body.startsWith('共同マガジンが増えすぎて')) {
-        src.value = INTRO + '\n\n' + body;
-      }
+      if (!/#\s/.test(src.value) || !/https:\/\/note\.com\/[^/]+\/m\/m[a-z0-9]+/i.test(src.value)) return;
+      src.value = addVisibleUrls(src.value);
     }, true);
   }
 
