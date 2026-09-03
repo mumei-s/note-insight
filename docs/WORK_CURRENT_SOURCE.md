@@ -1,8 +1,41 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-02 21:06 JST
+Updated: 2026-09-03 22:24 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
+
+## 0. 2026-09-03 comment/reply sync completion checkpoint
+
+This is the newest INSIGHT checkpoint and supersedes the older comment-sync notes below.
+
+Current production behavior:
+
+- note's current v3 comment API is supported when `data` itself is an array.
+- pagination follows note's `next_page`; do not assume 100 rows are returned simply because `per_page=100` was requested. Current note responses may return 25 rows per page.
+- comment text is extracted from note's structured `comment` JSON tree (`children` / text `value`), not only old string fields.
+- `latest_creator_reply` is captured and stored as a child reply of the external root comment.
+- additional reply pages are fetched using `parent_key` when `reply_count` exceeds the embedded creator reply count.
+- parent/child relationships are stored in `insight_public_comments.parent_key`.
+- creator replies update the thread state but do not generate false inbound comment notifications.
+- recent articles and pending historical threads are both revisited.
+- public comment/reply refresh also runs independently every 15 minutes; the browser does not need to remain open for reply state to catch up.
+
+Current functions:
+
+- `insight-member-api` **v7 ACTIVE** — browser/live public reaction sync using the current comment parser.
+- `insight-comment-refresh` **v2 ACTIVE** — dedicated scheduled comment/reply refresh using the same current API semantics.
+- pg_cron job `insight-comment-refresh` runs every 15 minutes and calls the dedicated refresh function.
+
+Verified production data after the repair:
+
+- comments with stored body text: **4,023**
+- stored child replies: **2,482**
+- stored creator replies: **1,962**
+- latest captured comment/reply timestamp at verification: `2026-09-02 19:33:11.721+00`
+- a recent 100-thread state check returned 97 `replied`, 2 `followup_pending`, 1 `unreplied`.
+- the recently reported thread where the creator had already replied now resolves as `replied`; its latest row is the creator reply.
+
+Public comments/replies remain core INSIGHT data. **本人通知 pairing is not required** to identify who commented or to determine whether the creator replied. 本人通知 is only the optional logged-in note-bell extension for bell-only/private events.
 
 ## 1. Production scope
 
@@ -52,8 +85,8 @@ Verified preserved `ss_yr` historical scope remains mapped to analytics `member_
 
 - articles: 256
 - identified likes: 34,318
-- comments/replies: 4,048
-- external root comment threads: 1,570
+- historical comments/replies: 4,048 at the earlier restore checkpoint; live comment storage now continues through the current parser described in section 0
+- external root comment threads: 1,570 at the earlier restore checkpoint
 - active tracked followers: 1,023
 - active tracked followings: 888
 - historical notifications: 2,483
@@ -64,9 +97,10 @@ The UI may render 100 rows per screen page for mobile safety; this is **not** a 
 
 ## 3. Live public reaction synchronization
 
-Current Supabase function:
+Current Supabase functions:
 
-- `insight-member-api` **v4 ACTIVE**
+- `insight-member-api` **v7 ACTIVE**
+- `insight-comment-refresh` **v2 ACTIVE**
 
 Behavior:
 
@@ -78,7 +112,9 @@ Behavior:
 - Pending comment threads (`unreplied` / `followup_pending`) are also rechecked, including older articles.
 - Pending-thread refresh uses a recent set plus a rotating window so older pending conversations continue to be revisited over successive syncs.
 - Older article pages cycle instead of letting the cursor grow forever past the creator's article pages.
-- `note.ts` comment collection follows up to 20 pages × 100 comments so large threads are not limited to the first 100 items.
+- Comment collection follows note's actual `next_page` and may scan up to 20 pages.
+- Structured comment bodies, root/child relationships and `latest_creator_reply` are captured.
+- A dedicated scheduled comment refresh repeats this work every 15 minutes even when INSIGHT is not open.
 - New external comments/replies create actor-specific public reaction notifications.
 - Creator's own replies update thread state but do not create a false inbound notification.
 
@@ -92,7 +128,7 @@ Comment thread status comes from saved comment/reply rows, not only note's artic
 - `followup_pending`: creator replied previously, but the latest reply is external.
 - `replied`: latest reply is the creator.
 
-If the creator replies on note, the next live public sync must capture that creator reply and change the thread status accordingly.
+If the creator replies on note, the next live or scheduled public sync captures that creator reply and changes the thread status accordingly.
 
 Public comments are public data. **本人通知 pairing is not required to identify who commented/replied.** The public sync stores actor name/profile URL and the INSIGHT notification/history views may show them directly.
 
@@ -108,7 +144,7 @@ Provides identifiable public events such as:
 - public comments/replies
 - public follows where observable
 
-These events are created by `insight-member-api` with source `member-public-watch` and actor fields.
+These events are created by the public reaction sync with actor fields.
 
 For `ss_yr`, history reads merge both legacy `owner` notifications and the authenticated participant UUID notifications so old history and newly derived public events appear together.
 
@@ -219,7 +255,8 @@ These PWA rules are safety measures. They must not alter ordinary browser Back/F
 - `insight-recovery` v1 ACTIVE
 - `insight-self-account` v4 ACTIVE
 - `insight-member-history` v1 ACTIVE
-- `insight-member-api` **v4 ACTIVE**
+- `insight-member-api` **v7 ACTIVE**
+- `insight-comment-refresh` **v2 ACTIVE**
 - `insight-notification-import-token` **v6 ACTIVE**
 - `insight-notification-ingest-v2` v2 ACTIVE
 
@@ -227,7 +264,7 @@ These PWA rules are safety measures. They must not alter ordinary browser Back/F
 
 ## 11. CI / regression protection
 
-Pages workflow now requires all of the following before deploy:
+Pages workflow requires all of the following before deploy:
 
 1. `npm ci`
 2. notification userscript JavaScript syntax check
@@ -248,19 +285,11 @@ Pages workflow now requires all of the following before deploy:
 
 If any of those regress, Pages deployment must fail before publishing.
 
-## 12. Latest verified release
+## 12. Latest GitHub state
 
-Functional release HEAD before this documentation commit:
+At this checkpoint, unrelated newer tooling work may advance `main` after the INSIGHT commits. That work must be preserved. Always refetch current `main` before the next edit rather than resetting to an older INSIGHT SHA.
 
-`440c459378c6a5a0065597ff54e89cb44ab66a49`
-
-GitHub Pages workflow run `33627982524` completed:
-
-- userscript syntax check: SUCCESS
-- TypeScript/Vite build: SUCCESS
-- current INSIGHT regression tests: SUCCESS
-- artifact upload: SUCCESS
-- deploy: SUCCESS
+The INSIGHT comment parser / scheduled refresh source is committed in GitHub and deployed to Supabase as listed above.
 
 ## 13. Do not regress
 
@@ -275,6 +304,7 @@ GitHub Pages workflow run `33627982524` completed:
 - Never remove account switching.
 - Never change the fixed distribution URL.
 - Never make Edge a requirement; browser-specific handling is only a compatibility layer.
+- Never parse note comments as old flat strings only; preserve current structured comment tree / `latest_creator_reply` handling and `next_page` pagination.
 
 ## 14. Detached archives
 
