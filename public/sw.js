@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v28";
+const CACHE_NAME = "mumei-note-insight-v29";
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg"];
 const ROOT_URL = new URL("./?launch=top", self.registration.scope).href;
 
