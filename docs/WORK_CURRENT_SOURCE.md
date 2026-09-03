@@ -241,7 +241,7 @@ Manifest:
 
 Service Worker cache generation:
 
-- `mumei-note-insight-v28`
+- `mumei-note-insight-v29`
 
 The fixed public URL remains unchanged and is what gets distributed.
 
@@ -251,7 +251,7 @@ These PWA rules are safety measures. They must not alter ordinary browser Back/F
 
 ## 10. Current Supabase function versions
 
-- `insight-access` v3 ACTIVE
+- `insight-access` **v4 ACTIVE**
 - `insight-recovery` v1 ACTIVE
 - `insight-self-account` v4 ACTIVE
 - `insight-member-history` v1 ACTIVE
@@ -277,6 +277,8 @@ Pages workflow requires all of the following before deploy:
 
 - MemberInsightLive/full-history dashboard remains active;
 - comment pending-thread refresh remains;
+- current structured comment tree / `next_page` / `latest_creator_reply` handling remains;
+- scheduled comment refresh remains in source;
 - actor-specific public comment/like notification support remains;
 - personal notification account isolation/paired state remains;
 - code-input password login does not return;
