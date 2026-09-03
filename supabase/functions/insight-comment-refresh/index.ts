@@ -16,7 +16,7 @@ const iso=(v:any)=>typeof v==="string"&&!Number.isNaN(Date.parse(v))?new Date(v)
 async function noteJson(path:string){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
   try{
-    const r=await fetch(NOTE+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.1 (+comment-refresh)"},signal:c.signal});
+    const r=await fetch(NOTE+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.2 (+comment-refresh)"},signal:c.signal});
     if(!r.ok)throw new Error(`NOTE_PUBLIC_${r.status}`);
     return await r.json();
   }finally{clearTimeout(t)}
@@ -31,35 +31,65 @@ async function recentArticles(noteId:string){
   }).filter(Boolean) as Article[];
 }
 
-function pageRows(p:any){
-  const payload=p?.data;
-  if(Array.isArray(payload))return{rows:payload,last:payload.length<100};
-  const d=o(payload),rows=a(d.comments??d.note_comments??d.contents);
-  return{rows,last:Boolean(d.isLastPage??d.is_last_page)||rows.length<100};
+function commentText(v:any):string{
+  if(typeof v==="string")return v;
+  if(Array.isArray(v))return v.map(commentText).filter(Boolean).join("\n");
+  const d=o(v);
+  if(typeof d.value==="string")return d.value;
+  return[...a(d.children),...a(d.content)].map(commentText).filter(Boolean).join("\n");
 }
 
-function collectRows(input:any[],target:Map<string,any>,parentHint:string|null=null){
-  for(const item of input){
-    const r=o(item),key=s(r.key??r.comment_key);if(!key)continue;
-    const parent=s(r.parent_key??r.parentKey)||parentHint;
-    target.set(key,{...r,__parent:parent||null});
-    const nested=a(r.replies??r.children??r.reply_comments??r.note_comments);
-    if(nested.length)collectRows(nested,target,key);
+function pageRows(p:any){
+  const payload=p?.data,d=o(payload),rows=Array.isArray(payload)?payload:a(d.comments??d.note_comments??d.contents);
+  const next=p?.next_page??p?.nextPage??d.next_page??d.nextPage;
+  return{rows,last:next==null||next===false||next===""};
+}
+
+function normalize(r:any,parent:string|null=null){
+  const row=o(r),u=o(row.user??row.author),urlname=s(u.urlname)||null,key=s(row.key??row.comment_key);
+  if(!key)return null;
+  return{
+    key,
+    parent:s(row.parent_key??row.parentKey)||parent,
+    urlname,
+    name:s(u.nickname??u.name,"noteユーザー"),
+    url:urlname?`${NOTE}/${urlname}`:null,
+    image:s(u.profileImageUrl??u.profile_image_url)||null,
+    body:commentText(row.comment??row.body??row.text).replace(/\s+/g," ").trim().slice(0,1000),
+    at:s(row.created_at??row.createdAt)||null,
+    liked:Boolean(row.is_creator_liked??row.isCreatorLiked??row.is_liked_by_note_owner),
+    likeCount:n(row.like_count??row.likeCount)
+  };
+}
+
+async function commentPages(articleKey:string,parentKey:string|null=null){
+  const rows:any[]=[];
+  for(let page=1;page<=20;page++){
+    const parent=parentKey?`&parent_key=${encodeURIComponent(parentKey)}`:"";
+    const p=await noteJson(`/api/v3/notes/${encodeURIComponent(articleKey)}/note_comments?order=oldest&per_page=100&page=${page}${parent}`),cp=pageRows(p);
+    rows.push(...cp.rows);
+    if(cp.last)break;
+    await sleep(60);
   }
+  return rows;
 }
 
 async function comments(articleKey:string){
-  const all=new Map<string,any>();
-  for(let page=1;page<=20;page++){
-    const p=await noteJson(`/api/v3/notes/${encodeURIComponent(articleKey)}/note_comments?order=oldest&per_page=100&page=${page}`),cp=pageRows(p);
-    collectRows(cp.rows,all);
-    if(cp.last)break;
-    await sleep(80);
+  const all=new Map<string,any>(),roots=await commentPages(articleKey);
+  for(const raw of roots){
+    const root=o(raw),base=normalize(root,null);if(!base)continue;
+    all.set(base.key,base);
+    const embedded=normalize(root.latest_creator_reply,base.key);
+    if(embedded)all.set(embedded.key,embedded);
+    const replyCount=n(root.reply_count??root.replyCount),known=embedded?1:0;
+    if(replyCount>known){
+      try{
+        const replies=await commentPages(articleKey,base.key);
+        for(const rawReply of replies){const reply=normalize(rawReply,base.key);if(reply&&reply.key!==base.key)all.set(reply.key,reply)}
+      }catch(e){console.error("reply-fetch",articleKey,base.key,e instanceof Error?e.message:e)}
+    }
   }
-  return[...all.values()].map(r=>{
-    const u=o(r.user??r.author),urlname=s(u.urlname)||null;
-    return{key:s(r.key??r.comment_key),parent:s(r.__parent)||null,urlname,name:s(u.nickname??u.name,"noteユーザー"),url:urlname?`${NOTE}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url)||null,body:s(r.body??r.comment??r.text).replace(/\s+/g," ").trim().slice(0,1000),at:s(r.created_at??r.createdAt)||null,liked:Boolean(r.is_creator_liked??r.isCreatorLiked??r.is_liked_by_note_owner),likeCount:n(r.like_count??r.likeCount)};
-  }).filter(x=>x.key);
+  return[...all.values()];
 }
 
 async function notificationMember(noteId:string,fallback:string){
@@ -68,7 +98,7 @@ async function notificationMember(noteId:string,fallback:string){
 }
 
 async function pendingArticles(dataMember:string){
-  const {data,error}=await db.rpc("insight_fast_comment_threads",{p_member:dataMember,p_offset:0,p_limit:12,p_query:"",p_status:"pending"});
+  const {data,error}=await db.rpc("insight_fast_comment_threads",{p_member:dataMember,p_offset:0,p_limit:20,p_query:"",p_status:"pending"});
   if(error){console.error("pending-rpc",error);return[] as Article[]}
   const keys=[...new Set((data||[]).map((r:any)=>String(r.article_key||"")).filter(Boolean))];
   if(!keys.length)return[];
@@ -85,6 +115,7 @@ async function refreshProfile(profile:any){
   for(const art of recent.filter(x=>x.commentCount>0).slice(0,12))map.set(art.key,art);
   for(const art of pending)map.set(art.key,art);
   let inserted=0,scanned=0,latest:string|null=null;
+
   for(const art of map.values()){
     try{
       const [{data:known},rows]=await Promise.all([
