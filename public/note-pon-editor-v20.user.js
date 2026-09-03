@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         note URLポン v31｜URL行だけ自動カード化
+// @name         note URLポン v31.1｜URL行だけ自動カード化
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      31.0.0
+// @version      31.1.0
 // @description  本文はユーザーが貼るだけ。本文中の「note URLだけの1行」だけを検出し、その行でnote本来のURLカード化処理を順番に実行する。文字・見出し・順番・本文には一切触れない。
 // @author       無名S note
 // @match        https://editor.note.com/*
@@ -13,11 +13,11 @@
 
 (() => {
   'use strict';
-  if (window.__MUMEI_URL_PON_V31__) return;
-  window.__MUMEI_URL_PON_V31__ = true;
+  if (window.__MUMEI_URL_PON_V311__) return;
+  window.__MUMEI_URL_PON_V311__ = true;
 
-  const BTN_ID = 'mumei-url-pon-v31-btn';
-  const STATUS_ID = 'mumei-url-pon-v31-status';
+  const BTN_ID = 'mumei-url-pon-v311-btn';
+  const STATUS_ID = 'mumei-url-pon-v311-status';
   let busy = false;
   let viewCache = null;
   let noteUrlCommand = null;
@@ -172,15 +172,19 @@
     view.focus();
   }
 
-  async function waitConverted(view, url, beforeKeys, timeout = 45000) {
+  function sameRawStillNear(view, url, originalPos) {
+    return rawUrlRows(view).some((row) =>
+      row.url === normalizeUrl(url) && Math.abs(row.pos - originalPos) <= 3);
+  }
+
+  async function waitConverted(view, url, beforeKeys, originalPos, timeout = 45000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const fresh = embedNodes(view).find((hit) => {
         const key = cardKey(hit);
         return key && !beforeKeys.has(key) && genuineCard(hit, url);
       });
-      const rawStillExists = rawUrlRows(view).some((row) => row.url === normalizeUrl(url));
-      if (fresh && !rawStillExists) return fresh;
+      if (fresh && !sameRawStillNear(view, url, originalPos)) return fresh;
       await sleep(250);
     }
     return null;
@@ -188,12 +192,13 @@
 
   async function convertOne(view, row) {
     const beforeKeys = new Set(embedNodes(view).map(cardKey).filter(Boolean));
+    const originalPos = row.pos;
     setCursorAtUrlEnd(view, row);
     const command = noteUrlCommandFactory()(row.url);
     if (typeof command !== 'function') throw new Error('URLコマンド未生成');
     const handled = command(view.state, (tr) => view.dispatch(tr), view);
     if (!handled) throw new Error('noteがURLを処理しませんでした');
-    const card = await waitConverted(view, row.url, beforeKeys, 45000);
+    const card = await waitConverted(view, row.url, beforeKeys, originalPos, 45000);
     if (!card) throw new Error('カード生成を確認できません');
     return card;
   }
