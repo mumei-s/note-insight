@@ -69,7 +69,7 @@ async function sync(req:Request){
         for(const x of rows){
           if(keys.has(x.key))continue;
           const creatorComment=String(x.urlname||"").toLowerCase()===m.noteId.toLowerCase();
-          await db.from("insight_public_comments").upsert({member_id:dataMember,article_key:art.key,comment_key:x.key,parent_key:x.parent,actor_key:x.urlname||x.key,actor_name:x.name,actor_url:x.url,actor_image_url:x.image,body:x.body,occurred_at:validDate(x.at),is_root:!x.parent,is_creator:creatorComment},{onConflict:"member_id,article_key,comment_key"});
+          await db.from("insight_public_comments").upsert({member_id:dataMember,article_key:art.key,comment_key:x.key,parent_key:x.parent,actor_key:x.urlname||x.key,actor_name:x.name,actor_url:x.url,actor_image_url:x.image,body:x.body,occurred_at:validDate(x.at),is_root:!x.parent,is_creator:creatorComment,is_creator_liked:x.liked,like_count:x.likeCount},{onConflict:"member_id,article_key,comment_key"});
           if(!baseline&&!creatorComment&&await notice(m.id,`comment|${art.key}|${x.key}`,x.parent?"reply":"comment",`${x.name}さんが「${art.title}」に${x.parent?"返信":"コメント"}しました`,x.name,x.url,art.title,art.url,x.at,{articleKey:art.key,commentKey:x.key,parentKey:x.parent||null}))added++;
         }
       }catch(e){console.error("comments",art.key,e)}
