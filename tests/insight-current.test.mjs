@@ -45,6 +45,7 @@ test("social view has no redundant current button", async () => {
 test("comments refresh recent and pending threads without rebuilding history", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const note = await read("supabase/functions/insight-member-api/note.ts");
+  const scheduled = await read("supabase/functions/insight-comment-refresh/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
 
   assert.match(api, /historyPage=3\+\(\(cursor-1\)%18\)/);
@@ -53,8 +54,16 @@ test("comments refresh recent and pending threads without rebuilding history", a
   assert.match(api, /refreshedCommentThreads/);
   assert.match(api, /x\.parent\?"reply":"comment"/);
   assert.match(note, /page<=20/);
+  assert.match(note, /next_page/);
   assert.match(note, /latest_creator_reply/);
   assert.match(note, /commentText/);
+  assert.match(note, /row\.comment\?\?row\.body\?\?row\.text/);
+  assert.match(note, /parent_key=/);
+  assert.match(scheduled, /latest_creator_reply/);
+  assert.match(scheduled, /next_page/);
+  assert.match(scheduled, /commentText/);
+  assert.match(scheduled, /parent_key=/);
+  assert.match(scheduled, /insight_fast_comment_threads/);
   assert.match(history, /noteId==="ss_yr"\?"owner"/);
   assert.match(history, /insight_fast_comment_threads/);
 });
