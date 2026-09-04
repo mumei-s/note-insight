@@ -6,6 +6,7 @@
   const favorites=new Set();
   let loaded=false;
   let loading=false;
+  let scanTimer=0;
 
   function token(){return localStorage.getItem(OWNER_KEY)||''}
   function profile(href){
@@ -34,13 +35,16 @@
     const img=scope?.querySelector('img');
     return{creatorKey:id,actorName,actorUrl:url,actorImageUrl:img instanceof HTMLImageElement?img.src:null};
   }
+  function paint(button,id){
+    const on=favorites.has(id);
+    button.textContent=on?'★':'☆';
+    button.setAttribute('aria-label',on?'お気に入り解除':'お気に入りに追加');
+    button.title=on?'お気に入り解除':'お気に入りに追加';
+    button.classList.toggle('is-favorite',on);
+  }
   function updateButtons(id){
-    document.querySelectorAll(`button.insight-fav-quick[data-creator-key="${CSS.escape(id)}"]`).forEach(el=>{
-      const on=favorites.has(id);
-      el.textContent=on?'★':'☆';
-      el.setAttribute('aria-label',on?'お気に入り解除':'お気に入りに追加');
-      el.title=on?'お気に入り解除':'お気に入りに追加';
-      el.classList.toggle('is-favorite',on);
+    document.querySelectorAll('button.insight-fav-quick').forEach(el=>{
+      if(el instanceof HTMLButtonElement&&el.dataset.creatorKey===id)paint(el,id);
     });
   }
   async function toggle(button,anchor,info){
@@ -59,21 +63,30 @@
     }finally{button.disabled=false}
   }
   function scan(){
+    scanTimer=0;
     if(!loaded||!token())return;
-    document.querySelectorAll('a[href]').forEach(anchor=>{
-      if(!(anchor instanceof HTMLAnchorElement))return;
+    const anchors=[...document.querySelectorAll('a[href]')];
+    for(const anchor of anchors){
+      if(!(anchor instanceof HTMLAnchorElement))continue;
       const info=profile(anchor.href);
-      if(!info||anchor.closest('.fav-reader,.iv8-favorite-mode'))return;
+      if(!info||anchor.closest('.fav-reader,.iv8-favorite-mode'))continue;
       const next=anchor.nextElementSibling;
-      if(next instanceof HTMLButtonElement&&next.classList.contains('insight-fav-quick')&&next.dataset.creatorKey===info.id){updateButtons(info.id);return}
+      if(next instanceof HTMLButtonElement&&next.classList.contains('insight-fav-quick')&&next.dataset.creatorKey===info.id){paint(next,info.id);continue}
       const button=document.createElement('button');
       button.type='button';
       button.className='insight-fav-quick';
       button.dataset.creatorKey=info.id;
+      paint(button,info.id);
       button.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();void toggle(button,anchor,info)});
       anchor.insertAdjacentElement('afterend',button);
-      updateButtons(info.id);
-    });
+    }
+  }
+  function scheduleScan(delay=500){
+    if(scanTimer)clearTimeout(scanTimer);
+    scanTimer=window.setTimeout(()=>{
+      if('requestIdleCallback' in window)window.requestIdleCallback(()=>scan(),{timeout:1200});
+      else scan();
+    },delay);
   }
   async function load(){
     if(loading||!token())return;
@@ -83,7 +96,7 @@
       favorites.clear();
       for(const row of Array.isArray(p?.rows)?p.rows:[]){const id=String(row?.creator_key||'').toLowerCase();if(id)favorites.add(id)}
       loaded=true;
-      scan();
+      scheduleScan(80);
     }catch{loaded=false}
     finally{loading=false}
   }
@@ -92,8 +105,10 @@
     const s=document.createElement('style');s.id='insight-fav-quick-style';s.textContent=`.insight-fav-quick{display:inline-grid;place-items:center;width:29px;height:29px;margin-left:5px;padding:0;border:1px solid #55657a;border-radius:999px;background:#101923;color:#a7b4c4;font:900 17px/1 system-ui;vertical-align:middle;cursor:pointer;box-shadow:none}.insight-fav-quick.is-favorite{border-color:#8a7132;background:#241c08;color:#ffd86a}.insight-fav-quick:disabled{opacity:.45}`;document.head.appendChild(s)
   }
   style();
-  const observer=new MutationObserver(()=>scan());observer.observe(document.documentElement,{childList:true,subtree:true});
+  window.addEventListener('hashchange',()=>scheduleScan(450));
+  document.addEventListener('click',()=>scheduleScan(700),{capture:true,passive:true});
+  window.addEventListener('insight-favorites-changed',()=>scheduleScan(150));
   window.addEventListener('storage',e=>{if(e.key===OWNER_KEY){loaded=false;void load()}});
   void load();
-  window.setInterval(()=>{if(!loaded&&token())void load();else scan()},2500);
+  window.setTimeout(()=>scheduleScan(0),1800);
 })();
