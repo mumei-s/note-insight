@@ -8,7 +8,7 @@ const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function get(path:string){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
   try{
-    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.3"},signal:c.signal});
+    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.4"},signal:c.signal});
     if(!r.ok)throw new Error(`NOTE_PUBLIC_${r.status}`);
     return o(await r.json());
   }finally{clearTimeout(t)}
@@ -32,20 +32,32 @@ function likePage(payload:any){
   const root=o(payload),data=root.data,box=Array.isArray(data)?{}:o(data),rows=Array.isArray(data)?data:a(box.likes??box.users??box.contents);
   const next=root.next_page??root.nextPage??box.next_page??box.nextPage;
   const explicitLast=box.isLastPage??box.is_last_page??root.isLastPage??root.is_last_page;
-  return{rows,last:explicitLast===true||next===null||next===false||next===""||rows.length<50,next};
+  const extra=o(box.extra_fields??root.extra_fields),total=n(root.total_count??root.totalCount??box.total_count??box.totalCount??extra.like_count,0);
+  return{rows,last:explicitLast===true||rows.length===0||(next===null||next===false||next==="")&&explicitLast!==false,next,total};
+}
+function addLikes(all:Map<string,any>,rows:any[]){
+  for(const x of rows){
+    const r=o(x),u=o(r.user??r),urlname=s(u.urlname)||null,userKey=s(u.key)||(u.id!=null?String(u.id):urlname||"");
+    if(!userKey)continue;
+    all.set(userKey,{key:userKey,name:s(u.nickname??u.name,"noteユーザー"),url:urlname?`${ROOT}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url??u.user_profile_image_url)||null,at:s(r.created_at??r.createdAt)||null});
+  }
 }
 
 export async function likes(key:string){
-  const all=new Map<string,any>();
+  const all=new Map<string,any>();let expected=0;
   for(let page=1;page<=100;page++){
-    const p=await get(`/api/v3/notes/${encodeURIComponent(key)}/likes?page=${page}`),lp=likePage(p);
-    for(const x of lp.rows){
-      const r=o(x),u=o(r.user??r),urlname=s(u.urlname)||null,userKey=s(u.key)||(u.id!=null?String(u.id):urlname||"");
-      if(!userKey)continue;
-      all.set(userKey,{key:userKey,name:s(u.nickname??u.name,"noteユーザー"),url:urlname?`${ROOT}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url??u.user_profile_image_url)||null,at:s(r.created_at??r.createdAt)||null});
-    }
-    if(lp.last)break;
+    const p=await get(`/api/v3/notes/${encodeURIComponent(key)}/likes?page=${page}&per_page=100`),lp=likePage(p),before=all.size;
+    expected=Math.max(expected,lp.total);addLikes(all,lp.rows);
+    if((expected&&all.size>=expected)||lp.last||all.size===before)break;
     await sleep(35);
+  }
+  if(expected&&all.size<expected){
+    for(let start=all.size;start<expected&&start<5000;start+=100){
+      const p=await get(`/api/v3/notes/${encodeURIComponent(key)}/likes?size=100&start=${start}`),lp=likePage(p),before=all.size;
+      expected=Math.max(expected,lp.total);addLikes(all,lp.rows);
+      if(all.size===before||all.size>=expected)break;
+      await sleep(35);
+    }
   }
   return[...all.values()];
 }
