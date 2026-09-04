@@ -9,6 +9,26 @@ async function notice(mid:string,fp:string,type:string,text:string,name:string|n
   return !error;
 }
 
+async function syncArticleCatalog(noteId:string,dataMember:string,force=false){
+  const [{count,error:countError},profile]=await Promise.all([
+    db.from("insight_public_articles").select("article_key",{count:"exact",head:true}).eq("member_id",dataMember),
+    creator(noteId),
+  ]);
+  if(countError)throw countError;
+  const stored=Number(count||0),official=Number(profile.notes||0);
+  if(!force&&official>0&&stored>=official)return{refreshed:false,stored,official,pages:0};
+  if(!force&&official<=0&&stored>18)return{refreshed:false,stored,official,pages:0};
+  const found=new Map<string,Article>();let pages=0;
+  for(let page=1;page<=200;page++){
+    const x=await articles(noteId,page);pages=page;
+    for(const row of x.rows)found.set(row.key,row);
+    if(x.last)break;
+  }
+  const now=new Date().toISOString(),rows=[...found.values()].map(art=>({member_id:dataMember,article_key:art.key,title:art.title,url:art.url,publish_at:validDate(art.published),like_count:art.likes,comment_count:art.comments,last_seen_at:now}));
+  for(let i=0;i<rows.length;i+=400){const {error}=await db.from("insight_public_articles").upsert(rows.slice(i,i+400),{onConflict:"member_id,article_key"});if(error)throw error}
+  return{refreshed:true,stored:rows.length,official,pages};
+}
+
 async function addPendingCommentArticles(dataMember:string,cursor:number,seenArticles:Map<string,Article>,refreshComments:Set<string>){
   const offset=((Math.max(1,cursor)-1)%10)*10;
   const [{data:recent,error:recentError},{data:rotating,error:rotatingError}]=await Promise.all([
@@ -36,7 +56,8 @@ async function sync(req:Request){
   const m=await member(req),dataMember=scope(m),watchMember=dataMember;
   const {data:p}=await db.from("insight_notification_profiles").select("watch_cursor,public_watch_initialized_at").eq("member_id",watchMember).maybeSingle();
   const baseline=!p?.public_watch_initialized_at,cursor=Math.max(1,Number(p?.watch_cursor||1));
-  const historyPage=3+((cursor-1)%18);
+  const catalog=await syncArticleCatalog(m.noteId,dataMember,baseline);
+  const historyPage=3+((cursor-1)%198);
   const pages=[1,2,historyPage],seenArticles=new Map<string,Article>(),refreshComments=new Set<string>();
 
   for(const page of [...new Set(pages)]){
@@ -91,7 +112,7 @@ async function sync(req:Request){
 
   const now=new Date().toISOString();
   await db.from("insight_notification_profiles").upsert({member_id:watchMember,note_urlname:m.noteId,note_nickname:m.displayName,role:watchMember==="owner"?"owner":"member",verified_at:now,public_watch_enabled:true,public_watch_initialized_at:p?.public_watch_initialized_at||now,last_watch_at:now,watch_error:null,watch_cursor:cursor+1,updated_at:now},{onConflict:"member_id"});
-  return{ok:true,baseline,scannedArticles:seenArticles.size,refreshedCommentThreads:refreshComments.size,newNotifications:added,lastWatchAt:now,dataScope:dataMember,historyPage};
+  return{ok:true,baseline,catalog,scannedArticles:seenArticles.size,refreshedCommentThreads:refreshComments.size,newNotifications:added,lastWatchAt:now,dataScope:dataMember,historyPage};
 }
 
 async function dashboard(req:Request){
