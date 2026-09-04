@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
   pages: write
   id-token: write
 
@@ -18,28 +17,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Verify recovery files
-        run: |
-          grep -q 'mumei-note-insight-v31' public/sw.js
-          grep -q 'getRegistrations' public/recovery.html
-          grep -q 'caches.delete' public/recovery.html
-      - name: Restore last successful Pages artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl -fL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9930058572/zip" \
-            -o previous-pages.zip
-          unzip -q previous-pages.zip
-          mkdir -p dist
-          tar -xf artifact.tar -C dist
-          cp public/sw.js dist/sw.js
-          cp public/recovery.html dist/recovery.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+        timeout-minutes: 6
+      - run: node --check public/note-insight-notification-sync.user.js
+      - run: npm run build
+      - name: Unified INSIGHT regression tests
+        run: node --test tests/insight-current.test.mjs tests/favorite-reader-current.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
