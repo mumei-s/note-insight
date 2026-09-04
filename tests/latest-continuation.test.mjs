@@ -21,28 +21,17 @@ test("unpaired personal notifications auto-start the existing safe ID-checked pa
   assert.match(userScript, /PAIR_ACCOUNT_MISMATCH/);
 });
 
-test("OWNER can add or remove favorites directly beside note profile links without a second favorite store", async () => {
+test("favorites remain in the existing React UI and Favorite Reader without an external DOM scanner", async () => {
   const index = await read("index.html");
-  const quick = await read("public/insight-favorite-quick.js");
+  const v6 = await read("src/fast-insight-v6.tsx");
   const reader = await read("src/favorite-reader.tsx");
 
-  assert.match(index, /insight-favorite-quick\.js\?v=2/);
+  assert.doesNotMatch(index, /insight-favorite-quick\.js/);
   assert.match(index, /notification-import\.html/);
   assert.match(index, /searchParams\.set\("autopair", "1"\)/);
-  assert.match(quick, /action:'favorites'/);
-  assert.match(quick, /action:'favorite_toggle'/);
-  assert.match(quick, /parts\.length!==1/);
-  assert.match(quick, /creatorKey:id/);
-  assert.match(quick, /★/);
-  assert.match(quick, /☆/);
+  assert.match(v6, /favorite_toggle/);
+  assert.match(v6, /iv6-star/);
+  assert.match(v6, /r\.favorite\?"★":"☆"/);
   assert.match(reader, /action: "favorites"/);
   assert.match(reader, /action: "favorite_toggle"/);
-});
-
-test("quick favorites never rescan the whole DOM on every mutation or a permanent interval", async () => {
-  const quick = await read("public/insight-favorite-quick.js");
-  assert.doesNotMatch(quick, /new MutationObserver/);
-  assert.doesNotMatch(quick, /setInterval/);
-  assert.match(quick, /scheduleScan/);
-  assert.match(quick, /requestIdleCallback/);
 });
