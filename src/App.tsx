@@ -3,12 +3,11 @@ import { AccessPortalV6 } from "./access-portal-v6";
 import { ArticleLikesPageV2 } from "./article-likes-page-v2";
 import { CombinedAnalyticsApp } from "./combined-analytics-app";
 import { EvidenceV2 } from "./evidence-v2";
-import { FastInsightV8 } from "./fast-insight-v8";
 import "./fast-insight-v6-override.css";
 import { FeaturePage } from "./feature-page";
 import { HubHome } from "./hub-home";
 import { ManagementPage } from "./management-page";
-import { MemberInsightLive } from "./member-insight-live";
+import { MemberInsightLiveV2 } from "./member-insight-live-v2";
 import { OwnerGate } from "./owner-gate";
 
 const OWNER_KEY = "mumei-unified-owner-token";
@@ -68,8 +67,8 @@ export function App() {
         return;
       }
       const next = currentRoute();
-      if (next === "owner-insight" || next.startsWith("owner-features/")) sessionStorage.setItem(OWNER_VIEW_KEY, "1");
-      if (next === "access/insight" || next === "home") sessionStorage.removeItem(OWNER_VIEW_KEY);
+      if (next.startsWith("owner-features/")) sessionStorage.setItem(OWNER_VIEW_KEY, "1");
+      if (next === "access/insight" || next === "home" || next === "dashboard" || next === "owner-insight" || next === "manage") sessionStorage.removeItem(OWNER_VIEW_KEY);
       setRoute(next);
     };
     update();
@@ -84,18 +83,19 @@ export function App() {
   }, []);
 
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
+  const memberToken = localStorage.getItem("mumei-insight-access-token") || "";
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   let page;
   if (route === "access/insight") page = <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
-  else if (route === "owner-insight") page = ownerToken ? <FastInsightV8 /> : <OwnerGate />;
+  else if (route === "owner-insight") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
-  else if (route === "dashboard") page = ownerView ? <FastInsightV8 /> : <MemberInsightLive />;
-  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightLive />;
-  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightLive />;
-  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightLive />;
-  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightLive />;
+  else if (route === "dashboard") page = <MemberInsightLiveV2 />;
+  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightLiveV2 />;
+  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightLiveV2 />;
+  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightLiveV2 />;
+  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightLiveV2 />;
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
