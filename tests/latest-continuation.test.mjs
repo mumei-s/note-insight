@@ -28,10 +28,20 @@ test("favorites remain in the existing React UI and Favorite Reader without an e
 
   assert.doesNotMatch(index, /insight-favorite-quick\.js/);
   assert.match(index, /notification-import\.html/);
+  assert.match(index, /searchParams\.set\("from", "setup"\)/);
   assert.match(index, /searchParams\.set\("autopair", "1"\)/);
   assert.match(v6, /favorite_toggle/);
   assert.match(v6, /iv6-star/);
   assert.match(v6, /r\.favorite\?"★":"☆"/);
   assert.match(reader, /action: "favorites"/);
   assert.match(reader, /action: "favorite_toggle"/);
+});
+
+test("PWA service worker accepts the current autopair route and purges the stale freeze cache", async () => {
+  const sw = await read("public/sw.js");
+  assert.match(sw, /mumei-note-insight-v30/);
+  assert.match(sw, /u\.searchParams\.get\("autopair"\) === "1"/);
+  assert.match(sw, /return !fromSetup && !autoPair/);
+  assert.match(sw, /fetch\(event\.request, \{ cache: "no-store" \}\)/);
+  assert.doesNotMatch(sw, /client\.navigate\(ROOT_URL\)/);
 });
