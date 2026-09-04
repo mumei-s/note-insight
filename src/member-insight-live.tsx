@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
 import { MemberInsightAnalyticsV3 } from "./member-insight-analytics-v3";
+import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -11,6 +12,7 @@ const QUIET_AFTER_INTERACTION_MS = 2_500;
 export function MemberInsightLive() {
   const [revision, setRevision] = useState(0);
   const [screen, setScreen] = useState<"insight" | "analytics">("insight");
+  const [socialOverride, setSocialOverride] = useState(false);
   const lastRun = useRef(0);
   const lastInteraction = useRef(Date.now());
   const running = useRef(false);
@@ -79,6 +81,22 @@ export function MemberInsightLive() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!socialOverride) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("mis2-social")?.scrollIntoView({ block: "start", behavior: "auto" });
+    }, 30);
+    return () => window.clearTimeout(timer);
+  }, [socialOverride]);
+
+  function captureInsightNavigation(event: React.MouseEvent<HTMLDivElement>) {
+    const button = (event.target as HTMLElement | null)?.closest?.("button");
+    if (!button) return;
+    const text = (button.textContent || "").trim();
+    if (button.closest(".miu-nav")) setSocialOverride(text === "フォロー");
+    else if (button.closest(".miu-stats")) setSocialOverride(text.includes("フォロワー"));
+  }
+
   return <>
     <div className="mia-switcher" role="navigation" aria-label="INSIGHT表示切替">
       <button className={screen === "insight" ? "active" : ""} onClick={() => setScreen("insight")}>INSIGHT</button>
@@ -86,6 +104,9 @@ export function MemberInsightLive() {
     </div>
     {screen === "analytics"
       ? <MemberInsightAnalyticsV3 revision={revision} onBack={() => setScreen("insight")} />
-      : <MemberInsightUnifiedV4 revision={revision} />}
+      : <div className={socialOverride ? "mia-social-override" : ""} onClickCapture={captureInsightNavigation}>
+          <MemberInsightUnifiedV4 revision={revision} />
+          {socialOverride ? <MemberInsightSocialV2 revision={revision} /> : null}
+        </div>}
   </>;
 }
