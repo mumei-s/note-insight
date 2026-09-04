@@ -8,7 +8,7 @@ const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function get(path:string){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
   try{
-    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.2"},signal:c.signal});
+    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.3"},signal:c.signal});
     if(!r.ok)throw new Error(`NOTE_PUBLIC_${r.status}`);
     return o(await r.json());
   }finally{clearTimeout(t)}
@@ -28,9 +28,26 @@ export async function articles(id:string,page:number){
   return{rows,last:Boolean(d.isLastPage??d.is_last_page)||rows.length===0};
 }
 
+function likePage(payload:any){
+  const root=o(payload),data=root.data,box=Array.isArray(data)?{}:o(data),rows=Array.isArray(data)?data:a(box.likes??box.users??box.contents);
+  const next=root.next_page??root.nextPage??box.next_page??box.nextPage;
+  const explicitLast=box.isLastPage??box.is_last_page??root.isLastPage??root.is_last_page;
+  return{rows,last:explicitLast===true||next===null||next===false||next===""||rows.length<50,next};
+}
+
 export async function likes(key:string){
-  const d=o((await get(`/api/v3/notes/${encodeURIComponent(key)}/likes`)).data);
-  return a(d.likes).map((x:any)=>{const r=o(x),u=o(r.user),urlname=s(u.urlname)||null;return{key:s(u.key)||(u.id!=null?String(u.id):urlname||"unknown"),name:s(u.nickname,"noteユーザー"),url:urlname?`${ROOT}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url)||null,at:s(r.created_at??r.createdAt)||null}});
+  const all=new Map<string,any>();
+  for(let page=1;page<=100;page++){
+    const p=await get(`/api/v3/notes/${encodeURIComponent(key)}/likes?page=${page}`),lp=likePage(p);
+    for(const x of lp.rows){
+      const r=o(x),u=o(r.user??r),urlname=s(u.urlname)||null,userKey=s(u.key)||(u.id!=null?String(u.id):urlname||"");
+      if(!userKey)continue;
+      all.set(userKey,{key:userKey,name:s(u.nickname??u.name,"noteユーザー"),url:urlname?`${ROOT}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url??u.user_profile_image_url)||null,at:s(r.created_at??r.createdAt)||null});
+    }
+    if(lp.last)break;
+    await sleep(35);
+  }
+  return[...all.values()];
 }
 
 function commentText(v:any):string{
