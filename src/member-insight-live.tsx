@@ -1,22 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
-import { MemberInsightUnifiedV3 } from "./member-insight-unified-v3";
+import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RESYNC_AFTER_MS = 120_000;
+const QUIET_AFTER_INTERACTION_MS = 2_500;
 
 export function MemberInsightLive() {
   const [revision, setRevision] = useState(0);
   const lastRun = useRef(0);
+  const lastInteraction = useRef(Date.now());
   const running = useRef(false);
   const controller = useRef<AbortController | null>(null);
+  const deferred = useRef<number | null>(null);
 
   async function refresh(force = false) {
     const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
     if (!token || running.current) return;
     const now = Date.now();
     if (!force && now - lastRun.current < RESYNC_AFTER_MS) return;
+    if (now - lastInteraction.current < QUIET_AFTER_INTERACTION_MS) {
+      if (deferred.current) window.clearTimeout(deferred.current);
+      deferred.current = window.setTimeout(() => { void refresh(force); }, QUIET_AFTER_INTERACTION_MS);
+      return;
+    }
     lastRun.current = now;
     running.current = true;
     controller.current?.abort();
@@ -34,7 +42,7 @@ export function MemberInsightLive() {
       const payload = await response.json().catch(() => ({}));
       if (response.ok && payload?.ok !== false) setRevision((value) => value + 1);
     } catch {
-      // Saved full history stays usable even when a live refresh is unavailable.
+      // Saved history remains usable even when a live refresh is unavailable.
     } finally {
       window.clearTimeout(timer);
       if (controller.current === current) controller.current = null;
@@ -43,17 +51,31 @@ export function MemberInsightLive() {
   }
 
   useEffect(() => {
-    void refresh(true);
-    const onVisible = () => { if (document.visibilityState === "visible") void refresh(false); };
-    const onFocus = () => { void refresh(false); };
+    const interacted = () => { lastInteraction.current = Date.now(); };
+    const schedule = (force = false) => {
+      if (deferred.current) window.clearTimeout(deferred.current);
+      deferred.current = window.setTimeout(() => { void refresh(force); }, QUIET_AFTER_INTERACTION_MS);
+    };
+    window.addEventListener("pointerdown", interacted, { passive: true });
+    window.addEventListener("touchstart", interacted, { passive: true });
+    window.addEventListener("wheel", interacted, { passive: true });
+    window.addEventListener("scroll", interacted, { passive: true });
+    const onVisible = () => { if (document.visibilityState === "visible") schedule(false); };
+    const onFocus = () => schedule(false);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
+    schedule(true);
     return () => {
+      window.removeEventListener("pointerdown", interacted);
+      window.removeEventListener("touchstart", interacted);
+      window.removeEventListener("wheel", interacted);
+      window.removeEventListener("scroll", interacted);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
+      if (deferred.current) window.clearTimeout(deferred.current);
       controller.current?.abort();
     };
   }, []);
 
-  return <MemberInsightUnifiedV3 revision={revision} />;
+  return <MemberInsightUnifiedV4 revision={revision} />;
 }
