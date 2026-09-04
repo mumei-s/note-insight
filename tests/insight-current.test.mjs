@@ -4,21 +4,21 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("participant dashboard uses calendar-first unified INSIGHT v2 without overview duplication", async () => {
+test("participant dashboard uses calendar-first unified INSIGHT v3 without overview duplication", async () => {
   const app = await read("src/App.tsx");
   const live = await read("src/member-insight-live.tsx");
-  const full = await read("src/member-insight-unified-v2.tsx");
+  const full = await read("src/member-insight-unified-v3.tsx");
 
   assert.match(app, /MemberInsightLive/);
   assert.match(app, /route === "dashboard"[\s\S]*MemberInsightLive/);
-  assert.match(live, /MemberInsightUnifiedV2 revision=\{revision\}/);
+  assert.match(live, /MemberInsightUnifiedV3 revision=\{revision\}/);
   assert.match(full, /useState<Tab>\("likes"\)/);
   assert.doesNotMatch(full, /\["overview","概要"\]/);
   for (const label of ["スキ履歴", "スキ順位", "コメント", "コメント順位", "マガジン", "お気に入り", "フォロー", "通知", "記事", "アカウント切替", "データ更新"]) assert.match(full, new RegExp(label));
 });
 
 test("likes keep avatars, favorite stars, and day month year filters with missing-icon enrichment", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+  const full = await read("src/member-insight-unified-v3.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
 
   assert.match(full, /creator-icons/);
@@ -34,7 +34,7 @@ test("likes keep avatars, favorite stars, and day month year filters with missin
 });
 
 test("comments support calendar to article list to thread search while keeping heart-close state", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+  const full = await read("src/member-insight-unified-v3.tsx");
   const extras = await read("supabase/functions/insight-member-extras/index.ts");
   assert.match(full, /comment_articles/);
   assert.match(full, /comments_filtered/);
@@ -47,17 +47,18 @@ test("comments support calendar to article list to thread search while keeping h
   assert.match(extras, /X-Insight-Token/);
 });
 
-test("comment ranking uses the formerly empty area for three useful metrics", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+test("comment ranking explains initial-comment and article-count mismatch", async () => {
+  const full = await read("src/member-insight-unified-v3.tsx");
   assert.match(full, /miu-rank-metrics/);
   assert.match(full, /initial_comment_count/);
   assert.match(full, /article_count/);
+  assert.match(full, /重複初手/);
   assert.match(full, /最終コメント/);
   assert.match(full, /commenter_comments/);
 });
 
-test("magazines show participants followers articles and calendar article search", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+test("magazines show participants followers articles and JST calendar article search with cached fallback", async () => {
+  const full = await read("src/member-insight-unified-v3.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
   assert.match(full, /参加人数/);
   assert.match(full, /フォロワー/);
@@ -65,14 +66,17 @@ test("magazines show participants followers articles and calendar article search
   assert.match(full, /magazine_articles/);
   assert.match(full, /記事日/);
   assert.match(full, /recentArticles/);
+  assert.match(full, /jstDay\(a\.publishAt\)/);
+  assert.match(full, /setArticleRows\(local\)/);
   assert.match(history, /insight_magazine_cache/);
 });
 
 test("favorite reader and social history both expose calendar search", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+  const full = await read("src/member-insight-unified-v3.tsx");
   assert.match(full, /favorite_articles/);
   assert.match(full, /favorite_read_set/);
   assert.match(full, /投稿日/);
+  assert.match(full, /loadArticles\(r,v,query\)/);
   assert.match(full, /既読にする/);
   assert.match(full, /未読に戻す/);
   assert.match(full, /social_changes/);
@@ -80,12 +84,31 @@ test("favorite reader and social history both expose calendar search", async () 
   assert.match(full, /最終確認/);
 });
 
-test("article archive remains searchable and calendar addressable", async () => {
-  const full = await read("src/member-insight-unified-v2.tsx");
+test("notification cards separate actor action target and time with profile and target links", async () => {
+  const full = await read("src/member-insight-unified-v3.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
+  assert.match(full, /miu-notice-card/);
+  assert.match(full, /await enrich\(x\.rows\|\|\[\]\)/);
+  assert.match(full, /プロフィール ↗/);
+  assert.match(full, /記事を開く ↗/);
+  assert.match(full, /target_url/);
+  assert.match(full, /target_title/);
+  assert.match(history, /actor_url,target_title,target_url/);
+});
+
+test("article archive uses JST calendar matching and authenticated thumbnail cards", async () => {
+  const full = await read("src/member-insight-unified-v3.tsx");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
+  const thumbs = await read("supabase/functions/insight-article-thumbnails/index.ts");
   assert.match(full, /自分の記事・過去アーカイブ/);
   assert.match(full, /記事タイトルを検索/);
-  assert.match(full, /type="date"/);
+  assert.match(full, /jstDay\(r\.publish_at\)/);
+  assert.match(full, /insight-article-thumbnails/);
+  assert.match(full, /miu-self-article-grid/);
+  assert.match(full, /さらに40件表示/);
+  assert.match(thumbs, /X-Insight-Token/);
+  assert.match(thumbs, /api\/v3\/notes/);
+  assert.match(thumbs, /og:image/);
   assert.match(history, /limit\(1000\)/);
 });
 
@@ -118,7 +141,7 @@ test("comments refresh recent and pending threads without rebuilding history", a
 test("public comment/like notifications identify actors without private bell pairing", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-  const full = await read("src/member-insight-unified-v2.tsx");
+  const full = await read("src/member-insight-unified-v3.tsx");
 
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
