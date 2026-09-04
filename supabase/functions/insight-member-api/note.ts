@@ -8,7 +8,7 @@ const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function get(path:string){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
   try{
-    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.4"},signal:c.signal});
+    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.5"},signal:c.signal});
     if(!r.ok)throw new Error(`NOTE_PUBLIC_${r.status}`);
     return o(await r.json());
   }finally{clearTimeout(t)}
@@ -42,6 +42,12 @@ function addLikes(all:Map<string,any>,rows:any[]){
     all.set(userKey,{key:userKey,name:s(u.nickname??u.name,"noteユーザー"),url:urlname?`${ROOT}/${urlname}`:null,image:s(u.profileImageUrl??u.profile_image_url??u.user_profile_image_url)||null,at:s(r.created_at??r.createdAt)||null});
   }
 }
+async function numericNoteId(key:string){
+  for(const path of [`/api/v3/notes/${encodeURIComponent(key)}`,`/api/v1/notes/${encodeURIComponent(key)}`]){
+    try{const p=await get(path),d=o(p.data),note=o(d.note),id=n(d.id??d.note_id??note.id,0);if(id>0)return id}catch{}
+  }
+  return 0;
+}
 
 export async function likes(key:string){
   const all=new Map<string,any>();let expected=0;
@@ -57,6 +63,19 @@ export async function likes(key:string){
       expected=Math.max(expected,lp.total);addLikes(all,lp.rows);
       if(all.size===before||all.size>=expected)break;
       await sleep(35);
+    }
+  }
+  if(expected&&all.size<expected){
+    const id=await numericNoteId(key);
+    if(id>0){
+      for(let page=1;page<=100;page++){
+        try{
+          const p=await get(`/api/v1/note/${id}/likes?page=${page}`),lp=likePage(p),before=all.size;
+          expected=Math.max(expected,lp.total);addLikes(all,lp.rows);
+          if((expected&&all.size>=expected)||lp.last||all.size===before)break;
+        }catch{break}
+        await sleep(35);
+      }
     }
   }
   return[...all.values()];
