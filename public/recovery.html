@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+<title>INSIGHT 復旧</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(680px,calc(100% - 24px));margin:auto;padding:54px 0}.card{border:1px solid #30445b;border-radius:18px;background:#0d141d;padding:22px}.card small{color:#8feaff;font-weight:900;letter-spacing:.12em}.card h1{margin:7px 0 10px;font-size:30px}.card p{color:#a7b4c4;line-height:1.7}.status{margin-top:16px;padding:12px;border-radius:11px;background:#101923;color:#b6ff38;font-weight:850}.btn{display:flex;align-items:center;justify-content:center;min-height:52px;margin-top:16px;border:0;border-radius:12px;background:#54d8ff;color:#071016;text-decoration:none;font-weight:950;width:100%;font-size:15px}.btn.dark{background:#131e2b;color:#fff;border:1px solid #40546c}</style>
+</head>
+<body><main class="wrap"><section class="card"><small>EDGE / PWA RECOVERY</small><h1>INSIGHTを復旧</h1><p>ログイン情報や保存済み設定は残したまま、このサイトの古いService WorkerとCache Storageだけを削除して最新版を開き直します。</p><div id="status" class="status">復旧処理を開始しています…</div><button id="retry" class="btn" hidden>最新版INSIGHTを開く</button><a class="btn dark" href="./?recovery-manual=1">そのままINSIGHTを開く</a></section></main>
+<script>
+(async()=>{
+ const status=document.getElementById('status'),retry=document.getElementById('retry');
+ try{
+  if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes('/note-insight/')).map(r=>r.unregister()));}
+  if('caches' in window){const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('mumei-note-insight-')).map(k=>caches.delete(k)));}
+  status.textContent='✅ 古いキャッシュを削除しました。最新版へ移動します。';
+  const target=`./?edge-recovered=${Date.now()}`;
+  retry.hidden=false;retry.onclick=()=>location.replace(target);
+  setTimeout(()=>location.replace(target),450);
+ }catch(e){status.textContent='自動削除の一部に失敗しました。下の「最新版INSIGHTを開く」を押してください。';retry.hidden=false;retry.onclick=()=>location.replace(`./?edge-recovered=${Date.now()}`);}
+})();
+</script></body></html>
