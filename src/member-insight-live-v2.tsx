@@ -9,6 +9,7 @@ const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-memb
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const SOCIAL="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-v2";
 const DASHBOARD="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
+const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const AUTO_MS=120_000;
 const QUIET_MS=2_500;
 
@@ -26,6 +27,8 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
 }
 const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 const when=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
+function noteIdFromUrl(v:any){try{return new URL(String(v||"")).pathname.split("/").filter(Boolean)[0]||""}catch{return""}}
+async function enrichPeople(rows:Row[]){const ids=[...new Set(rows.map(r=>noteIdFromUrl(r.actor_url)).filter(Boolean))];if(!ids.length)return rows;try{const r=await fetch(ICON,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteIds:ids}),cache:"no-store"}),p=await r.json(),m=new Map((p.items||[]).map((x:any)=>[String(x.noteId||""),x.image]));return rows.map(x=>({...x,actor_image_url:x.actor_image_url||m.get(noteIdFromUrl(x.actor_url))||null}))}catch{return rows}}
 
 function Sparkline({rows,field}:{rows:Row[];field:string}){
   const data=rows.map(r=>Number(r[field])).filter(Number.isFinite);
@@ -61,13 +64,14 @@ function AnalysisPanel({revision}:{revision:number}){
   </section>;
 }
 
-function SocialV2Panel({revision}:{revision:number}){
-  const[direction,setDirection]=useState("followers"),[mode,setMode]=useState("current"),[change,setChange]=useState("all"),[rows,setRows]=useState<Row[]>([]),[meta,setMeta]=useState<any>(null),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[error,setError]=useState("");
-  async function load(p=1){setLoading(true);setError("");try{const x=await post(SOCIAL,mode==="changes"?"changes":"current",{direction,change,page:p,pageSize:100},35_000);setRows(x.rows||[]);setMeta(x);setPage(p)}catch(e){setError(e instanceof Error?e.message:"フォロー情報を読めませんでした")}finally{setLoading(false)}}
+function SocialV2Panel({revision,onRevision}:{revision:number;onRevision:()=>void}){
+  const[direction,setDirection]=useState("followers"),[mode,setMode]=useState("current"),[change,setChange]=useState("all"),[rows,setRows]=useState<Row[]>([]),[meta,setMeta]=useState<any>(null),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[syncing,setSyncing]=useState(false),[error,setError]=useState("");
+  async function load(p=1){setLoading(true);setError("");try{const x=await post(SOCIAL,mode==="changes"?"changes":"current",{direction,change,page:p,pageSize:100},35_000);setRows(await enrichPeople(x.rows||[]));setMeta(x);setPage(p)}catch(e){setError(e instanceof Error?e.message:"フォロー情報を読めませんでした")}finally{setLoading(false)}}
+  async function syncLatest(){if(syncing)return;setSyncing(true);setError("");try{await post(RELATIONS,"sync",{},120_000);onRevision();await load(1)}catch(e){setError(e instanceof Error?e.message:"最新照合に失敗しました")}finally{setSyncing(false)}}
   useEffect(()=>{void load(1)},[direction,mode,change,revision]);
   const pages=Math.max(1,Math.ceil(Number(meta?.total||0)/100));
   return <section className="miv5-social">
-    <header><div><small>SOCIAL LIVE</small><h2>フォロー・フォロワー 最新</h2></div><button onClick={()=>void load(page)}>再読込</button></header>
+    <header><div><small>SOCIAL LIVE</small><h2>フォロー・フォロワー 最新</h2></div><button className="miv5-social-refresh" disabled={syncing} onClick={()=>void syncLatest()}>{syncing?"照合中…":"最新を再同期"}</button></header>
     <div className="miv5-tabs"><button className={direction==="followers"?"active":""} onClick={()=>setDirection("followers")}>フォロワー</button><button className={direction==="followings"?"active":""} onClick={()=>setDirection("followings")}>フォロー中</button><button className={mode==="current"?"active":""} onClick={()=>setMode("current")}>現在</button><button className={mode==="changes"?"active":""} onClick={()=>setMode("changes")}>増減</button>{mode==="changes"?<><button className={change==="added"?"active":""} onClick={()=>setChange("added")}>増えた</button><button className={change==="removed"?"active":""} onClick={()=>setChange("removed")}>減った</button></>:null}</div>
     {meta?<div className="miv5-socialmeta"><b>公式総数 {fmt(meta.officialTotal)}</b><span>名前取得 {fmt(meta.namedCount??meta.total)}人</span><span>前回比 {Number(meta.netDelta||0)>0?"+":""}{fmt(meta.netDelta||0)}</span><span>最終同期 {when(meta.scannedAt)}</span></div>:null}
     {meta?.message?<p className="miv5-note">{meta.message}</p>:null}{error?<p className="err">{error}</p>:null}
@@ -76,46 +80,34 @@ function SocialV2Panel({revision}:{revision:number}){
   </section>;
 }
 
+function OfficialStats({data}:{data:any}){
+  if(!data)return null;
+  const articles=data.articles||[],likes=articles.reduce((s:number,r:Row)=>s+Number(r.like_count||0),0),comments=articles.reduce((s:number,r:Row)=>s+Number(r.comment_count||0),0),creator=data.creator||{},stats=data.stats||{};
+  return <section className="miv5-official"><article><small>記事</small><b>{fmt(creator.notes??stats.storedArticles??articles.length)}</b><span>保存 {fmt(stats.storedArticles??articles.length)}</span></article><article><small>スキ総数</small><b>{fmt(likes)}</b><span>人物取得 {fmt(stats.identifiedLikes||0)}</span></article><article><small>コメント総数</small><b>{fmt(comments)}</b><span>詳細は順次補完</span></article><article><small>フォロワー</small><b>{fmt(creator.followers)}</b><span>note公式</span></article><article><small>フォロー中</small><b>{fmt(creator.following)}</b><span>note公式</span></article></section>;
+}
+
 export function MemberInsightLiveV2(){
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[analysis,setAnalysis]=useState(false),[social,setSocial]=useState(false);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[analysis,setAnalysis]=useState(false),[social,setSocial]=useState(false),[official,setOfficial]=useState<any>(null);
   const running=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0);
+  async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* normal panels still remain usable */}}
   async function publicSync(force=false){
-    if(running.current)return false;
-    const now=Date.now();
-    if(!force&&(document.visibilityState!=="visible"||now-lastInteraction.current<QUIET_MS||now-lastRun.current<AUTO_MS))return false;
+    if(running.current)return false;const now=Date.now();if(!force&&(document.visibilityState!=="visible"||now-lastInteraction.current<QUIET_MS||now-lastRun.current<AUTO_MS))return false;
     running.current=true;lastRun.current=now;
-    try{const p=await post(MEMBER,"sync",{},75_000);setStatus(`自動更新済み・記事${fmt(p.scannedArticles||0)}件 / 履歴ページ${fmt(p.historyPage||0)}`);setRevision(v=>v+1);return true}
+    try{const p=await post(MEMBER,"sync",{},75_000);setStatus(`自動更新済み・記事確認${fmt(p.scannedArticles||0)}件 / 保存記事${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);setRevision(v=>v+1);void loadOfficial();return true}
     catch(e){setStatus(`自動更新は次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
     finally{running.current=false}
   }
   async function manualRefresh(){
     if(manualBusy)return;setManualBusy(true);setStatus("公開履歴を更新中…");
-    try{
-      await publicSync(true);
-      setStatus("フォロー・フォロワーを最新照合中…");
-      try{await post(RELATIONS,"sync",{},120_000)}catch{/* relation cron remains a safety net */}
-      setRevision(v=>v+1);
-      setStatus("最新版アプリを確認中…");
-      if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}
-      await fetch(`./?app-check=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);
-      setStatus("データ・アプリ最新版を更新しました");
-      window.setTimeout(()=>{const u=new URL(location.href);u.searchParams.set("refresh",String(Date.now()));u.hash="dashboard";location.replace(u.toString())},450);
-    }catch(e){setStatus(e instanceof Error?`更新エラー：${e.message}`:"更新エラー");setManualBusy(false)}
+    try{await publicSync(true);setStatus("フォロー・フォロワーを最新照合中…");try{await post(RELATIONS,"sync",{},120_000)}catch{}setRevision(v=>v+1);await loadOfficial();setStatus("最新版アプリを確認中…");if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}await fetch(`./?app-check=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);setStatus("データ・アプリ最新版を更新しました");window.setTimeout(()=>{const u=new URL(location.href);u.searchParams.set("refresh",String(Date.now()));u.hash="dashboard";location.replace(u.toString())},450)}catch(e){setStatus(e instanceof Error?`更新エラー：${e.message}`:"更新エラー");setManualBusy(false)}
   }
-  useEffect(()=>{
-    const touch=()=>{lastInteraction.current=Date.now()};
-    window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
-    const first=window.setTimeout(()=>void publicSync(true),3000);
-    const timer=window.setInterval(()=>void publicSync(false),15_000);
-    const visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>void publicSync(false),QUIET_MS)};
-    document.addEventListener("visibilitychange",visible);
-    return()=>{window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)};
-  },[]);
+  useEffect(()=>{void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});const first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>void publicSync(false),QUIET_MS)};document.addEventListener("visibilitychange",visible);return()=>{window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)}},[]);
   function capture(e:React.MouseEvent){const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;const label=t.closest("button")?.textContent?.trim()||"";setAnalysis(false);setSocial(label==="フォロー")}
   const mode=analysis?"analysis":social?"social":"normal";
   return <div className={`miv5 ${mode}`} onClickCapture={capture}>
-    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>公開データはバックグラウンド＋画面表示中2分ごとに継続取得。本人限定の購入・メンシプ等は通知ベル同期。</small></div><div><button className={analysis?"active":""} onClick={()=>{setAnalysis(v=>!v);setSocial(false)}}>推移分析</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
+    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>記事数・スキ総数・コメント総数・フォロー数はnote公式値を表示。人物・本文履歴は裏で不足分を継続補完します。</small></div><div><button className={analysis?"active":""} onClick={()=>{setAnalysis(v=>!v);setSocial(false)}}>推移分析</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
+    <OfficialStats data={official}/>
     <MemberInsightUnifiedV4 revision={revision}/>
-    {analysis?<AnalysisDashboardV2 revision={revision}/>:social?<SocialV2Panel revision={revision}/>:null}
+    {analysis?<AnalysisDashboardV2 revision={revision}/>:social?<SocialV2Panel revision={revision} onRevision={()=>setRevision(v=>v+1)}/>:null}
   </div>;
 }
