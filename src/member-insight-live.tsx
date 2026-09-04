@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
-import { MemberInsightUnifiedV2 } from "./member-insight-unified-v2";
+import { MemberInsightUnifiedV3 } from "./member-insight-unified-v3";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -55,5 +55,5 @@ export function MemberInsightLive() {
     };
   }, []);
 
-  return <MemberInsightUnifiedV2 revision={revision} />;
+  return <MemberInsightUnifiedV3 revision={revision} />;
 }
