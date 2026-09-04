@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
+import { AnalysisDashboardV2 } from "./member-insight-analysis-v2";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
 
@@ -115,6 +116,6 @@ export function MemberInsightLiveV2(){
   return <div className={`miv5 ${mode}`} onClickCapture={capture}>
     <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>公開データはバックグラウンド＋画面表示中2分ごとに継続取得。本人限定の購入・メンシプ等は通知ベル同期。</small></div><div><button className={analysis?"active":""} onClick={()=>{setAnalysis(v=>!v);setSocial(false)}}>推移分析</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
     <MemberInsightUnifiedV4 revision={revision}/>
-    {analysis?<AnalysisPanel revision={revision}/>:social?<SocialV2Panel revision={revision}/>:null}
+    {analysis?<AnalysisDashboardV2 revision={revision}/>:social?<SocialV2Panel revision={revision}/>:null}
   </div>;
 }
