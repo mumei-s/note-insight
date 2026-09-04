@@ -26,7 +26,7 @@ test("OWNER can add or remove favorites directly beside note profile links witho
   const quick = await read("public/insight-favorite-quick.js");
   const reader = await read("src/favorite-reader.tsx");
 
-  assert.match(index, /insight-favorite-quick\.js/);
+  assert.match(index, /insight-favorite-quick\.js\?v=2/);
   assert.match(index, /notification-import\.html/);
   assert.match(index, /searchParams\.set\("autopair", "1"\)/);
   assert.match(quick, /action:'favorites'/);
@@ -37,4 +37,12 @@ test("OWNER can add or remove favorites directly beside note profile links witho
   assert.match(quick, /☆/);
   assert.match(reader, /action: "favorites"/);
   assert.match(reader, /action: "favorite_toggle"/);
+});
+
+test("quick favorites never rescan the whole DOM on every mutation or a permanent interval", async () => {
+  const quick = await read("public/insight-favorite-quick.js");
+  assert.doesNotMatch(quick, /new MutationObserver/);
+  assert.doesNotMatch(quick, /setInterval/);
+  assert.match(quick, /scheduleScan/);
+  assert.match(quick, /requestIdleCallback/);
 });
