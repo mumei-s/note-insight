@@ -4,21 +4,21 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("participant dashboard uses calendar-first unified INSIGHT v3 without overview duplication", async () => {
+test("participant dashboard uses calendar-first unified INSIGHT v4 without overview duplication", async () => {
   const app = await read("src/App.tsx");
   const live = await read("src/member-insight-live.tsx");
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
 
   assert.match(app, /MemberInsightLive/);
   assert.match(app, /route === "dashboard"[\s\S]*MemberInsightLive/);
-  assert.match(live, /MemberInsightUnifiedV3 revision=\{revision\}/);
+  assert.match(live, /MemberInsightUnifiedV4 revision=\{revision\}/);
   assert.match(full, /useState<Tab>\("likes"\)/);
   assert.doesNotMatch(full, /\["overview","概要"\]/);
   for (const label of ["スキ履歴", "スキ順位", "コメント", "コメント順位", "マガジン", "お気に入り", "フォロー", "通知", "記事", "アカウント切替", "データ更新"]) assert.match(full, new RegExp(label));
 });
 
 test("likes keep avatars, favorite stars, and day month year filters with missing-icon enrichment", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
 
   assert.match(full, /creator-icons/);
@@ -34,7 +34,7 @@ test("likes keep avatars, favorite stars, and day month year filters with missin
 });
 
 test("comments support calendar to article list to thread search while keeping heart-close state", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   const extras = await read("supabase/functions/insight-member-extras/index.ts");
   assert.match(full, /comment_articles/);
   assert.match(full, /comments_filtered/);
@@ -48,7 +48,7 @@ test("comments support calendar to article list to thread search while keeping h
 });
 
 test("comment ranking explains initial-comment and article-count mismatch", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   assert.match(full, /miu-rank-metrics/);
   assert.match(full, /initial_comment_count/);
   assert.match(full, /article_count/);
@@ -58,7 +58,7 @@ test("comment ranking explains initial-comment and article-count mismatch", asyn
 });
 
 test("magazines show participants followers articles and JST calendar article search with cached fallback", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
   assert.match(full, /参加人数/);
   assert.match(full, /フォロワー/);
@@ -72,7 +72,7 @@ test("magazines show participants followers articles and JST calendar article se
 });
 
 test("favorite reader and social history both expose calendar search", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   assert.match(full, /favorite_articles/);
   assert.match(full, /favorite_read_set/);
   assert.match(full, /投稿日/);
@@ -84,20 +84,32 @@ test("favorite reader and social history both expose calendar search", async () 
   assert.match(full, /最終確認/);
 });
 
-test("notification cards separate actor action target and time with profile and target links", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
-  const history = await read("supabase/functions/insight-member-history/index.ts");
-  assert.match(full, /miu-notice-card/);
+test("notification V4 separates reply comment like commerce membership buzz and magazine", async () => {
+  const full = await read("src/member-insight-unified-v4.tsx");
+  const notify = await read("supabase/functions/insight-notification-history-v2/index.ts");
+  const ingest = await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+
+  assert.match(full, /insight-notification-history-v2/);
+  for (const label of ["返信", "コメント", "スキ", "購入", "チップ", "メンシプ", "話題", "マガジン", "高評価"]) assert.match(full, new RegExp(label));
   assert.match(full, /await enrich\(x\.rows\|\|\[\]\)/);
   assert.match(full, /プロフィール ↗/);
   assert.match(full, /記事を開く ↗/);
-  assert.match(full, /target_url/);
-  assert.match(full, /target_title/);
-  assert.match(history, /actor_url,target_title,target_url/);
+  assert.match(notify, /insight_public_comments/);
+  assert.match(notify, /not\("parent_key","is",null\)/);
+  assert.match(notify, /eq\("is_creator",false\)/);
+  assert.match(notify, /public_comment_reply/);
+  assert.match(notify, /actorNameFromText/);
+  assert.match(ingest, /npm:@supabase\/supabase-js@2\.112\.4/);
+  assert.match(ingest, /classifier:"action-v2"/);
+  assert.match(ingest, /あなたの記事にスキしました/);
+  assert.match(ingest, /メンバーシップに参加/);
+  assert.match(ingest, /話題です/);
+  assert.doesNotMatch(ingest, /if\(\/返信\/\.test\(t\)\)return"reply"/);
+  assert.doesNotMatch(ingest, /if\(\/コメント\/\.test\(t\)\)return"comment"/);
 });
 
 test("article archive uses JST calendar matching and authenticated thumbnail cards", async () => {
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
   const thumbs = await read("supabase/functions/insight-article-thumbnails/index.ts");
   assert.match(full, /自分の記事・過去アーカイブ/);
@@ -138,10 +150,10 @@ test("comments refresh recent and pending threads without rebuilding history", a
   assert.match(history, /insight_fast_comment_threads/);
 });
 
-test("public comment/like notifications identify actors without private bell pairing", async () => {
+test("public comment and like notifications identify actors without private bell pairing", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-  const full = await read("src/member-insight-unified-v3.tsx");
+  const full = await read("src/member-insight-unified-v4.tsx");
 
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
@@ -150,11 +162,12 @@ test("public comment/like notifications identify actors without private bell pai
   assert.match(full, /r\.actor_name/);
 });
 
-test("personal notification pairing is account-safe and reports paired state", async () => {
+test("personal notification pairing stays account-safe and note browsing stays passive", async () => {
   const pairing = await read("supabase/functions/insight-notification-import-token/index.ts");
   const ingest = await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   const setup = await read("public/notification-import.html");
   const userScript = await read("public/note-insight-notification-sync.user.js");
+  const live = await read("src/member-insight-live.tsx");
 
   assert.match(pairing, /authorized:true/);
   assert.match(pairing, /pairedState/);
@@ -164,8 +177,21 @@ test("personal notification pairing is account-safe and reports paired state", a
   assert.match(ingest, /synced_note_id/);
   assert.match(setup, /本人通知は連携済みです/);
   assert.match(setup, /スキ・公開コメント・公開フォローは本人通知なしでもINSIGHTで追跡/);
+  assert.match(userScript, /@version\s+2\.4\.0/);
   assert.match(userScript, /\/api\/v2\/current_user/);
   assert.match(userScript, /TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
+  assert.doesNotMatch(userScript, /observe\(document\.documentElement/);
+  assert.match(userScript, /rootObserver\.observe\(root,\{childList:true,subtree:true\}\)/);
+  assert.match(userScript, /originalTop/);
+  assert.match(userScript, /box\.scrollTop=originalTop/);
+  assert.match(userScript, /document\.body\|\|box===document\.documentElement/);
+  assert.match(userScript, /if\(!bellLike\(target\)/);
+  assert.doesNotMatch(userScript, /preventDefault\(/);
+  assert.doesNotMatch(userScript, /stopPropagation\(/);
+  assert.match(live, /QUIET_AFTER_INTERACTION_MS/);
+  assert.match(live, /pointerdown/);
+  assert.match(live, /touchstart/);
+  assert.match(live, /scroll/);
 });
 
 test("access switching and browser history never use the profile code as a password", async () => {
