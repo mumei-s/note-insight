@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
+import { MemberInsightAnalyticsV2 } from "./member-insight-analytics-v2";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -9,6 +10,7 @@ const QUIET_AFTER_INTERACTION_MS = 2_500;
 
 export function MemberInsightLive() {
   const [revision, setRevision] = useState(0);
+  const [screen, setScreen] = useState<"insight" | "analytics">("insight");
   const lastRun = useRef(0);
   const lastInteraction = useRef(Date.now());
   const running = useRef(false);
@@ -77,5 +79,13 @@ export function MemberInsightLive() {
     };
   }, []);
 
-  return <MemberInsightUnifiedV4 revision={revision} />;
+  return <>
+    <div className="mia-switcher" role="navigation" aria-label="INSIGHT表示切替">
+      <button className={screen === "insight" ? "active" : ""} onClick={() => setScreen("insight")}>INSIGHT</button>
+      <button className={screen === "analytics" ? "active" : ""} onClick={() => setScreen("analytics")}>📊 分析</button>
+    </div>
+    {screen === "analytics"
+      ? <MemberInsightAnalyticsV2 revision={revision} onBack={() => setScreen("insight")} />
+      : <MemberInsightUnifiedV4 revision={revision} />}
+  </>;
 }
