@@ -72,10 +72,17 @@ async function sync(req:Request){
 
   let added=0;
   for(const art of seenArticles.values()){
-    const {data:old}=await db.from("insight_public_articles").select("like_count,comment_count").eq("member_id",dataMember).eq("article_key",art.key).maybeSingle();
-    const oldLikes=Number(old?.like_count??-1),oldComments=Number(old?.comment_count??-1);
+    const [{data:old},{count:knownLikeCount,error:likeCountError},{count:knownCommentCount,error:commentCountError}]=await Promise.all([
+      db.from("insight_public_articles").select("like_count,comment_count").eq("member_id",dataMember).eq("article_key",art.key).maybeSingle(),
+      db.from("insight_public_likes").select("liker_key",{count:"exact",head:true}).eq("member_id",dataMember).eq("article_key",art.key),
+      db.from("insight_public_comments").select("comment_key",{count:"exact",head:true}).eq("member_id",dataMember).eq("article_key",art.key),
+    ]);
+    if(likeCountError)throw likeCountError;if(commentCountError)throw commentCountError;
+    const oldLikes=Number(old?.like_count??-1),oldComments=Number(old?.comment_count??-1),storedLikes=Number(knownLikeCount||0),storedComments=Number(knownCommentCount||0);
+    const needsLikeDetails=!old||art.likes!==oldLikes||storedLikes<art.likes;
+    const needsCommentDetails=!old||art.comments!==oldComments||refreshComments.has(art.key)||storedComments<art.comments;
 
-    if(!old||art.likes!==oldLikes){
+    if(needsLikeDetails){
       const rows=await likes(art.key),{data:known}=await db.from("insight_public_likes").select("liker_key").eq("member_id",dataMember).eq("article_key",art.key),keys=new Set((known||[]).map((x:any)=>String(x.liker_key)));
       for(const x of rows){
         if(keys.has(x.key))continue;
@@ -84,7 +91,7 @@ async function sync(req:Request){
       }
     }
 
-    if(!old||art.comments!==oldComments||refreshComments.has(art.key)){
+    if(needsCommentDetails){
       try{
         const rows:any[]=await comments(art.key),{data:known}=await db.from("insight_public_comments").select("comment_key").eq("member_id",dataMember).eq("article_key",art.key),keys=new Set((known||[]).map((x:any)=>String(x.comment_key)));
         for(const x of rows){
