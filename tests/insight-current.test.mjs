@@ -101,29 +101,37 @@ test("personal notification pairing stays account-safe and note browsing stays p
   const userScript = await read("public/note-insight-notification-sync.user.js");
   assert.match(pairing,/pair-exchange/);
   assert.match(ingest,/NOTIFICATION_ACCOUNT_MISMATCH/);
-  assert.match(setup,/通知・統計同期 v2\.6\.0/);
-  assert.match(userScript,/@version\s+2\.6\.0/);
+  assert.match(setup,/共通同期ツール v2\.7\.0/);
+  assert.match(setup,/参加者ごとの専用ファイルは不要/);
+  assert.match(setup,/本人通知を今すぐ同期/);
+  assert.match(setup,/ダッシュボードを今すぐ同期/);
+  assert.match(userScript,/@version\s+2\.7\.0/);
   assert.match(userScript,/TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
   assert.match(userScript,/MUTE_PROFILE_PREFIX/);
   assert.match(userScript,/byName=profiles\.some/);
   assert.match(userScript,/isMagazineNotice\(text\)&&\(byLink\|\|byName\|\|byId\)/);
+  assert.doesNotMatch(userScript,/statusDock/);
+  assert.doesNotMatch(userScript,/data-sync-tab/);
   assert.doesNotMatch(userScript,/observe\(document\.documentElement/);
   assert.match(userScript,/rootObserver\.observe\(root,\{childList:true,subtree:true\}\)/);
-  assert.match(userScript,/originalTop/);
-  assert.match(userScript,/box\.scrollTop=originalTop/);
-  assert.match(userScript,/if\(!bellLike\(target\)/);
+  assert.match(userScript,/explicitNoticeSync/);
+  assert.match(userScript,/if\(explicitNoticeSync\)/);
+  assert.match(userScript,/collectHistoryManual/);
+  assert.match(userScript,/box\.scrollTop=original/);
   assert.doesNotMatch(userScript,/preventDefault\(/);
   assert.doesNotMatch(userScript,/stopPropagation\(/);
 });
 
-test("dashboard sync v2.6 is explicit verified and has DOM fallback", async () => {
+test("dashboard sync v2.7 is explicit and has DOM fallback", async () => {
   const userScript = await read("public/note-insight-notification-sync.user.js");
   const dashboard = await read("supabase/functions/insight-dashboard-data/index.ts");
   assert.match(userScript,/isDashboardPage/);
   assert.match(userScript,/dashboardDomRows/);
-  assert.match(userScript,/📊 INSIGHT統計同期/);
-  assert.match(userScript,/DASHBOARD_INGEST_NOT_CONFIRMED/);
-  assert.match(userScript,/setTimeout\(\(\)=>void syncDashboardIfDue\(lifecycleToken,account\.id,true,true\),1100\)/);
+  assert.match(userScript,/mumei_dashboard/);
+  assert.match(userScript,/ダッシュボード統計を今すぐ同期/);
+  assert.match(userScript,/syncDashboard\(true\)/);
+  assert.doesNotMatch(userScript,/DASH_INTERVAL/);
+  assert.doesNotMatch(userScript,/setInterval\([^)]*syncDashboard/);
   assert.match(dashboard,/insight_dashboard_snapshots/);
   assert.match(dashboard,/snapshotId/);
   assert.match(dashboard,/note-stats-api/);
