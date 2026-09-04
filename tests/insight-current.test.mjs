@@ -122,7 +122,8 @@ test("distribution remains browser-neutral with PWA TOP hardening only as a safe
   assert.equal(manifest.id, "/note-insight/");
   assert.equal(manifest.scope, "/note-insight/");
   assert.match(manifest.start_url, /^\/note-insight\/\?launch=top$/);
-  assert.match(sw, /mumei-note-insight-v29/);
+  assert.match(sw, /mumei-note-insight-v30/);
   assert.match(sw, /notification-setup\.html/);
+  assert.match(sw, /autopair/);
   assert.match(setup, /from.*insight/);
 });
