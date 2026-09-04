@@ -1,18 +1,5 @@
-const CACHE_NAME = "mumei-note-insight-v29";
-const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg"];
-const ROOT_URL = new URL("./?launch=top", self.registration.scope).href;
-
-function notificationPage(url) {
-  const u = new URL(url);
-  return u.pathname.endsWith("/notification-setup.html") || u.pathname.endsWith("/notification-import.html");
-}
-
-function staleNotificationEntry(url) {
-  const u = new URL(url);
-  if (u.pathname.endsWith("/notification-setup.html")) return u.searchParams.get("from") !== "insight";
-  if (u.pathname.endsWith("/notification-import.html")) return u.searchParams.get("from") !== "setup";
-  return false;
-}
+const CACHE_NAME = "mumei-note-insight-v31";
+const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -22,14 +9,8 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+    await Promise.all(keys.filter((key) => key.startsWith("mumei-note-insight-") && key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
-
-    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    await Promise.all(windows.map(async (client) => {
-      if (!notificationPage(client.url)) return;
-      try { await client.navigate(ROOT_URL); } catch { /* Some browsers reject background navigation. */ }
-    }));
   })());
 });
 
@@ -37,18 +18,22 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) return;
 
-  if (event.request.mode === "navigate" && staleNotificationEntry(requestUrl.href)) {
-    event.respondWith(Promise.resolve(Response.redirect(ROOT_URL, 302)));
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(event.request, { cache: "no-store" });
+      if (response && response.ok) {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./"))),
-  );
+        void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+      }
+      return response;
+    } catch {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      if (event.request.mode === "navigate") {
+        const shell = await caches.match("./index.html") || await caches.match("./");
+        if (shell) return shell;
+      }
+      throw new Error("OFFLINE_AND_NOT_CACHED");
+    }
+  })());
 });
