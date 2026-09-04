@@ -41,17 +41,21 @@ test("comment ranking keeps initial article duplicate and final metrics", async 
 
 test("magazines and favorite reader keep JST calendar search", async () => {
   const full = await read("src/member-insight-unified-v4.tsx");
-  for (const token of ["参加人数","フォロワー","記事数","magazine_articles","recentArticles","jstDay\\(a\\.publishAt\\)","favorite_articles","favorite_read_set","増減日","最終確認"]) assert.match(full,new RegExp(token));
+  for (const token of ["参加人数","フォロワー","記事数","magazine_articles","recentArticles","jstDay\\(a\\.publishAt\\)","favorite_articles","favorite_read_set"]) assert.match(full,new RegExp(token));
 });
 
-test("notification UI separates reaction commerce membership buzz and magazine", async () => {
+test("notification UI separates categories and all merges true comments replies", async () => {
   const full = await read("src/member-insight-unified-v4.tsx");
   const notify = await read("supabase/functions/insight-notification-history-v2/index.ts");
   const ingest = await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   for (const label of ["返信","コメント","スキ","購入","チップ","メンシプ","話題","マガジン","高評価"]) assert.match(full,new RegExp(label));
   assert.match(full,/プロフィール ↗/);
   assert.match(full,/記事を開く ↗/);
-  assert.match(notify,/listCommentEvents/);
+  assert.match(notify,/publicCommentRows/);
+  assert.match(notify,/browserNoticeRows/);
+  assert.match(notify,/listCombined/);
+  assert.match(notify,/kind==="all"\|\|kind==="reply"\|\|kind==="comment"/);
+  assert.match(notify,/member-public-watch/);
   assert.match(ingest,/classifier:"action-v3"/);
   assert.match(ingest,/メンバーシップに参加しました/);
   assert.match(ingest,/話題です/);
@@ -97,24 +101,47 @@ test("comment refresh still follows pending threads and nested replies", async (
   assert.match(scheduled,/insight_fast_comment_threads/);
 });
 
-test("personal notification pairing stays account-safe and note browsing stays passive", async () => {
+test("social screen is one add remove timeline with direct pages and real resync", async () => {
+  const live = await read("src/member-insight-live.tsx");
+  const social = await read("src/member-insight-social-v2.tsx");
+  const events = await read("supabase/functions/insight-social-events/index.ts");
+  const relations = await read("supabase/functions/insight-relations/index.ts");
+  assert.match(live,/MemberInsightSocialV2/);
+  assert.match(live,/mia-social-override/);
+  assert.match(live,/scrollIntoView/);
+  assert.match(social,/フォロー・フォロワー増減/);
+  assert.match(social,/"all","すべて"/);
+  assert.match(social,/"added","増"/);
+  assert.match(social,/"removed","減"/);
+  assert.match(social,/最新を再同期/);
+  assert.match(social,/確認日時/);
+  assert.match(social,/<select value=\{page\}/);
+  assert.doesNotMatch(social,/現在一覧/);
+  assert.match(events,/change_count/);
+  assert.match(events,/direction==="followers"\|\|direction==="followings"/);
+  assert.match(relations,/aggregateEvent/);
+  assert.match(relations,/change_count:count/);
+  assert.match(relations,/netDelta/);
+});
+
+test("personal notification pairing stays account-safe and bell import stays explicit", async () => {
   const pairing = await read("supabase/functions/insight-notification-import-token/index.ts");
   const ingest = await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   const setup = await read("public/notification-import.html");
   const userScript = await read("public/note-insight-notification-sync.user.js");
   assert.match(pairing,/pair-exchange/);
   assert.match(ingest,/NOTIFICATION_ACCOUNT_MISMATCH/);
-  assert.match(setup,/共通同期ツール v2\.8\.1/);
+  assert.match(setup,/共通同期ツール v2\.8\.2/);
   assert.match(setup,/新しい参加者が増えても作り直し不要/);
   assert.match(setup,/参加者ごとの専用ファイルは不要/);
-  assert.match(setup,/INSIGHT保存/);
-  assert.match(setup,/過去通知/);
+  assert.match(setup,/表示中を取り込む/);
+  assert.match(setup,/過去分を取り込む/);
   assert.match(setup,/iPhone Safariでの初回インストール/);
   assert.match(setup,/apps\.apple\.com\/jp\/app\/userscripts\/id1463298887/);
   assert.match(setup,/設定 → アプリ → Safari → 拡張機能 → Userscripts/);
   assert.match(setup,/コード画面まで開けているなら③までは成功/);
   assert.match(setup,/\.\/note-insight-notification-sync\.user\.js/);
-  assert.match(userScript,/@version\s+2\.8\.1/);
+  assert.match(userScript,/@version\s+2\.8\.2/);
   assert.match(userScript,/@grant\s+GM\.xmlHttpRequest/);
   assert.match(userScript,/@grant\s+GM\.getValue/);
   assert.match(userScript,/@grant\s+GM\.setValue/);
@@ -123,13 +150,10 @@ test("personal notification pairing stays account-safe and note browsing stays p
   assert.doesNotMatch(userScript,/GM_setValue/);
   assert.doesNotMatch(userScript,/GM_deleteValue/);
   assert.doesNotMatch(userScript,/GM_registerMenuCommand/);
-  assert.match(userScript,/TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
-  assert.match(userScript,/MUTE_PROFILE_PREFIX/);
-  assert.match(userScript,/byName=profiles\.some/);
-  assert.match(userScript,/isMagazineNotice\(text\)&&\(byLink\|\|byName\|\|byId\)/);
   assert.match(userScript,/ensurePanelAction/);
-  assert.match(userScript,/INSIGHT保存/);
-  assert.match(userScript,/過去通知/);
+  assert.match(userScript,/表示中を取り込む/);
+  assert.match(userScript,/過去分を取り込む/);
+  assert.match(userScript,/const ids=await muteIds\(accountId\),profiles=await muteProfiles\(accountId\)/);
   assert.doesNotMatch(userScript,/statusDock/);
   assert.doesNotMatch(userScript,/data-sync-tab/);
   assert.doesNotMatch(userScript,/explicitNoticeSync/);
@@ -142,10 +166,14 @@ test("personal notification pairing stays account-safe and note browsing stays p
   assert.doesNotMatch(userScript,/stopPropagation\(/);
 });
 
-test("dashboard sync v2.8 is explicit and has DOM fallback", async () => {
+test("dashboard sync v2.8.2 only runs on official note dashboard", async () => {
   const userScript = await read("public/note-insight-notification-sync.user.js");
+  const setup = await read("public/notification-import.html");
   const dashboard = await read("supabase/functions/insight-dashboard-data/index.ts");
-  assert.match(userScript,/isDashboardPage/);
+  assert.match(setup,/https:\/\/note\.com\/sitesettings\/stats/);
+  assert.doesNotMatch(setup,/https:\/\/note\.com\/stats["']/);
+  assert.match(userScript,/startsWith\('\/sitesettings\/stats'\)/);
+  assert.doesNotMatch(userScript,/startsWith\('\/stats'\)/);
   assert.match(userScript,/dashboardDomRows/);
   assert.match(userScript,/ensureDashboardAction/);
   assert.match(userScript,/📊 INSIGHTへ統計保存/);
