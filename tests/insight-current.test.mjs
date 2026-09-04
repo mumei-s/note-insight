@@ -70,12 +70,15 @@ test("article archive keeps JST thumbnails and incremental rendering", async () 
 
 test("member sync discovers the full article catalog instead of stopping at 18", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
+  const auth = await read("supabase/functions/insight-member-api/auth.ts");
   const note = await read("supabase/functions/insight-member-api/note.ts");
   const backfill = await read("supabase/functions/insight-like-backfill/index.ts");
   assert.match(api,/syncArticleCatalog/);
+  assert.match(api,/syncArticleCatalog\(m\.noteId,dataMember,baseline\)/);
   assert.match(api,/page<=200/);
   assert.match(api,/historyPage=3\+\(\(cursor-1\)%198\)/);
   assert.match(api,/catalog,/);
+  assert.match(auth,/noteId:String\(a\.note_id\)/);
   assert.match(backfill,/discoverCatalog/);
   assert.match(backfill,/memberId/);
   assert.match(backfill,/page<=200/);
@@ -101,33 +104,36 @@ test("personal notification pairing stays account-safe and note browsing stays p
   const userScript = await read("public/note-insight-notification-sync.user.js");
   assert.match(pairing,/pair-exchange/);
   assert.match(ingest,/NOTIFICATION_ACCOUNT_MISMATCH/);
-  assert.match(setup,/共通同期ツール v2\.7\.0/);
+  assert.match(setup,/共通同期ツール v2\.8\.0/);
+  assert.match(setup,/新しい参加者が増えても作り直し不要/);
   assert.match(setup,/参加者ごとの専用ファイルは不要/);
-  assert.match(setup,/本人通知を今すぐ同期/);
-  assert.match(setup,/ダッシュボードを今すぐ同期/);
-  assert.match(userScript,/@version\s+2\.7\.0/);
+  assert.match(setup,/INSIGHT保存/);
+  assert.match(userScript,/@version\s+2\.8\.0/);
   assert.match(userScript,/TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
   assert.match(userScript,/MUTE_PROFILE_PREFIX/);
   assert.match(userScript,/byName=profiles\.some/);
   assert.match(userScript,/isMagazineNotice\(text\)&&\(byLink\|\|byName\|\|byId\)/);
+  assert.match(userScript,/ensurePanelAction/);
+  assert.match(userScript,/INSIGHT保存/);
   assert.doesNotMatch(userScript,/statusDock/);
   assert.doesNotMatch(userScript,/data-sync-tab/);
+  assert.doesNotMatch(userScript,/explicitNoticeSync/);
+  assert.doesNotMatch(userScript,/mumei_notify/);
   assert.doesNotMatch(userScript,/observe\(document\.documentElement/);
   assert.match(userScript,/rootObserver\.observe\(root,\{childList:true,subtree:true\}\)/);
-  assert.match(userScript,/explicitNoticeSync/);
-  assert.match(userScript,/if\(explicitNoticeSync\)/);
   assert.match(userScript,/collectHistoryManual/);
   assert.match(userScript,/box\.scrollTop=original/);
   assert.doesNotMatch(userScript,/preventDefault\(/);
   assert.doesNotMatch(userScript,/stopPropagation\(/);
 });
 
-test("dashboard sync v2.7 is explicit and has DOM fallback", async () => {
+test("dashboard sync v2.8 is explicit and has DOM fallback", async () => {
   const userScript = await read("public/note-insight-notification-sync.user.js");
   const dashboard = await read("supabase/functions/insight-dashboard-data/index.ts");
   assert.match(userScript,/isDashboardPage/);
   assert.match(userScript,/dashboardDomRows/);
-  assert.match(userScript,/mumei_dashboard/);
+  assert.match(userScript,/ensureDashboardAction/);
+  assert.match(userScript,/📊 INSIGHTへ統計保存/);
   assert.match(userScript,/ダッシュボード統計を今すぐ同期/);
   assert.match(userScript,/syncDashboard\(true\)/);
   assert.doesNotMatch(userScript,/DASH_INTERVAL/);
