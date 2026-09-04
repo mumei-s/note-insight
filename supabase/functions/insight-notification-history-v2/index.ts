@@ -9,14 +9,17 @@ function out(x:unknown,s=200){return new Response(JSON.stringify(x),{status:s,he
 async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function auth(req:Request){const raw=req.headers.get("X-Insight-Token")||"";if(!raw)throw new Error("INSIGHT_LOGIN_REQUIRED");const {data:s}=await db.from("insight_member_sessions").select("id,application_id,expires_at,revoked_at").eq("token_hash",await sha(raw)).maybeSingle();if(!s||s.revoked_at||Date.parse(s.expires_at)<=Date.now())throw new Error("INSIGHT_SESSION_INVALID");const {data:a}=await db.from("insight_access_applications").select("id,note_id,status").eq("id",s.application_id).maybeSingle();if(!a||a.status!=="active")throw new Error("INSIGHT_MEMBER_INACTIVE");const noteId=String(a.note_id||"").toLowerCase();return{id:String(a.id),noteId,scope:noteId==="ss_yr"?"owner":String(a.id)}}
 const txt=(v:any,d="")=>typeof v==="string"?v:d;
+function validDate(v:any){if(!v)return null;const d=new Date(String(v));return Number.isNaN(d.getTime())?null:d.toISOString()}
 function cleanUrl(v:any){try{const u=new URL(String(v||""));u.search="";u.hash="";return u.toString().replace(/\/$/,"")}catch{return String(v||"").split("?")[0].replace(/\/$/,"")}}
 function noteIdFromUrl(v:any){try{const u=new URL(String(v||""));if(u.hostname!=="note.com"&&u.hostname!=="www.note.com")return"";return u.pathname.split("/").filter(Boolean)[0]||""}catch{return""}}
 function actorNameFromText(v:any){const t=String(v||"").replace(/\s+/g," ").trim();const m=t.match(/^(.{1,120}?)\s*さん(?:他\d+名)?(?:が|の)/);return m?.[1]?.trim()||null}
 function effectiveActorUrl(row:any,me:string){if(row.actor_url)return row.actor_url;const type=String(row.notification_type||"");if(!["magazine","buzz","membership"].includes(type))return null;const id=noteIdFromUrl(row.target_url);if(!id||id.toLowerCase()===me.toLowerCase())return null;return`https://note.com/${id}`}
 
-async function listCommentEvents(m:any,kind:"comment"|"reply",page:number,size:number,offset:number){
+async function listCommentEvents(m:any,kind:"comment"|"reply",page:number,size:number,offset:number,dateFrom:string|null,dateTo:string|null){
  let q=db.from("insight_public_comments").select("comment_key,article_key,parent_key,actor_key,actor_name,actor_url,actor_image_url,body,occurred_at",{count:"exact"}).eq("member_id",m.scope).eq("is_creator",false);
  q=kind==="reply"?q.not("parent_key","is",null):q.is("parent_key",null);
+ if(dateFrom)q=q.gte("occurred_at",dateFrom);
+ if(dateTo)q=q.lt("occurred_at",dateTo);
  const [{data,error,count},{data:articles,error:ae}]=await Promise.all([
    q.order("occurred_at",{ascending:false}).range(offset,offset+size-1),
    db.from("insight_public_articles").select("article_key,title,url").eq("member_id",m.scope)
@@ -24,18 +27,20 @@ async function listCommentEvents(m:any,kind:"comment"|"reply",page:number,size:n
  if(error)throw error;if(ae)throw ae;
  const amap=new Map((articles||[]).map((a:any)=>[String(a.article_key),a]));
  const rows=(data||[]).map((r:any)=>{const a=amap.get(String(r.article_key))||{};return{id:`${kind}:${r.comment_key}`,member_id:m.scope,notification_type:kind,raw_text:r.body||(kind==="reply"?"コメントへの返信":"コメント"),actor_name:r.actor_name||null,actor_url:r.actor_url||null,actor_image_url:r.actor_image_url||null,target_title:a.title||"記事",target_url:a.url||null,occurred_at:r.occurred_at,captured_at:r.occurred_at,meta:{source:kind==="reply"?"public_comment_reply":"public_comment_root",comment_key:r.comment_key,article_key:r.article_key,parent_key:r.parent_key||null}}});
- return{ok:true,page,pageSize:size,total:count||0,rows};
+ return{ok:true,page,pageSize:size,total:count||0,rows,dateFrom,dateTo};
 }
 
-async function listNotices(m:any,kind:string,page:number,size:number,offset:number){
+async function listNotices(m:any,kind:string,page:number,size:number,offset:number,dateFrom:string|null,dateTo:string|null){
  const ids=m.scope===m.id?[m.id]:[m.scope,m.id];
  let q=db.from("insight_notifications").select("id,member_id,fingerprint,notification_type,raw_text,actor_name,actor_url,target_title,target_url,occurred_at,captured_at,is_read,meta",{count:"exact"}).in("member_id",ids)
    .not("fingerprint","like","public-comment-summary%")
    .not("fingerprint","like","public-like-summary%");
  if(kind!=="all")q=q.eq("notification_type",kind);
+ if(dateFrom)q=q.gte("captured_at",dateFrom);
+ if(dateTo)q=q.lt("captured_at",dateTo);
  const {data,error,count}=await q.order("captured_at",{ascending:false}).range(offset,offset+size-1);if(error)throw error;
  const rows=(data||[]).map((r:any)=>{const actor_url=effectiveActorUrl(r,m.noteId);return{...r,actor_url,actor_name:r.actor_name||actorNameFromText(r.raw_text)||null,target_url:r.target_url?cleanUrl(r.target_url):null}});
- return{ok:true,page,pageSize:size,total:count||0,rows};
+ return{ok:true,page,pageSize:size,total:count||0,rows,dateFrom,dateTo};
 }
 
-Deno.serve(async(req)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H()});try{if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);const m=await auth(req),b=await req.json().catch(()=>({})),kind=txt(b.kind,"all"),page=Math.max(1,Number(b.page||1)),size=Math.min(100,Math.max(20,Number(b.pageSize||100))),offset=(page-1)*size;if(kind==="reply"||kind==="comment")return out(await listCommentEvents(m,kind,page,size,offset));return out(await listNotices(m,kind,page,size,offset))}catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
+Deno.serve(async(req)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H()});try{if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);const m=await auth(req),b=await req.json().catch(()=>({})),kind=txt(b.kind,"all"),page=Math.max(1,Number(b.page||1)),size=Math.min(100,Math.max(20,Number(b.pageSize||100))),offset=(page-1)*size,dateFrom=validDate(b.dateFrom),dateTo=validDate(b.dateTo);if(kind==="reply"||kind==="comment")return out(await listCommentEvents(m,kind,page,size,offset,dateFrom,dateTo));return out(await listNotices(m,kind,page,size,offset,dateFrom,dateTo))}catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
