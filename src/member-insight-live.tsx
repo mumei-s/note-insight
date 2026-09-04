@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
-import { MemberInsightAnalyticsV2 } from "./member-insight-analytics-v2";
+import { MemberInsightAnalyticsV3 } from "./member-insight-analytics-v3";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -85,7 +85,7 @@ export function MemberInsightLive() {
       <button className={screen === "analytics" ? "active" : ""} onClick={() => setScreen("analytics")}>📊 分析</button>
     </div>
     {screen === "analytics"
-      ? <MemberInsightAnalyticsV2 revision={revision} onBack={() => setScreen("insight")} />
+      ? <MemberInsightAnalyticsV3 revision={revision} onBack={() => setScreen("insight")} />
       : <MemberInsightUnifiedV4 revision={revision} />}
   </>;
 }
