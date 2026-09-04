@@ -4,27 +4,25 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("participant dashboard uses the unified full-history INSIGHT", async () => {
+test("participant dashboard uses calendar-first unified INSIGHT v2 without overview duplication", async () => {
   const app = await read("src/App.tsx");
   const live = await read("src/member-insight-live.tsx");
-  const full = await read("src/member-insight-unified.tsx");
+  const full = await read("src/member-insight-unified-v2.tsx");
 
   assert.match(app, /MemberInsightLive/);
   assert.match(app, /route === "dashboard"[\s\S]*MemberInsightLive/);
-  assert.doesNotMatch(app, /MemberInsightApp/);
-  assert.match(live, /visibilitychange/);
-  assert.match(live, /window\.addEventListener\("focus"/);
-  assert.match(live, /MemberInsightUnified revision=\{revision\}/);
-  for (const label of ["概要", "スキ履歴", "スキ順位", "コメント", "コメント順位", "マガジン", "お気に入り", "フォロー", "通知", "記事", "アカウント切替", "データ更新"]) assert.match(full, new RegExp(label));
-  assert.match(full, /FavoriteReader/);
-  assert.match(full, /ARTICLE ARCHIVE/);
+  assert.match(live, /MemberInsightUnifiedV2 revision=\{revision\}/);
+  assert.match(full, /useState<Tab>\("likes"\)/);
+  assert.doesNotMatch(full, /\["overview","概要"\]/);
+  for (const label of ["スキ履歴", "スキ順位", "コメント", "コメント順位", "マガジン", "お気に入り", "フォロー", "通知", "記事", "アカウント切替", "データ更新"]) assert.match(full, new RegExp(label));
 });
 
-test("likes keep avatars, favorite stars, and day month year filters", async () => {
-  const full = await read("src/member-insight-unified.tsx");
+test("likes keep avatars, favorite stars, and day month year filters with missing-icon enrichment", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
 
-  assert.match(full, /actor_image_url/);
+  assert.match(full, /creator-icons/);
+  assert.match(full, /await enrich\(x\.rows\|\|\[\]\)/);
   assert.match(full, /loading="lazy" decoding="async"/);
   assert.match(full, /日ごと/);
   assert.match(full, /月ごと/);
@@ -35,30 +33,56 @@ test("likes keep avatars, favorite stars, and day month year filters", async () 
   assert.match(history, /insight_favorite_creators/);
 });
 
-test("comment workflow keeps ranking and heart-close state", async () => {
-  const full = await read("src/member-insight-unified.tsx");
-  const history = await read("supabase/functions/insight-member-history/index.ts");
-
+test("comments support calendar to article list to thread search while keeping heart-close state", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
+  assert.match(full, /comment_articles/);
+  assert.match(full, /comments_filtered/);
+  assert.match(full, /コメント日/);
+  assert.match(full, /この日の記事すべて/);
+  assert.match(full, /名前・記事・コメント本文/);
   assert.match(full, /heart_closed/);
   assert.match(full, /♡で終了/);
-  assert.match(full, /COMMENT RANKING/);
-  assert.match(full, /comment_ranking/);
-  assert.match(full, /commenter_comments/);
-  assert.match(history, /insight_fast_comment_threads/);
-  assert.match(history, /insight_fast_commenter_ranking/);
-  assert.match(history, /insight_fast_commenter_roots/);
 });
 
-test("magazines and article archive remain first-class INSIGHT features", async () => {
-  const full = await read("src/member-insight-unified.tsx");
-  const history = await read("supabase/functions/insight-member-history/index.ts");
+test("comment ranking uses the formerly empty area for three useful metrics", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
+  assert.match(full, /miu-rank-metrics/);
+  assert.match(full, /initial_comment_count/);
+  assert.match(full, /article_count/);
+  assert.match(full, /最終コメント/);
+  assert.match(full, /commenter_comments/);
+});
 
-  assert.match(full, /共同マガジン/);
-  assert.match(full, /自分がオーナー/);
-  assert.match(full, /参加中/);
+test("magazines show participants followers articles and calendar article search", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
+  assert.match(full, /参加人数/);
+  assert.match(full, /フォロワー/);
+  assert.match(full, /記事数/);
+  assert.match(full, /magazine_articles/);
+  assert.match(full, /記事日/);
+  assert.match(full, /recentArticles/);
+  assert.match(history, /insight_magazine_cache/);
+});
+
+test("favorite reader and social history both expose calendar search", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
+  assert.match(full, /favorite_articles/);
+  assert.match(full, /favorite_read_set/);
+  assert.match(full, /投稿日/);
+  assert.match(full, /既読にする/);
+  assert.match(full, /未読に戻す/);
+  assert.match(full, /social_changes/);
+  assert.match(full, /増減日/);
+  assert.match(full, /最終確認/);
+});
+
+test("article archive remains searchable and calendar addressable", async () => {
+  const full = await read("src/member-insight-unified-v2.tsx");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
   assert.match(full, /自分の記事・過去アーカイブ/);
   assert.match(full, /記事タイトルを検索/);
-  assert.match(history, /insight_magazine_cache/);
+  assert.match(full, /type="date"/);
   assert.match(history, /limit\(1000\)/);
 });
 
@@ -91,11 +115,11 @@ test("comments refresh recent and pending threads without rebuilding history", a
 test("public comment/like notifications identify actors without private bell pairing", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-  const full = await read("src/member-insight-unified.tsx");
+  const full = await read("src/member-insight-unified-v2.tsx");
 
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
-  assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"返信":"コメント"\}しました/);
+  assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"reply":"comment"\}しました/);
   assert.match(history, /\[m\.scope,m\.id\]/);
   assert.match(full, /r\.actor_name/);
 });
