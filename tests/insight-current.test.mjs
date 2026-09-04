@@ -183,9 +183,14 @@ test("personal notification pairing stays account-safe and note browsing stays p
   assert.match(ingest, /synced_note_id/);
   assert.match(setup, /本人通知は連携済みです/);
   assert.match(setup, /スキ・公開コメント・公開フォローは本人通知なしでもINSIGHTで追跡/);
-  assert.match(userScript, /@version\s+2\.4\.0/);
+  assert.match(setup, /v2\.5\.1/);
+  assert.match(userScript, /@version\s+2\.5\.1/);
   assert.match(userScript, /\/api\/v2\/current_user/);
   assert.match(userScript, /TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
+  assert.match(userScript, /MUTE_PROFILE_PREFIX/);
+  assert.match(userScript, /ensureMuteProfiles/);
+  assert.match(userScript, /byName=profiles\.some/);
+  assert.match(userScript, /isMagazineNotice\(text\)&&\(byLink\|\|byName\|\|byId\)/);
   assert.doesNotMatch(userScript, /observe\(document\.documentElement/);
   assert.match(userScript, /rootObserver\.observe\(root,\{childList:true,subtree:true\}\)/);
   assert.match(userScript, /originalTop/);
