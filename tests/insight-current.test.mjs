@@ -8,7 +8,6 @@ test("participant dashboard uses calendar-first unified INSIGHT v4 without overv
   const app = await read("src/App.tsx");
   const live = await read("src/member-insight-live.tsx");
   const full = await read("src/member-insight-unified-v4.tsx");
-
   assert.match(app, /MemberInsightLive/);
   assert.match(app, /route === "dashboard"[\s\S]*MemberInsightLive/);
   assert.match(live, /MemberInsightUnifiedV4 revision=\{revision\}/);
@@ -20,7 +19,6 @@ test("participant dashboard uses calendar-first unified INSIGHT v4 without overv
 test("likes keep avatars, favorite stars, and day month year filters with missing-icon enrichment", async () => {
   const full = await read("src/member-insight-unified-v4.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-
   assert.match(full, /creator-icons/);
   assert.match(full, /await enrich\(x\.rows\|\|\[\]\)/);
   assert.match(full, /loading="lazy" decoding="async"/);
@@ -84,28 +82,39 @@ test("favorite reader and social history both expose calendar search", async () 
   assert.match(full, /最終確認/);
 });
 
-test("notification V4 separates reply comment like commerce membership buzz and magazine", async () => {
+test("notification V4 separates reaction commerce membership buzz and magazine and uses real comment actors", async () => {
   const full = await read("src/member-insight-unified-v4.tsx");
   const notify = await read("supabase/functions/insight-notification-history-v2/index.ts");
   const ingest = await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+  const migration = await read("supabase/migrations/20260904212500_notification_action_classifier_v2.sql");
 
   assert.match(full, /insight-notification-history-v2/);
   for (const label of ["返信", "コメント", "スキ", "購入", "チップ", "メンシプ", "話題", "マガジン", "高評価"]) assert.match(full, new RegExp(label));
   assert.match(full, /await enrich\(x\.rows\|\|\[\]\)/);
   assert.match(full, /プロフィール ↗/);
   assert.match(full, /記事を開く ↗/);
+  assert.match(notify, /listCommentEvents/);
   assert.match(notify, /insight_public_comments/);
   assert.match(notify, /not\("parent_key","is",null\)/);
+  assert.match(notify, /is\("parent_key",null\)/);
   assert.match(notify, /eq\("is_creator",false\)/);
   assert.match(notify, /public_comment_reply/);
+  assert.match(notify, /public_comment_root/);
+  assert.match(notify, /public-comment-summary%/);
   assert.match(notify, /actorNameFromText/);
   assert.match(ingest, /npm:@supabase\/supabase-js@2\.112\.4/);
-  assert.match(ingest, /classifier:"action-v2"/);
+  assert.match(ingest, /classifier:"action-v3"/);
   assert.match(ingest, /あなたの記事にスキしました/);
-  assert.match(ingest, /メンバーシップに参加/);
+  assert.match(ingest, /メンバーシップに参加しました/);
+  assert.match(ingest, /あなたの記事を高評価しました/);
   assert.match(ingest, /話題です/);
   assert.doesNotMatch(ingest, /if\(\/返信\/\.test\(t\)\)return"reply"/);
   assert.doesNotMatch(ingest, /if\(\/コメント\/\.test\(t\)\)return"comment"/);
+  assert.match(migration, /src = 'public_watcher'/);
+  assert.match(migration, /public-like%/);
+  assert.match(migration, /member-public-watch/);
+  assert.match(migration, /メンバーシップをはじめました/);
+  assert.match(migration, /new\.notification_type := 'other'/);
 });
 
 test("article archive uses JST calendar matching and authenticated thumbnail cards", async () => {
@@ -129,7 +138,6 @@ test("comments refresh recent and pending threads without rebuilding history", a
   const note = await read("supabase/functions/insight-member-api/note.ts");
   const scheduled = await read("supabase/functions/insight-comment-refresh/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-
   assert.match(api, /historyPage=3\+\(\(cursor-1\)%18\)/);
   assert.match(api, /p_status:"pending"/);
   assert.match(api, /refreshComments\.add\(row\.key\)/);
@@ -154,7 +162,6 @@ test("public comment and like notifications identify actors without private bell
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
   const full = await read("src/member-insight-unified-v4.tsx");
-
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
   assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"返信":"コメント"\}しました/);
@@ -168,7 +175,6 @@ test("personal notification pairing stays account-safe and note browsing stays p
   const setup = await read("public/notification-import.html");
   const userScript = await read("public/note-insight-notification-sync.user.js");
   const live = await read("src/member-insight-live.tsx");
-
   assert.match(pairing, /authorized:true/);
   assert.match(pairing, /pairedState/);
   assert.match(pairing, /pairedExpiresAt/);
@@ -198,7 +204,6 @@ test("access switching and browser history never use the profile code as a passw
   const access = await read("src/access-portal-v6.tsx");
   const main = await read("src/main.tsx");
   const app = await read("src/App.tsx");
-
   assert.match(access, /アカウント切替/);
   assert.match(access, /<em>\{current \? "使用中" : "切替"\}<\/em>/);
   assert.match(access, /機種変更・再ログイン/);
@@ -215,7 +220,6 @@ test("distribution remains browser-neutral and Edge can reset stale PWA cache wi
   const sw = await read("public/sw.js");
   const recovery = await read("public/recovery.html");
   const setup = await read("public/notification-setup.html");
-
   assert.equal(manifest.id, "/note-insight/");
   assert.equal(manifest.scope, "/note-insight/");
   assert.match(manifest.start_url, /^\/note-insight\/\?launch=top$/);
