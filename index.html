@@ -47,14 +47,6 @@
     <div id="root"></div>
     <script>
       document.addEventListener("click", function (event) {
-        const direct = event.target instanceof Element ? event.target.closest('a[href*="notification-import.html"]') : null;
-        if (direct && localStorage.getItem("mumei-unified-owner-token")) {
-          const u = new URL(direct.href, location.href);
-          if (!u.searchParams.has("from")) u.searchParams.set("from", "setup");
-          if (!u.searchParams.has("autopair")) u.searchParams.set("autopair", "1");
-          if (!u.searchParams.has("role")) u.searchParams.set("role", "owner");
-          direct.href = u.toString();
-        }
         const target = event.target instanceof Element ? event.target.closest('a[href*="notification-setup.html"]') : null;
         if (!target || target.target === "_blank") return;
         event.preventDefault();
