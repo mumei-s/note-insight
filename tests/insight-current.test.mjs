@@ -114,15 +114,21 @@ test("access switching and browser history never use the profile code as a passw
   assert.doesNotMatch(main, /localStorage\.removeItem\(INSIGHT_TOKEN_KEY\)/);
 });
 
-test("distribution remains browser-neutral with PWA TOP hardening only as a safety net", async () => {
+test("distribution remains browser-neutral and Edge can reset stale PWA cache without losing login storage", async () => {
   const manifest = JSON.parse(await read("public/manifest.webmanifest"));
   const sw = await read("public/sw.js");
+  const recovery = await read("public/recovery.html");
   const setup = await read("public/notification-setup.html");
 
   assert.equal(manifest.id, "/note-insight/");
   assert.equal(manifest.scope, "/note-insight/");
   assert.match(manifest.start_url, /^\/note-insight\/\?launch=top$/);
-  assert.match(sw, /mumei-note-insight-v29/);
-  assert.match(sw, /notification-setup\.html/);
+  assert.match(sw, /mumei-note-insight-v31/);
+  assert.doesNotMatch(sw, /client\.navigate/);
+  assert.doesNotMatch(sw, /staleNotificationEntry/);
+  assert.match(sw, /cache: "no-store"/);
+  assert.match(recovery, /getRegistrations/);
+  assert.match(recovery, /caches\.delete/);
+  assert.doesNotMatch(recovery, /localStorage\.clear/);
   assert.match(setup, /from.*insight/);
 });
