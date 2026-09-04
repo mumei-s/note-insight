@@ -4,42 +4,62 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("participant dashboard stays on the restored live full-history INSIGHT", async () => {
+test("participant dashboard uses the unified full-history INSIGHT", async () => {
   const app = await read("src/App.tsx");
   const live = await read("src/member-insight-live.tsx");
-  const full = await read("src/member-insight-full.tsx");
+  const full = await read("src/member-insight-unified.tsx");
 
   assert.match(app, /MemberInsightLive/);
   assert.match(app, /route === "dashboard"[\s\S]*MemberInsightLive/);
   assert.doesNotMatch(app, /MemberInsightApp/);
   assert.match(live, /visibilitychange/);
   assert.match(live, /window\.addEventListener\("focus"/);
-  assert.match(live, /MemberInsightFull revision=\{revision\}/);
-  for (const label of ["概要", "スキ履歴", "コメント", "応援者", "フォロー", "通知", "記事", "アカウント切替", "本人通知", "データ更新"]) assert.match(full, new RegExp(label));
-  assert.match(full, /target="_blank" rel="noopener noreferrer">本人通知/);
-  assert.match(full, /revision=0/);
+  assert.match(live, /MemberInsightUnified revision=\{revision\}/);
+  for (const label of ["概要", "スキ履歴", "スキ順位", "コメント", "コメント順位", "マガジン", "お気に入り", "フォロー", "通知", "記事", "アカウント切替", "データ更新"]) assert.match(full, new RegExp(label));
+  assert.match(full, /FavoriteReader/);
+  assert.match(full, /ARTICLE ARCHIVE/);
 });
 
-test("likes/comments keep creator avatars and comment heart-close workflow", async () => {
-  const full = await read("src/member-insight-full.tsx");
-  const hotfix = await read("src/member-insight-hotfix.css");
+test("likes keep avatars, favorite stars, and day month year filters", async () => {
+  const full = await read("src/member-insight-unified.tsx");
   const history = await read("supabase/functions/insight-member-history/index.ts");
 
   assert.match(full, /actor_image_url/);
   assert.match(full, /loading="lazy" decoding="async"/);
-  assert.match(full, /heart_closed/);
-  assert.match(full, /♡で終了/);
-  assert.match(history, /insight_fast_comment_threads/);
-  assert.match(hotfix, /mif-state\.heart_closed/);
-  assert.match(hotfix, /img\.mif-avatar/);
+  assert.match(full, /日ごと/);
+  assert.match(full, /月ごと/);
+  assert.match(full, /年ごと/);
+  assert.match(full, /favorite_toggle/);
+  assert.match(full, /row\.favorite\?"★":"☆"/);
+  assert.match(history, /insight_fast_like_page_scoped_status/);
+  assert.match(history, /insight_favorite_creators/);
 });
 
-test("social view has no redundant current button", async () => {
-  const full = await read("src/member-insight-full.tsx");
-  assert.doesNotMatch(full, />現在<\/button>/);
-  assert.match(full, /setMode\("current"\);setDirection\("followers"\)/);
-  assert.match(full, /setMode\("current"\);setDirection\("followings"\)/);
-  assert.match(full, />増減履歴<\/button>/);
+test("comment workflow keeps ranking and heart-close state", async () => {
+  const full = await read("src/member-insight-unified.tsx");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
+
+  assert.match(full, /heart_closed/);
+  assert.match(full, /♡で終了/);
+  assert.match(full, /COMMENT RANKING/);
+  assert.match(full, /comment_ranking/);
+  assert.match(full, /commenter_comments/);
+  assert.match(history, /insight_fast_comment_threads/);
+  assert.match(history, /insight_fast_commenter_ranking/);
+  assert.match(history, /insight_fast_commenter_roots/);
+});
+
+test("magazines and article archive remain first-class INSIGHT features", async () => {
+  const full = await read("src/member-insight-unified.tsx");
+  const history = await read("supabase/functions/insight-member-history/index.ts");
+
+  assert.match(full, /共同マガジン/);
+  assert.match(full, /自分がオーナー/);
+  assert.match(full, /参加中/);
+  assert.match(full, /自分の記事・過去アーカイブ/);
+  assert.match(full, /記事タイトルを検索/);
+  assert.match(history, /insight_magazine_cache/);
+  assert.match(history, /limit\(1000\)/);
 });
 
 test("comments refresh recent and pending threads without rebuilding history", async () => {
@@ -71,13 +91,13 @@ test("comments refresh recent and pending threads without rebuilding history", a
 test("public comment/like notifications identify actors without private bell pairing", async () => {
   const api = await read("supabase/functions/insight-member-api/index.ts");
   const history = await read("supabase/functions/insight-member-history/index.ts");
-  const full = await read("src/member-insight-full.tsx");
+  const full = await read("src/member-insight-unified.tsx");
 
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
   assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"返信":"コメント"\}しました/);
   assert.match(history, /\[m\.scope,m\.id\]/);
-  assert.match(full, /r\.actor_name\|\|""/);
+  assert.match(full, /r\.actor_name/);
 });
 
 test("personal notification pairing is account-safe and reports paired state", async () => {
