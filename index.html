@@ -50,6 +50,7 @@
         const direct = event.target instanceof Element ? event.target.closest('a[href*="notification-import.html"]') : null;
         if (direct && localStorage.getItem("mumei-unified-owner-token")) {
           const u = new URL(direct.href, location.href);
+          if (!u.searchParams.has("from")) u.searchParams.set("from", "setup");
           if (!u.searchParams.has("autopair")) u.searchParams.set("autopair", "1");
           if (!u.searchParams.has("role")) u.searchParams.set("role", "owner");
           direct.href = u.toString();
