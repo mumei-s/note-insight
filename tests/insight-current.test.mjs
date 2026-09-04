@@ -108,6 +108,11 @@ test("personal notification pairing stays account-safe and note browsing stays p
   assert.match(setup,/新しい参加者が増えても作り直し不要/);
   assert.match(setup,/参加者ごとの専用ファイルは不要/);
   assert.match(setup,/INSIGHT保存/);
+  assert.match(setup,/iPhone Safariでの初回インストール/);
+  assert.match(setup,/apps\.apple\.com\/jp\/app\/userscripts\/id1463298887/);
+  assert.match(setup,/設定 → アプリ → Safari → 拡張機能 → Userscripts/);
+  assert.match(setup,/コード画面まで開けているなら③までは成功/);
+  assert.match(setup,/\.\/note-insight-notification-sync\.user\.js/);
   assert.match(userScript,/@version\s+2\.8\.0/);
   assert.match(userScript,/TOKEN_PREFIX='mumei_insight_notification_sync_token_v2:'/);
   assert.match(userScript,/MUTE_PROFILE_PREFIX/);
