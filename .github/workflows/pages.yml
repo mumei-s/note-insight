@@ -25,8 +25,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --check public/note-insight-notification-sync.user.js
+      - run: node --check public/insight-favorite-quick.js
       - run: npm run build
-      - run: node --test tests/insight-current.test.mjs tests/favorite-reader-current.test.mjs
+      - run: node --test tests/insight-current.test.mjs tests/favorite-reader-current.test.mjs tests/latest-continuation.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
