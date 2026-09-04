@@ -35,6 +35,7 @@ test("likes keep avatars, favorite stars, and day month year filters with missin
 
 test("comments support calendar to article list to thread search while keeping heart-close state", async () => {
   const full = await read("src/member-insight-unified-v2.tsx");
+  const extras = await read("supabase/functions/insight-member-extras/index.ts");
   assert.match(full, /comment_articles/);
   assert.match(full, /comments_filtered/);
   assert.match(full, /コメント日/);
@@ -42,6 +43,8 @@ test("comments support calendar to article list to thread search while keeping h
   assert.match(full, /名前・記事・コメント本文/);
   assert.match(full, /heart_closed/);
   assert.match(full, /♡で終了/);
+  assert.match(extras, /npm:@supabase\/supabase-js@2\.112\.4/);
+  assert.match(extras, /X-Insight-Token/);
 });
 
 test("comment ranking uses the formerly empty area for three useful metrics", async () => {
@@ -119,7 +122,7 @@ test("public comment/like notifications identify actors without private bell pai
 
   assert.match(api, /actor_name:name/);
   assert.match(api, /member-public-watch/);
-  assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"reply":"comment"\}しました/);
+  assert.match(api, /さんが「\$\{art\.title\}」に\$\{x\.parent\?"返信":"コメント"\}しました/);
   assert.match(history, /\[m\.scope,m\.id\]/);
   assert.match(full, /r\.actor_name/);
 });
