@@ -3,30 +3,53 @@ import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
 import { MemberInsightAnalyticsV3 } from "./member-insight-analytics-v3";
 import { MemberInsightSocialV2 } from "./member-insight-social-v2";
+import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
+import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
+const RELATIONS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const RESYNC_AFTER_MS = 120_000;
 const QUIET_AFTER_INTERACTION_MS = 2_500;
+type Override = "social" | "comments" | "notifications" | null;
 
 export function MemberInsightLive() {
   const [revision, setRevision] = useState(0);
   const [screen, setScreen] = useState<"insight" | "analytics">("insight");
-  const [socialOverride, setSocialOverride] = useState(false);
+  const [panelOverride, setPanelOverride] = useState<Override>(null);
   const lastRun = useRef(0);
   const lastInteraction = useRef(Date.now());
   const running = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const deferred = useRef<number | null>(null);
 
-  async function refresh(force = false) {
+  async function call(endpoint:string, action:string, timeoutMs=45_000) {
+    const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+    if (!token) return null;
+    const current = new AbortController();
+    const timer = window.setTimeout(() => current.abort(), timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Insight-Token": token },
+        body: JSON.stringify({ action }),
+        cache: "no-store",
+        signal: current.signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "INSIGHT_API_ERROR");
+      return payload;
+    } finally { window.clearTimeout(timer); }
+  }
+
+  async function refresh(force = false, includeRelations = false) {
     const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
     if (!token || running.current) return;
     const now = Date.now();
     if (!force && now - lastRun.current < RESYNC_AFTER_MS) return;
     if (now - lastInteraction.current < QUIET_AFTER_INTERACTION_MS) {
       if (deferred.current) window.clearTimeout(deferred.current);
-      deferred.current = window.setTimeout(() => { void refresh(force); }, QUIET_AFTER_INTERACTION_MS);
+      deferred.current = window.setTimeout(() => { void refresh(force, includeRelations); }, QUIET_AFTER_INTERACTION_MS);
       return;
     }
     lastRun.current = now;
@@ -34,7 +57,7 @@ export function MemberInsightLive() {
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
-    const timer = window.setTimeout(() => current.abort(), 45_000);
+    const timer = window.setTimeout(() => current.abort(), 50_000);
     try {
       const response = await fetch(MEMBER, {
         method: "POST",
@@ -45,6 +68,9 @@ export function MemberInsightLive() {
       });
       const payload = await response.json().catch(() => ({}));
       if (response.ok && payload?.ok !== false) setRevision((value) => value + 1);
+      if (includeRelations) {
+        try { await call(RELATIONS, "sync", 115_000); setRevision((value) => value + 1); } catch { /* previous exact snapshot remains authoritative */ }
+      }
     } catch {
       // Saved history remains usable even when a live refresh is unavailable.
     } finally {
@@ -55,10 +81,17 @@ export function MemberInsightLive() {
   }
 
   useEffect(() => {
-    const interacted = () => { lastInteraction.current = Date.now(); };
+    const interacted = (event:Event) => {
+      lastInteraction.current = Date.now();
+      const button = (event.target as HTMLElement | null)?.closest?.("button");
+      const text = (button?.textContent || "").replace(/\s+/g," ").trim();
+      if (button && /データ更新|全データ更新|最新データ/.test(text)) {
+        window.setTimeout(() => { void refresh(true, true); }, 80);
+      }
+    };
     const schedule = (force = false) => {
       if (deferred.current) window.clearTimeout(deferred.current);
-      deferred.current = window.setTimeout(() => { void refresh(force); }, QUIET_AFTER_INTERACTION_MS);
+      deferred.current = window.setTimeout(() => { void refresh(force, false); }, QUIET_AFTER_INTERACTION_MS);
     };
     window.addEventListener("pointerdown", interacted, { passive: true });
     window.addEventListener("touchstart", interacted, { passive: true });
@@ -82,21 +115,29 @@ export function MemberInsightLive() {
   }, []);
 
   useEffect(() => {
-    if (!socialOverride) return;
-    const timer = window.setTimeout(() => {
-      document.getElementById("mis2-social")?.scrollIntoView({ block: "start", behavior: "auto" });
-    }, 30);
+    if (!panelOverride) return;
+    const id = panelOverride === "social" ? "mis2-social" : panelOverride === "comments" ? "micf-comments" : "minf-notifications";
+    const timer = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "auto" }), 30);
     return () => window.clearTimeout(timer);
-  }, [socialOverride]);
+  }, [panelOverride]);
 
   function captureInsightNavigation(event: React.MouseEvent<HTMLDivElement>) {
     const button = (event.target as HTMLElement | null)?.closest?.("button");
     if (!button) return;
-    const text = (button.textContent || "").trim();
-    if (button.closest(".miu-nav")) setSocialOverride(text === "フォロー");
-    else if (button.closest(".miu-stats")) setSocialOverride(text.includes("フォロワー"));
+    const text = (button.textContent || "").replace(/\s+/g," ").trim();
+    if (button.closest(".miu-nav")) {
+      if (text.includes("フォロー")) setPanelOverride("social");
+      else if (text.includes("コメント")) setPanelOverride("comments");
+      else if (text.includes("通知")) setPanelOverride("notifications");
+      else setPanelOverride(null);
+    } else if (button.closest(".miu-stats")) {
+      if (text.includes("フォロワー") || text.includes("フォロー")) setPanelOverride("social");
+      else if (text.includes("コメント")) setPanelOverride("comments");
+      else if (text.includes("通知")) setPanelOverride("notifications");
+    }
   }
 
+  const overrideClass = panelOverride ? `mia-${panelOverride}-override` : "";
   return <>
     <div className="mia-switcher" role="navigation" aria-label="INSIGHT表示切替">
       <button className={screen === "insight" ? "active" : ""} onClick={() => setScreen("insight")}>INSIGHT</button>
@@ -104,9 +145,11 @@ export function MemberInsightLive() {
     </div>
     {screen === "analytics"
       ? <MemberInsightAnalyticsV3 revision={revision} onBack={() => setScreen("insight")} />
-      : <div className={socialOverride ? "mia-social-override" : ""} onClickCapture={captureInsightNavigation}>
+      : <div className={overrideClass} onClickCapture={captureInsightNavigation}>
           <MemberInsightUnifiedV4 revision={revision} />
-          {socialOverride ? <MemberInsightSocialV2 revision={revision} /> : null}
+          {panelOverride === "social" ? <MemberInsightSocialV2 revision={revision} /> : null}
+          {panelOverride === "comments" ? <MemberInsightCommentsFinal revision={revision} /> : null}
+          {panelOverride === "notifications" ? <MemberInsightNotificationsFinal revision={revision} /> : null}
         </div>}
   </>;
 }
