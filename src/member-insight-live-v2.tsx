@@ -35,7 +35,13 @@ export function MemberInsightLiveV2(){
   const initialMode=MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal";
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0);
-  function openMode(next:Mode){if(mode===next)return;window.history.pushState({...window.history.state,route:"dashboard",insightMode:next},"",window.location.href);setMode(next);window.scrollTo({top:0,behavior:"auto"})}
+  function openMode(next:Mode){
+    if(mode===next)return;
+    const y=window.scrollY;
+    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
+    setMode(next);
+    requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
+  }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function relationSync(force=false){
@@ -71,8 +77,13 @@ export function MemberInsightLiveV2(){
     finally{setManualBusy(false)}
   }
   useEffect(()=>{
-    if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal"},"",window.location.href);
-    const pop=()=>{const next=history.state?.insightMode;setMode(MODES.has(next)?next:"normal")};
+    if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
+    const pop=()=>{
+      const next=history.state?.insightMode;
+      const y=Number(history.state?.insightScrollY);
+      setMode(MODES.has(next)?next:"normal");
+      if(Number.isFinite(y))requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
+    };
     window.addEventListener("popstate",pop);
     return()=>window.removeEventListener("popstate",pop)
   },[]);
