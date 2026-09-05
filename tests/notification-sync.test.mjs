@@ -3,10 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const read=(name)=>readFile(new URL(`../public/${name}`,import.meta.url),"utf8");
+const readRoot=(name)=>readFile(new URL(`../${name}`,import.meta.url),"utf8");
 
 async function sources(){return{boot:await read("note-insight-notification-sync.user.js"),runtime:await read("note-insight-notification-runtime-v298.js"),setup:await read("notification-import.html"),helper:await read("notification-install.html")}}
 
 test("v2.9.9 keeps manual notification read and auto-save runtime",async()=>{const{boot,runtime}=await sources();assert.match(boot,/@version\s+2\.9\.9/);assert.match(boot,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v298\.js\?v=298/);for(const x of ["manualCurrent(root,current)","manualSweep(root,past)","🔔 表示分読込","↧ 過去まで読込","読込→INSIGHT自動保存完了","過去読込→INSIGHT自動保存完了","saveRows(rows)","saveRows([...seen.values()])","box.scrollTop=box.scrollHeight","box.scrollTop=start","panelObserver.observe(root,{childList:true,subtree:true})"])assert.match(runtime,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));assert.doesNotMatch(runtime,/autoSweep\(root\)/);assert.doesNotMatch(runtime,/scheduleSweep/)});
+
+test("current manual source is accepted by ingest and blocked-all can never report success",async()=>{const{runtime}=await sources(),ingest=await readRoot("supabase/functions/insight-notification-ingest-v2/index.ts");assert.match(runtime,/source:'note-notification-manual-sync-v298'/);assert.match(ingest,/function allowedExplicitSource/);assert.match(ingest,/manual-sync-v\\d\+/);assert.match(ingest,/explicit-sync/);assert.match(ingest,/note-notification-auto-sync/);assert.match(ingest,/NOTIFICATION_SOURCE_BLOCKED/);assert.match(ingest,/blocked===incoming\.length/);assert.match(ingest,/browser-manual-v299/);assert.match(ingest,/memberId,noteId:"ss_yr"/);assert.match(ingest,/insight_access_applications/)});
 
 test("pairing still returns only to INSIGHT after actual note verification",async()=>{const{runtime}=await sources();assert.match(runtime,/function insightReturn/);assert.match(runtime,/u\.origin==='https:\/\/mumei-s\.github\.io'/);assert.match(runtime,/u\.pathname\.startsWith\('\/note-insight\/'\)/);assert.match(runtime,/mumei_return/);assert.match(runtime,/location\.replace\(back\)/)});
 
