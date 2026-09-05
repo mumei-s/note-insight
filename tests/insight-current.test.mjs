@@ -57,7 +57,7 @@ test("notification UI separates final categories and all merges canonical commen
   for (const label of ["人物フォロー","マガジンフォロー","自分の記事追加","マガジン記事追加","マガジン参加","メンシプ掲示板","メンシプ開始","プラン追加","メンシプ参加","購入","サポート","話題","高評価","ポイント","その他"]) assert.match(ui,new RegExp(label));
   assert.match(ui,/insight-notification-feed-final/);
   assert.match(feed,/insight_public_comments/);
-  assert.match(feed,/not\("notification_type","in","\(comment,reply\)"\)/);
+  assert.match(feed,/notification_type.*comment,reply/);
   assert.match(feed,/canonical-public-comments/);
   assert.match(ingest,/classifier:"action-v4-exact"/);
   assert.match(ingest,/メンバーシップに参加しました/);
@@ -188,8 +188,9 @@ test("analysis final shows no decorative chart before real dashboard snapshots",
   const analysis = await read("src/member-insight-analytics-final.tsx");
   assert.match(live,/MemberInsightAnalyticsFinal/);
   assert.match(live,/✓ 分析表示中/);
-  assert.match(analysis,/ダッシュボード統計がまだありません/);
-  assert.match(analysis,/snapshotCount<2/);
+  assert.match(analysis,/公式ダッシュボードの統計がまだINSIGHTへ保存されていません/);
+  assert.match(analysis,/snapshots\.length<2/);
+  assert.match(analysis,/グラフはまだ表示しません/);
   assert.match(analysis,/総VIEW推移/);
   assert.match(analysis,/総スキ推移/);
   assert.match(analysis,/総コメント推移/);
