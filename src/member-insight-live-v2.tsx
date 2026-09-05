@@ -16,6 +16,7 @@ const AUTO_MS=120_000;
 const RELATION_MS=600_000;
 const QUIET_MS=2_500;
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
+const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
@@ -31,8 +32,11 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
 const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 
 export function MemberInsightLiveV2(){
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>("normal"),[official,setOfficial]=useState<any>(null);
+  const initialMode=MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal";
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0);
+  function openMode(next:Mode){if(mode===next)return;window.history.pushState({...window.history.state,route:"dashboard",insightMode:next},"",window.location.href);setMode(next);window.scrollTo({top:0,behavior:"auto"})}
+  function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function relationSync(force=false){
     const now=Date.now();if(relationRunning.current||(!force&&now-lastRelationRun.current<RELATION_MS))return false;
@@ -67,6 +71,12 @@ export function MemberInsightLiveV2(){
     finally{setManualBusy(false)}
   }
   useEffect(()=>{
+    if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal"},"",window.location.href);
+    const pop=()=>{const next=history.state?.insightMode;setMode(MODES.has(next)?next:"normal")};
+    window.addEventListener("popstate",pop);
+    return()=>window.removeEventListener("popstate",pop)
+  },[]);
+  useEffect(()=>{
     void loadOfficial();
     const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
@@ -77,20 +87,20 @@ export function MemberInsightLiveV2(){
   function capture(e:React.MouseEvent){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;
     const label=t.closest("button")?.textContent?.trim()||"";
-    if(label==="コメント")setMode("comments");
-    else if(label==="お気に入り")setMode("favorites");
-    else if(label==="フォロー")setMode("social");
-    else if(label==="通知")setMode("notifications");
-    else setMode("normal");
+    if(label==="コメント")openMode("comments");
+    else if(label==="お気に入り")openMode("favorites");
+    else if(label==="フォロー")openMode("social");
+    else if(label==="通知")openMode("notifications");
+    else if(mode!=="normal")openMode("normal");
   }
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
-    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>総数はnote公式値。公開APIで人物まで確認できる範囲は別表示します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>setMode(v=>v==="analysis"?"normal":"analysis")}>{mode==="analysis"?"✓ 分析表示中":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
+    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>総数はnote公式値。公開APIで人物まで確認できる範囲は別表示します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
-    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={()=>setMode("normal")}/></div>:null}
+    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={backMode}/></div>:null}
   </div>;
 }
