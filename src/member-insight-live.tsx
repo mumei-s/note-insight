@@ -5,6 +5,7 @@ import { MemberInsightAnalyticsFinal } from "./member-insight-analytics-final";
 import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
+import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 
 const MEMBER = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -147,6 +148,7 @@ export function MemberInsightLive() {
       ? <MemberInsightAnalyticsFinal revision={revision} onBack={() => setScreen("insight")} />
       : <div className={overrideClass} onClickCapture={captureInsightNavigation}>
           <MemberInsightUnifiedV4 revision={revision} />
+          <MemberInsightCompleteness revision={revision} />
           {panelOverride === "social" ? <MemberInsightSocialV2 revision={revision} /> : null}
           {panelOverride === "comments" ? <MemberInsightCommentsFinal revision={revision} /> : null}
           {panelOverride === "notifications" ? <MemberInsightNotificationsFinal revision={revision} /> : null}
