@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 const FAST = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-fast-api-v2";
 const ARTICLES = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-favorite-articles";
 const OWNER = "mumei-unified-owner-token";
+const GROUP_STORAGE = "mumei-insight-favorite-creator-groups-v1";
 
 type Favorite = {
   creator_key: string;
@@ -10,325 +11,45 @@ type Favorite = {
   actor_url: string | null;
   actor_image_url: string | null;
   created_at: string;
+  group_name?: string | null;
 };
+type Article = { key:string; title:string; url:string; publishedAt:string|null; thumbnail:string|null; likeCount:number; commentCount:number; excerpt:string|null; read:boolean; readAt:string|null; };
+type ArticleState = { rows:Article[]; page:number; hasNext:boolean; loading:boolean; error:string; };
+type ReadFilter = "all"|"unread"|"read";
+type ArticleSort = "newest"|"oldest";
+type GroupState = { names:string[]; assigned:Record<string,string>; };
 
-type Article = {
-  key: string;
-  title: string;
-  url: string;
-  publishedAt: string | null;
-  thumbnail: string | null;
-  likeCount: number;
-  commentCount: number;
-  excerpt: string | null;
-  read: boolean;
-  readAt: string | null;
-};
+function date(v:string|null){if(!v)return"日時不明";const d=new Date(v);return Number.isNaN(d.getTime())?v:new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric"}).format(d)}
+function idFromUrl(v:string|null){try{return v?new URL(v).pathname.split("/").filter(Boolean)[0]||"":""}catch{return""}}
+function timeValue(v:string|null){const n=v?new Date(v).getTime():0;return Number.isFinite(n)?n:0}
+function cleanGroup(v:string){return v.replace(/\s+/g," ").trim().slice(0,40)}
+function initialGroups():GroupState{try{const raw=JSON.parse(localStorage.getItem(GROUP_STORAGE)||"{}");const names=Array.isArray(raw?.names)?raw.names.map((x:any)=>cleanGroup(String(x||""))).filter(Boolean):[];const assigned=raw?.assigned&&typeof raw.assigned==="object"?Object.fromEntries(Object.entries(raw.assigned).map(([k,v])=>[k,cleanGroup(String(v||""))]).filter(([,v])=>Boolean(v))):{};return{names:[...new Set(names)],assigned}}catch{return{names:[],assigned:{}}}}
+async function post(url:string,body:Record<string,unknown>){const token=localStorage.getItem(OWNER)||"";if(!token)throw new Error("OWNER本人認証が必要です");const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-Owner-Token":token},body:JSON.stringify(body),cache:"no-store"});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p?.error||"読み込めませんでした");return p}
 
-type ArticleState = {
-  rows: Article[];
-  page: number;
-  hasNext: boolean;
-  loading: boolean;
-  error: string;
-};
-
-type ReadFilter = "all" | "unread" | "read";
-type ArticleSort = "newest" | "oldest";
-
-function date(v: string | null) {
-  if (!v) return "日時不明";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime())
-    ? v
-    : new Intl.DateTimeFormat("ja-JP", {
-        timeZone: "Asia/Tokyo",
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-      }).format(d);
-}
-
-function idFromUrl(v: string | null) {
-  try {
-    return v ? new URL(v).pathname.split("/").filter(Boolean)[0] || "" : "";
-  } catch {
-    return "";
-  }
-}
-
-function timeValue(v: string | null) {
-  const n = v ? new Date(v).getTime() : 0;
-  return Number.isFinite(n) ? n : 0;
-}
-
-async function post(url: string, body: Record<string, unknown>) {
-  const token = localStorage.getItem(OWNER) || "";
-  if (!token) throw new Error("OWNER本人認証が必要です");
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Owner-Token": token },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-  const p = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(p?.error || "読み込めませんでした");
-  return p;
-}
-
-export function FavoriteReader() {
-  const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
-  const [articles, setArticles] = useState<Record<string, ArticleState>>({});
-  const [articleQuery, setArticleQuery] = useState("");
-  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
-  const [articleSort, setArticleSort] = useState<ArticleSort>("newest");
-
-  async function loadFavorites() {
-    setLoading(true);
-    setError("");
-    try {
-      const p = await post(FAST, { action: "favorites" });
-      setFavorites(Array.isArray(p?.rows) ? p.rows : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "読み込めませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadFavorites();
-  }, []);
-
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
-      ? favorites.filter(
-          (x) =>
-            String(x.actor_name || "").toLowerCase().includes(q) ||
-            String(x.actor_url || "").toLowerCase().includes(q),
-        )
-      : favorites;
-  }, [favorites, query]);
-
-  async function loadArticles(f: Favorite, page = 1) {
-    const key = f.creator_key;
-    const currentPage = articles[key]?.page || 1;
-    if (open === key && page === 1 && currentPage === 1) {
-      setOpen(null);
-      return;
-    }
-    setOpen(key);
-    setArticles((v) => ({
-      ...v,
-      [key]: {
-        rows: v[key]?.rows || [],
-        page,
-        hasNext: v[key]?.hasNext || false,
-        loading: true,
-        error: "",
-      },
-    }));
-    try {
-      const p = await post(ARTICLES, {
-        action: "articles",
-        creatorUrl: f.actor_url,
-        creatorKey: f.creator_key,
-        page,
-      });
-      setArticles((v) => ({
-        ...v,
-        [key]: {
-          rows: Array.isArray(p?.rows) ? p.rows : [],
-          page: Number(p?.page || page),
-          hasNext: Boolean(p?.hasNext),
-          loading: false,
-          error: "",
-        },
-      }));
-    } catch (e) {
-      setArticles((v) => ({
-        ...v,
-        [key]: {
-          rows: [],
-          page,
-          hasNext: false,
-          loading: false,
-          error: e instanceof Error ? e.message : "記事を取得できませんでした",
-        },
-      }));
-    }
-  }
-
-  async function setRead(f: Favorite, article: Article, read: boolean) {
-    const key = f.creator_key;
-    const previous = article.read;
-    const patch = (value: boolean) =>
-      setArticles((v) => {
-        const current = v[key];
-        if (!current) return v;
-        return {
-          ...v,
-          [key]: {
-            ...current,
-            rows: current.rows.map((x) =>
-              x.key === article.key
-                ? { ...x, read: value, readAt: value ? new Date().toISOString() : null }
-                : x,
-            ),
-          },
-        };
-      });
-
-    patch(read);
-    try {
-      await post(ARTICLES, {
-        action: "read_set",
-        creatorKey: f.creator_key,
-        creatorUrl: f.actor_url,
-        articleKey: article.key,
-        articleUrl: article.url,
-        read,
-      });
-    } catch (e) {
-      patch(previous);
-      setError(e instanceof Error ? e.message : "既読状態を保存できませんでした");
-    }
-  }
-
-  async function remove(f: Favorite) {
-    try {
-      await post(FAST, {
-        action: "favorite_toggle",
-        creatorKey: f.creator_key,
-        actorName: f.actor_name,
-        actorUrl: f.actor_url,
-        actorImageUrl: f.actor_image_url,
-        favorite: false,
-      });
-      setFavorites((v) => v.filter((x) => x.creator_key !== f.creator_key));
-      if (open === f.creator_key) setOpen(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "解除できませんでした");
-    }
-  }
-
-  return (
-    <div className="fav-reader">
-      <div className="fav-reader-head">
-        <div>
-          <b>お気に入り・高速記事ビュー</b>
-          <small>登録 {favorites.length}人。過去記事をINSIGHT内で探し、既読/未読も保存します。</small>
-        </div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="お気に入りを検索" />
-      </div>
-
-      {error ? <div className="fav-reader-error">{error}</div> : null}
-      {loading ? (
-        <div className="fav-reader-empty">読み込み中…</div>
-      ) : visible.length === 0 ? (
-        <div className="fav-reader-empty">お気に入りしたクリエイターはまだいません。</div>
-      ) : (
-        <div className="fav-reader-list">
-          {visible.map((f) => {
-            const a = articles[f.creator_key];
-            const isOpen = open === f.creator_key;
-            const q = articleQuery.trim().toLowerCase();
-            const pageRows = [...(a?.rows || [])];
-            const unreadCount = pageRows.filter((x) => !x.read).length;
-            const filteredRows = pageRows
-              .filter((x) => !q || x.title.toLowerCase().includes(q) || String(x.excerpt || "").toLowerCase().includes(q))
-              .filter((x) => readFilter === "all" || (readFilter === "read" ? x.read : !x.read))
-              .sort((x, y) =>
-                articleSort === "newest"
-                  ? timeValue(y.publishedAt) - timeValue(x.publishedAt)
-                  : timeValue(x.publishedAt) - timeValue(y.publishedAt),
-              );
-
-            return (
-              <article className="fav-creator" key={f.creator_key}>
-                <div className="fav-creator-main">
-                  <div className="fav-person">
-                    {f.actor_image_url ? (
-                      <img src={f.actor_image_url} alt="" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span>{String(f.actor_name || "n").slice(0, 1)}</span>
-                    )}
-                    <div>
-                      <strong>{f.actor_name || "noteユーザー"}</strong>
-                      <small>{idFromUrl(f.actor_url) ? `@${idFromUrl(f.actor_url)}` : ""}</small>
-                    </div>
-                  </div>
-                  <div className="fav-actions">
-                    <button onClick={() => void loadArticles(f, 1)}>
-                      {isOpen && (a?.page || 1) === 1 ? "記事を閉じる" : "過去記事を見る"}
-                    </button>
-                    {f.actor_url ? <a href={f.actor_url} target="_blank" rel="noreferrer">プロフィール ↗</a> : null}
-                    <button className="remove" onClick={() => void remove(f)}>★ 解除</button>
-                  </div>
-                </div>
-
-                {isOpen ? (
-                  <div className="fav-articles">
-                    {a?.loading ? (
-                      <div className="fav-reader-empty">過去記事を高速取得中…</div>
-                    ) : a?.error ? (
-                      <div className="fav-reader-error">{a.error}</div>
-                    ) : a?.rows?.length ? (
-                      <>
-                        <div className="fav-article-tools">
-                          <div className="fav-unread-summary"><b>このページ 未読 {unreadCount}件</b><span>全 {pageRows.length}件</span></div>
-                          <input value={articleQuery} onChange={(e) => setArticleQuery(e.target.value)} placeholder="このページの記事を検索" />
-                          <select value={readFilter} onChange={(e) => setReadFilter(e.target.value as ReadFilter)}>
-                            <option value="all">すべて</option><option value="unread">未読だけ</option><option value="read">既読だけ</option>
-                          </select>
-                          <select value={articleSort} onChange={(e) => setArticleSort(e.target.value as ArticleSort)}>
-                            <option value="newest">新しい順</option><option value="oldest">古い順</option>
-                          </select>
-                        </div>
-
-                        {filteredRows.length ? (
-                          <div className="fav-article-grid">
-                            {filteredRows.map((x) => (
-                              <article className={`fav-article ${x.read ? "is-read" : "is-unread"}`} key={x.key}>
-                                <a className="fav-article-link" href={x.url} target="_blank" rel="noreferrer" onClick={() => void setRead(f, x, true)}>
-                                  {x.thumbnail ? <img src={x.thumbnail} alt="" referrerPolicy="no-referrer" /> : <div className="fav-thumb" />}
-                                  <div>
-                                    <span className="fav-read-badge">{x.read ? "既読" : "● 未読"}</span>
-                                    <strong>{x.title}</strong>
-                                    <small>{date(x.publishedAt)}　♡{x.likeCount}　💬{x.commentCount}</small>
-                                    {x.excerpt ? <p>{x.excerpt}</p> : null}
-                                    <em>noteで読む ↗</em>
-                                  </div>
-                                </a>
-                                <button className="fav-read-toggle" onClick={() => void setRead(f, x, !x.read)}>{x.read ? "未読に戻す" : "既読にする"}</button>
-                              </article>
-                            ))}
-                          </div>
-                        ) : <div className="fav-reader-empty">この条件に合う記事はありません。</div>}
-
-                        <div className="fav-page">
-                          <button disabled={(a?.page || 1) <= 1} onClick={() => void loadArticles(f, (a?.page || 1) - 1)}>← 新しい記事</button>
-                          <span>記事ページ {a?.page || 1}</span>
-                          <button disabled={!a?.hasNext} onClick={() => void loadArticles(f, (a?.page || 1) + 1)}>古い記事 →</button>
-                        </div>
-                      </>
-                    ) : <div className="fav-reader-empty">公開記事を取得できませんでした。</div>}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
-
-      <style>{`
-        .fav-reader{display:grid;gap:10px;margin:8px 0 14px}.fav-reader-head{display:flex;justify-content:space-between;gap:10px;align-items:end;border:1px solid #32465c;border-radius:12px;background:#0b151f;padding:11px}.fav-reader-head>div{display:grid;gap:2px}.fav-reader-head b{color:#ffd86a}.fav-reader-head small{color:#8494a8}.fav-reader-head input,.fav-article-tools input,.fav-article-tools select{min-height:38px;border:1px solid #3c4d63;border-radius:9px;background:#070c12;color:#fff;padding:0 10px}.fav-reader-head input{min-width:210px}.fav-reader-list{display:grid;gap:9px}.fav-creator{border:1px solid #2d3d51;border-radius:13px;background:#0b1119;overflow:hidden}.fav-creator-main{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px}.fav-person{display:flex;align-items:center;gap:9px;min-width:0}.fav-person img,.fav-person>span{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#182432;display:grid;place-items:center;flex:none}.fav-person>div{min-width:0}.fav-person strong,.fav-person small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fav-person small{color:#8493a8}.fav-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.fav-actions button,.fav-actions a,.fav-page button,.fav-read-toggle{border:1px solid #3c5068;border-radius:8px;background:#122030;color:#eaf3fd;min-height:36px;padding:7px 10px;font-weight:850;text-decoration:none}.fav-actions button:first-child{border-color:#4c788f;color:#8feaff}.fav-actions .remove{border-color:#665447;color:#ffd86a}.fav-articles{border-top:1px solid #253448;padding:10px;background:#080d14}.fav-article-tools{display:grid;grid-template-columns:auto minmax(160px,1fr) auto auto;gap:7px;align-items:center;margin-bottom:10px}.fav-unread-summary{display:grid;gap:1px;padding-right:5px}.fav-unread-summary b{color:#8feaff;font-size:11px}.fav-unread-summary span{color:#8293a8;font-size:10px}.fav-article-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.fav-article{border:1px solid #293a50;border-radius:10px;background:#0f1721;padding:8px;min-width:0;display:grid;gap:7px}.fav-article.is-unread{border-color:#4d7188;box-shadow:inset 3px 0 0 #63dfff}.fav-article.is-read{opacity:.82}.fav-article-link{display:grid;grid-template-columns:92px minmax(0,1fr);gap:9px;color:#eef5fc;text-decoration:none;min-width:0}.fav-article-link>img,.fav-thumb{width:92px;height:68px;border-radius:7px;object-fit:cover;background:#172330}.fav-article-link>div{min-width:0}.fav-read-badge{display:inline-flex;border:1px solid #3b536c;border-radius:999px;padding:2px 6px;margin-bottom:4px;color:#95a6b9;font-size:9px;font-weight:900}.is-unread .fav-read-badge{border-color:#397b96;color:#8feaff}.fav-article-link strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45}.fav-article-link small{display:block;color:#8293a8;margin-top:4px}.fav-article-link p{font-size:11px;color:#a6b3c3;line-height:1.5;margin:5px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.fav-article-link em{font-style:normal;color:#8feaff;font-size:10px;font-weight:900}.fav-read-toggle{justify-self:end;min-height:30px;padding:4px 8px;font-size:10px}.fav-page{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:10px}.fav-page span{color:#8d9caf;font-size:11px}.fav-page button:disabled{opacity:.35}.fav-reader-empty{padding:18px;text-align:center;color:#8fa0b4}.fav-reader-error{border:1px solid #70404b;border-radius:9px;background:#251218;color:#ffabb5;padding:9px}@media(max-width:700px){.fav-reader-head{display:grid}.fav-reader-head input{min-width:0;width:100%}.fav-creator-main{display:grid}.fav-actions{justify-content:stretch}.fav-actions>*{flex:1;text-align:center}.fav-article-tools{grid-template-columns:1fr 1fr}.fav-unread-summary{grid-column:1/-1}.fav-article-tools input{grid-column:1/-1}.fav-article-grid{grid-template-columns:1fr}.fav-article-link{grid-template-columns:76px minmax(0,1fr)}.fav-article-link>img,.fav-thumb{width:76px;height:60px}.fav-page{justify-content:space-between}}
-      `}</style>
-    </div>
-  );
+export function FavoriteReader(){
+  const[favorites,setFavorites]=useState<Favorite[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(""),[query,setQuery]=useState(""),[open,setOpen]=useState<string|null>(null),[articles,setArticles]=useState<Record<string,ArticleState>>({}),[articleQuery,setArticleQuery]=useState(""),[readFilter,setReadFilter]=useState<ReadFilter>("all"),[articleSort,setArticleSort]=useState<ArticleSort>("newest");
+  const[groupState,setGroupState]=useState<GroupState>(()=>initialGroups()),[groupFilter,setGroupFilter]=useState("all"),[newGroup,setNewGroup]=useState("");
+  function persistGroups(next:GroupState){setGroupState(next);localStorage.setItem(GROUP_STORAGE,JSON.stringify(next))}
+  function groupOf(f:Favorite){return cleanGroup(String(f.group_name||groupState.assigned[f.creator_key]||""))}
+  async function loadFavorites(){setLoading(true);setError("");try{const p=await post(FAST,{action:"favorites"});const rows=Array.isArray(p?.rows)?p.rows:[];setFavorites(rows);const serverAssigned:Record<string,string>={...groupState.assigned};const names=[...groupState.names];for(const f of rows){const g=cleanGroup(String(f?.group_name||""));if(g){serverAssigned[String(f.creator_key)]=g;if(!names.includes(g))names.push(g)}}if(JSON.stringify(serverAssigned)!==JSON.stringify(groupState.assigned)||JSON.stringify(names)!==JSON.stringify(groupState.names))persistGroups({names,assigned:serverAssigned})}catch(e){setError(e instanceof Error?e.message:"読み込めませんでした")}finally{setLoading(false)}}
+  useEffect(()=>{void loadFavorites()},[]);
+  const groupNames=useMemo(()=>{const names=[...groupState.names];for(const f of favorites){const g=groupOf(f);if(g&&!names.includes(g))names.push(g)}return names},[groupState,favorites]);
+  const groupCounts=useMemo(()=>Object.fromEntries(groupNames.map(g=>[g,favorites.filter(f=>groupOf(f)===g).length])),[groupNames,favorites,groupState]);
+  const visible=useMemo(()=>{const q=query.trim().toLowerCase();return favorites.filter(f=>{const g=groupOf(f),groupOk=groupFilter==="all"||(groupFilter==="ungrouped"?!g:g===groupFilter),queryOk=!q||String(f.actor_name||"").toLowerCase().includes(q)||String(f.actor_url||"").toLowerCase().includes(q);return groupOk&&queryOk})},[favorites,query,groupFilter,groupState]);
+  function createGroup(){const name=cleanGroup(newGroup);if(!name)return;if(!groupState.names.includes(name))persistGroups({...groupState,names:[...groupState.names,name]});setNewGroup("");setGroupFilter(name)}
+  function assignGroup(f:Favorite,name:string){const g=cleanGroup(name),assigned={...groupState.assigned};if(g)assigned[f.creator_key]=g;else delete assigned[f.creator_key];const names=g&&!groupState.names.includes(g)?[...groupState.names,g]:groupState.names;persistGroups({names,assigned})}
+  function deleteGroup(name:string){const assigned={...groupState.assigned};for(const[k,v]of Object.entries(assigned))if(v===name)delete assigned[k];persistGroups({names:groupState.names.filter(x=>x!==name),assigned});if(groupFilter===name)setGroupFilter("all")}
+  async function loadArticles(f:Favorite,page=1){const key=f.creator_key,currentPage=articles[key]?.page||1;if(open===key&&page===1&&currentPage===1){setOpen(null);return}setOpen(key);setArticles(v=>({...v,[key]:{rows:v[key]?.rows||[],page,hasNext:v[key]?.hasNext||false,loading:true,error:""}}));try{const p=await post(ARTICLES,{action:"articles",creatorUrl:f.actor_url,creatorKey:f.creator_key,page});setArticles(v=>({...v,[key]:{rows:Array.isArray(p?.rows)?p.rows:[],page:Number(p?.page||page),hasNext:Boolean(p?.hasNext),loading:false,error:""}}))}catch(e){setArticles(v=>({...v,[key]:{rows:[],page,hasNext:false,loading:false,error:e instanceof Error?e.message:"記事を取得できませんでした"}}))}}
+  async function setRead(f:Favorite,article:Article,read:boolean){const key=f.creator_key,previous=article.read,patch=(value:boolean)=>setArticles(v=>{const current=v[key];if(!current)return v;return{...v,[key]:{...current,rows:current.rows.map(x=>x.key===article.key?{...x,read:value,readAt:value?new Date().toISOString():null}:x)}}});patch(read);try{await post(ARTICLES,{action:"read_set",creatorKey:f.creator_key,creatorUrl:f.actor_url,articleKey:article.key,articleUrl:article.url,read})}catch(e){patch(previous);setError(e instanceof Error?e.message:"既読状態を保存できませんでした")}}
+  async function remove(f:Favorite){try{await post(FAST,{action:"favorite_toggle",creatorKey:f.creator_key,actorName:f.actor_name,actorUrl:f.actor_url,actorImageUrl:f.actor_image_url,favorite:false});setFavorites(v=>v.filter(x=>x.creator_key!==f.creator_key));const assigned={...groupState.assigned};delete assigned[f.creator_key];persistGroups({...groupState,assigned});if(open===f.creator_key)setOpen(null)}catch(e){setError(e instanceof Error?e.message:"解除できませんでした")}}
+  return <div className="fav-reader">
+    <div className="fav-reader-head"><div><b>お気に入り・高速記事ビュー</b><small>登録 {favorites.length}人。クリエイターをグループ分けし、過去記事と既読/未読をまとめて管理します。</small></div><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="お気に入りを検索"/></div>
+    <section className="fav-groups"><div className="fav-groups-title"><div><b>お気に入りグループ</b><small>通知グループとは別。お気に入りクリエイターを整理するためのグループです。</small></div><div className="fav-group-create"><input value={newGroup} onChange={e=>setNewGroup(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();createGroup()}}} placeholder="例：必ず読む / AI / 仲間"/><button onClick={createGroup}>＋ グループ作成</button></div></div><div className="fav-group-tabs"><button className={groupFilter==="all"?"active":""} onClick={()=>setGroupFilter("all")}>すべて <b>{favorites.length}</b></button><button className={groupFilter==="ungrouped"?"active":""} onClick={()=>setGroupFilter("ungrouped")}>未分類 <b>{favorites.filter(f=>!groupOf(f)).length}</b></button>{groupNames.map(g=><span className="fav-group-tab" key={g}><button className={groupFilter===g?"active":""} onClick={()=>setGroupFilter(g)}>{g} <b>{groupCounts[g]||0}</b></button><button className="delete" title={`${g}を削除`} onClick={()=>deleteGroup(g)}>×</button></span>)}</div></section>
+    {error?<div className="fav-reader-error">{error}</div>:null}
+    {loading?<div className="fav-reader-empty">読み込み中…</div>:visible.length===0?<div className="fav-reader-empty">{favorites.length?"このグループ／検索条件に合うクリエイターはいません。":"お気に入りしたクリエイターはまだいません。"}</div>:<div className="fav-reader-list">{visible.map(f=>{const a=articles[f.creator_key],isOpen=open===f.creator_key,q=articleQuery.trim().toLowerCase(),pageRows=[...(a?.rows||[])],unreadCount=pageRows.filter(x=>!x.read).length,filteredRows=pageRows.filter(x=>!q||x.title.toLowerCase().includes(q)||String(x.excerpt||"").toLowerCase().includes(q)).filter(x=>readFilter==="all"||(readFilter==="read"?x.read:!x.read)).sort((x,y)=>articleSort==="newest"?timeValue(y.publishedAt)-timeValue(x.publishedAt):timeValue(x.publishedAt)-timeValue(y.publishedAt)),g=groupOf(f);return <article className="fav-creator" key={f.creator_key}><div className="fav-creator-main"><div className="fav-person">{f.actor_image_url?<img src={f.actor_image_url} alt="" referrerPolicy="no-referrer"/>:<span>{String(f.actor_name||"n").slice(0,1)}</span>}<div><strong>{f.actor_name||"noteユーザー"}</strong><small>{idFromUrl(f.actor_url)?`@${idFromUrl(f.actor_url)}`:""}</small>{g?<em>{g}</em>:<em className="none">未分類</em>}</div></div><div className="fav-actions"><select aria-label={`${f.actor_name||"クリエイター"}のグループ`} value={g} onChange={e=>assignGroup(f,e.target.value)}><option value="">未分類</option>{groupNames.map(x=><option key={x} value={x}>{x}</option>)}</select><button onClick={()=>void loadArticles(f,1)}>{isOpen&&(a?.page||1)===1?"記事を閉じる":"過去記事を見る"}</button>{f.actor_url?<a href={f.actor_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<button className="remove" onClick={()=>void remove(f)}>★ 解除</button></div></div>{isOpen?<div className="fav-articles">{a?.loading?<div className="fav-reader-empty">過去記事を高速取得中…</div>:a?.error?<div className="fav-reader-error">{a.error}</div>:a?.rows?.length?<><div className="fav-article-tools"><div className="fav-unread-summary"><b>このページ 未読 {unreadCount}件</b><span>全 {pageRows.length}件</span></div><input value={articleQuery} onChange={e=>setArticleQuery(e.target.value)} placeholder="このページの記事を検索"/><select value={readFilter} onChange={e=>setReadFilter(e.target.value as ReadFilter)}><option value="all">すべて</option><option value="unread">未読だけ</option><option value="read">既読だけ</option></select><select value={articleSort} onChange={e=>setArticleSort(e.target.value as ArticleSort)}><option value="newest">新しい順</option><option value="oldest">古い順</option></select></div>{filteredRows.length?<div className="fav-article-grid">{filteredRows.map(x=><article className={`fav-article ${x.read?"is-read":"is-unread"}`} key={x.key}><a className="fav-article-link" href={x.url} target="_blank" rel="noreferrer" onClick={()=>void setRead(f,x,true)}>{x.thumbnail?<img src={x.thumbnail} alt="" referrerPolicy="no-referrer"/>:<div className="fav-thumb"/>}<div><span className="fav-read-badge">{x.read?"既読":"● 未読"}</span><strong>{x.title}</strong><small>{date(x.publishedAt)}　♡{x.likeCount}　💬{x.commentCount}</small>{x.excerpt?<p>{x.excerpt}</p>:null}<em>noteで読む ↗</em></div></a><button className="fav-read-toggle" onClick={()=>void setRead(f,x,!x.read)}>{x.read?"未読に戻す":"既読にする"}</button></article>)}</div>:<div className="fav-reader-empty">この条件に合う記事はありません。</div>}<div className="fav-page"><button disabled={(a?.page||1)<=1} onClick={()=>void loadArticles(f,(a?.page||1)-1)}>← 新しい記事</button><span>記事ページ {a?.page||1}</span><button disabled={!a?.hasNext} onClick={()=>void loadArticles(f,(a?.page||1)+1)}>古い記事 →</button></div></>:<div className="fav-reader-empty">公開記事を取得できませんでした。</div>}</div>:null}</article>})}</div>}
+    <style>{`
+      .fav-reader{display:grid;gap:10px;margin:8px 0 14px}.fav-reader-head,.fav-groups{border:1px solid #32465c;border-radius:12px;background:#0b151f;padding:11px}.fav-reader-head{display:flex;justify-content:space-between;gap:10px;align-items:end}.fav-reader-head>div,.fav-groups-title>div{display:grid;gap:2px}.fav-reader-head b,.fav-groups b{color:#ffd86a}.fav-reader-head small,.fav-groups small{color:#8494a8}.fav-reader-head input,.fav-groups input,.fav-actions select,.fav-article-tools input,.fav-article-tools select{min-height:38px;border:1px solid #3c4d63;border-radius:9px;background:#070c12;color:#fff;padding:0 10px}.fav-reader-head input{min-width:210px}.fav-groups{display:grid;gap:10px;border-color:#4b4a34}.fav-groups-title{display:flex;gap:12px;align-items:end;justify-content:space-between}.fav-group-create{display:flex;gap:7px}.fav-group-create button,.fav-group-tabs button{border:1px solid #596170;border-radius:9px;background:#111d29;color:#e9f3ff;min-height:36px;padding:6px 10px;font-weight:850}.fav-group-create button{border-color:#6f6534;color:#ffe385}.fav-group-tabs{display:flex;gap:6px;flex-wrap:wrap}.fav-group-tabs>button.active,.fav-group-tab>button:first-child.active{background:#243346;border-color:#70d8ff;color:#b7f2ff}.fav-group-tab{display:flex}.fav-group-tab>button:first-child{border-radius:9px 0 0 9px}.fav-group-tab .delete{border-left:0;border-radius:0 9px 9px 0;color:#eaa0a8;padding-inline:8px}.fav-reader-list{display:grid;gap:9px}.fav-creator{border:1px solid #2d3d51;border-radius:13px;background:#0b1119;overflow:hidden}.fav-creator-main{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px}.fav-person{display:flex;align-items:center;gap:9px;min-width:0}.fav-person img,.fav-person>span{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#182432;display:grid;place-items:center;flex:none}.fav-person>div{min-width:0}.fav-person strong,.fav-person small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fav-person small{color:#8493a8}.fav-person em{display:inline-block;margin-top:3px;border-radius:999px;background:#2b2917;color:#ffe385;padding:2px 7px;font-size:10px;font-style:normal;font-weight:850}.fav-person em.none{background:#18202a;color:#8796a8}.fav-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.fav-actions button,.fav-actions a,.fav-page button,.fav-read-toggle{border:1px solid #3c5068;border-radius:8px;background:#122030;color:#eaf3fd;min-height:36px;padding:7px 10px;font-weight:850;text-decoration:none}.fav-actions button:first-of-type{border-color:#4c788f;color:#8feaff}.fav-actions .remove{border-color:#665447;color:#ffd86a}.fav-articles{border-top:1px solid #253448;padding:10px;background:#080d14}.fav-article-tools{display:grid;grid-template-columns:auto minmax(160px,1fr) auto auto;gap:7px;align-items:center;margin-bottom:10px}.fav-unread-summary{display:grid;gap:1px;padding-right:5px}.fav-unread-summary b{color:#8feaff}.fav-unread-summary span{font-size:11px;color:#7f8fa3}.fav-article-grid{display:grid;gap:8px}.fav-article{position:relative;border:1px solid #26384d;border-radius:11px;background:#0c141e;overflow:hidden}.fav-article.is-unread{border-color:#456b7d;background:#0c1821}.fav-article-link{display:grid;grid-template-columns:112px 1fr;gap:10px;color:#fff;text-decoration:none;padding:9px}.fav-article-link>img,.fav-thumb{width:112px;height:74px;border-radius:8px;object-fit:cover;background:#172231}.fav-article-link>div{min-width:0}.fav-read-badge{display:inline-block;font-size:10px;color:#8feaff;margin-bottom:3px}.fav-article.is-read .fav-read-badge{color:#7f8ea2}.fav-article-link strong,.fav-article-link small,.fav-article-link p,.fav-article-link em{display:block}.fav-article-link strong{font-size:14px}.fav-article-link small,.fav-article-link p{color:#8393a7;font-size:11px}.fav-article-link p{margin:5px 0 0;line-height:1.55}.fav-article-link em{font-style:normal;color:#8feaff;font-size:11px;margin-top:5px}.fav-read-toggle{position:absolute;right:8px;bottom:8px;min-height:28px!important;padding:4px 7px!important;font-size:10px;background:#0b121b!important}.fav-page{display:flex;justify-content:center;align-items:center;gap:9px;margin-top:9px}.fav-page span{font-size:11px;color:#8797aa}.fav-reader-empty,.fav-reader-error{padding:13px;border-radius:10px;background:#0c141e;color:#8998aa;text-align:center}.fav-reader-error{border:1px solid #734b55;color:#ffbdc5}.fav-actions select{max-width:170px}.fav-actions select:focus,.fav-groups input:focus{outline:1px solid #7fdfff}
+      @media(max-width:720px){.fav-reader-head,.fav-groups-title,.fav-creator-main{align-items:stretch;flex-direction:column}.fav-reader-head input{min-width:0;width:100%}.fav-group-create{display:grid;grid-template-columns:1fr auto}.fav-actions{justify-content:flex-start}.fav-actions select{max-width:none;flex:1 1 150px}.fav-article-tools{grid-template-columns:1fr 1fr}.fav-unread-summary{grid-column:1/-1}.fav-article-link{grid-template-columns:82px 1fr}.fav-article-link>img,.fav-thumb{width:82px;height:58px}.fav-read-toggle{position:static;margin:0 9px 9px}.fav-group-tabs{gap:5px}}
+    `}</style>
+  </div>
 }
