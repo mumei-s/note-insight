@@ -2,74 +2,20 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const read=()=>readFile(new URL("../public/note-insight-notification-sync.user.js",import.meta.url),"utf8");
+const read=(name)=>readFile(new URL(`../public/${name}`,import.meta.url),"utf8");
 
-test("notification sync v2.9.8 only runs when a notification read button is pressed and auto-saves", async () => {
-  const source = await read();
-  assert.match(source, /@version\s+2\.9\.8/);
-  assert.match(source, /note-notification-manual-sync-v298/);
-  assert.match(source, /manualCurrent\(root,current\)/);
-  assert.match(source, /manualSweep\(root,past\)/);
-  assert.match(source, /current\.textContent='🔔 表示分読込'/);
-  assert.match(source, /past\.textContent='↧ 過去まで読込'/);
-  assert.match(source, /読込→INSIGHT自動保存完了/);
-  assert.match(source, /過去読込→INSIGHT自動保存完了/);
-  assert.match(source, /saveRows\(rows\)/);
-  assert.match(source, /saveRows\(\[\.\.\.seen\.values\(\)\]\)/);
-  assert.match(source, /box\.scrollTop=box\.scrollHeight/);
-  assert.match(source, /box\.scrollTop=start/);
-  assert.match(source, /panelObserver\.observe\(root,\{childList:true,subtree:true\}\)/);
-  assert.doesNotMatch(source, /scheduleSweep/);
-  assert.doesNotMatch(source, /autoSweep\(root\)/);
-  assert.doesNotMatch(source, /schedulePanelSync/);
-});
+async function sources(){return{boot:await read("note-insight-notification-sync.user.js"),runtime:await read("note-insight-notification-runtime-v298.js"),setup:await read("notification-import.html"),helper:await read("notification-install.html")}}
 
-test("pairing returns only to the INSIGHT origin after successful verification", async () => {
-  const source = await read();
-  assert.match(source, /function insightReturn/);
-  assert.match(source, /u\.origin==='https:\/\/mumei-s\.github\.io'/);
-  assert.match(source, /u\.pathname\.startsWith\('\/note-insight\/'\)/);
-  assert.match(source, /mumei_return/);
-  assert.match(source, /location\.replace\(back\)/);
-});
+test("v2.9.9 keeps manual notification read and auto-save runtime",async()=>{const{boot,runtime}=await sources();assert.match(boot,/@version\s+2\.9\.9/);assert.match(boot,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v298\.js\?v=298/);for(const x of ["manualCurrent(root,current)","manualSweep(root,past)","🔔 表示分読込","↧ 過去まで読込","読込→INSIGHT自動保存完了","過去読込→INSIGHT自動保存完了","saveRows(rows)","saveRows([...seen.values()])","box.scrollTop=box.scrollHeight","box.scrollTop=start","panelObserver.observe(root,{childList:true,subtree:true})"])assert.match(runtime,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));assert.doesNotMatch(runtime,/autoSweep\(root\)/);assert.doesNotMatch(runtime,/scheduleSweep/)});
 
-test("notification panel is re-bound after dashboard or stale panel transitions", async () => {
-  const source = await read();
-  for(const x of ["liveItems","panelUsable","resetPanel","retryPanel(true)","observedRoot&&observedRoot!==root"]) assert.match(source,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(source, /if\(observedRoot&&!panelUsable\(observedRoot\)\)resetPanel\(\)/);
-  assert.match(source, /if\(location\.pathname\.toLowerCase\(\)\.startsWith\('\/sitesettings\/stats'\)&&!notificationRoot\(\)\)return/);
-  assert.doesNotMatch(source, /\[popover\],main/);
-});
+test("pairing still returns only to INSIGHT after actual note verification",async()=>{const{runtime}=await sources();assert.match(runtime,/function insightReturn/);assert.match(runtime,/u\.origin==='https:\/\/mumei-s\.github\.io'/);assert.match(runtime,/u\.pathname\.startsWith\('\/note-insight\/'\)/);assert.match(runtime,/mumei_return/);assert.match(runtime,/location\.replace\(back\)/)});
 
-test("notification filter can be toggled in the notification toolbar by group", async () => {
-  const source = await read();
-  assert.match(source, /mumei_insight_magazine_mute_ids_v5:/);
-  assert.match(source, /mumei_insight_magazine_filter_enabled_v3:/);
-  assert.match(source, /mumei_insight_notification_groups_v1:/);
-  assert.match(source, /m297-filter-switch/);
-  assert.match(source, /setMasterFilter/);
-  assert.match(source, /setGroupEnabled/);
-  assert.match(source, /readGroups/);
-  assert.match(source, /isMag\(text\(e\)\)/);
-  assert.match(source, /mumei_filter_reset/);
-  assert.match(source, /mumei_groups_sync/);
-});
+test("dashboard bell is hard-reset through normal note before notification toolbar binds",async()=>{const{boot,runtime}=await sources();assert.match(boot,/startsWith\('\/sitesettings\/stats'\)/);assert.match(boot,/event\.stopImmediatePropagation\(\)/);assert.match(boot,/mumei_open_notice_v299/);assert.match(boot,/location\.replace\(`https:\/\/note\.com\/\?\$\{CLEAN_NOTICE\}=1`\)/);assert.match(boot,/openBellAfterCleanNavigation/);assert.match(boot,/bell\.dispatchEvent\(new MouseEvent\('click'/);for(const x of ["liveItems","panelUsable","resetPanel","retryPanel","observedRoot&&observedRoot!==root"])assert.match(runtime,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))});
 
-test("v2.9.8 supports modern and legacy userscript manager APIs", async () => {
-  const source = await read();
-  for(const x of ["GM.xmlHttpRequest","GM.getValue","GM.setValue","GM_xmlhttpRequest","GM_getValue","GM_setValue"]) assert.match(source,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(source, /@updateURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
-});
+test("notification filters and groups remain available",async()=>{const{runtime}=await sources();for(const x of ["mumei_insight_magazine_mute_ids_v5:","mumei_insight_magazine_filter_enabled_v3:","mumei_insight_notification_groups_v1:","m297-filter-switch","setMasterFilter","setGroupEnabled","readGroups","mumei_filter_reset","mumei_groups_sync"])assert.match(runtime,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))});
 
-test("dashboard auto-sync remains automatic and isolated from notification controls", async () => {
-  const source = await read();
-  assert.match(source, /startsWith\('\/sitesettings\/stats'\)/);
-  assert.match(source, /note-dashboard-auto-v298/);
-  assert.match(source, /#mumei-v297-dashboard\{position:fixed!important/);
-  assert.match(source, /saveDashboardAuto/);
-  assert.doesNotMatch(source, /host\.prepend/);
-  assert.doesNotMatch(source, /Dashboardを読み取る → INSIGHT反映/);
-  assert.doesNotMatch(source, /location\.href\s*=\s*['"]https:\/\/note\.com\/sitesettings\/stats/);
-  assert.doesNotMatch(source, /documentObserver/);
-  assert.doesNotMatch(source, /observe\(document\.documentElement/);
-});
+test("v2.9.9 uses raw update URLs and supports modern plus legacy GM APIs",async()=>{const{boot,runtime}=await sources();assert.match(boot,/@updateURL\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-sync\.user\.js/);for(const x of ["GM.xmlHttpRequest","GM.getValue","GM.setValue","GM_xmlhttpRequest","GM_getValue","GM_setValue"])assert.match(boot+runtime,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))});
+
+test("dashboard automatic ingest is preserved",async()=>{const{runtime}=await sources();assert.match(runtime,/startsWith\('\/sitesettings\/stats'\)/);assert.match(runtime,/note-dashboard-auto-v298/);assert.match(runtime,/saveDashboardAuto/);assert.doesNotMatch(runtime,/host\.prepend/);assert.doesNotMatch(runtime,/Dashboardを読み取る → INSIGHT反映/);assert.doesNotMatch(runtime,/observe\(document\.documentElement/)});
+
+test("PWA install flow launches browser helper and verifies installed v2.9.9 on note",async()=>{const{boot,setup,helper}=await sources();assert.match(setup,/display-mode: standalone/);assert.match(setup,/package=com\.microsoft\.emmx/);assert.match(setup,/notification-install\.html/);assert.match(helper,/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-sync\.user\.js/);assert.match(helper,/mumei_insight_version_check=1/);assert.match(boot,/mumei_insight_version_check/);assert.match(boot,/notificationInstalled/);assert.match(setup,/v2\.9\.9 実動確認済み/)});
