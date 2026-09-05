@@ -4,12 +4,15 @@ import test from "node:test";
 
 const read=()=>readFile(new URL("../public/note-insight-notification-sync.user.js",import.meta.url),"utf8");
 
-test("notification sync v2.9.2 is explicit and does not auto ingest", async () => {
+test("notification sync v2.9.3 is explicit and does not auto ingest", async () => {
   const source = await read();
-  assert.match(source, /@version\s+2\.9\.2/);
+  assert.match(source, /@version\s+2\.9\.3/);
   assert.match(source, /表示通知を読み込む/);
   assert.match(source, /過去通知を読み込む/);
   assert.match(source, /note-notification-explicit-sync-v292/);
+  assert.match(source, /mumei-v293-fallback/);
+  assert.match(source, /retryPanel/);
+  assert.match(source, /\[role=\"menu\"\]/);
   assert.doesNotMatch(source, /note-notification-auto-sync.*notifications/);
   assert.doesNotMatch(source, /\.click\(\)/);
 });
@@ -30,4 +33,6 @@ test("dashboard is manual and limited to official stats route", async () => {
   assert.match(source, /Dashboardを読み取る → INSIGHT反映/);
   assert.match(source, /note-dashboard-manual-v292/);
   assert.doesNotMatch(source, /location\.href\s*=\s*['"]https:\/\/note\.com\/sitesettings\/stats/);
+  assert.doesNotMatch(source, /documentObserver/);
+  assert.doesNotMatch(source, /observe\(document\.documentElement/);
 });
