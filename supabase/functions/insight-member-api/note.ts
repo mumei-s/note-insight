@@ -8,7 +8,7 @@ const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function get(path:string){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
   try{
-    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.5"},signal:c.signal});
+    const r=await fetch(ROOT+path,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.6"},signal:c.signal});
     if(!r.ok)throw new Error(`NOTE_PUBLIC_${r.status}`);
     return o(await r.json());
   }finally{clearTimeout(t)}
@@ -21,7 +21,7 @@ export async function creator(id:string){
 
 export type Article={key:string;title:string;url:string;published:string|null;likes:number;comments:number};
 export async function articles(id:string,page:number){
-  const p=await get(`/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${page}`),d=o(p.data),rows=a(d.contents??d.notes).map((x:any)=>{
+  const p=await get(`/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${page}&disabled_pinned=true&with_notes=false`),d=o(p.data),rows=a(d.contents??d.notes).map((x:any)=>{
     const v=o(o(x).note??x),key=s(v.key);
     return key?{key,title:s(v.name??v.title,"無題の記事"),url:s(v.noteUrl??v.url,`${ROOT}/${id}/n/${key}`),published:s(v.publishAt??v.publish_at)||null,likes:n(v.likeCount??v.like_count),comments:n(v.commentCount??v.comment_count)}:null;
   }).filter(Boolean) as Article[];
