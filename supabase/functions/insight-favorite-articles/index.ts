@@ -76,7 +76,7 @@ async function fetchPage(un: string, p: number) {
   ];
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint, { headers: { Accept: "application/json", "User-Agent": "Mumei-S-note-INSIGHT-favorites/2.1" } });
+      const r = await fetch(endpoint, { headers: { Accept: "application/json", "User-Agent": "Mumei-S-note-INSIGHT-favorites/2.2" } });
       if (!r.ok) continue;
       const x = normalize(await r.json(), un);
       if (x.rows.length || x.last) return x;
@@ -134,19 +134,33 @@ async function readSet(b: any) {
 }
 
 async function groups() {
-  const { data, error } = await db.from("insight_favorite_creators")
-    .select("creator_key,group_name")
-    .eq("member_id", MEMBER)
-    .order("created_at", { ascending: false });
+  const [{ data: defs, error: de }, { data: favs, error: fe }] = await Promise.all([
+    db.from("insight_favorite_groups").select("name,created_at,updated_at").eq("member_id", MEMBER).order("created_at", { ascending: true }),
+    db.from("insight_favorite_creators").select("creator_key,group_name").eq("member_id", MEMBER).order("created_at", { ascending: false }),
+  ]);
+  if (de) throw de;
+  if (fe) throw fe;
+  const definitions = (defs || []).map((x: any) => ({ name: cleanGroup(x.name), createdAt: x.created_at, updatedAt: x.updated_at })).filter((x: any) => x.name);
+  const rows = (favs || []).map((x: any) => ({ creatorKey: String(x.creator_key), groupName: cleanGroup(x.group_name) || null }));
+  return { ok: true, definitions, rows };
+}
+
+async function groupCreate(b: any) {
+  const name = cleanGroup(b?.groupName ?? b?.name);
+  if (!name) throw new Error("GROUP_NAME_REQUIRED");
+  const now = new Date().toISOString();
+  const { data, error } = await db.from("insight_favorite_groups")
+    .upsert({ member_id: MEMBER, name, updated_at: now }, { onConflict: "member_id,name" })
+    .select("name,created_at,updated_at").single();
   if (error) throw error;
-  const rows = (data || []).map((x: any) => ({ creatorKey: String(x.creator_key), groupName: cleanGroup(x.group_name) || null }));
-  return { ok: true, rows };
+  return { ok: true, name: cleanGroup(data.name), createdAt: data.created_at, updatedAt: data.updated_at };
 }
 
 async function groupSet(b: any) {
   const creatorKey = txt(b?.creatorKey);
   if (!creatorKey) throw new Error("CREATOR_KEY_REQUIRED");
   const groupName = cleanGroup(b?.groupName) || null;
+  if (groupName) await groupCreate({ groupName });
   const { data, error } = await db.from("insight_favorite_creators")
     .update({ group_name: groupName })
     .eq("member_id", MEMBER)
@@ -158,13 +172,25 @@ async function groupSet(b: any) {
   return { ok: true, creatorKey: String(data.creator_key), groupName: cleanGroup(data.group_name) || null };
 }
 
-async function groupClear(b: any) {
-  const groupName = cleanGroup(b?.groupName);
+async function groupRename(b: any) {
+  const from = cleanGroup(b?.from ?? b?.oldName);
+  const to = cleanGroup(b?.to ?? b?.newName);
+  if (!from || !to) throw new Error("GROUP_NAME_REQUIRED");
+  if (from === to) return { ok: true, from, to };
+  await groupCreate({ groupName: to });
+  const { error: favError } = await db.from("insight_favorite_creators").update({ group_name: to }).eq("member_id", MEMBER).eq("group_name", from);
+  if (favError) throw favError;
+  const { error: delError } = await db.from("insight_favorite_groups").delete().eq("member_id", MEMBER).eq("name", from);
+  if (delError) throw delError;
+  return { ok: true, from, to };
+}
+
+async function groupDelete(b: any) {
+  const groupName = cleanGroup(b?.groupName ?? b?.name);
   if (!groupName) throw new Error("GROUP_NAME_REQUIRED");
-  const { error } = await db.from("insight_favorite_creators")
-    .update({ group_name: null })
-    .eq("member_id", MEMBER)
-    .eq("group_name", groupName);
+  const { error: favError } = await db.from("insight_favorite_creators").update({ group_name: null }).eq("member_id", MEMBER).eq("group_name", groupName);
+  if (favError) throw favError;
+  const { error } = await db.from("insight_favorite_groups").delete().eq("member_id", MEMBER).eq("name", groupName);
   if (error) throw error;
   return { ok: true, groupName };
 }
@@ -179,8 +205,10 @@ Deno.serve(async (req) => {
     if (action === "articles") return out(await articles(b));
     if (action === "read_set") return out(await readSet(b));
     if (action === "groups") return out(await groups());
+    if (action === "group_create") return out(await groupCreate(b));
     if (action === "group_set") return out(await groupSet(b));
-    if (action === "group_clear") return out(await groupClear(b));
+    if (action === "group_rename") return out(await groupRename(b));
+    if (action === "group_delete" || action === "group_clear") return out(await groupDelete(b));
     return out({ ok: false, error: "UNKNOWN_ACTION" }, 400);
   } catch (e) {
     console.error(e);
