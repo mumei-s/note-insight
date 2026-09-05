@@ -2,8 +2,8 @@
   'use strict';
 
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  if (page.__MUMEI_AWARD_THIN_PATCH_112__) return;
-  page.__MUMEI_AWARD_THIN_PATCH_112__ = true;
+  if (page.__MUMEI_AWARD_THIN_PATCH_121__) return;
+  page.__MUMEI_AWARD_THIN_PATCH_121__ = true;
 
   const DATA_KEY = 'mumei_award_thin_dataset_v100';
   const SHARED_KEY = 'mumei_award_thin_shared_dataset_v112';
@@ -11,6 +11,7 @@
   let sharedCache = null;
   let lastLocal = '';
   let autoOpening = false;
+  let autoExtracting = false;
 
   function parse(value){
     try { return JSON.parse(value || 'null'); } catch (_) { return null; }
@@ -18,12 +19,8 @@
   function valid(value){
     return Boolean(value && value.sourceKey === 'nde66a065c21c' && Array.isArray(value.rows) && value.rows.length);
   }
-  function status(){
-    return document.querySelector('[id^="mumei-award-thin-status-"]');
-  }
-  function panel(){
-    return document.querySelector('[id^="mumei-award-thin-panel-"]');
-  }
+  function status(){ return document.querySelector('[id^="mumei-award-thin-status-"]'); }
+  function panel(){ return document.querySelector('[id^="mumei-award-thin-panel-"]'); }
   function setPatchStatus(text,bad=false){
     const el=status();
     if(!el) return;
@@ -80,11 +77,8 @@
     autoOpening=true;
     try{
       await new Promise(r=>setTimeout(r,180));
-      let plus=plusCandidate();
-      if(!plus){
-        setPatchStatus('極薄画像の準備完了 ✅ 本文の「＋」→「画像」を1回押してください');
-        return;
-      }
+      const plus=plusCandidate();
+      if(!plus){ setPatchStatus('極薄画像の準備完了 ✅ 本文の「＋」→「画像」を1回押してください'); return; }
       plus.click();
       const deadline=Date.now()+5000;
       while(Date.now()<deadline){
@@ -100,11 +94,41 @@
     }
   }
 
+  async function autoExtractThenImage(){
+    if(autoExtracting) return;
+    autoExtracting=true;
+    try{
+      const p=panel();
+      const extract=p?.querySelector('button[data-a="extract"]');
+      const images=p?.querySelector('button[data-a="images"]');
+      if(!extract || !images) throw new Error('表彰ツールのボタンが見つかりません');
+      setPatchStatus('抽出データなし → 元記事から自動抽出中…');
+      extract.click();
+      const deadline=Date.now()+90000;
+      let data=null;
+      while(Date.now()<deadline){
+        data=parse(localStorage.getItem(DATA_KEY));
+        if(valid(data) && !extract.disabled && !images.disabled) break;
+        await new Promise(r=>setTimeout(r,250));
+      }
+      if(!valid(data)) throw new Error('自動抽出が完了しませんでした');
+      await syncLocalToShared();
+      setPatchStatus(`自動抽出 ${data.linkedCount ?? data.rows.filter(r=>r.url).length}件 ✅ 極薄画像を準備開始…`);
+      await new Promise(r=>setTimeout(r,150));
+      autoExtracting=false;
+      images.click();
+    }catch(error){
+      setPatchStatus(`画の自動開始失敗：${error?.message||String(error)}`,true);
+    }finally{
+      autoExtracting=false;
+    }
+  }
+
   function observeStatus(){
     const attach=()=>{
       const el=status();
-      if(!el || el.dataset.patch112==='1') return false;
-      el.dataset.patch112='1';
+      if(!el || el.dataset.patch121==='1') return false;
+      el.dataset.patch121='1';
       const observer=new MutationObserver(()=>{
         const text=String(el.textContent||'');
         if(/準備完了\s*\d+件.*「＋」.*「画像」/.test(text)) void autoOpenImage();
@@ -120,7 +144,7 @@
 
   function installImagePreflight(){
     if(!IS_EDITOR) return;
-    document.addEventListener('pointerdown',(event)=>{
+    document.addEventListener('click',(event)=>{
       const button=event.target?.closest?.('button[data-a="images"]');
       if(!button) return;
       const local=parse(localStorage.getItem(DATA_KEY));
@@ -130,7 +154,11 @@
         localStorage.setItem(DATA_KEY,text);
         lastLocal=text;
         setPatchStatus(`抽出データ ${sharedCache.linkedCount ?? sharedCache.rows.filter(r=>r.url).length}件を復元 ✅ 「画」を続行`);
+        return;
       }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void autoExtractThenImage();
     },true);
   }
 
@@ -141,9 +169,7 @@
     setInterval(()=>void syncLocalToShared(),500);
     if(IS_EDITOR && sharedCache){
       const el=status();
-      if(el && !/対象\d+件/.test(el.textContent||'')){
-        setPatchStatus(`抽出データ ${sharedCache.linkedCount ?? sharedCache.rows.filter(r=>r.url).length}件を共有保存から復元済み ✅`);
-      }
+      if(el && !/対象\d+件/.test(el.textContent||'')) setPatchStatus(`抽出データ ${sharedCache.linkedCount ?? sharedCache.rows.filter(r=>r.url).length}件を共有保存から復元済み ✅`);
     }
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>void boot(),{once:true}); else void boot();
