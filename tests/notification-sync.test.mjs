@@ -4,10 +4,10 @@ import test from "node:test";
 
 const read=()=>readFile(new URL("../public/note-insight-notification-sync.user.js",import.meta.url),"utf8");
 
-test("notification sync v2.9.7 only runs when a notification read button is pressed and auto-saves", async () => {
+test("notification sync v2.9.8 only runs when a notification read button is pressed and auto-saves", async () => {
   const source = await read();
-  assert.match(source, /@version\s+2\.9\.7/);
-  assert.match(source, /note-notification-manual-sync-v297/);
+  assert.match(source, /@version\s+2\.9\.8/);
+  assert.match(source, /note-notification-manual-sync-v298/);
   assert.match(source, /manualCurrent\(root,current\)/);
   assert.match(source, /manualSweep\(root,past\)/);
   assert.match(source, /current\.textContent='🔔 表示分読込'/);
@@ -22,6 +22,15 @@ test("notification sync v2.9.7 only runs when a notification read button is pres
   assert.doesNotMatch(source, /scheduleSweep/);
   assert.doesNotMatch(source, /autoSweep\(root\)/);
   assert.doesNotMatch(source, /schedulePanelSync/);
+});
+
+test("pairing returns only to the INSIGHT origin after successful verification", async () => {
+  const source = await read();
+  assert.match(source, /function insightReturn/);
+  assert.match(source, /u\.origin==='https:\/\/mumei-s\.github\.io'/);
+  assert.match(source, /u\.pathname\.startsWith\('\/note-insight\/'\)/);
+  assert.match(source, /mumei_return/);
+  assert.match(source, /location\.replace\(back\)/);
 });
 
 test("notification panel is re-bound after dashboard or stale panel transitions", async () => {
@@ -46,7 +55,7 @@ test("notification filter can be toggled in the notification toolbar by group", 
   assert.match(source, /mumei_groups_sync/);
 });
 
-test("v2.9.7 supports modern and legacy userscript manager APIs", async () => {
+test("v2.9.8 supports modern and legacy userscript manager APIs", async () => {
   const source = await read();
   for(const x of ["GM.xmlHttpRequest","GM.getValue","GM.setValue","GM_xmlhttpRequest","GM_getValue","GM_setValue"]) assert.match(source,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(source, /@updateURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
@@ -55,7 +64,7 @@ test("v2.9.7 supports modern and legacy userscript manager APIs", async () => {
 test("dashboard auto-sync remains automatic and isolated from notification controls", async () => {
   const source = await read();
   assert.match(source, /startsWith\('\/sitesettings\/stats'\)/);
-  assert.match(source, /note-dashboard-auto-v297/);
+  assert.match(source, /note-dashboard-auto-v298/);
   assert.match(source, /#mumei-v297-dashboard\{position:fixed!important/);
   assert.match(source, /saveDashboardAuto/);
   assert.doesNotMatch(source, /host\.prepend/);
