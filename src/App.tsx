@@ -13,6 +13,7 @@ import { OwnerGate } from "./owner-gate";
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
+const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -24,6 +25,7 @@ function currentRoute() {
 }
 function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
+function memberRoute(route: string) { return route === "access/insight" || route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
 
 export function goTo(route: string) {
   const next = route || "home";
@@ -51,6 +53,7 @@ function BottomNav({ route }: { route: string }) {
       .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
       .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}
       .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
+      .app-session-check{min-height:56vh;display:grid;place-items:center;padding:28px}.app-session-check>div{width:min(420px,100%);border:1px solid #2c4055;border-radius:16px;background:#0c1621;padding:18px;color:#dce9f5;text-align:center}.app-session-check b{display:block;color:#8feaff;margin-bottom:6px}.app-session-check span{font-size:12px;color:#91a3b7}
       @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:320px}.app-route-shell{padding-bottom:94px}}
     `}</style>
   </>;
@@ -58,6 +61,8 @@ function BottomNav({ route }: { route: string }) {
 
 export function App() {
   const [route, setRoute] = useState(currentRoute);
+  const [validatedMemberToken, setValidatedMemberToken] = useState("");
+  const [checkingMember, setCheckingMember] = useState(false);
 
   useEffect(() => {
     const update = () => {
@@ -86,22 +91,40 @@ export function App() {
 
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
   const memberToken = localStorage.getItem(MEMBER_KEY) || "";
+  const needsMember = memberRoute(route);
+  useEffect(() => {
+    let cancelled = false;
+    if (!needsMember || !memberToken) { setCheckingMember(false); if (!memberToken) setValidatedMemberToken(""); return; }
+    if (validatedMemberToken === memberToken) { setCheckingMember(false); return; }
+    setCheckingMember(true);
+    const c = new AbortController();
+    const timer = window.setTimeout(() => c.abort(), 20_000);
+    fetch(ACCESS_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":memberToken},body:JSON.stringify({action:"session"}),cache:"no-store",signal:c.signal})
+      .then(async r=>({ok:r.ok,p:await r.json().catch(()=>({}))}))
+      .then(({ok,p})=>{if(cancelled)return;if(ok&&p?.ok!==false){setValidatedMemberToken(memberToken)}else{localStorage.removeItem(MEMBER_KEY);setValidatedMemberToken("")}})
+      .catch(()=>{if(!cancelled)setValidatedMemberToken(memberToken)})
+      .finally(()=>{window.clearTimeout(timer);if(!cancelled)setCheckingMember(false)});
+    return()=>{cancelled=true;window.clearTimeout(timer);c.abort()};
+  },[memberToken,needsMember,validatedMemberToken]);
+
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
+  const memberValid = Boolean(memberToken && validatedMemberToken === memberToken);
   let page;
-  if (route === "access/insight") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  if (needsMember && memberToken && !memberValid && checkingMember) page = <div className="app-session-check"><div><b>INSIGHT</b><span>ログイン状態を1回だけ確認しています…</span></div></div>;
+  else if (route === "access/insight") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
-  else if (route === "owner-insight") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "owner-insight") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
-  else if (route === "dashboard") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
-  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightLiveV2 />;
-  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightLiveV2 />;
-  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightLiveV2 />;
-  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : <MemberInsightLiveV2 />;
+  else if (route === "dashboard") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
-  const hideBottomNav = (route.startsWith("access/") && !memberToken) || admin;
+  const hideBottomNav = (route.startsWith("access/") && !memberToken) || admin || checkingMember;
   return <>
     <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
     {hideBottomNav ? null : <BottomNav route={route} />}
