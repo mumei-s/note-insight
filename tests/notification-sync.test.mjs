@@ -2,40 +2,32 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("notification sync detects the opened mobile notification view", async () => {
-  const source = await readFile(
-    new URL("../public/note-insight-notification-sync.user.js", import.meta.url),
-    "utf8",
-  );
+const read=()=>readFile(new URL("../public/note-insight-notification-sync.user.js",import.meta.url),"utf8");
 
-  assert.match(source, /@version\s+2\.1\.0/);
-  assert.match(source, /tabByText\('通知'\)/);
-  assert.match(source, /tabByText\('お知らせ'\)/);
-  assert.match(source, /new MutationObserver\(check\)/);
-  assert.match(source, /onNotificationOpened/);
-  assert.doesNotMatch(source, /通知ベルを自動で見つけられません/);
+test("notification sync v2.9.2 is explicit and does not auto ingest", async () => {
+  const source = await read();
+  assert.match(source, /@version\s+2\.9\.2/);
+  assert.match(source, /表示通知を読み込む/);
+  assert.match(source, /過去通知を読み込む/);
+  assert.match(source, /note-notification-explicit-sync-v292/);
+  assert.doesNotMatch(source, /note-notification-auto-sync.*notifications/);
+  assert.doesNotMatch(source, /\.click\(\)/);
 });
 
-test("notification status uses a non-obstructive edge drawer", async () => {
-  const source = await readFile(
-    new URL("../public/note-insight-notification-sync.user.js", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /data-sync-tab/);
-  assert.match(source, /data-sync-panel/);
-  assert.match(source, /data-sync-close/);
-  assert.match(source, /right:'0'/);
-  assert.match(source, /host\._collapse/);
+test("notification filter stays scoped and old filters can be reset", async () => {
+  const source = await read();
+  assert.match(source, /mumei_insight_magazine_mute_ids_v5:/);
+  assert.match(source, /mumei_insight_magazine_filter_enabled_v3:/);
+  assert.match(source, /mumei_insight_notification_groups_v1:/);
+  assert.match(source, /isMag\(text\(e\)\)/);
+  assert.match(source, /mumei_filter_reset/);
+  assert.match(source, /mumei_groups_sync/);
 });
 
-test("magazine mute stays scoped to actor and notification type", async () => {
-  const source = await readFile(
-    new URL("../public/note-insight-notification-sync.user.js", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /isMagazineNotice\(text\)&&actors\.some/);
-  assert.match(source, /mumeiMagazineMuted/);
-  assert.match(source, /一時表示/);
+test("dashboard is manual and limited to official stats route", async () => {
+  const source = await read();
+  assert.match(source, /startsWith\('\/sitesettings\/stats'\)/);
+  assert.match(source, /Dashboardを読み取る → INSIGHT反映/);
+  assert.match(source, /note-dashboard-manual-v292/);
+  assert.doesNotMatch(source, /location\.href\s*=\s*['"]https:\/\/note\.com\/sitesettings\/stats/);
 });
