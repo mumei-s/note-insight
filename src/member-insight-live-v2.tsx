@@ -4,6 +4,7 @@ import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
 import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
 import { MemberInsightAnalyticsFinal } from "./member-insight-analytics-final";
+import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
@@ -12,7 +13,7 @@ const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-memb
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const AUTO_MS=120_000;
 const QUIET_MS=2_500;
-type Mode="normal"|"social"|"notifications"|"analysis";
+type Mode="normal"|"comments"|"social"|"notifications"|"analysis";
 type Row=Record<string,any>;
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
@@ -82,7 +83,8 @@ export function MemberInsightLiveV2(){
   function capture(e:React.MouseEvent){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;
     const label=t.closest("button")?.textContent?.trim()||"";
-    if(label==="フォロー")setMode("social");
+    if(label==="コメント")setMode("comments");
+    else if(label==="フォロー")setMode("social");
     else if(label==="通知")setMode("notifications");
     else setMode("normal");
   }
@@ -91,6 +93,7 @@ export function MemberInsightLiveV2(){
     <OfficialStats data={official}/>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
+    {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={()=>setMode("normal")}/></div>:null}
