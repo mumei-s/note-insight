@@ -14,7 +14,6 @@ const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-r
 const AUTO_MS=120_000;
 const QUIET_MS=2_500;
 type Mode="normal"|"comments"|"social"|"notifications"|"analysis";
-type Row=Record<string,any>;
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
@@ -28,18 +27,6 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
   }finally{window.clearTimeout(timer)}
 }
 const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
-
-function OfficialStats({data}:{data:any}){
-  if(!data)return null;
-  const articles=data.articles||[],likes=articles.reduce((s:number,r:Row)=>s+Number(r.like_count||0),0),comments=articles.reduce((s:number,r:Row)=>s+Number(r.comment_count||0),0),creator=data.creator||{},stats=data.stats||{};
-  return <section className="miv5-official">
-    <article><small>記事</small><b>{fmt(creator.notes??stats.storedArticles??articles.length)}</b><span>保存 {fmt(stats.storedArticles??articles.length)}</span></article>
-    <article><small>スキ総数</small><b>{fmt(likes)}</b><span>人物取得 {fmt(stats.identifiedLikes||0)}</span></article>
-    <article><small>コメント総数</small><b>{fmt(comments)}</b><span>保存詳細 {fmt(stats.storedComments||0)}</span></article>
-    <article><small>フォロワー</small><b>{fmt(creator.followers)}</b><span>note公式</span></article>
-    <article><small>フォロー中</small><b>{fmt(creator.following)}</b><span>note公式</span></article>
-  </section>;
-}
 
 export function MemberInsightLiveV2(){
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>("normal"),[official,setOfficial]=useState<any>(null);
@@ -62,15 +49,15 @@ export function MemberInsightLiveV2(){
     setManualBusy(true);setStatus("公開履歴を更新中…");
     try{
       await publicSync(true);
-      setStatus("フォロー・フォロワーを完全照合中…");
-      try{await post(RELATIONS,"sync",{},120_000)}catch(e){setStatus(`フォロー照合は継続再試行：${e instanceof Error?e.message:"一時エラー"}`)}
+      setStatus("フォロー・フォロワーを照合中…");
+      try{await post(RELATIONS,"sync",{},120_000)}catch(e){setStatus(`フォロー照合は次回も継続：${e instanceof Error?e.message:"一時エラー"}`)}
       setRevision(v=>v+1);await loadOfficial();
       setStatus("最新版アプリを確認中…");
       if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}
       await fetch(`./?app-check=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);
       setStatus("データ・アプリ最新版を更新しました");
-      setManualBusy(false);
-    }catch(e){setStatus(e instanceof Error?`更新エラー：${e.message}`:"更新エラー");setManualBusy(false)}
+    }catch(e){setStatus(e instanceof Error?`更新エラー：${e.message}`:"更新エラー")}
+    finally{setManualBusy(false)}
   }
   useEffect(()=>{
     void loadOfficial();
@@ -89,13 +76,12 @@ export function MemberInsightLiveV2(){
     else setMode("normal");
   }
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
-    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>総数はnote公式値。詳細履歴は完全性監査で一致確認し、不足分を自動補完します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>setMode(v=>v==="analysis"?"normal":"analysis")}>{mode==="analysis"?"✓ 分析表示中":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
-    <OfficialStats data={official}/>
+    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>総数はnote公式値。公開APIで人物まで確認できる範囲は別表示します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>setMode(v=>v==="analysis"?"normal":"analysis")}>{mode==="analysis"?"✓ 分析表示中":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
-    {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision}/></div>:null}
+    {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={()=>setMode("normal")}/></div>:null}
   </div>;
 }
