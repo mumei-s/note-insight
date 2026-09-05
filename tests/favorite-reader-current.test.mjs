@@ -15,7 +15,7 @@ test("production favorite tab uses durable account-scoped groups", async () => {
   assert.match(live, /label==="お気に入り"/);
   assert.match(live, /mode==="favorites"/);
   assert.match(css, /mode-favorites/);
-  for (const label of ["お気に入り・グループ管理","グループ作成","未分類","通知グループとは別","グループ","名称変更"]) assert.match(reader, new RegExp(label));
+  for (const label of ["お気に入り・グループ管理","グループ作成","未分類","通知フィルターのグループとは別","グループ管理","名前変更","グループ削除"]) assert.match(reader, new RegExp(label));
   for (const action of ["create","assign","rename","delete","list"]) assert.match(reader+groups, new RegExp(`action[:=].*["']${action}["']|a===?["']${action}["']`));
   assert.match(reader, /favorite_articles/);
   assert.match(reader, /favorite_read_set/);
