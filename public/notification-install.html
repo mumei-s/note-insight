@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-store">
+<title>通知ツール更新｜INSIGHT</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(640px,calc(100% - 22px));margin:auto;padding:24px 0 70px}.card{border:1px solid #36516a;border-radius:18px;background:#0d1620;padding:20px;margin-top:12px}.card h1{font-size:27px;margin:4px 0 10px}.card p{color:#a9b8c8;line-height:1.7}.status{margin-top:12px;padding:11px;border:1px solid #3f5d75;border-radius:11px;background:#09131c;color:#bdeeff;font-size:12px;font-weight:800;line-height:1.6}.ok{border-color:#48704f;background:#0c1b11;color:#b9ffca}.warn{border-color:#765f2f;background:#1c1609;color:#ffe4a0}.btn{width:100%;min-height:54px;border:0;border-radius:12px;margin-top:12px;padding:0 14px;background:#b6ff38;color:#071016;font-weight:950;font-size:15px;display:flex;align-items:center;justify-content:center;text-decoration:none}.sub{background:#122131;color:#dbeeff;border:1px solid #405c74}.tiny{font-size:11px;color:#8092a5;line-height:1.6}.hidden{display:none!important}
+</style>
+</head>
+<body><main class="wrap">
+<section class="card"><small>EDGE / TAMPERMONKEY INSTALL</small><h1>本人通知・統計 v2.9.9</h1><p>この画面は<strong>INSIGHTアプリ内ではなく、Tampermonkeyが動くブラウザ本体</strong>でインストールするための専用画面です。</p><div id="status" class="status">インストール／更新ボタンを押してください。</div><button id="install" class="btn">v2.9.9 をインストール／更新</button><button id="verify" class="btn sub">インストール済み版を確認してINSIGHTへ戻る</button><p class="tiny">Tampermonkey公式推奨の「.user.js / GitHub View raw」方式を使います。インストール画面は別タブで開くため、この画面は残ります。</p></section>
+<section class="card"><strong>文字列だけ表示された場合</strong><p class="tiny">Tampermonkey 5.3以降のChrome/Edge系では、ユーザースクリプト実行許可または開発者モードが必要です。また5.5系では更新確認と実更新が分離されています。Tampermonkey側で「Userscript URL detection」をLegacyにすると従来のURL検出に戻せます。</p></section>
+</main>
+<script>
+const RAW='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js',VERSION='2.9.9',q=new URLSearchParams(location.search),status=document.getElementById('status'),install=document.getElementById('install'),verify=document.getElementById('verify');
+function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:'https://mumei-s.github.io/note-insight/notification-import.html?from=setup'}catch{return'https://mumei-s.github.io/note-insight/notification-import.html?from=setup'}}
+const back=safeReturn(q.get('return'));
+function checkUrl(){return`https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(back)}`}
+function beginVerify(){status.className='status';status.textContent='インストール済み版をnote上で確認しています…';location.href=checkUrl()}
+install.onclick=()=>{sessionStorage.setItem('mumei-v299-install-opened',String(Date.now()));status.className='status';status.textContent='Tampermonkeyのインストール／更新タブを開きました。完了するとこの画面へ戻れます。';const w=window.open(`${RAW}?v=2.9.9&t=${Date.now()}`,'_blank','noopener');if(!w){status.className='status warn';status.textContent='新しいタブを開けませんでした。ポップアップを許可して再度押してください。'}};
+verify.onclick=beginVerify;
+let autoDone=false;function maybeVerify(){if(autoDone||document.visibilityState!=='visible')return;const at=Number(sessionStorage.getItem('mumei-v299-install-opened')||0);if(!at||Date.now()-at<1500)return;autoDone=true;sessionStorage.removeItem('mumei-v299-install-opened');window.setTimeout(beginVerify,250)}
+window.addEventListener('focus',maybeVerify);window.addEventListener('pageshow',maybeVerify);document.addEventListener('visibilitychange',maybeVerify);
+</script></body></html>
