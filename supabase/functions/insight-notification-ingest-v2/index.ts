@@ -1,34 +1,110 @@
 import { createClient } from "npm:@supabase/supabase-js@2.112.4";
+
 const U=Deno.env.get("SUPABASE_URL")!,K=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(U,K,{auth:{persistSession:false}});
-const H={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"content-type,x-ingest-token","Access-Control-Allow-Methods":"POST,OPTIONS","Content-Type":"application/json; charset=utf-8"};
+const H={
+  "Access-Control-Allow-Origin":"*",
+  "Access-Control-Allow-Headers":"content-type,x-ingest-token",
+  "Access-Control-Allow-Methods":"POST,OPTIONS",
+  "Content-Type":"application/json; charset=utf-8",
+};
 const out=(x:unknown,s=200)=>new Response(JSON.stringify(x),{status:s,headers:H});
-async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+
+async function sha(v:string){
+  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
 function clean(v:unknown,max=2000){return typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null}
-function cleanTarget(v:unknown){const raw=clean(v,1200);if(!raw)return null;try{const u=new URL(raw);u.hash="";u.searchParams.delete("from");return u.toString()}catch{return raw}}
+function cleanTarget(v:unknown){
+  const raw=clean(v,1200); if(!raw)return null;
+  try{const u=new URL(raw);u.hash="";u.searchParams.delete("from");return u.toString()}catch{return raw}
+}
 function canonicalText(v:string){return v.replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim()}
-function actorFromText(v:string){const t=canonicalText(v),m=t.match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の)/u);return m?.[1]?.trim()||null}
-function classify(text:string,targetUrl:string|null){const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
- if(/(?:あなたのコメント.{0,80}(?:に|へ).{0,20}スキ(?:しました|されました)|コメントにスキしました|コメントをスキしました)/.test(t))return"comment_like";
- if(/(?:あなたの記事にスキしました|あなたの投稿にスキしました|「[^」]{0,500}」にスキしました|新しいスキが\d*件?増えました|さん他?\d*名?があなたの記事にスキしました)/.test(t))return"like";
- if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t))return"reply";
- if(/(?:あなたの記事.{0,80}コメントしました|新しいコメントが\d*件?増えました|コメントがありました)/.test(t))return"comment";
- if(/メンバーシップ.{0,80}掲示板.{0,40}投稿しました/.test(t))return"membership_board";
- if(/メンバーシップを(?:はじめ|始め|開始し)ました/.test(t))return"membership_started";
- if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
- if(/(?:あなたのメンバーシップ.{0,50}参加しました|あなたのメンバーシップ.{0,50}メンバーになりました|メンバーシップに参加しました)/.test(t))return"membership_join";
- if(/(?:運営メンバーに仲間入りしました|マガジン.{0,80}参加しました|共同マガジン.{0,80}仲間入りしました)/.test(t))return"magazine_join";
- if(/(?:あなたの記事が.{0,160}に追加されました|あなたの記事を.{0,120}マガジン.{0,50}追加)/.test(t))return"my_article_magazine_added";
- if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
- if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さんがあなたをフォロー)/.test(t))return"follow";
- if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
- if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
- if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
- if(/(?:チップを送りました|チップを贈りました|チップを受け取りました|チップが届|サポートされました|サポートを受けました)/.test(t))return"tip";
- if(/(?:あなたの記事.{0,40}引用され|あなたの記事.{0,40}紹介され)/.test(t))return"quote";
- if(/あなたの記事を高評価しました/.test(t))return"rating";
- if(/(?:あなたにポイント|ポイントが付与|ポイントを獲得)/.test(t))return"points";
- return"other"}
-async function identity(req:Request){const raw=req.headers.get("X-Ingest-Token")||"";if(!raw)throw new Error("INGEST_TOKEN_REQUIRED");const now=new Date().toISOString();const{data,error}=await db.from("insight_notification_ingest_tokens").select("member_id,expires_at").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();if(error||!data?.member_id)throw new Error("INGEST_TOKEN_INVALID");const memberId=String(data.member_id);if(memberId==="owner")return{memberId,noteId:"ss_yr"};const{data:app}=await db.from("insight_access_applications").select("note_id,status,verified_at").eq("id",memberId).maybeSingle();if(app?.note_id&&app.status==="active"&&app.verified_at)return{memberId,noteId:String(app.note_id).toLowerCase()};const{data:profile}=await db.from("insight_notification_profiles").select("note_urlname").eq("member_id",memberId).maybeSingle();const noteId=String(profile?.note_urlname||"").toLowerCase();if(!noteId)throw new Error("INGEST_ACCOUNT_UNKNOWN");return{memberId,noteId}}
-function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type);return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`}
-Deno.serve(async(req)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);try{const who=await identity(req),body=await req.json().catch(()=>({})),suppliedNoteId=String(body?.noteId||"").trim().replace(/^@/,"").toLowerCase();if(!suppliedNoteId||suppliedNoteId!==who.noteId)return out({ok:false,error:"NOTIFICATION_ACCOUNT_MISMATCH",expectedNoteId:who.noteId},409);const incoming=Array.isArray(body?.notifications)?body.notifications.slice(0,1000):[];let inserted=0,updated=0,blocked=0,skipped=0;for(const item of incoming){const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||"");if(source==="note-notification-auto-sync"||source==="note-notification-visible-sync"||source==="note-notification-passive-sync"){blocked++;continue}if(!["note-notification-explicit-sync","note-notification-explicit-sync-v290","note-notification-explicit-sync-v291","note-notification-explicit-sync-v292"].includes(source)){blocked++;continue}const raw=clean(item?.raw_text??item?.text,500);if(!raw||raw.length<5||raw.length>420){skipped++;continue}const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);if(type==="other"){skipped++;continue}const actorName=clean(item?.actor_name,200)||actorFromText(raw),at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null,bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString(),actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket)),row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v8-v292-manual"}};const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});if(error)throw error;if(existing?.id)updated++;else inserted++}await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-explicit-v292"});return out({ok:true,noteId:who.noteId,received:incoming.length,inserted,updated,blocked,skipped})}catch(e){const message=e instanceof Error?e.message:"INGEST_ERROR";return out({ok:false,error:message},/REQUIRED|INVALID|UNKNOWN/.test(message)?401:500)}});
+function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の)/u);return m?.[1]?.trim()||null}
+
+function classify(text:string,targetUrl:string|null){
+  const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
+  if(/(?:あなたのコメント.{0,80}(?:に|へ).{0,20}スキ(?:しました|されました)|コメントにスキしました|コメントをスキしました)/.test(t))return"comment_like";
+  if(/(?:あなたの記事にスキしました|あなたの投稿にスキしました|「[^」]{0,500}」にスキしました|新しいスキが\d*件?増えました|さん他?\d*名?があなたの記事にスキしました)/.test(t))return"like";
+  if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t))return"reply";
+  if(/(?:あなたの記事.{0,80}コメントしました|新しいコメントが\d*件?増えました|コメントがありました)/.test(t))return"comment";
+  if(/メンバーシップ.{0,80}掲示板.{0,40}投稿しました/.test(t))return"membership_board";
+  if(/メンバーシップを(?:はじめ|始め|開始し)ました/.test(t))return"membership_started";
+  if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
+  if(/(?:あなたのメンバーシップ.{0,50}参加しました|あなたのメンバーシップ.{0,50}メンバーになりました|メンバーシップに参加しました)/.test(t))return"membership_join";
+  if(/(?:運営メンバーに仲間入りしました|マガジン.{0,80}参加しました|共同マガジン.{0,80}仲間入りしました)/.test(t))return"magazine_join";
+  if(/(?:あなたの記事が.{0,160}に追加されました|あなたの記事を.{0,120}マガジン.{0,50}追加)/.test(t))return"my_article_magazine_added";
+  if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
+  if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さんがあなたをフォロー)/.test(t))return"follow";
+  if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
+  if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
+  if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
+  if(/(?:チップを送りました|チップを贈りました|チップを受け取りました|チップが届|サポートされました|サポートを受けました)/.test(t))return"tip";
+  if(/(?:あなたの記事.{0,40}引用され|あなたの記事.{0,40}紹介され)/.test(t))return"quote";
+  if(/あなたの記事を高評価しました/.test(t))return"rating";
+  if(/(?:あなたにポイント|ポイントが付与|ポイントを獲得)/.test(t))return"points";
+  return"other";
+}
+
+async function identity(req:Request){
+  const raw=req.headers.get("X-Ingest-Token")||"";
+  if(!raw)throw new Error("INGEST_TOKEN_REQUIRED");
+  const now=new Date().toISOString();
+  const{data,error}=await db.from("insight_notification_ingest_tokens").select("member_id,expires_at").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();
+  if(error||!data?.member_id)throw new Error("INGEST_TOKEN_INVALID");
+  const memberId=String(data.member_id);
+  if(memberId==="owner")return{memberId,noteId:"ss_yr"};
+  const{data:app}=await db.from("insight_access_applications").select("note_id,status,verified_at").eq("id",memberId).maybeSingle();
+  if(app?.note_id&&app.status==="active"&&app.verified_at)return{memberId,noteId:String(app.note_id).toLowerCase()};
+  const{data:profile}=await db.from("insight_notification_profiles").select("note_urlname").eq("member_id",memberId).maybeSingle();
+  const noteId=String(profile?.note_urlname||"").toLowerCase();
+  if(!noteId)throw new Error("INGEST_ACCOUNT_UNKNOWN");
+  return{memberId,noteId};
+}
+
+function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
+  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type);
+  return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
+}
+function allowedExplicitSource(source:string){
+  if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
+  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+)$/.test(source);
+}
+
+Deno.serve(async(req)=>{
+  if(req.method==="OPTIONS")return new Response("ok",{headers:H});
+  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
+  try{
+    const who=await identity(req),body=await req.json().catch(()=>({}));
+    const suppliedNoteId=String(body?.noteId||"").trim().replace(/^@/,"").toLowerCase();
+    if(!suppliedNoteId||suppliedNoteId!==who.noteId)return out({ok:false,error:"NOTIFICATION_ACCOUNT_MISMATCH",expectedNoteId:who.noteId},409);
+    const incoming=Array.isArray(body?.notifications)?body.notifications.slice(0,1000):[];
+    let inserted=0,updated=0,blocked=0,skipped=0;
+    const sources=new Set<string>();
+    for(const item of incoming){
+      const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||"");
+      sources.add(source||"(empty)");
+      if(!allowedExplicitSource(source)){blocked++;continue}
+      const raw=clean(item?.raw_text??item?.text,500);
+      if(!raw||raw.length<5||raw.length>420){skipped++;continue}
+      const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
+      if(type==="other"){skipped++;continue}
+      const actorName=clean(item?.actor_name,200)||actorFromText(raw);
+      const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
+      const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
+      const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v9-manual"}};
+      const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
+      const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
+      if(error)throw error;
+      if(existing?.id)updated++;else inserted++;
+    }
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-manual-v299"});
+    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
+    if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
+    return out(result);
+  }catch(e){
+    const message=e instanceof Error?e.message:"INGEST_ERROR";
+    return out({ok:false,error:message},/REQUIRED|INVALID|UNKNOWN/.test(message)?401:500);
+  }
+});
