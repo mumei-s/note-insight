@@ -12,6 +12,7 @@ import "./member-insight-live-v2.css";
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const AUTO_MS=120_000;
+const RELATION_MS=600_000;
 const QUIET_MS=2_500;
 type Mode="normal"|"comments"|"social"|"notifications"|"analysis";
 
@@ -30,8 +31,13 @@ const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 
 export function MemberInsightLiveV2(){
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>("normal"),[official,setOfficial]=useState<any>(null);
-  const running=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0);
+  const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0);
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
+  async function relationSync(force=false){
+    const now=Date.now();if(relationRunning.current||(!force&&now-lastRelationRun.current<RELATION_MS))return false;
+    relationRunning.current=true;lastRelationRun.current=now;
+    try{await post(RELATIONS,"sync",{},120_000);setRevision(v=>v+1);return true}catch{return false}finally{relationRunning.current=false}
+  }
   async function publicSync(force=false){
     if(running.current)return false;
     const now=Date.now();
@@ -40,7 +46,7 @@ export function MemberInsightLiveV2(){
     try{
       const p=await post(MEMBER,"sync",{},75_000);
       setStatus(`自動更新済み・記事確認${fmt(p.scannedArticles||0)}件 / 保存記事${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);
-      setRevision(v=>v+1);void loadOfficial();return true;
+      setRevision(v=>v+1);void loadOfficial();void relationSync(force);return true;
     }catch(e){setStatus(`自動更新は次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
     finally{running.current=false}
   }
@@ -50,7 +56,7 @@ export function MemberInsightLiveV2(){
     try{
       await publicSync(true);
       setStatus("フォロー・フォロワーを照合中…");
-      try{await post(RELATIONS,"sync",{},120_000)}catch(e){setStatus(`フォロー照合は次回も継続：${e instanceof Error?e.message:"一時エラー"}`)}
+      const ok=await relationSync(true);if(!ok)setStatus("フォロー照合は次回も自動継続します");
       setRevision(v=>v+1);await loadOfficial();
       setStatus("最新版アプリを確認中…");
       if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}
@@ -63,9 +69,9 @@ export function MemberInsightLiveV2(){
     void loadOfficial();
     const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
-    const first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>void publicSync(false),QUIET_MS)};
+    const first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>void publicSync(false),QUIET_MS)};
     document.addEventListener("visibilitychange",visible);
-    return()=>{window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)};
+    return()=>{window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)};
   },[]);
   function capture(e:React.MouseEvent){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;
