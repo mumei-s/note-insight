@@ -136,5 +136,7 @@ export function HubHome() {
     </section>
 
     <section className="hub-wrap hub-cross"><article><small>CROSS PLATFORM</small><h2>端末・ブラウザを固定しない</h2><p>本人確認後のnote ID＋個別パスコードで、別のスマホ・PC・ブラウザからもログインできます。この端末では複数アカウントを保存し、ログアウトせず切り替えられます。</p></article></section>
+
+    <section className="hub-note-exit-wrap"><a className="hub-note-exit" href="https://note.com/" target="_blank" rel="noopener noreferrer">アプリを終了してnoteへ ↗ <small>ログイン状態は保持</small></a></section>
   </main><ConfirmDialog action={confirm} account={activeAccount} busy={busy} onCancel={() => setConfirm(null)} onYes={() => void confirmAction()} /></div>;
 }
