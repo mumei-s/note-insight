@@ -11,6 +11,7 @@ import { MemberInsightLiveV2 } from "./member-insight-live-v2";
 import { OwnerGate } from "./owner-gate";
 
 const OWNER_KEY = "mumei-unified-owner-token";
+const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
@@ -34,10 +35,11 @@ export function goTo(route: string) {
 
 function BottomNav({ route }: { route: string }) {
   const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
+  const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
       <button className={route === "home" ? "active" : ""} onClick={() => goTo("home")}><span aria-hidden="true">⌂</span><b>TOP</b></button>
-      <button className={insightActive ? "active" : ""} onClick={() => goTo("access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
+      <button className={insightActive ? "active" : ""} onClick={() => goTo(hasMember ? "dashboard" : "access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
     </nav>
     <style>{`
       html{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -83,15 +85,15 @@ export function App() {
   }, []);
 
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
-  const memberToken = localStorage.getItem("mumei-insight-access-token") || "";
+  const memberToken = localStorage.getItem(MEMBER_KEY) || "";
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   let page;
-  if (route === "access/insight") page = <AccessPortalV6 />;
+  if (route === "access/insight") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
   else if (route === "owner-insight") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
-  else if (route === "dashboard") page = <MemberInsightLiveV2 />;
+  else if (route === "dashboard") page = memberToken ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
   else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : <MemberInsightLiveV2 />;
   else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : <MemberInsightLiveV2 />;
   else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : <MemberInsightLiveV2 />;
@@ -99,7 +101,7 @@ export function App() {
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
-  const hideBottomNav = route.startsWith("access/") || admin;
+  const hideBottomNav = (route.startsWith("access/") && !memberToken) || admin;
   return <>
     <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
     {hideBottomNav ? null : <BottomNav route={route} />}
