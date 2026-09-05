@@ -5,6 +5,7 @@ import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
 import { MemberInsightAnalyticsFinal } from "./member-insight-analytics-final";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
+import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
 import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
@@ -14,7 +15,7 @@ const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-r
 const AUTO_MS=120_000;
 const RELATION_MS=600_000;
 const QUIET_MS=2_500;
-type Mode="normal"|"comments"|"social"|"notifications"|"analysis";
+type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
@@ -77,6 +78,7 @@ export function MemberInsightLiveV2(){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;
     const label=t.closest("button")?.textContent?.trim()||"";
     if(label==="コメント")setMode("comments");
+    else if(label==="お気に入り")setMode("favorites");
     else if(label==="フォロー")setMode("social");
     else if(label==="通知")setMode("notifications");
     else setMode("normal");
@@ -86,6 +88,7 @@ export function MemberInsightLiveV2(){
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
+    {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={()=>setMode("normal")}/></div>:null}
