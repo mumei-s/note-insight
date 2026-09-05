@@ -1,0 +1,65 @@
+/* Final mobile-density and analytics clarity overrides. Keep this file additive so stable feature CSS remains untouched. */
+
+/* The stored metric is inbound unique supporters, not outbound likes. */
+.miu-stats button:nth-child(3)>small{font-size:0!important}
+.miu-stats button:nth-child(3)>small::after{content:"スキしてくれた人数";font-size:8px;line-height:1.25;color:inherit;font-weight:inherit}
+
+/* Dense notification history: preserve every field while reducing dead vertical space. */
+.minf{padding:11px!important;margin:8px 0 22px!important}
+.minf-head{padding-bottom:8px!important;gap:8px!important}
+.minf-head h2{font-size:22px!important;margin:3px 0!important}
+.minf-head p{line-height:1.4!important}
+.minf-syncnote{margin-top:5px!important}
+.minf-tabs{padding:8px 0 3px!important;gap:4px!important}
+.minf-tabs button{min-height:31px!important;padding:0 9px!important}
+.minf-list{gap:6px!important;margin-top:6px!important}
+.minf-list article{padding:8px 9px!important;border-radius:10px!important;border-left-width:4px!important}
+.minf-meta{gap:4px!important}
+.minf-meta span,.minf-meta b{padding:2px 6px!important;font-size:7.5px!important}
+.minf-meta time{font-size:7.5px!important}
+.minf-who{gap:6px!important;margin-top:5px!important}
+.minf-avatar{width:34px!important;height:34px!important;flex-basis:34px!important}
+.minf-avatar.fallback{font-size:13px!important}
+.minf-actor{font-size:10px!important}
+.minf-main{gap:2px!important;margin-top:5px!important;line-height:1.32!important}
+.minf-main>strong{font-size:12px!important;line-height:1.28!important}
+.minf-main>span{font-size:10px!important;line-height:1.3!important}
+.minf-main>small{font-size:9px!important;line-height:1.35!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.minf-target{margin-top:4px!important;font-size:7.5px!important}
+.minf-pager{margin-top:9px!important}
+@media(max-width:620px){.minf{padding:9px!important}.minf-tabs{margin-right:-9px!important;padding-right:9px!important}.minf-list article{padding:7px 8px!important}.minf-avatar{width:32px!important;height:32px!important;flex-basis:32px!important}.minf-main>strong{font-size:11.5px!important}}
+
+/* Root-page note exit. This is navigation only; it does not clear any token/session. */
+.hub-note-exit-wrap{padding:0 16px 18px}
+.hub-note-exit{display:flex;align-items:center;justify-content:center;width:min(900px,100%);min-height:46px;margin:0 auto;border:1px solid #36536a;border-radius:12px;background:#0d1c28;color:#a8eaff;text-decoration:none;font-weight:950;font-size:11px;box-shadow:inset 0 1px rgba(255,255,255,.03)}
+.hub-note-exit small{margin-left:8px;color:#7f93a7;font-size:8px;font-weight:800}
+
+/* Professional chart treatment: precise axes and restrained presentation. */
+.miaf-chart{background:linear-gradient(180deg,#091621,#07111a)!important;border-color:#31495f!important;box-shadow:inset 0 1px rgba(255,255,255,.025),0 8px 28px rgba(0,0,0,.14)}
+.miaf-chartscroll{background:#061019!important;border-color:#21374a!important;border-radius:7px!important}
+.miaf-grid{stroke:#294155!important;stroke-width:1!important;stroke-dasharray:2 4!important;opacity:.9}
+.miaf-axisline{stroke:#8ba0b2!important;stroke-width:1.15!important}
+.miaf-axis.y{fill:#c1cfda!important;font-size:10.5px!important;font-weight:900!important}
+.miaf-axis.x{fill:#93a8ba!important;font-size:9.5px!important}
+.miaf-axis-title{fill:#b6c6d2!important;font-size:9px!important;font-weight:900!important;letter-spacing:.04em}
+.miaf-delta.plus{fill:#63dca1!important}.miaf-delta.minus{fill:#f07189!important}
+.miaf-delta-value{font-size:9.5px!important}
+.miaf-chart-readout{gap:6px!important}
+.miaf-chart-readout>span{background:#0b1a26!important;border-color:#315069!important}
+.miaf-chart-readout small{color:#8fa5b8!important}
+.miaf-chart footer{border-top:1px solid #1b3041;padding-top:7px;margin-top:8px!important}
+.miaf-kpis span{background:#0b1823!important;border-color:#31495e!important}
+.miaf-kpis b{font-variant-numeric:tabular-nums}
+
+/* Exact comment-like analysis generated only when the ANALYSIS screen is executed. */
+.miaf-commentlike{margin-top:12px;border:1px solid #2c4258;border-radius:14px;background:#09131d;padding:13px;min-width:0}
+.miaf-commentlike>header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.miaf-commentlike header small{font-size:8px;color:#7edff8;font-weight:950;letter-spacing:.12em}
+.miaf-commentlike h2{font-size:18px;margin:3px 0 0}
+.miaf-commentlike-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:10px}
+.miaf-commentlike-kpis span{display:grid;gap:3px;border:1px solid #30485e;border-radius:10px;background:#0b1924;padding:10px}
+.miaf-commentlike-kpis small{font-size:8px;color:#8ca0b3}.miaf-commentlike-kpis b{font-size:20px;color:#c8ff75}
+.miaf-commentlike-list{display:grid;gap:5px;margin-top:10px}
+.miaf-commentlike-row{display:grid;grid-template-columns:30px minmax(0,1fr) 56px 92px;gap:7px;align-items:center;border-top:1px solid #1c3041;padding:7px 2px;color:#e9f2fa;text-decoration:none}
+.miaf-commentlike-row>em{font-style:normal;color:#7edff8;text-align:center;font-weight:950}.miaf-commentlike-row>span{min-width:0;display:grid;gap:2px}.miaf-commentlike-row strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.miaf-commentlike-row small{font-size:8px;color:#7f93a7}.miaf-commentlike-row>b{text-align:right;color:#c8ff75;font-size:11px}.miaf-commentlike-row>time{text-align:right;color:#91a4b6;font-size:8px}
+@media(max-width:620px){.miaf-commentlike-row{grid-template-columns:26px minmax(0,1fr) 48px 72px}.miaf-commentlike-row>time{font-size:7px}}
