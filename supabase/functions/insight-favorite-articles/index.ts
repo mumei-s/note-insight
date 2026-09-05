@@ -17,6 +17,7 @@ const obj = (v: any) => v && typeof v === "object" && !Array.isArray(v) ? v : {}
 const arr = (v: any) => Array.isArray(v) ? v : [];
 const txt = (v: any, f = "") => typeof v === "string" ? v : f;
 const num = (v: any, f = 0) => typeof v === "number" && Number.isFinite(v) ? v : f;
+const cleanGroup = (v: any) => txt(v).replace(/\s+/g, " ").trim().slice(0, 40);
 
 async function sha(v: string) {
   const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
@@ -75,7 +76,7 @@ async function fetchPage(un: string, p: number) {
   ];
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint, { headers: { Accept: "application/json", "User-Agent": "Mumei-S-note-INSIGHT-favorites/2.0" } });
+      const r = await fetch(endpoint, { headers: { Accept: "application/json", "User-Agent": "Mumei-S-note-INSIGHT-favorites/2.1" } });
       if (!r.ok) continue;
       const x = normalize(await r.json(), un);
       if (x.rows.length || x.last) return x;
@@ -132,6 +133,42 @@ async function readSet(b: any) {
   return { ok: true, creatorKey, articleKey, read };
 }
 
+async function groups() {
+  const { data, error } = await db.from("insight_favorite_creators")
+    .select("creator_key,group_name")
+    .eq("member_id", MEMBER)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data || []).map((x: any) => ({ creatorKey: String(x.creator_key), groupName: cleanGroup(x.group_name) || null }));
+  return { ok: true, rows };
+}
+
+async function groupSet(b: any) {
+  const creatorKey = txt(b?.creatorKey);
+  if (!creatorKey) throw new Error("CREATOR_KEY_REQUIRED");
+  const groupName = cleanGroup(b?.groupName) || null;
+  const { data, error } = await db.from("insight_favorite_creators")
+    .update({ group_name: groupName })
+    .eq("member_id", MEMBER)
+    .eq("creator_key", creatorKey)
+    .select("creator_key,group_name")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("FAVORITE_NOT_FOUND");
+  return { ok: true, creatorKey: String(data.creator_key), groupName: cleanGroup(data.group_name) || null };
+}
+
+async function groupClear(b: any) {
+  const groupName = cleanGroup(b?.groupName);
+  if (!groupName) throw new Error("GROUP_NAME_REQUIRED");
+  const { error } = await db.from("insight_favorite_creators")
+    .update({ group_name: null })
+    .eq("member_id", MEMBER)
+    .eq("group_name", groupName);
+  if (error) throw error;
+  return { ok: true, groupName };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: H });
   if (req.method !== "POST") return out({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -141,6 +178,9 @@ Deno.serve(async (req) => {
     const action = String(b?.action || "articles");
     if (action === "articles") return out(await articles(b));
     if (action === "read_set") return out(await readSet(b));
+    if (action === "groups") return out(await groups());
+    if (action === "group_set") return out(await groupSet(b));
+    if (action === "group_clear") return out(await groupClear(b));
     return out({ ok: false, error: "UNKNOWN_ACTION" }, 400);
   } catch (e) {
     console.error(e);
