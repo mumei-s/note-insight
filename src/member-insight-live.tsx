@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
-import { MemberInsightAnalyticsV3 } from "./member-insight-analytics-v3";
+import { MemberInsightAnalyticsFinal } from "./member-insight-analytics-final";
 import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
@@ -144,7 +144,7 @@ export function MemberInsightLive() {
       <button className={screen === "analytics" ? "active" : ""} onClick={() => setScreen("analytics")}>📊 分析</button>
     </div>
     {screen === "analytics"
-      ? <MemberInsightAnalyticsV3 revision={revision} onBack={() => setScreen("insight")} />
+      ? <MemberInsightAnalyticsFinal revision={revision} onBack={() => setScreen("insight")} />
       : <div className={overrideClass} onClickCapture={captureInsightNavigation}>
           <MemberInsightUnifiedV4 revision={revision} />
           {panelOverride === "social" ? <MemberInsightSocialV2 revision={revision} /> : null}
