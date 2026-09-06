@@ -14,13 +14,12 @@ import "./insight-polish-v1.css";
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
-const INSTALL_RETURN_KEY = "mumei-notification-install-return-v1";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.18";
+const NOTIFICATION_TOOL_VERSION = "2.9.21";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
-const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2915";
-const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2915";
-const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2915";
+const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2921";
+const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2921";
+const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2921";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -146,21 +145,6 @@ export function App() {
       window.location.assign(note.href);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(INSTALL_RETURN_KEY);
-      if (raw && currentRoute() === "home") {
-        const x = JSON.parse(raw);
-        if (Number(x?.at) && Date.now() - Number(x.at) < 15 * 60_000 && typeof x?.back === "string") {
-          localStorage.removeItem(INSTALL_RETURN_KEY);
-          window.location.replace(new URL(x.back, window.location.href).toString());
-          return;
-        }
-        localStorage.removeItem(INSTALL_RETURN_KEY);
-      }
-    } catch { localStorage.removeItem(INSTALL_RETURN_KEY); }
   }, []);
 
   useEffect(() => {
