@@ -56,14 +56,20 @@ test("server and feed retain self-add tip and explicit continuous sync support",
   assert.match(f,/追加されました/);
 });
 
-test("iPhone installation uses Tampermonkey handoff instead of raw source as primary path",async()=>{
+test("iPhone and supported browsers install from exact INSIGHT user.js URL",async()=>{
   const helper=await read("public/notification-install.html");
   assert.match(helper,/2\.9\.21/);
-  assert.match(helper,/script_installation\.php#url=/);
-  assert.match(helper,/スクリプトURLをコピー/);
-  assert.match(helper,/Dashboard \/ Utilities/);
-  assert.match(helper,/raw本文/);
-  assert.match(helper,/Safari＋Tampermonkey/);
+  assert.match(helper,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
+  assert.doesNotMatch(helper,/script_installation\.php#url=/);
+  assert.match(helper,/英語のコードが並んだ場合は未インストールです/);
+  assert.match(helper,/Tampermonkey拡張機能をON/);
+  assert.match(helper,/Android Edge/);
+  assert.match(helper,/Android Firefox/);
+  assert.match(helper,/PC Chrome \/ Edge/);
+  assert.match(helper,/Mac Safari/);
+  assert.match(helper,/Android Chrome/);
+  assert.match(helper,/Yahooアプリ内ブラウザ/);
+  assert.match(helper,/ユーザースクリプトを許可/);
 });
 
 test("INSIGHT notification view still exposes current notification categories",async()=>{
