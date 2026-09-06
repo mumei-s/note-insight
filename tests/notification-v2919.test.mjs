@@ -52,8 +52,10 @@ test("bell open triggers near-immediate save and panel heartbeat never auto-open
 test("tip self-add and creator post classification are covered client and server",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2919.js");
   const s=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
-  for(const x of ["my_article_magazine_added","creator_article_posted","return'tip'","さん(?:から|より)"])assert.match(r,new RegExp(x));
-  for(const x of ["my_article_magazine_added","creator_article_posted","action-v14-v2919","browser-notification-v2919","さん(?:から|より)"])assert.match(s,new RegExp(x));
+  for(const x of ["my_article_magazine_added","creator_article_posted","return'tip'"])assert.match(r,new RegExp(x));
+  assert.ok(r.includes("さん(?:から|より)"));
+  for(const x of ["my_article_magazine_added","creator_article_posted","action-v14-v2919","browser-notification-v2919"])assert.match(s,new RegExp(x));
+  assert.ok(s.includes("さん(?:から|より)"));
   assert.match(s,/continuous-sync-v\\d\+/);
   assert.match(s,/cleanRaw/);
 });
@@ -65,7 +67,7 @@ test("iPhone install never requires opening raw source as the primary path",asyn
   assert.match(helper,/script_installation\.php#url=/);
   assert.match(helper,/スクリプトURLをコピー/);
   assert.match(helper,/Dashboard \/ Utilities/);
-  assert.match(helper,/rawコード/);
+  assert.match(helper,/raw本文/);
   assert.match(setup,/Safari＋Tampermonkey/);
 });
 
