@@ -4,31 +4,31 @@
 .miu-stats button:nth-child(3)>small{font-size:0!important}
 .miu-stats button:nth-child(3)>small::after{content:"スキしてくれた人数";font-size:8px;line-height:1.25;color:inherit;font-weight:inherit}
 
-/* Dense notification history: preserve every field while reducing dead vertical space. */
-.minf{padding:11px!important;margin:8px 0 22px!important}
-.minf-head{padding-bottom:8px!important;gap:8px!important}
+/* Dense notification history: preserve every field, enlarge category labels, remove dead vertical space. */
+.minf{padding:9px!important;margin:7px 0 20px!important}
+.minf-head{padding-bottom:7px!important;gap:7px!important}
 .minf-head h2{font-size:22px!important;margin:3px 0!important}
-.minf-head p{line-height:1.4!important}
-.minf-syncnote{margin-top:5px!important}
-.minf-tabs{padding:8px 0 3px!important;gap:4px!important}
-.minf-tabs button{min-height:31px!important;padding:0 9px!important}
-.minf-list{gap:6px!important;margin-top:6px!important}
-.minf-list article{padding:8px 9px!important;border-radius:10px!important;border-left-width:4px!important}
+.minf-head p{line-height:1.38!important}
+.minf-syncnote{margin-top:4px!important}
+.minf-tabs{padding:7px 0 3px!important;gap:4px!important}
+.minf-tabs button{min-height:31px!important;padding:0 9px!important;font-size:10.5px!important}
+.minf-list{gap:5px!important;margin-top:5px!important}
+.minf-list article{padding:7px 8px!important;border-radius:10px!important;border-left-width:4px!important}
 .minf-meta{gap:4px!important}
-.minf-meta span{padding:4px 8px!important;font-size:10px!important;line-height:1.05!important}
-.minf-meta b{padding:2px 6px!important;font-size:8px!important}
+.minf-meta span{padding:4px 9px!important;font-size:11.5px!important;line-height:1.05!important}
+.minf-meta b{padding:2px 6px!important;font-size:8.5px!important}
 .minf-meta time{font-size:7.5px!important}
-.minf-who{gap:6px!important;margin-top:5px!important}
-.minf-avatar{width:34px!important;height:34px!important;flex-basis:34px!important}
+.minf-who{gap:6px!important;margin-top:4px!important}
+.minf-avatar{width:32px!important;height:32px!important;flex-basis:32px!important}
 .minf-avatar.fallback{font-size:13px!important}
 .minf-actor{font-size:10px!important}
-.minf-main{gap:2px!important;margin-top:5px!important;line-height:1.32!important}
-.minf-main>strong{font-size:12px!important;line-height:1.28!important}
-.minf-main>span{font-size:10px!important;line-height:1.3!important}
-.minf-main>small{font-size:9px!important;line-height:1.35!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.minf-target{margin-top:4px!important;font-size:7.5px!important}
-.minf-pager{margin-top:9px!important}
-@media(max-width:620px){.minf{padding:9px!important}.minf-tabs{margin-right:-9px!important;padding-right:9px!important}.minf-list article{padding:7px 8px!important}.minf-avatar{width:32px!important;height:32px!important;flex-basis:32px!important}.minf-main>strong{font-size:11.5px!important}.minf-meta span{font-size:10px!important}}
+.minf-main{gap:2px!important;margin-top:4px!important;line-height:1.3!important}
+.minf-main>strong{font-size:12.5px!important;line-height:1.25!important}
+.minf-main>span{font-size:10px!important;line-height:1.28!important}
+.minf-main>small{font-size:9px!important;line-height:1.32!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.minf-target{margin-top:3px!important;font-size:7.5px!important}
+.minf-pager{margin-top:8px!important}
+@media(max-width:620px){.minf{padding:8px!important}.minf-tabs{margin-right:-8px!important;padding-right:8px!important}.minf-list article{padding:6px 7px!important}.minf-avatar{width:30px!important;height:30px!important;flex-basis:30px!important}.minf-main>strong{font-size:12px!important}.minf-meta span{font-size:11px!important}}
 
 /* Professional chart treatment: precise axes and restrained presentation. */
 .miaf-chart{background:linear-gradient(180deg,#091621,#07111a)!important;border-color:#31495f!important;box-shadow:inset 0 1px rgba(255,255,255,.025),0 8px 28px rgba(0,0,0,.14)}
