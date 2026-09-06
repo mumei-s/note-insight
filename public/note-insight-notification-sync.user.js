@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.9
-// @description  Dashboard→通知は通常noteへクリーン遷移してDOMバグを回避。本人認証・版確認はINSIGHTへ自動復帰し、通知読込とDashboard同期は従来機能を維持します。
+// @version      2.9.10
+// @description  Dashboard→通知は通常noteへクリーン遷移。通知バーからINSIGHT本人通知へ直接戻れ、本人認証・版確認もINSIGHTへ自動復帰します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -19,10 +19,11 @@
 
 (function(){
 'use strict';
-const VERSION='2.9.9';
-const CLEAN_NOTICE='mumei_open_notice_v299';
+const VERSION='2.9.10';
+const CLEAN_NOTICE='mumei_open_notice_v2910';
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
+const INSIGHT_NOTIFICATIONS='https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard';
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
@@ -92,6 +93,28 @@ function handleVersionCheck(){
   }
   return false;
 }
+
+function ensureInsightReturnButton(){
+  const bar=document.getElementById('mumei-v297-actions');
+  if(!bar||bar.querySelector('.mumei-insight-return'))return;
+  const b=document.createElement('button');
+  b.type='button';
+  b.className='mumei-insight-return';
+  b.textContent='INSIGHTへ';
+  b.title='INSIGHT本人通知へ戻る';
+  b.addEventListener('click',()=>location.assign(INSIGHT_NOTIFICATIONS));
+  bar.append(b);
+}
+function installReturnButtonStyle(){
+  if(document.getElementById('mumei-v2910-return-style'))return;
+  const s=document.createElement('style');
+  s.id='mumei-v2910-return-style';
+  s.textContent=`html #mumei-v297-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto auto!important}html #mumei-v297-actions .mumei-insight-return{border-color:#79dff6!important;background:#123448!important;color:#eaffff!important}@media(max-width:430px){html #mumei-v297-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto!important}html #mumei-v297-actions details{grid-column:1/-1!important}}`;
+  document.documentElement.appendChild(s);
+}
+installReturnButtonStyle();
+const returnButtonTimer=window.setInterval(ensureInsightReturnButton,700);
+window.addEventListener('pagehide',()=>window.clearInterval(returnButtonTimer),{once:true});
 
 // Dashboard上の通知パネルはSPAの古いDOM参照を残しやすい。
 // ここではベル押下だけを捕捉し、通常noteをフルロードしてからベルを1回開く。
