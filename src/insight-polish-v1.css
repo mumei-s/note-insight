@@ -15,7 +15,8 @@
 .minf-list{gap:6px!important;margin-top:6px!important}
 .minf-list article{padding:8px 9px!important;border-radius:10px!important;border-left-width:4px!important}
 .minf-meta{gap:4px!important}
-.minf-meta span,.minf-meta b{padding:2px 6px!important;font-size:7.5px!important}
+.minf-meta span{padding:4px 8px!important;font-size:10px!important;line-height:1.05!important}
+.minf-meta b{padding:2px 6px!important;font-size:8px!important}
 .minf-meta time{font-size:7.5px!important}
 .minf-who{gap:6px!important;margin-top:5px!important}
 .minf-avatar{width:34px!important;height:34px!important;flex-basis:34px!important}
@@ -27,12 +28,7 @@
 .minf-main>small{font-size:9px!important;line-height:1.35!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .minf-target{margin-top:4px!important;font-size:7.5px!important}
 .minf-pager{margin-top:9px!important}
-@media(max-width:620px){.minf{padding:9px!important}.minf-tabs{margin-right:-9px!important;padding-right:9px!important}.minf-list article{padding:7px 8px!important}.minf-avatar{width:32px!important;height:32px!important;flex-basis:32px!important}.minf-main>strong{font-size:11.5px!important}}
-
-/* Root-page note exit. This is navigation only; it does not clear any token/session. */
-.hub-note-exit-wrap{padding:0 16px 18px}
-.hub-note-exit{display:flex;align-items:center;justify-content:center;width:min(900px,100%);min-height:46px;margin:0 auto;border:1px solid #36536a;border-radius:12px;background:#0d1c28;color:#a8eaff;text-decoration:none;font-weight:950;font-size:11px;box-shadow:inset 0 1px rgba(255,255,255,.03)}
-.hub-note-exit small{margin-left:8px;color:#7f93a7;font-size:8px;font-weight:800}
+@media(max-width:620px){.minf{padding:9px!important}.minf-tabs{margin-right:-9px!important;padding-right:9px!important}.minf-list article{padding:7px 8px!important}.minf-avatar{width:32px!important;height:32px!important;flex-basis:32px!important}.minf-main>strong{font-size:11.5px!important}.minf-meta span{font-size:10px!important}}
 
 /* Professional chart treatment: precise axes and restrained presentation. */
 .miaf-chart{background:linear-gradient(180deg,#091621,#07111a)!important;border-color:#31495f!important;box-shadow:inset 0 1px rgba(255,255,255,.025),0 8px 28px rgba(0,0,0,.14)}
