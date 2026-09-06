@@ -16,6 +16,7 @@ const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insigh
 const OWNER_KEY = "mumei-unified-owner-token";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
 const OWNER_PENDING_SEEN_KEY = "mumei-owner-pending-seen-v1";
+const ACCOUNT_ROUTE_REFRESH_KEY = "mumei-account-route-refresh-v1";
 const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 
@@ -31,6 +32,7 @@ if (pwaTopLaunch) {
   clean.searchParams.delete("launch");
   window.history.replaceState({ route: "home" }, "", clean.toString());
 }
+if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
 
 installApiBridge();
 registerServiceWorker();
@@ -137,6 +139,16 @@ if (insightToken) {
     cache: "no-store",
   }).catch(() => { /* Long-session refresh must never block app startup. */ });
 }
+
+window.addEventListener("mumei-insight-accounts", () => {
+  if (window.location.hash === "#dashboard" && localStorage.getItem(INSIGHT_TOKEN_KEY) && sessionStorage.getItem(ACCOUNT_ROUTE_REFRESH_KEY) !== "1") {
+    sessionStorage.setItem(ACCOUNT_ROUTE_REFRESH_KEY, "1");
+    window.setTimeout(() => window.location.reload(), 30);
+  }
+});
+window.addEventListener("hashchange", () => {
+  if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
+});
 
 void tryReturningMemberResume();
 void pollOwnerPendingApplications();
