@@ -16,7 +16,7 @@ const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const INSTALL_RETURN_KEY = "mumei-notification-install-return-v1";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.16";
+const NOTIFICATION_TOOL_VERSION = "2.9.17";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2915";
 const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2915";
@@ -141,7 +141,7 @@ export function App() {
     localStorage.setItem(NOTIFICATION_AUTO_AT_KEY, String(Date.now()));
     const timer = window.setTimeout(() => {
       const note = new URL("https://note.com/");
-      note.searchParams.set("mumei_auto_notice_v2916", "1");
+      note.searchParams.set("mumei_auto_notice_v2917", "1");
       note.searchParams.set("mumei_return", window.location.href);
       window.location.assign(note.href);
     }, 700);
