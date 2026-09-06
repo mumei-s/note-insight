@@ -34,13 +34,13 @@ function classify(text:string,targetUrl:string|null){
   if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
   if(/(?:あなたのメンバーシップ.{0,50}参加しました|あなたのメンバーシップ.{0,50}メンバーになりました|メンバーシップに参加しました)/.test(t))return"membership_join";
   if(/(?:運営メンバーに仲間入りしました|マガジン.{0,80}参加しました|共同マガジン.{0,80}仲間入りしました)/.test(t))return"magazine_join";
-  if(/(?:あなたの記事が.{0,160}に追加されました|あなたの記事を.{0,120}マガジン.{0,50}追加)/.test(t))return"my_article_magazine_added";
+  if(/(?:あなたの記事が.{0,260}に追加されました|あなたの記事を.{0,180}マガジン.{0,80}追加)/.test(t))return"my_article_magazine_added";
   if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
   if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さんがあなたをフォロー)/.test(t))return"follow";
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
   if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
-  if(/(?:チップを送りました|チップを贈りました|チップを受け取りました|チップが届|サポートされました|サポートを受けました)/.test(t))return"tip";
+  if(/(?:チップ|サポート).{0,120}(?:送りました|送られました|贈りました|贈られました|もらいました|受け取りました|受け取り|届きました|届いた|届き|されました|受けました)|(?:チップ|サポート)(?:を|が|に)|(?:支援|応援金).{0,80}(?:届|受け|もら|贈)/.test(t))return"tip";
   if(/(?:あなたの記事.{0,40}引用され|あなたの記事.{0,40}紹介され)/.test(t))return"quote";
   if(/あなたの記事を高評価しました/.test(t))return"rating";
   if(/(?:あなたにポイント|ポイントが付与|ポイントを獲得)/.test(t))return"points";
@@ -69,7 +69,7 @@ function semantic(type:string,actor:string,target:string|null,raw:string,bucket:
 }
 function allowedExplicitSource(source:string){
   if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
-  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+)$/.test(source);
+  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+)$/.test(source);
 }
 
 Deno.serve(async(req)=>{
@@ -86,21 +86,21 @@ Deno.serve(async(req)=>{
       const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||"");
       sources.add(source||"(empty)");
       if(!allowedExplicitSource(source)){blocked++;continue}
-      const raw=clean(item?.raw_text??item?.text,500);
-      if(!raw||raw.length<5||raw.length>420){skipped++;continue}
+      const raw=clean(item?.raw_text??item?.text,800);
+      if(!raw||raw.length<5||raw.length>700){skipped++;continue}
       const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
       if(type==="other"){skipped++;continue}
       const actorName=clean(item?.actor_name,200)||actorFromText(raw);
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v10-manual"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v11-continuous"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-manual-v2910"});
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2915"});
     const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
