@@ -15,12 +15,13 @@ async function sha(v:string){
   return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 function clean(v:unknown,max=2000){return typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null}
+function cleanRaw(v:unknown){const x=clean(v,800);return x?x.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").trim():null}
 function cleanTarget(v:unknown){
   const raw=clean(v,1200); if(!raw)return null;
   try{const u=new URL(raw);u.hash="";u.searchParams.delete("from");return u.toString()}catch{return raw}
 }
-function canonicalText(v:string){return v.replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim()}
-function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の)/u);return m?.[1]?.trim()||null}
+function canonicalText(v:string){return v.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim()}
+function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の|から)/u);return m?.[1]?.trim()||null}
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
@@ -40,7 +41,7 @@ function classify(text:string,targetUrl:string|null){
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
   if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
-  if(/(?:チップ|サポート).{0,120}(?:送りました|送られました|贈りました|贈られました|もらいました|受け取りました|受け取り|届きました|届いた|届き|されました|受けました)|(?:チップ|サポート)(?:を|が|に)|(?:支援|応援金).{0,80}(?:届|受け|もら|贈)/.test(t))return"tip";
+  if(t.length<350&&/(?:さんから.{0,30}(?:チップ|サポート).{0,50}(?:届きました|受け取りました|受け取った|贈られました)|(?:チップ|サポート).{0,80}(?:が届きました|を受け取りました|をもらいました|を贈られました|を贈りました)|(?:支援|応援金).{0,80}(?:届きました|受け取りました|もらいました))/.test(t))return"tip";
   if(/(?:あなたの記事.{0,40}引用され|あなたの記事.{0,40}紹介され)/.test(t))return"quote";
   if(/あなたの記事を高評価しました/.test(t))return"rating";
   if(/(?:あなたにポイント|ポイントが付与|ポイントを獲得)/.test(t))return"points";
@@ -86,7 +87,7 @@ Deno.serve(async(req)=>{
       const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||"");
       sources.add(source||"(empty)");
       if(!allowedExplicitSource(source)){blocked++;continue}
-      const raw=clean(item?.raw_text??item?.text,800);
+      const raw=cleanRaw(item?.raw_text??item?.text);
       if(!raw||raw.length<5||raw.length>700){skipped++;continue}
       const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
       if(type==="other"){skipped++;continue}
@@ -94,13 +95,13 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v11-continuous"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v12-resume"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2915"});
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2917c"});
     const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
