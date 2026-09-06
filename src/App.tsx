@@ -27,7 +27,8 @@ function currentRoute() {
 }
 function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
-function memberRoute(route: string) { return route === "access/insight" || route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
+// access/insight is an explicit login/join/switch screen and must never be replaced by the current member dashboard.
+function memberRoute(route: string) { return route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
 
 export function goTo(route: string) {
   const next = route || "home";
@@ -164,7 +165,7 @@ export function App() {
   const memberValid = Boolean(memberToken && validatedMemberToken === memberToken);
   let page;
   if (needsMember && memberToken && !memberValid && checkingMember) page = <div className="app-session-check"><div><b>INSIGHT</b><span>ログイン状態を1回だけ確認しています…</span></div></div>;
-  else if (route === "access/insight") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "access/insight") page = <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
   else if (route === "owner-insight") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
@@ -177,7 +178,7 @@ export function App() {
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
-  const hideBottomNav = (route.startsWith("access/") && !memberToken) || admin || checkingMember;
+  const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
     <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
     {hideBottomNav ? null : <BottomNav route={route} />}
