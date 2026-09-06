@@ -26,6 +26,7 @@ function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
   if(/(?:あなたのコメント.{0,80}(?:に|へ).{0,20}スキ(?:しました|されました)|コメントにスキしました|コメントをスキしました)/.test(t))return"comment_like";
   if(/(?:あなたの記事にスキしました|あなたの投稿にスキしました|「[^」]{0,500}」にスキしました|新しいスキが\d*件?増えました|さん他?\d*名?があなたの記事にスキしました)/.test(t))return"like";
+  if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t)&&(/\/membership\/boards\//.test(target)||/[?&]kind=board_reply_comment(?:&|$)/.test(target)))return"membership_board_reply";
   if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t))return"reply";
   if(/(?:あなたの記事.{0,80}コメントしました|新しいコメントが\d*件?増えました|コメントがありました)/.test(t))return"comment";
   if(/メンバーシップ.{0,80}掲示板.{0,40}投稿しました/.test(t))return"membership_board";
@@ -63,7 +64,7 @@ async function identity(req:Request){
 }
 
 function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
-  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type);
+  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type);
   return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
 }
 function allowedExplicitSource(source:string){
@@ -93,13 +94,13 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v9-manual"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v10-manual"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-manual-v299"});
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-manual-v2910"});
     const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
