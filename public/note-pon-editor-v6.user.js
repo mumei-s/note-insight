@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v14｜コピペ→整えてポン出し
+// @name         note ポン出し v14.1｜コピペ→整えてポン出し
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      14.0.0
-// @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、見出し・段落・箇条書きを整理してbrなしで貼付。挿絵は触らない。
+// @version      14.1.0
+// @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、note標準の大見出し・小見出し・段落・箇条書きへ整形。目次対応、brなし、挿絵は触らない。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,12 +14,12 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v14_root__';
+  const ROOT_ID = '__mumei_pon_v14_1_root__';
   const BACKUP_PREFIX = 'mumei-note-pon-v14-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   [
-    '__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__',
+    '__mumei_pon_v14_root__','__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__',
     '__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__',
     '__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
   ].forEach(id => document.getElementById(id)?.remove());
@@ -73,10 +73,12 @@
         flushAll(); blocks.push({type:'hr'}); continue;
       }
 
-      const h1 = t.match(/^#\s+(.+)$/);
-      const h2 = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/);
-      if (h1) { flushAll(); blocks.push({type:'h2', text:h1[1]}); continue; }
-      if (h2) { flushAll(); blocks.push({type:'h3', text:h2[1]}); continue; }
+      // note本文ではタイトルがh1相当なので、本文の大見出し=h2、小見出し=h3。
+      // # / ## のほか、既存原稿で使っている ◆ / ◇ も自動で見出し化する。
+      const bigHeading = t.match(/^#\s+(.+)$/) || t.match(/^◆\s*(.+)$/);
+      const smallHeading = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/) || t.match(/^◇\s*(.+)$/);
+      if (bigHeading) { flushAll(); blocks.push({type:'h2', text:bigHeading[1]}); continue; }
+      if (smallHeading) { flushAll(); blocks.push({type:'h3', text:smallHeading[1]}); continue; }
 
       const ul = t.match(/^[-*・]\s*(.+)$/);
       if (ul) {
@@ -128,7 +130,11 @@
     }).join('');
 
     if (/<br\b/i.test(html)) throw new Error('br detected');
-    return html;
+    return {
+      html,
+      bigCount: compact.filter(b => b.type === 'h2').length,
+      smallCount: compact.filter(b => b.type === 'h3').length
+    };
   }
 
   function visible(el) {
@@ -215,7 +221,7 @@
         <b style="flex:1;font-size:14px">📄 コピペ → 整えてポン出し</b>
         <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:5px 8px">✕</button>
       </div>
-      <div style="font-size:11px;line-height:1.45;color:#c8d9e6;margin-bottom:7px">本文をそのままコピペ。# 大見出し / ## 小見出し。余計な改行を詰め、既存本文を全消しして貼ります。挿絵は触りません。</div>
+      <div style="font-size:11px;line-height:1.45;color:#c8d9e6;margin-bottom:7px">本文をそのままコピペ。# / ◆ = 大見出し、## / ◇ = 小見出し。note標準サイズで入り、目次にも拾われます。本文は通常サイズ。brは作りません。挿絵は触りません。</div>
       <textarea id="ponSrc" rows="13" placeholder="ここに本文をコピペ" style="display:block;width:100%;min-height:250px;resize:vertical;box-sizing:border-box;border:2px solid #39e7d2;border-radius:9px;padding:10px;background:#fff;color:#111;font:15px/1.5 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
       <button id="ponGo" type="button" style="display:block;width:100%;margin-top:8px;border:0;border-radius:9px;padding:12px;background:#39e7d2;color:#04202a;font-weight:900;font-size:14px">🚀 整えてポン出し</button>
       <button id="ponUndo" type="button" style="display:block;width:100%;margin-top:6px;border:0;border-radius:9px;padding:9px;background:#5a2841;color:#fff;font-weight:800;font-size:12px">↩️ 前の本文に戻す</button>
@@ -244,19 +250,25 @@
     const editor = await waitEditor();
     if (!editor) return show('❌ note本文エディタが見つからない');
 
-    let html;
-    try { html = sourceToHtml(src.value); }
+    let converted;
+    try { converted = sourceToHtml(src.value); }
     catch { return show('❌ 整形に失敗しました'); }
 
     show('① 旧本文を全消し中…');
     const empty = await hardClear(editor);
     if (!empty) return show('❌ 全消しできなかったので貼付を中止');
 
-    show('② 改行・見出しを整えて貼付中…');
-    await insertHtml(editor, html);
-    show('✅ 整えてポン出し完了');
+    show('② 文字サイズ・見出し・改行を整えて貼付中…');
+    await insertHtml(editor, converted.html);
 
-    setTimeout(() => root.remove(), 900);
+    const actualBig = editor.querySelectorAll('h2').length;
+    const actualSmall = editor.querySelectorAll('h3').length;
+    if (converted.bigCount + converted.smallCount > 0 && actualBig + actualSmall === 0) {
+      return show('⚠️ 本文は貼れたけど、note側で見出し化できていません。保存せず教えてください。');
+    }
+
+    show(`✅ 完了｜大見出し ${actualBig} / 小見出し ${actualSmall}｜目次対応`);
+    setTimeout(() => root.remove(), 1300);
   });
 
   root.querySelector('#ponUndo').addEventListener('click', async () => {
