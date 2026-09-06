@@ -14,6 +14,7 @@ import type { StoredInsightAccount } from "./insight-account-store";
 import "./access-portal-v2.css";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const RECOVERY = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-recovery";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
@@ -26,6 +27,7 @@ type Application = {
   imageUrl: string | null;
   status: "pending" | "approved" | "active" | "rejected" | "revoked";
   verificationCode?: string | null;
+  verifiedAt?: string | null;
 };
 type Stage = "loading" | "accounts" | "apply" | "pending" | "approved" | "recovery" | "recovery-check";
 
@@ -41,6 +43,9 @@ function errorText(code: string) {
     INSIGHT_MEMBER_NOT_ACTIVE: "このnote IDは参加済みアカウントとして確認できません。",
     RECOVERY_TOKEN_INVALID: "再ログイン確認が失効しました。最初からやり直してください。",
     RECOVERY_NOT_READY: "再ログイン確認を最初からやり直してください。",
+    WAITING_OWNER_APPROVAL: "OWNER承認待ちです。",
+    REACTIVATION_NOT_ALLOWED: "この参加履歴はそのまま再開できません。参加申請から進めてください。",
+    IDENTITY_REVERIFY_REQUIRED: "本人確認が未完了です。初回本人確認へ進んでください。",
   };
   return messages[code] ?? code ?? "処理できませんでした。";
 }
@@ -117,6 +122,17 @@ export function AccessPortalV6() {
     }
   }
 
+  async function reactivateReturning(account: StoredInsightAccount) {
+    if (!account.applicantToken) return false;
+    const payload = await post(REACTIVATE, "resume", {}, { "X-Insight-Applicant": account.applicantToken });
+    rememberMemberSession(payload.application, payload.memberToken, account.passcode);
+    localStorage.removeItem(JOIN_NOTE_KEY);
+    setVerificationCode("");
+    refresh();
+    goDashboard();
+    return true;
+  }
+
   async function resumeCurrentJoin() {
     const account = currentJoinAccount();
     if (!account?.applicantToken) return false;
@@ -126,6 +142,7 @@ export function AccessPortalV6() {
       rememberApplication(app, app.verificationCode || account.passcode);
       setApplication(app);
       if (app.verificationCode) setVerificationCode(app.verificationCode);
+      if ((app.status === "approved" || app.status === "active") && app.verifiedAt) return reactivateReturning(account);
       if (app.status === "approved") setStage("approved");
       else if (app.status === "pending") setStage("pending");
       else {
@@ -178,7 +195,7 @@ export function AccessPortalV6() {
       rememberApplicant(payload.application, payload.applicantToken);
       localStorage.setItem(JOIN_NOTE_KEY, String(payload.application.noteId || "").toLowerCase());
       setApplication(payload.application); setNoteInput(""); setStage("pending");
-      setMessage("参加申請を送信しました。OWNER承認後、このまま本人確認へ進めます。");
+      setMessage("参加申請を送信しました。OWNER承認後、このまま続けられます。本人確認済みの再参加者は承認後に自動再開します。");
     } catch (reason) { setError(errorText(reason instanceof Error ? reason.message : "ACCESS_ERROR")); }
     finally { setSaving(false); }
   }
@@ -193,7 +210,10 @@ export function AccessPortalV6() {
       rememberApplication(app, app.verificationCode || account.passcode);
       setApplication(app);
       if (app.verificationCode) setVerificationCode(app.verificationCode);
-      if (app.status === "approved") setStage("approved");
+      if ((app.status === "approved" || app.status === "active") && app.verifiedAt) {
+        setMessage("本人確認済みの参加履歴を再開しています…");
+        await reactivateReturning(account);
+      } else if (app.status === "approved") setStage("approved");
       else if (app.status === "pending") setMessage("まだ承認待ちです。承認後に本人確認へ進みます。");
       else { localStorage.removeItem(JOIN_NOTE_KEY); setStage("accounts"); }
     } catch (reason) { setError(errorText(reason instanceof Error ? reason.message : "ACCESS_ERROR")); }
@@ -259,11 +279,11 @@ export function AccessPortalV6() {
 
     {stage === "apply" ? <section className="access2-card"><small className="access2-note">STEP 1 / 2</small><h2>参加申請</h2><p>自分のnote ID、またはクリエイターページURLを入れてください。</p><form onSubmit={apply}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "申請中…" : "参加申請する"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
 
-    {stage === "pending" && application ? <section className="access2-card"><small className="access2-note">OWNER APPROVAL</small><h2>承認待ち</h2><Identity app={application} /><p>申請は届いています。OWNER承認後、次の本人確認へ進みます。</p><div className="access2-actions"><button className="access2-btn" disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を確認"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>あとで続ける</button></div></section> : null}
+    {stage === "pending" && application ? <section className="access2-card"><small className="access2-note">OWNER APPROVAL</small><h2>承認待ち</h2><Identity app={application} /><p>申請は届いています。OWNER承認後、初参加なら本人確認、本人確認済みの再参加ならそのまま自動再開します。</p><div className="access2-actions"><button className="access2-btn" disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を確認"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>あとで続ける</button></div></section> : null}
 
     {stage === "approved" && application ? <section className="access2-card"><small className="access2-note">STEP 2 / 2</small><h2>note自己紹介欄で本人確認</h2><Identity app={application} /><p>下の確認コードを一時的にnote自己紹介欄へ入れて保存してください。認証後は削除して元に戻せます。コードをログイン欄へ入力する必要はありません。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyProfile()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
 
-    {stage === "recovery" ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>機種変更・再ログイン</h2><p>コード入力は不要です。参加済みのnote IDを入れると、新しい本人確認コードを発行します。</p><form onSubmit={startRecovery}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "確認中…" : "本人確認コードを発行"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
+    {stage === "recovery" ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>機種変更・再ログイン</h2><p>コード入力は不要です。現在参加中のnote IDを入れると、新しい本人確認コードを発行します。退会・利用停止中のアカウントは先に参加申請とOWNER承認が必要です。</p><form onSubmit={startRecovery}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "確認中…" : "本人確認コードを発行"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
 
     {stage === "recovery-check" && application ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>自己紹介欄で再確認</h2><Identity app={application} /><p>下の新しい確認コードを一時的に自己紹介欄へ入れて保存してください。確認できたら、この端末のログインを発行します。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyRecovery()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
   </main></div>;
