@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         note ポン出し v14.1｜コピペ→整えてポン出し
+// @name         note ポン出し v32.1｜コピペ→整えてポン出し
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      14.1.0
+// @version      32.1.0
 // @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、note標準の大見出し・小見出し・段落・箇条書きへ整形。目次対応、brなし、挿絵は触らない。
 // @author       無名S note
 // @match        https://editor.note.com/*
@@ -14,14 +14,14 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v14_1_root__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v14-backup:';
+  const ROOT_ID = '__mumei_pon_v32_1_root__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v32-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   [
-    '__mumei_pon_v14_root__','__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__',
-    '__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__',
-    '__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
+    '__mumei_pon_v32_root__','__mumei_pon_v31_root__','__mumei_pon_v14_1_root__','__mumei_pon_v14_root__',
+    '__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__','__mumei_pon_v10_root__',
+    '__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
   ].forEach(id => document.getElementById(id)?.remove());
   if (document.getElementById(ROOT_ID)) return;
 
@@ -73,8 +73,6 @@
         flushAll(); blocks.push({type:'hr'}); continue;
       }
 
-      // note本文ではタイトルがh1相当なので、本文の大見出し=h2、小見出し=h3。
-      // # / ## のほか、既存原稿で使っている ◆ / ◇ も自動で見出し化する。
       const bigHeading = t.match(/^#\s+(.+)$/) || t.match(/^◆\s*(.+)$/);
       const smallHeading = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/) || t.match(/^◇\s*(.+)$/);
       if (bigHeading) { flushAll(); blocks.push({type:'h2', text:bigHeading[1]}); continue; }
@@ -101,7 +99,6 @@
     }
     flushAll();
 
-    // ChatGPT由来の「一文ごとに空行」を詰め、自然な長さの段落へまとめる。
     const compact = [];
     const standalone = text => /^\*\*.+\*\*$/.test(text) || /^「.+」$/.test(text) || /^『.+』$/.test(text);
     for (const b of blocks) {
@@ -218,7 +215,7 @@
     <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:10px 13px;background:#0b2138;color:#fff;font-weight:900;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.35);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン出し</button>
     <div id="ponPanel" style="display:none;position:absolute;right:0;bottom:52px;width:min(90vw,430px);max-height:72vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:13px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.45)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-        <b style="flex:1;font-size:14px">📄 コピペ → 整えてポン出し</b>
+        <b style="flex:1;font-size:14px">📄 v32.1 コピペ → 整えてポン出し</b>
         <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:5px 8px">✕</button>
       </div>
       <div style="font-size:11px;line-height:1.45;color:#c8d9e6;margin-bottom:7px">本文をそのままコピペ。# / ◆ = 大見出し、## / ◇ = 小見出し。note標準サイズで入り、目次にも拾われます。本文は通常サイズ。brは作りません。挿絵は触りません。</div>
