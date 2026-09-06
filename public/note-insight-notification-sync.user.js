@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.13
-// @description  通知バーを最小化し、現在noteにログイン中のアカウントへ安全に保存。INSIGHT起動時の最新通知差分同期にも対応します。
+// @version      2.9.14
+// @description  INSIGHT起動時の最新通知差分を自動保存。通常はフィルターON/OFFとINSIGHT戻りを常設し、過去読込やグループ管理は収納します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,16 +12,16 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2913
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2913-patch.js?v=2913
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2914
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2914-patch.js?v=2914
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='2.9.13';
-const CLEAN_NOTICE='mumei_open_notice_v2913';
+const VERSION='2.9.14';
+const CLEAN_NOTICE='mumei_open_notice_v2914';
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
 const INSIGHT_NOTIFICATIONS='https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard';
@@ -40,14 +40,14 @@ function visible(el){if(!el?.getBoundingClientRect)return false;const r=el.getBo
 function noticeTop(){const exact=[...document.querySelectorAll('[role="tab"],button,a,div')].filter(el=>visible(el)&&clean(el.textContent)==='通知');for(const tab of exact){const box=tab.closest('[role="tablist"]')||tab.parentElement;if(!box||!visible(box))continue;const r=box.getBoundingClientRect();if(r.top<360&&r.bottom>40)return Math.round(Math.max(48,Math.min(innerHeight-125,r.bottom+1)))}return 274}
 function setToolbarTop(){document.documentElement.style.setProperty('--mumei-notice-toolbar-top',`${noticeTop()}px`)}
 function ensureInsightReturnButton(){const bar=document.getElementById('mumei-v297-actions');if(!bar)return;if(!bar.querySelector('.mumei-insight-return')){const b=document.createElement('button');b.type='button';b.className='mumei-insight-return';b.textContent='INSIGHTへ';b.title='INSIGHT本人通知へ戻る';b.addEventListener('click',()=>location.assign(INSIGHT_NOTIFICATIONS));bar.append(b)}setToolbarTop()}
-function installToolbarStyle(){if(document.getElementById('mumei-v2913-return-style'))return;const s=document.createElement('style');s.id='mumei-v2913-return-style';s.textContent=`
+function installToolbarStyle(){if(document.getElementById('mumei-v2914-return-style'))return;const s=document.createElement('style');s.id='mumei-v2914-return-style';s.textContent=`
 html #mumei-v297-actions{position:fixed!important;top:var(--mumei-notice-toolbar-top,274px)!important;left:0!important;right:0!important;z-index:2147483000!important;width:100vw!important;max-width:100vw!important;min-width:0!important;margin:0!important;border-left:0!important;border-right:0!important;background:rgba(9,23,34,.985)!important;box-sizing:border-box!important;overflow:visible!important;transform:none!important;float:none!important;align-self:auto!important}
 `;
   document.documentElement.appendChild(s)
 }
 installToolbarStyle();
 setToolbarTop();
-const toolbarTimer=window.setInterval(()=>{ensureInsightReturnButton();setToolbarTop()},350);
+const toolbarTimer=window.setInterval(()=>{ensureInsightReturnButton();setToolbarTop()},700);
 window.addEventListener('resize',setToolbarTop,{passive:true});
 window.addEventListener('pagehide',()=>window.clearInterval(toolbarTimer),{once:true});
 
