@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v32.1｜コピペ→整えてポン出し
+// @name         note ポン出し v32.2｜コピペ→整えてポン出し
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      32.1.0
-// @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、note標準の大見出し・小見出し・段落・箇条書きへ整形。目次対応、brなし、挿絵は触らない。
+// @version      32.2.0
+// @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、note標準の大見出し・小見出し・段落・箇条書きへ整形。目次対応、brなし、挿絵は触らない。現行note本文エディタ検出対応。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,12 +14,12 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v32_1_root__';
+  const ROOT_ID = '__mumei_pon_v32_2_root__';
   const BACKUP_PREFIX = 'mumei-note-pon-v32-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   [
-    '__mumei_pon_v32_root__','__mumei_pon_v31_root__','__mumei_pon_v14_1_root__','__mumei_pon_v14_root__',
+    '__mumei_pon_v32_1_root__','__mumei_pon_v32_root__','__mumei_pon_v31_root__','__mumei_pon_v14_1_root__','__mumei_pon_v14_root__',
     '__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__','__mumei_pon_v10_root__',
     '__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
   ].forEach(id => document.getElementById(id)?.remove());
@@ -134,27 +134,119 @@
     };
   }
 
-  function visible(el) {
-    if (!el) return false;
+  function isVisibleEnough(el) {
+    if (!el || !el.getBoundingClientRect) return false;
     const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
-    return r.width > 160 && r.height > 80 && s.display !== 'none' && s.visibility !== 'hidden';
+    let s;
+    try { s = el.ownerDocument.defaultView.getComputedStyle(el); }
+    catch { return false; }
+    return r.width > 180 && r.height > 20 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+  }
+
+  function looksLikeTitle(el) {
+    const bits = [
+      el.id,
+      el.className,
+      el.getAttribute?.('aria-label'),
+      el.getAttribute?.('placeholder'),
+      el.getAttribute?.('data-placeholder'),
+      el.getAttribute?.('name')
+    ].filter(Boolean).join(' ').toLowerCase();
+    const txt = (el.innerText || el.textContent || '').trim();
+    return /title|headline|heading-title|記事タイトル|タイトル/.test(bits) || (el.tagName === 'H1' && txt.length < 160);
+  }
+
+  function editorScore(el) {
+    if (!isVisibleEnough(el) || looksLikeTitle(el)) return -99999;
+    const r = el.getBoundingClientRect();
+    const cls = String(el.className || '');
+    const attrs = [
+      el.getAttribute?.('aria-label'),
+      el.getAttribute?.('placeholder'),
+      el.getAttribute?.('data-placeholder'),
+      el.getAttribute?.('role')
+    ].filter(Boolean).join(' ');
+    const text = (el.innerText || el.textContent || '').trim();
+    let score = 0;
+
+    if (/ProseMirror/i.test(cls)) score += 10000;
+    if (el.getAttribute?.('contenteditable') === 'true') score += 3000;
+    if (el.getAttribute?.('contenteditable') === 'plaintext-only') score += 2500;
+    if (el.getAttribute?.('role') === 'textbox') score += 1200;
+    if (/本文|記事本文|body|content|editor/i.test(attrs + ' ' + cls)) score += 1800;
+    if (/本文を書|本文を入力|記事を書く/i.test(attrs)) score += 3000;
+    if (el.querySelector?.('p,h2,h3,blockquote,ul,ol')) score += 1000;
+
+    score += Math.min(r.width, 1000) * 0.5;
+    score += Math.min(r.height, 1200) * 1.5;
+    score += Math.min(text.length, 3000) * 0.08;
+
+    // 上部の短い入力欄はタイトル候補なので減点。
+    if (r.height < 70) score -= 1200;
+    if (text.length < 80 && r.height < 100) score -= 600;
+
+    return score;
+  }
+
+  function collectRoots(startDoc = document) {
+    const roots = [];
+    const seen = new Set();
+
+    const walkRoot = root => {
+      if (!root || seen.has(root)) return;
+      seen.add(root);
+      roots.push(root);
+
+      let all = [];
+      try { all = [...root.querySelectorAll('*')]; } catch {}
+      for (const el of all) {
+        if (el.shadowRoot) walkRoot(el.shadowRoot);
+        if (el.tagName === 'IFRAME') {
+          try {
+            const d = el.contentDocument;
+            if (d) walkRoot(d);
+          } catch {}
+        }
+      }
+    };
+
+    walkRoot(startDoc);
+    return roots;
   }
 
   function findEditor() {
-    const pm = [...document.querySelectorAll('.ProseMirror[contenteditable="true"]')].filter(visible);
-    if (pm.length) return pm.sort((a,b) => b.getBoundingClientRect().height - a.getBoundingClientRect().height)[0];
-    const all = [...document.querySelectorAll('[contenteditable="true"]')].filter(visible);
-    if (!all.length) return null;
-    return all.sort((a,b) => b.getBoundingClientRect().height - a.getBoundingClientRect().height)[0];
+    const candidates = [];
+    const selectors = [
+      '.ProseMirror',
+      '[contenteditable="true"]',
+      '[contenteditable="plaintext-only"]',
+      '[role="textbox"]',
+      '[data-placeholder*="本文"]',
+      '[aria-label*="本文"]'
+    ];
+
+    for (const root of collectRoots()) {
+      for (const sel of selectors) {
+        try {
+          root.querySelectorAll(sel).forEach(el => candidates.push(el));
+        } catch {}
+      }
+    }
+
+    const unique = [...new Set(candidates)];
+    if (!unique.length) return null;
+
+    unique.sort((a, b) => editorScore(b) - editorScore(a));
+    const best = unique[0];
+    return editorScore(best) > 0 ? best : null;
   }
 
-  async function waitEditor(ms = 10000) {
+  async function waitEditor(ms = 20000) {
     const end = Date.now() + ms;
     while (Date.now() < end) {
       const e = findEditor();
       if (e) return e;
-      await sleep(120);
+      await sleep(180);
     }
     return null;
   }
@@ -171,15 +263,18 @@
   }
 
   function fireInput(editor, type='insertText') {
-    try { editor.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:type, data:null})); }
-    catch { editor.dispatchEvent(new Event('input', {bubbles:true})); }
-    editor.dispatchEvent(new Event('change', {bubbles:true}));
+    const win = editor.ownerDocument?.defaultView || window;
+    try { editor.dispatchEvent(new win.InputEvent('input', {bubbles:true, inputType:type, data:null})); }
+    catch { editor.dispatchEvent(new win.Event('input', {bubbles:true})); }
+    editor.dispatchEvent(new win.Event('change', {bubbles:true}));
   }
 
   function selectEditor(editor) {
-    const range = document.createRange();
+    const doc = editor.ownerDocument || document;
+    const win = doc.defaultView || window;
+    const range = doc.createRange();
     range.selectNodeContents(editor);
-    const sel = window.getSelection();
+    const sel = win.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
     editor.focus();
@@ -187,25 +282,28 @@
 
   async function hardClear(editor) {
     saveBackup(editor);
+    const doc = editor.ownerDocument || document;
     selectEditor(editor);
-    try { document.execCommand('delete', false); } catch {}
+    try { doc.execCommand('delete', false); } catch {}
     fireInput(editor, 'deleteContentBackward');
-    await sleep(180);
+    await sleep(220);
 
-    if ((editor.innerText || '').trim()) {
+    if ((editor.innerText || editor.textContent || '').trim()) {
       editor.innerHTML = '';
       fireInput(editor, 'deleteContentBackward');
-      await sleep(140);
+      await sleep(180);
     }
-    return !(editor.innerText || '').trim();
+    return !(editor.innerText || editor.textContent || '').trim();
   }
 
   async function insertHtml(editor, html) {
+    const doc = editor.ownerDocument || document;
     selectEditor(editor);
     let ok = false;
-    try { ok = document.execCommand('insertHTML', false, html); } catch {}
-    if (!ok || !(editor.innerText || '').trim()) editor.innerHTML = html;
+    try { ok = doc.execCommand('insertHTML', false, html); } catch {}
+    if (!ok || !(editor.innerText || editor.textContent || '').trim()) editor.innerHTML = html;
     fireInput(editor, 'insertFromPaste');
+    await sleep(180);
   }
 
   const root = document.createElement('div');
@@ -215,7 +313,7 @@
     <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:10px 13px;background:#0b2138;color:#fff;font-weight:900;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.35);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン出し</button>
     <div id="ponPanel" style="display:none;position:absolute;right:0;bottom:52px;width:min(90vw,430px);max-height:72vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:13px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.45)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-        <b style="flex:1;font-size:14px">📄 v32.1 コピペ → 整えてポン出し</b>
+        <b style="flex:1;font-size:14px">📄 v32.2 コピペ → 整えてポン出し</b>
         <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:5px 8px">✕</button>
       </div>
       <div style="font-size:11px;line-height:1.45;color:#c8d9e6;margin-bottom:7px">本文をそのままコピペ。# / ◆ = 大見出し、## / ◇ = 小見出し。note標準サイズで入り、目次にも拾われます。本文は通常サイズ。brは作りません。挿絵は触りません。</div>
@@ -244,8 +342,9 @@
 
   root.querySelector('#ponGo').addEventListener('click', async () => {
     if (!src.value.trim()) return show('本文をコピペしてから押してね');
+    show('note本文エディタを探しています…');
     const editor = await waitEditor();
-    if (!editor) return show('❌ note本文エディタが見つからない');
+    if (!editor) return show('❌ note本文エディタが見つからない｜本文欄を1回タップしてから、もう一度押して');
 
     let converted;
     try { converted = sourceToHtml(src.value); }
@@ -258,14 +357,14 @@
     show('② 文字サイズ・見出し・改行を整えて貼付中…');
     await insertHtml(editor, converted.html);
 
-    const actualBig = editor.querySelectorAll('h2').length;
-    const actualSmall = editor.querySelectorAll('h3').length;
+    const actualBig = editor.querySelectorAll?.('h2').length || 0;
+    const actualSmall = editor.querySelectorAll?.('h3').length || 0;
     if (converted.bigCount + converted.smallCount > 0 && actualBig + actualSmall === 0) {
       return show('⚠️ 本文は貼れたけど、note側で見出し化できていません。保存せず教えてください。');
     }
 
     show(`✅ 完了｜大見出し ${actualBig} / 小見出し ${actualSmall}｜目次対応`);
-    setTimeout(() => root.remove(), 1300);
+    setTimeout(() => root.remove(), 1400);
   });
 
   root.querySelector('#ponUndo').addEventListener('click', async () => {
