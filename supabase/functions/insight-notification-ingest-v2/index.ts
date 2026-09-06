@@ -39,6 +39,7 @@ function classify(text:string,targetUrl:string|null){
   if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
   if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さんがあなたをフォロー)/.test(t))return"follow";
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
+  if(/(?:さんが記事を投稿しました|さんが新しい記事を投稿しました)/.test(t))return"creator_article_posted";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
   if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
   if(t.length<350&&/(?:さんから.{0,30}(?:チップ|サポート).{0,50}(?:届きました|受け取りました|受け取った|贈られました)|(?:チップ|サポート).{0,80}(?:が届きました|を受け取りました|をもらいました|を贈られました|を贈りました)|(?:支援|応援金).{0,80}(?:届きました|受け取りました|もらいました))/.test(t))return"tip";
@@ -65,7 +66,7 @@ async function identity(req:Request){
 }
 
 function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
-  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type)&&!(type==="my_article_magazine_added"&&!target);
+  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type)&&!(type==="my_article_magazine_added"&&!target);
   return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
 }
 function allowedExplicitSource(source:string){
@@ -95,13 +96,13 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v12-resume"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v13-resume"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2917c"});
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2918"});
     const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
