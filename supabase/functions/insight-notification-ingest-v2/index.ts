@@ -64,7 +64,7 @@ async function identity(req:Request){
 }
 
 function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
-  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type);
+  const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like"].includes(type)&&!(type==="my_article_magazine_added"&&!target);
   return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
 }
 function allowedExplicitSource(source:string){
