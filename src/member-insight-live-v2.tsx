@@ -73,7 +73,6 @@ export function MemberInsightLiveV2(){
       setStatus("最新版アプリを確認中…");
       if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}
       await fetch(`./?app-check=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);
-      // One final revision refreshes every currently mounted INSIGHT panel. Analytics is remounted once here as well.
       setRevision(v=>v+1);
       setFullRefreshSeq(v=>v+1);
       window.dispatchEvent(new CustomEvent("mumei-insight-refresh-all",{detail:{at:Date.now()}}));
@@ -113,6 +112,12 @@ export function MemberInsightLiveV2(){
   }
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>「データ＋最新版 更新」は記事・スキ・コメント・お気に入り・フォロー・通知保存データ・分析表示までINSIGHT全体を再読込します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
+    <section className="miv5-data-warning" role="note" aria-label="データ精度について">
+      <b>⚠️ データ精度について</b>
+      <span>INSIGHTの履歴は、取得条件・ブラウザ・note側の表示状況などにより、欠落・重複・時刻ずれが生じる場合があります。</span>
+      <strong>特に「本人通知」は推定・補完を含むため、大きな誤差が生じることがあります。</strong>
+      <small>重要な確認はnote本体の通知・記事履歴を優先してください。</small>
+    </section>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
