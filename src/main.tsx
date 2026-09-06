@@ -55,6 +55,8 @@ async function tryReturningMemberResume() {
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
   if (!joinId) return;
   const onAccessScreen = window.location.hash.includes("access/insight");
+  const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
+  if (!onAccessScreen && !onMemberScreen) return;
   if (localStorage.getItem(INSIGHT_TOKEN_KEY) && !onAccessScreen) return;
   const account = getStoredInsightAccount(joinId);
   if (!account?.applicantToken) return;
