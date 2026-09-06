@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=(p)=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("TOP requires two TOP presses and exit never logs out",async()=>{const app=await read("src/App.tsx"),home=await read("src/hub-home.tsx");for(const x of ["topArmed","TOPをもう一度押すと終了","大元TOP｜TOPを2回押すと終了","./exit.html"])assert.match(app,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));assert.match(home,/アプリを終了してnoteへ/);assert.match(home,/https:\/\/note\.com\//);const exitLink=home.match(/<section className="hub-note-exit-wrap">[\s\S]*?<\/section>/)?.[0]||"";assert.doesNotMatch(exitLink,/forgetMemberSession|forgetInsightAccount|removeItem|logout|leave/);});
+test("TOP requires two TOP presses and note exit is embedded in bottom nav",async()=>{const app=await read("src/App.tsx"),home=await read("src/hub-home.tsx"),index=await read("index.html");for(const x of ["topArmed","もう1回で終了","./exit.html","note-exit","noteへ","アプリ終了","https://note.com/"])assert.match(app,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));assert.doesNotMatch(home,/hub-note-exit-wrap|hub-note-exit/);assert.doesNotMatch(index,/app-exit-to-note/);assert.doesNotMatch(app,/forgetMemberSession|forgetInsightAccount/);});
 
 test("notification list is dense without dropping fields",async()=>{const css=await read("src/insight-polish-v1.css"),ui=await read("src/member-insight-notifications-final.tsx");for(const x of [".minf-list{gap:6px", ".minf-list article{padding:8px 9px", ".minf-avatar{width:34px", ".minf-main{gap:2px", "-webkit-line-clamp:2"])assert.match(css,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));for(const x of ["minf-meta","minf-who","minf-main","minf-target"])assert.match(ui,new RegExp(x));});
 
