@@ -42,6 +42,22 @@ function BottomNav({ route }: { route: string }) {
   const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
   const [topArmed, setTopArmed] = useState(false);
   useEffect(() => { if (route !== "home") setTopArmed(false); }, [route]);
+  function exitApp() {
+    try { window.close(); } catch { /* browser may block close for user-opened windows */ }
+    if (/Android/i.test(navigator.userAgent)) {
+      window.setTimeout(() => {
+        if (document.visibilityState !== "visible") return;
+        window.location.href = "intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.HOME;end";
+      }, 40);
+      window.setTimeout(() => {
+        if (document.visibilityState === "visible") window.location.replace("./exit.html?close=1");
+      }, 900);
+      return;
+    }
+    window.setTimeout(() => {
+      if (document.visibilityState === "visible") window.location.replace("./exit.html?close=1");
+    }, 120);
+  }
   function topPress() {
     if (route !== "home") {
       setTopArmed(true);
@@ -49,7 +65,7 @@ function BottomNav({ route }: { route: string }) {
       return;
     }
     if (topArmed) {
-      window.location.assign("./exit.html");
+      exitApp();
       return;
     }
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -63,7 +79,7 @@ function BottomNav({ route }: { route: string }) {
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
       <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label={topArmed && route === "home" ? "TOPをもう一度押すと終了" : "TOP"}><span aria-hidden="true">⌂</span><b>TOP</b>{topArmed && route === "home" ? <em>もう1回で終了</em> : null}</button>
       <button className={insightActive ? "active" : ""} onClick={() => goTo(hasMember ? "dashboard" : "access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
-      <button className="note-exit" onClick={notePress} aria-label="アプリを終了してnoteへ"><span aria-hidden="true">↗</span><b>noteへ</b><em>アプリ終了</em></button>
+      <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
     <style>{`
       html{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -71,10 +87,10 @@ function BottomNav({ route }: { route: string }) {
       .app-route-shell>*{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       .app-route-shell.is-member .iv8-apprefresh{display:none!important}
       .app-route-shell.is-admin{padding-bottom:24px!important}.app-route-shell.is-admin>*{scroll-margin-bottom:0!important}
-      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:1fr 1fr .72fr;gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
+      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:1fr 1fr .62fr;gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
       .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
       .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}.app-bottom-nav button em{font-style:normal;font-size:7px;line-height:1.1;color:#ffe09a;white-space:nowrap}
-      .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}.app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid #243246;border-radius:0}.app-bottom-nav button.note-exit b{color:#c9f4ff}.app-bottom-nav button.note-exit em{color:#7890a6}
+      .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}.app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid #243246;border-radius:0}.app-bottom-nav button.note-exit b{color:#c9f4ff}
       .app-session-check{min-height:56vh;display:grid;place-items:center;padding:28px}.app-session-check>div{width:min(420px,100%);border:1px solid #2c4055;border-radius:16px;background:#0c1621;padding:18px;color:#dce9f5;text-align:center}.app-session-check b{display:block;color:#8feaff;margin-bottom:6px}.app-session-check span{font-size:12px;color:#91a3b7}
       @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:420px}.app-route-shell{padding-bottom:94px}}
     `}</style>
