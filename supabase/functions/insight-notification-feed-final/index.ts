@@ -10,8 +10,24 @@ const ts=(r:any)=>Date.parse(r.occurred_at||r.captured_at||0)||0;
 const canon=(v:any)=>String(v||"").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim();
 const urlKey=(v:any)=>String(v||"").split(/[?#]/)[0].replace(/\/$/,"").toLowerCase();
 function actorKey(r:any){return urlKey(r.actor_url)||String(r.actor_name||"").toLowerCase()}
-function useful(r:any){const source=String(r?.meta?.source||""),type=String(r.notification_type||"other"),raw=canon(r.raw_text);if(source==="canonical-public-comments")return true;if(type==="other")return false;if(raw.length<5||raw.length>420)return false;const action=/(?:さん(?:他\d+名)?が|あなた(?:の|を|に)|新しい(?:スキ|コメント|フォロワー)).{0,260}(?:スキしました|コメントしました|返信しました|フォローしました|フォローされました|追加しました|仲間入りしました|参加しました|購入されました|購入しました|投稿しました|話題|高評価|ポイント)|(?:メンバーシップ|掲示板).{0,160}(?:投稿しました|開始しました|始めました|はじめました|追加しました|公開しました|参加しました|メンバーになりました)|(?:購入がありました|返信がありました|コメントがありました)/u.test(raw);if(!action)return false;if(source==="note-notification-auto-sync"&&!r.occurred_at&&!r.actor_url&&raw.length>180)return false;return true}
-function semanticKey(r:any){const type=String(r.notification_type||"other"),actor=actorKey(r),target=urlKey(r.target_url)||urlKey(r.source_url),time=ts(r),bucket=time?Math.floor(time/(5*60_000)):Math.floor((Date.parse(r.captured_at||0)||0)/(5*60_000)),base=`${type}|${actor}|${target}|${bucket}`;if(["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type))return base;return`${base}|${canon(r.raw_text)}`}
+function useful(r:any){
+  const source=String(r?.meta?.source||""),type=String(r.notification_type||"other"),raw=canon(r.raw_text);
+  if(source==="canonical-public-comments")return true;
+  if(type==="other")return false;
+  if(raw.length<5||raw.length>700)return false;
+  if(type==="my_article_magazine_added"||type==="tip")return true;
+  const action=/(?:さん(?:他\d+名)?が|あなた(?:の|を|に)|新しい(?:スキ|コメント|フォロワー)).{0,320}(?:スキしました|コメントしました|返信しました|フォローしました|フォローされました|追加しました|追加されました|仲間入りしました|参加しました|購入されました|購入しました|投稿しました|話題|高評価|ポイント)|(?:メンバーシップ|掲示板).{0,200}(?:投稿しました|開始しました|始めました|はじめました|追加しました|追加されました|公開しました|参加しました|メンバーになりました)|(?:購入がありました|返信がありました|コメントがありました)|(?:チップ|サポート|支援|応援金).{0,180}(?:届きました|届いた|受け取りました|受け取った|もらいました|いただきました|贈られました|送られました)/u.test(raw);
+  if(!action)return false;
+  if(source==="note-notification-auto-sync"&&!r.occurred_at&&!r.actor_url&&raw.length>180)return false;
+  return true
+}
+function semanticKey(r:any){
+  const type=String(r.notification_type||"other"),actor=actorKey(r),target=urlKey(r.target_url)||urlKey(r.source_url),title=canon(r.target_title),time=ts(r),bucket=time?Math.floor(time/(5*60_000)):Math.floor((Date.parse(r.captured_at||0)||0)/(5*60_000)),base=`${type}|${actor}|${target}|${bucket}`;
+  if(type==="my_article_magazine_added"&&!target)return`${base}|${title||canon(r.raw_text)}`;
+  if(type==="tip"&&!actor&&!target)return`${base}|${canon(r.raw_text)}`;
+  if(["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type))return base;
+  return`${base}|${canon(r.raw_text)}`
+}
 function dedupe(rows:any[]){const map=new Map<string,any>();for(const r of (rows||[]).filter(useful)){const source=String(r?.meta?.source||""),key=source==="canonical-public-comments"?String(r.id):semanticKey(r),prev=map.get(key);if(!prev){map.set(key,r);continue}const score=(x:any)=>(x.actor_image_url?16:0)+(x.actor_url?8:0)+(x.actor_name?4:0)+(x.target_title?2:0)+(x.target_url?1:0)+(x.occurred_at?1:0),rich=score(r)>score(prev)?r:prev,other=rich===r?prev:r;map.set(key,{...other,...rich,actor_image_url:rich.actor_image_url||other.actor_image_url||null,actor_name:rich.actor_name||other.actor_name||null,actor_url:rich.actor_url||other.actor_url||null,target_title:rich.target_title||other.target_title||null,target_url:rich.target_url||other.target_url||null,occurred_at:rich.occurred_at||other.occurred_at||null})}return[...map.values()].sort((a,b)=>ts(b)-ts(a))}
 function articleOwner(url:any){try{const u=new URL(String(url||""));const m=u.pathname.match(/^\/([^/]+)\/n\//);return m?.[1]?.toLowerCase()||""}catch{return""}}
 function decorate(r:any,noteId:string){const owner=articleOwner(r.target_url),source=String(r?.meta?.source||""),self=source==="canonical-public-comments"||(owner&&owner===noteId),type=String(r.notification_type||"");let contextLabel="";if(type==="comment")contextLabel=self?"自分の記事へのコメント":owner?`@${owner} の記事へのコメント`:"コメント";else if(type==="reply")contextLabel=self?"自分の記事のコメントへの返信":owner?`@${owner} の記事コメントへの返信`:"コメントへの返信";else if(type==="comment_like")contextLabel=self?"自分の記事のコメントへの♡":owner?`@${owner} の記事コメントへの♡`:"コメントへの♡";else if(type==="like")contextLabel=self?"自分の記事へのスキ":owner?`@${owner} の記事へのスキ`:"記事へのスキ";return{...r,article_context:self?"self":owner?"other":"unknown",article_owner:owner||null,context_label:contextLabel}}
