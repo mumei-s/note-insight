@@ -34,7 +34,7 @@ const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
+  const[revision,setRevision]=useState(0),[fullRefreshSeq,setFullRefreshSeq]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0);
   function openMode(next:Mode){
     if(mode===next)return;
@@ -64,16 +64,20 @@ export function MemberInsightLiveV2(){
   }
   async function manualRefresh(){
     if(manualBusy)return;
-    setManualBusy(true);setStatus("公開履歴を更新中…");
+    setManualBusy(true);setStatus("INSIGHT全体の公開履歴を更新中…");
     try{
       await publicSync(true);
       setStatus("フォロー・フォロワーを照合中…");
       const ok=await relationSync(true);if(!ok)setStatus("フォロー照合は次回も自動継続します");
-      setRevision(v=>v+1);await loadOfficial();
+      await loadOfficial();
       setStatus("最新版アプリを確認中…");
       if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)))}
       await fetch(`./?app-check=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);
-      setStatus("データ・アプリ最新版を更新しました");
+      // One final revision refreshes every currently mounted INSIGHT panel. Analytics is remounted once here as well.
+      setRevision(v=>v+1);
+      setFullRefreshSeq(v=>v+1);
+      window.dispatchEvent(new CustomEvent("mumei-insight-refresh-all",{detail:{at:Date.now()}}));
+      setStatus("INSIGHT全体・データ＋アプリ最新版を更新しました");
     }catch(e){setStatus(e instanceof Error?`更新エラー：${e.message}`:"更新エラー")}
     finally{setManualBusy(false)}
   }
@@ -108,13 +112,13 @@ export function MemberInsightLiveV2(){
     else if(mode!=="normal")openMode("normal");
   }
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
-    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>総数はnote公式値。公開APIで人物まで確認できる範囲は別表示します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
+    <section className="miv5-update"><div><b>AUTO SYNC</b><span>{status}</span><small>「データ＋最新版 更新」は記事・スキ・コメント・お気に入り・フォロー・通知保存データ・分析表示までINSIGHT全体を再読込します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className="primary" disabled={manualBusy} onClick={()=>void manualRefresh()}>{manualBusy?"更新中…":"データ＋最新版 更新"}</button></div></section>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
-    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal revision={revision} onBack={backMode}/></div>:null}
+    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
   </div>;
 }
