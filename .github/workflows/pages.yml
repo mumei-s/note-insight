@@ -32,10 +32,10 @@ jobs:
           node --check public/note-insight-notification-sync.user.js
           node --check public/note-insight-notification-runtime-v2915-patch.js
           node --check public/note-insight-notification-runtime-v2917-patch.js
-          node --check public/note-insight-notification-runtime-v2917-layout-hotfix.js
+          node --check public/note-insight-notification-runtime-v2917-resume-hotfix.js
       - run: npm run build
       - name: Unified INSIGHT regression tests
-        run: node --test tests/insight-current.test.mjs tests/favorite-reader-current.test.mjs tests/notification-sync.test.mjs tests/notification-layout-hotfix.test.mjs tests/polish-regression.test.mjs
+        run: node --test tests/insight-current.test.mjs tests/favorite-reader-current.test.mjs tests/notification-sync.test.mjs tests/notification-resume-hotfix.test.mjs tests/polish-regression.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
