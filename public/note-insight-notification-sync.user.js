@@ -2,7 +2,7 @@
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
 // @version      2.9.17
-// @description  noteログイン中は通知を継続差分保存。通知画面は欄外の細い横長パネル＋INSIGHT常時表示、保存確認は小さい「保完」で示します。
+// @description  note通知を開いた瞬間から未保存位置まで自動保存し、保存完了位置を保持。INSIGHT連携と通知フィルターを省スペースで利用します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -15,7 +15,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2917
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2915-patch.js?v=2917
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2917-patch.js?v=2917
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2917-layout-hotfix.js?v=2917b
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2917-resume-hotfix.js?v=2917c
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
