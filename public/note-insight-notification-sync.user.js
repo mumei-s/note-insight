@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.19
-// @description  note通知を開くと未保存分を即時保存。旧通知UI競合を止め、チップ・自分の記事追加・記事投稿も補完します。
+// @version      2.9.20
+// @description  note通知を自動保存し、通知パネル再描画中も追加読込・フィルター・設定・INSIGHTを安定表示します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,16 +12,17 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2919
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2919.js?v=2919a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2920
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2919.js?v=2920
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2920-ui.js?v=2920a
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.19';
-const CLEAN_NOTICE='mumei_open_notice_v2919';
-const LEGACY_CLEAN=['mumei_open_notice_v2918','mumei_open_notice_v2917','mumei_open_notice_v2916','mumei_open_notice_v2915','mumei_open_notice_v2914','mumei_open_notice_v2913'];
+const VERSION='2.9.20';
+const CLEAN_NOTICE='mumei_open_notice_v2920';
+const LEGACY_CLEAN=['mumei_open_notice_v2919','mumei_open_notice_v2918','mumei_open_notice_v2917','mumei_open_notice_v2916','mumei_open_notice_v2915','mumei_open_notice_v2914','mumei_open_notice_v2913'];
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
