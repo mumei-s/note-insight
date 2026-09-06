@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v13｜追記標準・小型可動
+// @name         note ポン出し v14｜コピペ→整えてポン出し
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      13.0.0
-// @description  通常は既存本文・リンクを消さずカーソル位置へ追記。全消しは別ボタン。小型・移動・最小化対応。brなし、---区切り線対応。
+// @version      14.0.0
+// @description  本文をコピペして「整えてポン出し」を押すだけ。既存本文を全消しし、見出し・段落・箇条書きを整理してbrなしで貼付。挿絵は触らない。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,12 +14,15 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v13_root__';
-  const BACKUP_PREFIX = 'mumei-note-pon-v13-backup:';
+  const ROOT_ID = '__mumei_pon_v14_root__';
+  const BACKUP_PREFIX = 'mumei-note-pon-v14-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  ['__mumei_pon_v12_root__','__mumei_pon_v11_root__','__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__']
-    .forEach(id => document.getElementById(id)?.remove());
+  [
+    '__mumei_pon_v13_root__','__mumei_pon_v12_root__','__mumei_pon_v11_root__',
+    '__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__',
+    '__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
+  ].forEach(id => document.getElementById(id)?.remove());
   if (document.getElementById(ROOT_ID)) return;
 
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -34,13 +37,16 @@
       .replace(/^:::\s*$/gmi, '')
       .replace(/^```(?:markdown|md|text)?\s*$/gmi, '')
       .replace(/^```\s*$/gmi, '')
+      .replace(/^\uFEFF/, '')
       .replace(/\r\n?/g, '\n')
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
 
   function sourceToHtml(src) {
     const lines = cleanSource(src).split('\n');
-    const out = [];
+    const blocks = [];
     let para = [];
     let list = [];
     let listType = '';
@@ -48,29 +54,29 @@
     const flushPara = () => {
       if (!para.length) return;
       const text = para.map(v => v.trim()).filter(Boolean).join('');
-      if (text) out.push(`<p>${inline(text)}</p>`);
+      if (text) blocks.push({type:'p', text});
       para = [];
     };
-
     const flushList = () => {
       if (!list.length || !listType) return;
-      out.push(`<${listType}>${list.map(v => `<li>${inline(v)}</li>`).join('')}</${listType}>`);
+      blocks.push({type:listType, items:[...list]});
       list = [];
       listType = '';
     };
+    const flushAll = () => { flushPara(); flushList(); };
 
     for (const raw of lines) {
       const t = raw.trim();
-      if (!t) { flushPara(); flushList(); continue; }
+      if (!t) { flushAll(); continue; }
 
-      if (/^-{3,}$/.test(t)) {
-        flushPara(); flushList(); out.push('<hr>'); continue;
+      if (/^-{3,}$/.test(t) || /^_{3,}$/.test(t)) {
+        flushAll(); blocks.push({type:'hr'}); continue;
       }
 
       const h1 = t.match(/^#\s+(.+)$/);
       const h2 = t.match(/^##\s+(.+)$/) || t.match(/^###\s+(.+)$/);
-      if (h1) { flushPara(); flushList(); out.push(`<h2>${inline(h1[1])}</h2>`); continue; }
-      if (h2) { flushPara(); flushList(); out.push(`<h3>${inline(h2[1])}</h3>`); continue; }
+      if (h1) { flushAll(); blocks.push({type:'h2', text:h1[1]}); continue; }
+      if (h2) { flushAll(); blocks.push({type:'h3', text:h2[1]}); continue; }
 
       const ul = t.match(/^[-*・]\s*(.+)$/);
       if (ul) {
@@ -87,13 +93,40 @@
       }
 
       const q = t.match(/^>\s?(.*)$/);
-      if (q) { flushPara(); flushList(); out.push(`<blockquote>${inline(q[1])}</blockquote>`); continue; }
+      if (q) { flushAll(); blocks.push({type:'quote', text:q[1]}); continue; }
+
       para.push(t);
     }
+    flushAll();
 
-    flushPara();
-    flushList();
-    const html = out.join('');
+    // ChatGPT由来の「一文ごとに空行」を詰め、自然な長さの段落へまとめる。
+    const compact = [];
+    const standalone = text => /^\*\*.+\*\*$/.test(text) || /^「.+」$/.test(text) || /^『.+』$/.test(text);
+    for (const b of blocks) {
+      const prev = compact[compact.length - 1];
+      if (
+        b.type === 'p' && prev?.type === 'p' &&
+        !standalone(prev.text) && !standalone(b.text) &&
+        prev.text.length < 170 && (prev.text.length + b.text.length) <= 280
+      ) {
+        prev.text += b.text;
+      } else {
+        compact.push({...b});
+      }
+    }
+
+    const html = compact.map(b => {
+      if (b.type === 'p') return `<p>${inline(b.text)}</p>`;
+      if (b.type === 'h2') return `<h2>${inline(b.text)}</h2>`;
+      if (b.type === 'h3') return `<h3>${inline(b.text)}</h3>`;
+      if (b.type === 'quote') return `<blockquote>${inline(b.text)}</blockquote>`;
+      if (b.type === 'hr') return '<hr>';
+      if (b.type === 'ul' || b.type === 'ol') {
+        return `<${b.type}>${b.items.map(v => `<li>${inline(v)}</li>`).join('')}</${b.type}>`;
+      }
+      return '';
+    }).join('');
+
     if (/<br\b/i.test(html)) throw new Error('br detected');
     return html;
   }
@@ -106,8 +139,8 @@
   }
 
   function findEditor() {
-    const pm = [...document.querySelectorAll('.ProseMirror[contenteditable="true"]')].find(visible);
-    if (pm) return pm;
+    const pm = [...document.querySelectorAll('.ProseMirror[contenteditable="true"]')].filter(visible);
+    if (pm.length) return pm.sort((a,b) => b.getBoundingClientRect().height - a.getBoundingClientRect().height)[0];
     const all = [...document.querySelectorAll('[contenteditable="true"]')].filter(visible);
     if (!all.length) return null;
     return all.sort((a,b) => b.getBoundingClientRect().height - a.getBoundingClientRect().height)[0];
@@ -125,10 +158,13 @@
 
   function backupKey() { return BACKUP_PREFIX + location.pathname; }
   function saveBackup(editor) {
-    try { localStorage.setItem(backupKey(), JSON.stringify({html: editor.innerHTML, time: Date.now()})); } catch {}
+    try {
+      localStorage.setItem(backupKey(), JSON.stringify({html:editor.innerHTML, time:Date.now(), url:location.href}));
+    } catch {}
   }
   function readBackup() {
-    try { return JSON.parse(localStorage.getItem(backupKey()) || 'null'); } catch { return null; }
+    try { return JSON.parse(localStorage.getItem(backupKey()) || 'null'); }
+    catch { return null; }
   }
 
   function fireInput(editor, type='insertText') {
@@ -146,204 +182,91 @@
     editor.focus();
   }
 
-  let savedEditorRange = null;
-  const toElement = node => node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-
-  document.addEventListener('selectionchange', () => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const editor = findEditor();
-    if (!editor) return;
-    const range = sel.getRangeAt(0);
-    const el = toElement(range.commonAncestorContainer);
-    if (el && (el === editor || editor.contains(el))) savedEditorRange = range.cloneRange();
-  });
-
-  function placeCaret(editor) {
-    const sel = window.getSelection();
-    if (savedEditorRange) {
-      const el = toElement(savedEditorRange.commonAncestorContainer);
-      if (el && (el === editor || editor.contains(el))) {
-        try {
-          sel.removeAllRanges();
-          sel.addRange(savedEditorRange.cloneRange());
-          editor.focus();
-          return;
-        } catch {}
-      }
-    }
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    editor.focus();
-  }
-
   async function hardClear(editor) {
     saveBackup(editor);
     selectEditor(editor);
     try { document.execCommand('delete', false); } catch {}
     fireInput(editor, 'deleteContentBackward');
-    await sleep(150);
+    await sleep(180);
+
     if ((editor.innerText || '').trim()) {
       editor.innerHTML = '';
       fireInput(editor, 'deleteContentBackward');
-      await sleep(120);
+      await sleep(140);
     }
-    savedEditorRange = null;
     return !(editor.innerText || '').trim();
   }
 
-  async function appendHtml(editor, html) {
-    saveBackup(editor);
-    placeCaret(editor);
-    let ok = false;
-    try { ok = document.execCommand('insertHTML', false, html); } catch {}
-    if (!ok) {
-      try {
-        const sel = window.getSelection();
-        if (sel?.rangeCount) {
-          const range = sel.getRangeAt(0);
-          range.collapse(true);
-          const fragment = range.createContextualFragment(html);
-          const last = fragment.lastChild;
-          range.insertNode(fragment);
-          if (last) {
-            range.setStartAfter(last);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-          }
-          ok = true;
-        }
-      } catch {}
-    }
-    if (!ok) editor.insertAdjacentHTML('beforeend', html);
-    fireInput(editor, 'insertFromPaste');
-  }
-
-  async function replaceAll(editor, html) {
-    const empty = await hardClear(editor);
-    if (!empty) return false;
-    placeCaret(editor);
+  async function insertHtml(editor, html) {
+    selectEditor(editor);
     let ok = false;
     try { ok = document.execCommand('insertHTML', false, html); } catch {}
     if (!ok || !(editor.innerText || '').trim()) editor.innerHTML = html;
     fireInput(editor, 'insertFromPaste');
-    return true;
   }
 
   const root = document.createElement('div');
   root.id = ROOT_ID;
-  root.style.cssText = 'position:fixed!important;right:10px!important;bottom:74px!important;z-index:2147483647!important;font-family:system-ui,-apple-system,sans-serif!important;pointer-events:auto!important;';
+  root.style.cssText = 'position:fixed!important;right:12px!important;bottom:78px!important;z-index:2147483647!important;font-family:system-ui,-apple-system,sans-serif!important;pointer-events:auto!important;';
   root.innerHTML = `
-    <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:8px 11px;background:#0b2138;color:#fff;font-weight:900;font-size:12px;box-shadow:0 5px 16px rgba(0,0,0,.32);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン</button>
-    <div id="ponPanel" style="display:none;position:fixed;right:8px;bottom:116px;width:min(78vw,350px);max-height:46vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:12px;padding:8px;box-shadow:0 10px 28px rgba(0,0,0,.42)">
-      <div id="ponDrag" style="display:flex;align-items:center;gap:6px;margin:-2px -2px 6px;padding:5px 4px;cursor:move;touch-action:none;user-select:none;border-bottom:1px solid #28445c">
-        <b style="flex:1;font-size:13px">↔️ ポン出し v13</b>
-        <button id="ponMin" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:4px 7px;font-size:12px">＿</button>
-        <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:4px 7px;font-size:12px">✕</button>
+    <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:10px 13px;background:#0b2138;color:#fff;font-weight:900;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.35);outline:1px solid #39e7d2;touch-action:manipulation">📄 ポン出し</button>
+    <div id="ponPanel" style="display:none;position:absolute;right:0;bottom:52px;width:min(90vw,430px);max-height:72vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:13px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.45)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        <b style="flex:1;font-size:14px">📄 コピペ → 整えてポン出し</b>
+        <button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:7px;padding:5px 8px">✕</button>
       </div>
-      <div style="font-size:10px;line-height:1.35;color:#c8d9e6;margin-bottom:5px">通常は既存本文・リンク保持。カーソル位置へ追記。# 大見出し / ## 小見出し / --- 区切り線</div>
-      <textarea id="ponSrc" rows="7" placeholder="原稿を貼り付け" style="display:block;width:100%;height:132px;resize:vertical;box-sizing:border-box;border:1px solid #39e7d2;border-radius:8px;padding:8px;background:#fff;color:#111;font:14px/1.4 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
-        <button id="ponClip" type="button" style="border:0;border-radius:8px;padding:8px 5px;background:#17314b;color:#fff;font-weight:800;font-size:11px">📋 読込</button>
-        <button id="ponAdd" type="button" style="border:0;border-radius:8px;padding:8px 5px;background:#39e7d2;color:#04202a;font-weight:900;font-size:11px">➕ 追記する</button>
-        <button id="ponUndo" type="button" style="border:0;border-radius:8px;padding:8px 5px;background:#5a2841;color:#fff;font-weight:800;font-size:11px">↩️ 戻す</button>
-        <button id="ponReplace" type="button" style="border:1px solid #ff7a7a;border-radius:8px;padding:8px 5px;background:#521b25;color:#fff;font-weight:900;font-size:11px">⚠️ 全消し→貼る</button>
-      </div>
-      <div id="ponStatus" style="min-height:1.2em;margin-top:5px;color:#9ddbd6;font-size:10px;line-height:1.3;white-space:pre-wrap"></div>
+      <div style="font-size:11px;line-height:1.45;color:#c8d9e6;margin-bottom:7px">本文をそのままコピペ。# 大見出し / ## 小見出し。余計な改行を詰め、既存本文を全消しして貼ります。挿絵は触りません。</div>
+      <textarea id="ponSrc" rows="13" placeholder="ここに本文をコピペ" style="display:block;width:100%;min-height:250px;resize:vertical;box-sizing:border-box;border:2px solid #39e7d2;border-radius:9px;padding:10px;background:#fff;color:#111;font:15px/1.5 system-ui;caret-color:#111;user-select:text;-webkit-user-select:text"></textarea>
+      <button id="ponGo" type="button" style="display:block;width:100%;margin-top:8px;border:0;border-radius:9px;padding:12px;background:#39e7d2;color:#04202a;font-weight:900;font-size:14px">🚀 整えてポン出し</button>
+      <button id="ponUndo" type="button" style="display:block;width:100%;margin-top:6px;border:0;border-radius:9px;padding:9px;background:#5a2841;color:#fff;font-weight:800;font-size:12px">↩️ 前の本文に戻す</button>
+      <div id="ponStatus" style="min-height:1.3em;margin-top:7px;color:#9ddbd6;font-size:11px;white-space:pre-wrap"></div>
     </div>`;
   document.body.appendChild(root);
 
   const fab = root.querySelector('#ponFab');
   const panel = root.querySelector('#ponPanel');
-  const drag = root.querySelector('#ponDrag');
-  const close = root.querySelector('#ponClose');
-  const min = root.querySelector('#ponMin');
   const src = root.querySelector('#ponSrc');
   const status = root.querySelector('#ponStatus');
-  const show = m => status.textContent = m;
-  const finishAndMinimize = () => setTimeout(() => { panel.style.display = 'none'; fab.style.display = 'block'; }, 650);
+  const show = m => { status.textContent = m; };
 
-  function openPanel() {
+  fab.addEventListener('click', () => {
     panel.style.display = 'block';
     fab.style.display = 'none';
-  }
-  fab.addEventListener('click', openPanel);
-  min.addEventListener('click', () => { panel.style.display = 'none'; fab.style.display = 'block'; });
-  close.addEventListener('click', () => root.remove());
-
-  let moving = null;
-  drag.addEventListener('pointerdown', e => {
-    if (e.target.closest('button')) return;
-    const r = panel.getBoundingClientRect();
-    moving = {x:e.clientX, y:e.clientY, left:r.left, top:r.top};
-    panel.style.right = 'auto'; panel.style.bottom = 'auto';
-    try { drag.setPointerCapture(e.pointerId); } catch {}
-    e.preventDefault();
+    setTimeout(() => src.focus(), 60);
   });
-  drag.addEventListener('pointermove', e => {
-    if (!moving) return;
-    const maxLeft = Math.max(0, innerWidth - panel.offsetWidth);
-    const maxTop = Math.max(0, innerHeight - 44);
-    const left = Math.min(maxLeft, Math.max(0, moving.left + e.clientX - moving.x));
-    const top = Math.min(maxTop, Math.max(0, moving.top + e.clientY - moving.y));
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
-    e.preventDefault();
-  });
-  const stopMove = () => { moving = null; };
-  drag.addEventListener('pointerup', stopMove);
-  drag.addEventListener('pointercancel', stopMove);
-
-  root.querySelector('#ponClip').addEventListener('click', async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text) return show('クリップボードが空です');
-      src.value = text;
-      show('✅ 読み込みました');
-    } catch {
-      show('白い欄を長押し→貼り付けでOK');
-    }
+  root.querySelector('#ponClose').addEventListener('click', () => {
+    panel.style.display = 'none';
+    fab.style.display = 'block';
   });
 
-  root.querySelector('#ponAdd').addEventListener('click', async () => {
-    if (!src.value.trim()) return show('原稿を貼ってから押してね');
+  root.querySelector('#ponGo').addEventListener('click', async () => {
+    if (!src.value.trim()) return show('本文をコピペしてから押してね');
     const editor = await waitEditor();
     if (!editor) return show('❌ note本文エディタが見つからない');
-    let html;
-    try { html = sourceToHtml(src.value); } catch { return show('❌ br検出。中止'); }
-    show('既存本文を残して追記中…');
-    await appendHtml(editor, html);
-    show('✅ 追記完了');
-    finishAndMinimize();
-  });
 
-  root.querySelector('#ponReplace').addEventListener('click', async () => {
-    if (!src.value.trim()) return show('原稿を貼ってから押してね');
-    if (!confirm('⚠️ 本文と既存リンクをすべて削除して、新しい原稿へ置き換えます。実行しますか？')) return;
-    const editor = await waitEditor();
-    if (!editor) return show('❌ note本文エディタが見つからない');
     let html;
-    try { html = sourceToHtml(src.value); } catch { return show('❌ br検出。中止'); }
-    show('⚠️ 全消しして貼付中…');
-    const ok = await replaceAll(editor, html);
-    if (!ok) return show('❌ 全消しできなかったため貼付中止');
-    show('✅ 全置換完了');
-    finishAndMinimize();
+    try { html = sourceToHtml(src.value); }
+    catch { return show('❌ 整形に失敗しました'); }
+
+    show('① 旧本文を全消し中…');
+    const empty = await hardClear(editor);
+    if (!empty) return show('❌ 全消しできなかったので貼付を中止');
+
+    show('② 改行・見出しを整えて貼付中…');
+    await insertHtml(editor, html);
+    show('✅ 整えてポン出し完了');
+
+    setTimeout(() => root.remove(), 900);
   });
 
   root.querySelector('#ponUndo').addEventListener('click', async () => {
     const editor = await waitEditor();
     if (!editor) return show('❌ note本文エディタが見つからない');
     const b = readBackup();
-    if (!b?.html) return show('戻せるバックアップがありません');
+    if (!b?.html) return show('戻せる本文がありません');
     selectEditor(editor);
     editor.innerHTML = b.html;
     fireInput(editor, 'insertFromPaste');
-    savedEditorRange = null;
-    show('↩️ 直前の本文へ戻しました');
+    show('↩️ 前の本文に戻しました');
   });
 })();
