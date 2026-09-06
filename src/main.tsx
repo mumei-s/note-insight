@@ -19,6 +19,10 @@ const OWNER_PENDING_SEEN_KEY = "mumei-owner-pending-seen-v1";
 const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 
+// The public INSIGHT URL must stay inside INSIGHT. Notification capture runs from note itself;
+// opening/reloading the app must never bounce the user to note or the installer.
+sessionStorage.setItem("mumei-notification-auto-once-v2921", "1");
+
 // Only an explicit PWA/distribution launch marker forces the public TOP.
 // Browser back/forward and explicit INSIGHT deep links such as #dashboard must keep their route and session.
 if (pwaTopLaunch) {
