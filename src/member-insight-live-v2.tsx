@@ -17,6 +17,7 @@ const RELATION_MS=600_000;
 const QUIET_MS=2_500;
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
+function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");return q&&MODES.has(q as Mode)?q as Mode:null}
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
@@ -32,7 +33,7 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
 const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 
 export function MemberInsightLiveV2(){
-  const initialMode=MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal";
+  const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[manualBusy,setManualBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0);
   function openMode(next:Mode){
@@ -77,7 +78,9 @@ export function MemberInsightLiveV2(){
     finally{setManualBusy(false)}
   }
   useEffect(()=>{
-    if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
+    const requested=requestedMode();
+    if(requested){const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightScrollY:0},"",u.href);setMode(requested)}
+    else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
     const pop=()=>{
       const next=history.state?.insightMode;
       const y=Number(history.state?.insightScrollY);
