@@ -16,6 +16,11 @@ const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const INSTALL_RETURN_KEY = "mumei-notification-install-return-v1";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const NOTIFICATION_TOOL_VERSION = "2.9.13";
+const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
+const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2913";
+const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2913";
+const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2913";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -27,6 +32,7 @@ function currentRoute() {
 }
 function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
+function standaloneMode() { return window.matchMedia?.("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone); }
 // access/insight is an explicit login/join/switch screen and must never be replaced by the current member dashboard.
 function memberRoute(route: string) { return route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
 
@@ -102,6 +108,45 @@ export function App() {
   const [route, setRoute] = useState(currentRoute);
   const [validatedMemberToken, setValidatedMemberToken] = useState("");
   const [checkingMember, setCheckingMember] = useState(false);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const installed = url.searchParams.get("notificationInstalled");
+    if (installed) localStorage.setItem(NOTIFICATION_TOOL_VERSION_KEY, installed);
+    const synced = url.searchParams.get("notificationAutoSynced");
+    if (synced !== null) {
+      const result = {
+        ok: synced === "1",
+        noteId: url.searchParams.get("notificationNoteId") || "",
+        error: url.searchParams.get("notificationAutoError") || "",
+        at: Number(url.searchParams.get("notificationAutoAt") || Date.now()),
+      };
+      localStorage.setItem(NOTIFICATION_AUTO_RESULT_KEY, JSON.stringify(result));
+      sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
+      for (const key of ["notificationAutoSynced", "notificationNoteId", "notificationAutoError", "notificationAutoAt", "notificationInstalled", "notificationCheckedAt"]) url.searchParams.delete(key);
+      window.history.replaceState(window.history.state, "", url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const r = currentRoute();
+    if (r !== "home" && r !== "dashboard") return;
+    if (standaloneMode()) return;
+    if (localStorage.getItem(NOTIFICATION_TOOL_VERSION_KEY) !== NOTIFICATION_TOOL_VERSION) return;
+    if (!localStorage.getItem(MEMBER_KEY) && !localStorage.getItem(OWNER_KEY)) return;
+    if (sessionStorage.getItem(NOTIFICATION_AUTO_ONCE_KEY) === "1") return;
+    const last = Number(localStorage.getItem(NOTIFICATION_AUTO_AT_KEY) || 0);
+    sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
+    if (last && Date.now() - last < 60_000) return;
+    localStorage.setItem(NOTIFICATION_AUTO_AT_KEY, String(Date.now()));
+    const timer = window.setTimeout(() => {
+      const note = new URL("https://note.com/");
+      note.searchParams.set("mumei_auto_notice_v2913", "1");
+      note.searchParams.set("mumei_return", window.location.href);
+      window.location.assign(note.href);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     try {
