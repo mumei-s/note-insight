@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         note ポン出し v32.3｜小型・本文タップ対応
+// @name         note ポン出し v32.4｜note標準見出し貼付
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      32.3.0
-// @description  原稿コピペ→整えてポン出し。小型UI。note本文を自動検出し、見つからない場合は本文を1回タップして対象を確定。大見出し・小見出し・目次対応、brなし、挿絵は触らない。
+// @version      32.4.0
+// @description  原稿コピペ→整えてポン出し。小型UI。note標準の貼付処理を使って大見出し・小見出しを保持し、目次対応。見出し化失敗時は元本文へ自動復元。brなし、挿絵は触らない。
 // @author       無名S note
 // @match        https://editor.note.com/*
 // @grant        none
@@ -14,15 +14,14 @@
 (() => {
   'use strict';
 
-  const ROOT_ID = '__mumei_pon_v32_3_root__';
+  const ROOT_ID = '__mumei_pon_v32_4_root__';
   const BACKUP_PREFIX = 'mumei-note-pon-v32-backup:';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   [
-    '__mumei_pon_v32_2_root__','__mumei_pon_v32_1_root__','__mumei_pon_v32_root__','__mumei_pon_v31_root__',
+    '__mumei_pon_v32_3_root__','__mumei_pon_v32_2_root__','__mumei_pon_v32_1_root__','__mumei_pon_v32_root__','__mumei_pon_v31_root__',
     '__mumei_pon_v14_1_root__','__mumei_pon_v14_root__','__mumei_pon_v13_root__','__mumei_pon_v12_root__',
-    '__mumei_pon_v11_root__','__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__',
-    '__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
+    '__mumei_pon_v11_root__','__mumei_pon_v10_root__','__mumei_pon_v9_editor__','__mumei_pon_v8_editor__','__mumei_pon_v7_editor__','__mumei_pon_v6_editor__'
   ].forEach(id => document.getElementById(id)?.remove());
   if (document.getElementById(ROOT_ID)) return;
 
@@ -45,7 +44,7 @@
       .trim();
   }
 
-  function sourceToHtml(src) {
+  function sourceToBlocks(src) {
     const lines = cleanSource(src).split('\n');
     const blocks = [];
     let para = [];
@@ -102,8 +101,11 @@
         prev.text += b.text;
       } else compact.push({...b});
     }
+    return compact;
+  }
 
-    const html = compact.map(b => {
+  function blocksToHtml(blocks) {
+    return blocks.map(b => {
       if (b.type === 'p') return `<p>${inline(b.text)}</p>`;
       if (b.type === 'h2') return `<h2>${inline(b.text)}</h2>`;
       if (b.type === 'h3') return `<h3>${inline(b.text)}</h3>`;
@@ -112,23 +114,40 @@
       if (b.type === 'ul' || b.type === 'ol') return `<${b.type}>${b.items.map(v => `<li>${inline(v)}</li>`).join('')}</${b.type}>`;
       return '';
     }).join('');
+  }
 
+  function blocksToPlain(blocks) {
+    return blocks.map(b => {
+      if (b.type === 'p' || b.type === 'h2' || b.type === 'h3' || b.type === 'quote') return b.text;
+      if (b.type === 'hr') return '---';
+      if (b.type === 'ul') return b.items.map(v => `・${v}`).join('\n');
+      if (b.type === 'ol') return b.items.map((v,i) => `${i+1}. ${v}`).join('\n');
+      return '';
+    }).join('\n\n');
+  }
+
+  function convert(src) {
+    const blocks = sourceToBlocks(src);
+    const html = blocksToHtml(blocks);
     if (/<br\b/i.test(html)) throw new Error('br detected');
-    return {html, bigCount:compact.filter(b=>b.type==='h2').length, smallCount:compact.filter(b=>b.type==='h3').length};
+    return {
+      html,
+      plain: blocksToPlain(blocks),
+      bigCount: blocks.filter(b => b.type === 'h2').length,
+      smallCount: blocks.filter(b => b.type === 'h3').length
+    };
   }
 
   function attrs(el) {
     return [el?.id, el?.className, el?.getAttribute?.('aria-label'), el?.getAttribute?.('placeholder'), el?.getAttribute?.('data-placeholder'), el?.getAttribute?.('name')]
       .filter(Boolean).join(' ').toLowerCase();
   }
-
   function looksLikeTitle(el) {
     if (!el) return true;
     const a = attrs(el);
     const txt = (el.innerText || el.textContent || '').trim();
     return /title|headline|記事タイトル|タイトル/.test(a) || (el.tagName === 'H1' && txt.length < 180);
   }
-
   function editableSelfOrAncestor(node) {
     let el = node?.nodeType === 1 ? node : node?.parentElement;
     for (let i = 0; el && i < 12; i++, el = el.parentElement) {
@@ -148,7 +167,6 @@
     if (e) lastEditor = e;
     return e;
   }
-
   document.addEventListener('focusin', e => rememberFromNode(e.target), true);
   document.addEventListener('selectionchange', () => {
     const sel = window.getSelection();
@@ -162,7 +180,6 @@
     try { s = el.ownerDocument.defaultView.getComputedStyle(el); } catch { return false; }
     return r.width > 80 && r.height > 8 && s.display !== 'none' && s.visibility !== 'hidden';
   }
-
   function score(el) {
     if (!el || !visible(el) || looksLikeTitle(el) || el.closest?.(`#${ROOT_ID}`)) return -1e9;
     const r = el.getBoundingClientRect();
@@ -177,20 +194,17 @@
     n += Math.min(r.width, 900) + Math.min(r.height, 900) * 1.2;
     return n;
   }
-
   function scanDoc(doc) {
     const list = [];
     const sels = ['.ProseMirror','[contenteditable]','[role="textbox"]','[data-placeholder]','[aria-label]'];
     for (const sel of sels) {
       try { doc.querySelectorAll(sel).forEach(el => list.push(el)); } catch {}
     }
-    const frames = [...(doc.querySelectorAll?.('iframe') || [])];
-    for (const f of frames) {
+    for (const f of [...(doc.querySelectorAll?.('iframe') || [])]) {
       try { if (f.contentDocument) list.push(...scanDoc(f.contentDocument)); } catch {}
     }
     return list;
   }
-
   function findEditor() {
     if (lastEditor?.isConnected && visible(lastEditor) && !looksLikeTitle(lastEditor)) return lastEditor;
     const candidates = [...new Set(scanDoc(document))].sort((a,b) => score(b)-score(a));
@@ -206,14 +220,12 @@
   function readBackup() {
     try { return JSON.parse(localStorage.getItem(backupKey()) || 'null'); } catch { return null; }
   }
-
   function fireInput(editor, type='insertText') {
     const win = editor.ownerDocument?.defaultView || window;
     try { editor.dispatchEvent(new win.InputEvent('input',{bubbles:true,inputType:type,data:null})); }
     catch { editor.dispatchEvent(new win.Event('input',{bubbles:true})); }
     editor.dispatchEvent(new win.Event('change',{bubbles:true}));
   }
-
   function selectAll(editor) {
     const doc = editor.ownerDocument || document;
     const win = doc.defaultView || window;
@@ -222,9 +234,7 @@
     const sel = win.getSelection();
     sel.removeAllRanges(); sel.addRange(range); editor.focus();
   }
-
-  async function replaceEditor(editor, converted) {
-    saveBackup(editor);
+  async function clearEditor(editor) {
     const doc = editor.ownerDocument || document;
     selectAll(editor);
     try { doc.execCommand('delete', false); } catch {}
@@ -235,14 +245,57 @@
       fireInput(editor,'deleteContentBackward');
       await sleep(100);
     }
+  }
 
+  function headingCounts(editor) {
+    return {
+      big: editor.querySelectorAll?.('h2').length || 0,
+      small: editor.querySelectorAll?.('h3').length || 0
+    };
+  }
+
+  async function pasteThroughNote(editor, converted) {
+    const doc = editor.ownerDocument || document;
+    const win = doc.defaultView || window;
+    selectAll(editor);
+
+    try {
+      const dt = new win.DataTransfer();
+      dt.setData('text/html', converted.html);
+      dt.setData('text/plain', converted.plain);
+      const ev = new win.ClipboardEvent('paste', {bubbles:true,cancelable:true,clipboardData:dt});
+      editor.dispatchEvent(ev);
+      await sleep(350);
+      const c = headingCounts(editor);
+      const hasText = (editor.innerText || editor.textContent || '').trim().length > 0;
+      if (hasText && c.big >= converted.bigCount && c.small >= converted.smallCount) return true;
+    } catch {}
+
+    // fallback: execCommand insertHTML
+    await clearEditor(editor);
     selectAll(editor);
     let ok = false;
     try { ok = doc.execCommand('insertHTML', false, converted.html); } catch {}
     if (!ok || !(editor.innerText || editor.textContent || '').trim()) editor.innerHTML = converted.html;
     fireInput(editor,'insertFromPaste');
-    await sleep(180);
-    return true;
+    await sleep(250);
+    const c = headingCounts(editor);
+    return c.big >= converted.bigCount && c.small >= converted.smallCount;
+  }
+
+  async function replaceEditor(editor, converted) {
+    saveBackup(editor);
+    await clearEditor(editor);
+    const ok = await pasteThroughNote(editor, converted);
+    if (ok) return true;
+
+    const b = readBackup();
+    if (b?.html) {
+      await clearEditor(editor);
+      editor.innerHTML = b.html;
+      fireInput(editor,'insertFromPaste');
+    }
+    return false;
   }
 
   const root = document.createElement('div');
@@ -251,7 +304,7 @@
   root.innerHTML = `
     <button id="ponFab" type="button" style="border:0;border-radius:999px;padding:7px 10px;background:#0b2138;color:#fff;font-weight:900;font-size:11px;box-shadow:0 5px 15px rgba(0,0,0,.32);outline:1px solid #39e7d2">📄 ポン</button>
     <div id="ponPanel" style="display:none;position:absolute;right:0;bottom:42px;width:min(76vw,300px);max-height:38vh;overflow:auto;background:#07182a;color:#fff;border:1px solid #39e7d2;border-radius:10px;padding:7px;box-shadow:0 10px 28px rgba(0,0,0,.42)">
-      <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px"><b style="flex:1;font-size:12px">📄 ポン出し v32.3</b><button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:6px;padding:3px 6px;font-size:11px">✕</button></div>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px"><b style="flex:1;font-size:12px">📄 ポン出し v32.4</b><button id="ponClose" type="button" style="border:0;background:#17314b;color:#fff;border-radius:6px;padding:3px 6px;font-size:11px">✕</button></div>
       <div style="font-size:9px;line-height:1.3;color:#c8d9e6;margin-bottom:4px"># / ◆＝大見出し　## / ◇＝小見出し</div>
       <textarea id="ponSrc" placeholder="本文をコピペ" style="display:block;width:100%;height:88px;resize:vertical;box-sizing:border-box;border:1px solid #39e7d2;border-radius:7px;padding:6px;background:#fff;color:#111;font:13px/1.35 system-ui;caret-color:#111"></textarea>
       <button id="ponGo" type="button" style="display:block;width:100%;margin-top:5px;border:0;border-radius:7px;padding:8px;background:#39e7d2;color:#04202a;font-weight:900;font-size:11px">🚀 整えてポン出し</button>
@@ -273,53 +326,53 @@
   root.querySelector('#ponMin').onclick = () => { panel.style.display='none'; fab.style.display='block'; };
 
   async function finish(editor, converted) {
-    picking = false; pick.style.display='none';
-    show('貼付中…');
-    await replaceEditor(editor, converted);
-    const big = editor.querySelectorAll?.('h2').length || 0;
-    const small = editor.querySelectorAll?.('h3').length || 0;
-    show(`✅ 完了｜大${big} 小${small}｜目次対応`);
-    setTimeout(()=>root.remove(),1000);
-  }
+    picking = false;
+    pick.style.display='none';
+    show('note標準形式で貼付中…');
+    const ok = await replaceEditor(editor, converted);
+    if (!ok) return show('❌ 見出し化できなかったため元本文へ戻しました');
 
-  async function startPick(converted) {
-    pendingConverted = converted;
-    picking = true;
-    panel.style.display='none'; fab.style.display='none'; pick.style.display='block';
+    const c = headingCounts(editor);
+    show(`✅ 完了｜大見出し ${c.big} / 小見出し ${c.small}｜目次対応`);
+    setTimeout(() => root.remove(), 1600);
   }
 
   document.addEventListener('pointerdown', e => {
-    if (!picking || e.target?.closest?.(`#${ROOT_ID}`)) return;
-    const direct = rememberFromNode(e.target);
-    setTimeout(async () => {
-      const editor = direct || findEditor() || rememberFromNode(document.activeElement);
-      if (!editor) {
-        pick.textContent = '👆 もう一度、本文の文字を書く場所をタップ';
-        return;
-      }
-      const converted = pendingConverted;
-      pendingConverted = null;
-      await finish(editor, converted);
-    },120);
+    if (!picking) return;
+    if (e.target?.closest?.(`#${ROOT_ID}`)) return;
+    const editor = rememberFromNode(e.target);
+    if (!editor || !pendingConverted) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const converted = pendingConverted;
+    pendingConverted = null;
+    setTimeout(() => finish(editor, converted), 80);
   }, true);
 
   root.querySelector('#ponGo').onclick = async () => {
     if (!src.value.trim()) return show('本文をコピペしてね');
     let converted;
-    try { converted = sourceToHtml(src.value); } catch { return show('❌ 整形失敗'); }
+    try { converted = convert(src.value); }
+    catch { return show('❌ 整形失敗'); }
+
     const editor = findEditor();
     if (editor) return finish(editor, converted);
-    show('本文をタップして指定します');
-    await startPick(converted);
+
+    pendingConverted = converted;
+    picking = true;
+    panel.style.display='none';
+    pick.style.display='block';
+    show('本文欄を1回タップしてね');
   };
 
   root.querySelector('#ponUndo').onclick = async () => {
     const editor = findEditor();
-    if (!editor) return show('本文を1回タップしてから戻すを押して');
+    if (!editor) return show('本文欄を1回タップしてから戻して');
     const b = readBackup();
     if (!b?.html) return show('戻せる本文なし');
+    await clearEditor(editor);
     editor.innerHTML = b.html;
     fireInput(editor,'insertFromPaste');
-    show('↩️ 戻しました');
+    show('↩️ 前の本文に戻しました');
   };
 })();
