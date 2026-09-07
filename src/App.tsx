@@ -15,11 +15,11 @@ const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.22";
+const NOTIFICATION_TOOL_VERSION = "2.9.23";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
-const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2922";
-const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2922";
-const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2922";
+const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2923";
+const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2923";
+const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2923";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -143,7 +143,7 @@ export function App() {
     localStorage.setItem(NOTIFICATION_AUTO_AT_KEY, String(Date.now()));
     const timer = window.setTimeout(() => {
       const note = new URL("https://note.com/");
-      note.searchParams.set("mumei_auto_notice_v2922", "1");
+      note.searchParams.set("mumei_auto_notice_v2923", "1");
       note.searchParams.set("mumei_return", window.location.href);
       window.location.assign(note.href);
     }, 700);
