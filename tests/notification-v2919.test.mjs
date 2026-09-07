@@ -60,7 +60,7 @@ test("notification filter hides every matching magazine noise row including trun
   assert.match(ui,/hydrateProfile/);
   assert.match(ui,/sameCreatorName/);
   assert.match(ui,/warmFilterProfiles/);
-  assert.match(ui,/1件だけ残す仕様ではありません/);
+  assert.doesNotMatch(ui,/1件だけ残す仕様ではありません/);
   assert.match(ui,/textContent='解除'/);
   assert.match(ui,/グループ削除/);
   assert.match(ui,/g\.enabled/);
@@ -140,14 +140,23 @@ test("release manifest advertises current app and notification versions",async()
   assert.equal(manifest.appVersion,"2026.09.07.6");
 });
 
-test("follow totals still use live note counts and relation sync supports each direction",async()=>{
+test("follow totals, people and delta history refresh without mixed-shape relation upserts",async()=>{
   const social=await read("src/member-insight-social-v2.tsx");
+  const live=await read("src/member-insight-live-v2.tsx");
   const rel=await read("supabase/functions/insight-relations/index.ts");
   const api=await read("supabase/functions/insight-social-events/index.ts");
   assert.match(social,/live_expected_count/);
   assert.match(social,/公式現在/);
-  assert.match(rel,/direction=b\.direction==="followers"\|\|b\.direction==="followings"/);
-  assert.match(rel,/fast-relations/);
+  assert.match(live,/post\(RELATIONS,"sync",\{direction:"followers"\}/);
+  assert.match(live,/post\(RELATIONS,"sync",\{direction:"followings"\}/);
+  assert.match(live,/if\(mode==="social"\)void relationSync\(true\)/);
+  assert.match(rel,/function relationRows/);
+  assert.match(rel,/const stable=people\.filter/);
+  assert.match(rel,/touched=people\.filter/);
+  assert.match(rel,/if\(stable\.length\)await upsertRows/);
+  assert.match(rel,/if\(touched\.length\)await upsertRows/);
+  assert.match(rel,/function errText/);
+  assert.match(rel,/relation-delta-fix/);
   assert.match(api,/liveCounts/);
   assert.match(api,/live_count_at/);
 });
