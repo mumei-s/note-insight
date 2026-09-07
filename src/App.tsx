@@ -15,11 +15,12 @@ const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.23";
+const NOTIFICATION_TOOL_VERSION = "2.9.24";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
-const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2923";
-const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2923";
-const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2923";
+const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
+const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2924";
+const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
+const NOTIFICATION_ENTRY_MODE_KEY = "mumei-insight-entry-mode";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -35,7 +36,8 @@ function standaloneMode() { return window.matchMedia?.("(display-mode: standalon
 function memberRoute(route: string) { return route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
 function notificationDeepLink() {
   const requested = new URLSearchParams(window.location.search).get("insightMode");
-  return requested === "notifications" || window.history.state?.insightMode === "notifications";
+  const stored = sessionStorage.getItem(NOTIFICATION_ENTRY_MODE_KEY);
+  return requested === "notifications" || stored === "notifications" || window.history.state?.insightMode === "notifications";
 }
 
 export function goTo(route: string) {
@@ -121,10 +123,12 @@ export function App() {
         noteId: url.searchParams.get("notificationNoteId") || "",
         error: url.searchParams.get("notificationAutoError") || "",
         at: Number(url.searchParams.get("notificationAutoAt") || Date.now()),
+        savedAt: Number(url.searchParams.get("notificationAutoSavedAt") || 0),
+        boundaryLabel: url.searchParams.get("notificationBoundaryLabel") || "",
       };
       localStorage.setItem(NOTIFICATION_AUTO_RESULT_KEY, JSON.stringify(result));
       sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
-      for (const key of ["notificationAutoSynced", "notificationNoteId", "notificationAutoError", "notificationAutoAt", "notificationInstalled", "notificationCheckedAt"]) url.searchParams.delete(key);
+      for (const key of ["notificationAutoSynced", "notificationNoteId", "notificationAutoError", "notificationAutoAt", "notificationAutoSavedAt", "notificationBoundaryLabel", "notificationInstalled", "notificationCheckedAt"]) url.searchParams.delete(key);
       window.history.replaceState(window.history.state, "", url.toString());
     }
   }, []);
@@ -143,7 +147,7 @@ export function App() {
     localStorage.setItem(NOTIFICATION_AUTO_AT_KEY, String(Date.now()));
     const timer = window.setTimeout(() => {
       const note = new URL("https://note.com/");
-      note.searchParams.set("mumei_auto_notice_v2923", "1");
+      note.searchParams.set("mumei_auto_notice_v2924", "1");
       note.searchParams.set("mumei_return", window.location.href);
       window.location.assign(note.href);
     }, 700);
