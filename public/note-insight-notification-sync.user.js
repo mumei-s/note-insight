@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.25
-// @description  note通知を継ぎ足し保存。通知上部UIの自己監視ループを止め、点滅せずINSIGHT【通知】へ直行します。
+// @version      2.9.26
+// @description  緊急安定版。通知の自動巡回・自動遷移を停止し、通知画面で手動読込した時だけINSIGHTへ保存します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,35 +12,28 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2924
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2924.js?v=2924a
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2925-ui.js?v=2925a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2926.js?v=2926a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2926-ui.js?v=2926a
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.25';
-const CLEAN_NOTICE='mumei_open_notice_v2924';
-const AUTO_NOTICE='mumei_auto_notice_v2924';
-const EVT_STATUS='mumei-insight-sync-status-v2922';
-const LEGACY_CLEAN=['mumei_open_notice_v2923','mumei_open_notice_v2922','mumei_open_notice_v2921','mumei_open_notice_v2920','mumei_open_notice_v2919','mumei_open_notice_v2918','mumei_open_notice_v2917','mumei_open_notice_v2916','mumei_open_notice_v2915','mumei_open_notice_v2914','mumei_open_notice_v2913'];
-const LEGACY_AUTO=['mumei_auto_notice_v2923','mumei_auto_notice_v2922','mumei_auto_notice_v2921','mumei_auto_notice_v2920','mumei_auto_notice_v2919','mumei_auto_notice_v2918'];
+const VERSION='2.9.26';
+const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
+const TOKEN='mumei_insight_notification_sync_token_v2:';
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const modern=()=>Boolean(globalThis.GM);
+const key=(p,id)=>p+String(id||'').toLowerCase();
+async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
+async function set(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
+function request(url,body){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json'},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300?resolve(p):reject(new Error(p.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
 function safeInsightReturn(value){try{const u=new URL(String(value||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
-function withInstalledVersion(back){const u=new URL(back);u.searchParams.set('notificationInstalled',VERSION);u.searchParams.set('notificationCheckedAt',String(Date.now()));return u.href}
-function withAutoResult(back,ok,detail={}){const u=new URL(back);u.searchParams.set('notificationInstalled',VERSION);u.searchParams.set('notificationCheckedAt',String(Date.now()));u.searchParams.set('notificationAutoSynced',ok?'1':'0');u.searchParams.set('notificationNoteId',String(detail.noteId||''));u.searchParams.set('notificationAutoAt',String(Number(detail.lastCheckAt||detail.at||Date.now())));u.searchParams.set('notificationAutoSavedAt',String(Number(detail.lastSaveAt||0)));if(detail.boundaryLabel)u.searchParams.set('notificationBoundaryLabel',String(detail.boundaryLabel).slice(0,160));if(!ok)u.searchParams.set('notificationAutoError',String(detail.error||detail.text||'AUTO_SYNC_FAILED').slice(0,240));else u.searchParams.delete('notificationAutoError');return u.href}
-function buttonText(el){return clean((el?.getAttribute?.('aria-label')||'')+' '+(el?.getAttribute?.('title')||'')+' '+(el?.getAttribute?.('data-testid')||'')+' '+(el?.textContent||''))}
-function looksLikeBell(target){const el=target instanceof Element?target.closest('button,a,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return null;const s=buttonText(el);if(/通知|notification|notice|bell/i.test(s))return el;const r=el.getBoundingClientRect?.(),svg=el.querySelector?.('svg');if(r&&svg&&r.top<180&&r.right>innerWidth*.55&&r.width<90&&r.height<90)return el;return null}
-function findBell(){const selectors=['button[aria-label*="通知"]','a[aria-label*="通知"]','button[title*="通知"]','a[title*="通知"]','[data-testid*="notification" i]','[data-testid*="notice" i]'];for(const selector of selectors){const el=[...document.querySelectorAll(selector)].find(x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>0&&r.height>0&&r.top<190&&s.display!=='none'&&s.visibility!=='hidden'});if(el)return el}return [...document.querySelectorAll('button,a,[role="button"]')].find(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.top<190&&r.right>innerWidth*.55&&/通知|notification|notice|bell/i.test(buttonText(el))})||null}
-function clickBell(el){el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}))}
-async function findAndOpenBell(){for(let i=0;i<32;i++){const bell=findBell();if(bell){await sleep(220);clickBell(bell);return true}await sleep(250)}return false}
-async function openBellAfterCleanNavigation(){const u=new URL(location.href);const key=[CLEAN_NOTICE,...LEGACY_CLEAN].find(x=>u.searchParams.get(x)==='1');if(!key)return false;for(const x of [CLEAN_NOTICE,...LEGACY_CLEAN])u.searchParams.delete(x);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);await findAndOpenBell();return true}
-function handleVersionCheck(){const u=new URL(location.href);if(u.searchParams.get(VERSION_CHECK)!=='1')return false;const back=safeInsightReturn(u.searchParams.get(RETURN_PARAM));u.searchParams.delete(VERSION_CHECK);u.searchParams.delete(RETURN_PARAM);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);if(back){location.replace(withInstalledVersion(back));return true}return false}
-async function handleAutoNotice(){const u=new URL(location.href),autoKey=[AUTO_NOTICE,...LEGACY_AUTO].find(x=>u.searchParams.get(x)==='1');if(!autoKey)return false;const back=safeInsightReturn(u.searchParams.get(RETURN_PARAM));for(const x of [AUTO_NOTICE,...LEGACY_AUTO])u.searchParams.delete(x);u.searchParams.delete(RETURN_PARAM);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);if(!back)return true;let finished=false,timeout=0;const finish=(ok,detail={})=>{if(finished)return;finished=true;clearTimeout(timeout);window.removeEventListener(EVT_STATUS,onStatus);location.replace(withAutoResult(back,ok,detail))};const onStatus=e=>{const d=e.detail||{};if(d.state==='done')finish(true,d);else if(d.state==='error')finish(false,d)};window.addEventListener(EVT_STATUS,onStatus);timeout=window.setTimeout(()=>finish(false,{error:'AUTO_SYNC_TIMEOUT',at:Date.now()}),30000);const opened=await findAndOpenBell();if(!opened)finish(false,{error:'NOTIFICATION_BELL_NOT_FOUND',at:Date.now()});return true}
-document.addEventListener('click',event=>{if(!location.pathname.toLowerCase().startsWith('/sitesettings/stats'))return;const bell=looksLikeBell(event.target);if(!bell)return;event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();location.replace(`https://note.com/?${CLEAN_NOTICE}=1`)},true);
-(async()=>{if(handleVersionCheck())return;if(await handleAutoNotice())return;await openBellAfterCleanNavigation()})();
+async function currentAccount(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+function stripControlParams(u){for(const x of ['mumei_auto_notice_v2924','mumei_auto_notice_v2923','mumei_auto_notice_v2922','mumei_auto_notice_v2921','mumei_auto_notice_v2920','mumei_auto_notice_v2919','mumei_auto_notice_v2918','mumei_open_notice_v2924','mumei_open_notice_v2923','mumei_open_notice_v2922','mumei_open_notice_v2921','mumei_open_notice_v2920','mumei_open_notice_v2919','mumei_open_notice_v2918'])u.searchParams.delete(x);return u}
+async function handlePair(){const u=new URL(location.href),code=clean(u.searchParams.get('mumei_pair')).replace(/\D/g,'').slice(0,8);if(!code)return false;const expected=clean(u.searchParams.get('mumei_account')).replace(/^@/,'').toLowerCase(),back=safeInsightReturn(u.searchParams.get(RETURN_PARAM)),a=await currentAccount();if(!a)return true;if(expected&&expected!==a.id)return true;try{const p=await request(PAIR,{action:'pair-exchange',code}),t=String(p.ingestToken||'');if(t)await set(key(TOKEN,a.id),t)}catch{}u.searchParams.delete('mumei_pair');u.searchParams.delete('mumei_account');u.searchParams.delete(RETURN_PARAM);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);if(back)location.replace(back);return true}
+function handleVersionCheck(){const u=new URL(location.href);if(u.searchParams.get(VERSION_CHECK)!=='1')return false;const back=safeInsightReturn(u.searchParams.get(RETURN_PARAM));u.searchParams.delete(VERSION_CHECK);u.searchParams.delete(RETURN_PARAM);stripControlParams(u);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);if(back){const b=new URL(back);b.searchParams.set('notificationInstalled',VERSION);b.searchParams.set('notificationCheckedAt',String(Date.now()));location.replace(b.href)}return true}
+(async()=>{const u=new URL(location.href),hadAuto=[...u.searchParams.keys()].some(k=>k.startsWith('mumei_auto_notice_')||k.startsWith('mumei_open_notice_'));if(hadAuto){stripControlParams(u);u.searchParams.delete(RETURN_PARAM);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash)}if(handleVersionCheck())return;await handlePair()})();
 })();
