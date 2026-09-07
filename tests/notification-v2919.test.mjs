@@ -3,13 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.29 bootstrap loads manual core and touch-safe current UI",async()=>{
+test("v2.9.30 bootstrap loads manual core and panel-safe current UI",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.29/);
-  assert.match(boot,/runtime-v2928\.js\?v=2929a/);
-  assert.match(boot,/runtime-v2929-ui\.js\?v=2929a/);
-  assert.doesNotMatch(boot,/@require.+runtime-v2927/);
-  assert.doesNotMatch(boot,/@require.+runtime-v298/);
+  assert.match(boot,/@version\s+2\.9\.30/);
+  assert.match(boot,/runtime-v2928\.js\?v=2930a/);
+  assert.match(boot,/runtime-v2930-ui\.js\?v=2930a/);
+  assert.doesNotMatch(boot,/@require.+runtime-v2929-ui/);
   assert.match(boot,/自動巡回・自動遷移は行わず/);
 });
 
@@ -33,23 +32,25 @@ test("manual reader stores only server-confirmed rows and reuses saved boundary"
   assert.match(r,/保存済み境界/);
 });
 
-test("manual UI lives outside note click targets and touch start is not cancelled",async()=>{
-  const ui=await read("public/note-insight-notification-runtime-v2929-ui.js");
-  assert.match(ui,/document\.body\.append\(rail\)/);
+test("manual UI stays inside the open note notification panel so tapping it does not close the popover",async()=>{
+  const ui=await read("public/note-insight-notification-runtime-v2930-ui.js");
+  assert.match(ui,/function panelHost/);
+  assert.match(ui,/host\.prepend\(rail\)/);
+  assert.match(ui,/host\.append\(p\)/);
+  assert.doesNotMatch(ui,/document\.body\.append\(rail\)/);
+  assert.doesNotMatch(ui,/document\.body\.append\(p\)/);
   assert.match(ui,/function isolate/);
   assert.match(ui,/pointerdown/);
   assert.match(ui,/touchstart/);
   assert.match(ui,/passive:true/);
-  assert.match(ui,/e=>e\.stopPropagation\(\)/);
   assert.match(ui,/read\.onclick/);
   assert.match(ui,/filter\.onclick/);
   assert.match(ui,/settings\.onclick/);
   assert.match(ui,/notification-entry\.html/);
-  assert.doesNotMatch(ui,/guardButton/);
 });
 
 test("notification controls remain manual and direct across supported userscript browsers",async()=>{
-  const ui=await read("public/note-insight-notification-runtime-v2929-ui.js");
+  const ui=await read("public/note-insight-notification-runtime-v2930-ui.js");
   assert.match(ui,/touch-action:manipulation/);
   assert.match(ui,/-webkit-appearance:none/);
   assert.match(ui,/pointer-events:auto/);
@@ -82,13 +83,14 @@ test("INSIGHT notification view auto-refreshes saved server data",async()=>{
 test("settings restores installer and update flow returns with readable completion state",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.29/);
-  assert.match(update,/v2\.9\.29 をインストール／更新/);
-  assert.match(update,/mumei-notification-update-pending-v2929/);
+  assert.match(update,/最新版 v2\.9\.30/);
+  assert.match(update,/v2\.9\.30 をインストール／更新/);
+  assert.match(update,/mumei-notification-update-pending-v2930/);
   assert.match(update,/window\.open\(SCRIPT,'_blank'\)/);
   assert.match(update,/autoVerify/);
   assert.match(update,/mumei_insight_version_check=1/);
   assert.match(setup,/本人通知ツールをインストール／更新/);
+  assert.match(setup,/最新版は v2\.9\.30/);
   assert.match(setup,/更新完了 v\$\{VERSION\}/);
   assert.match(setup,/notificationUpdateResult/);
   assert.match(setup,/history\.replaceState/);
@@ -111,7 +113,7 @@ test("server accepts follow membership joins and membership reactions and confir
 
 test("release manifest advertises current app and notification versions",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
-  assert.equal(manifest.notificationVersion,"2.9.29");
+  assert.equal(manifest.notificationVersion,"2.9.30");
   assert.equal(manifest.appVersion,"2026.09.07.5");
 });
 
