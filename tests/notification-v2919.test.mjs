@@ -99,6 +99,21 @@ test("INSIGHT notification deep link and active nav are deterministic",async()=>
   assert.match(css,/mode-notifications \.miu-nav button:nth-child\(8\)/);
 });
 
+test("INSIGHT always shows app and notification versions as separate tracks",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx");
+  const css=await read("src/member-insight-live-v2.css");
+  const release=await read("src/insight-release.ts");
+  assert.match(live,/miv5-version-status/);
+  assert.match(live,/INSIGHT本体/);
+  assert.match(live,/本人通知/);
+  assert.match(live,/現在 v\{CURRENT_INSIGHT_APP_VERSION\}/);
+  assert.match(live,/この端末 v\$\{notificationInstalled\}/);
+  assert.match(live,/最新 v\$\{appLatest/);
+  assert.match(live,/最新 v\$\{notificationLatest/);
+  assert.match(css,/\.miv5-version-status/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.07\.7"/);
+});
+
 test("INSIGHT notification view auto-refreshes saved server data",async()=>{
   const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(ui,/window\.setInterval\(refresh,3000\)/);
@@ -146,10 +161,10 @@ test("server and database preserve exact membership joins, reactions, boards, an
   assert.match(m,/trg_zzz_fix_insight_membership/);
 });
 
-test("release manifest advertises current app and notification versions",async()=>{
+test("release manifest advertises current app and notification versions independently",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
   assert.equal(manifest.notificationVersion,"2.9.34");
-  assert.equal(manifest.appVersion,"2026.09.07.6");
+  assert.equal(manifest.appVersion,"2026.09.07.7");
 });
 
 test("follow totals, people and delta history refresh without mixed-shape relation upserts",async()=>{
