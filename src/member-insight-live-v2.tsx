@@ -166,12 +166,17 @@ export function MemberInsightLiveV2(){
     else if(label==="通知")openMode("notifications");
     else if(mode!=="normal")openMode("normal");
   }
-  const appUpdateAvailable=Boolean(release&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,release.appVersion));
+  const appLatest=release?.appVersion||"";
+  const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
   const notificationLatest=release?.notificationVersion||"";
   const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled!==notificationLatest);
   const role=String(official?.member?.noteId||"").toLowerCase()==="ss_yr"?"owner":"member";
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className={`miv5-update ${appUpdateAvailable?"has-update":""}`}><div><b>AUTO DATA SYNC</b><span>{status}</span><small>記事・スキ・コメント・お気に入り・フォローなどの公開データは自動更新します。フォロー総数はnote公式現在値、人物一覧はバックグラウンド照合で追従します。右の緑ボタンはINSIGHT本体だけを更新します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className={`primary app-update ${appUpdateAvailable?"update-ready":""}`} disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?<strong>更新中…</strong>:appUpdateAvailable?<><small>NEW・最新版あり v{release?.appVersion}</small><strong>INSIGHT本体 更新</strong></>:<><small>{releaseChecked?`v${CURRENT_INSIGHT_APP_VERSION}・最新版`:`v${CURRENT_INSIGHT_APP_VERSION}・確認中`}</small><strong>INSIGHT本体</strong></>}</button></div></section>
+    <section className="miv5-version-status" aria-label="バージョン情報">
+      <div className={appUpdateAvailable?"needs-update":""}><b>INSIGHT本体</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION}</span><small>{releaseChecked?`最新 v${appLatest||CURRENT_INSIGHT_APP_VERSION}`:"最新 確認中"}</small>{appUpdateAvailable?<em>NEW</em>:null}</div>
+      <div className={notificationUpdateAvailable?"needs-update":""}><b>本人通知</b><span>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未確認"}</span><small>{releaseChecked?`最新 v${notificationLatest||"—"}`:"最新 確認中"}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</div>
+    </section>
     {appUpdateAvailable?<section className="miv5-release-alert app" role="status"><div><b>NEW　INSIGHT最新版あり</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION} → 最新 v{release?.appVersion}</span></div><button onClick={()=>void updateInsightApp()}>この画面から更新</button></section>:null}
     {notificationUpdateAvailable?<section className="miv5-release-alert notification" role="status"><div><b>🔔 本人通知ツール 更新あり</b><span>{notificationInstalled?`現在 v${notificationInstalled}`:"この端末の版は未確認"} → 最新 v{notificationLatest}</span></div><a href={`./notification-update.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest)}&return=${encodeURIComponent(window.location.href)}`}>インストール画面へ</a></section>:null}
     <section className="miv5-data-warning" role="note" aria-label="データ精度について">
