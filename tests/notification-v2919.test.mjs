@@ -95,7 +95,7 @@ test("follow totals use live note counts and relation sync supports each directi
   const api=await read("supabase/functions/insight-social-events/index.ts");
   assert.match(social,/live_expected_count/);
   assert.match(social,/公式現在/);
-  assert.match(rel,/direction:b\.direction/);
+  assert.match(rel,/direction=b\.direction==="followers"\|\|b\.direction==="followings"/);
   assert.match(rel,/fast-relations/);
   assert.match(api,/liveCounts/);
   assert.match(api,/live_count_at/);
