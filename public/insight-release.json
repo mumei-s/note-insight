@@ -1,7 +1,7 @@
 {
-  "appVersion": "2026.09.07.2",
-  "notificationVersion": "2.9.23",
-  "releasedAt": "2026-09-07T09:33:00+09:00",
+  "appVersion": "2026.09.07.3",
+  "notificationVersion": "2.9.24",
+  "releasedAt": "2026-09-07T10:12:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知・統計"
 }
