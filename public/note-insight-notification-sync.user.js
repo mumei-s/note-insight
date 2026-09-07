@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.24
-// @description  note通知を下側の古い通知から順に継ぎ足し保存。保存到達点を明示し、INSIGHT【通知】へ直行します。
+// @version      2.9.25
+// @description  note通知を継ぎ足し保存。通知上部UIの自己監視ループを止め、点滅せずINSIGHT【通知】へ直行します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -14,13 +14,13 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2924
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2924.js?v=2924a
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2924-ui.js?v=2924a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2925-ui.js?v=2925a
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.24';
+const VERSION='2.9.25';
 const CLEAN_NOTICE='mumei_open_notice_v2924';
 const AUTO_NOTICE='mumei_auto_notice_v2924';
 const EVT_STATUS='mumei-insight-sync-status-v2922';
