@@ -3,15 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.36 bootstrap loads manual core, UI, independent guard, lead filter and foreground scroll",async()=>{
+test("v2.9.37 bootstrap loads manual core, UI, independent guard, stable lead filter and foreground scroll",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.36/);
+  assert.match(boot,/@version\s+2\.9\.37/);
   assert.match(boot,/runtime-v2933\.js\?v=2933c/);
   assert.match(boot,/runtime-v2933-ui\.js\?v=2933c/);
   assert.match(boot,/runtime-v2934-dock\.js\?v=2934b/);
   assert.match(boot,/runtime-v2935-guard\.js\?v=2935a/);
-  assert.match(boot,/runtime-v2936-filter\.js\?v=2936a/);
-  assert.match(boot,/runtime-v2936-scroll\.js\?v=2936a/);
+  assert.match(boot,/runtime-v2936-filter\.js\?v=2936b/);
+  assert.match(boot,/runtime-v2936-scroll\.js\?v=2936b/);
   assert.match(boot,/自動巡回・自動遷移は行わず/);
 });
 
@@ -72,28 +72,29 @@ test("guard detaches controls from note reaction modals and restores only on rea
   assert.match(guard,/e\.detail\.root=shell/);
 });
 
-test("v2.9.36 filter uses only the leading representative and repairs over-broad legacy muting",async()=>{
+test("v2.9.37 filter is lead-only and reconciles classes idempotently without hide/show flicker",async()=>{
   const f=await read("public/note-insight-notification-runtime-v2936-filter.js");
   assert.match(f,/function leadTextName/);
   assert.match(f,/function leadId/);
   assert.match(f,/function nameMatches/);
   assert.match(f,/truncated/);
   assert.match(f,/creatorLinks/);
-  assert.match(f,/st\.profiles\.some/);
-  assert.match(f,/for\(const e of root\.querySelectorAll\(`\.\$\{MUTED\}`\)\)e\.classList\.remove\(MUTED\)/);
-  assert.match(f,/if\(!lead\)continue/);
-  assert.match(f,/if\(!hit\)continue/);
+  assert.match(f,/function setMuted\(el,want\)/);
+  assert.match(f,/setMuted\(row,want\)/);
+  assert.match(f,/if\(row!==el\)setMuted\(el,false\)/);
+  assert.doesNotMatch(f,/for\(const e of root\.querySelectorAll\(`\.\$\{MUTED\}`\)\)e\.classList\.remove\(MUTED\);if\(!st\.enabled/);
   assert.doesNotMatch(f,/actors\.some/);
 });
 
-test("v2.9.36 filter hides the complete logical row, not only an inner text block",async()=>{
+test("v2.9.37 filter hides complete logical row and does not repeatedly reset every row first",async()=>{
   const f=await read("public/note-insight-notification-runtime-v2936-filter.js");
   assert.match(f,/function outerRow/);
-  assert.match(f,/row\.classList\.add\(MUTED\)/);
-  assert.match(f,/if\(row!==el\)el\.classList\.add\(MUTED\)/);
+  assert.match(f,/const logical=logicalRows\(root\),seen=new Set\(\)/);
+  assert.match(f,/setMuted\(row,want\)/);
+  assert.match(f,/if\(row!==el\)setMuted\(el,false\)/);
 });
 
-test("v2.9.36 routes filtered scrolling to foreground notifications and contains overscroll",async()=>{
+test("v2.9.37 routes filtered scrolling to foreground without automatic scroll-to-bottom loops",async()=>{
   const s=await read("public/note-insight-notification-runtime-v2936-scroll.js");
   assert.match(s,/overscroll-behavior-y:contain/);
   assert.match(s,/function frontScroller/);
@@ -101,8 +102,10 @@ test("v2.9.36 routes filtered scrolling to foreground notifications and contains
   assert.match(s,/e\.preventDefault\(\)/);
   assert.match(s,/e\.stopPropagation\(\)/);
   assert.match(s,/box\.scrollTop=next/);
-  assert.match(s,/fillOlder/);
-  assert.match(s,/visible>=7/);
+  assert.match(s,/requestOlder/);
+  assert.match(s,/max<=2/);
+  assert.doesNotMatch(s,/fillOlder/);
+  assert.doesNotMatch(s,/box\.scrollTop=max/);
 });
 
 test("legacy filter settings still preserve groups, IDs and truncated profile hydration",async()=>{
@@ -174,18 +177,18 @@ test("INSIGHT notification cards keep count headlines but hide duplicate categor
   assert.match(css,/\.minf-main\{display:grid;gap:1px;margin-top:2px/);
 });
 
-test("notification update flow stays in browser history and advertises v2.9.36",async()=>{
+test("notification update flow stays in browser history and advertises v2.9.37",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.36/);
-  assert.match(update,/v2\.9\.36 をインストール／更新/);
-  assert.match(update,/mumei-notification-update-pending-v2936/);
+  assert.match(update,/最新版 v2\.9\.37/);
+  assert.match(update,/v2\.9\.37 をインストール／更新/);
+  assert.match(update,/mumei-notification-update-pending-v2937/);
   assert.match(update,/location\.assign\(SCRIPT\)/);
   assert.doesNotMatch(update,/window\.open\(SCRIPT/);
   assert.match(update,/ブラウザの「←」/);
   assert.match(update,/autoVerify/);
   assert.match(update,/mumei_insight_version_check=1/);
-  assert.match(setup,/最新版は v2\.9\.36/);
+  assert.match(setup,/最新版は v2\.9\.37/);
   assert.match(setup,/本人通知ツールをインストール／更新/);
   assert.match(setup,/更新完了 v\$\{VERSION\}/);
   assert.match(setup,/notificationUpdateResult/);
@@ -214,7 +217,7 @@ test("server and database preserve exact membership joins, reactions, boards, an
 
 test("release manifest advertises current app and notification versions independently",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
-  assert.equal(manifest.notificationVersion,"2.9.36");
+  assert.equal(manifest.notificationVersion,"2.9.37");
   assert.equal(manifest.appVersion,"2026.09.07.8");
 });
 
