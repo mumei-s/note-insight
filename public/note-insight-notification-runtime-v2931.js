@@ -1,0 +1,69 @@
+(function(){
+'use strict';
+if(location.hostname!=='note.com')return;
+const V='2.9.31';
+const ING='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
+const TOK='mumei_insight_notification_sync_token_v2:';
+const SAVED='mumei_insight_notification_saved_v2919:';
+const CHECK='mumei_insight_notification_checkpoint_v2922:';
+const SRC='note-notification-manual-sync-v2931';
+const EVT_STATUS='mumei-insight-sync-status-v2931';
+const EVT_MANUAL='mumei-insight-manual-read-v2931';
+const EVT_MARK='mumei-insight-mark-v2931';
+const HOST_ATTR='data-mumei-insight-notification-host';
+const KNOWN='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
+const ROOT='[class*="navbarNotice"],[class*="notification" i],[class*="notice" i],[data-testid*="notification" i],[data-testid*="notice" i],[role="dialog"],[role="menu"],[popover]';
+const ACTION=/(?:スキ|コメント|返信|フォロー|フォロワー|追加|仲間入り|参加|加入|入会|メンバー|Member\s*Ship|メンバーシップ|メンシプ|掲示板|購入|チップ|サポート|支援|応援金|話題|高評価|ポイント|引用|紹介|記事を投稿|新しい記事)/iu;
+const MAX_STEPS=10,MAX_NEW=120,STEP_WAIT=850,COOLDOWN=12000,BATCH=25;
+const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+const stripTime=v=>clean(v).replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,'').trim();
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const key=(p,id)=>p+String(id||'').toLowerCase();
+const modern=()=>Boolean(globalThis.GM);
+async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
+async function set(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
+function request(url,body,headers={}){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};if(r.status>=200&&r.status<300)return resolve(p);reject(new Error(p.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
+let accountId='',busy=false,lastManualAt=0;
+function friendly(v){const s=String(v||'');if(/PAIR_REQUIRED|INGEST_TOKEN_REQUIRED|INGEST_TOKEN_INVALID|HTTP_401|HTTP_403/.test(s))return'本人連携の更新が必要です';if(s==='NOTIFICATION_ACCOUNT_MISMATCH')return'noteアカウントと本人連携が一致していません';if(s==='NOTE_LOGIN_REQUIRED')return'noteのログイン状態を確認してください';if(s==='NOTIFICATION_PANEL_NOT_FOUND')return'🔔の「通知」一覧を開いてから押してください';if(s==='NETWORK_ERROR')return'通信エラーです';if(s==='TIMEOUT')return'通信がタイムアウトしました';return s||'保存エラー'}
+function emit(state,text,extra={}){window.dispatchEvent(new CustomEvent(EVT_STATUS,{detail:{state,text,at:Date.now(),version:V,manual:true,...extra}}))}
+async function account(){if(accountId)return{id:accountId};try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id))return null;accountId=id;return{id}}catch{return null}}
+function shown(el){if(!el?.getBoundingClientRect)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}
+function text(el){return clean(el?.innerText||el?.textContent)}
+function links(el){return[...(el?.matches?.('a[href]')?[el]:[]),...(el?.querySelectorAll?.('a[href]')||[])]}
+function strictRow(el){if(!el||el.closest?.('[id^="mumei-v29"]'))return false;const t=text(el);if(t.length<5||t.length>850||!ACTION.test(t))return false;return links(el).some(a=>{try{return new URL(a.getAttribute('href'),location.href).hostname.endsWith('note.com')}catch{return false}})}
+function rawRows(root){if(!root)return[];let xs=[...root.querySelectorAll(KNOWN)].filter(strictRow);if(!xs.length)xs=[...root.querySelectorAll('li,[role="listitem"],article')].filter(strictRow);if(!xs.length)xs=[...root.querySelectorAll('div')].filter(el=>el.children.length<=18&&strictRow(el)&&![...el.children].some(ch=>strictRow(ch)));return[...new Set(xs)].filter(strictRow)}
+function visibleRows(root){return rawRows(root).filter(el=>shown(el)||el.classList.contains('mumei-muted-v2931'))}
+function scoreRoot(el){const rows=visibleRows(el),t=text(el).slice(0,220),hint=/(通知|お知らせ|notification|notice)/i.test(t)||/notification|notice/i.test(String(el.id||'')+' '+String(el.className||'')+' '+String(el.getAttribute?.('data-testid')||''));return rows.length*100+(hint?80:0)-Math.min(50,Math.round((el.querySelectorAll?.('*').length||0)/70))}
+function validHint(el){return Boolean(el&&el.isConnected&&shown(el)&&rawRows(el).length)}
+function notificationRoot(hint=null){if(validHint(hint))return hint;const marked=document.querySelector(`[${HOST_ATTR}="1"]`);if(validHint(marked))return marked;const candidates=[...document.querySelectorAll(ROOT)].filter(el=>shown(el)&&el!==document.body&&el!==document.documentElement&&!el.closest?.('[id^="mumei-v29"]'));const ranked=candidates.map(el=>({el,s:scoreRoot(el)})).filter(x=>x.s>=100).sort((a,b)=>b.s-a.s);if(ranked[0])return ranked[0].el;const all=[...document.querySelectorAll(KNOWN)].filter(el=>strictRow(el)&&shown(el));if(all.length){let p=all[0].parentElement,best=null;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(shown(p)&&rawRows(p).length){best=p;if(/notification|notice/i.test(String(p.className||'')+String(p.id||'')))break}}if(best)return best}return null}
+function noteLinks(el){return links(el).map(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.hostname.endsWith('note.com')?{a,u:u.href,t:clean(a.textContent)}:null}catch{return null}}).filter(Boolean)}
+function targetLink(ls){return ls.find(x=>/\/membership(?:[/?#]|$)|\/memberships?\/|\/m\/|\/n\/|kind=board_reply_comment|scrollpos=comment/i.test(x.u))||null}
+function actorLink(ls,raw){const self=/^あなた/u.test(stripTime(raw));return ls.find(x=>{try{const p=new URL(x.u).pathname.split('/').filter(Boolean),id=(p[0]||'').toLowerCase();return p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)&&!(self&&id===accountId)}catch{return false}})||null}
+function actorImage(actor,el){const img=actor?.a?.querySelector?.('img[src]')||el?.querySelector?.('img[src]');return img?.currentSrc||img?.src||null}
+function row(el){const raw=text(el);if(!raw||raw.length>850)return null;const ls=noteLinks(el),target=targetLink(ls),actor=actorLink(ls,raw),tm=el.querySelector('time[datetime]')?.getAttribute('datetime')||el.querySelector('[datetime]')?.getAttribute('datetime')||null,m=stripTime(raw).match(/^(.{1,180}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return{raw_text:raw,actor_name:actor?.t||m?.[1]||null,actor_url:actor?.u||null,actor_image_url:actorImage(actor,el),target_title:target?.t||null,target_url:target?.u||null,source_url:target?.u||actor?.u||null,occurred_at:tm,meta:{source:SRC,via:'notification-panel-manual-v2931',userscript:V}}}
+const signature=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0]].join('|');
+function ordered(root){return rawRows(root).map(el=>({el,r:row(el)})).filter(x=>x.r).sort((a,b)=>{const ar=a.el.getBoundingClientRect(),br=b.el.getBoundingClientRect();return ar.top-br.top})}
+function scrollBox(root){if(!root)return null;const candidates=[root,...root.querySelectorAll('*')].filter(el=>el!==document.body&&el!==document.documentElement&&shown(el));return candidates.filter(el=>{const s=getComputedStyle(el);return /auto|scroll/.test(s.overflowY)&&el.scrollHeight>el.clientHeight+80&&el.clientHeight>120}).sort((a,b)=>(b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight))[0]||null}
+async function loadSaved(id){const x=await get(key(SAVED,id),[]);return new Set(Array.isArray(x)?x:[])}
+async function saveSaved(id,s){await set(key(SAVED,id),[...s].slice(-10000))}
+async function checkpoint(id){const x=await get(key(CHECK,id),{});return x&&typeof x==='object'?x:{}}
+async function saveCheckpoint(id,x){await set(key(CHECK,id),x);return x}
+async function sendBatch(rows,a){if(!rows.length)return{confirmed:[],inserted:0,updated:0,skipped:0,blocked:0,attempted:0};const token=String(await get(key(TOK,a.id),'')||'');if(!token)throw new Error('PAIR_REQUIRED');let confirmed=[],inserted=0,updated=0,skipped=0,blocked=0,attempted=0;for(let i=0;i<rows.length;i+=BATCH){const part=rows.slice(i,i+BATCH),payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:signature(r)}})),p=await request(ING,{noteId:a.id,notifications:payload},{'X-Ingest-Token':token});attempted+=part.length;inserted+=Number(p.inserted||0);updated+=Number(p.updated||0);skipped+=Number(p.skipped||0);blocked+=Number(p.blocked||0);const cs=Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures:[];if(cs.length)confirmed.push(...cs.map(String));else if(!Number(p.skipped||0)&&!Number(p.blocked||0))confirmed.push(...part.map(signature))}return{confirmed:[...new Set(confirmed)],inserted,updated,skipped,blocked,attempted}}
+function markerStyle(){if(document.getElementById('mumei-v2931-marker-style'))return;const s=document.createElement('style');s.id='mumei-v2931-marker-style';s.textContent='[data-mumei-insight-boundary-v2931="1"]{position:relative!important;border-top:3px solid #69db91!important}[data-mumei-insight-boundary-v2931="1"]::before{content:attr(data-mumei-insight-boundary-text-v2931)!important;display:block!important;margin:5px 7px;padding:6px!important;border:1px solid #55b97b!important;border-radius:7px!important;background:#0b3320!important;color:#d5ffe2!important;font:900 9px/1.35 system-ui!important;text-align:center!important}';document.documentElement.append(s)}
+async function mark(id,rootHint=null){markerStyle();for(const el of document.querySelectorAll('[data-mumei-insight-boundary-v2931]')){delete el.dataset.mumeiInsightBoundaryV2931;delete el.dataset.mumeiInsightBoundaryTextV2931}const cp=await checkpoint(id);if(!cp.boundary)return;const root=notificationRoot(rootHint);if(!root)return;for(const el of rawRows(root)){const r=row(el);if(r&&signature(r)===cp.boundary){el.dataset.mumeiInsightBoundaryV2931='1';el.dataset.mumeiInsightBoundaryTextV2931='✓ 保存済み境界｜次回はここから上だけ保存';break}}}
+async function manualResume(rootHint=null){const now=Date.now();if(busy)return;if(now-lastManualAt<COOLDOWN){emit('error',`連続操作防止中。${Math.ceil((COOLDOWN-now+lastManualAt)/1000)}秒待ってください`);return}lastManualAt=now;const root=notificationRoot(rootHint);if(!root){emit('error',friendly('NOTIFICATION_PANEL_NOT_FOUND'));return}busy=true;let box=null,startScroll=0,a=null;try{a=await account();if(!a)throw new Error('NOTE_LOGIN_REQUIRED');const saved=await loadSaved(a.id),cp=await checkpoint(a.id),oldBoundary=String(cp.boundary||''),seenRun=new Set(),host=root;box=scrollBox(host);startScroll=box?.scrollTop||0;let boundaryFound=!oldBoundary,knownRegion=false,newestCheckpoint='',newCount=0,checked=0,skipped=0,blocked=0,stall=0;emit('saving','手動保存中…新しい通知だけ確認します');for(let step=0;step<MAX_STEPS&&newCount<MAX_NEW;step++){
+ const current=ordered(host);if(!current.length)break;
+ const unique=current.filter(x=>{const q=signature(x.r);if(seenRun.has(q))return false;seenRun.add(q);return true});checked+=unique.length;
+ if(oldBoundary&&unique.some(x=>signature(x.r)===oldBoundary))boundaryFound=true;
+ const unsaved=unique.map(x=>x.r).filter(r=>!saved.has(signature(r))).slice(0,MAX_NEW-newCount);
+ if(unsaved.length){const out=await sendBatch(unsaved,a);for(const q of out.confirmed)saved.add(q);newCount+=out.confirmed.length;skipped+=out.skipped;blocked+=out.blocked}
+ if(!newestCheckpoint){for(const x of current){const q=signature(x.r);if(saved.has(q)){newestCheckpoint=q;break}}}
+ const savedHere=unique.filter(x=>saved.has(signature(x.r))).length;if(boundaryFound||(!unsaved.length&&savedHere>=2)||savedHere>=4){knownRegion=true;break}
+ if(!box)break;const max=Math.max(0,box.scrollHeight-box.clientHeight),before=box.scrollTop;if(before>=max-2){const h=box.scrollHeight;await sleep(STEP_WAIT);const max2=Math.max(0,box.scrollHeight-box.clientHeight);if(max2<=before+2&&box.scrollHeight<=h+2){stall++;if(stall>=2)break}else{stall=0;box.scrollTop=max2}}else{box.scrollTop=Math.min(max,before+Math.max(300,box.clientHeight*.78));await sleep(STEP_WAIT)}
+ emit('saving',`確認${checked}件・新規保存${newCount}件`)
+ }
+ await saveSaved(a.id,saved);const nextBoundary=newestCheckpoint||oldBoundary;const next=await saveCheckpoint(a.id,{...cp,boundary:nextBoundary,boundaryLabel:nextBoundary?'保存済み境界':'',lastSaveAt:newCount?Date.now():Number(cp.lastSaveAt||0),lastCheckAt:Date.now(),savedCount:saved.size,lastError:'',manualNewCount:newCount,manualSeenCount:checked,boundaryFound:boundaryFound||knownRegion,version:V});await mark(a.id,host);emit('done',`保存完了 ✓ 新規${newCount}件・確認${checked}件${skipped+blocked?`・未分類${skipped+blocked}件`:''}`,{savedCount:saved.size,lastSaveAt:next.lastSaveAt,boundary:next.boundary})
+ }catch(e){const msg=friendly(e?.message||e);if(a?.id){const cp=await checkpoint(a.id);await saveCheckpoint(a.id,{...cp,lastError:msg,lastCheckAt:Date.now(),version:V})}emit('error',msg)}finally{if(box)try{box.scrollTop=startScroll}catch{}busy=false}}
+window.addEventListener(EVT_MANUAL,e=>void manualResume(e?.detail?.root||null));
+window.addEventListener(EVT_MARK,e=>void(async()=>{const a=await account();if(a)await mark(a.id,e?.detail?.root||null)})());
+})();
