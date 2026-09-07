@@ -69,15 +69,25 @@ test("INSIGHT disables notification auto-navigation in v2.9.27 safe mode",async(
   assert.doesNotMatch(app,/window\.location\.assign\(note\.href\)/);
 });
 
-test("INSIGHT notification view auto-refreshes saved data while note capture stays manual",async()=>{
+test("notification deep link jumps to the notification panel instead of top of dashboard",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx");
+  const ui=await read("src/member-insight-notifications-final.tsx");
+  assert.match(live,/mode!=="notifications"/);
+  assert.match(live,/getElementById\("minf-notifications"\)/);
+  assert.match(live,/scrollIntoView\(\{block:"start",behavior:"auto"\}\)/);
+  assert.match(ui,/id="minf-notifications"/);
+});
+
+test("INSIGHT notification view auto-refreshes saved data with compact status UI",async()=>{
   const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(ui,/window\.setInterval\(refresh,3000\)/);
-  assert.match(ui,/note側：手動保存/);
+  assert.match(ui,/手動保存（続きから）/);
   assert.match(ui,/自動反映 ON/);
-  assert.match(ui,/INSIGHT【通知】 最終更新/);
-  assert.match(ui,/INSIGHT保存処理 最終実行/);
+  assert.match(ui,/minf-compact-status/);
+  assert.match(ui,/更新状態・精度/);
+  assert.match(ui,/membership_reaction/);
   assert.match(ui,/fresh\|\|r\.actor_image_url/);
-  assert.match(ui,/本人通知の精度について/);
+  assert.doesNotMatch(ui,/minf-update-status/);
   assert.doesNotMatch(ui,/mumei_open_notice_v2924=1/);
 });
 
@@ -89,7 +99,7 @@ test("INSIGHT data refresh, app update, and notification update remain separated
   assert.match(live,/本人通知ツール 更新あり/);
   assert.match(live,/notification-update\.html/);
   assert.equal(manifest.notificationVersion,"2.9.27");
-  assert.equal(manifest.appVersion,"2026.09.07.3");
+  assert.equal(manifest.appVersion,"2026.09.07.4");
 });
 
 test("dedicated notification update page advertises checkpoint-safe v2.9.27",async()=>{
@@ -101,12 +111,16 @@ test("dedicated notification update page advertises checkpoint-safe v2.9.27",asy
   assert.match(page,/mumei_insight_version_check=1/);
 });
 
-test("server accepts manual sync source and current follow wording",async()=>{
+test("server accepts current follow membership join and membership reaction wording",async()=>{
   const s=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
   assert.match(s,/manual-sync-v\\d\+/);
-  assert.match(s,/my_article_magazine_added/);
+  assert.match(s,/membership_reaction/);
+  assert.match(s,/メンシプ/);
+  assert.match(s,/フォロー\|フォロワー/);
+  assert.match(s,/新しいメンバー/);
   assert.match(f,/type==="follow"&&\/フォロー\|フォロワー/);
+  assert.match(f,/type==="membership_reaction"/);
   assert.match(f,/lastUpdatedAt/);
 });
 
