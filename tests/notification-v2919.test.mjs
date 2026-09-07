@@ -3,13 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.35 bootstrap loads current manual core, UI, dock and independent guard",async()=>{
+test("v2.9.36 bootstrap loads manual core, UI, independent guard, lead filter and foreground scroll",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.35/);
+  assert.match(boot,/@version\s+2\.9\.36/);
   assert.match(boot,/runtime-v2933\.js\?v=2933c/);
   assert.match(boot,/runtime-v2933-ui\.js\?v=2933c/);
   assert.match(boot,/runtime-v2934-dock\.js\?v=2934b/);
   assert.match(boot,/runtime-v2935-guard\.js\?v=2935a/);
+  assert.match(boot,/runtime-v2936-filter\.js\?v=2936a/);
+  assert.match(boot,/runtime-v2936-scroll\.js\?v=2936a/);
   assert.match(boot,/自動巡回・自動遷移は行わず/);
 });
 
@@ -29,7 +31,7 @@ test("manual reader stays manual, accepts exact host, and tolerates note row DOM
   assert.match(r,/NOTIFICATION_ROWS_WAITING/);
 });
 
-test("manual reader keeps the saved checkpoint internally while v2.9.35 hides boundary visuals",async()=>{
+test("manual reader keeps saved checkpoint internally while visible boundary decoration stays suppressed",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2933.js");
   const guard=await read("public/note-insight-notification-runtime-v2935-guard.js");
   assert.match(r,/confirmedClientSignatures/);
@@ -43,7 +45,7 @@ test("manual reader keeps the saved checkpoint internally while v2.9.35 hides bo
   assert.match(guard,/stripBoundaryText/);
 });
 
-test("manual UI appears from the notification tab shell even before strict rows resolve",async()=>{
+test("manual UI appears from notification tab shell even before strict rows resolve",async()=>{
   const ui=await read("public/note-insight-notification-runtime-v2933-ui.js");
   assert.match(ui,/function commonShell/);
   assert.match(ui,/exact\('通知'\)/);
@@ -53,7 +55,7 @@ test("manual UI appears from the notification tab shell even before strict rows 
   assert.match(ui,/new CustomEvent\(EVT_MANUAL,\{detail:\{root:current\}\}\)/);
 });
 
-test("v2.9.35 guard detaches controls from note reaction modals and restores only on the real notification shell",async()=>{
+test("guard detaches controls from note reaction modals and restores only on real notification shell",async()=>{
   const dock=await read("public/note-insight-notification-runtime-v2934-dock.js");
   const guard=await read("public/note-insight-notification-runtime-v2935-guard.js");
   assert.match(dock,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)!important/);
@@ -70,12 +72,41 @@ test("v2.9.35 guard detaches controls from note reaction modals and restores onl
   assert.match(guard,/e\.detail\.root=shell/);
 });
 
-test("notification filter hides every matching magazine noise row including truncated creator names",async()=>{
+test("v2.9.36 filter uses only the leading representative and repairs over-broad legacy muting",async()=>{
+  const f=await read("public/note-insight-notification-runtime-v2936-filter.js");
+  assert.match(f,/function leadTextName/);
+  assert.match(f,/function leadId/);
+  assert.match(f,/function nameMatches/);
+  assert.match(f,/truncated/);
+  assert.match(f,/creatorLinks/);
+  assert.match(f,/st\.profiles\.some/);
+  assert.match(f,/for\(const e of root\.querySelectorAll\(`\.\$\{MUTED\}`\)\)e\.classList\.remove\(MUTED\)/);
+  assert.match(f,/if\(!lead\)continue/);
+  assert.match(f,/if\(!hit\)continue/);
+  assert.doesNotMatch(f,/actors\.some/);
+});
+
+test("v2.9.36 filter hides the complete logical row, not only an inner text block",async()=>{
+  const f=await read("public/note-insight-notification-runtime-v2936-filter.js");
+  assert.match(f,/function outerRow/);
+  assert.match(f,/row\.classList\.add\(MUTED\)/);
+  assert.match(f,/if\(row!==el\)el\.classList\.add\(MUTED\)/);
+});
+
+test("v2.9.36 routes filtered scrolling to foreground notifications and contains overscroll",async()=>{
+  const s=await read("public/note-insight-notification-runtime-v2936-scroll.js");
+  assert.match(s,/overscroll-behavior-y:contain/);
+  assert.match(s,/function frontScroller/);
+  assert.match(s,/touchmove/);
+  assert.match(s,/e\.preventDefault\(\)/);
+  assert.match(s,/e\.stopPropagation\(\)/);
+  assert.match(s,/box\.scrollTop=next/);
+  assert.match(s,/fillOlder/);
+  assert.match(s,/visible>=7/);
+});
+
+test("legacy filter settings still preserve groups, IDs and truncated profile hydration",async()=>{
   const ui=await read("public/note-insight-notification-runtime-v2933-ui.js");
-  assert.match(ui,/mumei-muted-v2933/);
-  assert.match(ui,/async function applyFilter/);
-  assert.match(ui,/isMagazineNoise/);
-  assert.match(ui,/actorIds/);
   assert.match(ui,/mumei_insight_magazine_mute_profiles_v5/);
   assert.match(ui,/hydrateProfile/);
   assert.match(ui,/sameCreatorName/);
@@ -143,17 +174,18 @@ test("INSIGHT notification cards keep count headlines but hide duplicate categor
   assert.match(css,/\.minf-main\{display:grid;gap:1px;margin-top:2px/);
 });
 
-test("notification update flow stays in browser history and returns with readable completion state",async()=>{
+test("notification update flow stays in browser history and advertises v2.9.36",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.35/);
-  assert.match(update,/v2\.9\.35 をインストール／更新/);
-  assert.match(update,/mumei-notification-update-pending-v2935/);
+  assert.match(update,/最新版 v2\.9\.36/);
+  assert.match(update,/v2\.9\.36 をインストール／更新/);
+  assert.match(update,/mumei-notification-update-pending-v2936/);
   assert.match(update,/location\.assign\(SCRIPT\)/);
   assert.doesNotMatch(update,/window\.open\(SCRIPT/);
   assert.match(update,/ブラウザの「←」/);
   assert.match(update,/autoVerify/);
   assert.match(update,/mumei_insight_version_check=1/);
+  assert.match(setup,/最新版は v2\.9\.36/);
   assert.match(setup,/本人通知ツールをインストール／更新/);
   assert.match(setup,/更新完了 v\$\{VERSION\}/);
   assert.match(setup,/notificationUpdateResult/);
@@ -182,7 +214,7 @@ test("server and database preserve exact membership joins, reactions, boards, an
 
 test("release manifest advertises current app and notification versions independently",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
-  assert.equal(manifest.notificationVersion,"2.9.35");
+  assert.equal(manifest.notificationVersion,"2.9.36");
   assert.equal(manifest.appVersion,"2026.09.07.8");
 });
 
