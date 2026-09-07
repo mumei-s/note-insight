@@ -16,13 +16,14 @@ const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM);
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
-let accountId='';
+let accountId='',cachedRoot=null,rootObserver=null;
 async function account(){if(accountId)return{id:accountId};try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id))return null;accountId=id;return{id}}catch{return null}}
 function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${VISIBLE}="1"]{display:var(--mumei-v2938-display,block)!important}.${OWN}{display:none!important}`;document.documentElement.append(s)}
 function shown(el){if(!el?.getBoundingClientRect)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}
 function exact(v){return[...document.querySelectorAll('button,a,[role="tab"],[role="button"],div,span')].find(el=>{if(!el?.getBoundingClientRect)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&clean(el.textContent)===v})||null}
 function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>100)return p}}return null}
-function shell(){return commonShell(exact('通知'),exact('お知らせ'))}
+function findShell(){return commonShell(exact('通知'),exact('お知らせ'))}
+function shell(){if(cachedRoot?.isConnected&&shown(cachedRoot))return cachedRoot;const root=findShell();if(root!==cachedRoot){cachedRoot=root||null;watchRoot(cachedRoot)}return cachedRoot}
 function logicalRows(root){if(!root)return[];let xs=[...root.querySelectorAll(ITEM)];if(!xs.length)xs=[...root.querySelectorAll('li,[role="listitem"],article')];if(!xs.length)xs=[...root.querySelectorAll('div')].filter(el=>{const t=clean(el.textContent);return t.length>8&&/(?:さん他\d+名が|新しい記事を\d+本追加しました|運営メンバーに仲間入りしました)/u.test(t)});return[...new Set(xs)]}
 function creatorIdFromUrl(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean);if(!u.hostname.endsWith('note.com')||p.length!==1)return'';const id=(p[0]||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({a,id:creatorIdFromUrl(a.getAttribute('href')),txt:clean(a.textContent)})).filter(x=>x.id)}
@@ -38,9 +39,10 @@ function setVisibleLock(el,on){if(!el)return;rememberDisplay(el);if(on)el.setAtt
 function setOwnMuted(el,want){if(!el)return;setVisibleLock(el,!want);const has=el.classList.contains(OWN);if(want&&!has)el.classList.add(OWN);else if(!want&&has)el.classList.remove(OWN)}
 let busy=false,timer=0;
 async function reconcile(){if(busy)return;busy=true;try{installStyle();const root=shell();if(!root)return;const st=await state();if(!st)return;const logical=logicalRows(root),seen=new Set();for(const el of logical){const row=outerRow(el,root);if(seen.has(row))continue;seen.add(row);const t=clean(row.textContent||el.textContent),lead=leadTextName(t);let want=false;if(st.enabled&&st.ids.size&&magazineNoise(t)&&lead){want=st.profiles.some(p=>p.name&&nameMatches(lead,p.name));if(!want){const id=leadId(row,lead,st);want=Boolean(id&&st.ids.has(id))}}setOwnMuted(row,want);if(row!==el)setOwnMuted(el,false)}for(const e of root.querySelectorAll(`.${LEGACY}`)){if(!e.closest(`.${OWN}`))setVisibleLock(e,true)}if(!st.enabled||!st.ids.size){for(const e of root.querySelectorAll(`.${OWN}`))setOwnMuted(e,false)}}finally{busy=false}}
-function schedule(ms=25){clearTimeout(timer);timer=setTimeout(()=>void reconcile(),ms)}
-const obs=new MutationObserver(ms=>{if(ms.some(m=>m.type==='childList'))schedule(0)});obs.observe(document.documentElement,{subtree:true,childList:true});
-document.addEventListener('click',e=>{const b=e.target instanceof Element?e.target.closest(`#${RAIL} .filter`):null;schedule(b?70:35)},true);
-document.addEventListener('scroll',()=>schedule(45),true);addEventListener('focus',()=>schedule(50));addEventListener('pageshow',()=>schedule(50));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')schedule(50)});
-installStyle();schedule(80);
+function schedule(ms=70){clearTimeout(timer);timer=setTimeout(()=>void reconcile(),ms)}
+function watchRoot(root){try{rootObserver?.disconnect()}catch{}rootObserver=null;if(!root)return;rootObserver=new MutationObserver(ms=>{if(ms.some(m=>m.type==='childList'))schedule(90)});rootObserver.observe(root,{subtree:true,childList:true})}
+const bootObserver=new MutationObserver(()=>{if(!cachedRoot?.isConnected){cachedRoot=null;schedule(120)}});bootObserver.observe(document.documentElement,{subtree:true,childList:true});
+document.addEventListener('click',e=>{const b=e.target instanceof Element?e.target.closest(`#${RAIL} .filter`):null;schedule(b?100:160)},true);
+addEventListener('focus',()=>schedule(100));addEventListener('pageshow',()=>schedule(100));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')schedule(100)});
+installStyle();schedule(120);
 })();
