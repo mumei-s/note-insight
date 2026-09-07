@@ -1,61 +1,63 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-04 08:22 JST
+Updated: 2026-09-07 19:03 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
-## 0. 2026-09-04 comment/reply + 本人通知 completion checkpoint
+## 0. 2026-09-07 本人通知 v2.9.33 completion checkpoint
 
-This is the newest INSIGHT checkpoint and supersedes the older comment-sync / notification-sync notes below.
+This is the newest INSIGHT checkpoint and supersedes older notification-sync notes.
 
-Current production behavior:
+Current release:
 
-- note's current v3 comment API is supported when `data` itself is an array.
-- pagination follows note's `next_page`; current note responses can return 25 rows even when `per_page=100` is requested.
-- comment text is extracted from note's structured `comment` JSON tree (`children` / text `value`).
-- `latest_creator_reply` is captured and stored as a child reply of the external root comment.
-- additional reply pages are fetched with `parent_key` when `reply_count` exceeds the embedded creator reply count.
-- parent/child relationships are stored in `insight_public_comments.parent_key`.
-- creator replies update thread state but do not generate false inbound notifications.
-- recent articles and pending historical threads are both revisited.
-- public comment/reply refresh runs independently every 15 minutes; the browser does not need to remain open.
-- the normal participant live sync and the scheduled comment refresh now share the current structured-comment semantics.
+- INSIGHT app: `2026.09.07.6`
+- 本人通知・統計: **v2.9.33**
+- fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
+- current userscript bootstrap: `public/note-insight-notification-sync.user.js`
+- current manual reader: `public/note-insight-notification-runtime-v2933.js`
+- current notification UI/filter: `public/note-insight-notification-runtime-v2933-ui.js`
 
-Current functions:
+### v2.9.33 completed fixes
 
-- `insight-member-api` **v8 ACTIVE** — browser/live public reaction sync using the current comment parser.
-- `insight-comment-refresh` **v2 ACTIVE** — dedicated scheduled comment/reply refresh using the same current API semantics.
-- pg_cron job `insight-comment-refresh` runs every 15 minutes.
-- `insight-notification-import-token` **v6 ACTIVE** — participant/OWNER notification pairing with paired-state reporting.
-- `insight-notification-ingest-v2` **v2 ACTIVE** — account-ID checked bell notification ingest.
+1. **Membership joins and membership reactions are exact categories.**
+   - note URLs containing `kind=circle_plan_join` are forced to `membership_join`.
+   - `kind=board_like_comment` / `kind=board_like_post` are forced to `membership_reaction`.
+   - board replies, board posts and membership plan-open URLs are also protected from the older generic DB classifier.
+   - production DB migration `notification_membership_exact_v5` is applied.
+   - existing misclassified rows were reclassified; the observed Monetize Crew join now resolves as `membership_join` and the observed membership-board like now resolves as `membership_reaction`.
+   - source migration: `supabase/migrations/20260907185100_notification_membership_exact_v5.sql`.
 
-Verified production data after the comment repair:
+2. **Saved boundary is visible without enlarging the notification row.**
+   - saved/checkpoint keys remain compatible with prior versions.
+   - the exact saved boundary row receives a non-layout pill marker: `✓ ここまで保存済み｜次回はこの上だけ保存`.
+   - a size guard prevents a mistaken large container from becoming the boundary marker.
+   - the compact status line also reports when a saved boundary exists, even before the user scrolls to the exact row.
+   - the marker is reapplied while the real notification list lazily renders and while the user scrolls.
 
-- comments with stored body text: **4,023**
-- stored child replies: **2,482**
-- stored creator replies: **1,962**
-- latest captured comment/reply timestamp at verification: `2026-09-02 19:33:11.721+00`
-- a recent 100-thread state check returned 97 `replied`, 2 `followup_pending`, 1 `unreplied`.
-- the recently reported thread where the creator had already replied resolves as `replied`; its latest row is the creator reply.
+3. **Notification filtering does not intentionally leave one row.**
+   - registered creator + magazine-add noise is hidden for every matching row.
+   - creator URL/ID remains the strongest match.
+   - cached creator names are hydrated and truncated note display names ending in ellipsis are matched safely by normalized prefix.
+   - filter settings explicitly state that there is no “leave one notification visible” rule.
+   - filter groups, per-creator removal and group ON/OFF remain account-isolated.
 
-Public comments/replies remain core INSIGHT data. **本人通知 pairing is not required** to identify who commented or to determine whether the creator replied. 本人通知 is only the optional logged-in note-bell extension for bell-only/private events.
+4. **Install/update no longer opens a disposable new browser tab.**
+   - `notification-update.html` opens the userscript installer in the **same tab** with `location.assign`.
+   - the update page therefore remains in browser Back history instead of returning to the Android home screen because a new tab was closed.
+   - after install/update, browser Back returns to the update page; `pageshow`/focus/visibility handling performs version verification and returns to 本人通知・設定.
+   - browser diagnostics remain visible for supported/unsupported userscript environments.
 
-### 本人通知 v2.3
+### Manual-only notification behavior
 
-- `public/note-insight-notification-sync.user.js` is **v2.3.0**.
-- Actual note login identity is retried for several seconds after moving from INSIGHT to note, preventing early false `未連携` errors while note finishes loading the account session.
-- Pair-exchange errors now show their actual error code instead of only a generic red error.
-- Manual bell synchronization no longer depends on identifying the bell button's DOM/label. A global click watcher plus notification-panel observer starts synchronization whenever the real notification panel appears.
-- If automatic bell opening is unavailable, the user may tap the normal note bell manually; opening the panel triggers synchronization.
-- Account-specific tokens, last signatures and magazine-mute settings remain isolated by actual note ID.
-- Server-side ingest still rejects an account mismatch.
-- At the database check immediately before v2.3 was installed, `ss_yr` had no active private-notification ingest token. Therefore a **one-time re-pair after updating/installing v2.3** is required on the actual note browser. Do not bypass this by issuing a server token without verifying the real note login ID.
+- Automatic notification crawling and automatic navigation remain OFF.
+- User opens the real note bell and presses `手動保存（続きから）`.
+- Only server-confirmed rows become saved rows.
+- saved boundary/checkpoint is reused on the next manual run.
+- `MAX_NEW=120`, `BATCH=25`, and the manual cooldown remain safety limits.
+- INSIGHT【通知】 reads saved server data and refreshes the visible feed every 3 seconds.
+- 本人通知 is an optional logged-in bell extension; core public likes/comments do not depend on it.
 
 ## 1. Production scope
-
-Fixed public distribution URL:
-
-`https://mumei-s.github.io/note-insight/`
 
 The production-facing app is **INSIGHT only**.
 
@@ -63,21 +65,19 @@ The production-facing app is **INSIGHT only**.
 - Creator directory/catalog remains detached and preserved.
 - Public participant navigation is TOP / INSIGHT.
 - OWNER routes remain separate and authenticated.
-- Core INSIGHT must work in ordinary modern browsers (Chrome/Chromium, Edge, Yahoo-compatible browsing environments where normal web APIs work, Safari-class browsers) without depending on Edge-specific behavior.
-- PWA/Edge logic is only a recovery/safety layer for browser window restoration; it is never a prerequisite for core analytics.
+- Core INSIGHT must work in ordinary modern browsers without depending on Edge-specific behavior.
+- browser/userscript compatibility diagnostics may recommend another browser where a userscript engine is unavailable, but Edge must never be a requirement for core INSIGHT analytics.
 
-## 2. Full participant INSIGHT — do not simplify again
+## 2. Full participant INSIGHT — do not simplify
 
-Participant dashboard uses:
+Participant dashboard uses the full-history/live implementation, including:
 
 - `src/member-insight-live.tsx`
 - `src/member-insight-full.tsx`
 - `supabase/functions/insight-member-history`
 - `supabase/functions/insight-member-api`
 
-Do **not** restore the simplified `MemberInsightApp` as the participant dashboard.
-
-Visible participant tabs:
+Visible participant tabs include:
 
 - 概要
 - スキ履歴
@@ -87,242 +87,140 @@ Visible participant tabs:
 - 通知
 - 記事
 
-Visible header controls:
+Visible header controls include account switching, 本人通知 and data refresh.
 
-- アカウント切替
-- 本人通知
-- データ更新
+Saved full history must display immediately. A fresh note crawl must never block initial display.
 
-Saved full history is displayed immediately from Supabase / existing fast RPCs. A fresh note crawl must not block initial display.
+`ss_yr` remains mapped to the preserved legacy analytics scope `member_id='owner'`; other participants remain strictly scoped to their own participant UUID. Never expose OWNER history to another participant.
 
-Verified preserved `ss_yr` historical scope remains mapped to analytics `member_id='owner'`:
+## 3. Public comments/replies and reaction synchronization
 
-- articles: 256
-- identified likes: 34,318
-- historical comments/replies: 4,048 at the earlier restore checkpoint; live comment storage now continues through the current parser described in section 0
-- external root comment threads: 1,570 at the earlier restore checkpoint
-- active tracked followers: 1,023
-- active tracked followings: 888
-- historical notifications: 2,483
+Current semantics must be preserved:
 
-`ss_yr` participant authentication maps server-side to this legacy full-history scope. Other participants remain strictly scoped to their own application UUID. Other participants must never receive `owner` data.
+- note v3 structured comment JSON is supported.
+- pagination follows note `next_page` rather than assuming requested page size.
+- comment body text is extracted from structured children/text values.
+- parent/child reply relationships are stored.
+- `latest_creator_reply` semantics are preserved.
+- pending threads are revisited, including older threads through rotating windows.
+- creator replies update thread state but do not create false inbound notifications.
+- scheduled public comment refresh continues independently of the browser.
 
-The UI may render 100 rows per screen page for mobile safety; this is **not** a 100-row recrawl. Full saved history and totals already exist server-side.
+Thread status:
 
-## 3. Live public reaction synchronization
-
-Current Supabase functions:
-
-- `insight-member-api` **v8 ACTIVE**
-- `insight-comment-refresh` **v2 ACTIVE**
-
-Behavior:
-
-- Existing saved history is shown first.
-- A background sync runs after participant INSIGHT opens.
-- `MemberInsightLive` also re-checks after returning/focusing the app, throttled to avoid repeated requests.
-- Successful background sync updates the currently visible full-history tab without resetting the user back to 概要.
-- Recent article page 1 comment threads are refreshed even when note's top-level `comment_count` did not change.
-- Pending comment threads (`unreplied` / `followup_pending`) are also rechecked, including older articles.
-- Pending-thread refresh uses a recent set plus a rotating window so older pending conversations continue to be revisited over successive syncs.
-- Older article pages cycle instead of letting the cursor grow forever past the creator's article pages.
-- Comment collection follows note's actual `next_page` and may scan up to 20 pages.
-- Structured comment bodies, root/child relationships and `latest_creator_reply` are captured.
-- A dedicated scheduled comment refresh repeats this work every 15 minutes even when INSIGHT is not open.
-- New external comments/replies create actor-specific public reaction notifications.
-- Creator's own replies update thread state but do not create a false inbound notification.
-
-For `ss_yr`, live article/like/comment updates continue writing to `owner` history scope so the old history and new history remain one continuous dataset.
-
-## 4. Comment status semantics
-
-Comment thread status comes from saved comment/reply rows, not only note's article-level comment count.
-
-- `unreplied`: creator reply has not been captured.
-- `followup_pending`: creator replied previously, but the latest reply is external.
+- `unreplied`: creator reply not captured.
+- `followup_pending`: creator replied before, latest reply is external.
 - `replied`: latest reply is the creator.
 
-If the creator replies on note, the next live or scheduled public sync captures that creator reply and changes the thread status accordingly.
+Public comments/likes are core public data and **must not require 本人通知 pairing**.
 
-Public comments are public data. **本人通知 pairing is not required to identify who commented/replied.** The public sync stores actor name/profile URL and the INSIGHT notification/history views may show them directly.
+## 4. Public notifications vs 本人通知
 
-## 5. Public notifications vs 本人通知
+Public reaction watch supplies identifiable public events such as likes, comments/replies and observable follows.
 
-Two different sources are intentionally combined in the participant notification history:
+本人通知 supplies logged-in note-bell events that public crawling cannot reliably provide, including bell-only/private events such as purchases, tips, membership events and other notification-only categories.
 
-### Public reaction watch — core, no userscript required
+The participant notification view intentionally merges the appropriate saved sources for that participant while maintaining strict account isolation.
 
-Provides identifiable public events such as:
+## 5. 本人通知 account isolation and pairing
 
-- likes
-- public comments/replies
-- public follows where observable
+- actual note login identity is read from `/api/v2/current_user`.
+- ingest token, saved signatures/checkpoint and filter settings are isolated by actual note ID.
+- server ingest rejects note-ID/token mismatch with `NOTIFICATION_ACCOUNT_MISMATCH`.
+- active verified INSIGHT participants may pair their selected account; no legacy password/code login is reintroduced.
+- switching between saved verified accounts does not log out the other saved account.
 
-These events are created by the public reaction sync with actor fields.
+## 6. Notification categories
 
-For `ss_yr`, history reads merge both legacy `owner` notifications and the authenticated participant UUID notifications so old history and newly derived public events appear together.
+The notification UI/feed currently supports categories including:
 
-### 本人通知 — optional private bell extension
+- like
+- comment_like
+- comment / reply
+- follow
+- creator_article_posted
+- magazine_follow / magazine_article_added / my_article_magazine_added / magazine_join
+- membership_board / membership_board_reply
+- membership_reaction
+- membership_started / membership_plan / membership_join
+- purchase / tip
+- buzz / rating / points / quote / other
 
-Used for information exposed in the logged-in note bell, including events that public crawling cannot reliably provide, such as purchase/tip/private bell-only events.
-
-Core INSIGHT must remain usable when the browser cannot run the notification userscript.
-
-## 6. 本人通知 current implementation
-
-Current components/functions:
-
-- `public/note-insight-notification-sync.user.js` **v2.3.0**
-- `public/notification-setup.html`
-- `public/notification-import.html`
-- `insight-notification-import-token` **v6 ACTIVE**
-- `insight-notification-ingest-v2` **v2 ACTIVE**
-
-Account isolation:
-
-- Userscript reads the actual logged-in note identity from `/api/v2/current_user`.
-- Notification token is stored per actual note ID.
-- Last notification signature is stored per note ID.
-- Magazine mute settings are stored per note ID.
-- Server ingest rejects a token/note-ID mismatch with `NOTIFICATION_ACCOUNT_MISMATCH`.
-- Notifications from two saved INSIGHT accounts must never mix.
-
-Pairing:
-
-- An `active` INSIGHT participant is already authorized for notification pairing. Do not require a second/legacy notification-profile verification row.
-- `insight-notification-import-token` v6 exposes `paired` / `pairedExpiresAt` in stats.
-- Notification setup clearly shows `連携済み` or `未連携`.
-- If unpaired, the user performs the one-time `このアカウントを連携する` flow.
-- Pair exchange issues the ingest token only after the actual note login ID matches the selected INSIGHT note ID.
-- Once paired, normal use is simply opening note's notification bell; v2.3 observes the real notification panel and ingests it even when the bell icon itself has no stable selector/label.
-
-Magazine muting remains exact/safe:
-
-- hide only matching creator + magazine-add notifications;
-- do not hide likes/comments/follows/purchases/tips.
+Membership exact-category DB protection must remain **after** the older generic classifier trigger so exact `kind=` URLs cannot be overwritten to generic categories.
 
 ## 7. Access V6 / account switching
 
-Current access UI:
-
-- `src/access-portal-v6.tsx`
-
-The `INSIGHT-XXXXXXXX` code is **profile ownership verification only**. It is not a login password.
+`INSIGHT-XXXXXXXX` is profile ownership verification only; it is not a login password.
 
 Normal participation:
 
-1. Enter note ID/profile URL once.
-2. OWNER approves.
-3. INSIGHT displays a temporary verification code.
-4. Participant temporarily places the code in public note self-introduction/profile.
-5. INSIGHT verifies the profile.
-6. Long-lived participant session is issued and saved.
-7. Participant removes the code from note.
+1. enter note ID/profile URL;
+2. OWNER approval;
+3. temporary public profile verification code;
+4. INSIGHT verifies it;
+5. long-lived participant session is saved;
+6. verification code may be removed from note profile.
 
-There is no normal code-input login form.
+There is no normal code-input password login form.
 
-Normal same-device account switching:
-
-- fully verified saved accounts only;
-- tap `切替`;
-- switching does not log out the other saved account;
-- pending/unverified sub-account applications are not shown as normal switchable accounts.
-
-New-device/lost-session recovery:
-
-- note ID → new temporary profile verification code → public profile verification → new long-lived session;
-- no remembered old verification code/password is required.
+New-device/lost-session recovery repeats public profile verification; remembered old verification codes/passwords are not required.
 
 ## 8. Back / browser history semantics
 
 Browser Back must **never mean logout**.
 
-`src/main.tsx` only forces TOP when the explicit internal PWA launch marker `?launch=top` is present.
+- participant token is not revoked by Back/Forward.
+- explicit logout/leave actions are the only destructive session actions.
+- internal PWA `?launch=top` behavior must not erase normal dashboard deep links.
+- notification installer/update flow must retain an in-browser return path; do not restore `window.open(..., '_blank')` for the userscript installer.
 
-- `#dashboard` and other INSIGHT deep links are not erased during browser Back/Forward.
-- browser Back/Forward does not revoke or remove the participant token;
-- explicit logout/leave buttons are the only destructive session actions.
+## 9. PWA and fixed URL
 
-`src/App.tsx` listens to `popstate` / `hashchange` and preserves the current participant route normally.
+- fixed public URL remains `https://mumei-s.github.io/note-insight/`.
+- PWA/browser recovery logic is a safety layer, not a prerequisite for analytics.
+- do not change the distribution URL.
 
-## 9. TOP / PWA / browser compatibility
+## 10. CI / regression protection
 
-Manifest:
-
-- id: `/note-insight/`
-- scope: `/note-insight/`
-- internal PWA start URL: `/note-insight/?launch=top`
-
-Service Worker cache generation:
-
-- `mumei-note-insight-v29`
-
-The fixed public URL remains unchanged and is what gets distributed.
-
-Notification helper pages require explicit markers and are opened outside the main INSIGHT client where possible. A stale helper-page launch is redirected back through TOP.
-
-These PWA rules are safety measures. They must not alter ordinary browser Back/Forward semantics or make Edge a requirement.
-
-## 10. Current Supabase function versions
-
-- `insight-access` **v4 ACTIVE**
-- `insight-recovery` v1 ACTIVE
-- `insight-self-account` v4 ACTIVE
-- `insight-member-history` v1 ACTIVE
-- `insight-member-api` **v8 ACTIVE**
-- `insight-comment-refresh` **v2 ACTIVE**
-- `insight-notification-import-token` **v6 ACTIVE**
-- `insight-notification-ingest-v2` v2 ACTIVE
-
-`insight-access` public participant upsert is note-ID safe, so an existing historical OWNER public row cannot break first participant verification.
-
-## 11. CI / regression protection
-
-Pages workflow requires all of the following before deploy:
+Pages workflow must pass before public deployment:
 
 1. `npm ci`
-2. notification userscript JavaScript syntax check
-3. TypeScript + Vite production build
-4. `tests/insight-current.test.mjs`
+2. JavaScript syntax checks for bootstrap + current v2.9.33 runtime/UI
+3. TypeScript/Vite production build
+4. unified INSIGHT regression tests including `tests/notification-v2919.test.mjs`
 5. Pages artifact upload
 6. deploy
 
-`tests/insight-current.test.mjs` locks the current requirements, including:
+Notification regression coverage must protect:
 
-- MemberInsightLive/full-history dashboard remains active;
-- comment pending-thread refresh remains;
-- current structured comment tree / `next_page` / `latest_creator_reply` handling remains;
-- scheduled comment refresh remains in source;
-- actor-specific public comment/like notification support remains;
-- personal notification account isolation/paired state remains;
-- code-input password login does not return;
-- Back does not clear the INSIGHT token;
-- fixed PWA TOP behavior and current SW generation remain.
+- v2.9.33 bootstrap/runtime paths;
+- manual-only behavior;
+- server-confirmed saves and saved boundary marker;
+- full-match filter behavior including truncated creator names;
+- same-tab installer return flow;
+- exact membership `kind=` DB classification;
+- notification deep link and 3-second INSIGHT feed refresh;
+- current release manifest.
 
-If any of those regress, Pages deployment must fail before publishing.
+## 11. Do not regress
 
-## 12. Latest GitHub state
-
-The v2.3 notification userscript and setup page are committed after unrelated newer tooling work. Preserve all later unrelated commits and always refetch current `main` by timestamp before future edits.
-
-Latest functional public release before this documentation commit: `edcaec37b6ef88dfa6507245d10c0da32223a299`; its Pages workflow completed the userscript syntax check, production build, INSIGHT regression test and deploy successfully.
-
-## 13. Do not regress
-
-- Never replace full participant INSIGHT with the simplified dashboard.
+- Never replace full participant INSIGHT with a simplified dashboard.
 - Never move `ss_yr` to an empty/new analytics scope without a verified migration of all history.
 - Never remove comments/replies, follower/following history, supporter ranking, notification history or article archive.
 - Never make a fresh note crawl block initial history display.
 - Never make 本人通知/userscript a requirement for public comments/likes.
-- Never mix notification tokens across note IDs.
+- Never mix notification tokens/settings/history across note IDs.
 - Never treat profile verification code as a password.
 - Never make browser Back log the participant out.
 - Never remove account switching.
 - Never change the fixed distribution URL.
-- Never make Edge a requirement; browser-specific handling is only a compatibility layer.
-- Never parse note comments as old flat strings only; preserve current structured comment tree / `latest_creator_reply` handling and `next_page` pagination.
+- Never make Edge a requirement for core analytics.
+- Never parse note comments as old flat strings only.
+- Never let the generic notification classifier override exact membership URL kinds.
+- Never intentionally leave one filtered magazine notification visible.
+- Never restore a saved-boundary marker that can enlarge a whole notification panel/container.
 
-## 14. Detached archives
+## 12. Detached archives
 
 ### Games
 Preserve completed six-game source, CSS, ledger support, migrations and `docs/GAME_SPEC.md`. Do not reconnect unless explicitly requested.
@@ -330,6 +228,6 @@ Preserve completed six-game source, CSS, ledger support, migrations and `docs/GA
 ### Creator directory
 Preserve directory/catalog source and Supabase data. It is not part of the current production-facing INSIGHT app unless explicitly requested.
 
-## 15. Persistence discipline
+## 13. Persistence discipline
 
-Always fetch the newest GitHub `main` by actual commit timestamp before editing. Commit in small recoverable stages. If usage limits appear, stop only after pushing a compilable state and updating this file. Never overwrite unrelated newer work with an older local tree.
+Always fetch newest GitHub `main` by actual commit timestamp before editing. Commit in small recoverable stages. If usage limits appear, stop only after pushing a compilable state and updating this file. Never overwrite unrelated newer work with an older local tree.
