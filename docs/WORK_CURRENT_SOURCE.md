@@ -1,12 +1,12 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-07 19:03 JST
+Updated: 2026-09-07 19:30 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
-## 0. 2026-09-07 本人通知 v2.9.33 completion checkpoint
+## 0. 2026-09-07 current completion checkpoint
 
-This is the newest INSIGHT checkpoint and supersedes older notification-sync notes.
+This is the newest INSIGHT checkpoint and supersedes older notification-sync / relation-sync notes.
 
 Current release:
 
@@ -16,15 +16,17 @@ Current release:
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
 - current manual reader: `public/note-insight-notification-runtime-v2933.js`
 - current notification UI/filter: `public/note-insight-notification-runtime-v2933-ui.js`
+- current relation backend source: `supabase/functions/insight-relations/index.ts`
+- deployed production `insight-relations`: **v11 ACTIVE**
 
-### v2.9.33 completed fixes
+### v2.9.33 notification fixes
 
 1. **Membership joins and membership reactions are exact categories.**
    - note URLs containing `kind=circle_plan_join` are forced to `membership_join`.
    - `kind=board_like_comment` / `kind=board_like_post` are forced to `membership_reaction`.
    - board replies, board posts and membership plan-open URLs are also protected from the older generic DB classifier.
    - production DB migration `notification_membership_exact_v5` is applied.
-   - existing misclassified rows were reclassified; the observed Monetize Crew join now resolves as `membership_join` and the observed membership-board like now resolves as `membership_reaction`.
+   - existing misclassified rows were reclassified; the observed Monetize Crew join resolves as `membership_join` and the observed membership-board like resolves as `membership_reaction`.
    - source migration: `supabase/migrations/20260907185100_notification_membership_exact_v5.sql`.
 
 2. **Saved boundary is visible without enlarging the notification row.**
@@ -34,18 +36,53 @@ Current release:
    - the compact status line also reports when a saved boundary exists, even before the user scrolls to the exact row.
    - the marker is reapplied while the real notification list lazily renders and while the user scrolls.
 
-3. **Notification filtering does not intentionally leave one row.**
+3. **Notification filtering hides every matching magazine-noise row.**
    - registered creator + magazine-add noise is hidden for every matching row.
    - creator URL/ID remains the strongest match.
    - cached creator names are hydrated and truncated note display names ending in ellipsis are matched safely by normalized prefix.
-   - filter settings explicitly state that there is no “leave one notification visible” rule.
+   - there is no intentional “leave one notification visible” behavior.
+   - the unnecessary explanatory sentence about this was removed from the participant-facing settings UI; behavior is enforced in code/tests instead.
    - filter groups, per-creator removal and group ON/OFF remain account-isolated.
 
 4. **Install/update no longer opens a disposable new browser tab.**
-   - `notification-update.html` opens the userscript installer in the **same tab** with `location.assign`.
+   - `notification-update.html` opens the userscript installer in the same tab with `location.assign`.
    - the update page therefore remains in browser Back history instead of returning to the Android home screen because a new tab was closed.
    - after install/update, browser Back returns to the update page; `pageshow`/focus/visibility handling performs version verification and returns to 本人通知・設定.
    - browser diagnostics remain visible for supported/unsupported userscript environments.
+
+### 2026-09-07 live follow/follower repair
+
+The reported state was: a new follower already appeared in 【通知】, while INSIGHT本体の「フォロー・フォロワー」 totals, people list and 【増】【減】 history remained stale.
+
+Root cause and repair:
+
+- notification ingestion and relation synchronization are intentionally separate pipelines.
+- the relation cron itself was still scheduled and returning from pg_cron, but the actual `insight-relations` Edge Function was failing before it could write a new relation-sync run.
+- production responses showed per-member errors as only `[object Object]`, so the old error formatting was also hiding the real database error.
+- the relation upsert constructed mixed JSON row shapes when only some people were newly changed: changed rows included `last_changed_at`, unchanged rows did not. This can break a PostgREST bulk upsert exactly when a real follow delta appears.
+- `upsertPeople` now separates unchanged (`stable`) and changed (`touched`) rows and upserts each uniform shape separately.
+- relation/event batches were reduced to 300 rows for safer requests.
+- database/API errors are normalized through `errText`, so future failures expose message/code/details/hint instead of `[object Object]`.
+- production `insight-relations` was deployed as v11 and a full cron sync was immediately run to verify the fix.
+
+Verified production result after repair (`2026-09-07 19:25 JST`):
+
+- `ss_yr` official followers: **2,082** (previous saved run 2,078, **+4**).
+- `ss_yr` latest identifiable follower snapshot: **1,000** because note caps the identity list; all +4 were identified in the latest window (`unknownAdded=0`).
+- `ss_yr` official followings: **891** (previous 889, **+2**) and the complete 891-person list was reconciled.
+- follower additions were written with actor names/profile URLs for 4 people.
+- following additions were written with actor names/profile URLs for 2 people.
+- the other active verified participant was also synced successfully in the same production cron run, proving this was not an OWNER-only repair.
+
+Current client behavior already triggers relation synchronization without requiring a new button:
+
+- `MemberInsightLiveV2` starts both direction-specific relation syncs shortly after INSIGHT opens.
+- relation refresh is throttled by `RELATION_MS=180_000`.
+- opening the フォロー view explicitly calls `relationSync(true)`.
+- after either direction succeeds, `revision` increments and `MemberInsightSocialV2` reloads totals, people and delta history.
+- `MemberInsightSocialV2` also overlays the current note official count through `insight-social-events.liveCounts` when available.
+
+Therefore the fix is server-side and does **not** require a new app or userscript install for the repaired relation pipeline itself.
 
 ### Manual-only notification behavior
 
@@ -114,7 +151,19 @@ Thread status:
 
 Public comments/likes are core public data and **must not require 本人通知 pairing**.
 
-## 4. Public notifications vs 本人通知
+## 4. Follow/follower semantics
+
+- Current totals should prefer note official current counts.
+- `followers` identity enumeration is capped by note at the latest 1,000 identities for accounts above 1,000 followers.
+- an identity falling outside the latest-1,000 window alone must never be treated as an unfollow.
+- official-count delta plus latest-1,000 snapshot is used for capped follower tracking.
+- when the official delta can be mapped to visible identity changes, save named 【増】【減】 events.
+- if an official delta cannot be identified within the latest window, save the unmatched amount as an unknown aggregate event instead of inventing a person.
+- `followings` is fully reconciled when note returns the complete list.
+- relation sync must continue to split changed/unchanged bulk upserts; do not restore mixed row shapes in one PostgREST upsert.
+- opening the フォロー screen must continue to trigger an immediate relation refresh through `relationSync(true)`.
+
+## 5. Public notifications vs 本人通知
 
 Public reaction watch supplies identifiable public events such as likes, comments/replies and observable follows.
 
@@ -122,7 +171,7 @@ Public reaction watch supplies identifiable public events such as likes, comment
 
 The participant notification view intentionally merges the appropriate saved sources for that participant while maintaining strict account isolation.
 
-## 5. 本人通知 account isolation and pairing
+## 6. 本人通知 account isolation and pairing
 
 - actual note login identity is read from `/api/v2/current_user`.
 - ingest token, saved signatures/checkpoint and filter settings are isolated by actual note ID.
@@ -130,7 +179,7 @@ The participant notification view intentionally merges the appropriate saved sou
 - active verified INSIGHT participants may pair their selected account; no legacy password/code login is reintroduced.
 - switching between saved verified accounts does not log out the other saved account.
 
-## 6. Notification categories
+## 7. Notification categories
 
 The notification UI/feed currently supports categories including:
 
@@ -148,7 +197,7 @@ The notification UI/feed currently supports categories including:
 
 Membership exact-category DB protection must remain **after** the older generic classifier trigger so exact `kind=` URLs cannot be overwritten to generic categories.
 
-## 7. Access V6 / account switching
+## 8. Access V6 / account switching
 
 `INSIGHT-XXXXXXXX` is profile ownership verification only; it is not a login password.
 
@@ -165,7 +214,7 @@ There is no normal code-input password login form.
 
 New-device/lost-session recovery repeats public profile verification; remembered old verification codes/passwords are not required.
 
-## 8. Back / browser history semantics
+## 9. Back / browser history semantics
 
 Browser Back must **never mean logout**.
 
@@ -174,13 +223,13 @@ Browser Back must **never mean logout**.
 - internal PWA `?launch=top` behavior must not erase normal dashboard deep links.
 - notification installer/update flow must retain an in-browser return path; do not restore `window.open(..., '_blank')` for the userscript installer.
 
-## 9. PWA and fixed URL
+## 10. PWA and fixed URL
 
 - fixed public URL remains `https://mumei-s.github.io/note-insight/`.
 - PWA/browser recovery logic is a safety layer, not a prerequisite for analytics.
 - do not change the distribution URL.
 
-## 10. CI / regression protection
+## 11. CI / regression protection
 
 Pages workflow must pass before public deployment:
 
@@ -191,18 +240,23 @@ Pages workflow must pass before public deployment:
 5. Pages artifact upload
 6. deploy
 
-Notification regression coverage must protect:
+Regression coverage must protect:
 
 - v2.9.33 bootstrap/runtime paths;
-- manual-only behavior;
+- manual-only notification behavior;
 - server-confirmed saves and saved boundary marker;
 - full-match filter behavior including truncated creator names;
+- no unnecessary “one row remains” explanatory text in settings;
 - same-tab installer return flow;
 - exact membership `kind=` DB classification;
 - notification deep link and 3-second INSIGHT feed refresh;
+- relation sync for both followers/followings;
+- social-mode forced relation refresh;
+- split stable/touched relation upserts;
+- normalized relation error reporting;
 - current release manifest.
 
-## 11. Do not regress
+## 12. Do not regress
 
 - Never replace full participant INSIGHT with a simplified dashboard.
 - Never move `ss_yr` to an empty/new analytics scope without a verified migration of all history.
@@ -219,8 +273,9 @@ Notification regression coverage must protect:
 - Never let the generic notification classifier override exact membership URL kinds.
 - Never intentionally leave one filtered magazine notification visible.
 - Never restore a saved-boundary marker that can enlarge a whole notification panel/container.
+- Never put changed and unchanged relation rows with different JSON key sets in one bulk PostgREST upsert.
 
-## 12. Detached archives
+## 13. Detached archives
 
 ### Games
 Preserve completed six-game source, CSS, ledger support, migrations and `docs/GAME_SPEC.md`. Do not reconnect unless explicitly requested.
@@ -228,6 +283,6 @@ Preserve completed six-game source, CSS, ledger support, migrations and `docs/GA
 ### Creator directory
 Preserve directory/catalog source and Supabase data. It is not part of the current production-facing INSIGHT app unless explicitly requested.
 
-## 13. Persistence discipline
+## 14. Persistence discipline
 
 Always fetch newest GitHub `main` by actual commit timestamp before editing. Commit in small recoverable stages. If usage limits appear, stop only after pushing a compilable state and updating this file. Never overwrite unrelated newer work with an older local tree.
