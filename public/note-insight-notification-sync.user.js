@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.23
-// @description  note通知を自動確認・自動保存し、現行通知DOMの検出漏れを補完。保存成功地点・最終確認日時を表示します。
+// @version      2.9.24
+// @description  note通知を下側の古い通知から順に継ぎ足し保存。保存到達点を明示し、INSIGHT【通知】へ直行します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,29 +12,27 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2923
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2922.js?v=2923
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2922-ui.js?v=2923
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2923-compat.js?v=2923a
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2923-ui-fix.js?v=2923a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v298.js?v=2924
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2924.js?v=2924a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2924-ui.js?v=2924a
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.23';
-const CLEAN_NOTICE='mumei_open_notice_v2923';
-const AUTO_NOTICE='mumei_auto_notice_v2923';
+const VERSION='2.9.24';
+const CLEAN_NOTICE='mumei_open_notice_v2924';
+const AUTO_NOTICE='mumei_auto_notice_v2924';
 const EVT_STATUS='mumei-insight-sync-status-v2922';
-const LEGACY_CLEAN=['mumei_open_notice_v2922','mumei_open_notice_v2921','mumei_open_notice_v2920','mumei_open_notice_v2919','mumei_open_notice_v2918','mumei_open_notice_v2917','mumei_open_notice_v2916','mumei_open_notice_v2915','mumei_open_notice_v2914','mumei_open_notice_v2913'];
-const LEGACY_AUTO=['mumei_auto_notice_v2922','mumei_auto_notice_v2921','mumei_auto_notice_v2920','mumei_auto_notice_v2919','mumei_auto_notice_v2918'];
+const LEGACY_CLEAN=['mumei_open_notice_v2923','mumei_open_notice_v2922','mumei_open_notice_v2921','mumei_open_notice_v2920','mumei_open_notice_v2919','mumei_open_notice_v2918','mumei_open_notice_v2917','mumei_open_notice_v2916','mumei_open_notice_v2915','mumei_open_notice_v2914','mumei_open_notice_v2913'];
+const LEGACY_AUTO=['mumei_auto_notice_v2923','mumei_auto_notice_v2922','mumei_auto_notice_v2921','mumei_auto_notice_v2920','mumei_auto_notice_v2919','mumei_auto_notice_v2918'];
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function safeInsightReturn(value){try{const u=new URL(String(value||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
 function withInstalledVersion(back){const u=new URL(back);u.searchParams.set('notificationInstalled',VERSION);u.searchParams.set('notificationCheckedAt',String(Date.now()));return u.href}
-function withAutoResult(back,ok,detail={}){const u=new URL(back);u.searchParams.set('notificationInstalled',VERSION);u.searchParams.set('notificationCheckedAt',String(Date.now()));u.searchParams.set('notificationAutoSynced',ok?'1':'0');u.searchParams.set('notificationNoteId',String(detail.noteId||''));u.searchParams.set('notificationAutoAt',String(Number(detail.lastCheckAt||detail.at||Date.now())));if(!ok)u.searchParams.set('notificationAutoError',String(detail.error||detail.text||'AUTO_SYNC_FAILED').slice(0,240));else u.searchParams.delete('notificationAutoError');return u.href}
+function withAutoResult(back,ok,detail={}){const u=new URL(back);u.searchParams.set('notificationInstalled',VERSION);u.searchParams.set('notificationCheckedAt',String(Date.now()));u.searchParams.set('notificationAutoSynced',ok?'1':'0');u.searchParams.set('notificationNoteId',String(detail.noteId||''));u.searchParams.set('notificationAutoAt',String(Number(detail.lastCheckAt||detail.at||Date.now())));u.searchParams.set('notificationAutoSavedAt',String(Number(detail.lastSaveAt||0)));if(detail.boundaryLabel)u.searchParams.set('notificationBoundaryLabel',String(detail.boundaryLabel).slice(0,160));if(!ok)u.searchParams.set('notificationAutoError',String(detail.error||detail.text||'AUTO_SYNC_FAILED').slice(0,240));else u.searchParams.delete('notificationAutoError');return u.href}
 function buttonText(el){return clean((el?.getAttribute?.('aria-label')||'')+' '+(el?.getAttribute?.('title')||'')+' '+(el?.getAttribute?.('data-testid')||'')+' '+(el?.textContent||''))}
 function looksLikeBell(target){const el=target instanceof Element?target.closest('button,a,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return null;const s=buttonText(el);if(/通知|notification|notice|bell/i.test(s))return el;const r=el.getBoundingClientRect?.(),svg=el.querySelector?.('svg');if(r&&svg&&r.top<180&&r.right>innerWidth*.55&&r.width<90&&r.height<90)return el;return null}
 function findBell(){const selectors=['button[aria-label*="通知"]','a[aria-label*="通知"]','button[title*="通知"]','a[title*="通知"]','[data-testid*="notification" i]','[data-testid*="notice" i]'];for(const selector of selectors){const el=[...document.querySelectorAll(selector)].find(x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>0&&r.height>0&&r.top<190&&s.display!=='none'&&s.visibility!=='hidden'});if(el)return el}return [...document.querySelectorAll('button,a,[role="button"]')].find(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.top<190&&r.right>innerWidth*.55&&/通知|notification|notice|bell/i.test(buttonText(el))})||null}
