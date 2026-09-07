@@ -151,7 +151,7 @@ export function MemberInsightLiveV2(){
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className={`miv5-update ${appUpdateAvailable?"has-update":""}`}><div><b>AUTO DATA SYNC</b><span>{status}</span><small>記事・スキ・コメント・お気に入り・フォローなどの公開データは自動更新します。右の緑ボタンはINSIGHT本体だけを更新します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className={`primary app-update ${appUpdateAvailable?"update-ready":""}`} disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?<strong>更新中…</strong>:appUpdateAvailable?<><small>NEW・最新版あり v{release?.appVersion}</small><strong>INSIGHT本体 更新</strong></>:<><small>{releaseChecked?`v${CURRENT_INSIGHT_APP_VERSION}・最新版`:`v${CURRENT_INSIGHT_APP_VERSION}・確認中`}</small><strong>INSIGHT本体</strong></>}</button></div></section>
     {appUpdateAvailable?<section className="miv5-release-alert app" role="status"><div><b>NEW　INSIGHT最新版あり</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION} → 最新 v{release?.appVersion}</span></div><button onClick={()=>void updateInsightApp()}>この画面から更新</button></section>:null}
-    {notificationUpdateAvailable?<section className="miv5-release-alert notification" role="status"><div><b>🔔 本人通知ツール 更新あり</b><span>{notificationInstalled?`現在 v${notificationInstalled}`:"この端末の版は未確認"} → 最新 v{notificationLatest}</span></div><a href={`./notification-setup.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest)}`}>インストール画面へ</a></section>:null}
+    {notificationUpdateAvailable?<section className="miv5-release-alert notification" role="status"><div><b>🔔 本人通知ツール 更新あり</b><span>{notificationInstalled?`現在 v${notificationInstalled}`:"この端末の版は未確認"} → 最新 v{notificationLatest}</span></div><a href={`./notification-update.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest)}&return=${encodeURIComponent(window.location.href)}`}>インストール画面へ</a></section>:null}
     <section className="miv5-data-warning" role="note" aria-label="データ精度について">
       <b>⚠️ データ精度について</b>
       <span>INSIGHTの履歴は、取得条件・ブラウザ・note側の表示状況などにより、欠落・重複・時刻ずれが生じる場合があります。</span>
@@ -163,7 +163,7 @@ export function MemberInsightLiveV2(){
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
-    {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")} latestNotificationVersion={notificationLatest} installedNotificationVersion={notificationInstalled}/></div>:null}
+    {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
   </div>;
 }
