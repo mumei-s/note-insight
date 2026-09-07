@@ -15,11 +15,10 @@ const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.26";
+const NOTIFICATION_TOOL_VERSION = "2.9.27";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
 const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
-const NOTIFICATION_ENTRY_MODE_KEY = "mumei-insight-entry-mode";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
@@ -127,7 +126,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    // v2.9.26 emergency safe mode: do not move the participant between INSIGHT and note automatically.
+    // v2.9.27 safe mode: never move participants between INSIGHT and note automatically.
     sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
   }, []);
 
