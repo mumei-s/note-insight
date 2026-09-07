@@ -1,6 +1,6 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-07 19:30 JST
+Updated: 2026-09-07 19:51 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
@@ -10,16 +10,17 @@ This is the newest INSIGHT checkpoint and supersedes older notification-sync / r
 
 Current release:
 
-- INSIGHT app: `2026.09.07.6`
-- 本人通知・統計: **v2.9.33**
+- INSIGHT app: `2026.09.07.7`
+- 本人通知・統計: **v2.9.34**
 - fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
 - current manual reader: `public/note-insight-notification-runtime-v2933.js`
 - current notification UI/filter: `public/note-insight-notification-runtime-v2933-ui.js`
+- current notification bottom dock: `public/note-insight-notification-runtime-v2934-dock.js`
 - current relation backend source: `supabase/functions/insight-relations/index.ts`
 - deployed production `insight-relations`: **v11 ACTIVE**
 
-### v2.9.33 notification fixes
+### v2.9.34 notification fixes
 
 1. **Membership joins and membership reactions are exact categories.**
    - note URLs containing `kind=circle_plan_join` are forced to `membership_join`.
@@ -49,6 +50,13 @@ Current release:
    - the update page therefore remains in browser Back history instead of returning to the Android home screen because a new tab was closed.
    - after install/update, browser Back returns to the update page; `pageshow`/focus/visibility handling performs version verification and returns to 本人通知・設定.
    - browser diagnostics remain visible for supported/unsupported userscript environments.
+
+5. **Notification controls are a compact bottom dock.**
+   - the notification controls no longer occupy the top of the note notification list.
+   - the dock is fixed near the bottom with safe-area awareness and a compact two-row layout.
+   - the notification list remains readable from its natural top edge.
+   - settings open above the dock so browser bottom UI / gesture areas are not intentionally covered.
+   - manual save, filter, settings and INSIGHT【通知】 behavior remain unchanged.
 
 ### 2026-09-07 live follow/follower repair
 
@@ -83,6 +91,22 @@ Current client behavior already triggers relation synchronization without requir
 - `MemberInsightSocialV2` also overlays the current note official count through `insight-social-events.liveCounts` when available.
 
 Therefore the fix is server-side and does **not** require a new app or userscript install for the repaired relation pipeline itself.
+
+### Independent release/version tracks
+
+INSIGHT本体 and 本人通知 are two independently updated products and must never share one version counter.
+
+- `public/insight-release.json.appVersion` is the latest **INSIGHT本体** version.
+- `public/insight-release.json.notificationVersion` is the latest **本人通知** version.
+- `src/insight-release.ts` embeds the currently running INSIGHT app version.
+- the userscript metadata/runtime identifies the installed 本人通知 version independently.
+- an INSIGHT-only change increments `appVersion` only; it must not force a 本人通知 reinstall/update.
+- a 本人通知-only change increments `notificationVersion` only; it must not pretend the INSIGHT app itself changed.
+- the INSIGHT main dashboard must always show two persistent version rows/cards, not only when an update exists:
+  - `INSIGHT本体　現在 v... / 最新 v...`
+  - `本人通知　この端末 v... / 最新 v...`
+- only a mismatch receives `NEW` / `更新あり` treatment and the corresponding update route.
+- an unverified notification installation must say `この端末 未確認`; never guess that it is installed merely because the server manifest has a latest version.
 
 ### Manual-only notification behavior
 
@@ -234,7 +258,7 @@ Browser Back must **never mean logout**.
 Pages workflow must pass before public deployment:
 
 1. `npm ci`
-2. JavaScript syntax checks for bootstrap + current v2.9.33 runtime/UI
+2. JavaScript syntax checks for bootstrap + current notification runtime/UI + v2.9.34 bottom dock
 3. TypeScript/Vite production build
 4. unified INSIGHT regression tests including `tests/notification-v2919.test.mjs`
 5. Pages artifact upload
@@ -242,7 +266,7 @@ Pages workflow must pass before public deployment:
 
 Regression coverage must protect:
 
-- v2.9.33 bootstrap/runtime paths;
+- v2.9.34 bootstrap/runtime paths and bottom dock;
 - manual-only notification behavior;
 - server-confirmed saves and saved boundary marker;
 - full-match filter behavior including truncated creator names;
@@ -250,6 +274,7 @@ Regression coverage must protect:
 - same-tab installer return flow;
 - exact membership `kind=` DB classification;
 - notification deep link and 3-second INSIGHT feed refresh;
+- independent app/notification release versions and persistent main-screen version display;
 - relation sync for both followers/followings;
 - social-mode forced relation refresh;
 - split stable/touched relation upserts;
@@ -274,6 +299,8 @@ Regression coverage must protect:
 - Never intentionally leave one filtered magazine notification visible.
 - Never restore a saved-boundary marker that can enlarge a whole notification panel/container.
 - Never put changed and unchanged relation rows with different JSON key sets in one bulk PostgREST upsert.
+- Never couple INSIGHT本体 and 本人通知 to one version number or force one update merely because the other changed.
+- Never hide both current/latest version tracks from the INSIGHT main dashboard.
 
 ## 13. Detached archives
 
