@@ -15,10 +15,9 @@ const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = "mumei-insight-access-token";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const NOTIFICATION_TOOL_VERSION = "2.9.25";
+const NOTIFICATION_TOOL_VERSION = "2.9.26";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
-const NOTIFICATION_AUTO_AT_KEY = "mumei-notification-auto-at-v2924";
 const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
 const NOTIFICATION_ENTRY_MODE_KEY = "mumei-insight-entry-mode";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
@@ -32,13 +31,7 @@ function currentRoute() {
 }
 function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
-function standaloneMode() { return window.matchMedia?.("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone); }
 function memberRoute(route: string) { return route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
-function notificationDeepLink() {
-  const requested = new URLSearchParams(window.location.search).get("insightMode");
-  const stored = sessionStorage.getItem(NOTIFICATION_ENTRY_MODE_KEY);
-  return requested === "notifications" || stored === "notifications" || window.history.state?.insightMode === "notifications";
-}
 
 export function goTo(route: string) {
   const next = route || "home";
@@ -134,24 +127,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const r = currentRoute();
-    if (r !== "home" && r !== "dashboard") return;
-    if (notificationDeepLink()) return;
-    if (standaloneMode()) return;
-    if (localStorage.getItem(NOTIFICATION_TOOL_VERSION_KEY) !== NOTIFICATION_TOOL_VERSION) return;
-    if (!localStorage.getItem(MEMBER_KEY) && !localStorage.getItem(OWNER_KEY)) return;
-    if (sessionStorage.getItem(NOTIFICATION_AUTO_ONCE_KEY) === "1") return;
-    const last = Number(localStorage.getItem(NOTIFICATION_AUTO_AT_KEY) || 0);
+    // v2.9.26 emergency safe mode: do not move the participant between INSIGHT and note automatically.
     sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
-    if (last && Date.now() - last < 60_000) return;
-    localStorage.setItem(NOTIFICATION_AUTO_AT_KEY, String(Date.now()));
-    const timer = window.setTimeout(() => {
-      const note = new URL("https://note.com/");
-      note.searchParams.set("mumei_auto_notice_v2924", "1");
-      note.searchParams.set("mumei_return", window.location.href);
-      window.location.assign(note.href);
-    }, 700);
-    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
