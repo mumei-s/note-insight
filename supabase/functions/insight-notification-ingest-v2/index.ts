@@ -25,19 +25,19 @@ function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
-  const membershipTarget=/\/membership(?:[/?]|$)/.test(target);
-  const membershipContext=membershipTarget||/(?:メンバーシップ|メンシプ|掲示板|メンバー特典)/.test(t);
+  const membershipTarget=/\/membership(?:[/?#]|$)|\/memberships?\//i.test(target);
+  const membershipContext=membershipTarget||/(?:メンバーシップ|メンシプ|掲示板|メンバー特典|Member\s*Ship)/iu.test(t);
   if(membershipContext&&/(?:スキ|リアクション|いいね|反応)/.test(t)&&/(?:しました|されました|がありました|ありました|付きました|つきました)/.test(t))return"membership_reaction";
   if(/(?:あなたのコメント.{0,80}(?:に|へ).{0,20}スキ(?:しました|されました)|コメントにスキしました|コメントをスキしました)/.test(t))return"comment_like";
   if(/(?:あなたの記事にスキしました|あなたの投稿にスキしました|「[^」]{0,500}」にスキしました|新しいスキが\d*件?増えました|さん他?\d*名?があなたの記事にスキしました)/.test(t))return"like";
   if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t)&&(/\/membership\/boards\//.test(target)||/[?&]kind=board_reply_comment(?:&|$)/.test(target)))return"membership_board_reply";
   if(/(?:あなたのコメント.{0,80}返信|コメントへの返信|コメントに返信しました|返信がありました)/.test(t))return"reply";
   if(/(?:あなたの記事.{0,80}コメントしました|新しいコメントが\d*件?増えました|コメントがありました)/.test(t))return"comment";
-  if(/メンバーシップ.{0,80}掲示板.{0,40}投稿しました/.test(t))return"membership_board";
-  if(/メンバーシップを(?:はじめ|始め|開始し)ました/.test(t))return"membership_started";
-  if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|新プラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
+  if(/(?:メンバーシップ|メンシプ|Member\s*Ship).{0,100}掲示板.{0,50}投稿しました/iu.test(t))return"membership_board";
+  if(/(?:メンバーシップ|メンシプ|Member\s*Ship)を(?:はじめ|始め|開始し)ました/iu.test(t))return"membership_started";
+  if(/(?:メンバーシップ|メンシプ|Member\s*Ship).{0,100}(?:新しいプラン.{0,30}(?:追加|公開)しました|新プラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/iu.test(t))return"membership_plan";
   const joinAction=/(?:参加しました|参加されました|加入しました|加入されました|入会しました|入会されました|メンバーになりました|メンバーが増えました|新しいメンバー)/.test(t);
-  if((membershipContext&&joinAction)||/(?:あなたの)?メンバーシップ.{0,180}(?:参加|加入|入会|メンバーにな|新しいメンバー)/.test(t)||/さん(?:他\d+名)?が.{0,180}(?:メンバーシップ|メンシプ|メンバー).{0,120}(?:参加|加入|入会|なりました)/.test(t)||/(?:参加|加入|入会).{0,100}(?:メンバーシップ|メンシプ)/.test(t))return"membership_join";
+  if((membershipContext&&joinAction)||/(?:あなたの)?(?:メンバーシップ|メンシプ|Member\s*Ship).{0,180}(?:参加|加入|入会|メンバーにな|新しいメンバー)/iu.test(t)||/さん(?:他\d+名)?が.{0,180}(?:メンバーシップ|メンシプ|Member\s*Ship|メンバー).{0,120}(?:参加|加入|入会|なりました)/iu.test(t)||/(?:参加|加入|入会).{0,100}(?:メンバーシップ|メンシプ|Member\s*Ship)/iu.test(t))return"membership_join";
   if(/(?:運営メンバーに仲間入りしました|マガジン.{0,80}参加しました|共同マガジン.{0,80}仲間入りしました)/.test(t))return"magazine_join";
   if(/(?:あなたの記事が.{0,260}に追加されました|あなたの記事を.{0,180}マガジン.{0,80}追加)/.test(t))return"my_article_magazine_added";
   if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
@@ -88,9 +88,9 @@ Deno.serve(async(req)=>{
     if(!suppliedNoteId||suppliedNoteId!==who.noteId)return out({ok:false,error:"NOTIFICATION_ACCOUNT_MISMATCH",expectedNoteId:who.noteId},409);
     const incoming=Array.isArray(body?.notifications)?body.notifications.slice(0,1000):[];
     let inserted=0,updated=0,blocked=0,skipped=0;
-    const sources=new Set<string>();
+    const sources=new Set<string>(),confirmedClientSignatures:string[]=[];
     for(const item of incoming){
-      const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||"");
+      const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||""),clientSignature=String(meta?.client_signature||"");
       sources.add(source||"(empty)");
       if(!allowedExplicitSource(source)){blocked++;continue}
       const raw=cleanRaw(item?.raw_text??item?.text);
@@ -101,14 +101,15 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v16-v2927"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v17-v2928"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
+      if(clientSignature)confirmedClientSignatures.push(clientSignature);
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2919"});
-    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked,inserted,updated,blocked,skipped,sources:[...sources]};
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2928"});
+    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,blocked,skipped,sources:[...sources],confirmedClientSignatures:[...new Set(confirmedClientSignatures)]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
