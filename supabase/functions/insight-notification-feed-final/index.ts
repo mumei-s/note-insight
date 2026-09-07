@@ -15,7 +15,7 @@ function useful(r:any){
   if(source==="canonical-public-comments")return true;
   if(type==="other")return false;
   if(raw.length<5||raw.length>700)return false;
-  if(type==="my_article_magazine_added"||type==="tip")return true;
+  if(type==="my_article_magazine_added"||type==="tip"||type==="membership_reaction")return true;
   if(type==="follow"&&/フォロー|フォロワー/u.test(raw))return true;
   const action=/(?:さん(?:他\d+名)?(?:が|に)|あなた(?:の|を|に)|新しい(?:スキ|コメント|フォロワー)).{0,320}(?:スキしました|コメントしました|返信しました|フォローしました|フォローされました|追加しました|追加されました|仲間入りしました|参加しました|購入されました|購入しました|投稿しました|話題|高評価|ポイント)|(?:メンバーシップ|掲示板).{0,200}(?:投稿しました|開始しました|始めました|はじめました|追加しました|追加されました|公開しました|参加しました|メンバーになりました)|(?:購入がありました|返信がありました|コメントがありました)|(?:チップ|サポート|支援|応援金).{0,180}(?:届きました|届いた|受け取りました|受け取った|もらいました|いただきました|贈られました|送られました)/u.test(raw);
   if(!action)return false;
@@ -26,7 +26,7 @@ function semanticKey(r:any){
   const type=String(r.notification_type||"other"),actor=actorKey(r),target=urlKey(r.target_url)||urlKey(r.source_url),title=canon(r.target_title),time=ts(r),bucket=time?Math.floor(time/(5*60_000)):Math.floor((Date.parse(r.captured_at||0)||0)/(5*60_000)),base=`${type}|${actor}|${target}|${bucket}`;
   if(type==="my_article_magazine_added"&&!target)return`${base}|${title||canon(r.raw_text)}`;
   if(type==="tip"&&!actor&&!target)return`${base}|${canon(r.raw_text)}`;
-  if(["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type))return base;
+  if(["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_reaction","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type))return base;
   return`${base}|${canon(r.raw_text)}`
 }
 function dedupe(rows:any[]){const map=new Map<string,any>();for(const r of (rows||[]).filter(useful)){const source=String(r?.meta?.source||""),key=source==="canonical-public-comments"?String(r.id):semanticKey(r),prev=map.get(key);if(!prev){map.set(key,r);continue}const score=(x:any)=>(x.actor_image_url?16:0)+(x.actor_url?8:0)+(x.actor_name?4:0)+(x.target_title?2:0)+(x.target_url?1:0)+(x.occurred_at?1:0),rich=score(r)>score(prev)?r:prev,other=rich===r?prev:r;map.set(key,{...other,...rich,actor_image_url:rich.actor_image_url||other.actor_image_url||null,actor_name:rich.actor_name||other.actor_name||null,actor_url:rich.actor_url||other.actor_url||null,target_title:rich.target_title||other.target_title||null,target_url:rich.target_url||other.target_url||null,occurred_at:rich.occurred_at||other.occurred_at||null})}return[...map.values()].sort((a,b)=>ts(b)-ts(a))}
