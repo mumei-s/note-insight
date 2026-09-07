@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.24 bootstrap loads the bottom-up reader and current UI",async()=>{
+test("v2.9.25 bootstrap loads the bottom-up reader and stable current UI",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.24/);
+  assert.match(boot,/@version\s+2\.9\.25/);
   assert.match(boot,/runtime-v2924\.js\?v=2924a/);
-  assert.match(boot,/runtime-v2924-ui\.js\?v=2924a/);
+  assert.match(boot,/runtime-v2925-ui\.js\?v=2925a/);
   assert.match(boot,/mumei_open_notice_v2924/);
   assert.match(boot,/mumei_auto_notice_v2924/);
 });
@@ -29,8 +29,17 @@ test("manual notification read is incremental and exposes continuation state",as
   assert.match(r,/✓ ここまで保存済み/);
 });
 
+test("v2.9.25 notification rail avoids self-observer redraw loops",async()=>{
+  const ui=await read("public/note-insight-notification-runtime-v2925-ui.js");
+  assert.doesNotMatch(ui,/new MutationObserver/);
+  assert.match(ui,/function setText\(el,value\)/);
+  assert.match(ui,/if\(state==='saving'&&!d\.manual\)return/);
+  assert.match(ui,/lastHost&&lastHost\.isConnected&&visible\(lastHost\)/);
+  assert.match(ui,/setInterval\(\(\)=>\{if\(document\.visibilityState==='visible'\)void maintain\(\)\},650\)/);
+});
+
 test("notification rail goes directly to INSIGHT notification entry",async()=>{
-  const ui=await read("public/note-insight-notification-runtime-v2924-ui.js");
+  const ui=await read("public/note-insight-notification-runtime-v2925-ui.js");
   assert.match(ui,/notification-entry\.html/);
   assert.match(ui,/INSIGHT【通知】/);
   assert.match(ui,/mumei-insight-manual-read-v2924/);
@@ -38,9 +47,9 @@ test("notification rail goes directly to INSIGHT notification entry",async()=>{
   assert.match(entry,/insightMode=notifications#dashboard/);
 });
 
-test("INSIGHT deep-link and background notification round trip target v2.9.24",async()=>{
+test("INSIGHT deep-link and background notification round trip target v2.9.25",async()=>{
   const app=await read("src/App.tsx");
-  assert.match(app,/NOTIFICATION_TOOL_VERSION = "2\.9\.24"/);
+  assert.match(app,/NOTIFICATION_TOOL_VERSION = "2\.9\.25"/);
   assert.match(app,/mumei-insight-entry-mode/);
   assert.match(app,/requested === "notifications"/);
   assert.match(app,/mumei_auto_notice_v2924/);
@@ -55,13 +64,13 @@ test("INSIGHT data refresh, app update, and notification update are visibly sepa
   assert.match(live,/INSIGHT本体 更新/);
   assert.match(live,/本人通知ツール 更新あり/);
   assert.match(live,/notification-update\.html/);
-  assert.equal(manifest.notificationVersion,"2.9.24");
+  assert.equal(manifest.notificationVersion,"2.9.25");
   assert.equal(manifest.appVersion,"2026.09.07.3");
 });
 
 test("dedicated notification update page verifies the installed userscript on note",async()=>{
   const page=await read("public/notification-update.html");
-  assert.match(page,/最新版 v2\.9\.24/);
+  assert.match(page,/最新版 v2\.9\.25/);
   assert.match(page,/note-insight-notification-sync\.user\.js/);
   assert.match(page,/mumei_insight_version_check=1/);
   assert.match(page,/Android Edge/);
@@ -70,7 +79,7 @@ test("dedicated notification update page verifies the installed userscript on no
   assert.match(page,/Yahooアプリ内ブラウザ/);
 });
 
-test("server and feed accept explicit v2.9.24 continuous sync and current follow wording",async()=>{
+test("server and feed accept explicit continuous sync and current follow wording",async()=>{
   const s=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
   assert.match(s,/continuous-sync-v\\d\+/);
