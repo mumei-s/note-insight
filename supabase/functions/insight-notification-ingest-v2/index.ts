@@ -21,7 +21,7 @@ function cleanTarget(v:unknown){
   try{const u=new URL(raw);u.hash="";u.searchParams.delete("from");return u.toString()}catch{return raw}
 }
 function canonicalText(v:string){return v.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim()}
-function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の|から|より)/u);return m?.[1]?.trim()||null}
+function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||null}
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
@@ -32,12 +32,14 @@ function classify(text:string,targetUrl:string|null){
   if(/(?:あなたの記事.{0,80}コメントしました|新しいコメントが\d*件?増えました|コメントがありました)/.test(t))return"comment";
   if(/メンバーシップ.{0,80}掲示板.{0,40}投稿しました/.test(t))return"membership_board";
   if(/メンバーシップを(?:はじめ|始め|開始し)ました/.test(t))return"membership_started";
-  if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
-  if(/(?:あなたのメンバーシップ.{0,50}参加しました|あなたのメンバーシップ.{0,50}メンバーになりました|メンバーシップに参加しました)/.test(t))return"membership_join";
+  if(/メンバーシップ.{0,80}(?:新しいプラン.{0,30}(?:追加|公開)しました|新プラン.{0,30}(?:追加|公開)しました|プラン.{0,30}(?:追加|公開)しました)/.test(t))return"membership_plan";
+  const membershipTarget=/\/membership(?:[/?]|$)/.test(target);
+  const joinAction=/(?:参加しました|メンバーになりました|加入しました|入会しました)/.test(t);
+  if((membershipTarget&&joinAction)||/(?:あなたの)?メンバーシップ.{0,140}(?:参加しました|メンバーになりました|加入しました|入会しました)/.test(t)||/さん(?:他\d+名)?が.{0,140}(?:メンバーシップ|メンバー).{0,100}(?:参加しました|なりました|加入しました|入会しました)/.test(t))return"membership_join";
   if(/(?:運営メンバーに仲間入りしました|マガジン.{0,80}参加しました|共同マガジン.{0,80}仲間入りしました)/.test(t))return"magazine_join";
   if(/(?:あなたの記事が.{0,260}に追加されました|あなたの記事を.{0,180}マガジン.{0,80}追加)/.test(t))return"my_article_magazine_added";
   if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジンをフォローしました/.test(t))return"magazine_follow";
-  if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さんがあなたをフォロー)/.test(t))return"follow";
+  if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さん(?:他\d+名)?が(?:あなたを)?フォローしました|さんがあなたをフォロー)/.test(t))return"follow";
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
   if(/(?:さんが記事を投稿しました|さんが新しい記事を投稿しました)/.test(t))return"creator_article_posted";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
@@ -96,7 +98,7 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v14-v2919"}};
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v15-v2927"}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
