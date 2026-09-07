@@ -33,6 +33,7 @@ jobs:
           node --check public/note-insight-notification-runtime-v2933.js
           node --check public/note-insight-notification-runtime-v2933-ui.js
           node --check public/note-insight-notification-runtime-v2934-dock.js
+          node --check public/note-insight-notification-runtime-v2935-guard.js
           node --check public/note-pon-editor-v6.user.js
       - run: npm run build
       - name: Unified INSIGHT regression tests
