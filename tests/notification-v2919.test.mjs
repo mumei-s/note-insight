@@ -3,128 +3,112 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.27 bootstrap loads only manual checkpoint notification runtimes",async()=>{
+test("v2.9.28 bootstrap loads only current manual runtimes",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.27/);
-  assert.match(boot,/runtime-v2927\.js\?v=2927a/);
-  assert.match(boot,/runtime-v2927-ui\.js\?v=2927a/);
-  assert.doesNotMatch(boot,/@require.+runtime-v2924/);
+  assert.match(boot,/@version\s+2\.9\.28/);
+  assert.match(boot,/runtime-v2928\.js\?v=2928a/);
+  assert.match(boot,/runtime-v2928-ui\.js\?v=2928a/);
+  assert.doesNotMatch(boot,/@require.+runtime-v2927/);
   assert.doesNotMatch(boot,/@require.+runtime-v298/);
   assert.match(boot,/自動巡回・自動遷移は行わず/);
 });
 
-test("manual reader has no automatic DOM observer or heartbeat sync",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2927.js");
+test("manual reader has no automatic observer heartbeat or auto navigation",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2928.js");
   assert.doesNotMatch(r,/MutationObserver/);
   assert.doesNotMatch(r,/setInterval/);
   assert.doesNotMatch(r,/syncVisible/);
-  assert.match(r,/mumei-insight-manual-read-v2927/);
-  assert.match(r,/manual-resume-v2927/);
-  assert.match(r,/COOLDOWN=10000/);
-  assert.match(r,/MAX_NEW=160/);
+  assert.match(r,/mumei-insight-manual-read-v2928/);
+  assert.match(r,/COOLDOWN=12000/);
+  assert.match(r,/MAX_NEW=120/);
+  assert.match(r,/BATCH=25/);
 });
 
-test("manual reader preserves the old checkpoint until it is actually reached",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2927.js");
-  assert.match(r,/allowBoundaryAdvance=extra\.allowBoundaryAdvance!==false/);
-  assert.match(r,/allowBoundaryAdvance:resumeFound/);
-  assert.match(r,/previous\.boundary/);
-  assert.match(r,/前回の保存到達点/);
-  assert.match(r,/次回はここから/);
+test("manual reader stores only server-confirmed rows and reuses saved boundary",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2928.js");
+  assert.match(r,/confirmedClientSignatures/);
+  assert.match(r,/saved\.add\(q\)/);
+  assert.match(r,/oldBoundary/);
+  assert.match(r,/boundaryFound/);
+  assert.match(r,/保存済み境界/);
 });
 
-test("manual batching avoids per-notification retry bursts",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2927.js");
-  assert.match(r,/BATCH=40/);
-  assert.doesNotMatch(r,/for\(const r of part\)/);
-  assert.match(r,/attempted<limit/);
-});
-
-test("manual UI is fixed, direct, and has no background loop",async()=>{
-  const ui=await read("public/note-insight-notification-runtime-v2927-ui.js");
-  assert.match(ui,/position:fixed!important/);
+test("manual UI lives outside note click targets and all controls suppress note navigation",async()=>{
+  const ui=await read("public/note-insight-notification-runtime-v2928-ui.js");
   assert.match(ui,/document\.body\.append\(rail\)/);
-  assert.doesNotMatch(ui,/insertBefore\(rail/);
-  assert.doesNotMatch(ui,/MutationObserver/);
-  assert.doesNotMatch(ui,/setInterval/);
-  assert.match(ui,/手動保存（続きから）/);
-  assert.match(ui,/自動巡回OFF/);
-  assert.match(ui,/\?insightMode=notifications#dashboard/);
+  assert.doesNotMatch(ui,/host\.append\(rail\)/);
+  assert.match(ui,/guardButton/);
+  assert.match(ui,/preventDefault\(\)/);
+  assert.match(ui,/stopImmediatePropagation\(\)/);
+  assert.match(ui,/フィルターOFF/);
+  assert.match(ui,/通知フィルター設定/);
+  assert.match(ui,/notification-entry\.html/);
+  assert.doesNotMatch(ui,/window\.open\(`https:\/\/note\.com/);
+});
+
+test("notification controls remain manual and direct across supported userscript browsers",async()=>{
+  const ui=await read("public/note-insight-notification-runtime-v2928-ui.js");
+  assert.match(ui,/touch-action:manipulation/);
+  assert.match(ui,/-webkit-appearance:none/);
+  assert.match(ui,/type=\"button\"/);
+  assert.match(ui,/location\.assign\(INS\)/);
   assert.match(ui,/INSIGHT【通知】/);
+  assert.doesNotMatch(ui,/navigator\.userAgent/);
 });
 
-test("bootstrap strips legacy auto-notice params without opening or redirecting notification panel",async()=>{
-  const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/stripControlParams/);
-  assert.doesNotMatch(boot,/findAndOpenBell/);
-  assert.doesNotMatch(boot,/clickBell/);
-  assert.doesNotMatch(boot,/handleAutoNotice/);
-});
-
-test("INSIGHT disables notification auto-navigation in v2.9.27 safe mode",async()=>{
-  const app=await read("src/App.tsx");
-  assert.match(app,/NOTIFICATION_TOOL_VERSION = "2\.9\.27"/);
-  assert.match(app,/v2\.9\.27 safe mode/);
-  assert.doesNotMatch(app,/note\.searchParams\.set\("mumei_auto_notice_v2924"/);
-  assert.doesNotMatch(app,/window\.location\.assign\(note\.href\)/);
-});
-
-test("notification deep link jumps to the notification panel instead of top of dashboard",async()=>{
+test("INSIGHT notification deep link and active nav are deterministic",async()=>{
+  const entry=await read("public/notification-entry.html");
   const live=await read("src/member-insight-live-v2.tsx");
-  const ui=await read("src/member-insight-notifications-final.tsx");
-  assert.match(live,/mode!=="notifications"/);
+  const css=await read("src/member-insight-live-v2.css");
+  assert.match(entry,/mumei-insight-entry-mode/);
+  assert.match(entry,/insightMode=notifications#dashboard/);
   assert.match(live,/getElementById\("minf-notifications"\)/);
-  assert.match(live,/scrollIntoView\(\{block:"start",behavior:"auto"\}\)/);
-  assert.match(ui,/id="minf-notifications"/);
+  assert.match(css,/mode-notifications \.miu-nav button:nth-child\(8\)/);
 });
 
-test("INSIGHT notification view auto-refreshes saved data with compact status UI",async()=>{
+test("INSIGHT notification view auto-refreshes saved server data",async()=>{
   const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(ui,/window\.setInterval\(refresh,3000\)/);
   assert.match(ui,/手動保存（続きから）/);
   assert.match(ui,/自動反映 ON/);
-  assert.match(ui,/minf-compact-status/);
-  assert.match(ui,/更新状態・精度/);
   assert.match(ui,/membership_reaction/);
+  assert.match(ui,/membership_join/);
   assert.match(ui,/fresh\|\|r\.actor_image_url/);
-  assert.doesNotMatch(ui,/minf-update-status/);
-  assert.doesNotMatch(ui,/mumei_open_notice_v2924=1/);
 });
 
-test("INSIGHT data refresh, app update, and notification update remain separated",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx");
-  const manifest=JSON.parse(await read("public/insight-release.json"));
-  assert.match(live,/AUTO DATA SYNC/);
-  assert.match(live,/INSIGHT本体 更新/);
-  assert.match(live,/本人通知ツール 更新あり/);
-  assert.match(live,/notification-update\.html/);
-  assert.equal(manifest.notificationVersion,"2.9.27");
-  assert.equal(manifest.appVersion,"2026.09.07.4");
+test("notification update and setup are separate one-purpose flows",async()=>{
+  const update=await read("public/notification-update.html");
+  const setup=await read("public/notification-setup.html");
+  assert.match(update,/最新版 v2\.9\.28/);
+  assert.match(update,/v2\.9\.28 をインストール／更新/);
+  assert.match(update,/note-insight-notification-sync\.user\.js/);
+  assert.match(setup,/本人通知・設定/);
+  assert.match(setup,/本人連携だけ/);
+  assert.doesNotMatch(setup,/インストール／更新<\/a>/);
 });
 
-test("dedicated notification update page advertises checkpoint-safe v2.9.27",async()=>{
-  const page=await read("public/notification-update.html");
-  assert.match(page,/最新版 v2\.9\.27/);
-  assert.match(page,/保存到達点/);
-  assert.match(page,/手動/);
-  assert.match(page,/note-insight-notification-sync\.user\.js/);
-  assert.match(page,/mumei_insight_version_check=1/);
-});
-
-test("server accepts current follow membership join and membership reaction wording",async()=>{
+test("server accepts follow membership joins and membership reactions and confirms exact rows",async()=>{
   const s=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
   assert.match(s,/manual-sync-v\\d\+/);
   assert.match(s,/membership_reaction/);
+  assert.match(s,/membership_join/);
   assert.match(s,/メンシプ/);
+  assert.match(s,/Member\\s\*Ship/);
   assert.match(s,/フォロー\|フォロワー/);
-  assert.match(s,/新しいメンバー/);
+  assert.match(s,/confirmedClientSignatures/);
+  assert.match(f,/membership_reaction/);
+  assert.match(f,/membership_join/);
   assert.match(f,/type==="follow"&&\/フォロー\|フォロワー/);
-  assert.match(f,/type==="membership_reaction"/);
-  assert.match(f,/lastUpdatedAt/);
 });
 
-test("follow totals use live note counts and relation sync supports each direction",async()=>{
+test("release manifest advertises current app and notification versions",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json"));
+  assert.equal(manifest.notificationVersion,"2.9.28");
+  assert.equal(manifest.appVersion,"2026.09.07.5");
+});
+
+test("follow totals still use live note counts and relation sync supports each direction",async()=>{
   const social=await read("src/member-insight-social-v2.tsx");
   const rel=await read("supabase/functions/insight-relations/index.ts");
   const api=await read("supabase/functions/insight-social-events/index.ts");
