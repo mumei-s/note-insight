@@ -15,9 +15,9 @@ function useful(r:any){
   if(source==="canonical-public-comments")return true;
   if(type==="other")return false;
   if(raw.length<5||raw.length>700)return false;
-  if(type==="my_article_magazine_added"||type==="tip"||type==="membership_reaction")return true;
+  if(["my_article_magazine_added","tip","membership_reaction","membership_join","membership_started","membership_plan","membership_board","membership_board_reply"].includes(type))return true;
   if(type==="follow"&&/フォロー|フォロワー/u.test(raw))return true;
-  const action=/(?:さん(?:他\d+名)?(?:が|に)|あなた(?:の|を|に)|新しい(?:スキ|コメント|フォロワー)).{0,320}(?:スキしました|コメントしました|返信しました|フォローしました|フォローされました|追加しました|追加されました|仲間入りしました|参加しました|購入されました|購入しました|投稿しました|話題|高評価|ポイント)|(?:メンバーシップ|掲示板).{0,200}(?:投稿しました|開始しました|始めました|はじめました|追加しました|追加されました|公開しました|参加しました|メンバーになりました)|(?:購入がありました|返信がありました|コメントがありました)|(?:チップ|サポート|支援|応援金).{0,180}(?:届きました|届いた|受け取りました|受け取った|もらいました|いただきました|贈られました|送られました)/u.test(raw);
+  const action=/(?:さん(?:他\d+名)?(?:が|に)|あなた(?:の|を|に)|新しい(?:スキ|コメント|フォロワー)).{0,320}(?:スキしました|コメントしました|返信しました|フォローしました|フォローされました|追加しました|追加されました|仲間入りしました|参加しました|購入されました|購入しました|投稿しました|話題|高評価|ポイント)|(?:メンバーシップ|メンシプ|Member\s*Ship|掲示板).{0,200}(?:投稿しました|開始しました|始めました|はじめました|追加しました|追加されました|公開しました|参加しました|加入しました|入会しました|メンバーになりました)|(?:購入がありました|返信がありました|コメントがありました)|(?:チップ|サポート|支援|応援金).{0,180}(?:届きました|届いた|受け取りました|受け取った|もらいました|いただきました|贈られました|送られました)/iu.test(raw);
   if(!action)return false;
   if(source==="note-notification-auto-sync"&&!r.occurred_at&&!r.actor_url&&raw.length>180)return false;
   return true
