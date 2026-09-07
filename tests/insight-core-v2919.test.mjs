@@ -23,7 +23,8 @@ test("comments workflow and exact final-reply heart remain available",async()=>{
 
 test("social remains official-total plus latest-1000 tracking",async()=>{
   const s=await read("src/member-insight-social-v2.tsx"),rel=await read("supabase/functions/insight-relations/index.ts");
-  for(const x of ["note公式の現在値","最新1,000人","不明 −N","【増】","【減】","人物一覧"])assert.match(s,new RegExp(x));
+  for(const x of ["note公式の現在値","最新1,000人","【増】","【減】","人物一覧"])assert.match(s,new RegExp(x));
+  assert.match(s,/不明 −\$\{c\}/);
   for(const x of ["NOTE_IDENTITY_LIST_CAPPED_AT_1000","syncCappedFollowers","official_total_plus_latest_1000","unknownEvent"])assert.match(rel,new RegExp(x));
 });
 
