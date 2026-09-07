@@ -3,11 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.33 bootstrap loads current manual core and UI",async()=>{
+test("v2.9.34 bootstrap loads current manual core, UI and bottom dock",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.33/);
-  assert.match(boot,/runtime-v2933\.js\?v=2933a/);
-  assert.match(boot,/runtime-v2933-ui\.js\?v=2933a/);
+  assert.match(boot,/@version\s+2\.9\.34/);
+  assert.match(boot,/runtime-v2933\.js\?v=2933b/);
+  assert.match(boot,/runtime-v2933-ui\.js\?v=2933b/);
+  assert.match(boot,/runtime-v2934-dock\.js\?v=2934a/);
   assert.match(boot,/自動巡回・自動遷移は行わず/);
 });
 
@@ -48,6 +49,17 @@ test("manual UI appears from the notification tab shell even before strict rows 
   assert.match(ui,/host\.prepend\(rail\)/);
   assert.match(ui,/new CustomEvent\(EVT_MANUAL,\{detail:\{root:current\}\}\)/);
   assert.match(ui,/保存済み境界あり/);
+});
+
+test("v2.9.34 notification controls use a compact safe-area bottom dock",async()=>{
+  const dock=await read("public/note-insight-notification-runtime-v2934-dock.js");
+  assert.match(dock,/top:auto!important/);
+  assert.match(dock,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)!important/);
+  assert.match(dock,/min-height:48px!important/);
+  assert.match(dock,/grid-template-rows:25px 16px!important/);
+  assert.match(dock,/border-radius:10px!important/);
+  assert.match(dock,/host\.append\(rail\)/);
+  assert.match(dock,/bottom:max\(62px,calc\(env\(safe-area-inset-bottom,0px\) \+ 62px\)\)!important/);
 });
 
 test("notification filter hides every matching magazine noise row including truncated creator names",async()=>{
@@ -100,9 +112,9 @@ test("INSIGHT notification view auto-refreshes saved server data",async()=>{
 test("notification update flow stays in browser history and returns with readable completion state",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.33/);
-  assert.match(update,/v2\.9\.33 をインストール／更新/);
-  assert.match(update,/mumei-notification-update-pending-v2933/);
+  assert.match(update,/最新版 v2\.9\.34/);
+  assert.match(update,/v2\.9\.34 をインストール／更新/);
+  assert.match(update,/mumei-notification-update-pending-v2934/);
   assert.match(update,/location\.assign\(SCRIPT\)/);
   assert.doesNotMatch(update,/window\.open\(SCRIPT/);
   assert.match(update,/ブラウザの「←」/);
@@ -136,7 +148,7 @@ test("server and database preserve exact membership joins, reactions, boards, an
 
 test("release manifest advertises current app and notification versions",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
-  assert.equal(manifest.notificationVersion,"2.9.33");
+  assert.equal(manifest.notificationVersion,"2.9.34");
   assert.equal(manifest.appVersion,"2026.09.07.6");
 });
 
