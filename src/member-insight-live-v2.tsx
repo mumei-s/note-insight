@@ -51,7 +51,7 @@ export function MemberInsightLiveV2(){
     const y=window.scrollY;
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
     setMode(next);
-    requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
+    if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
@@ -129,6 +129,18 @@ export function MemberInsightLiveV2(){
     window.addEventListener("popstate",pop);
     return()=>window.removeEventListener("popstate",pop)
   },[]);
+  useEffect(()=>{
+    if(mode!=="notifications")return;
+    let stopped=false,tries=0;
+    const jump=()=>{
+      if(stopped)return;
+      const el=document.getElementById("minf-notifications");
+      if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}
+      if(tries++<12)window.setTimeout(jump,70);
+    };
+    requestAnimationFrame(jump);
+    return()=>{stopped=true};
+  },[mode]);
   useEffect(()=>{
     void loadOfficial();
     const touch=()=>{lastInteraction.current=Date.now()};
