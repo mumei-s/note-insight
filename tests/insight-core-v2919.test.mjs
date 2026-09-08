@@ -32,7 +32,7 @@ test("analysis is participant-scoped, uses official Dashboard data, and keeps IN
   const a=await read("src/member-insight-analytics-final.tsx"),css=await read("src/member-insight-analytics-final.css"),dash=await read("supabase/functions/insight-dashboard-data/index.ts"),sync=await read("public/note-insight-dashboard-sync.user.js");
   assert.match(a,/action:"analysis",days:365/);
   for(const x of ["本人の公式データだけ","ダッシュボード読み込み","PULSE WAVE","SOURCE ORBIT","ARTICLE CONSTELLATION","REVENUE THERMAL","PV化率","反応率","INSIGHT指数","コメントスキ"])assert.match(a,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["mia2-wave-svg","mia2-orbit","mia2-constellation","mia2-thermal","mia2-people"])assert.match(css,new RegExp(x));
+  for(const x of ["mia2-wave .pv","mia2-wave .sales","mia2-orbit","mia2-constellation","mia2-thermal","mia2-people"])assert.match(css,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(a,/スクリーンショットや他参加者の値は分析データに使用しません/);
   assert.match(dash,/\.eq\("member_id",m\.scope\)/);
   assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);
