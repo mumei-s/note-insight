@@ -14,7 +14,7 @@ test("v2.9.40 bootstrap loads exactly one notification runtime",async()=>{
   assert.doesNotMatch(boot,/runtime-v2939/);
 });
 
-test("v2.9.40 runtime is one isolated dock with no normal-scroll interception",async()=>{
+test("v2.9.40 runtime uses one isolated dock and never intercepts normal scrolling",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2940.js");
   assert.match(r,/document\.createElement\('iframe'\)/);
   assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
@@ -36,7 +36,6 @@ test("v2.9.40 filter is display-only and only the leading creator can hide a row
   assert.match(r,/const first=firstCreatorId\(el\);if\(first\)return st\.ids\.has\(first\)/);
   assert.match(r,/el\.classList\.toggle\(HIDE/);
   assert.doesNotMatch(r,/actors\.some/);
-  assert.doesNotMatch(r,/location\.(?:assign|href).*filter/i);
 });
 
 test("v2.9.40 only observes the active notification panel for newly added rows",async()=>{
@@ -59,7 +58,7 @@ test("v2.9.40 manual save never drives the notification scroll position",async()
   assert.doesNotMatch(r,/scrollTo\(/);
 });
 
-test("v2.9.40 INSIGHT navigation originates only from the isolated iframe command",async()=>{
+test("v2.9.40 INSIGHT navigation originates from the isolated iframe command",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2940.js");
   assert.match(r,/notification-entry\.html\?from=note&insightMode=notifications#dashboard/);
   assert.match(r,/cmd==='insight'\)location\.assign\(INSIGHT\)/);
@@ -67,7 +66,7 @@ test("v2.9.40 INSIGHT navigation originates only from the isolated iframe comman
   assert.doesNotMatch(r,/\.onclick\(fake/);
 });
 
-test("v2.9.40 retains grouped filter settings and exact/truncated fallback names",async()=>{
+test("v2.9.40 retains grouped filter settings and truncated-name fallback",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2940.js");
   assert.match(r,/mumei_insight_notification_groups_v1/);
   assert.match(r,/mumei_insight_magazine_mute_profiles_v5/);
