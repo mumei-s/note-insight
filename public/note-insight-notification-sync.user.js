@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.40
+// @version      2.9.41
 // @description  軽量統合版。通知フィルター・手動保存・操作UIを1ランタイムで処理し、note本来のスクロールを妨げません。
 // @match        https://note.com/*
 // @run-at       document-idle
@@ -13,12 +13,12 @@
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2940.js?v=2940a
-// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
-// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-sync.user.js
+// @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
+// @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.40';
+const VERSION='2.9.41';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
