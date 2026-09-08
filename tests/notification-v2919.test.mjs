@@ -94,15 +94,20 @@ test("INSIGHT notification UI exposes exact requested categories",async()=>{
   assert.match(ui,/window\.setInterval\(refresh,3000\)/);
 });
 
-test("INSIGHT merges duplicate magazine joins and keeps captured actor avatar authoritative",async()=>{
+test("INSIGHT notification avatars reject note action icons and recover creator identity",async()=>{
   const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(ui,/function mergeMagazineJoinRows/);
   assert.match(ui,/function mergePair/);
   assert.match(ui,/function safeActorImage/);
   assert.match(ui,/magazine_cover\|ogp\|cover/);
+  assert.match(ui,/\/assets\\\/notices\\\//);
+  assert.match(ui,/function repairActorRows/);
+  assert.match(ui,/type==="my_article_magazine_added"&&!r\.actor_url/);
+  assert.match(ui,/actor_url:`https:\/\/note\.com\/\$\{id\}`/);
+  assert.match(ui,/さんがあなたのコメントに返信しました/);
   assert.match(ui,/rows\.filter\(r=>!safeActorImage\(r\.actor_image_url\)\)/);
   assert.match(ui,/safeActorImage\(r\.actor_image_url\)\|\|String\(m\.get\(noteId\(r\.actor_url\)\)\|\|""\)\|\|null/);
-  assert.match(ui,/enrich\(mergeMagazineJoinRows\(x\.rows\|\|\[\]\)\)/);
+  assert.match(ui,/enrich\(mergeMagazineJoinRows\(repairActorRows\(x\.rows\|\|\[\]\)\)\)/);
 });
 
 test("v2.9.48 installer verifies the actual running version",async()=>{
@@ -132,14 +137,31 @@ test("manual notifications are never dropped merely because subtype is unknown",
 test("INSIGHT and本人通知 release tracks remain independent",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
   const release=await read("src/insight-release.ts");
-  assert.equal(manifest.appVersion,"2026.09.08.6");
+  assert.equal(manifest.appVersion,"2026.09.08.7");
   assert.equal(manifest.notificationVersion,"2.9.48");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.6"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.7"/);
 });
 
-test("comment history loads every saved thread instead of stopping at the first 100",async()=>{
+test("comment all tab loads every saved comment and reply row, not only threads",async()=>{
   const ui=await read("src/member-insight-comments-final.tsx");
+  const api=await read("supabase/functions/insight-comment-events/index.ts");
   const css=await read("src/member-insight-comments-final.css");
+  assert.match(ui,/const EVENTS=.*insight-comment-events/);
+  assert.match(ui,/const EVENT_PAGE=500/);
+  assert.match(ui,/status==="all"/);
+  assert.match(ui,/post\(EVENTS,\{\.\.\.params,page:1\}\)/);
+  assert.match(ui,/uniqueRows\(await enrich\(first\.rows\|\|\[\]\),"comment_key"\)/);
+  assert.match(ui,/すべて（全コメント）/);
+  assert.match(ui,/全コメント・全返信/);
+  assert.match(api,/from\("insight_public_comments"\)\.select/);
+  assert.match(api,/\{count:"exact"\}/);
+  assert.doesNotMatch(api,/\.eq\("is_creator",false\)/);
+  assert.match(css,/\.micf-event-list/);
+  assert.match(css,/content-visibility:auto/);
+});
+
+test("comment workflow tabs still load every saved thread instead of stopping at first 100",async()=>{
+  const ui=await read("src/member-insight-comments-final.tsx");
   assert.match(ui,/const PAGE=100/);
   assert.match(ui,/async function loadAll\(\)/);
   assert.match(ui,/const pages=Math\.ceil\(expected\/PAGE\)/);
@@ -147,7 +169,6 @@ test("comment history loads every saved thread instead of stopping at the first 
   assert.match(ui,/setRows\(collected\)/);
   assert.match(ui,/全履歴 読込完了/);
   assert.doesNotMatch(ui,/className="micf-pager"/);
-  assert.match(css,/content-visibility:auto/);
 });
 
 test("notification entry activates only the matching saved INSIGHT account token",async()=>{
