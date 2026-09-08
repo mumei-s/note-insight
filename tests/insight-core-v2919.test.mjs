@@ -28,10 +28,16 @@ test("social remains official-total plus latest-1000 tracking",async()=>{
   for(const x of ["NOTE_IDENTITY_LIST_CAPPED_AT_1000","syncCappedFollowers","official_total_plus_latest_1000","unknownEvent"])assert.match(rel,new RegExp(x));
 });
 
-test("analysis keeps 60-day exact-value views and comment-like analysis",async()=>{
-  const a=await read("src/member-insight-analytics-final.tsx"),css=await read("src/member-insight-analytics-final.css");
-  for(const x of ["60日","フォロワー日次増減","記事別VIEW構成比","記事別 VIEW × スキ","記事ごとの反応分析","スキ率＝スキ÷VIEW","コメント♡"])assert.match(a,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["miaf-chart-readout","miaf-pie-table","miaf-scatter-readout"])assert.match(css,new RegExp(x));
+test("analysis is participant-scoped, uses official Dashboard data, and keeps INSIGHT-native visuals",async()=>{
+  const a=await read("src/member-insight-analytics-final.tsx"),css=await read("src/member-insight-analytics-final.css"),dash=await read("supabase/functions/insight-dashboard-data/index.ts"),sync=await read("public/note-insight-dashboard-sync.user.js");
+  assert.match(a,/action:"analysis",days:365/);
+  for(const x of ["本人の公式データだけ","ダッシュボード読み込み","PULSE WAVE","SOURCE ORBIT","ARTICLE CONSTELLATION","REVENUE THERMAL","PV化率","反応率","INSIGHT指数","コメントスキ"])assert.match(a,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["mia2-wave-svg","mia2-orbit","mia2-constellation","mia2-thermal","mia2-people"])assert.match(css,new RegExp(x));
+  assert.match(a,/スクリーンショットや他参加者の値は分析データに使用しません/);
+  assert.match(dash,/\.eq\("member_id",m\.scope\)/);
+  assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);
+  assert.match(sync,/current!==paired/);
+  assert.match(sync,/DASHBOARD_ACCOUNT_MISMATCH/);
 });
 
 test("favorite groups stay durable server-side with explicit delete",async()=>{
