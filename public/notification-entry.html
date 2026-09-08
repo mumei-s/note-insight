@@ -1,1 +1,22 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-store"><title>INSIGHT【通知】へ移動</title><style>body{margin:0;background:#070a10;color:#dff8ff;font-family:system-ui;display:grid;place-items:center;min-height:100vh}.box{width:min(420px,calc(100% - 28px));padding:20px;border:1px solid #35506b;border-radius:16px;background:#0c1621;text-align:center}.box b{display:block;color:#8feaff;margin-bottom:7px}.box span{font-size:12px;color:#9db0c3}</style></head><body><div class="box"><b>INSIGHT【通知】へ移動中…</b><span>通知履歴を直接開きます。</span></div><script>try{sessionStorage.setItem('mumei-insight-entry-mode','notifications');sessionStorage.setItem('mumei-insight-entry-at',String(Date.now()))}catch{}location.replace('./?insightMode=notifications#dashboard');</script></body></html>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-store"><title>INSIGHT【通知】へ移動</title><style>body{margin:0;background:#070a10;color:#dff8ff;font-family:system-ui;display:grid;place-items:center;min-height:100vh}.box{width:min(440px,calc(100% - 28px));padding:20px;border:1px solid #35506b;border-radius:16px;background:#0c1621;text-align:center}.box b{display:block;color:#8feaff;margin-bottom:7px}.box span{font-size:12px;color:#9db0c3;line-height:1.6}</style></head><body><div class="box"><b id="title">INSIGHT【通知】へ移動中…</b><span id="detail">note側と同じアカウントの通知履歴を開きます。</span></div><script>
+const q=new URLSearchParams(location.search),requested=String(q.get('account')||'').trim().replace(/^@/,'').toLowerCase();
+const STORE='mumei-insight-saved-accounts-v3',ACTIVE='mumei-insight-active-account-v3',TOKEN='mumei-insight-access-token',APPLICANT='mumei-insight-applicant-token',PASS='mumei-insight-passcode',ENTRY='mumei-insight-entry-mode',ENTRY_ACCOUNT='mumei-insight-notification-account';
+const title=document.getElementById('title'),detail=document.getElementById('detail');
+let switched=false,missing=false;
+try{
+  sessionStorage.setItem(ENTRY,'notifications');sessionStorage.setItem('mumei-insight-entry-at',String(Date.now()));
+  if(requested){
+    sessionStorage.setItem(ENTRY_ACCOUNT,requested);
+    const rows=JSON.parse(localStorage.getItem(STORE)||'[]'),account=Array.isArray(rows)?rows.find(x=>String(x?.noteId||'').trim().replace(/^@/,'').toLowerCase()===requested):null;
+    if(account?.memberToken){
+      localStorage.setItem(ACTIVE,requested);localStorage.setItem(TOKEN,String(account.memberToken));
+      if(account.applicantToken)localStorage.setItem(APPLICANT,String(account.applicantToken));else localStorage.removeItem(APPLICANT);
+      if(account.passcode)localStorage.setItem(PASS,String(account.passcode));else localStorage.removeItem(PASS);
+      switched=true;
+    }else missing=true;
+  }
+}catch{missing=Boolean(requested)}
+if(requested&&switched){title.textContent=`@${requested} のINSIGHT【通知】へ移動中…`;detail.textContent='note側と同じ保存済みINSIGHTアカウントへ自動切替しました。'}
+else if(requested&&missing){title.textContent=`@${requested} の通知を開きます…`;detail.textContent='この端末に同じINSIGHTアカウントの保存済みログインが見つからないため、現在のINSIGHTセッションで開きます。表示アカウントが違う場合はINSIGHTのアカウント切替を確認してください。'}
+const u=new URL('./',location.href);u.searchParams.set('insightMode','notifications');if(requested)u.searchParams.set('notificationAccount',requested);if(missing)u.searchParams.set('notificationAccountMissing','1');u.hash='dashboard';setTimeout(()=>location.replace(u.href),switched?120:missing?900:120);
+</script></body></html>
