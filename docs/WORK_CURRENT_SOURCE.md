@@ -1,16 +1,16 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 13:45 JST
+Updated: 2026-09-08 17:10 JST
 
 **Always fetch the current GitHub `main` before editing. Newest actual timestamp/current main is authoritative. Never overwrite unrelated newer work with stale local state. Real-device reports are authoritative; CI success alone does not prove a device bug is fixed.**
 
 ## 0. Current production checkpoint
 
-- INSIGHT app: **`2026.09.08.4`**
-- 本人通知・統計 package: **`v2.9.47`**
+- INSIGHT app: **`2026.09.08.6`**
+- 本人通知・統計 package: **`v2.9.48`**
 - public URL: `https://mumei-s.github.io/note-insight/`
 - userscript bootstrap: `public/note-insight-notification-sync.user.js`
-- stable notification core runtime: `public/note-insight-notification-runtime-v2945.js`
+- active notification core runtime: `public/note-insight-notification-runtime-v2948.js`
 - notification ingest: production `insight-notification-ingest-v2` **v21 ACTIVE**
 - notification feed: production `insight-notification-feed-final` **v13 ACTIVE**
 - relation backend: production `insight-relations` **v11 ACTIVE**
@@ -27,7 +27,8 @@ Updated: 2026-09-08 13:45 JST
 - v2.9.44: filter double-binding/OFF restoration and magazine-join avatar repair.
 - v2.9.45: filter became session-only; previous-save checkpoint/line became independent of note unread state.
 - v2.9.46: proved manual rows were already in DB; repaired DB→feed→matching INSIGHT account display path.
-- **v2.9.47: exact notification category routing, manual comment/reply feed merge, self/other reply split, own/joined membership-reaction split, old follow/article-post backfill, and saved-overlap checkpoint recovery.**
+- v2.9.47: exact notification category routing, manual comment/reply feed merge, self/other reply split, own/joined membership-reaction split, old follow/article-post backfill, and saved-overlap checkpoint recovery.
+- **v2.9.48: active runtime moved to v2948; previous-save recovery is handled in the current core and joint-magazine filtering verifies only the leading person. INSIGHT `2026.09.08.6` additionally restores exact notification actor-avatar priority and loads the complete saved comment history instead of stopping at the first 100 threads.**
 
 ## 1. Production scope — do not simplify
 
@@ -64,17 +65,17 @@ Never combine INSIGHT本体 and 本人通知 versions.
 
 INSIGHT always shows both current/latest versions separately. Only the product actually changed receives NEW/更新あり treatment. An unverified userscript installation says `この端末 未確認`; never infer installed version only from server manifest.
 
-Current pair: **INSIGHT `2026.09.08.4` / 本人通知 `2.9.47`.**
+Current pair: **INSIGHT `2026.09.08.6` / 本人通知 `2.9.48`.**
 
-## 3. Stable 本人通知 runtime architecture
+## 3. Current 本人通知 runtime architecture
 
 ### One active core only
 
-Bootstrap v2.9.47 loads exactly one core `@require`:
+Bootstrap v2.9.48 loads exactly one current core `@require`:
 
-`public/note-insight-notification-runtime-v2945.js?v=2945a`
+`public/note-insight-notification-runtime-v2948.js?v=2948a`
 
-Do not restore old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943/v2944 runtimes to the active chain. v2945 remains the stable core until its actual core source is intentionally changed.
+Do not restore old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943/v2944/v2945 runtimes to the active chain. v2948 is the current core.
 
 ### Bottom dock
 
@@ -100,11 +101,10 @@ Filter is display-only and must never navigate or drive scrolling.
 - closing bell resets OFF and restores all rows hidden in that session.
 - only the **leading/first creator** may cause a joint-magazine notification to hide.
 - a target creator appearing second/later in an aggregate notification must not hide it.
-- creator URL/ID is strongest match; hydrated exact/truncated name is fallback.
+- v2948 reads the leading name first; a creator link is accepted for filtering only when its visible identity matches that leading name.
+- hydrated exact/truncated name matching remains available.
 - ON reports actual `非表示N件`; OFF reports actual `N件復元`.
 - do not intentionally leave one matching row behind.
-
-Real-device filter was confirmed working before v2.9.47; classification/checkpoint changes must not regress it.
 
 ## 5. Native scrolling is authoritative
 
@@ -127,7 +127,7 @@ Manual save is the only authoritative private-notification capture action.
 
 - user opens the real note bell and presses `手動保存（続きから）`.
 - runtime reads rows already loaded in that bell shell; it does not auto-scroll.
-- current source contract remains `note-notification-manual-sync-v2945`, accepted by server `manual-sync-v\d+` allowlist.
+- current source contract is `note-notification-manual-sync-v2948`, accepted by server `manual-sync-v\d+` allowlist.
 - only server-returned `confirmedClientSignatures` count as saved.
 - note unread/new/read state is **never** the continuation source.
 - merely opening or closing the bell never advances the checkpoint.
@@ -138,18 +138,21 @@ Authoritative state:
 - checkpoint key: `mumei_insight_notification_checkpoint_v2922:<account>`
 - checkpoint boundary: `boundarySignature`
 
-### v2.9.47 overlap recovery
+### v2.9.48 saved-overlap recovery
 
-Exact previous boundary may not be present in the currently rendered note list. To avoid repeated `前回ライン未到達`, bootstrap v2.9.47 may recover the checkpoint from the **first visible row that overlaps a server-confirmed saved signature**.
+If the exact previous boundary is absent from the currently rendered note list, v2948 searches visible rows for the first signature already present in the saved-signature set.
 
-- recovery source marker: `saved-overlap-recovery-v2947`
-- this uses saved signatures, never note unread/seen badges.
-- it must not scroll the page.
-- if no safe overlap is found, keep the old checkpoint rather than silently skipping a gap.
+- exact boundary match remains strongest.
+- safe saved overlap is the fallback continuation point.
+- recovery source marker: `manual-saved-overlap-v2948`.
+- normal confirmed top marker: `manual-confirmed-top-v2948`.
+- note unread/seen badges are never used.
+- no scrolling is driven by recovery.
+- if no safe overlap is found, the old boundary is retained rather than silently skipping an unseen gap.
 
 ### Previous-save line
 
-`前回保存ここまで` is visual only. Show it only when a safe boundary row is present and size guards pass. If marker rendering becomes unstable/giant/blinking, suppress the visual marker but keep the underlying continuation state.
+`前回保存ここまで` is visual only. Show it only when a safe boundary/saved-overlap row is present and size guards pass. If marker rendering becomes unstable/giant/blinking, suppress the visual marker but keep the underlying continuation state.
 
 ## 7. Exact notification classification — current required tabs
 
@@ -193,11 +196,11 @@ Manual/public duplicates for the same follow actor are deduped in feed using a w
 
 ### Creator article posts
 
-`○○さんが記事を投稿しました` is `creator_article_posted` and displays in **記事投稿**. v6 migration backfilled existing known rows, including the previously observed Labo. case.
+`○○さんが記事を投稿しました` is `creator_article_posted` and displays in **記事投稿**. v6 migration backfilled existing known rows.
 
 ### Comments and replies
 
-Manual bell comment/reply rows live in `insight_notifications`; public canonical comments/replies live in `insight_public_comments`. Feed must merge both stores. Never make コメント/返信 tabs read only the public table.
+Manual bell comment/reply rows live in `insight_notifications`; public canonical comments/replies live in `insight_public_comments`. Feed must merge both stores. Never make コメント/返信 notification tabs read only the public table.
 
 Replies are display-split by target article owner while DB type remains `reply`:
 
@@ -208,7 +211,7 @@ This specifically covers replies received after the user commented on someone el
 
 ### Magazine join
 
-`運営メンバーに仲間入りしました` remains `magazine_join` and must display in **マガジン参加**. Production DB has confirmed v2.9.45 manual rows of this type; feed/UI must not drop them.
+`運営メンバーに仲間入りしました` remains `magazine_join` and must display in **マガジン参加**.
 
 ### Membership reactions
 
@@ -221,7 +224,7 @@ Exact `kind=board_like_comment` / `kind=board_like_post` protection remains mand
 
 ### Membership join
 
-`kind=circle_plan_join` remains `membership_join` and must display in **メンシプ参加**. Do not let generic DB classifier overwrite it. Production DB contains confirmed membership_join rows and the feed must return them.
+`kind=circle_plan_join` remains `membership_join` and must display in **メンシプ参加**. Do not let a generic DB classifier overwrite it.
 
 ## 8. Feed and display pipeline — verify end to end
 
@@ -237,6 +240,18 @@ Production feed v13:
 - account response includes the authenticated note ID.
 
 INSIGHT UI rejects cross-account notification display instead of silently showing the wrong account.
+
+### Notification avatar authority — 2026.09.08.6
+
+For a notification card, the person/avatar shown must correspond to the actor in that exact note notification.
+
+- the `actor_image_url` captured from the note bell row is authoritative when it is a safe non-cover image.
+- `creator-icons` is **fallback only when the captured actor image is missing/invalid**.
+- enrichment must never replace an already captured valid actor image merely because the actor URL can be looked up again.
+- reject magazine-cover, OGP and generic cover artwork as a person avatar.
+- duplicate `magazine_join` rows may be merged, but the merge must retain the richest safe actor image and actor URL.
+
+This rule exists because a later generic creator lookup caused real-device notification cards to show an image different from the person shown by note.
 
 ## 9. Account-aware INSIGHT handoff
 
@@ -280,16 +295,14 @@ Browser guidance remains:
 
 `magazine_join` legacy rows may contain null actor fields or magazine-cover images. Current behavior:
 
-- actor-link image first
-- `/profile_` asset next
-- other non-cover actor candidate last
-- never deliberately use `magazine_cover`, OGP or generic cover as person avatar
-- merge duplicate magazine-join rows before enrichment and prefer richer actor/profile/target/timestamp data
-- `creator-icons` is preferred final enrichment when actor URL exists
+- captured safe actor image is preserved first.
+- actor-link/profile lookup is used only when actor image is missing.
+- never deliberately use `magazine_cover`, OGP or generic cover as person avatar.
+- merge duplicate magazine-join rows before enrichment and retain richer safe actor/profile/target/timestamp data.
 
 Existing production backfill repaired known unambiguous missing/wrong actor images.
 
-## 12. Public comments/replies and reactions
+## 12. Public comments/replies and complete comment history
 
 Public note comments/likes are core public data and must not require本人通知 pairing.
 
@@ -304,6 +317,29 @@ Preserve:
 - creator replies updating thread state without false inbound notifications
 
 Thread states remain `unreplied`, `followup_pending`, `replied` with existing semantics.
+
+### All saved comments are required — never first 100 only
+
+Production audit on 2026-09-08 for owner scope found:
+
+- **1,619 root comment threads**
+- **4,187 total comment/reply rows**
+- history extends back to **2026-01-04**
+
+The server API/RPC intentionally returns at most 100 thread summaries per page. That 100 is a transport page size, **not a history limit**.
+
+Current `MemberInsightCommentsFinal` behavior:
+
+- requests page 1 to obtain total.
+- requests every remaining 100-row page until the full matching total is collected.
+- fetches pages in small parallel groups rather than one giant request.
+- deduplicates by `root_key`.
+- displays `全履歴を読込中 X / total件` and `全履歴 読込完了`.
+- no first-100 pager remains as the only route to older history.
+- final-reply heart checks continue in batches.
+- CSS uses `content-visibility:auto` / intrinsic sizing so thousands of thread cards do not all incur full layout cost at once.
+
+Never reintroduce a UI that makes the comment tab appear to contain only 100 histories.
 
 ## 13. Follow/follower semantics
 
@@ -323,7 +359,7 @@ Do not reintroduce redundant vertical text that repeats the pill/actor unless it
 
 ## 15. Regression gate
 
-Before declaring a notification release complete:
+Before declaring a notification or history release complete:
 
 1. fetch latest main.
 2. preserve unrelated newer changes.
@@ -334,5 +370,11 @@ Before declaring a notification release complete:
 7. if backend changed, confirm production Edge Function/migration state.
 8. where possible inspect real production rows for the reported notification forms.
 9. still require real-device confirmation for device/UI behavior.
+
+Current regression protection includes:
+
+- v2.9.48 active-runtime/bootstrap consistency.
+- captured notification actor image remains authoritative and creator lookup is fallback only.
+- comment UI fetches every saved 100-row page and cannot silently stop at page 1.
 
 Never call a real-device issue fixed solely because code/tests/deploy passed.
