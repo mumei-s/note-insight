@@ -6,19 +6,20 @@ const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 test("v2.9.44 bootstrap loads exactly one current notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
   assert.match(boot,/@version\s+2\.9\.44/);
-  assert.match(boot,/runtime-v2944\.js\?v=2944a/);
+  assert.match(boot,/runtime-v2944\.js\?v=2944b/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,1);
   assert.doesNotMatch(boot,/runtime-v2933|runtime-v2935|runtime-v2938|runtime-v2939|runtime-v2940|runtime-v2942|runtime-v2943/);
   assert.match(boot,/@updateURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
 });
 
-test("v2.9.44 iframe is CSP-safe and binds each dock exactly once",async()=>{
+test("v2.9.44 iframe is CSP-safe and binds each dock exactly once after required buttons exist",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2944.js");
   assert.match(r,/document\.createElement\('iframe'\)/);
   assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
   assert.match(r,/frame\.addEventListener\('load',bindFrame/);
   assert.match(r,/frame\.dataset\.mumeiBound==='1'/);
-  assert.match(r,/frame\.dataset\.mumeiBound='1'/);
+  assert.match(r,/const d=frame\.contentDocument,read=d\.getElementById\('read'\),filter=d\.getElementById\('filter'\),settings=d\.getElementById\('settings'\),ins=d\.getElementById\('ins'\)/);
+  assert.match(r,/if\(!read\|\|!filter\|\|!settings\|\|!ins\)return;frame\.dataset\.mumeiBound='1'/);
   assert.match(r,/contentDocument/);
   assert.doesNotMatch(r,/parent\.postMessage/);
   assert.doesNotMatch(r,/contentWindow\?\.postMessage/);
