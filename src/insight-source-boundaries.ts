@@ -5,6 +5,8 @@ const PANEL_ID="mumei-data-source-boundaries";
 const STYLE_ID="mumei-data-source-boundaries-style";
 let normalBusy=false;
 let graphsOpen=false;
+let runTimer=0;
+let lastRun=0;
 
 function token(){return localStorage.getItem(TOKEN_KEY)||""}
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=120000){
@@ -46,16 +48,22 @@ async function normalRefresh(section:HTMLElement){
 }
 function enhanceSourcePanel(){
   if(!location.hash.includes("dashboard")&&!location.hash.includes("owner-insight"))return;
-  const anchor=document.querySelector<HTMLElement>(".miv5-update");if(!anchor)return;if(document.getElementById(PANEL_ID))return;anchor.insertAdjacentElement("afterend",sourcePanel())
+  const anchor=document.querySelector<HTMLElement>(".miv5-update");if(!anchor||document.getElementById(PANEL_ID))return;anchor.insertAdjacentElement("afterend",sourcePanel())
 }
 function enhanceAnalysis(){
   const root=document.querySelector<HTMLElement>(".mia2");if(!root)return;const tabs=root.querySelector<HTMLElement>(".mia2-tabs");if(!tabs)return;
   let toggle=document.getElementById("mumei-analysis-graph-toggle") as HTMLButtonElement|null;if(!toggle){toggle=document.createElement("button");toggle.id="mumei-analysis-graph-toggle";tabs.insertAdjacentElement("afterend",toggle);toggle.addEventListener("click",()=>{graphsOpen=!graphsOpen;paintAnalysis(root,toggle!)})}paintAnalysis(root,toggle)
 }
 function paintAnalysis(root:HTMLElement,toggle:HTMLButtonElement){
-  const active=[...root.querySelectorAll<HTMLButtonElement>(".mia2-tabs button")].find(b=>b.classList.contains("active"));const overview=active?.textContent?.trim()==="総合";toggle.hidden=!overview;if(!overview){root.classList.remove("mumei-overview-graphs-collapsed");return}root.classList.toggle("mumei-overview-graphs-collapsed",!graphsOpen);toggle.textContent=graphsOpen?"▲ 詳細分析グラフを閉じる":"▼ 詳細分析グラフを開く（流入・波形・星図）"
+  const active=[...root.querySelectorAll<HTMLButtonElement>(".mia2-tabs button")].find(b=>b.classList.contains("active"));const overview=active?.textContent?.trim()==="総合";toggle.hidden=!overview;if(!overview){root.classList.remove("mumei-overview-graphs-collapsed");return}root.classList.toggle("mumei-overview-graphs-collapsed",!graphsOpen);const label=graphsOpen?"▲ 詳細分析グラフを閉じる":"▼ 詳細分析グラフを開く（流入・波形・星図）";if(toggle.textContent!==label)toggle.textContent=label
 }
-function run(){installStyle();enhanceSourcePanel();enhanceAnalysis()}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run,{once:true});else run();
-const observer=new MutationObserver(()=>run());observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});
-window.addEventListener("hashchange",()=>setTimeout(run,30));window.addEventListener("pageshow",()=>setTimeout(run,30));
+function run(){lastRun=Date.now();installStyle();enhanceSourcePanel();enhanceAnalysis()}
+function scheduleRun(delay=180){
+  if(runTimer)window.clearTimeout(runTimer);
+  const elapsed=Date.now()-lastRun;
+  runTimer=window.setTimeout(()=>{runTimer=0;run()},Math.max(delay,elapsed<250?250-elapsed:0));
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>scheduleRun(0),{once:true});else scheduleRun(0);
+// Reactが子要素を差し替えた時だけ再確認する。class属性は監視しない（自己更新ループ防止）。
+const observer=new MutationObserver(()=>scheduleRun(220));observer.observe(document.documentElement,{subtree:true,childList:true});
+window.addEventListener("hashchange",()=>scheduleRun(80));window.addEventListener("pageshow",()=>scheduleRun(80));
