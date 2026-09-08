@@ -37,7 +37,7 @@ function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='htt
 const returnTo=safeReturn(q.get('return'));back.href=returnTo;
 function resetButtons(){pair.disabled=false;sync.disabled=false;pair.textContent=PAIR_LABEL;sync.textContent=SYNC_LABEL}
 function bridgeVersion(){return document.documentElement.getAttribute('data-mumei-dashboard-bridge')||''}
-function bridgeReady(){return bridgeVersion()===VERSION}
+function bridgeReady(){const ok=bridgeVersion()===VERSION;if(ok)localStorage.setItem('mumei-dashboard-tool-version',VERSION);return ok}
 function showBridgeRequired(){result.className='status warn';result.innerHTML=`先に①で <b>Dashboard同期ツール v${VERSION}</b> をインストール／更新してください。<br>更新済みなのにこの表示なら、このページを1回再読み込みしてください。`}
 install.addEventListener('click',()=>{sessionStorage.setItem('mumei-dashboard-install-attempt-v130','1');sessionStorage.removeItem('mumei-dashboard-install-reloaded-v130')});
 window.addEventListener('pageshow',()=>{resetButtons();const tried=sessionStorage.getItem('mumei-dashboard-install-attempt-v130')==='1';if(tried&&!bridgeReady()&&sessionStorage.getItem('mumei-dashboard-install-reloaded-v130')!=='1'){sessionStorage.setItem('mumei-dashboard-install-reloaded-v130','1');setTimeout(()=>location.reload(),120);return}void stats().catch(()=>{})});
