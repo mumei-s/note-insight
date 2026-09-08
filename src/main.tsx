@@ -9,6 +9,7 @@ import {
   rememberMemberSession,
 } from "./insight-account-store";
 import "./styles.css";
+import "./insight-source-boundaries";
 
 const SELF_ACCOUNT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
