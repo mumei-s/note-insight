@@ -3,6 +3,7 @@ import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import {
   CURRENT_INSIGHT_APP_VERSION,
   NOTIFICATION_VERSION_STORAGE_KEY,
+  DASHBOARD_VERSION_STORAGE_KEY,
   fetchInsightRelease,
   type InsightRelease,
   versionDiffers,
@@ -45,7 +46,7 @@ const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
   const[revision,setRevision]=useState(0),[fullRefreshSeq]=useState(0),[status,setStatus]=useState("公開データは自動更新中（操作不要）"),[appBusy,setAppBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
-  const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||"");
+  const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
@@ -63,6 +64,7 @@ export function MemberInsightLiveV2(){
       const next=await fetchInsightRelease();
       setRelease(next);
       setNotificationInstalled(localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||"");
+      setDashboardInstalled(localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
       setReleaseChecked(true);
       return next;
     }catch{
@@ -180,12 +182,17 @@ export function MemberInsightLiveV2(){
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
   const notificationLatest=release?.notificationVersion||"";
   const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled!==notificationLatest);
-  const role=String(official?.member?.noteId||"").toLowerCase()==="ss_yr"?"owner":"member";
+  const dashboardLatest=release?.dashboardVersion||"";
+  const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled!==dashboardLatest);
+  const noteId=String(official?.member?.noteId||"").toLowerCase();
+  const role=noteId==="ss_yr"?"owner":"member";
+  const dashboardHref=`./dashboard-setup.html?from=insight-top&role=${role}&account=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`;
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
-    <section className={`miv5-update ${appUpdateAvailable?"has-update":""}`}><div><b>AUTO DATA SYNC</b><span>{status}</span><small>記事・スキ・コメント・お気に入り・フォローなどの公開データは自動更新します。フォロー総数はnote公式現在値、人物一覧はバックグラウンド照合で追従します。右の緑ボタンはINSIGHT本体だけを更新します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><button className={`primary app-update ${appUpdateAvailable?"update-ready":""}`} disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?<strong>確認中…</strong>:appUpdateAvailable?<><small>NEW・最新版あり v{release?.appVersion}</small><strong>INSIGHT本体 更新</strong></>:<><small>{releaseChecked?`v${CURRENT_INSIGHT_APP_VERSION}・最新版`:`v${CURRENT_INSIGHT_APP_VERSION}・確認中`}</small><strong>INSIGHT本体</strong></>}</button></div></section>
+    <section className={`miv5-update ${appUpdateAvailable?"has-update":""}`}><div><b>AUTO DATA SYNC</b><span>{status}</span><small>記事・スキ・コメント・お気に入り・フォローなどの公開データは自動更新します。フォロー総数はnote公式現在値、人物一覧はバックグラウンド照合で追従します。公式Dashboardは専用ボタンから本人データだけを同期します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><a className="dashboard-link" href={dashboardHref}>📥 Dashboard読み込み</a><button className={`primary app-update ${appUpdateAvailable?"update-ready":""}`} disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?<strong>確認中…</strong>:appUpdateAvailable?<><small>NEW・最新版あり v{release?.appVersion}</small><strong>INSIGHT本体 更新</strong></>:<><small>{releaseChecked?`v${CURRENT_INSIGHT_APP_VERSION}・最新版`:`v${CURRENT_INSIGHT_APP_VERSION}・確認中`}</small><strong>INSIGHT本体</strong></>}</button></div></section>
     <section className="miv5-version-status" aria-label="バージョン情報">
       <div className={appUpdateAvailable?"needs-update":""}><b>INSIGHT本体</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION}</span><small>{releaseChecked?`最新 v${appLatest||CURRENT_INSIGHT_APP_VERSION}`:"最新 確認中"}</small>{appUpdateAvailable?<em>NEW</em>:null}</div>
       <div className={notificationUpdateAvailable?"needs-update":""}><b>本人通知</b><span>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未確認"}</span><small>{releaseChecked?`最新 v${notificationLatest||"—"}`:"最新 確認中"}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</div>
+      <div className={dashboardUpdateAvailable?"needs-update":""}><b>Dashboard同期</b><span>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未確認"}</span><small>{releaseChecked?`最新 v${dashboardLatest||"—"}`:"最新 確認中"}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</div>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     {appUpdateAvailable?<section className="miv5-release-alert app" role="status"><div><b>NEW　INSIGHT最新版あり</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION} → 最新 v{release?.appVersion}</span></div><button onClick={()=>void updateInsightApp()}>この画面から更新</button></section>:null}
