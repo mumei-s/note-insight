@@ -26,6 +26,7 @@ const date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number
 const canonical=(v:any)=>String(v||"").replace(/保完(?=\s|$)/g," ").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim();
 const short=(v:any,n=170)=>{const s=canonical(v);return s.length>n?s.slice(0,n-1)+"…":s};
 function noteId(url:any){try{const id=new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]||"";return /^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():""}catch{return""}}
+function requestedNotificationAccount(){try{return String(new URLSearchParams(window.location.search).get("notificationAccount")||sessionStorage.getItem("mumei-insight-notification-account")||"").trim().replace(/^@/,"").toLowerCase()}catch{return""}}
 function creatorTop(url:any,selfId=""){const id=noteId(url);return id&&id!==String(selfId||"").toLowerCase()?`https://note.com/${id}`:""}
 function safeActorImage(v:any){const s=String(v||"");return s&&!/magazine_cover|ogp|cover/i.test(s)?s:""}
 function richness(r:Row){let n=0;if(r.actor_url)n+=8;if(safeActorImage(r.actor_image_url))n+=8;else if(r.actor_image_url)n+=1;if(r.target_url)n+=4;if(r.occurred_at)n+=2;if(r.target_title)n+=1;return n}
@@ -45,7 +46,9 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   async function load(p=1,k=kind,silent=false){
     if(!silent)setLoading(true);setError("");
     try{
-      const x=await post({kind:k,page:p,pageSize:PAGE}),seen=new Set<string>(),list:Row[]=[];
+      const x=await post({kind:k,page:p,pageSize:PAGE}),feedId=String(x.noteId||"").toLowerCase(),requested=requestedNotificationAccount(),expected=requested||String(memberNoteId||"").toLowerCase();
+      if(expected&&feedId&&expected!==feedId){setRows([]);setTotal(0);setCheckedAt(new Date());setError(`通知アカウント不一致：note側 @${expected} / INSIGHT側 @${feedId}。INSIGHTのアカウント切替を確認してください。`);return}
+      const seen=new Set<string>(),list:Row[]=[];
       for(const r of await enrich(mergeMagazineJoinRows(x.rows||[]))){const key=rowKey(r);if(seen.has(key))continue;seen.add(key);list.push(r)}
       setRows(list);setTotal(Number(x.total||0));setPage(p);setCheckedAt(new Date());
       if(x.lastUpdatedAt)setUpdatedAt(String(x.lastUpdatedAt));
@@ -58,7 +61,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const pages=Math.max(1,Math.ceil(total/PAGE)),categoryCounts=useMemo(()=>{const m:Record<string,number>={};for(const r of rows)m[String(r.notification_type||"other")]=(m[String(r.notification_type||"other")]||0)+1;return m},[rows]),role=String(memberNoteId||"").toLowerCase()==="ss_yr"?"owner":"member",selfId=String(memberNoteId||"").toLowerCase();
   const latest=syncAt||updatedAt;
   return <section id="minf-notifications" className="minf">
-    <header className="minf-head"><div><small>NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteは「手動保存（続きから）」だけ。保存後はこの【通知】へ3秒ごとに自動反映します。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a><a className="minf-setup" href={`./notification-setup.html?from=insight&role=${role}&v=2944`} target="_blank" rel="noopener noreferrer">⚙ 設定</a></div></header>
+    <header className="minf-head"><div><small>NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteは「手動保存（続きから）」だけ。保存後はこの【通知】へ3秒ごとに自動反映します。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a><a className="minf-setup" href={`./notification-setup.html?from=insight&role=${role}&v=2946`} target="_blank" rel="noopener noreferrer">⚙ 設定</a></div></header>
     <details className="minf-state"><summary>更新状態・精度</summary><div><span>保存データ</span><strong>{updatedAt?date(updatedAt):"確認中…"}</strong><span>画面確認</span><strong>{checkedAt?date(checkedAt.toISOString()):"確認中…"}</strong></div><p>取得条件やnote側表示により欠落・重複・時刻ずれが起こる場合があります。重要な確認はnote本体を優先してください。</p></details>
     <div className="minf-tabs" role="tablist">{CATS.map(([id,label])=><button key={id} className={kind===id?"active":""} onClick={()=>{setPage(1);setKind(id)}}>{label}{kind==="all"&&id!=="all"&&categoryCounts[id]?<small>{categoryCounts[id]}</small>:null}</button>)}</div>
     {error?<p className="minf-error">{error}</p>:null}
