@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.46
-// @description  通知反映アカウント連動版。note側の現在アカウントと同じINSIGHT保存アカウントを自動選択して【通知】を開きます。
+// @version      2.9.47
+// @description  通知分類・前回保存位置補強版。保存済み通知との重なりから前回境界を復元し、note既読状態には依存しません。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -18,17 +18,21 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.46';
+const VERSION='2.9.47';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
 const FILTER='mumei_insight_magazine_filter_enabled_v3:';
 const GROUPS='mumei_insight_notification_groups_v1:';
+const SAVED='mumei_insight_notification_saved_v2919:';
+const CHECK='mumei_insight_notification_checkpoint_v2922:';
 const VERSION_CHECK='mumei_insight_version_check';
 const RETURN_PARAM='mumei_return';
 const INSIGHT_ENTRY='https://mumei-s.github.io/note-insight/notification-entry.html';
 const DOCK_FRAME='mumei-v2945-frame';
+const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
+const stripTime=v=>clean(v).replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,'').trim();
 const modern=()=>Boolean(globalThis.GM);
 const key=(p,id)=>p+String(id||'').toLowerCase();
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
@@ -44,6 +48,14 @@ function handleVersionCheck(){const u=new URL(location.href);if(u.searchParams.g
 async function handleFilterSync(){const u=new URL(location.href),reset=u.searchParams.get('mumei_filter_reset')==='1',grouped=u.searchParams.get('mumei_groups_sync');if(!reset&&!grouped)return false;const a=await currentAccount();if(!a)return true;const expected=clean(u.searchParams.get('mumei_account')).replace(/^@/,'').toLowerCase();if(expected&&expected!==a.id)return true;if(reset){await set(key(MUTES,a.id),[]);await set(key(GROUPS,a.id),[]);await set(key(FILTER,a.id),false);u.searchParams.delete('mumei_filter_reset')}else{try{const groups=(decode64(grouped)||[]).map(g=>({name:clean(g?.name)||'グループ',enabled:g?.enabled!==false,ids:[...new Set((Array.isArray(g?.ids)?g.ids:[]).map(creatorId).filter(Boolean))]})).filter(g=>g.ids.length);await set(key(GROUPS,a.id),groups);await set(key(MUTES,a.id),[...new Set(groups.filter(g=>g.enabled).flatMap(g=>g.ids))]);await set(key(FILTER,a.id),false)}catch{}u.searchParams.delete('mumei_groups_sync')}u.searchParams.delete('mumei_account');history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);return true}
 async function openMatchingInsight(){const a=await currentAccount(),u=new URL(INSIGHT_ENTRY);u.searchParams.set('from','note');u.searchParams.set('insightMode','notifications');if(a?.id)u.searchParams.set('account',a.id);u.hash='dashboard';location.assign(u.href)}
 function bindDockInsightButton(tries=0){try{const f=document.getElementById(DOCK_FRAME),b=f?.contentDocument?.getElementById('ins');if(b){if(b.dataset.mumeiAccountRoute==='1')return;b.dataset.mumeiAccountRoute='1';b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void openMatchingInsight()},true);return}}catch{}if(tries<40)setTimeout(()=>bindDockInsightButton(tries+1),250)}
+function visible(el){if(!el?.getBoundingClientRect)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}
+function bellIsOpen(){let n=false,o=false;for(const el of document.querySelectorAll('button,[role="tab"],a,span,div')){if(!visible(el))continue;const t=clean(el.textContent);if(t==='通知')n=true;else if(t==='お知らせ')o=true;if(n&&o)break}return n&&o}
+async function reconcileSavedBoundary(){try{if(document.visibilityState==='hidden'||!bellIsOpen())return;const a=await currentAccount();if(!a)return;const savedRaw=await get(key(SAVED,a.id),[]),saved=Array.isArray(savedRaw)?savedRaw.map(String):[];if(!saved.length)return;const rows=[...document.querySelectorAll(ITEM)].filter(el=>!el.closest?.(`#${DOCK_FRAME}`)&&visible(el));if(!rows.length)return;const texts=rows.map(el=>stripTime(el.innerText||el.textContent)).filter(Boolean);if(!texts.length)return;const cpRaw=await get(key(CHECK,a.id),{}),cp=cpRaw&&typeof cpRaw==='object'?cpRaw:{},current=String(cp.boundarySignature||'');if(current&&texts.some(t=>current.startsWith(t+'|')))return;for(const t of texts){const hit=saved.find(sig=>sig.startsWith(t+'|'));if(!hit)continue;await set(key(CHECK,a.id),{...cp,boundarySignature:hit,boundaryAt:Date.now(),boundarySource:'saved-overlap-recovery-v2947'});return}}catch{}}
 setTimeout(()=>bindDockInsightButton(),250);
+setTimeout(()=>void reconcileSavedBoundary(),800);
+setInterval(()=>void reconcileSavedBoundary(),2400);
+addEventListener('focus',()=>setTimeout(()=>void reconcileSavedBoundary(),250));
+addEventListener('pageshow',()=>setTimeout(()=>void reconcileSavedBoundary(),250));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(()=>void reconcileSavedBoundary(),250)});
 (async()=>{const u=new URL(location.href),hadAuto=[...u.searchParams.keys()].some(k=>k.startsWith('mumei_auto_notice_')||k.startsWith('mumei_open_notice_'));if(hadAuto){stripControlParams(u);u.searchParams.delete(RETURN_PARAM);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash)}if(handleVersionCheck())return;if(await handleFilterSync())return;await handlePair()})();
 })();
