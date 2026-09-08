@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.43
-// @description  CSP安全版。下部固定ドック、確実な手動保存・共同マガジン通知フィルター、note本来のスクロールを維持します。
+// @version      2.9.44
+// @description  フィルター復旧版。ON/OFF確実切替、非表示行復元、人物アイコン優先、note本来のスクロールを維持します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,13 +12,13 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2943.js?v=2943a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2944.js?v=2944a
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.43';
+const VERSION='2.9.44';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
