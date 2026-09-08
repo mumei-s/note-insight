@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.08.8",
   "notificationVersion": "2.9.48",
-  "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T10:20:00+09:00",
+  "dashboardVersion": "1.4.1",
+  "releasedAt": "2026-09-09T10:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "Dashboard v1.4.0: INSIGHT既存ボタンから本人確認・公式Dashboard読込・INSIGHT復帰までワンタップ自動化。正常時のnote側パネルを非表示化し、円グラフ表示とINSIGHT独自の機会損失分析を強化。"
+  "note": "Dashboard v1.4.1: 本人通知と同じ別タブ型インストール導線へ統一。文字列表示を検知してフォールバックし、通常時のnote側同期パネルはCSS段階から完全非表示、失敗時だけ復旧表示。"
 }
