@@ -1,18 +1,19 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 17:10 JST
+Updated: 2026-09-08 19:36 JST
 
 **Always fetch the current GitHub `main` before editing. Newest actual timestamp/current main is authoritative. Never overwrite unrelated newer work with stale local state. Real-device reports are authoritative; CI success alone does not prove a device bug is fixed.**
 
 ## 0. Current production checkpoint
 
-- INSIGHT app: **`2026.09.08.6`**
+- INSIGHT app: **`2026.09.08.7`**
 - 本人通知・統計 package: **`v2.9.48`**
 - public URL: `https://mumei-s.github.io/note-insight/`
 - userscript bootstrap: `public/note-insight-notification-sync.user.js`
 - active notification core runtime: `public/note-insight-notification-runtime-v2948.js`
 - notification ingest: production `insight-notification-ingest-v2` **v21 ACTIVE**
 - notification feed: production `insight-notification-feed-final` **v13 ACTIVE**
+- full comment-row feed: production `insight-comment-events` **v1 ACTIVE**
 - relation backend: production `insight-relations` **v11 ACTIVE**
 - exact membership migration retained: `20260907185100_notification_membership_exact_v5.sql`
 - exact follow/article-post classifier migration applied: `20260908051000_notification_classification_exact_v6.sql`
@@ -28,7 +29,8 @@ Updated: 2026-09-08 17:10 JST
 - v2.9.45: filter became session-only; previous-save checkpoint/line became independent of note unread state.
 - v2.9.46: proved manual rows were already in DB; repaired DB→feed→matching INSIGHT account display path.
 - v2.9.47: exact notification category routing, manual comment/reply feed merge, self/other reply split, own/joined membership-reaction split, old follow/article-post backfill, and saved-overlap checkpoint recovery.
-- **v2.9.48: active runtime moved to v2948; previous-save recovery is handled in the current core and joint-magazine filtering verifies only the leading person. INSIGHT `2026.09.08.6` additionally restores exact notification actor-avatar priority and loads the complete saved comment history instead of stopping at the first 100 threads.**
+- v2.9.48: active runtime moved to v2948; previous-save recovery is handled in the current core and joint-magazine filtering verifies only the leading person.
+- **INSIGHT `2026.09.08.7`: コメント「すべて」は会話単位ではなく保存済みコメント・返信行を1件ずつ全件表示する。通知カードはnoteの汎用コメント/マガジン通知アイコンを人物アイコンとして採用せず、保存済みactor URL・近接する同一通知・対象マガジンURLから人物URLを復元してcreator-iconsで本人画像を補完する。**
 
 ## 1. Production scope — do not simplify
 
@@ -65,7 +67,7 @@ Never combine INSIGHT本体 and 本人通知 versions.
 
 INSIGHT always shows both current/latest versions separately. Only the product actually changed receives NEW/更新あり treatment. An unverified userscript installation says `この端末 未確認`; never infer installed version only from server manifest.
 
-Current pair: **INSIGHT `2026.09.08.6` / 本人通知 `2.9.48`.**
+Current pair: **INSIGHT `2026.09.08.7` / 本人通知 `2.9.48`.**
 
 ## 3. Current 本人通知 runtime architecture
 
@@ -241,17 +243,18 @@ Production feed v13:
 
 INSIGHT UI rejects cross-account notification display instead of silently showing the wrong account.
 
-### Notification avatar authority — 2026.09.08.6
+### Notification avatar authority — 2026.09.08.7
 
-For a notification card, the person/avatar shown must correspond to the actor in that exact note notification.
+For a notification card, use an actual creator/person image whenever a reliable creator identity exists.
 
-- the `actor_image_url` captured from the note bell row is authoritative when it is a safe non-cover image.
-- `creator-icons` is **fallback only when the captured actor image is missing/invalid**.
-- enrichment must never replace an already captured valid actor image merely because the actor URL can be looked up again.
-- reject magazine-cover, OGP and generic cover artwork as a person avatar.
+- a safe captured `actor_image_url` remains authoritative.
+- `creator-icons` is fallback when the captured person image is missing or invalid.
+- generic note action assets such as `/assets/notices/icon_comment...`, notice icons, magazine-cover images, OGP and generic covers are **not person avatars** and must be rejected.
+- missing reply/comment actor URLs may be recovered from a nearby duplicate of the same notification or an exact actor-name identity already present in the current feed page; only actor identity fields may be reused by name, not unrelated target/article data.
+- `my_article_magazine_added` rows with no actor URL may use the creator part of the target magazine URL as the available associated creator identity; nearby rich duplicate rows may supply the target URL first.
 - duplicate `magazine_join` rows may be merged, but the merge must retain the richest safe actor image and actor URL.
 
-This rule exists because a later generic creator lookup caused real-device notification cards to show an image different from the person shown by note.
+Real-device confirmation is still required for the exact cards shown in the user screenshots; CI proves code/build/deploy, not the final phone rendering.
 
 ## 9. Account-aware INSIGHT handoff
 
@@ -297,7 +300,7 @@ Browser guidance remains:
 
 - captured safe actor image is preserved first.
 - actor-link/profile lookup is used only when actor image is missing.
-- never deliberately use `magazine_cover`, OGP or generic cover as person avatar.
+- never deliberately use `magazine_cover`, OGP, generic cover or generic note notice icons as person avatar.
 - merge duplicate magazine-join rows before enrichment and retain richer safe actor/profile/target/timestamp data.
 
 Existing production backfill repaired known unambiguous missing/wrong actor images.
@@ -318,28 +321,31 @@ Preserve:
 
 Thread states remain `unreplied`, `followup_pending`, `replied` with existing semantics.
 
-### All saved comments are required — never first 100 only
+### “すべて” means every saved comment/reply row
 
-Production audit on 2026-09-08 for owner scope found:
+Production audit on 2026-09-08 for owner scope found at that moment:
 
-- **1,619 root comment threads**
-- **4,187 total comment/reply rows**
-- history extends back to **2026-01-04**
+- **4,187 total saved comment/reply rows**
+- **2,149 inbound comment/reply rows** (`is_creator=false`)
+- **1,623 inbound conversation roots**
 
-The server API/RPC intentionally returns at most 100 thread summaries per page. That 100 is a transport page size, **not a history limit**.
+The earlier ~1,600 number is a conversation/thread count, **not the number of comments**. Do not present it as the total comment history.
+
+Production `insight-comment-events` v1 is the raw-row feed for the all-comments view. It is custom authenticated with `X-Insight-Token` and maps owner note scope to `member_id='owner'` exactly like the other INSIGHT APIs.
 
 Current `MemberInsightCommentsFinal` behavior:
 
-- requests page 1 to obtain total.
-- requests every remaining 100-row page until the full matching total is collected.
-- fetches pages in small parallel groups rather than one giant request.
-- deduplicates by `root_key`.
-- displays `全履歴を読込中 X / total件` and `全履歴 読込完了`.
-- no first-100 pager remains as the only route to older history.
-- final-reply heart checks continue in batches.
-- CSS uses `content-visibility:auto` / intrinsic sizing so thousands of thread cards do not all incur full layout cost at once.
+- **`すべて（全コメント）`** reads raw `insight_public_comments` rows, including both other people and the creator's own comments/replies.
+- transport page size is 500, but the UI automatically requests every remaining page until all rows are collected.
+- rows are deduplicated by `comment_key`, not collapsed into `root_key` threads.
+- each comment/reply is rendered individually with person, body, article and timestamp.
+- client-side search in the all-comments view searches the fully loaded row set.
+- UI shows `全履歴を読込中 X / total件` and then `全履歴 読込完了`.
+- CSS uses `content-visibility:auto` / intrinsic sizing so 4,000+ cards do not all incur full layout cost at once on mobile.
+- status/workflow tabs (`要対応`, `未返信`, `相手返信`, `あなたの♡で終了`, `自分返信`) remain **thread-based** and continue to page through every 100-row thread-summary page.
+- final-reply heart checks remain batched on the thread workflow tabs.
 
-Never reintroduce a UI that makes the comment tab appear to contain only 100 histories.
+Never reintroduce a “すべて” view that reports only the root-thread count or silently stops at 100.
 
 ## 13. Follow/follower semantics
 
@@ -374,7 +380,10 @@ Before declaring a notification or history release complete:
 Current regression protection includes:
 
 - v2.9.48 active-runtime/bootstrap consistency.
-- captured notification actor image remains authoritative and creator lookup is fallback only.
-- comment UI fetches every saved 100-row page and cannot silently stop at page 1.
+- notification person image rejects generic note notice/action icons and keeps safe captured actor images authoritative.
+- missing notification actor identity recovery is preserved.
+- `すべて（全コメント）` uses the raw comment-row feed and does not filter out creator rows.
+- all-comments transport is paginated automatically until the full count is loaded.
+- thread workflow tabs still load every 100-row page and do not stop at page 1.
 
 Never call a real-device issue fixed solely because code/tests/deploy passed.
