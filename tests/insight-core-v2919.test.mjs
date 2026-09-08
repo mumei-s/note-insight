@@ -29,7 +29,7 @@ test("social remains official-total plus latest-1000 tracking",async()=>{
 });
 
 test("analysis is participant-scoped, uses official Dashboard data, and keeps INSIGHT-native visuals",async()=>{
-  const a=await read("src/member-insight-analytics-final.tsx"),css=await read("src/member-insight-analytics-final.css"),dash=await read("supabase/functions/insight-dashboard-data/index.ts"),sync=await read("public/note-insight-dashboard-sync.user.js");
+  const a=await read("src/member-insight-analytics-final.tsx"),css=await read("src/member-insight-analytics-final.css"),dash=await read("supabase/functions/insight-dashboard-data/index.ts"),boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),sync=`${boot}\n${core}`;
   assert.match(a,/action:"analysis",days:365/);
   for(const x of ["本人の公式データだけ","ダッシュボード読み込み","PULSE WAVE","SOURCE ORBIT","ARTICLE CONSTELLATION","REVENUE THERMAL","PV化率","反応率","INSIGHT指数","コメントスキ"])assert.match(a,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   for(const x of ["mia2-wave .pv","mia2-wave .sales","mia2-orbit","mia2-constellation","mia2-thermal","mia2-people"])assert.match(css,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
