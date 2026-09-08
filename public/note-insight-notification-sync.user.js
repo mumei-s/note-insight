@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.48
-// @description  前回保存位置の保存済み重なり復旧と先頭代表者だけの厳密フィルター版。note既読状態には依存しません。
+// @version      2.9.49
+// @description  前回保存位置まで通知欄を自動走査して保存。公開データ更新とは分離し、本人通知でしか取れない履歴だけを補完します。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -13,12 +13,13 @@
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2948.js?v=2948a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2949.js?v=2949a
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.48';
+const VERSION='2.9.49';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
