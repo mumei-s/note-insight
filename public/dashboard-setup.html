@@ -13,36 +13,37 @@
 <main class="wrap">
 <a class="back" id="back" href="./">← INSIGHTへ戻る</a>
 <section class="hero">
-<small>OFFICIAL DASHBOARD CONNECTOR v1.1.1</small>
+<small>OFFICIAL DASHBOARD CONNECTOR v1.2.0</small>
 <h1>📊 Dashboard読み込み</h1>
 <p>note公式Dashboardを、<strong>本人通知とは別機能</strong>・完全に別経路でINSIGHTへ取り込みます。参加者ごとにnote現在ログインIDとINSIGHTの対象IDを完全一致させ、一致しない場合は保存しません。</p>
 <span id="expected" class="account">対象アカウント確認中…</span>
 <div id="result" class="status">Dashboard同期状態を確認中…</div>
-<a id="install" class="btn" href="./note-insight-dashboard-sync.user.js">① Dashboard同期ツール v1.1.1 をインストール／更新</a>
+<a id="install" class="btn" href="./note-insight-dashboard-sync-v1.2.0.user.js?v=120">① Dashboard同期ツール v1.2.0 をインストール／更新</a>
 <button id="pair" class="btn green">② note本人とDashboardを連携</button>
 <button id="sync" class="btn primary">③ 今すぐ公式Dashboardを読み込む</button>
 </section>
 <section class="card"><h2>読み込む公式指標</h2><div class="grid"><div class="metric"><b>インプレッション</b><small>届いた量・記事別</small></div><div class="metric"><b>ページビュー</b><small>実際に開かれた量</small></div><div class="metric"><b>スキ・コメント</b><small>期間反応を分離</small></div><div class="metric"><b>売上</b><small>記事/メンシプ/マガジン</small></div><div class="metric"><b>流入元</b><small>note / 検索 / SNS / 通知等</small></div><div class="metric"><b>日別公式系列</b><small>PV・売上などの時系列</small></div></div></section>
 <section class="card"><h2>参加者データの分離</h2><p>スクリーンショットの数値やオーナーの数値は分析に使いません。各参加者が自分のnoteで公式Dashboardを開いて同期し、その参加者のINSIGHTアカウントにだけ保存します。note側IDとINSIGHT側IDが違う場合は <b>DASHBOARD_ACCOUNT_MISMATCH</b> で停止します。</p></section>
-<section class="card"><h2>ブラウザについて</h2><p>この同期ツールは、noteへログインでき、Tampermonkey等のユーザースクリプトが動くブラウザで利用します。本人通知ツールの導入は不要です。Android Edge/Chrome系ではTampermonkey側の「ユーザースクリプトを許可」または開発者モードが必要になる場合があります。</p><p class="tiny">インストールリンクを開いて文字列だけ表示される場合は、ツールが未導入/無効、またはブラウザ側でユーザースクリプト捕捉が許可されていません。その場合はインストール完了扱いにしません。</p></section>
+<section class="card"><h2>ブラウザについて</h2><p>この同期ツールは、noteへログインでき、Tampermonkey等のユーザースクリプトが動くブラウザで利用します。本人通知ツールの導入は不要です。</p><p class="tiny">v1.2.0は旧URLのキャッシュを避けるため専用インストールURLに変更しています。</p></section>
 <section class="card"><h2>INSIGHTが公式より追加するもの</h2><p>PV化率・スキ率・コメント率・総反応率・1,000PV売上・外部流入率・検索流入率・通知依存率・INSIGHT記事指数に加え、PULSE WAVE・SOURCE ORBIT・ARTICLE CONSTELLATION・REVENUE THERMALで「次に何をするか」まで可視化します。</p></section>
 </main>
 <script>
-const VERSION='1.1.1',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token',MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',q=new URLSearchParams(location.search),role=q.get('role')==='owner'?'owner':'member',expectedAccount=String(q.get('account')||'').replace(/^@/,'').toLowerCase(),result=document.getElementById('result'),expected=document.getElementById('expected'),pair=document.getElementById('pair'),sync=document.getElementById('sync'),back=document.getElementById('back');
+const VERSION='1.2.0',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token',MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',q=new URLSearchParams(location.search),role=q.get('role')==='owner'?'owner':'member',expectedAccount=String(q.get('account')||'').replace(/^@/,'').toLowerCase(),result=document.getElementById('result'),expected=document.getElementById('expected'),pair=document.getElementById('pair'),sync=document.getElementById('sync'),back=document.getElementById('back');
 const PAIR_LABEL='② note本人とDashboardを連携',SYNC_LABEL='③ 今すぐ公式Dashboardを読み込む';
 expected.textContent=expectedAccount?`INSIGHT対象 @${expectedAccount}`:'INSIGHT対象はログイン情報から確認';
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
 const returnTo=safeReturn(q.get('return'));back.href=returnTo;
 function resetButtons(){pair.disabled=false;sync.disabled=false;pair.textContent=PAIR_LABEL;sync.textContent=SYNC_LABEL}
 window.addEventListener('pageshow',()=>{resetButtons();void stats().catch(()=>{})});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resetButtons()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){resetButtons();void stats().catch(()=>{})}});
 async function call(action,extra={}){const h={'Content-Type':'application/json'};if(role==='owner')h['X-Owner-Token']=localStorage.getItem(OWNER)||'';else h['X-Insight-Token']=localStorage.getItem(MEMBER)||'';const r=await fetch(API,{method:'POST',headers:h,body:JSON.stringify({action,role,...extra}),cache:'no-store'}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||'DASHBOARD_SETUP_ERROR');if(expectedAccount&&p.noteId&&String(p.noteId).toLowerCase()!==expectedAccount)throw new Error(`INSIGHT_ACCOUNT_MISMATCH：@${expectedAccount} / @${p.noteId}`);return p}
 function show(p){const s=p?.lastSnapshot,paired=p?.paired;result.className='status '+(paired?'ok':'warn');result.innerHTML=`<b>@${p?.noteId||'—'}</b> ｜ Dashboard連携 ${paired?'済み':'未確認'}<br>${s?`最終保存 ${new Date(s.captured_at).toLocaleString('ja-JP')} / PV ${(Number(s.total_page_views)||0).toLocaleString()} / 売上 ¥${(Number(s.total_sales_yen)||0).toLocaleString()}`:'まだ新Dashboard形式の保存はありません'}`}
 async function stats(){try{const p=await call('stats');show(p);return p}catch(e){result.className='status warn';result.textContent=e.message||'INSIGHTログインを確認してください';throw e}}
 function openStats(code=''){const u=new URL('https://note.com/sitesettings/stats');if(code)u.searchParams.set('mumei_dashboard_pair',code);u.searchParams.set('mumei_dashboard_sync','1');u.searchParams.set('mumei_dashboard_return',new URL(`./dashboard-setup.html?from=sync-result&role=${role}&account=${encodeURIComponent(expectedAccount)}&return=${encodeURIComponent(returnTo)}`,location.href).href);resetButtons();location.assign(u.href)}
+async function startPairAndOpen(){const p=await call('pair-start');result.className='status';result.textContent=`@${p.noteId} のDashboard連携・読み込みを開始します…`;openStats(p.pairingCode)}
 const synced=q.get('dashboardSync')==='ok';if(synced){localStorage.setItem('mumei-dashboard-tool-version',q.get('dashboardVersion')||VERSION);result.className='status ok';result.textContent=`✅ Dashboard読み込み完了｜同期ツール v${q.get('dashboardVersion')||VERSION}。INSIGHTへ戻ると新しい分析へ反映されます。`;const clean=new URL(location.href);for(const k of ['dashboardSync','dashboardVersion','dashboardSnapshot','dashboardAt'])clean.searchParams.delete(k);history.replaceState(history.state,'',clean.href);setTimeout(()=>location.replace(returnTo),2200)}else void stats().catch(()=>{});
-pair.onclick=async()=>{if(pair.disabled)return;pair.disabled=true;pair.textContent='本人確認コードを発行中…';result.className='status';result.textContent='本人確認コードを発行中…';try{const p=await call('pair-start');result.textContent=`@${p.noteId} のDashboard連携を開始します…`;openStats(p.pairingCode)}catch(e){result.className='status warn';result.textContent=e.message||'連携を開始できませんでした';resetButtons()}};
-sync.onclick=async()=>{if(sync.disabled)return;sync.disabled=true;sync.textContent='Dashboard同期を開始中…';try{const p=await stats();if(!p.paired){result.className='status warn';result.textContent='先に「② note本人とDashboardを連携」を実行してください。';resetButtons();return}result.className='status';result.textContent='公式Dashboardを開いて自動読み込みを開始します…';openStats()}catch{resetButtons()}};
+pair.onclick=async()=>{if(pair.disabled)return;pair.disabled=true;pair.textContent='本人確認コードを発行中…';try{await startPairAndOpen()}catch(e){result.className='status warn';result.textContent=e.message||'連携を開始できませんでした';resetButtons()}};
+sync.onclick=async()=>{if(sync.disabled)return;sync.disabled=true;sync.textContent='Dashboard同期を開始中…';try{const p=await stats();if(!p.paired){await startPairAndOpen();return}result.className='status';result.textContent='公式Dashboardを開いて自動読み込みを開始します…';openStats()}catch(e){result.className='status warn';result.textContent=e.message||'Dashboard同期を開始できませんでした';resetButtons()}};
 </script>
 </body>
 </html>
