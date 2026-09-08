@@ -3,96 +3,104 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.39 bootstrap loads only the current stable runtime chain",async()=>{
+test("v2.9.40 bootstrap loads exactly one notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.39/);
-  assert.match(boot,/runtime-v2938-perf\.js\?v=2938a/);
-  assert.match(boot,/runtime-v2935-guard\.js\?v=2935c/);
-  assert.match(boot,/runtime-v2939-prelude\.js\?v=2939a/);
-  assert.match(boot,/runtime-v2933\.js\?v=2933c/);
-  assert.match(boot,/runtime-v2933-ui\.js\?v=2933c/);
-  assert.match(boot,/runtime-v2939-filter\.js\?v=2939a/);
-  assert.match(boot,/runtime-v2939-scroll\.js\?v=2939a/);
-  assert.match(boot,/runtime-v2939-dock\.js\?v=2939a/);
-  assert.doesNotMatch(boot,/runtime-v2936-filter/);
-  assert.doesNotMatch(boot,/runtime-v2936-scroll/);
-  assert.doesNotMatch(boot,/runtime-v2938-controls/);
+  assert.match(boot,/@version\s+2\.9\.40/);
+  assert.match(boot,/runtime-v2940\.js\?v=2940a/);
+  assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,1);
+  assert.doesNotMatch(boot,/runtime-v2933/);
+  assert.doesNotMatch(boot,/runtime-v2935/);
+  assert.doesNotMatch(boot,/runtime-v2938/);
+  assert.doesNotMatch(boot,/runtime-v2939/);
 });
 
-test("manual reader remains manual and keeps confirmed saved checkpoints",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2933.js");
-  assert.doesNotMatch(r,/MutationObserver/);
-  assert.doesNotMatch(r,/setInterval/);
-  assert.match(r,/manualResume\(rootHint=null\)/);
-  assert.match(r,/COOLDOWN=12000/);
+test("v2.9.40 runtime is one isolated dock with no normal-scroll interception",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/document\.createElement\('iframe'\)/);
+  assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
+  assert.match(r,/parent\.postMessage\(\{m2940:true,cmd/);
+  assert.match(r,/setInterval\(maintenance,900\)/);
+  assert.doesNotMatch(r,/touchmove/);
+  assert.doesNotMatch(r,/wheel/);
+  assert.doesNotMatch(r,/document\.addEventListener\('scroll'/);
+  assert.doesNotMatch(r,/scrollTop\s*=/);
+  assert.doesNotMatch(r,/preventDefault\(\)/);
+});
+
+test("v2.9.40 filter is display-only and only the leading creator can hide a row",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/const HIDE='mumei-v2940-hide'/);
+  assert.match(r,/function firstCreatorId/);
+  assert.match(r,/function leadName/);
+  assert.match(r,/function magazineNoise/);
+  assert.match(r,/const first=firstCreatorId\(el\);if\(first\)return st\.ids\.has\(first\)/);
+  assert.match(r,/el\.classList\.toggle\(HIDE/);
+  assert.doesNotMatch(r,/actors\.some/);
+  assert.doesNotMatch(r,/location\.(?:assign|href).*filter/i);
+});
+
+test("v2.9.40 only observes the active notification panel for newly added rows",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/panelObs=new MutationObserver/);
+  assert.match(r,/panelObs\.observe\(p,\{childList:true,subtree:true\}\)/);
+  assert.match(r,/rowsFromMutation/);
+  assert.doesNotMatch(r,/observe\(document\.documentElement/);
+  assert.doesNotMatch(r,/observe\(document\.body/);
+});
+
+test("v2.9.40 manual save never drives the notification scroll position",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/async function manualSave\(\)/);
   assert.match(r,/MAX_NEW=120/);
   assert.match(r,/confirmedClientSignatures/);
-  assert.match(r,/oldBoundary/);
-  assert.match(r,/boundaryFound/);
+  assert.match(r,/mumei_insight_notification_saved_v2919/);
+  assert.match(r,/mumei_insight_notification_checkpoint_v2922/);
+  assert.doesNotMatch(r,/scrollHeight/);
+  assert.doesNotMatch(r,/scrollTo\(/);
 });
 
-test("v2.9.39 prelude narrows manual reading to notification rows before the reader runs",async()=>{
-  const p=await read("public/note-insight-notification-runtime-v2939-prelude.js");
-  assert.match(p,/__MUMEI_NOTIFICATION_V2939__/);
-  assert.match(p,/function safeListRoot/);
-  assert.match(p,/mumei-insight-manual-read-v2933/);
-  assert.match(p,/e\.detail\.root=r/);
+test("v2.9.40 INSIGHT navigation originates only from the isolated iframe command",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/notification-entry\.html\?from=note&insightMode=notifications#dashboard/);
+  assert.match(r,/cmd==='insight'\)location\.assign\(INSIGHT\)/);
+  assert.doesNotMatch(r,/\.click\(\)/);
+  assert.doesNotMatch(r,/\.onclick\(fake/);
 });
 
-test("legacy per-scroll filtering is pre-disabled before UI binding",async()=>{
-  const p=await read("public/note-insight-notification-runtime-v2938-perf.js");
-  assert.match(p,/data-mumei-insight-filter-scroll-v2933/);
-  assert.match(p,/dataset\.mumeiInsightFilterScrollV2933='1'/);
-  assert.match(p,/schedule\(10\)/);
+test("v2.9.40 retains grouped filter settings and exact/truncated fallback names",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2940.js");
+  assert.match(r,/mumei_insight_notification_groups_v1/);
+  assert.match(r,/mumei_insight_magazine_mute_profiles_v5/);
+  assert.match(r,/async function settingsCommand/);
+  assert.match(r,/group-toggle/);
+  assert.match(r,/group-delete/);
+  assert.match(r,/member-remove/);
+  assert.match(r,/member-add/);
+  assert.match(r,/function nameMatch/);
 });
 
-test("v2.9.39 filter is display-only, lead-representative-only, and does not run on scroll",async()=>{
-  const f=await read("public/note-insight-notification-runtime-v2939-filter.js");
-  assert.match(f,/const OWN='mumei-muted-v2939'/);
-  assert.match(f,/function leadName/);
-  assert.match(f,/function leadId/);
-  assert.match(f,/function nameMatch/);
-  assert.match(f,/function magazineNoise/);
-  assert.match(f,/function setHidden/);
-  assert.match(f,/MutationObserver/);
-  assert.match(f,/mumei-insight-filter-refresh-v2939/);
-  assert.doesNotMatch(f,/document\.addEventListener\('scroll'/);
-  assert.doesNotMatch(f,/touchmove/);
-  assert.doesNotMatch(f,/wheel/);
+test("v2.9.40 update flow is same-tab, persistent, and auto-resumes verification",async()=>{
+  const update=await read("public/notification-update.html");
+  const setup=await read("public/notification-setup.html");
+  assert.match(update,/最新版 v2\.9\.40/);
+  assert.match(update,/v2\.9\.40 をインストール／更新/);
+  assert.match(update,/tampermonkey\.net\/script_installation\.php#url=/);
+  assert.match(update,/mumei-notification-update-pending/);
+  assert.match(update,/location\.assign\(INSTALLER\)/);
+  assert.doesNotMatch(update,/window\.open\(/);
+  assert.match(update,/autoVerify/);
+  assert.match(setup,/最新版は v2\.9\.40/);
+  assert.match(setup,/更新確認を再開しています/);
+  assert.match(setup,/mumei_insight_version_check=1/);
+  assert.match(setup,/localStorage\.removeItem\(PENDING\)/);
 });
 
-test("v2.9.39 native scroll runtime never writes scrollTop or captures touch movement",async()=>{
-  const s=await read("public/note-insight-notification-runtime-v2939-scroll.js");
-  assert.match(s,/overscroll-behavior-y:contain/);
-  assert.match(s,/touch-action:pan-y/);
-  assert.match(s,/function findBox/);
-  assert.doesNotMatch(s,/touchmove/);
-  assert.doesNotMatch(s,/wheel/);
-  assert.doesNotMatch(s,/scrollTop\s*=/);
-  assert.doesNotMatch(s,/preventDefault/);
-});
-
-test("v2.9.39 dock isolates user taps inside an iframe and invokes legacy handlers without DOM clicks",async()=>{
-  const d=await read("public/note-insight-notification-runtime-v2939-dock.js");
-  assert.match(d,/document\.createElement\('iframe'\)/);
-  assert.match(d,/frame\.srcdoc=html\(\)/);
-  assert.match(d,/parent\.postMessage\(\{mumei2939:true,cmd:id\}/);
-  assert.match(d,/typeof b\.onclick!=='function'/);
-  assert.match(d,/b\.onclick\(fake\(\)\)/);
-  assert.match(d,/mumei-insight-filter-refresh-v2939/);
-  assert.match(d,/notification-entry\.html\?from=note&insightMode=notifications#dashboard/);
-  assert.match(d,/location\.assign\(INS\)/);
-  assert.match(d,/function capture/);
-  assert.match(d,/function restore/);
-  assert.match(d,/window\.scrollTo\(0,s\.pageY\)/);
-});
-
-test("independent guard keeps the dock state stable through transient note DOM changes",async()=>{
-  const g=await read("public/note-insight-notification-runtime-v2935-guard.js");
-  assert.match(g,/MISS_GRACE=900/);
-  assert.match(g,/lastShell=null,lastSeen=0/);
-  assert.match(g,/hideTimer=setTimeout/);
-  assert.doesNotMatch(g,/rail\.hidden=!shell/);
+test("INSIGHT and本人通知 versions remain independent",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json"));
+  const release=await read("src/insight-release.ts");
+  assert.equal(manifest.appVersion,"2026.09.07.8");
+  assert.equal(manifest.notificationVersion,"2.9.40");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.07\.8"/);
 });
 
 test("INSIGHT notification deep link and active nav remain deterministic",async()=>{
@@ -102,30 +110,6 @@ test("INSIGHT notification deep link and active nav remain deterministic",async(
   assert.match(entry,/insightMode=notifications#dashboard/);
   assert.match(live,/getElementById\("minf-notifications"\)/);
   assert.match(css,/mode-notifications \.miu-nav button:nth-child\(8\)/);
-});
-
-test("INSIGHT and本人通知 versions remain separate",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json"));
-  const release=await read("src/insight-release.ts");
-  assert.equal(manifest.appVersion,"2026.09.07.8");
-  assert.equal(manifest.notificationVersion,"2.9.39");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.07\.8"/);
-});
-
-test("v2.9.39 update flow uses Tampermonkey installer and persistent auto-return state",async()=>{
-  const update=await read("public/notification-update.html");
-  const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.39/);
-  assert.match(update,/v2\.9\.39 をインストール／更新/);
-  assert.match(update,/tampermonkey\.net\/script_installation\.php#url=/);
-  assert.match(update,/mumei-notification-update-pending-v2939/);
-  assert.match(update,/localStorage\.setItem\(PENDING/);
-  assert.match(update,/window\.open\(INSTALLER,'_blank'\)/);
-  assert.match(update,/child\.closed/);
-  assert.match(update,/autoVerify/);
-  assert.match(setup,/最新版は v2\.9\.39/);
-  assert.match(setup,/最新版です/);
-  assert.match(setup,/localStorage\.removeItem\(PENDING\)/);
 });
 
 test("INSIGHT notification view preserves membership categories and auto-reflects saved data",async()=>{
