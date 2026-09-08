@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.08.8",
   "notificationVersion": "2.9.48",
-  "dashboardVersion": "1.2.0",
-  "releasedAt": "2026-09-09T10:00:00+09:00",
+  "dashboardVersion": "1.3.0",
+  "releasedAt": "2026-09-09T05:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "参加者ごとのnote公式Dashboardを完全分離して同期。v1.2.0ではDashboard到着後の自動起動・ページ復帰・遅延注入を強化し、公式5指標・流入・日別系列・記事/メンシプ/マガジンをINSIGHTへ取り込む。"
+  "note": "Dashboard v1.3.0: URLクエリ依存を廃止し、同期ツール共通領域で本人確認コードを安全に引き渡してからnote公式Dashboardを自動同期。"
 }
