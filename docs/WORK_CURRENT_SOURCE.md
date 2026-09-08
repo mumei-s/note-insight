@@ -1,6 +1,6 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 11:28 JST
+Updated: 2026-09-08 11:45 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
@@ -8,42 +8,48 @@ Updated: 2026-09-08 11:28 JST
 
 Current release:
 
-- INSIGHT app: `2026.09.08.1`
-- 本人通知・統計: **v2.9.43**
+- INSIGHT app: `2026.09.08.2`
+- 本人通知・統計: **v2.9.44**
 - fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
-- current notification runtime: `public/note-insight-notification-runtime-v2943.js`
+- current notification runtime: `public/note-insight-notification-runtime-v2944.js`
 - production `insight-notification-ingest-v2`: **v21 ACTIVE**
 - production `insight-notification-feed-final`: **v11 ACTIVE**
 - current relation backend source: `supabase/functions/insight-relations/index.ts`
 - deployed production `insight-relations`: **v11 ACTIVE**
 
-Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on an inline `<script>` + `postMessage`; note/browser CSP could leave the dock at `通知一覧を確認中…` and all buttons dead. **v2.9.43 removes that dependency.**
+Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on inline script + postMessage. `v2.9.43` removed that dependency, but real-device testing found the filter could remain ON because the same iframe controls could be bound twice and already-hidden rows were excluded from OFF re-evaluation. **v2.9.44 fixes both failures and also repairs magazine-join creator avatars.**
 
-### Current 本人通知 architecture — v2.9.43
+### Current 本人通知 architecture — v2.9.44
 
 1. **One current runtime only.**
-   - Current bootstrap loads only `public/note-insight-notification-runtime-v2943.js`.
-   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942 runtimes remain history only and must not be re-added to the current `@require` chain.
-   - The visible controls remain inside an isolated fixed iframe so note DOM click delegation cannot receive manual-save/filter/settings taps.
-   - **The iframe contains markup/styles only. It contains no inline JavaScript.**
-   - The userscript parent directly accesses `frame.contentDocument` and binds button handlers with `bindFrame()` after iframe load.
+   - Current bootstrap loads only `public/note-insight-notification-runtime-v2944.js`.
+   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943 runtimes remain history only and must not be re-added to the current `@require` chain.
+   - Visible controls remain inside an isolated fixed iframe so note DOM click delegation cannot receive manual-save/filter/settings taps.
+   - The iframe contains markup/styles only. It contains no inline JavaScript.
+   - The userscript parent directly accesses `frame.contentDocument` and binds button handlers after iframe load.
+   - `bindFrame()` is guarded by `frame.dataset.mumeiBound`; the same iframe controls must never be bound twice.
    - Do not reintroduce iframe `parent.postMessage` / `contentWindow.postMessage` control transport for the dock.
    - The dock remains at the bottom with safe-area offset.
 
 2. **Real note notification shell detection.**
    - Primary detection uses visible exact `通知` and `お知らせ` interactive tabs.
-   - When note renders those labels as non-interactive span/div nodes, v2.9.43 uses a throttled deep fallback (`smallTextNode`) rather than failing permanently.
+   - When note renders those labels as non-interactive span/div nodes, use the throttled deep fallback `smallTextNode` rather than failing permanently.
    - `shellFromTabs` uses the common ancestor of the two real tabs and ascends until the notification list shell is found.
    - Generic reaction dialogs such as `スキをつけたユーザー` must never become the manual-save/filter root.
    - The active shell is retained through `PANEL_GRACE=3200` ms so transient note rerenders do not blink/delete the dock.
    - No normal-scroll listener is used for shell detection.
 
-3. **Filtering is display-only.**
+3. **Filtering is display-only and reversible.**
    - Filter never navigates the page and never drives scroll.
    - Only a first/leading creator can cause a joint-magazine noise row to be hidden.
    - A registered creator appearing only second/later in an aggregated notification does not hide that row.
    - Leading creator URL/ID is strongest; if absent, saved hydrated profile names including safely truncated display names are fallback.
+   - `filterBusy` prevents a second toggle while one toggle is in progress.
+   - Filter state is written, read back and verified before UI result is reported.
+   - ON evaluates `rowCandidates(root,true)` so current hidden state never removes a row from evaluation.
+   - OFF calls `clearHidden(root)` and removes `mumei-v2944-hide` from every row previously hidden by the filter.
+   - Status explicitly reports actual work: `フィルターON ✓ 非表示N件` or `フィルターOFF ✓ N件復元`.
    - Existing rows are evaluated when the active notification panel is detected; afterward the panel-scoped MutationObserver evaluates newly inserted rows.
    - Filter groups, creator add/remove and group ON/OFF remain account-isolated.
 
@@ -59,7 +65,7 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
 5. **Manual save is manual-only and server-confirmed.**
    - User opens the real note bell notification list and presses `手動保存（続きから）`.
    - Runtime reads only notification rows already loaded in the real shell; it does not auto-scroll to fetch older rows.
-   - Current source contract is exactly `note-notification-manual-sync-v2943`.
+   - Current source contract is exactly `note-notification-manual-sync-v2944`.
    - This must remain compatible with the ingest allowlist regex for `manual-sync-v\d+`.
    - A prior defect used `note-notification-manual-v2940`, which did not match the allowlist and could cause `NOTIFICATION_SOURCE_BLOCKED`. Do not restore that source shape.
    - Only server-returned `confirmedClientSignatures` are added to saved signatures/checkpoint.
@@ -74,14 +80,14 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
    - INSIGHT UI has the `その他` category and 3-second feed refresh.
    - A server-confirmed manual row must not silently disappear merely because the classifier does not yet know its exact subtype.
 
-7. **Install/update v2.9.43.**
+7. **Install/update v2.9.44.**
    - Never navigate directly to `tampermonkey.net/script_installation.php`; that page is an intermediate page and real-device testing showed it can remain stuck.
    - Primary userscript URL remains `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
    - The update/result page remains open while the `.user.js` is opened in a dedicated child tab from a direct user gesture.
    - If Tampermonkey intercepts normally, the child leaves the same-origin `.user.js` page and proceeds to its installer.
-   - If the child remains on same-origin raw `.user.js` text for more than ~1.8 seconds, the original update page detects that state, closes the raw-text child, and starts real note-side version verification. The user must not be stranded on raw text.
-   - Success is determined only by the running note userscript reporting v2.9.43 via `mumei_insight_version_check`.
-   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.43｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
+   - If the child remains on same-origin raw `.user.js` text for more than ~1.8 seconds, the original update page detects that state, closes the raw-text child, and starts real note-side version verification.
+   - Success is determined only by the running note userscript reporting v2.9.44 via `mumei_insight_version_check`.
+   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.44｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
    - If the running version is old or absent, remain on the result page and explicitly say `更新されていません`.
    - Pending update state remains `mumei-notification-update-pending`, so reopening the original INSIGHT/settings tab can resume verification after Android temporarily leaves the browser.
    - If `window.open` itself is blocked, stay on the update page and show a popup-permission error; do not fall back to same-tab raw `.user.js` navigation.
@@ -102,11 +108,22 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
    - userscript metadata/version identifies the installed 本人通知 version.
    - an INSIGHT-only change increments `appVersion` only.
    - a 本人通知-only change increments `notificationVersion` only.
+   - when one repair touches both the userscript and INSIGHT UI, both tracks may increment independently, as in app `2026.09.08.2` + 本人通知 `2.9.44`.
    - INSIGHT main dashboard always shows current/latest values for both tracks.
    - only the mismatched product receives `NEW` / `更新あり` treatment.
    - an unverified notification installation says `この端末 未確認`; never infer installation from the server manifest.
 
-### INSIGHT app 2026.09.08.1 update feedback
+### INSIGHT app 2026.09.08.2 — magazine join avatar repair
+
+- `magazine_join` history contained mixed legacy records: some rows had correct creator URL/profile image, some had both fields null, and some had mistakenly captured a magazine cover as the actor image.
+- Production audit on 2026-09-08 found 17 `magazine_join` rows with missing actor URL/image; all 17 had exactly one unambiguous actor match elsewhere in the same member scope and all 17 had a profile image candidate.
+- Those 17 existing production rows were backfilled with the matching actor URL and profile image.
+- Current userscript `actorImage()` prefers an image inside the actor link, then `/profile_` assets, then other non-cover images. It never deliberately uses `magazine_cover`, OGP or cover assets as the person avatar.
+- INSIGHT notification UI runs `mergeMagazineJoinRows()` before enrichment so duplicate legacy rows representing the same join event are merged, preferring richer actor URL/profile image/target/timestamp data.
+- `creator-icons` enrichment remains the final preferred source when actor URL is available.
+- Saved magazine-cover images are sanitized by `safeActorImage()` and are not rendered as the actor avatar.
+
+### INSIGHT app update feedback retained
 
 - The INSIGHT本体 update/check button visibly enters `確認中…`.
 - Even when already current, the check is held long enough to be perceptible and then shows `✅ INSIGHT本体 v...｜最新版です` for several seconds.
@@ -277,20 +294,27 @@ Pages workflow must pass before public deployment:
 5. Pages artifact upload
 6. deploy
 
+Current v2.9.44 / app 2026.09.08.2 validation: GitHub Actions run `34180986826` succeeded through userscript syntax, production build, unified regression tests, artifact upload and Pages deploy.
+
 Regression coverage must protect:
 
-- exactly one current runtime `@require` (`runtime-v2943`);
+- exactly one current runtime `@require` (`runtime-v2944`);
 - no legacy notification runtime chain;
 - iframe markup/style only: no iframe inline script and no postMessage-based control transport;
 - direct parent-side `contentDocument` handler binding after iframe load;
+- `frame.dataset.mumeiBound` preventing duplicate control bindings;
 - bottom iframe dock and real `通知` + `お知らせ` shell gating with deep text fallback;
 - transient panel grace without scroll listeners or document-wide MutationObservers;
-- manual source `note-notification-manual-sync-v2943` remaining compatible with server allowlist;
+- manual source `note-notification-manual-sync-v2944` remaining compatible with server allowlist;
 - server-confirmed saved signatures only;
 - no normal-scroll interception or scroll-position writes;
 - first/leading-creator-only filter behavior;
+- filter OFF restoring every `mumei-v2944-hide` row;
+- filter ON/OFF reporting actual hidden/restored counts;
 - filter observation scoped to active notification panel;
 - no note-DOM proxy clicks;
+- actor image selection preferring profile images and excluding magazine cover/OGP/cover images;
+- INSIGHT `mergeMagazineJoinRows` duplicate consolidation and creator-icons enrichment;
 - child-tab GitHub Pages `.user.js` install path;
 - automatic closure/recovery when child remains raw `.user.js` text;
 - no direct `script_installation.php` navigation and no same-tab raw-script fallback;
@@ -323,10 +347,13 @@ Regression coverage must protect:
 - Never let the generic notification classifier override exact membership URL kinds.
 - Never intentionally leave one filtered magazine notification visible.
 - Never let a second/later creator in an aggregated notification cause the row to be hidden.
+- Never bind the same dock iframe controls more than once; one physical tap must produce exactly one filter state transition.
+- Never exclude already-hidden filter rows from OFF evaluation; OFF must restore every row hidden by the current filter class.
 - Never restore scroll/touch/wheel interception to the current notification runtime without a verified device reason.
 - Never load the old multi-runtime notification chain again.
 - Never put executable inline script inside the dock iframe or depend on postMessage for dock button functionality.
 - Never let manual/filter/settings dock taps proxy-click or fall through to note links.
+- Never use magazine cover, OGP or cover artwork as a creator/person avatar in INSIGHT【通知】.
 - Never change the current manual source to a value outside the ingest allowlist contract.
 - Never drop explicit-manual `other` rows from ingest/feed; they belong in INSIGHT【その他】 until a stronger classifier is added.
 - Never open Tampermonkey's intermediate installation page directly.
