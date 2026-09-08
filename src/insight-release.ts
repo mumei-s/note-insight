@@ -1,4 +1,4 @@
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.08.4";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.08.5";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 
 export type InsightRelease = {
