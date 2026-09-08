@@ -140,26 +140,32 @@ test("INSIGHT,本人通知,Dashboard sync release tracks remain independent",asy
   const dash=await read("public/note-insight-dashboard-sync.user.js");
   assert.equal(manifest.appVersion,"2026.09.08.8");
   assert.equal(manifest.notificationVersion,"2.9.48");
-  assert.equal(manifest.dashboardVersion,"1.3.0");
+  assert.equal(manifest.dashboardVersion,"1.4.0");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.8"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.48"/);
-  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.3\.0"/);
-  assert.match(dash,/@version\s+1\.3\.0/);
+  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.0"/);
+  assert.match(dash,/@version\s+1\.4\.0/);
 });
 
 test("Dashboard sync is independent of本人通知 and refuses cross-account data",async()=>{
-  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),dash=`${boot}\n${core}`,api=await read("supabase/functions/insight-dashboard-data/index.ts"),setup=await read("public/dashboard-setup.html");
+  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),dash=`${boot}\n${core}`,api=await read("supabase/functions/insight-dashboard-data/index.ts"),setup=await read("public/dashboard-setup.html"),analytics=await read("src/member-insight-analytics-final.tsx"),opportunity=await read("src/member-insight-opportunity-engine.tsx"),opportunityCss=await read("src/member-insight-opportunity-engine.css");
   assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);
   assert.match(boot,/@match\s+https:\/\/mumei-s\.github\.io\/note-insight\/dashboard-setup\.html\*/);
   assert.match(boot,/GM_setValue/);
-  assert.match(boot,/HANDOFF_KEY='mumei-dashboard-handoff-v130'/);
+  assert.match(boot,/HANDOFF_KEY='mumei-dashboard-handoff-v140'/);
+  assert.match(boot,/hidePanel/);
+  assert.match(boot,/showPanel/);
   assert.match(dash,/currentNoteId/);
   assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);
   assert.match(api,/purpose","note_dashboard_sync"/);
   assert.match(api,/noteId!==who\.noteId/);
-  assert.match(setup,/本人通知とは別機能/);
-  assert.match(setup,/Dashboard同期ツール v1\.3\.0/);
-  assert.match(setup,/mumei-dashboard-handoff/);
+  assert.match(setup,/Dashboard同期ツール v1\.4\.0/);
+  assert.match(setup,/autoStart/);
+  assert.match(analytics,/searchParams\.set\("auto","1"\)/);
+  assert.match(analytics,/OpportunityEngine/);
+  assert.match(opportunity,/INSIGHT OPPORTUNITY ENGINE/);
+  assert.match(opportunity,/潜在PV/);
+  assert.match(opportunityCss,/\.mia2-orbit \.arc\.note/);
 });
 
 test("comment all tab loads every saved comment and reply row, not only threads",async()=>{
