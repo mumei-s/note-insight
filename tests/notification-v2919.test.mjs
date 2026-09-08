@@ -18,7 +18,7 @@ test("v2.9.47 recovers checkpoint from server-confirmed saved overlap, never not
   assert.match(boot,/SAVED='mumei_insight_notification_saved_v2919:'/);
   assert.match(boot,/CHECK='mumei_insight_notification_checkpoint_v2922:'/);
   assert.match(boot,/async function reconcileSavedBoundary\(\)/);
-  assert.match(boot,/saved\.find\(sig=>sig\.startsWith\(t\+'\\\|'\)\)/);
+  assert.match(boot,/saved\.find\(sig=>sig\.startsWith\(t\+'\|'\)\)/);
   assert.match(boot,/boundarySource:'saved-overlap-recovery-v2947'/);
   assert.doesNotMatch(boot,/\bunread\b|aria-unread|is-unread|既読|未読/i);
   assert.doesNotMatch(boot,/scrollTop\s*=|scrollTo\(/);
