@@ -3,20 +3,20 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.49 bootstrap loads core plus automatic previous-checkpoint scanner",async()=>{
+test("v2.9.50 bootstrap loads core plus chunked automatic previous-checkpoint scanner",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.49/);
+  assert.match(boot,/@version\s+2\.9\.50/);
   assert.match(boot,/runtime-v2948\.js\?v=2948a/);
-  assert.match(boot,/notification-autoscan-v2949\.js\?v=2949a/);
+  assert.match(boot,/notification-autoscan-v2950\.js\?v=2950a/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,2);
   assert.match(boot,/async function openMatchingInsight\(\)/);
   assert.match(boot,/u\.searchParams\.set\('account',a\.id\)/);
 });
 
-test("v2.9.49 auto scanner reaches saved checkpoint without user scrolling and restores position",async()=>{
-  const r=await read("public/note-insight-notification-autoscan-v2949.js");
-  for(const x of ["MAX_STEPS=90","scrollHost(panel)","host.scrollTop=0","前回保存位置まで自動読込中","saved.has(s)","boundarySignature:newBoundary","confirmedClientSignatures","host.scrollTop=original","auto-saved-overlap-v2949","自動保存（前回まで）"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(r,/SRC='note-notification-manual-sync-v2949'/);
+test("v2.9.50 auto scanner reaches saved checkpoint in UI-friendly chunks and restores position",async()=>{
+  const r=await read("public/note-insight-notification-autoscan-v2950.js");
+  for(const x of ["MAX_STEPS=72","CHUNK_STEPS=6","yieldUi","scrollHost(panel)","host.scrollTop=0","saved.has(s)","boundarySignature:newBoundary","confirmedClientSignatures","host.scrollTop=original","auto-saved-overlap-v2950","自動保存（前回まで）"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(r,/SRC='note-notification-manual-sync-v2950'/);
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
@@ -26,14 +26,14 @@ test("notification core still owns filtering, marker and server-confirmed manual
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("notification installer and settings publish v2.9.49 and verify the running script",async()=>{
+test("notification installer and settings publish v2.9.50 and verify the running script",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.49/);
+  assert.match(update,/最新版 v2\.9\.50/);
   assert.match(update,/window\.open\(SCRIPT,'mumei-notification-install'\)/);
   assert.match(update,/Date\.now\(\)-rawSince>1800/);
   assert.match(update,/Android Edge/);
-  assert.match(setup,/最新版は v2\.9\.49/);
-  assert.match(setup,/前回保存位置まで自動/);
+  assert.match(setup,/最新版は v2\.9\.50/);
+  assert.match(setup,/前回保存位置まで小分け自動走査/);
 });
 
 test("INSIGHT separates normal refresh data from本人通知-only data",async()=>{
@@ -57,11 +57,11 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.1");
-  assert.equal(manifest.notificationVersion,"2.9.49");
+  assert.equal(manifest.appVersion,"2026.09.09.2");
+  assert.equal(manifest.notificationVersion,"2.9.50");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.1"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.49"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.2"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.50"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.0"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
