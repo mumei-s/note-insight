@@ -12,7 +12,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2944.js?v=2944a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2944.js?v=2944b
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
