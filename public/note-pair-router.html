@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>記事を選択</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#171b21;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{min-height:100dvh;display:grid;place-items:center;padding:18px}.box{width:min(760px,100%);background:#fff;border:1px solid #dce1e7;border-radius:18px;padding:16px;box-shadow:0 14px 40px #00000014}h1{font-size:18px;margin:0 0 5px}.sub{font-size:12px;color:#667085;margin-bottom:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{display:flex;min-height:112px;flex-direction:column;justify-content:space-between;text-decoration:none;color:inherit;border:1px solid #d8dee6;border-radius:14px;padding:14px;background:#fff;transition:.12s ease}.card:active{transform:scale(.985);background:#f8fafc}.tag{font-size:10px;font-weight:800;color:#667085}.name{font-size:16px;font-weight:850;line-height:1.35;word-break:break-word}.go{margin-top:12px;font-size:12px;font-weight:800;color:#0f766e}.single{grid-template-columns:1fr}@media(max-width:520px){.wrap{padding:10px}.box{padding:12px}.grid{gap:8px}.card{min-height:105px;padding:12px}.name{font-size:14px}}</style>
+</head>
+<body><main class="wrap"><section class="box"><h1>紹介記事を選択</h1><div class="sub">横2列カードで選んだ2人の記事です。</div><div class="grid" id="grid"></div></section></main>
+<script>
+(()=>{'use strict';const q=new URLSearchParams(location.search),grid=document.getElementById('grid');
+function safe(v){try{const u=new URL(String(v||''));return u.protocol==='https:'&&u.hostname==='note.com'&&/\/n\/n[a-z0-9]{8,}(?:[/?#]|$)/i.test(u.pathname+u.search+u.hash)?u.href:''}catch(_){return''}}
+const rows=[{u:safe(q.get('a')),n:q.get('an')||'左の記事',label:'LEFT'},{u:safe(q.get('b')),n:q.get('bn')||'右の記事',label:'RIGHT'}].filter(x=>x.u);if(rows.length===1)grid.classList.add('single');
+if(!rows.length){grid.innerHTML='<div>記事URLを確認できませんでした。</div>';return}
+for(const row of rows){const a=document.createElement('a');a.className='card';a.href=row.u;a.rel='noopener';const tag=document.createElement('div');tag.className='tag';tag.textContent=row.label;const name=document.createElement('div');name.className='name';name.textContent=row.n;const go=document.createElement('div');go.className='go';go.textContent='この記事を開く →';a.append(tag,name,go);grid.append(a)}})();
+</script></body></html>
