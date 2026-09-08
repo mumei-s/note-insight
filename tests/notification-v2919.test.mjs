@@ -3,41 +3,62 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.42 bootstrap loads exactly one current notification runtime",async()=>{
+test("v2.9.43 bootstrap loads exactly one current notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.42/);
-  assert.match(boot,/runtime-v2942\.js\?v=2942a/);
+  assert.match(boot,/@version\s+2\.9\.43/);
+  assert.match(boot,/runtime-v2943\.js\?v=2943a/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,1);
-  assert.doesNotMatch(boot,/runtime-v2933|runtime-v2935|runtime-v2938|runtime-v2939|runtime-v2940/);
+  assert.doesNotMatch(boot,/runtime-v2933|runtime-v2935|runtime-v2938|runtime-v2939|runtime-v2940|runtime-v2942/);
   assert.match(boot,/@updateURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
 });
 
-test("v2.9.42 bottom dock is isolated and never intercepts normal scrolling",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
+test("v2.9.43 iframe is CSP-safe: no inline script or postMessage dependency",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
   assert.match(r,/document\.createElement\('iframe'\)/);
+  assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
+  assert.match(r,/frame\.addEventListener\('load',bindFrame/);
+  assert.match(r,/function bindFrame\(\)/);
+  assert.match(r,/contentDocument/);
+  assert.doesNotMatch(r,/parent\.postMessage/);
+  assert.doesNotMatch(r,/contentWindow\?\.postMessage/);
+  assert.doesNotMatch(r,/<script>/);
+});
+
+test("v2.9.43 bottom dock never intercepts normal note scrolling",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
   assert.match(r,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)/);
-  assert.match(r,/setInterval\(maintenance,1500\)/);
-  assert.match(r,/PANEL_GRACE=2600/);
+  assert.match(r,/PANEL_GRACE=3200/);
+  assert.match(r,/setInterval\(maintenance,1800\)/);
   assert.doesNotMatch(r,/touchmove/);
   assert.doesNotMatch(r,/wheel/);
   assert.doesNotMatch(r,/addEventListener\(['"]scroll/);
   assert.doesNotMatch(r,/scrollTop\s*=/);
   assert.doesNotMatch(r,/scrollTo\(/);
-  assert.doesNotMatch(r,/preventDefault\(\)/);
 });
 
-test("v2.9.42 finds the real notification shell by 通知 and お知らせ tabs",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
-  assert.match(r,/function exactTabCount/);
-  assert.match(r,/t==='通知'/);
-  assert.match(r,/t==='お知らせ'/);
-  assert.match(r,/if\(tabs<2\)return-1/);
+test("v2.9.43 finds real notification shell from 通知 and お知らせ, with deep fallback",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
+  assert.match(r,/function findTabs/);
+  assert.match(r,/smallTextNode\('通知'\)/);
+  assert.match(r,/smallTextNode\('お知らせ'\)/);
+  assert.match(r,/function shellFromTabs/);
+  assert.match(r,/commonAncestor/);
   assert.match(r,/Date\.now\(\)-lastPanelSeen<PANEL_GRACE/);
 });
 
-test("v2.9.42 filter is display-only and only leading creator can hide a row",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
-  assert.match(r,/const HIDE='mumei-v2942-hide'/);
+test("v2.9.43 dock buttons are bound directly and only INSIGHT intentionally navigates",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
+  assert.match(r,/bind\(ui\.read,\(\)=>void manualSave\(\)\)/);
+  assert.match(r,/bind\(ui\.filter,\(\)=>void toggleFilter\(\)\)/);
+  assert.match(r,/bind\(ui\.settings/);
+  assert.match(r,/bind\(ui\.ins,\(\)=>location\.assign\(INSIGHT\)\)/);
+  assert.doesNotMatch(r,/\.click\(\)/);
+  assert.doesNotMatch(r,/onclick=fake/);
+});
+
+test("v2.9.43 filter is display-only and only leading creator can hide a row",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
+  assert.match(r,/const HIDE='mumei-v2943-hide'/);
   assert.match(r,/function firstCreatorId/);
   assert.match(r,/function leadName/);
   assert.match(r,/function magazineNoise/);
@@ -46,8 +67,8 @@ test("v2.9.42 filter is display-only and only leading creator can hide a row",as
   assert.doesNotMatch(r,/actors\.some/);
 });
 
-test("v2.9.42 only observes newly inserted rows inside active notification panel",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
+test("v2.9.43 observes only inserted rows inside active notification panel",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
   assert.match(r,/panelObs=new MutationObserver/);
   assert.match(r,/panelObs\.observe\(p,\{childList:true,subtree:true\}\)/);
   assert.match(r,/rowsFromMutation/);
@@ -55,10 +76,10 @@ test("v2.9.42 only observes newly inserted rows inside active notification panel
   assert.doesNotMatch(r,/observe\(document\.body/);
 });
 
-test("manual save source is accepted by server and never drives navigation or scroll",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
+test("manual save source remains server-accepted and never drives navigation or scroll",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2943.js");
   const ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
-  assert.match(r,/SRC='note-notification-manual-sync-v2942'/);
+  assert.match(r,/SRC='note-notification-manual-sync-v2943'/);
   assert.match(ingest,/manual-sync-v\\d\+/);
   assert.match(r,/async function manualSave\(\)/);
   assert.match(r,/confirmedClientSignatures/);
@@ -66,27 +87,22 @@ test("manual save source is accepted by server and never drives navigation or sc
   assert.doesNotMatch(r,/scrollHeight|scrollTop\s*=|scrollTo\(/);
 });
 
-test("only isolated INSIGHT command intentionally navigates away from note",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2942.js");
-  assert.match(r,/cmd==='insight'\)location\.assign\(INSIGHT\)/);
-  assert.doesNotMatch(r,/\.click\(\)/);
-  assert.doesNotMatch(r,/\.onclick\(fake/);
-});
-
-test("v2.9.42 browser-aware install page keeps update screen available",async()=>{
+test("v2.9.43 installer auto-closes raw-text child and verifies actual running version",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.42/);
+  assert.match(update,/最新版 v2\.9\.43/);
   assert.match(update,/Android Edge/);
   assert.match(update,/Android Firefox/);
   assert.match(update,/iPhone\/iPad Safari/);
-  assert.match(update,/Android Chrome \/ Yahoo/);
   assert.match(update,/window\.open\(SCRIPT,'mumei-notification-install'\)/);
+  assert.match(update,/note-insight-notification-sync\.user\.js/);
+  assert.match(update,/Date\.now\(\)-rawSince>1800/);
+  assert.match(update,/child\.close\(\)/);
+  assert.match(update,/文字列表示を検知/);
   assert.match(update,/mumei-notification-update-pending/);
   assert.doesNotMatch(update,/script_installation\.php/);
   assert.doesNotMatch(update,/location\.assign\(SCRIPT\)/);
-  assert.match(update,/autoVerify/);
-  assert.match(setup,/最新版は v2\.9\.42/);
+  assert.match(setup,/最新版は v2\.9\.43/);
   assert.match(setup,/更新完了｜本人通知 v\$\{VERSION\}｜最新版/);
   assert.match(setup,/setTimeout\(\(\)=>location\.replace\(returnTarget\),2200\)/);
   assert.match(setup,/更新されていません/);
@@ -106,7 +122,7 @@ test("INSIGHT and本人通知 versions remain independent",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
   const release=await read("src/insight-release.ts");
   assert.equal(manifest.appVersion,"2026.09.08.1");
-  assert.equal(manifest.notificationVersion,"2.9.42");
+  assert.equal(manifest.notificationVersion,"2.9.43");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.1"/);
 });
 
