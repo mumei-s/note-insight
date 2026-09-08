@@ -134,12 +134,28 @@ test("manual notifications are never dropped merely because subtype is unknown",
   assert.match(ui,/\["other","その他"\]/);
 });
 
-test("INSIGHT and本人通知 release tracks remain independent",async()=>{
+test("INSIGHT,本人通知,Dashboard sync release tracks remain independent",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
   const release=await read("src/insight-release.ts");
-  assert.equal(manifest.appVersion,"2026.09.08.7");
+  const dash=await read("public/note-insight-dashboard-sync.user.js");
+  assert.equal(manifest.appVersion,"2026.09.08.8");
   assert.equal(manifest.notificationVersion,"2.9.48");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.7"/);
+  assert.equal(manifest.dashboardVersion,"1.1.0");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.8"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.48"/);
+  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.1\.0"/);
+  assert.match(dash,/@version\s+1\.1\.0/);
+});
+
+test("Dashboard sync is independent of本人通知 and refuses cross-account data",async()=>{
+  const dash=await read("public/note-insight-dashboard-sync.user.js"),api=await read("supabase/functions/insight-dashboard-data/index.ts"),setup=await read("public/dashboard-setup.html");
+  assert.match(dash,/@match\s+https:\/\/note\.com\/sitesettings\/stats\*/);
+  assert.match(dash,/currentNoteId/);
+  assert.match(dash,/current!==paired/);
+  assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);
+  assert.match(api,/purpose","note_dashboard_sync"/);
+  assert.match(api,/noteId!==who\.noteId/);
+  assert.match(setup,/本人通知とは別機能/);
 });
 
 test("comment all tab loads every saved comment and reply row, not only threads",async()=>{
