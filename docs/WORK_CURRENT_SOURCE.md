@@ -1,6 +1,6 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 11:08 JST
+Updated: 2026-09-08 11:28 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
@@ -9,30 +9,35 @@ Updated: 2026-09-08 11:08 JST
 Current release:
 
 - INSIGHT app: `2026.09.08.1`
-- 本人通知・統計: **v2.9.42**
+- 本人通知・統計: **v2.9.43**
 - fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
-- current notification runtime: `public/note-insight-notification-runtime-v2942.js`
+- current notification runtime: `public/note-insight-notification-runtime-v2943.js`
 - production `insight-notification-ingest-v2`: **v21 ACTIVE**
 - production `insight-notification-feed-final`: **v11 ACTIVE**
 - current relation backend source: `supabase/functions/insight-relations/index.ts`
 - deployed production `insight-relations`: **v11 ACTIVE**
 
-`v2.9.39` was rejected by Android real-device testing. `v2.9.40` reset the notification tool to one runtime. `v2.9.41` repaired the installer route. `v2.9.42` is the current stabilization checkpoint and additionally fixes the manual-save server contract, dock detection, browser guidance, install-result return flow and INSIGHT feed completeness.
+Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on an inline `<script>` + `postMessage`; note/browser CSP could leave the dock at `通知一覧を確認中…` and all buttons dead. **v2.9.43 removes that dependency.**
 
-### Current 本人通知 architecture — v2.9.42
+### Current 本人通知 architecture — v2.9.43
 
 1. **One current runtime only.**
-   - Current bootstrap loads only `public/note-insight-notification-runtime-v2942.js`.
-   - Old v2933/v2935/v2936/v2938/v2939/v2940 runtimes remain only as history and must not be re-added to the current `@require` chain.
-   - Visible controls live in an isolated fixed iframe. Note DOM click delegation must never receive manual-save/filter/settings button taps.
+   - Current bootstrap loads only `public/note-insight-notification-runtime-v2943.js`.
+   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942 runtimes remain history only and must not be re-added to the current `@require` chain.
+   - The visible controls remain inside an isolated fixed iframe so note DOM click delegation cannot receive manual-save/filter/settings taps.
+   - **The iframe contains markup/styles only. It contains no inline JavaScript.**
+   - The userscript parent directly accesses `frame.contentDocument` and binds button handlers with `bindFrame()` after iframe load.
+   - Do not reintroduce iframe `parent.postMessage` / `contentWindow.postMessage` control transport for the dock.
    - The dock remains at the bottom with safe-area offset.
 
 2. **Real note notification shell detection.**
-   - A valid shell must contain the visible exact tabs `通知` and `お知らせ`.
+   - Primary detection uses visible exact `通知` and `お知らせ` interactive tabs.
+   - When note renders those labels as non-interactive span/div nodes, v2.9.43 uses a throttled deep fallback (`smallTextNode`) rather than failing permanently.
+   - `shellFromTabs` uses the common ancestor of the two real tabs and ascends until the notification list shell is found.
    - Generic reaction dialogs such as `スキをつけたユーザー` must never become the manual-save/filter root.
-   - The active shell is retained through a short `PANEL_GRACE=2600` ms transient-DOM grace period so note rerenders do not make the dock blink/disappear immediately.
-   - The dock must not depend on one particular notification row existing at every instant.
+   - The active shell is retained through `PANEL_GRACE=3200` ms so transient note rerenders do not blink/delete the dock.
+   - No normal-scroll listener is used for shell detection.
 
 3. **Filtering is display-only.**
    - Filter never navigates the page and never drives scroll.
@@ -49,13 +54,13 @@ Current release:
    - No normal-scroll `preventDefault()`.
    - No `scrollTop` writes.
    - No `scrollTo()` from the current notification runtime.
-   - No filter/manual-save logic is attached to normal scrolling.
+   - No filter/manual-save work is attached to normal scrolling.
 
 5. **Manual save is manual-only and server-confirmed.**
    - User opens the real note bell notification list and presses `手動保存（続きから）`.
    - Runtime reads only notification rows already loaded in the real shell; it does not auto-scroll to fetch older rows.
-   - Current source contract is exactly `note-notification-manual-sync-v2942`.
-   - This **must remain compatible** with the server allowlist regex for `manual-sync-v\d+`.
+   - Current source contract is exactly `note-notification-manual-sync-v2943`.
+   - This must remain compatible with the ingest allowlist regex for `manual-sync-v\d+`.
    - A prior defect used `note-notification-manual-v2940`, which did not match the allowlist and could cause `NOTIFICATION_SOURCE_BLOCKED`. Do not restore that source shape.
    - Only server-returned `confirmedClientSignatures` are added to saved signatures/checkpoint.
    - Existing account-scoped saved-signature/checkpoint keys remain compatible.
@@ -66,23 +71,23 @@ Current release:
    - Known rows continue through server classifier into `like`, `follow`, magazine, membership, purchase, tip, etc.
    - Explicit manual rows that cannot yet be classified are stored as `notification_type='other'` instead of being dropped.
    - `insight-notification-feed-final` allows `other` when its source is an explicit/manual notification source.
-   - INSIGHT UI already has the `その他` category and 3-second feed refresh.
-   - This guarantees a successfully server-confirmed manual row is not silently lost merely because the classifier does not yet know its exact subtype.
+   - INSIGHT UI has the `その他` category and 3-second feed refresh.
+   - A server-confirmed manual row must not silently disappear merely because the classifier does not yet know its exact subtype.
 
-7. **Install/update v2.9.42.**
-   - Never navigate directly to `tampermonkey.net/script_installation.php`; real-device testing showed that intermediate page can remain stuck.
-   - Primary userscript URL is `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
-   - Installer opens the `.user.js` in a dedicated child tab from the user gesture, preserving the update/result page in the original tab.
-   - If the new tab shows only raw script text, treat that as **not installed/updated**. Never mark success from opening the URL alone.
-   - Pending update state is stored as `mumei-notification-update-pending`.
-   - When the installer tab closes or the original update tab regains focus/visibility, the original tab starts note-side version verification.
-   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.42｜最新版です` only when the running note userscript itself reports v2.9.42.
-   - The success result remains visible briefly, then returns to the original INSIGHT URL with `location.replace`.
-   - A failed/old-version result stays visible and explicitly says `更新されていません`.
-   - If Android temporarily returns to the home screen, reopening the original INSIGHT/settings tab resumes verification from pending state while fresh.
+7. **Install/update v2.9.43.**
+   - Never navigate directly to `tampermonkey.net/script_installation.php`; that page is an intermediate page and real-device testing showed it can remain stuck.
+   - Primary userscript URL remains `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
+   - The update/result page remains open while the `.user.js` is opened in a dedicated child tab from a direct user gesture.
+   - If Tampermonkey intercepts normally, the child leaves the same-origin `.user.js` page and proceeds to its installer.
+   - If the child remains on same-origin raw `.user.js` text for more than ~1.8 seconds, the original update page detects that state, closes the raw-text child, and starts real note-side version verification. The user must not be stranded on raw text.
+   - Success is determined only by the running note userscript reporting v2.9.43 via `mumei_insight_version_check`.
+   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.43｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
+   - If the running version is old or absent, remain on the result page and explicitly say `更新されていません`.
+   - Pending update state remains `mumei-notification-update-pending`, so reopening the original INSIGHT/settings tab can resume verification after Android temporarily leaves the browser.
+   - If `window.open` itself is blocked, stay on the update page and show a popup-permission error; do not fall back to same-tab raw `.user.js` navigation.
 
 8. **Browser guidance shown on the install page.**
-   - Android Edge: supported with Tampermonkey and the required browser-side user-script/developer permission.
+   - Android Edge: supported with Tampermonkey and required user-script/developer permission enabled.
    - Android Firefox: supported with Android Tampermonkey add-on enabled.
    - iPhone/iPad Safari: supported with Safari Tampermonkey enabled and relevant website access allowed.
    - Desktop Chrome/Edge: supported; current Tampermonkey 5.3+ may require Allow User Scripts or Developer Mode.
@@ -272,22 +277,23 @@ Pages workflow must pass before public deployment:
 5. Pages artifact upload
 6. deploy
 
-Current v2.9.42 Pages validation: GitHub Actions run `34178840083` succeeded, including syntax checks, production build, unified tests, artifact and Pages deploy.
-
 Regression coverage must protect:
 
-- exactly one current runtime `@require` (`runtime-v2942`);
+- exactly one current runtime `@require` (`runtime-v2943`);
 - no legacy notification runtime chain;
-- bottom iframe dock and real `通知` + `お知らせ` shell gating;
-- transient panel grace without flicker-prone document-wide observers;
-- manual source `note-notification-manual-sync-v2942` remaining compatible with server allowlist;
+- iframe markup/style only: no iframe inline script and no postMessage-based control transport;
+- direct parent-side `contentDocument` handler binding after iframe load;
+- bottom iframe dock and real `通知` + `お知らせ` shell gating with deep text fallback;
+- transient panel grace without scroll listeners or document-wide MutationObservers;
+- manual source `note-notification-manual-sync-v2943` remaining compatible with server allowlist;
 - server-confirmed saved signatures only;
 - no normal-scroll interception or scroll-position writes;
 - first/leading-creator-only filter behavior;
 - filter observation scoped to active notification panel;
-- iframe controls with no note-DOM proxy clicks;
+- no note-DOM proxy clicks;
 - child-tab GitHub Pages `.user.js` install path;
-- no direct `script_installation.php` navigation;
+- automatic closure/recovery when child remains raw `.user.js` text;
+- no direct `script_installation.php` navigation and no same-tab raw-script fallback;
 - persistent auto-verification and explicit success/failure result;
 - explicit-manual `other` ingestion/feed visibility;
 - exact membership `kind=` DB classification;
@@ -319,10 +325,12 @@ Regression coverage must protect:
 - Never let a second/later creator in an aggregated notification cause the row to be hidden.
 - Never restore scroll/touch/wheel interception to the current notification runtime without a verified device reason.
 - Never load the old multi-runtime notification chain again.
+- Never put executable inline script inside the dock iframe or depend on postMessage for dock button functionality.
 - Never let manual/filter/settings dock taps proxy-click or fall through to note links.
 - Never change the current manual source to a value outside the ingest allowlist contract.
 - Never drop explicit-manual `other` rows from ingest/feed; they belong in INSIGHT【その他】 until a stronger classifier is added.
 - Never open Tampermonkey's intermediate installation page directly.
+- Never leave the user stranded on raw `.user.js` text when the original update tab can detect and recover it.
 - Never claim a notification install/update succeeded until note-side version verification reports the expected version.
 - Never put changed and unchanged relation rows with different JSON key sets in one bulk PostgREST upsert.
 - Never couple INSIGHT本体 and 本人通知 to one version number or force one update merely because the other changed.
