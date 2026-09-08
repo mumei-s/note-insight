@@ -1,5 +1,5 @@
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.09.1";
-export const CURRENT_NOTIFICATION_VERSION = "2.9.49";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.09.2";
+export const CURRENT_NOTIFICATION_VERSION = "2.9.50";
 export const CURRENT_DASHBOARD_VERSION = "1.4.0";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
