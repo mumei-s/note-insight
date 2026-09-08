@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.4.1
+// @version      1.4.0
 // @description  INSIGHTの既存ボタンから本人確認・公式Dashboard読込・INSIGHT復帰まで自動実行。通常時パネル完全非表示、失敗時のみ復旧表示。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/dashboard-setup.html*
@@ -16,15 +16,15 @@
 
 (() => {
   'use strict';
-  const VERSION='1.4.1';
+  const VERSION='1.4.0';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
-  const RETURN_KEY='mumei-dashboard-return-v141';
-  const FLOW_KEY='mumei-dashboard-flow-v141';
-  const HANDOFF_KEY='mumei-dashboard-handoff-v141';
+  const RETURN_KEY='mumei-dashboard-return-v140';
+  const FLOW_KEY='mumei-dashboard-flow-v140';
+  const HANDOFF_KEY='mumei-dashboard-handoff-v140';
   const HANDOFF_ID='mumei-dashboard-handoff';
-  const HIDE_STYLE_ID='mumei-dashboard-panel-hide-v141';
+  const HIDE_STYLE_ID='mumei-dashboard-panel-hide-v140';
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const gmGet=(k,d='')=>Promise.resolve(GM_getValue(k,d));
   const gmSet=(k,v)=>Promise.resolve(GM_setValue(k,v));
@@ -43,7 +43,7 @@
 
   if(location.origin!=='https://note.com')return;
   installHideStyle();markVersion();
-  async function currentNoteIdV141(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+  async function currentNoteIdV140(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
   function panel(){return document.getElementById('mumei-dashboard-sync')}
   function hidePanel(){const p=panel();if(p){p.removeAttribute('data-mumei-recovery');p.style.setProperty('display','none','important');p.setAttribute('aria-hidden','true')}}
   function showPanel(){const p=panel();if(p){p.setAttribute('data-mumei-recovery','1');p.style.setProperty('display','block','important');p.removeAttribute('aria-hidden')}}
@@ -51,7 +51,7 @@
   function ensureCorePanel(){if(panel()){hidePanel();return true}if(document.readyState!=='loading'){try{window.dispatchEvent(new Event('DOMContentLoaded'))}catch{}}const ok=!!panel();if(ok)hidePanel();return ok}
   function looksDashboard(){const p=location.pathname.toLowerCase(),body=(document.body?.innerText||'').slice(0,12000);return p.includes('/sitesettings/stats')||p.includes('/dashboard')||(/アクセス状況/.test(body)&&(/インプレッション|ページビュー|スキ/.test(body)))}
   async function loadPending(){const raw=await gmGet(HANDOFF_KEY,'');if(!raw)return null;try{const p=JSON.parse(String(raw));if(Date.now()-Number(p.savedAt||p.createdAt||0)>15*60*1000){await gmDel(HANDOFF_KEY);return null}return p}catch{await gmDel(HANDOFF_KEY);return null}}
-  async function pairPending(){const p=await loadPending();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHT本人確認中…');const current=await currentNoteIdV141(),expected=String(p.noteId||'').toLowerCase();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==expected)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${expected}`);const x=await request({action:'pair-exchange',code:String(p.code||'')});const issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);localStorage.setItem('mumei-dashboard-tool-version',VERSION);const back=safeReturn(p.returnTo);if(back)localStorage.setItem(RETURN_KEY,back);sessionStorage.setItem(FLOW_KEY,'1');await gmDel(HANDOFF_KEY);setCoreStatus(`✓ @${current} 本人連携完了。公式Dashboardを読み込みます`,'ok');return true}
+  async function pairPending(){const p=await loadPending();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHT本人確認中…');const current=await currentNoteIdV140(),expected=String(p.noteId||'').toLowerCase();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==expected)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${expected}`);const x=await request({action:'pair-exchange',code:String(p.code||'')});const issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);localStorage.setItem('mumei-dashboard-tool-version',VERSION);const back=safeReturn(p.returnTo);if(back)localStorage.setItem(RETURN_KEY,back);sessionStorage.setItem(FLOW_KEY,'1');await gmDel(HANDOFF_KEY);setCoreStatus(`✓ @${current} 本人連携完了。公式Dashboardを読み込みます`,'ok');return true}
   async function waitPanel(){for(let i=0;i<25;i++){if(ensureCorePanel())return true;await sleep(120)}return false}
   function watchCompletion(){const done=()=>{const s=document.querySelector('#mumei-dashboard-sync .status'),t=s?.textContent||'';if(!/同期完了/.test(t))return false;sessionStorage.removeItem(FLOW_KEY);markVersion();hidePanel();const back=safeReturn(localStorage.getItem(RETURN_KEY)||'');localStorage.removeItem(RETURN_KEY);if(back){const u=new URL(back);u.searchParams.set('dashboardSync','ok');u.searchParams.set('dashboardVersion',VERSION);u.searchParams.set('dashboardAt',new Date().toISOString());setTimeout(()=>location.assign(u.href),350)}return true};if(done())return;const o=new MutationObserver(()=>{hidePanel();if(done())o.disconnect()});o.observe(document.documentElement,{subtree:true,childList:true,characterData:true});setTimeout(()=>o.disconnect(),90000)}
   async function startRead(){if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');hidePanel();watchCompletion();await sleep(1200);const btn=document.getElementById('mumei-dash-read');if(!btn)throw new Error('DASHBOARD_READ_BUTTON_NOT_FOUND');btn.click();hidePanel()}
