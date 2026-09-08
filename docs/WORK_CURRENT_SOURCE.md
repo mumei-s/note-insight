@@ -1,6 +1,6 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 11:45 JST
+Updated: 2026-09-08 12:15 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
@@ -9,22 +9,22 @@ Updated: 2026-09-08 11:45 JST
 Current release:
 
 - INSIGHT app: `2026.09.08.2`
-- 本人通知・統計: **v2.9.44**
+- 本人通知・統計: **v2.9.45**
 - fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
-- current notification runtime: `public/note-insight-notification-runtime-v2944.js`
+- current notification runtime: `public/note-insight-notification-runtime-v2945.js`
 - production `insight-notification-ingest-v2`: **v21 ACTIVE**
 - production `insight-notification-feed-final`: **v11 ACTIVE**
 - current relation backend source: `supabase/functions/insight-relations/index.ts`
 - deployed production `insight-relations`: **v11 ACTIVE**
 
-Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on inline script + postMessage. `v2.9.43` removed that dependency, but real-device testing found the filter could remain ON because the same iframe controls could be bound twice and already-hidden rows were excluded from OFF re-evaluation. **v2.9.44 fixes both failures and also repairs magazine-join creator avatars.**
+Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on inline script + postMessage. `v2.9.43` removed that dependency. `v2.9.44` fixed duplicate filter bindings, OFF restoration and magazine-join avatars. Real-device testing then confirmed ingest and filtering work, but showed that reopening the note bell could leave the persisted filter flag visually ON even though the fresh panel was no longer filtered; the previous-save boundary marker was also missing. **v2.9.45 makes filter ON/OFF session-only and restores a checkpoint-based previous-save line that is independent of note unread/read state.**
 
-### Current 本人通知 architecture — v2.9.44
+### Current 本人通知 architecture — v2.9.45
 
 1. **One current runtime only.**
-   - Current bootstrap loads only `public/note-insight-notification-runtime-v2944.js`.
-   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943 runtimes remain history only and must not be re-added to the current `@require` chain.
+   - Current bootstrap loads only `public/note-insight-notification-runtime-v2945.js`.
+   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943/v2944 runtimes remain history only and must not be re-added to the current `@require` chain.
    - Visible controls remain inside an isolated fixed iframe so note DOM click delegation cannot receive manual-save/filter/settings taps.
    - The iframe contains markup/styles only. It contains no inline JavaScript.
    - The userscript parent directly accesses `frame.contentDocument` and binds button handlers after iframe load.
@@ -40,18 +40,18 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
    - The active shell is retained through `PANEL_GRACE=3200` ms so transient note rerenders do not blink/delete the dock.
    - No normal-scroll listener is used for shell detection.
 
-3. **Filtering is display-only and reversible.**
+3. **Filtering is display-only, reversible and session-only.**
    - Filter never navigates the page and never drives scroll.
    - Only a first/leading creator can cause a joint-magazine noise row to be hidden.
    - A registered creator appearing only second/later in an aggregated notification does not hide that row.
    - Leading creator URL/ID is strongest; if absent, saved hydrated profile names including safely truncated display names are fallback.
    - `filterBusy` prevents a second toggle while one toggle is in progress.
-   - Filter state is written, read back and verified before UI result is reported.
-   - ON evaluates `rowCandidates(root,true)` so current hidden state never removes a row from evaluation.
-   - OFF calls `clearHidden(root)` and removes `mumei-v2944-hide` from every row previously hidden by the filter.
+   - Filter target groups and creator IDs are saved per note account, but filter ON/OFF is **not** persisted as an active next-session state.
+   - Every real bell-panel open starts with `filterOn=false`, restores any row hidden by the previous panel session, and writes the legacy `FIL` key to false for compatibility.
+   - Closing the bell panel also calls `resetFilterSession()` and restores hidden rows.
+   - ON evaluates all current rows including already-hidden candidates; OFF removes `mumei-v2945-hide` from every row hidden by the current filter.
    - Status explicitly reports actual work: `フィルターON ✓ 非表示N件` or `フィルターOFF ✓ N件復元`.
-   - Existing rows are evaluated when the active notification panel is detected; afterward the panel-scoped MutationObserver evaluates newly inserted rows.
-   - Filter groups, creator add/remove and group ON/OFF remain account-isolated.
+   - Existing rows are evaluated when the active notification panel is detected; afterward the panel-scoped MutationObserver evaluates newly inserted rows only while filter ON.
 
 4. **Native scrolling is authoritative.**
    - No `touchmove` handler.
@@ -62,37 +62,48 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
    - No `scrollTo()` from the current notification runtime.
    - No filter/manual-save work is attached to normal scrolling.
 
-5. **Manual save is manual-only and server-confirmed.**
+5. **Manual save is checkpoint-based, manual-only and server-confirmed.**
    - User opens the real note bell notification list and presses `手動保存（続きから）`.
    - Runtime reads only notification rows already loaded in the real shell; it does not auto-scroll to fetch older rows.
-   - Current source contract is exactly `note-notification-manual-sync-v2944`.
-   - This must remain compatible with the ingest allowlist regex for `manual-sync-v\d+`.
+   - Current source contract is exactly `note-notification-manual-sync-v2945` and must remain compatible with the ingest allowlist regex for `manual-sync-v\d+`.
    - A prior defect used `note-notification-manual-v2940`, which did not match the allowlist and could cause `NOTIFICATION_SOURCE_BLOCKED`. Do not restore that source shape.
    - Only server-returned `confirmedClientSignatures` are added to saved signatures/checkpoint.
+   - The authoritative continuation marker is `checkpoint.boundarySignature`, not note's unread/new/seen state.
+   - The boundary signature is the top notification from the last manual-save pass only after that pass can safely advance the checkpoint.
+   - On the next manual save, if the previous boundary is present, only rows above that exact signature are new candidates.
+   - If the old boundary is not yet loaded, currently loaded unsaved rows may be server-confirmed, but the old boundary is retained so an unseen gap cannot be silently skipped.
+   - Closing the bell without pressing manual save never changes `boundarySignature`; therefore note marking the panel as read cannot make the next manual import miss those notifications.
    - Existing account-scoped saved-signature/checkpoint keys remain compatible.
    - `MAX_NEW=120`, `BATCH=25`, and manual cooldown remain safety limits.
    - Status says `INSIGHT反映N件` from confirmed saves; never count merely attempted rows as saved.
 
-6. **All explicit manual notifications reach an INSIGHT category.**
+6. **Previous-save line is visual only and best-effort.**
+   - When the exact `boundarySignature` row exists in the currently loaded bell list, v2.9.45 adds a compact cyan `前回保存ここまで` line to that row.
+   - The marker is size-guarded; suspiciously small/large containers are not marked.
+   - Marker lookup failures clear marker CSS and do **not** modify the checkpoint.
+   - The saved continuation state remains valid even when no line can be rendered.
+   - Never derive or move the boundary from note unread/new badges or from merely opening/closing the bell.
+
+7. **All explicit manual notifications reach an INSIGHT category.**
    - Known rows continue through server classifier into `like`, `follow`, magazine, membership, purchase, tip, etc.
    - Explicit manual rows that cannot yet be classified are stored as `notification_type='other'` instead of being dropped.
    - `insight-notification-feed-final` allows `other` when its source is an explicit/manual notification source.
    - INSIGHT UI has the `その他` category and 3-second feed refresh.
    - A server-confirmed manual row must not silently disappear merely because the classifier does not yet know its exact subtype.
 
-7. **Install/update v2.9.44.**
+8. **Install/update v2.9.45.**
    - Never navigate directly to `tampermonkey.net/script_installation.php`; that page is an intermediate page and real-device testing showed it can remain stuck.
    - Primary userscript URL remains `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
    - The update/result page remains open while the `.user.js` is opened in a dedicated child tab from a direct user gesture.
    - If Tampermonkey intercepts normally, the child leaves the same-origin `.user.js` page and proceeds to its installer.
    - If the child remains on same-origin raw `.user.js` text for more than ~1.8 seconds, the original update page detects that state, closes the raw-text child, and starts real note-side version verification.
-   - Success is determined only by the running note userscript reporting v2.9.44 via `mumei_insight_version_check`.
-   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.44｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
+   - Success is determined only by the running note userscript reporting v2.9.45 via `mumei_insight_version_check`.
+   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.45｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
    - If the running version is old or absent, remain on the result page and explicitly say `更新されていません`.
    - Pending update state remains `mumei-notification-update-pending`, so reopening the original INSIGHT/settings tab can resume verification after Android temporarily leaves the browser.
    - If `window.open` itself is blocked, stay on the update page and show a popup-permission error; do not fall back to same-tab raw `.user.js` navigation.
 
-8. **Browser guidance shown on the install page.**
+9. **Browser guidance shown on the install page.**
    - Android Edge: supported with Tampermonkey and required user-script/developer permission enabled.
    - Android Firefox: supported with Android Tampermonkey add-on enabled.
    - iPhone/iPad Safari: supported with Safari Tampermonkey enabled and relevant website access allowed.
@@ -101,14 +112,14 @@ Real-device history: `v2.9.39` was rejected for interaction/scroll instability. 
    - Android Chrome and Yahoo in-app browser: do not claim 本人通知 support; guide to Edge/Firefox (or Safari on iOS).
    - Core INSIGHT analytics still must not depend on any one browser or userscript engine.
 
-9. **Independent version tracks.**
+10. **Independent version tracks.**
    - `public/insight-release.json.appVersion` is the latest INSIGHT app version.
    - `public/insight-release.json.notificationVersion` is the latest 本人通知 version.
    - `src/insight-release.ts` embeds the running INSIGHT app version.
    - userscript metadata/version identifies the installed 本人通知 version.
    - an INSIGHT-only change increments `appVersion` only.
    - a 本人通知-only change increments `notificationVersion` only.
-   - when one repair touches both the userscript and INSIGHT UI, both tracks may increment independently, as in app `2026.09.08.2` + 本人通知 `2.9.44`.
+   - current release is app `2026.09.08.2` + 本人通知 `2.9.45`; this v2.9.45 change does not require another app-version bump.
    - INSIGHT main dashboard always shows current/latest values for both tracks.
    - only the mismatched product receives `NEW` / `更新あり` treatment.
    - an unverified notification installation says `この端末 未確認`; never infer installation from the server manifest.
@@ -294,23 +305,27 @@ Pages workflow must pass before public deployment:
 5. Pages artifact upload
 6. deploy
 
-Current v2.9.44 / app 2026.09.08.2 validation: GitHub Actions run `34180986826` succeeded through userscript syntax, production build, unified regression tests, artifact upload and Pages deploy.
+Current v2.9.45 / app 2026.09.08.2 validation: GitHub Actions run `34182591649` succeeded through userscript syntax, production build, unified regression tests, artifact upload and Pages deploy.
 
 Regression coverage must protect:
 
-- exactly one current runtime `@require` (`runtime-v2944`);
+- exactly one current runtime `@require` (`runtime-v2945`);
 - no legacy notification runtime chain;
 - iframe markup/style only: no iframe inline script and no postMessage-based control transport;
 - direct parent-side `contentDocument` handler binding after iframe load;
 - `frame.dataset.mumeiBound` preventing duplicate control bindings;
 - bottom iframe dock and real `通知` + `お知らせ` shell gating with deep text fallback;
 - transient panel grace without scroll listeners or document-wide MutationObservers;
-- manual source `note-notification-manual-sync-v2944` remaining compatible with server allowlist;
+- manual source `note-notification-manual-sync-v2945` remaining compatible with server allowlist;
 - server-confirmed saved signatures only;
 - no normal-scroll interception or scroll-position writes;
 - first/leading-creator-only filter behavior;
-- filter OFF restoring every `mumei-v2944-hide` row;
-- filter ON/OFF reporting actual hidden/restored counts;
+- filter ON being session-only and every bell reopen starting OFF;
+- filter OFF restoring every `mumei-v2945-hide` row;
+- filter target groups remaining saved while active ON/OFF state does not persist;
+- checkpoint continuation by `boundarySignature`, never note unread/new state;
+- closing bell without manual save never changing the checkpoint;
+- previous-save marker being best-effort, size guarded and non-authoritative;
 - filter observation scoped to active notification panel;
 - no note-DOM proxy clicks;
 - actor image selection preferring profile images and excluding magazine cover/OGP/cover images;
@@ -347,8 +362,12 @@ Regression coverage must protect:
 - Never let the generic notification classifier override exact membership URL kinds.
 - Never intentionally leave one filtered magazine notification visible.
 - Never let a second/later creator in an aggregated notification cause the row to be hidden.
+- Never persist filter ON as the next bell-session state; target configuration persists, active ON/OFF does not.
 - Never bind the same dock iframe controls more than once; one physical tap must produce exactly one filter state transition.
 - Never exclude already-hidden filter rows from OFF evaluation; OFF must restore every row hidden by the current filter class.
+- Never derive notification continuation from note unread/new/seen state. Only a completed manual-save checkpoint may advance `boundarySignature`.
+- Never advance `boundarySignature` merely because the bell was opened, closed or marked read by note.
+- Never make the visual previous-save line authoritative; if it cannot render safely, omit it and keep the internal checkpoint.
 - Never restore scroll/touch/wheel interception to the current notification runtime without a verified device reason.
 - Never load the old multi-runtime notification chain again.
 - Never put executable inline script inside the dock iframe or depend on postMessage for dock button functionality.
