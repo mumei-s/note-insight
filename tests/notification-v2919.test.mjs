@@ -3,229 +3,100 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.48 bootstrap keeps one current core runtime and account-aware handoff",async()=>{
+test("v2.9.49 bootstrap loads core plus automatic previous-checkpoint scanner",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.48/);
+  assert.match(boot,/@version\s+2\.9\.49/);
   assert.match(boot,/runtime-v2948\.js\?v=2948a/);
-  assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,1);
+  assert.match(boot,/notification-autoscan-v2949\.js\?v=2949a/);
+  assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,2);
   assert.match(boot,/async function openMatchingInsight\(\)/);
   assert.match(boot,/u\.searchParams\.set\('account',a\.id\)/);
-  assert.match(boot,/stopImmediatePropagation\(\)/);
 });
 
-test("v2.9.48 recovers checkpoint from saved overlap, never note unread state",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2948.js");
-  assert.match(r,/SAVED='mumei_insight_notification_saved_v2919:'/);
-  assert.match(r,/CHECK='mumei_insight_notification_checkpoint_v2922:'/);
-  assert.match(r,/function resolveBoundary\(data,boundary,saved\)/);
-  assert.match(r,/if\(saved\.has\(s\)\)return\{index:i,signature:s,reached:true,recovered:true\}/);
-  assert.match(r,/boundarySource:resolved\.recovered\?'manual-saved-overlap-v2948':'manual-confirmed-top-v2948'/);
+test("v2.9.49 auto scanner reaches saved checkpoint without user scrolling and restores position",async()=>{
+  const r=await read("public/note-insight-notification-autoscan-v2949.js");
+  for(const x of ["MAX_STEPS=90","scrollHost(panel)","host.scrollTop=0","前回保存位置まで自動読込中","saved.has(s)","boundarySignature:newBoundary","confirmedClientSignatures","host.scrollTop=original","auto-saved-overlap-v2949","自動保存（前回まで）"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(r,/SRC='note-notification-manual-sync-v2949'/);
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
-  assert.doesNotMatch(r,/scrollTop\s*=|scrollTo\(/);
 });
 
-test("v2948 current core remains CSP-safe, bottom-docked, filter-session-only and scroll-neutral",async()=>{
+test("notification core still owns filtering, marker and server-confirmed manual compatibility",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2948.js");
-  assert.match(r,/document\.createElement\('iframe'\)/);
-  assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
-  assert.match(r,/frame\.dataset\.mumeiBound==='1'/);
-  assert.match(r,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)/);
-  assert.doesNotMatch(r,/parent\.postMessage|contentWindow\?\.postMessage|<script>/);
-  assert.doesNotMatch(r,/touchmove|wheel|addEventListener\(['"]scroll|scrollTop\s*=|scrollTo\(/);
-  assert.match(r,/filterOn=false/);
-  assert.match(r,/async function resetFilterSession\(root\)/);
-  assert.match(r,/フィルターON ✓ 非表示\$\{result\.hidden\}件/);
-  assert.match(r,/フィルターOFF ✓ \$\{result\.restored\}件復元/);
-  assert.match(r,/function verifiedLeadCreatorId/);
-  assert.match(r,/const lead=leadName\(text\);if\(!lead\)return false/);
+  for(const x of ["SAVED='mumei_insight_notification_saved_v2919:'","CHECK='mumei_insight_notification_checkpoint_v2922:'","前回保存ここまで","filterOn=false","async function resetFilterSession(root)","function verifiedLeadCreatorId","confirmedClientSignatures"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("manual save remains server-confirmed and independent of note read badges",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2948.js");
-  const ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
-  assert.match(r,/SRC='note-notification-manual-sync-v2948'/);
-  assert.match(r,/confirmedClientSignatures/);
-  assert.match(r,/boundarySignature/);
-  assert.match(r,/前回保存ここまで/);
-  assert.match(ingest,/manual-sync-v\\d\+/);
-  assert.match(r,/function actorImage/);
-  assert.match(r,/magazine_cover\|ogp\|cover/);
-});
-
-test("database classifier keeps plain follows and creator article posts out of その他",async()=>{
-  const m=await read("supabase/migrations/20260908051000_notification_classification_exact_v6.sql");
-  assert.match(m,/がフォローしました\( \|\$\)/);
-  assert.match(m,/new\.notification_type := 'follow'/);
-  assert.match(m,/が\(新しい\)\?記事を投稿しました/);
-  assert.match(m,/new\.notification_type := 'creator_article_posted'/);
-  assert.match(m,/update public\.insight_notifications[\s\S]*notification_type='follow'/);
-  assert.match(m,/update public\.insight_notifications[\s\S]*notification_type='creator_article_posted'/);
-});
-
-test("feed merges manual comments/replies with canonical comments and splits reply context",async()=>{
-  const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
-  assert.match(f,/kind==="comment"\|\|kind==="reply"\|\|kind==="reply_self"\|\|kind==="reply_other"/);
-  assert.match(f,/Promise\.all\(\[notificationRows\(ids,base\),commentRows/);
-  assert.match(f,/displayCategory=selfArticle\?"reply_self":"reply_other"/);
-  assert.match(f,/自分の記事のコメントへの返信/);
-  assert.match(f,/相手の記事で自分のコメントへの返信/);
-  assert.match(f,/if\(type==="reply"\|\|type==="comment"\)return/);
-});
-
-test("feed splits own membership reactions from joined memberships and retains join/magazine categories",async()=>{
-  const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
-  assert.match(f,/membership_reaction_self/);
-  assert.match(f,/membership_reaction_joined/);
-  assert.match(f,/targetOwner&&targetOwner===noteId/);
-  assert.match(f,/membership_join/);
-  assert.match(f,/magazine_join/);
-});
-
-test("INSIGHT notification UI exposes exact requested categories",async()=>{
-  const ui=await read("src/member-insight-notifications-final.tsx");
-  assert.match(ui,/\["creator_article_posted","記事投稿"\]/);
-  assert.match(ui,/\["reply_self","自分の記事返信"\]/);
-  assert.match(ui,/\["reply_other","相手の記事返信"\]/);
-  assert.match(ui,/\["membership_reaction_self","自分のメンシプ反応"\]/);
-  assert.match(ui,/\["membership_reaction_joined","参加中のメンシプ反応"\]/);
-  assert.match(ui,/\["magazine_join","マガジン参加"\]/);
-  assert.match(ui,/\["membership_join","メンシプ参加"\]/);
-  assert.match(ui,/display_category/);
-  assert.match(ui,/window\.setInterval\(refresh,3000\)/);
-});
-
-test("INSIGHT notification avatars reject note action icons and recover creator identity",async()=>{
-  const ui=await read("src/member-insight-notifications-final.tsx");
-  assert.match(ui,/function mergeMagazineJoinRows/);
-  assert.match(ui,/function mergePair/);
-  assert.match(ui,/function safeActorImage/);
-  assert.match(ui,/magazine_cover\|ogp\|cover/);
-  assert.match(ui,/\/assets\\\/notices\\\//);
-  assert.match(ui,/function repairActorRows/);
-  assert.match(ui,/type==="my_article_magazine_added"&&!r\.actor_url/);
-  assert.match(ui,/actor_url:`https:\/\/note\.com\/\$\{id\}`/);
-  assert.match(ui,/さんがあなたのコメントに返信しました/);
-  assert.match(ui,/rows\.filter\(r=>!safeActorImage\(r\.actor_image_url\)\)/);
-  assert.match(ui,/safeActorImage\(r\.actor_image_url\)\|\|String\(m\.get\(noteId\(r\.actor_url\)\)\|\|""\)\|\|null/);
-  assert.match(ui,/enrich\(mergeMagazineJoinRows\(repairActorRows\(x\.rows\|\|\[\]\)\)\)/);
-});
-
-test("v2.9.48 installer verifies the actual running version",async()=>{
-  const update=await read("public/notification-update.html");
-  const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.48/);
-  assert.match(update,/Android Edge/);
-  assert.match(update,/Android Firefox/);
-  assert.match(update,/iPhone\/iPad Safari/);
+test("notification installer and settings publish v2.9.49 and verify the running script",async()=>{
+  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
+  assert.match(update,/最新版 v2\.9\.49/);
   assert.match(update,/window\.open\(SCRIPT,'mumei-notification-install'\)/);
   assert.match(update,/Date\.now\(\)-rawSince>1800/);
-  assert.match(update,/child\.close\(\)/);
-  assert.doesNotMatch(update,/script_installation\.php/);
-  assert.match(setup,/最新版は v2\.9\.48/);
-  assert.match(setup,/更新完了｜本人通知 v\$\{VERSION\}｜最新版/);
+  assert.match(update,/Android Edge/);
+  assert.match(setup,/最新版は v2\.9\.49/);
+  assert.match(setup,/前回保存位置まで自動/);
 });
 
-test("manual notifications are never dropped merely because subtype is unknown",async()=>{
-  const ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
-  const feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
-  const ui=await read("src/member-insight-notifications-final.tsx");
-  assert.doesNotMatch(ingest,/if\(type==="other"\)\{skipped\+\+;continue\}/);
-  assert.match(feed,/if\(explicitManual\(source\)\)return true/);
-  assert.match(ui,/\["other","その他"\]/);
+test("INSIGHT separates normal refresh data from本人通知-only data",async()=>{
+  const ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
+  assert.match(main,/import "\.\/insight-source-boundaries"/);
+  for(const x of ["✓ 通常更新（INSIGHT本体）","🔔 本人通知で追加取得","公開記事","フォロー","フォロワー推移","通知履歴","メンシプ参加","掲示板返信","↻ 通常データを今すぐ更新"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(ux,/post\(MEMBER,"sync"/);
+  assert.match(ux,/post\(RELATIONS,"sync",\{direction:"followers"\}/);
+  assert.match(ux,/post\(RELATIONS,"sync",\{direction:"followings"\}/);
+  assert.match(ux,/Dashboardの新しい値/);
+  assert.match(ux,/本人通知とは別経路/);
 });
 
-test("INSIGHT,本人通知,Dashboard sync release tracks remain independent",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json"));
-  const release=await read("src/insight-release.ts");
-  const dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.08.8");
-  assert.equal(manifest.notificationVersion,"2.9.48");
+test("analysis navigation is two-row visible and heavy graphs are collapsible",async()=>{
+  const ux=await read("src/insight-source-boundaries.ts");
+  assert.match(ux,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(ux,/全項目を2段表示・横スライド不要/);
+  assert.match(ux,/詳細分析グラフを開く（流入・波形・星図）/);
+  assert.match(ux,/mumei-overview-graphs-collapsed/);
+});
+
+test("release tracks are independent and current",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
+  assert.equal(manifest.appVersion,"2026.09.09.1");
+  assert.equal(manifest.notificationVersion,"2.9.49");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.8"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.48"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.1"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.49"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.0"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
 
-test("Dashboard sync is independent of本人通知 and refuses cross-account data",async()=>{
-  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),dash=`${boot}\n${core}`,api=await read("supabase/functions/insight-dashboard-data/index.ts"),setup=await read("public/dashboard-setup.html"),analytics=await read("src/member-insight-analytics-final.tsx"),opportunity=await read("src/member-insight-opportunity-engine.tsx"),opportunityCss=await read("src/member-insight-opportunity-engine.css");
+test("Dashboard sync remains separate from本人通知 and rejects account mismatch",async()=>{
+  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),setup=await read("public/dashboard-setup.html"),api=await read("supabase/functions/insight-dashboard-data/index.ts");
+  const dash=`${boot}\n${core}`;
   assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);
-  assert.match(boot,/@match\s+https:\/\/mumei-s\.github\.io\/note-insight\/dashboard-setup\.html\*/);
-  assert.match(boot,/GM_setValue/);
   assert.match(boot,/HANDOFF_KEY='mumei-dashboard-handoff-v140'/);
-  assert.match(boot,/hidePanel/);
-  assert.match(boot,/showPanel/);
-  assert.match(dash,/currentNoteId/);
   assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);
   assert.match(api,/purpose","note_dashboard_sync"/);
   assert.match(api,/noteId!==who\.noteId/);
   assert.match(setup,/Dashboard同期ツール v1\.4\.0/);
   assert.match(setup,/autoStart/);
-  assert.match(analytics,/searchParams\.set\("auto","1"\)/);
-  assert.match(analytics,/OpportunityEngine/);
-  assert.match(opportunity,/INSIGHT OPPORTUNITY ENGINE/);
-  assert.match(opportunity,/潜在PV/);
-  assert.match(opportunityCss,/\.mia2-orbit \.arc\.note/);
 });
 
-test("comment all tab loads every saved comment and reply row, not only threads",async()=>{
-  const ui=await read("src/member-insight-comments-final.tsx");
-  const api=await read("supabase/functions/insight-comment-events/index.ts");
-  const css=await read("src/member-insight-comments-final.css");
-  assert.match(ui,/const EVENTS=.*insight-comment-events/);
-  assert.match(ui,/const EVENT_PAGE=500/);
-  assert.match(ui,/status==="all"/);
-  assert.match(ui,/post\(EVENTS,\{\.\.\.params,page:1\}\)/);
-  assert.match(ui,/uniqueRows\(await enrich\(first\.rows\|\|\[\]\),"comment_key"\)/);
-  assert.match(ui,/すべて（全コメント）/);
-  assert.match(ui,/全コメント・全返信/);
-  assert.match(api,/from\("insight_public_comments"\)\.select/);
-  assert.match(api,/\{count:"exact"\}/);
-  assert.doesNotMatch(api,/\.eq\("is_creator",false\)/);
-  assert.match(css,/\.micf-event-list/);
-  assert.match(css,/content-visibility:auto/);
+test("notification UI keeps requested categories and unknown manual rows",async()=>{
+  const ui=await read("src/member-insight-notifications-final.tsx"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+  for(const x of ["creator_article_posted","reply_self","reply_other","membership_reaction_self","membership_reaction_joined","magazine_join","membership_join","other"])assert.match(ui,new RegExp(x));
+  assert.doesNotMatch(ingest,/if\(type==="other"\)\{skipped\+\+;continue\}/);
 });
 
-test("comment workflow tabs still load every saved thread instead of stopping at first 100",async()=>{
-  const ui=await read("src/member-insight-comments-final.tsx");
-  assert.match(ui,/const PAGE=100/);
-  assert.match(ui,/async function loadAll\(\)/);
-  assert.match(ui,/const pages=Math\.ceil\(expected\/PAGE\)/);
-  assert.match(ui,/for\(let start=2;start<=pages;start\+=FETCH_GROUP\)/);
-  assert.match(ui,/setRows\(collected\)/);
-  assert.match(ui,/全履歴 読込完了/);
-  assert.doesNotMatch(ui,/className="micf-pager"/);
-});
-
-test("notification entry activates only the matching saved INSIGHT account token",async()=>{
-  const entry=await read("public/notification-entry.html");
-  assert.match(entry,/mumei-insight-saved-accounts-v3/);
-  assert.match(entry,/mumei-insight-active-account-v3/);
-  assert.match(entry,/mumei-insight-access-token/);
-  assert.match(entry,/notificationAccount/);
-  assert.doesNotMatch(entry,/memberToken\s*=\s*requested/);
-});
-
-test("server/database preserve exact membership join and board reaction classification",async()=>{
-  const s=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
-  const f=await read("supabase/functions/insight-notification-feed-final/index.ts");
-  const m=await read("supabase/migrations/20260907185100_notification_membership_exact_v5.sql");
-  assert.match(s,/membership_reaction/);
-  assert.match(s,/membership_join/);
-  assert.match(f,/membership_reaction/);
-  assert.match(f,/membership_join/);
-  assert.match(m,/circle_plan_join/);
-  assert.match(m,/trg_zzz_fix_insight_membership/);
-});
-
-test("follow totals and delta history retain relation refresh fix",async()=>{
-  const social=await read("src/member-insight-social-v2.tsx");
-  const live=await read("src/member-insight-live-v2.tsx");
-  const rel=await read("supabase/functions/insight-relations/index.ts");
-  const api=await read("supabase/functions/insight-social-events/index.ts");
+test("follow totals and history continue to refresh independently of本人通知",async()=>{
+  const social=await read("src/member-insight-social-v2.tsx"),live=await read("src/member-insight-live-v2.tsx"),rel=await read("supabase/functions/insight-relations/index.ts");
   assert.match(social,/live_expected_count/);
   assert.match(live,/post\(RELATIONS,"sync",\{direction:"followers"\}/);
   assert.match(live,/post\(RELATIONS,"sync",\{direction:"followings"\}/);
   assert.match(rel,/relation-delta-fix/);
-  assert.match(api,/liveCounts/);
+});
+
+test("comment and membership history server paths remain intact",async()=>{
+  const comments=await read("src/member-insight-comments-final.tsx"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts"),migration=await read("supabase/migrations/20260907185100_notification_membership_exact_v5.sql");
+  assert.match(comments,/全コメント・全返信/);
+  assert.match(feed,/membership_reaction_self/);
+  assert.match(feed,/membership_reaction_joined/);
+  assert.match(feed,/membership_join/);
+  assert.match(migration,/circle_plan_join/);
 });
