@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.08.8",
-  "notificationVersion": "2.9.48",
+  "appVersion": "2026.09.09.1",
+  "notificationVersion": "2.9.49",
   "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T10:45:00+09:00",
+  "releasedAt": "2026-09-09T06:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "Dashboard v1.4.0 repaired: 本人通知と同じ別タブ型インストール導線へ統一。文字列表示を検知してフォールバックし、通常時のnote側同期パネルはCSS段階から完全非表示、失敗時だけ復旧表示。"
+  "note": "INSIGHT v2026.09.09.1: 通常更新と本人通知の取得経路を明確に分離し、通常更新ボタンを追加。分析タブを2段固定し、詳細グラフを収納。本人通知 v2.9.49 は前回保存位置まで通知欄を自動走査して保存。Dashboard同期は本人通知とは別経路のまま。"
 }
