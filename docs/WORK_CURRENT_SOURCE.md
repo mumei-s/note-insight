@@ -1,6 +1,6 @@
 # WORK CURRENT SOURCE OF TRUTH
 
-Updated: 2026-09-08 12:15 JST
+Updated: 2026-09-08 12:52 JST
 
 **Always determine the newest work by actual timestamp first, then fetch current GitHub `main`.** Do not choose an older chat/spec because of its title. Do not roll back unrelated newer userscript/tooling work.
 
@@ -8,165 +8,148 @@ Updated: 2026-09-08 12:15 JST
 
 Current release:
 
-- INSIGHT app: `2026.09.08.2`
-- 本人通知・統計: **v2.9.45**
+- INSIGHT app: `2026.09.08.3`
+- 本人通知・統計 package: **v2.9.46**
 - fixed public distribution URL: `https://mumei-s.github.io/note-insight/`
 - current userscript bootstrap: `public/note-insight-notification-sync.user.js`
-- current notification runtime: `public/note-insight-notification-runtime-v2945.js`
+- current stable notification core runtime: `public/note-insight-notification-runtime-v2945.js`
 - production `insight-notification-ingest-v2`: **v21 ACTIVE**
-- production `insight-notification-feed-final`: **v11 ACTIVE**
-- current relation backend source: `supabase/functions/insight-relations/index.ts`
+- production `insight-notification-feed-final`: **v12 ACTIVE**
 - deployed production `insight-relations`: **v11 ACTIVE**
 
-Real-device history: `v2.9.39` was rejected for interaction/scroll instability. `v2.9.40` reset to one runtime. `v2.9.41` repaired installer routing. `v2.9.42` fixed manual-save server contract and feed completeness but was rejected on Android because the visible iframe dock depended on inline script + postMessage. `v2.9.43` removed that dependency. `v2.9.44` fixed duplicate filter bindings, OFF restoration and magazine-join avatars. Real-device testing then confirmed ingest and filtering work, but showed that reopening the note bell could leave the persisted filter flag visually ON even though the fresh panel was no longer filtered; the previous-save boundary marker was also missing. **v2.9.45 makes filter ON/OFF session-only and restores a checkpoint-based previous-save line that is independent of note unread/read state.**
+Real-device history: v2.9.39 was rejected for interaction/scroll instability. v2.9.40 reset to one runtime. v2.9.41 repaired installer routing. v2.9.42 fixed manual-save server contract but failed because iframe inline script/postMessage could die on Android. v2.9.43 removed that dependency. v2.9.44 fixed filter duplicate binding/OFF restoration and magazine-join avatars. v2.9.45 made filter state session-only and restored a checkpoint-based previous-save line independent of note read/unread state. Real-device testing then confirmed manual ingest and filtering were operating, but newly loaded notifications were not visible in the INSIGHT【通知】 screen. Production audit proved the v2.9.45 rows were already in `insight_notifications`; the remaining fault was **after ingest**. v2.9.46 therefore hardens the DB→feed→matching-INSIGHT-account display path without changing the stable v2945 filter/checkpoint core.
 
-### Current 本人通知 architecture — v2.9.45
+### A. Current 本人通知 architecture
 
-1. **One current runtime only.**
-   - Current bootstrap loads only `public/note-insight-notification-runtime-v2945.js`.
-   - Old v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943/v2944 runtimes remain history only and must not be re-added to the current `@require` chain.
-   - Visible controls remain inside an isolated fixed iframe so note DOM click delegation cannot receive manual-save/filter/settings taps.
-   - The iframe contains markup/styles only. It contains no inline JavaScript.
-   - The userscript parent directly accesses `frame.contentDocument` and binds button handlers after iframe load.
-   - `bindFrame()` is guarded by `frame.dataset.mumeiBound`; the same iframe controls must never be bound twice.
-   - Do not reintroduce iframe `parent.postMessage` / `contentWindow.postMessage` control transport for the dock.
-   - The dock remains at the bottom with safe-area offset.
+1. **One stable core runtime only.**
+   - Bootstrap package is v2.9.46.
+   - Bootstrap still loads exactly one core `@require`: `public/note-insight-notification-runtime-v2945.js?v=2945a`.
+   - v2945 remains the verified filter/checkpoint implementation; do not rename it to v2946 unless its core source is actually changed.
+   - Older v2933/v2935/v2936/v2938/v2939/v2940/v2942/v2943/v2944 runtimes remain history only and must never be restored to the active chain.
+   - Visible controls remain inside one isolated fixed iframe. The iframe contains markup/styles only, no executable inline script.
+   - Parent userscript binds controls directly through `contentDocument`; no postMessage control transport.
+   - Same iframe controls are bound only once.
 
-2. **Real note notification shell detection.**
-   - Primary detection uses visible exact `通知` and `お知らせ` interactive tabs.
-   - When note renders those labels as non-interactive span/div nodes, use the throttled deep fallback `smallTextNode` rather than failing permanently.
-   - `shellFromTabs` uses the common ancestor of the two real tabs and ascends until the notification list shell is found.
-   - Generic reaction dialogs such as `スキをつけたユーザー` must never become the manual-save/filter root.
-   - The active shell is retained through `PANEL_GRACE=3200` ms so transient note rerenders do not blink/delete the dock.
-   - No normal-scroll listener is used for shell detection.
+2. **Real note bell shell only.**
+   - Detect exact visible `通知` and `お知らせ` tabs; use throttled small-text fallback only when necessary.
+   - Generic dialogs such as `スキをつけたユーザー` must never become the manual-save/filter root.
+   - Dock remains at the bottom with safe-area offset.
 
-3. **Filtering is display-only, reversible and session-only.**
-   - Filter never navigates the page and never drives scroll.
-   - Only a first/leading creator can cause a joint-magazine noise row to be hidden.
-   - A registered creator appearing only second/later in an aggregated notification does not hide that row.
-   - Leading creator URL/ID is strongest; if absent, saved hydrated profile names including safely truncated display names are fallback.
-   - `filterBusy` prevents a second toggle while one toggle is in progress.
-   - Filter target groups and creator IDs are saved per note account, but filter ON/OFF is **not** persisted as an active next-session state.
-   - Every real bell-panel open starts with `filterOn=false`, restores any row hidden by the previous panel session, and writes the legacy `FIL` key to false for compatibility.
-   - Closing the bell panel also calls `resetFilterSession()` and restores hidden rows.
-   - ON evaluates all current rows including already-hidden candidates; OFF removes `mumei-v2945-hide` from every row hidden by the current filter.
-   - Status explicitly reports actual work: `フィルターON ✓ 非表示N件` or `フィルターOFF ✓ N件復元`.
-   - Existing rows are evaluated when the active notification panel is detected; afterward the panel-scoped MutationObserver evaluates newly inserted rows only while filter ON.
+3. **Filter is display-only, reversible and session-only.**
+   - Target groups/creator IDs are saved per note account.
+   - ON/OFF itself is not carried into the next bell session.
+   - Every bell reopen starts OFF and restores rows hidden by the previous session.
+   - Closing bell also resets OFF.
+   - Only a first/leading creator may cause a joint-magazine notification to hide.
+   - A targeted creator appearing only second/later in an aggregated notification does not hide the row.
+   - ON/OFF status reports actual hidden/restored counts.
+   - Filter does not navigate, drive scroll or proxy-click note DOM.
 
 4. **Native scrolling is authoritative.**
-   - No `touchmove` handler.
-   - No `wheel` handler.
+   - No `touchmove` interception.
+   - No `wheel` interception.
    - No notification `scroll` listener.
    - No normal-scroll `preventDefault()`.
-   - No `scrollTop` writes.
-   - No `scrollTo()` from the current notification runtime.
-   - No filter/manual-save work is attached to normal scrolling.
+   - No `scrollTop` writes or `scrollTo()` from current notification core.
+   - Filter/manual-save work is not attached to normal scrolling.
 
-5. **Manual save is checkpoint-based, manual-only and server-confirmed.**
-   - User opens the real note bell notification list and presses `手動保存（続きから）`.
-   - Runtime reads only notification rows already loaded in the real shell; it does not auto-scroll to fetch older rows.
-   - Current source contract is exactly `note-notification-manual-sync-v2945` and must remain compatible with the ingest allowlist regex for `manual-sync-v\d+`.
-   - A prior defect used `note-notification-manual-v2940`, which did not match the allowlist and could cause `NOTIFICATION_SOURCE_BLOCKED`. Do not restore that source shape.
-   - Only server-returned `confirmedClientSignatures` are added to saved signatures/checkpoint.
-   - The authoritative continuation marker is `checkpoint.boundarySignature`, not note's unread/new/seen state.
-   - The boundary signature is the top notification from the last manual-save pass only after that pass can safely advance the checkpoint.
-   - On the next manual save, if the previous boundary is present, only rows above that exact signature are new candidates.
-   - If the old boundary is not yet loaded, currently loaded unsaved rows may be server-confirmed, but the old boundary is retained so an unseen gap cannot be silently skipped.
-   - Closing the bell without pressing manual save never changes `boundarySignature`; therefore note marking the panel as read cannot make the next manual import miss those notifications.
-   - Existing account-scoped saved-signature/checkpoint keys remain compatible.
-   - `MAX_NEW=120`, `BATCH=25`, and manual cooldown remain safety limits.
-   - Status says `INSIGHT反映N件` from confirmed saves; never count merely attempted rows as saved.
+5. **Manual save is checkpoint-based and server-confirmed.**
+   - Current source contract is `note-notification-manual-sync-v2945`, compatible with ingest allowlist `manual-sync-v\d+`.
+   - Only server-returned `confirmedClientSignatures` count as saved.
+   - `checkpoint.boundarySignature` is the continuation authority.
+   - note unread/read/new/seen state is never a continuation signal.
+   - Opening or closing the bell without pressing manual save never moves the checkpoint.
+   - If previous boundary exists in loaded rows, only rows above it are new candidates.
+   - If previous boundary is not loaded, do not silently advance past an unseen gap.
+   - `前回保存ここまで` is visual only. It appears only when the exact boundary row is present and passes size guards. Marker failure must never change saved checkpoint state.
 
-6. **Previous-save line is visual only and best-effort.**
-   - When the exact `boundarySignature` row exists in the currently loaded bell list, v2.9.45 adds a compact cyan `前回保存ここまで` line to that row.
-   - The marker is size-guarded; suspiciously small/large containers are not marked.
-   - Marker lookup failures clear marker CSS and do **not** modify the checkpoint.
-   - The saved continuation state remains valid even when no line can be rendered.
-   - Never derive or move the boundary from note unread/new badges or from merely opening/closing the bell.
+### B. Notification reflection pipeline — v2.9.46
 
-7. **All explicit manual notifications reach an INSIGHT category.**
-   - Known rows continue through server classifier into `like`, `follow`, magazine, membership, purchase, tip, etc.
-   - Explicit manual rows that cannot yet be classified are stored as `notification_type='other'` instead of being dropped.
-   - `insight-notification-feed-final` allows `other` when its source is an explicit/manual notification source.
-   - INSIGHT UI has the `その他` category and 3-second feed refresh.
-   - A server-confirmed manual row must not silently disappear merely because the classifier does not yet know its exact subtype.
+**A manual notification is not considered end-to-end complete merely because the userscript says saved. Always verify the complete path:**
 
-8. **Install/update v2.9.45.**
-   - Never navigate directly to `tampermonkey.net/script_installation.php`; that page is an intermediate page and real-device testing showed it can remain stuck.
-   - Primary userscript URL remains `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
-   - The update/result page remains open while the `.user.js` is opened in a dedicated child tab from a direct user gesture.
-   - If Tampermonkey intercepts normally, the child leaves the same-origin `.user.js` page and proceeds to its installer.
-   - If the child remains on same-origin raw `.user.js` text for more than ~1.8 seconds, the original update page detects that state, closes the raw-text child, and starts real note-side version verification.
-   - Success is determined only by the running note userscript reporting v2.9.45 via `mumei_insight_version_check`.
-   - `notification-setup.html` shows `✅ 更新完了｜本人通知 v2.9.45｜最新版です` only on that verified result, then returns to the original INSIGHT URL with `location.replace`.
-   - If the running version is old or absent, remain on the result page and explicitly say `更新されていません`.
-   - Pending update state remains `mumei-notification-update-pending`, so reopening the original INSIGHT/settings tab can resume verification after Android temporarily leaves the browser.
-   - If `window.open` itself is blocked, stay on the update page and show a popup-permission error; do not fall back to same-tab raw `.user.js` navigation.
+`note bell row → ingest v21 → insight_notifications → feed v12 → matching INSIGHT account → INSIGHT【通知】`
 
-9. **Browser guidance shown on the install page.**
-   - Android Edge: supported with Tampermonkey and required user-script/developer permission enabled.
-   - Android Firefox: supported with Android Tampermonkey add-on enabled.
-   - iPhone/iPad Safari: supported with Safari Tampermonkey enabled and relevant website access allowed.
-   - Desktop Chrome/Edge: supported; current Tampermonkey 5.3+ may require Allow User Scripts or Developer Mode.
-   - Desktop Firefox/Safari/Opera: supported with the corresponding Tampermonkey extension enabled.
-   - Android Chrome and Yahoo in-app browser: do not claim 本人通知 support; guide to Edge/Firefox (or Safari on iOS).
-   - Core INSIGHT analytics still must not depend on any one browser or userscript engine.
+Production audit on 2026-09-08 confirmed recent v2.9.45 owner imports were in the DB with source `note-notification-manual-sync-v2945` and userscript `2.9.45`. Recent browser sync runs included successful 12/12 inserts. Types present included `magazine_article_added`, `like`, `magazine_join` and `comment`. Therefore the reported missing reflection was not an ingest failure.
 
-10. **Independent version tracks.**
-   - `public/insight-release.json.appVersion` is the latest INSIGHT app version.
-   - `public/insight-release.json.notificationVersion` is the latest 本人通知 version.
-   - `src/insight-release.ts` embeds the running INSIGHT app version.
-   - userscript metadata/version identifies the installed 本人通知 version.
-   - an INSIGHT-only change increments `appVersion` only.
-   - a 本人通知-only change increments `notificationVersion` only.
-   - current release is app `2026.09.08.2` + 本人通知 `2.9.45`; this v2.9.45 change does not require another app-version bump.
-   - INSIGHT main dashboard always shows current/latest values for both tracks.
-   - only the mismatched product receives `NEW` / `更新あり` treatment.
-   - an unverified notification installation says `この端末 未確認`; never infer installation from the server manifest.
+1. **Feed v12 treats accepted explicit/manual rows as authoritative.**
+   - Once an explicit/manual row has been accepted into `insight_notifications`, `insight-notification-feed-final` returns it after basic raw-text sanity validation.
+   - Manual rows do not have to pass a second wording/action regex to become visible.
+   - This prevents a note wording change from producing “saved in DB but invisible in INSIGHT”.
+   - Explicit/manual `other` rows remain visible under INSIGHT【その他】.
 
-### INSIGHT app 2026.09.08.2 — magazine join avatar repair
+2. **INSIGHT【通知】 entry is account-aware.**
+   - v2.9.46 bootstrap reads the real currently logged-in note account from `/api/v2/current_user` when the user presses `INSIGHT【通知】`.
+   - It passes `account=<noteId>` to `notification-entry.html`.
+   - `notification-entry.html` searches `mumei-insight-saved-accounts-v3` for that exact note ID.
+   - Only if that saved account contains its own `memberToken` does entry activate it by setting the existing INSIGHT active-account/member-token keys.
+   - Never derive, invent or copy a token from the note ID itself.
+   - If the matching saved INSIGHT login is absent, entry does not silently claim success; it warns and opens with the existing INSIGHT session.
 
-- `magazine_join` history contained mixed legacy records: some rows had correct creator URL/profile image, some had both fields null, and some had mistakenly captured a magazine cover as the actor image.
-- Production audit on 2026-09-08 found 17 `magazine_join` rows with missing actor URL/image; all 17 had exactly one unambiguous actor match elsewhere in the same member scope and all 17 had a profile image candidate.
-- Those 17 existing production rows were backfilled with the matching actor URL and profile image.
-- Current userscript `actorImage()` prefers an image inside the actor link, then `/profile_` assets, then other non-cover images. It never deliberately uses `magazine_cover`, OGP or cover assets as the person avatar.
-- INSIGHT notification UI runs `mergeMagazineJoinRows()` before enrichment so duplicate legacy rows representing the same join event are merged, preferring richer actor URL/profile image/target/timestamp data.
-- `creator-icons` enrichment remains the final preferred source when actor URL is available.
-- Saved magazine-cover images are sanitized by `safeActorImage()` and are not rendered as the actor avatar.
+3. **Cross-account display is rejected.**
+   - `MemberInsightNotificationsFinal` compares the requested notification account / current member note ID against the feed-returned `noteId`.
+   - If they differ, it clears notification rows and shows an explicit account-mismatch error instead of showing another account’s history.
+   - Feed still refreshes every 3 seconds when visible once the correct account session is active.
 
-### INSIGHT app update feedback retained
+4. **`ss_yr` legacy scope remains preserved.**
+   - `ss_yr` continues to map to `member_id='owner'` in notification feed/ingest semantics.
+   - Other participants remain scoped to their own application/member UUID.
+   - Never expose OWNER rows to another participant.
 
-- The INSIGHT本体 update/check button visibly enters `確認中…`.
-- Even when already current, the check is held long enough to be perceptible and then shows `✅ INSIGHT本体 v...｜最新版です` for several seconds.
-- Future actual app updates store a session result marker before reload so the new bundle can show `更新完了・最新版` after reload.
-- The version status cards remain the authoritative current/latest display.
+### C. Install/update
 
-### INSIGHT notification-card compacting retained
+- Package latest: v2.9.46.
+- Never navigate directly to Tampermonkey `script_installation.php`.
+- Primary distribution remains `https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js`.
+- Update page remains open while the `.user.js` is opened in a child tab from a direct user gesture.
+- If the child remains raw `.user.js` text for about 1.8 seconds, close that child and perform note-side version verification; never strand the user on raw text.
+- Success is shown only when the actually running note userscript reports v2.9.46 through version-check flow.
+- Successful result says `更新完了｜本人通知 v2.9.46｜最新版です` and returns to INSIGHT.
+- If running version is old/absent, remain on result page and explicitly say it was not updated.
+- Pending update state remains persistent so Android temporarily leaving the browser does not lose verification state.
 
-- notification category pills remain the primary category label.
-- duplicate large category headings inside cards stay hidden for ordinary notification types.
-- `magazine_article_added` retains the strong headline because numeric values such as `新しい記事を109本追加` are important.
-- redundant secondary text stays hidden for simple types where it repeats actor/category information, including follow, magazine join/follow, membership join/reaction.
-- card padding, avatar size, gaps and line height remain compact.
+Browser guidance retained:
+- Android Edge: supported with Tampermonkey and required user-script/developer permission enabled.
+- Android Firefox: supported with Android Tampermonkey add-on enabled.
+- iPhone/iPad Safari: supported with Safari Tampermonkey and site access permitted.
+- Desktop Chrome/Edge: supported; current Tampermonkey may require Allow User Scripts or Developer Mode.
+- Desktop Firefox/Safari/Opera: supported with corresponding extension.
+- Android Chrome and Yahoo in-app browser: do not claim 本人通知 support; guide to Edge/Firefox (or Safari on iOS).
+- Core INSIGHT analytics must never depend on Edge or the notification userscript.
 
-### Exact membership categories retained
+### D. Version tracks
 
-- note URLs containing `kind=circle_plan_join` remain `membership_join`.
-- `kind=board_like_comment` / `kind=board_like_post` remain `membership_reaction`.
-- board replies, board posts and membership plan-open URLs remain protected from generic DB classification.
-- production DB migration `notification_membership_exact_v5` remains applied.
+- `public/insight-release.json.appVersion` = INSIGHT app release.
+- `public/insight-release.json.notificationVersion` = 本人通知 package release.
+- `src/insight-release.ts` embeds running app version.
+- userscript metadata/version identifies installed notification package.
+- Current release is app `2026.09.08.3` + 本人通知 `2.9.46`.
+- This change increments both because it changes both the userscript account handoff and the INSIGHT app entry/display behavior.
+- Main dashboard always shows current/latest for both tracks separately.
 
-### Live follow/follower repair retained
+### E. Magazine join avatar repair retained
 
-- notification ingestion and relation synchronization are separate pipelines.
-- `insight-relations` production function is v11.
-- relation upsert separates unchanged (`stable`) and changed (`touched`) rows into uniform PostgREST batches.
-- relation/event batches are 300 rows and database/API errors use `errText`.
-- `MemberInsightLiveV2` starts both follower/following direction syncs after INSIGHT opens.
-- relation refresh is throttled by `RELATION_MS=180_000`.
-- opening the フォロー view explicitly calls `relationSync(true)`.
-- successful direction sync increments revision and reloads totals, people and delta history.
-- current note official count is overlaid through `insight-social-events.liveCounts` when available.
+- Legacy `magazine_join` rows had a mix of proper creator images, null creator data and mistaken magazine-cover images.
+- 17 rows with missing actor URL/image were uniquely recovered and backfilled.
+- 74 uniquely recoverable cover-image rows were replaced with creator profile images.
+- Current core `actorImage()` prefers image inside actor link, then `/profile_`, then non-cover candidate.
+- Never use `magazine_cover`, OGP or cover artwork as a person avatar.
+- INSIGHT `mergeMagazineJoinRows()` merges richer duplicate join rows before icon enrichment.
+
+### F. Exact membership categories retained
+
+- `kind=circle_plan_join` → `membership_join`.
+- `kind=board_like_comment` / `kind=board_like_post` → `membership_reaction`.
+- board replies/posts and membership plan-open URLs remain protected from generic classification.
+- migration `20260907185100_notification_membership_exact_v5.sql` remains applied.
+
+### G. Follow/follower repair retained
+
+- Notification ingestion and relation synchronization are separate pipelines.
+- `insight-relations` production v11 remains active.
+- Changed/unchanged relation rows are split into uniform PostgREST batches.
+- relation/event batches remain 300; errors use normalized `errText`.
+- both follower/following directions sync; opening フォロー triggers forced relation refresh.
+- followers above 1,000 respect note’s latest-1,000 identity cap and official count delta semantics.
 
 ## 1. Production scope
 
@@ -177,11 +160,10 @@ The production-facing app is **INSIGHT only**.
 - Public participant navigation is TOP / INSIGHT.
 - OWNER routes remain separate and authenticated.
 - Core INSIGHT must work in ordinary modern browsers without depending on Edge-specific behavior.
-- Browser/userscript compatibility diagnostics may recommend another browser where a userscript engine is unavailable, but Edge must never be a requirement for core INSIGHT analytics.
 
 ## 2. Full participant INSIGHT — do not simplify
 
-Participant dashboard uses the full-history/live implementation. Visible participant tabs include:
+Visible participant tabs include:
 
 - 概要
 - スキ履歴
@@ -191,62 +173,53 @@ Participant dashboard uses the full-history/live implementation. Visible partici
 - 通知
 - 記事
 
-Saved full history must display immediately. A fresh note crawl must never block initial display.
+Saved full history must display immediately. Fresh note crawling must never block initial history display.
 
-`ss_yr` remains mapped to the preserved legacy analytics scope `member_id='owner'`; other participants remain strictly scoped to their own participant UUID. Never expose OWNER history to another participant.
+`ss_yr` remains mapped to legacy analytics scope `member_id='owner'`; other participants remain strictly scoped to their own participant UUID.
 
 ## 3. Public comments/replies and reaction synchronization
 
-Current semantics must be preserved:
+- note v3 structured comment JSON supported.
+- pagination follows note `next_page`.
+- comment body text extracted from structured children/text.
+- parent/child reply relationships stored.
+- `latest_creator_reply` semantics preserved.
+- pending/older threads revisited through rotating windows.
+- creator replies update thread state without false inbound notifications.
+- scheduled public comment refresh remains browser-independent.
+- Public comments/likes must not require 本人通知 pairing.
 
-- note v3 structured comment JSON is supported.
-- pagination follows note `next_page` rather than assuming requested page size.
-- comment body text is extracted from structured children/text values.
-- parent/child reply relationships are stored.
-- `latest_creator_reply` semantics are preserved.
-- pending threads are revisited, including older threads through rotating windows.
-- creator replies update thread state but do not create false inbound notifications.
-- scheduled public comment refresh continues independently of the browser.
-
-Thread status:
-
-- `unreplied`: creator reply not captured.
-- `followup_pending`: creator replied before, latest reply is external.
-- `replied`: latest reply is the creator.
-
-Public comments/likes are core public data and **must not require 本人通知 pairing**.
+Thread status remains `unreplied`, `followup_pending`, `replied`.
 
 ## 4. Follow/follower semantics
 
-- Current totals should prefer note official current counts.
-- `followers` identity enumeration is capped by note at the latest 1,000 identities for accounts above 1,000 followers.
-- an identity falling outside the latest-1,000 window alone must never be treated as an unfollow.
-- official-count delta plus latest-1,000 snapshot is used for capped follower tracking.
-- when the official delta can be mapped to visible identity changes, save named 【増】【減】 events.
-- if an official delta cannot be identified within the latest window, save the unmatched amount as an unknown aggregate event instead of inventing a person.
-- `followings` is fully reconciled when note returns the complete list.
-- relation sync must continue to split changed/unchanged bulk upserts.
-- opening the フォロー screen must continue to trigger `relationSync(true)`.
+- Prefer note official current totals.
+- Followers identity enumeration is capped to latest 1,000 for accounts over 1,000.
+- Falling outside that window alone is not an unfollow.
+- Official count delta + latest-1,000 snapshot drives capped tracking.
+- Save named deltas only when identifiable; otherwise save unknown aggregate delta.
+- Followings are fully reconciled when complete list is returned.
 
 ## 5. Public notifications vs 本人通知
 
 Public reaction watch supplies identifiable public events such as likes, comments/replies and observable follows.
 
-本人通知 supplies logged-in note-bell events that public crawling cannot reliably provide, including purchases, tips, membership events and other notification-only categories.
+本人通知 supplies logged-in note-bell events that public crawling cannot reliably provide, including purchases, tips, membership and other notification-only categories.
 
-The participant notification view merges appropriate saved sources for that participant while maintaining strict account isolation.
+The participant notification view merges appropriate saved sources while maintaining strict account isolation.
 
 ## 6. 本人通知 account isolation and pairing
 
-- actual note login identity is read from `/api/v2/current_user`.
-- ingest token, saved signatures/checkpoint and filter settings are isolated by actual note ID.
-- server ingest rejects note-ID/token mismatch with `NOTIFICATION_ACCOUNT_MISMATCH`.
-- active verified INSIGHT participants may pair their selected account; no legacy password/code login is reintroduced.
-- switching between saved verified accounts does not log out the other saved account.
+- Actual note login identity comes from `/api/v2/current_user`.
+- Ingest token, saved signatures/checkpoint and filter settings are isolated by actual note ID.
+- Server ingest rejects note-ID/token mismatch with `NOTIFICATION_ACCOUNT_MISMATCH`.
+- Active verified INSIGHT participants may pair their selected account.
+- Switching saved verified accounts does not log out other saved accounts.
+- Notification entry may activate an existing matching saved INSIGHT session but must never generate a session token locally.
 
 ## 7. Notification categories
 
-The notification UI/feed supports categories including:
+Supported categories include:
 
 - like
 - comment_like
@@ -260,135 +233,102 @@ The notification UI/feed supports categories including:
 - purchase / tip
 - buzz / rating / points / quote / other
 
-Membership exact-category DB protection must remain **after** the older generic classifier trigger so exact `kind=` URLs cannot be overwritten to generic categories.
+Exact membership protection must remain after older generic classifier behavior so exact `kind=` URLs cannot be overwritten.
 
 ## 8. Access V6 / account switching
 
-`INSIGHT-XXXXXXXX` is profile ownership verification only; it is not a login password.
+`INSIGHT-XXXXXXXX` is profile ownership verification, not a login password.
 
-Normal participation:
-
-1. enter note ID/profile URL;
-2. OWNER approval;
-3. temporary public profile verification code;
-4. INSIGHT verifies it;
-5. long-lived participant session is saved;
-6. verification code may be removed from note profile.
-
-There is no normal code-input password login form. New-device/lost-session recovery repeats public profile verification. Remembered old verification codes/passwords are not required.
+Normal participation remains: note ID/profile → OWNER approval → temporary public profile verification code → verification → long-lived participant session. New-device/lost-session recovery repeats public verification. No normal password-style code login form.
 
 ## 9. Back / browser history semantics
 
-Browser Back must **never mean logout**.
+Browser Back must never mean logout.
 
-- participant token is not revoked by Back/Forward.
-- explicit logout/leave actions are the only destructive session actions.
-- internal PWA `?launch=top` behavior must not erase normal dashboard deep links.
-- notification install/update must preserve a return path and persistent verification state.
-- it is valid to open the real `.user.js` in a dedicated child tab from a direct user gesture so the original INSIGHT result page remains available.
-- never navigate directly to Tampermonkey's `script_installation.php` intermediate page.
+- participant token not revoked by Back/Forward.
+- explicit logout/leave only destructive session actions.
+- PWA `?launch=top` must not erase normal dashboard deep links.
+- notification install/update preserves return path and persistent verification state.
 
 ## 10. PWA and fixed URL
 
 - fixed public URL remains `https://mumei-s.github.io/note-insight/`.
-- PWA/browser recovery logic is a safety layer, not a prerequisite for analytics.
-- do not change the distribution URL.
+- PWA/browser recovery is a safety layer, not an analytics prerequisite.
+- do not change distribution URL.
 
 ## 11. CI / regression protection
 
-Pages workflow must pass before public deployment:
+Final Pages workflow must pass:
 
 1. `npm ci`
-2. JavaScript syntax checks for the current userscript bootstrap and current notification runtime
-3. TypeScript/Vite production build
-4. unified INSIGHT regression tests including `tests/notification-v2919.test.mjs`
+2. syntax checks for current userscript bootstrap and current core runtime
+3. production Vite/TypeScript build
+4. unified INSIGHT regression tests
 5. Pages artifact upload
-6. deploy
-
-Current v2.9.45 / app 2026.09.08.2 validation: GitHub Actions run `34182591649` succeeded through userscript syntax, production build, unified regression tests, artifact upload and Pages deploy.
+6. Pages deploy
 
 Regression coverage must protect:
 
-- exactly one current runtime `@require` (`runtime-v2945`);
-- no legacy notification runtime chain;
-- iframe markup/style only: no iframe inline script and no postMessage-based control transport;
-- direct parent-side `contentDocument` handler binding after iframe load;
-- `frame.dataset.mumeiBound` preventing duplicate control bindings;
-- bottom iframe dock and real `通知` + `お知らせ` shell gating with deep text fallback;
-- transient panel grace without scroll listeners or document-wide MutationObservers;
-- manual source `note-notification-manual-sync-v2945` remaining compatible with server allowlist;
-- server-confirmed saved signatures only;
-- no normal-scroll interception or scroll-position writes;
-- first/leading-creator-only filter behavior;
-- filter ON being session-only and every bell reopen starting OFF;
-- filter OFF restoring every `mumei-v2945-hide` row;
-- filter target groups remaining saved while active ON/OFF state does not persist;
-- checkpoint continuation by `boundarySignature`, never note unread/new state;
-- closing bell without manual save never changing the checkpoint;
-- previous-save marker being best-effort, size guarded and non-authoritative;
-- filter observation scoped to active notification panel;
-- no note-DOM proxy clicks;
-- actor image selection preferring profile images and excluding magazine cover/OGP/cover images;
-- INSIGHT `mergeMagazineJoinRows` duplicate consolidation and creator-icons enrichment;
-- child-tab GitHub Pages `.user.js` install path;
-- automatic closure/recovery when child remains raw `.user.js` text;
-- no direct `script_installation.php` navigation and no same-tab raw-script fallback;
-- persistent auto-verification and explicit success/failure result;
-- explicit-manual `other` ingestion/feed visibility;
-- exact membership `kind=` DB classification;
-- notification deep link and 3-second INSIGHT feed refresh;
-- compact notification cards with numeric magazine-add headline retained;
-- independent app/notification release versions and persistent main-screen version display;
-- visible INSIGHT app update-check feedback;
-- relation sync for both followers/followings;
-- social-mode forced relation refresh;
-- split stable/touched relation upserts;
-- normalized relation error reporting;
-- current release manifest.
+- exactly one active runtime require (`runtime-v2945` for current v2.9.46 package);
+- no legacy multi-runtime chain;
+- iframe no inline script/postMessage control dependency;
+- one physical button tap = one handler transition;
+- bottom dock and real bell-shell gating;
+- no notification scroll/touch/wheel interception;
+- filter session OFF on every bell reopen;
+- first/leading-creator-only filtering;
+- OFF restores every hidden row;
+- manual source stays ingest-allowlisted;
+- checkpoint independent from note read/unread state;
+- visual boundary best-effort only;
+- server-confirmed signatures only;
+- explicit/manual rows always survive feed visibility filtering;
+- note-account-aware INSIGHT entry using only an existing matching saved member token;
+- cross-account feed mismatch is rejected rather than silently displayed;
+- magazine join creator image rules;
+- install raw-text recovery and actual version verification;
+- exact membership classification;
+- 3-second notification feed refresh;
+- independent app/notification release versions;
+- follower/following relation refresh repair.
 
 ## 12. Do not regress
 
-- Never replace full participant INSIGHT with a simplified dashboard.
-- Never move `ss_yr` to an empty/new analytics scope without a verified migration of all history.
-- Never remove comments/replies, follower/following history, supporter ranking, notification history or article archive.
-- Never make a fresh note crawl block initial history display.
-- Never make 本人通知/userscript a requirement for public comments/likes.
+- Never simplify the full participant INSIGHT dashboard.
+- Never move `ss_yr` away from `member_id='owner'` without verified full-history migration.
+- Never remove comments/replies, follow history, supporter ranking, notifications or article archive.
+- Never block saved-history display on a fresh crawl.
+- Never make 本人通知 required for public comments/likes.
 - Never mix notification tokens/settings/history across note IDs.
 - Never treat profile verification code as a password.
-- Never make browser Back log the participant out.
+- Never make browser Back logout.
 - Never remove account switching.
-- Never change the fixed distribution URL.
-- Never make Edge a requirement for core analytics.
-- Never let the generic notification classifier override exact membership URL kinds.
-- Never intentionally leave one filtered magazine notification visible.
-- Never let a second/later creator in an aggregated notification cause the row to be hidden.
-- Never persist filter ON as the next bell-session state; target configuration persists, active ON/OFF does not.
-- Never bind the same dock iframe controls more than once; one physical tap must produce exactly one filter state transition.
-- Never exclude already-hidden filter rows from OFF evaluation; OFF must restore every row hidden by the current filter class.
-- Never derive notification continuation from note unread/new/seen state. Only a completed manual-save checkpoint may advance `boundarySignature`.
-- Never advance `boundarySignature` merely because the bell was opened, closed or marked read by note.
-- Never make the visual previous-save line authoritative; if it cannot render safely, omit it and keep the internal checkpoint.
-- Never restore scroll/touch/wheel interception to the current notification runtime without a verified device reason.
-- Never load the old multi-runtime notification chain again.
-- Never put executable inline script inside the dock iframe or depend on postMessage for dock button functionality.
-- Never let manual/filter/settings dock taps proxy-click or fall through to note links.
-- Never use magazine cover, OGP or cover artwork as a creator/person avatar in INSIGHT【通知】.
-- Never change the current manual source to a value outside the ingest allowlist contract.
-- Never drop explicit-manual `other` rows from ingest/feed; they belong in INSIGHT【その他】 until a stronger classifier is added.
-- Never open Tampermonkey's intermediate installation page directly.
-- Never leave the user stranded on raw `.user.js` text when the original update tab can detect and recover it.
-- Never claim a notification install/update succeeded until note-side version verification reports the expected version.
-- Never put changed and unchanged relation rows with different JSON key sets in one bulk PostgREST upsert.
-- Never couple INSIGHT本体 and 本人通知 to one version number or force one update merely because the other changed.
-- Never hide both current/latest version tracks from the INSIGHT main dashboard.
+- Never change fixed distribution URL.
+- Never make Edge a core INSIGHT requirement.
+- Never intentionally leave one matching magazine notification visible.
+- Never let a second/later creator hide an aggregated notification.
+- Never persist filter ON into the next bell session.
+- Never move the saved checkpoint from merely opening/closing the bell or from note read/unread state.
+- Never restore scroll/touch/wheel interception without verified device reason.
+- Never restore old multi-runtime chain.
+- Never put executable inline script inside dock iframe or use postMessage for dock controls.
+- Never let dock taps proxy-click/fall through to note links.
+- Never use magazine cover/OGP/cover as a person avatar.
+- Never use a manual source outside the ingest allowlist.
+- Never drop an accepted explicit/manual notification from feed because wording regex fails.
+- Never open an account-blind INSIGHT notification entry from the note dock.
+- Never display another saved INSIGHT account’s notification feed when a specific note account was requested.
+- Never invent/copy a member token from a note ID; only activate an already stored matching account token.
+- Never claim install success until note-side actual version verification reports expected version.
+- Never couple INSIGHT本体 and 本人通知 to a single version number.
 
 ## 13. Detached archives
 
 ### Games
-Preserve completed six-game source, CSS, ledger support, migrations and `docs/GAME_SPEC.md`. Do not reconnect unless explicitly requested.
+Preserve six-game source, CSS, ledger support, migrations and `docs/GAME_SPEC.md`. Do not reconnect unless explicitly requested.
 
 ### Creator directory
-Preserve directory/catalog source and Supabase data. It is not part of the current production-facing INSIGHT app unless explicitly requested.
+Preserve directory/catalog source and Supabase data. It is detached from current production-facing INSIGHT unless explicitly requested.
 
 ## 14. Persistence discipline
 
