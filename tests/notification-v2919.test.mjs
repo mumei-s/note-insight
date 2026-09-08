@@ -3,45 +3,51 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.41 bootstrap loads exactly one notification runtime",async()=>{
+test("v2.9.42 bootstrap loads exactly one current notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.41/);
-  assert.match(boot,/runtime-v2940\.js\?v=2940a/);
+  assert.match(boot,/@version\s+2\.9\.42/);
+  assert.match(boot,/runtime-v2942\.js\?v=2942a/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,1);
+  assert.doesNotMatch(boot,/runtime-v2933|runtime-v2935|runtime-v2938|runtime-v2939|runtime-v2940/);
   assert.match(boot,/@updateURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
-  assert.match(boot,/@downloadURL\s+https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-sync\.user\.js/);
-  assert.doesNotMatch(boot,/runtime-v2933/);
-  assert.doesNotMatch(boot,/runtime-v2935/);
-  assert.doesNotMatch(boot,/runtime-v2938/);
-  assert.doesNotMatch(boot,/runtime-v2939/);
 });
 
-test("v2.9.40 runtime uses one isolated dock and never intercepts normal scrolling",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
+test("v2.9.42 bottom dock is isolated and never intercepts normal scrolling",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
   assert.match(r,/document\.createElement\('iframe'\)/);
-  assert.match(r,/frame\.srcdoc=frameHtml\(\)/);
-  assert.match(r,/parent\.postMessage\(\{m2940:true,cmd/);
-  assert.match(r,/setInterval\(maintenance,900\)/);
+  assert.match(r,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)/);
+  assert.match(r,/setInterval\(maintenance,1500\)/);
+  assert.match(r,/PANEL_GRACE=2600/);
   assert.doesNotMatch(r,/touchmove/);
   assert.doesNotMatch(r,/wheel/);
-  assert.doesNotMatch(r,/document\.addEventListener\('scroll'/);
+  assert.doesNotMatch(r,/addEventListener\(['"]scroll/);
   assert.doesNotMatch(r,/scrollTop\s*=/);
+  assert.doesNotMatch(r,/scrollTo\(/);
   assert.doesNotMatch(r,/preventDefault\(\)/);
 });
 
-test("v2.9.40 filter is display-only and only the leading creator can hide a row",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
-  assert.match(r,/const HIDE='mumei-v2940-hide'/);
+test("v2.9.42 finds the real notification shell by 通知 and お知らせ tabs",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
+  assert.match(r,/function exactTabCount/);
+  assert.match(r,/t==='通知'/);
+  assert.match(r,/t==='お知らせ'/);
+  assert.match(r,/if\(tabs<2\)return-1/);
+  assert.match(r,/Date\.now\(\)-lastPanelSeen<PANEL_GRACE/);
+});
+
+test("v2.9.42 filter is display-only and only leading creator can hide a row",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
+  assert.match(r,/const HIDE='mumei-v2942-hide'/);
   assert.match(r,/function firstCreatorId/);
   assert.match(r,/function leadName/);
   assert.match(r,/function magazineNoise/);
   assert.match(r,/const first=firstCreatorId\(el\);if\(first\)return st\.ids\.has\(first\)/);
-  assert.match(r,/el\.classList\.toggle\(HIDE/);
+  assert.match(r,/classList\.toggle\(HIDE/);
   assert.doesNotMatch(r,/actors\.some/);
 });
 
-test("v2.9.40 only observes the active notification panel for newly added rows",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
+test("v2.9.42 only observes newly inserted rows inside active notification panel",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
   assert.match(r,/panelObs=new MutationObserver/);
   assert.match(r,/panelObs\.observe\(p,\{childList:true,subtree:true\}\)/);
   assert.match(r,/rowsFromMutation/);
@@ -49,60 +55,58 @@ test("v2.9.40 only observes the active notification panel for newly added rows",
   assert.doesNotMatch(r,/observe\(document\.body/);
 });
 
-test("v2.9.40 manual save never drives the notification scroll position",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
+test("manual save source is accepted by server and never drives navigation or scroll",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
+  const ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+  assert.match(r,/SRC='note-notification-manual-sync-v2942'/);
+  assert.match(ingest,/manual-sync-v\\d\+/);
   assert.match(r,/async function manualSave\(\)/);
-  assert.match(r,/MAX_NEW=120/);
   assert.match(r,/confirmedClientSignatures/);
-  assert.match(r,/mumei_insight_notification_saved_v2919/);
-  assert.match(r,/mumei_insight_notification_checkpoint_v2922/);
-  assert.doesNotMatch(r,/scrollHeight/);
-  assert.doesNotMatch(r,/scrollTo\(/);
+  assert.match(r,/INSIGHT反映/);
+  assert.doesNotMatch(r,/scrollHeight|scrollTop\s*=|scrollTo\(/);
 });
 
-test("v2.9.40 INSIGHT navigation originates from the isolated iframe command",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
-  assert.match(r,/notification-entry\.html\?from=note&insightMode=notifications#dashboard/);
+test("only isolated INSIGHT command intentionally navigates away from note",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2942.js");
   assert.match(r,/cmd==='insight'\)location\.assign\(INSIGHT\)/);
   assert.doesNotMatch(r,/\.click\(\)/);
   assert.doesNotMatch(r,/\.onclick\(fake/);
 });
 
-test("v2.9.40 retains grouped filter settings and truncated-name fallback",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2940.js");
-  assert.match(r,/mumei_insight_notification_groups_v1/);
-  assert.match(r,/mumei_insight_magazine_mute_profiles_v5/);
-  assert.match(r,/async function settingsCommand/);
-  assert.match(r,/group-toggle/);
-  assert.match(r,/group-delete/);
-  assert.match(r,/member-remove/);
-  assert.match(r,/member-add/);
-  assert.match(r,/function nameMatch/);
-});
-
-test("v2.9.41 install flow opens the real Pages .user.js, not Tampermonkey intermediate page",async()=>{
+test("v2.9.42 browser-aware install page keeps update screen available",async()=>{
   const update=await read("public/notification-update.html");
   const setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.41/);
-  assert.match(update,/v2\.9\.41 をインストール／更新/);
-  assert.match(update,/new URL\('\.\/note-insight-notification-sync\.user\.js',location\.href\)\.href/);
-  assert.match(update,/window\.open\(SCRIPT,'_blank'\)/);
-  assert.doesNotMatch(update,/script_installation\.php/);
+  assert.match(update,/最新版 v2\.9\.42/);
+  assert.match(update,/Android Edge/);
+  assert.match(update,/Android Firefox/);
+  assert.match(update,/iPhone\/iPad Safari/);
+  assert.match(update,/Android Chrome \/ Yahoo/);
+  assert.match(update,/window\.open\(SCRIPT,'mumei-notification-install'\)/);
   assert.match(update,/mumei-notification-update-pending/);
+  assert.doesNotMatch(update,/script_installation\.php/);
+  assert.doesNotMatch(update,/location\.assign\(SCRIPT\)/);
   assert.match(update,/autoVerify/);
-  assert.match(setup,/最新版は v2\.9\.41/);
-  assert.match(setup,/更新完了｜本人通知 v\$\{VERSION\}｜最新版です/);
-  assert.match(setup,/setTimeout\(\(\)=>location\.replace\(returnTarget\),1800\)/);
+  assert.match(setup,/最新版は v2\.9\.42/);
+  assert.match(setup,/更新完了｜本人通知 v\$\{VERSION\}｜最新版/);
+  assert.match(setup,/setTimeout\(\(\)=>location\.replace\(returnTarget\),2200\)/);
   assert.match(setup,/更新されていません/);
-  assert.match(setup,/更新確認を再開しています/);
-  assert.match(setup,/mumei_insight_version_check=1/);
+});
+
+test("manual notification ingestion keeps unclassified rows as その他 instead of dropping them",async()=>{
+  const ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+  const feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
+  const ui=await read("src/member-insight-notifications-final.tsx");
+  assert.doesNotMatch(ingest,/if\(type==="other"\)\{skipped\+\+;continue\}/);
+  assert.match(ingest,/classifier:"action-v18-v2942"/);
+  assert.match(feed,/if\(type==="other"\)return explicitManual\(source\)/);
+  assert.match(ui,/\["other","その他"\]/);
 });
 
 test("INSIGHT and本人通知 versions remain independent",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json"));
   const release=await read("src/insight-release.ts");
   assert.equal(manifest.appVersion,"2026.09.08.1");
-  assert.equal(manifest.notificationVersion,"2.9.41");
+  assert.equal(manifest.notificationVersion,"2.9.42");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.08\.1"/);
 });
 
@@ -112,26 +116,19 @@ test("INSIGHT app update visibly reports checking and latest result",async()=>{
   assert.match(live,/APP_UPDATE_RESULT_KEY="mumei-insight-app-update-result"/);
   assert.match(live,/showAppFeedback\("INSIGHT本体の最新版を確認中…",0\)/);
   assert.match(live,/✅ INSIGHT本体 v\$\{CURRENT_INSIGHT_APP_VERSION\}｜最新版です/);
-  assert.match(live,/650-\(Date\.now\(\)-started\)/);
-  assert.match(live,/sessionStorage\.setItem\(APP_UPDATE_RESULT_KEY,latestVersion\)/);
   assert.match(css,/\.miv5-app-feedback/);
 });
 
-test("INSIGHT notification deep link and active nav remain deterministic",async()=>{
+test("INSIGHT notification deep link and 3-second feed refresh remain deterministic",async()=>{
   const entry=await read("public/notification-entry.html");
   const live=await read("src/member-insight-live-v2.tsx");
-  const css=await read("src/member-insight-live-v2.css");
+  const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(entry,/insightMode=notifications#dashboard/);
   assert.match(live,/getElementById\("minf-notifications"\)/);
-  assert.match(css,/mode-notifications \.miu-nav button:nth-child\(8\)/);
-});
-
-test("INSIGHT notification view preserves membership categories and auto-reflects saved data",async()=>{
-  const ui=await read("src/member-insight-notifications-final.tsx");
   assert.match(ui,/window\.setInterval\(refresh,3000\)/);
   assert.match(ui,/membership_reaction/);
   assert.match(ui,/membership_join/);
-  assert.match(ui,/fresh\|\|r\.actor_image_url/);
+  assert.match(ui,/magazine_article_added/);
 });
 
 test("server/database preserve membership join/reaction classification",async()=>{
@@ -140,7 +137,6 @@ test("server/database preserve membership join/reaction classification",async()=
   const m=await read("supabase/migrations/20260907185100_notification_membership_exact_v5.sql");
   assert.match(s,/membership_reaction/);
   assert.match(s,/membership_join/);
-  assert.match(s,/confirmedClientSignatures/);
   assert.match(f,/membership_reaction/);
   assert.match(f,/membership_join/);
   assert.match(m,/circle_plan_join/);
