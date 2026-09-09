@@ -42,13 +42,14 @@ test("INSIGHT notification history has one shared calendar filter for all catego
   for(const x of ["function jstDay","selectedDay:day||null","dated=day?filtered.filter","/^\\d{4}-\\d{2}-\\d{2}$/"])assert.match(feed,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
-test("INSIGHT compact UX removes top blank space, restores installers and keeps comment body disclosure",async()=>{
+test("INSIGHT compact UX measures top height and opens only real comment body",async()=>{
   const base=await read("src/insight-source-boundaries.ts"),ux11=await read("src/insight-ux-v11.ts"),ux12=await read("src/insight-ux-v12.ts"),ux13=await read("src/insight-ux-v13.ts");
   assert.match(base,/import "\.\/insight-ux-v11"/);
   assert.match(base,/import "\.\/insight-ux-v13"/);
   for(const x of ["mumei-history-frequency","mumei-notification-updated","grid-template-columns:repeat(3","grid-template-rows:repeat(2,34px)","mumei-all-tab","CAT_ORDER_KEY","長押しで並べ替え","mumei-comment-toggle","COMMENT_LABELS","mumei-comment-open"])assert.match(ux11,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["mumei-comment-body","コメント内容","insight-comment-events","コメント履歴から本文を照合",".minf-main small{display:block!important"])assert.match(ux12,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["height:fit-content!important","grid-template-rows:auto!important","miv5-install-link","インストール / 更新","📊 ダッシュボード","miah-dashboard-with-read"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["mumei-comment-body","コメント本文","返信本文","insight-comment-events","コメント履歴から実本文を照合","実本文を特定できません","summary?.style.setProperty('display','block','important')"])assert.match(ux12,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(ux12,/通知文から本文部分を抽出/);
+  for(const x of ["fitTopHeight","grid-template-rows:max-content","box-sizing:border-box","root.style.setProperty(\"height\"","miv5-install-link","インストール / 更新","📊 ダッシュボード","miah-dashboard-with-read"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
 test("Dashboard analysis is an explicit two-way split for notification-free and notification-added reads",async()=>{
@@ -99,10 +100,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.14");
+  assert.equal(manifest.appVersion,"2026.09.09.15");
   assert.equal(manifest.notificationVersion,"2.9.59");
   assert.equal(manifest.dashboardVersion,"1.4.1");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.14"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.15"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.1"/);
   assert.match(dash,/@version\s+1\.4\.1/);
