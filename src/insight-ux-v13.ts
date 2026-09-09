@@ -1,3 +1,4 @@
+export {};
 const STYLE_ID="mumei-insight-ux-v13-style";
 let timer=0;
 
