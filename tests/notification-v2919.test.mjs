@@ -3,25 +3,29 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.53 bootstrap drops legacy global monitor",async()=>{
+test("v2.9.54 bootstrap uses DM-safe runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.53/);
-  assert.match(boot,/runtime-v2953\.js\?v=2953a/);
+  assert.match(boot,/@version\s+2\.9\.54/);
+  assert.match(boot,/runtime-v2954\.js\?v=2954a/);
   assert.match(boot,/notification-autoscan-v2952\.js\?v=2952a/);
   assert.doesNotMatch(boot,/runtime-v2948\.js/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,2);
   assert.match(boot,/async function openMatchingInsight\(\)/);
 });
 
-test("v2.9.53 runtime is passive and does not poll or capture all note clicks",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2953.js");
-  assert.match(r,/const VERSION='2\.9\.53'/);
-  assert.match(r,/function schedule\(/);
-  assert.match(r,/function clickHint\(/);
+test("v2.9.54 runtime is passive and never shows dock outside visible notification tabs",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2954.js");
+  assert.match(r,/const VERSION='2\.9\.54'/);
+  assert.match(r,/function messagingContext\(\)/);
+  assert.match(r,/function visibleNoticeContext\(\)/);
+  assert.match(r,/t==='通知'/);
+  assert.match(r,/t==='お知らせ'/);
+  assert.match(r,/function shown\(el\)/);
+  assert.match(r,/if\(!visibleNoticeContext\(\)\)return null/);
+  assert.match(r,/function resetOutsideNotice\(\)/);
   assert.match(r,/document\.addEventListener\('click',clickHint,\{passive:true\}\)/);
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
-  assert.match(r,/DM・投稿・プロフィール|notification-entry/);
 });
 
 test("lightweight autoscan keeps checkpoint automation without full div scan",async()=>{
@@ -31,13 +35,13 @@ test("lightweight autoscan keeps checkpoint automation without full div scan",as
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("installer and settings publish v2.9.53",async()=>{
+test("installer and settings publish v2.9.54",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.53/);
-  assert.match(update,/v2\.9\.53 をインストール／更新/);
-  assert.match(update,/1\.8秒常時監視/);
-  assert.match(setup,/最新版 v2\.9\.53/);
-  assert.match(setup,/DM・投稿・プロフィール/);
+  assert.match(update,/最新版 v2\.9\.54/);
+  assert.match(update,/v2\.9\.54 をインストール／更新/);
+  assert.match(update,/DM・メッセージ・投稿・プロフィール/);
+  assert.match(setup,/最新版 v2\.9\.54/);
+  assert.match(setup,/DM・メッセージ・投稿・プロフィール/);
 });
 
 test("INSIGHT compact source panel separates normal,本人通知 and Dashboard without duplicate update CTA",async()=>{
@@ -57,10 +61,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
   assert.equal(manifest.appVersion,"2026.09.09.3");
-  assert.equal(manifest.notificationVersion,"2.9.53");
+  assert.equal(manifest.notificationVersion,"2.9.54");
   assert.equal(manifest.dashboardVersion,"1.4.0");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.3"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.53"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.54"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
 
