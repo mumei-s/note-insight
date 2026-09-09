@@ -135,6 +135,10 @@ export function MemberInsightLiveV2(){
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
   useEffect(()=>{
+    const handler=(event:Event)=>{const next=(event as CustomEvent).detail;if(typeof next==="string"&&MODES.has(next as Mode))openMode(next as Mode)};
+    window.addEventListener("mumei-insight-open-mode",handler as EventListener);return()=>window.removeEventListener("mumei-insight-open-mode",handler as EventListener)
+  },[mode]);
+  useEffect(()=>{
     if(mode!=="notifications")return;let stopped=false,tries=0;const jump=()=>{if(stopped)return;const el=document.getElementById("minf-notifications");if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}if(tries++<12)window.setTimeout(jump,70)};requestAnimationFrame(jump);return()=>{stopped=true}
   },[mode]);
   useEffect(()=>{
@@ -163,21 +167,23 @@ export function MemberInsightLiveV2(){
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   const role=noteId==="ss_yr"?"owner":"member";
   const dashboardHref=`./dashboard-setup.html?from=insight-top&role=${role}&account=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`;
+  const notificationHref=`./notification-update.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest||"")}&return=${encodeURIComponent(window.location.href)}`;
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
         <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("normal")}><strong>✓ 通常データ</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small>{appUpdateAvailable?<em>NEW</em>:null}</button>
-          <div className="miv5-source-actions"><button disabled={dataBusy} onClick={()=>void manualDataRefresh()}>{dataBusy?"更新中…":"↻ データ更新"}</button>{appUpdateAvailable?<button className="update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体更新"}</button>:null}</div>
+          <button className="miv5-source-main" disabled={dataBusy} onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"公開データを更新しています":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
+          {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</button>
+          <a className="miv5-install-link" href={notificationHref}>インストール / 更新</a>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 公式Dashboard分析</strong><small>{dashboardInstalled?`同期 v${dashboardInstalled}`:"同期ツール 未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 ダッシュボード</strong><small>{dashboardInstalled?`同期 v${dashboardInstalled}`:"同期ツール 未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
+          <a className="miv5-install-link" href={dashboardHref}>インストール / 更新</a>
         </div>
       </div>
-      <div className="miv5-sync-line">{status}</div>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <MemberInsightCompleteness revision={revision}/>
@@ -186,6 +192,6 @@ export function MemberInsightLiveV2(){
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
-    {mode==="analysis"?<div className="miv5-final-slot"><section className={`miv5-dashboard-tools ${dashboardUpdateAvailable?"needs-update":""}`}><div><b>📊 公式Dashboard同期</b><small>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未導入"}{dashboardLatest?`｜最新 v${dashboardLatest}`:""}</small></div><a href={dashboardHref}>{dashboardInstalled?dashboardUpdateAvailable?"同期ツールを更新／読み込み":"新しい公式値を読み込む":"同期ツールをインストール"}</a></section><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
+    {mode==="analysis"?<div className="miv5-final-slot"><section className={`miv5-dashboard-tools ${dashboardUpdateAvailable?"needs-update":""}`}><div><b>📊 ダッシュボード同期</b><small>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未導入"}{dashboardLatest?`｜最新 v${dashboardLatest}`:""}</small></div><a href={dashboardHref}>{dashboardInstalled?dashboardUpdateAvailable?"同期ツールを更新／読み込み":"新しい公式値を読み込む":"同期ツールをインストール"}</a></section><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
   </div>;
 }
