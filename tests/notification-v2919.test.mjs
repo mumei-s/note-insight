@@ -59,8 +59,15 @@ test("INSIGHT top is three compact source controls with built-in version status"
   assert.doesNotMatch(live,/AUTO DATA SYNC/);
   assert.doesNotMatch(live,/↻ データ更新/);
   assert.doesNotMatch(live,/miv5-sync-line/);
-  assert.match(css,/border-radius:18px/);
+  assert.match(css,/border-radius:999px/);
+  assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
   assert.match(css,/miv5-install-link/);
+});
+
+test("ordinary INSIGHT entry stays at top while notification deep-link remains targeted",async()=>{
+  const ux=await read("src/insight-source-boundaries.ts");
+  for(const x of ["explicitNotificationEntry","mumei-insight-entry-at","openNormalTop","mumei-insight-open-mode","window.scrollTo({top:0","blurActive","app-bottom-nav button"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(ux,/q==="notifications"\|\|fresh/);
 });
 
 test("Dashboard install and read controls stay available inside analysis",async()=>{
@@ -77,6 +84,7 @@ test("public data completeness is an 8-slot grid with two fixed and six selectab
   for(const x of ["GRID_KEY","DEFAULT_SLOTS","micmp-grid8","☰ 選択","⚠ 注意","表示する6枠","フォロー/フォロワー","PV・分析","mumei-insight-open-mode","公開データ確認済み","データ精度"])assert.match(c,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(c,/CANDIDATE_IDS/);
   assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css,/border-radius:999px/);
   assert.doesNotMatch(c,/DATA COMPLETENESS/);
 });
 
@@ -105,10 +113,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.8");
+  assert.equal(manifest.appVersion,"2026.09.09.9");
   assert.equal(manifest.notificationVersion,"2.9.56");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.8"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.9"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.56"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
