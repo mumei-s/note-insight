@@ -45,13 +45,13 @@ const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[fullRefreshSeq]=useState(0),[status,setStatus]=useState("公開データは自動更新中（操作不要）"),[appBusy,setAppBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
+  const[revision,setRevision]=useState(0),[fullRefreshSeq]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
-    if(mode===next)return;
+    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
     const y=window.scrollY;
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
     setMode(next);
@@ -92,11 +92,12 @@ export function MemberInsightLiveV2(){
     running.current=true;lastRun.current=now;
     try{
       const p=await post(MEMBER,"sync",{},75_000);
-      setStatus(`自動更新済み ${timeNow()}・記事確認${fmt(p.scannedArticles||0)}件 / 保存記事${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);
+      setStatus(`更新済み ${timeNow()}・記事確認${fmt(p.scannedArticles||0)}件 / 保存${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);
       setRevision(v=>v+1);void loadOfficial();void relationSync(force);return true;
-    }catch(e){setStatus(`自動更新は次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
+    }catch(e){setStatus(`次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
     finally{running.current=false}
   }
+  async function manualDataRefresh(){if(dataBusy)return;setDataBusy(true);try{await publicSync(true)}finally{setDataBusy(false)}}
   async function updateInsightApp(){
     if(appBusy)return;
     setAppBusy(true);
@@ -108,7 +109,7 @@ export function MemberInsightLiveV2(){
       const latestVersion=latest?.appVersion||CURRENT_INSIGHT_APP_VERSION;
       if(!versionDiffers(CURRENT_INSIGHT_APP_VERSION,latestVersion)){
         const wait=Math.max(0,650-(Date.now()-started));if(wait)await new Promise<void>(resolve=>window.setTimeout(resolve,wait));
-        setStatus(`INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} は最新版です。公開データは自動更新しています。`);
+        setStatus(`INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} は最新版です。`);
         showAppFeedback(`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION}｜最新版です`,5000);
         return;
       }
@@ -124,59 +125,34 @@ export function MemberInsightLiveV2(){
     }catch(e){
       const text=e instanceof Error?`INSIGHT本体更新エラー：${e.message}`:"INSIGHT本体更新エラー";
       setStatus(text);showAppFeedback(`⚠ ${text}`,7000);
-    }finally{
-      setAppBusy(false);
-    }
+    }finally{setAppBusy(false)}
   }
   useEffect(()=>{
     const requested=requestedMode();
     if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightScrollY:0},"",u.href);setMode(requested)}
     else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
-    const pop=()=>{
-      const next=history.state?.insightMode;
-      const y=Number(history.state?.insightScrollY);
-      setMode(MODES.has(next)?next:"normal");
-      if(Number.isFinite(y))requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
-    };
-    window.addEventListener("popstate",pop);
-    return()=>window.removeEventListener("popstate",pop)
+    const pop=()=>{const next=history.state?.insightMode;const y=Number(history.state?.insightScrollY);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}))};
+    window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
   useEffect(()=>{
-    if(mode!=="notifications")return;
-    let stopped=false,tries=0;
-    const jump=()=>{
-      if(stopped)return;
-      const el=document.getElementById("minf-notifications");
-      if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}
-      if(tries++<12)window.setTimeout(jump,70);
-    };
-    requestAnimationFrame(jump);
-    return()=>{stopped=true};
+    if(mode!=="notifications")return;let stopped=false,tries=0;const jump=()=>{if(stopped)return;const el=document.getElementById("minf-notifications");if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}if(tries++<12)window.setTimeout(jump,70)};requestAnimationFrame(jump);return()=>{stopped=true}
   },[mode]);
   useEffect(()=>{
-    void loadOfficial();
-    const touch=()=>{lastInteraction.current=Date.now()};
+    void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
     const relationFirst=window.setTimeout(()=>void relationSync(true),900),first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>{void publicSync(false);void relationSync(false)},QUIET_MS)};
     document.addEventListener("visibilitychange",visible);
-    return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)};
+    return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)}
   },[]);
   useEffect(()=>{if(mode==="social")void relationSync(true)},[mode]);
   useEffect(()=>{
-    void checkRelease();
-    const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},60_000);
-    const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
+    void checkRelease();const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},60_000);const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
-    return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current)};
+    return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current)}
   },[]);
   function capture(e:React.MouseEvent){
-    const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;
-    const label=t.closest("button")?.textContent?.trim()||"";
-    if(label==="コメント")openMode("comments");
-    else if(label==="お気に入り")openMode("favorites");
-    else if(label==="フォロー")openMode("social");
-    else if(label==="通知")openMode("notifications");
-    else if(mode!=="normal")openMode("normal");
+    const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;const label=t.closest("button")?.textContent?.trim()||"";
+    if(label==="コメント")openMode("comments");else if(label==="お気に入り")openMode("favorites");else if(label==="フォロー")openMode("social");else if(label==="通知")openMode("notifications");else if(mode!=="normal")openMode("normal")
   }
   const appLatest=release?.appVersion||"";
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
@@ -188,27 +164,28 @@ export function MemberInsightLiveV2(){
   const role=noteId==="ss_yr"?"owner":"member";
   const dashboardHref=`./dashboard-setup.html?from=insight-top&role=${role}&account=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`;
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
-    <section className={`miv5-update ${appUpdateAvailable?"has-update":""}`}><div><b>AUTO DATA SYNC</b><span>{status}</span><small>記事・スキ・コメント・お気に入り・フォローなどの公開データは自動更新します。フォロー総数はnote公式現在値、人物一覧はバックグラウンド照合で追従します。公式Dashboardは専用ボタンから本人データだけを同期します。</small></div><div><button className={mode==="analysis"?"active":""} onClick={()=>mode==="analysis"?backMode():openMode("analysis")}>{mode==="analysis"?"← 分析から戻る":"📊 分析"}</button><a className="dashboard-link" href={dashboardHref}>📥 Dashboard読み込み</a><button className={`primary app-update ${appUpdateAvailable?"update-ready":""}`} disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?<strong>確認中…</strong>:appUpdateAvailable?<><small>NEW・最新版あり v{release?.appVersion}</small><strong>INSIGHT本体 更新</strong></>:<><small>{releaseChecked?`v${CURRENT_INSIGHT_APP_VERSION}・最新版`:`v${CURRENT_INSIGHT_APP_VERSION}・確認中`}</small><strong>INSIGHT本体</strong></>}</button></div></section>
-    <section className="miv5-version-status" aria-label="バージョン情報">
-      <div className={appUpdateAvailable?"needs-update":""}><b>INSIGHT本体</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION}</span><small>{releaseChecked?`最新 v${appLatest||CURRENT_INSIGHT_APP_VERSION}`:"最新 確認中"}</small>{appUpdateAvailable?<em>NEW</em>:null}</div>
-      <div className={notificationUpdateAvailable?"needs-update":""}><b>本人通知</b><span>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未確認"}</span><small>{releaseChecked?`最新 v${notificationLatest||"—"}`:"最新 確認中"}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</div>
-      <div className={dashboardUpdateAvailable?"needs-update":""}><b>Dashboard同期</b><span>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未確認"}</span><small>{releaseChecked?`最新 v${dashboardLatest||"—"}`:"最新 確認中"}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</div>
+    <section className="miv5-update" aria-label="INSIGHT主要機能">
+      <div className="miv5-source-grid">
+        <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("normal")}><strong>✓ 通常データ</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small>{appUpdateAvailable?<em>NEW</em>:null}</button>
+          <div className="miv5-source-actions"><button disabled={dataBusy} onClick={()=>void manualDataRefresh()}>{dataBusy?"更新中…":"↻ データ更新"}</button>{appUpdateAvailable?<button className="update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体更新"}</button>:null}</div>
+        </div>
+        <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</button>
+        </div>
+        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 公式Dashboard分析</strong><small>{dashboardInstalled?`同期 v${dashboardInstalled}`:"同期ツール 未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
+        </div>
+      </div>
+      <div className="miv5-sync-line">{status}</div>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
-    {appUpdateAvailable?<section className="miv5-release-alert app" role="status"><div><b>NEW　INSIGHT最新版あり</b><span>現在 v{CURRENT_INSIGHT_APP_VERSION} → 最新 v{release?.appVersion}</span></div><button onClick={()=>void updateInsightApp()}>この画面から更新</button></section>:null}
-    {notificationUpdateAvailable?<section className="miv5-release-alert notification" role="status"><div><b>🔔 本人通知ツール 更新あり</b><span>{notificationInstalled?`現在 v${notificationInstalled}`:"この端末の版は未確認"} → 最新 v{notificationLatest}</span></div><a href={`./notification-update.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest)}&return=${encodeURIComponent(window.location.href)}`}>インストール画面へ</a></section>:null}
-    <section className="miv5-data-warning" role="note" aria-label="データ精度について">
-      <b>⚠️ データ精度について</b>
-      <span>INSIGHTの履歴は、取得条件・ブラウザ・note側の表示状況などにより、欠落・重複・時刻ずれが生じる場合があります。</span>
-      <strong>特に「本人通知」は推定・補完を含むため、大きな誤差が生じることがあります。</strong>
-      <small>重要な確認はnote本体の通知・記事履歴を優先してください。</small>
-    </section>
     <MemberInsightCompleteness revision={revision}/>
     <MemberInsightUnifiedV4 revision={revision}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
-    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
+    {mode==="analysis"?<div className="miv5-final-slot"><section className={`miv5-dashboard-tools ${dashboardUpdateAvailable?"needs-update":""}`}><div><b>📊 公式Dashboard同期</b><small>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未導入"}{dashboardLatest?`｜最新 v${dashboardLatest}`:""}</small></div><a href={dashboardHref}>{dashboardInstalled?dashboardUpdateAvailable?"同期ツールを更新／読み込み":"新しい公式値を読み込む":"同期ツールをインストール"}</a></section><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
   </div>;
 }
