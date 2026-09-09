@@ -33,17 +33,21 @@ test("installer detects raw user.js and returns automatically to INSIGHT",async(
   for(const x of ["最新版 v2.9.58","通知フィルター設定","checked===VERSION","location.replace(back)","一括・年月日指定"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
-test("INSIGHT compact UX frames top controls and densifies notification history",async()=>{
-  const base=await read("src/insight-source-boundaries.ts"),ux=await read("src/insight-ux-v11.ts");
+test("INSIGHT compact UX removes top blank space and comment labels disclose body only",async()=>{
+  const base=await read("src/insight-source-boundaries.ts"),ux11=await read("src/insight-ux-v11.ts"),ux12=await read("src/insight-ux-v12.ts"),live=await read("src/member-insight-live-v2.tsx");
   assert.match(base,/import "\.\/insight-ux-v11"/);
-  for(const x of [".miv5-update{border:1px","mumei-history-frequency","mumei-notification-updated","grid-template-columns:repeat(3","grid-template-rows:repeat(2,34px)","mumei-all-tab","CAT_ORDER_KEY","長押しで並べ替え","mumei-comment-toggle","COMMENT_LABELS","mumei-comment-open"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(live,/import "\.\/insight-ux-v12"/);
+  for(const x of ["mumei-history-frequency","mumei-notification-updated","grid-template-columns:repeat(3","grid-template-rows:repeat(2,34px)","mumei-all-tab","CAT_ORDER_KEY","長押しで並べ替え","mumei-comment-toggle","COMMENT_LABELS","mumei-comment-open"])assert.match(ux11,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["min-height:0!important","height:auto!important","aspect-ratio:auto!important","mumei-comment-body","コメント内容","insight-comment-events","コメント履歴から本文を照合",".minf-main small{display:block!important"])assert.match(ux12,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
-test("Dashboard analysis has notification-free and notification-inclusive scopes",async()=>{
-  const ux=await read("src/insight-ux-v11.ts"),live=await read("src/member-insight-live-v2.tsx");
-  for(const x of ["ANALYSIS_SCOPE_KEY","通常＋ダッシュボード","本人通知も含める","本人通知なしでも利用できます","insight-notification-feed-final","history.state?.insightMode===\"analysis\""])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(live,/miv5-dashboard-tools/);
-  assert.match(live,/ダッシュボード同期/);
+test("Dashboard analysis clearly separates notification-free official analysis and notification supplement",async()=>{
+  const hub=await read("src/member-insight-analysis-hub.tsx"),live=await read("src/member-insight-live-v2.tsx");
+  for(const x of ["公式＋INSIGHT分析","本人通知なしで利用可能","Dashboard同期ツールを入れて公式値を読む","本人通知も追加","本人通知をインストールして追加分析","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入・支援","時間帯・曜日","topActorShare","kind:\"all\""])assert.match(hub,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(hub,/本人通知は<strong>必須ではありません<\/strong>/);
+  assert.match(hub,/公式Dashboardの非公開値を新しく取り込むには<strong>Dashboard同期ツール<\/strong>が必要/);
+  assert.match(live,/MemberInsightAnalysisHub/);
+  assert.doesNotMatch(live,/miv5-dashboard-tools/);
 });
 
 test("ordinary INSIGHT entry stays at top while notification deep-link remains targeted",async()=>{
@@ -60,10 +64,11 @@ test("notifications remain grouped by day, reclassified daily, and always show k
   assert.match(ingest,/event_day_jst:eventDay/);
 });
 
-test("INSIGHT top is three compact source controls with update status",async()=>{
+test("INSIGHT top is three compact source controls without mandatory installer rows",async()=>{
   const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css");
-  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 ダッシュボード","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","インストール / 更新"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.doesNotMatch(live,/AUTO DATA SYNC/);
+  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","本人通知なしで分析可","公式Dashboard＋INSIGHT","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(live,/notificationHref/);
+  assert.doesNotMatch(live,/dashboardHref/);
   assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
 });
 
@@ -86,10 +91,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.11");
+  assert.equal(manifest.appVersion,"2026.09.09.12");
   assert.equal(manifest.notificationVersion,"2.9.58");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.11"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.12"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.58"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
