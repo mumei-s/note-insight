@@ -22,6 +22,7 @@ function cleanTarget(v:unknown){
 }
 function canonicalText(v:string){return v.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim()}
 function actorFromText(v:string){const m=canonicalText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||null}
+function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(ms)?new Date(ms):new Date();return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
@@ -76,7 +77,7 @@ function semantic(type:string,actor:string,target:string|null,raw:string,bucket:
 }
 function allowedExplicitSource(source:string){
   if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
-  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+)$/.test(source);
+  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
 }
 
 Deno.serve(async(req)=>{
@@ -98,16 +99,17 @@ Deno.serve(async(req)=>{
       const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
       const actorName=clean(item?.actor_name,200)||actorFromText(raw);
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
+      const eventDay=jstDay(at||new Date().toISOString());
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
-      const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket));
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v18-v2942"}};
+      const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket)),classifiedAt=new Date().toISOString();
+      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v19-v2957",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt}};
       const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
       const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
       if(error)throw error;
       if(clientSignature)confirmedClientSignatures.push(clientSignature);
       if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2942"});
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2957"});
     const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,blocked,skipped,sources:[...sources],confirmedClientSignatures:[...new Set(confirmedClientSignatures)]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
