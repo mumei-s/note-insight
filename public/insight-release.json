@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.09.2",
-  "notificationVersion": "2.9.51",
+  "notificationVersion": "2.9.52",
   "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T09:35:00+09:00",
+  "releasedAt": "2026-09-09T13:01:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "本人通知v2.9.51: 🔔一覧が実際に開いているのに未検出になるnote現行DOMへ対応。通知行のフォールバック検出、共通コンテナ判定、ページ全体スクロール対応を追加。小分け走査・前回保存位置・安全停止は維持。"
+  "note": "本人通知v2.9.52: v2.9.51の全div再走査を廃止。既知通知行・リンク・時刻要素だけを上限付きで軽量検出し、1スクロールごとにUIへ制御を返す。前回保存位置までの自動取得・途中停止は維持。"
 }
