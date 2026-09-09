@@ -3,34 +3,43 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.58 bootstrap uses matching runtime and autoscan",async()=>{
+test("v2.9.59 bootstrap uses refreshed notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2958.js");
-  assert.match(boot,/@version\s+2\.9\.58/);
-  assert.match(boot,/runtime-v2958\.js\?v=2958a/);
-  assert.match(boot,/notification-autoscan-v2958\.js\?v=2958a/);
-  assert.match(boot,/notification-bootstrap-v2958\.js\?v=2958a/);
+  assert.match(boot,/@version\s+2\.9\.59/);
+  assert.match(boot,/runtime-v2958\.js\?v=2959a/);
+  assert.match(boot,/notification-autoscan-v2958\.js\?v=2959a/);
+  assert.match(boot,/notification-bootstrap-v2958\.js\?v=2959a/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,3);
   assert.match(bridge,/async function openMatchingInsight\(\)/);
-  assert.match(bridge,/const VERSION='2\.9\.58'/);
+  assert.match(bridge,/const VERSION='2\.9\.59'/);
 });
 
-test("v2.9.58 runtime keeps notification-only detection and exposes range UI",async()=>{
+test("v2.9.59 runtime keeps notification-only detection and restores compact dock",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2958.js");
-  for(const x of ["const VERSION='2.9.58'","function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","modeResume","modeAll","modeDate","年月日指定","dateFrom","dateTo"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["const VERSION='2.9.59'","function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","前回の続きから読込","フィルター設定","INSIGHT【通知】"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["年月日指定","modeDate","dateFrom","dateTo","rangePanel"])assert.doesNotMatch(r,new RegExp(x));
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
 });
 
-test("v2.9.58 autoscan supports resume upward, one-shot all, date range and stop-save",async()=>{
+test("v2.9.59 autoscan is resume-upward only and saves on stop",async()=>{
   const r=await read("public/note-insight-notification-autoscan-v2958.js");
-  for(const x of ["note-notification-resume-upward-v2958","note-notification-manual-sync-v2958","scanResume","scanRange","mode==='all'","mode==='date'","前回保存位置から上へ読込中","一括読込","年月日の範囲を確認してください","停止地点まで保存","resumeSignatureV2958","rangeFromV2958","rangeToV2958","FILTER_URL","location.assign(FILTER_URL)"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["note-notification-resume-upward-v2959","autoScan","前回保存位置から上へ読込中","停止地点まで保存","resumeSignatureV2959","FILTER_URL","location.assign(FILTER_URL)"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["scanRange","modeDate","modeAll","年月日の範囲を確認してください","rangeFromV2958","rangeToV2958"])assert.doesNotMatch(r,new RegExp(x));
   assert.doesNotMatch(r,/querySelectorAll\('li,\[role="listitem"\],article,div'\)/);
 });
 
-test("installer detects raw user.js and returns automatically to INSIGHT",async()=>{
+test("installer detects raw user.js, returns to INSIGHT, and explains date filter lives in INSIGHT",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  for(const x of ["最新版 v2.9.58","v2.9.58 をインストール／更新","RAW_SCRIPT","raw.githubusercontent.com","child.close()","finishToVerify","mumei_insight_version_check"])assert.match(update,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["最新版 v2.9.58","通知フィルター設定","checked===VERSION","location.replace(back)","一括・年月日指定"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["最新版 v2.9.59","v2.9.59 をインストール／更新","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","child.close()","finishToVerify","mumei_insight_version_check"])assert.match(update,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+});
+
+test("INSIGHT notification history has one shared calendar filter for all categories",async()=>{
+  const ui=await read("src/member-insight-notifications-final.tsx"),css=await read("src/member-insight-notifications-final.css"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
+  for(const x of ["selectedDay","type=\"date\"","📅 表示日","全期間に戻す","この日付は下の全カテゴリ共通です。","day:day||null","dayLabel(selectedDay)"])assert.match(ui,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["minf-date-filter","color-scheme:dark","grid-template-columns:minmax(150px,1fr) auto auto"])assert.match(css,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["function jstDay","selectedDay:day||null","dated=day?filtered.filter","/^\\d{4}-\\d{2}-\\d{2}$/"])assert.match(feed,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
 test("INSIGHT compact UX removes top blank space, restores installers and keeps comment body disclosure",async()=>{
@@ -90,11 +99,11 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.13");
-  assert.equal(manifest.notificationVersion,"2.9.58");
+  assert.equal(manifest.appVersion,"2026.09.09.14");
+  assert.equal(manifest.notificationVersion,"2.9.59");
   assert.equal(manifest.dashboardVersion,"1.4.1");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.13"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.58"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.14"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.1"/);
   assert.match(dash,/@version\s+1\.4\.1/);
 });
