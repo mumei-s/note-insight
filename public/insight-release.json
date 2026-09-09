@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.09.2",
-  "notificationVersion": "2.9.50",
+  "notificationVersion": "2.9.51",
   "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T06:50:00+09:00",
+  "releasedAt": "2026-09-09T09:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "Freeze hotfix: 取得経路レイヤーのMutationObserver自己再発火を停止し、子要素変更のみを間引き監視。本人通知v2.9.50は前回位置までの走査を小分け実行・UIへ制御返却・途中停止可能に変更。"
+  "note": "本人通知v2.9.51: 🔔一覧が実際に開いているのに未検出になるnote現行DOMへ対応。通知行のフォールバック検出、共通コンテナ判定、ページ全体スクロール対応を追加。小分け走査・前回保存位置・安全停止は維持。"
 }
