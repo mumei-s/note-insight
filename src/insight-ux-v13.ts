@@ -6,8 +6,8 @@ function installStyle(){
   if(document.getElementById(STYLE_ID))return;
   const s=document.createElement("style");s.id=STYLE_ID;s.textContent=`
 /* v13: top source strip must shrink to content height. */
-section.miv5-update{display:block!important;min-height:0!important;min-block-size:0!important;height:fit-content!important;block-size:fit-content!important;max-height:none!important;aspect-ratio:auto!important;overflow:visible!important;padding:4px!important;margin:2px auto 2px!important}
-section.miv5-update>.miv5-source-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-template-rows:auto!important;grid-auto-rows:auto!important;align-items:start!important;align-content:start!important;min-height:0!important;height:fit-content!important;max-height:none!important;gap:4px!important}
+section.miv5-update{display:block!important;box-sizing:border-box!important;min-height:0!important;min-block-size:0!important;height:auto!important;block-size:auto!important;max-height:none!important;aspect-ratio:auto!important;overflow:visible!important;padding:4px!important;margin:2px auto 2px!important}
+section.miv5-update>.miv5-source-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-template-rows:max-content!important;grid-auto-rows:max-content!important;align-items:start!important;align-content:start!important;min-height:0!important;height:auto!important;max-height:none!important;gap:4px!important}
 section.miv5-update .miv5-source-card{display:grid!important;grid-template-rows:auto auto!important;align-content:start!important;align-self:start!important;min-height:0!important;height:auto!important;max-height:none!important;gap:3px!important}
 section.miv5-update .miv5-source-main{min-height:50px!important;height:auto!important;padding:7px 8px!important;border-radius:18px!important}
 section.miv5-update .miv5-install-link{min-height:25px!important;margin:0 2px 1px!important;border-radius:999px!important;font-size:8px!important}
@@ -41,6 +41,17 @@ function enhanceTop(){
   if(notice)ensureTopLink(notice,"notice");
   if(dashboard){ensureTopLink(dashboard,"dashboard");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main strong"),"📊 ダッシュボード");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main span"),"公式Dashboard＋INSIGHT分析")}
 }
+function fitTopHeight(){
+  const root=document.querySelector<HTMLElement>(".miv5-update"),grid=root?.querySelector<HTMLElement>(":scope > .miv5-source-grid");if(!root||!grid)return;
+  root.querySelectorAll<HTMLElement>(".miv5-source-card").forEach(card=>{card.style.setProperty("min-height","0px","important");card.style.setProperty("height","auto","important");card.style.setProperty("max-height","none","important")});
+  root.style.setProperty("box-sizing","border-box","important");root.style.setProperty("min-height","0px","important");root.style.setProperty("height","auto","important");root.style.setProperty("max-height","none","important");
+  requestAnimationFrame(()=>{
+    const cs=getComputedStyle(root),g=grid.getBoundingClientRect();
+    const extra=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+(parseFloat(cs.borderTopWidth)||0)+(parseFloat(cs.borderBottomWidth)||0);
+    const needed=Math.max(1,Math.ceil(g.height+extra));
+    root.style.setProperty("height",`${needed}px`,"important");root.style.setProperty("min-height",`${needed}px`,"important");root.style.setProperty("max-height",`${needed}px`,"important")
+  })
+}
 
 function enhanceAnalysisHub(){
   const root=document.querySelector<HTMLElement>(".miah");if(!root)return;const cards=[...root.querySelectorAll<HTMLElement>(".miah-paths > article")];if(cards.length<2)return;
@@ -54,7 +65,7 @@ function enhanceAnalysisHub(){
   setHtml(root.querySelector<HTMLElement>(".miah-rule"),"<b>整理：</b>Dashboard読込に本人通知は不要。INSIGHTとnoteの<strong>同一アカウント照合だけ自動実行</strong>します。本人通知は右側の追加分析だけに使います。");
 }
 
-function run(){installStyle();enhanceTop();enhanceAnalysisHub()}
+function run(){installStyle();enhanceTop();fitTopHeight();enhanceAnalysisHub()}
 function schedule(ms=100){window.clearTimeout(timer);timer=window.setTimeout(run,ms)}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>schedule(0),{once:true});else schedule(0);
 new MutationObserver(()=>schedule(140)).observe(document.documentElement,{subtree:true,childList:true});
