@@ -49,7 +49,7 @@ export function MemberInsightLiveV2(){
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
-  const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
     if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
@@ -98,7 +98,21 @@ export function MemberInsightLiveV2(){
     }catch(e){setStatus(`次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
     finally{running.current=false}
   }
-  async function manualDataRefresh(){if(dataBusy)return;setDataBusy(true);try{await publicSync(true)}finally{setDataBusy(false)}}
+  async function waitForPublicSyncIdle(timeout=80_000){
+    const started=Date.now();
+    while(running.current&&Date.now()-started<timeout)await new Promise<void>(resolve=>window.setTimeout(resolve,200));
+    return !running.current;
+  }
+  async function manualDataRefresh(){
+    if(manualRefreshRunning.current){setStatus("連携データを更新中…");return}
+    manualRefreshRunning.current=true;setDataBusy(true);setStatus(running.current?"自動更新完了後に連携データを更新します…":"連携データを更新中…");
+    try{
+      const idle=await waitForPublicSyncIdle();
+      if(!idle){setStatus("自動更新が長引いています。もう一度更新してください。");return}
+      const ok=await publicSync(true);
+      if(!ok)setStatus("連携データを更新できませんでした。もう一度お試しください。");
+    }finally{manualRefreshRunning.current=false;setDataBusy(false)}
+  }
   async function updateInsightApp(){
     if(appBusy)return;
     setAppBusy(true);
@@ -170,7 +184,7 @@ export function MemberInsightLiveV2(){
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
         <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" disabled={dataBusy} onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"公開データを更新しています":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
+          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="連携データを更新" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"連携データを更新しています":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
