@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.09.16",
   "notificationVersion": "2.9.59",
-  "dashboardVersion": "1.4.1",
-  "releasedAt": "2026-09-10T01:54:00+09:00",
+  "dashboardVersion": "1.4.2",
+  "releasedAt": "2026-09-10T05:55:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHT本体v2026.09.09.16: メイン最上段の通常データ（連携データ更新）を常時タップ可能に修正。自動更新と重なった場合は手動更新を捨てず、自動更新完了後に順番に強制更新する。更新中もボタン自体は無効化せず状態表示のみ切替。最上段の操作要素を前面固定して透明要素の被りも防止。本人通知v2.9.59、Dashboard同期v1.4.1は据え置き。"
+  "note": "Dashboard同期v1.4.2: 本人通知なしでも公式Dashboardを直接読み込みできる導線を正式化。iPhone/iPadはSafariを正規ルートとし、Userscripts/Tampermonkey向けの新旧GM API互換を追加。Safariでは.user.jsの文字列表示を自動で閉じず、拡張機能から導入できるよう修正。Dashboard画面には対応ブラウザ表、Dashboard同期の未導入/導入済み、本人通知なし/ありの利用手順を折りたたみパネルへ収納。本人通知v2.9.59、INSIGHT本体v2026.09.09.16は据え置き。"
 }
