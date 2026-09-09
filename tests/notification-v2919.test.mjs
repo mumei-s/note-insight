@@ -78,7 +78,8 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
   const ux=await read("src/insight-source-boundaries.ts");
   assert.match(ux,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(ux,/詳細分析グラフを開く（流入・波形・星図）/);
-  assert.doesNotMatch(ux,/mumei-data-source-boundaries/);
+  assert.doesNotMatch(ux,/const PANEL_ID=/);
+  assert.doesNotMatch(ux,/function sourcePanel\(/);
 });
 
 test("release tracks are independent and current",async()=>{
