@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知・統計連携
 // @namespace    https://github.com/mumei-s/note-insight/notification-sync
-// @version      2.9.54
-// @description  🔔通知画面だけでパネルを表示し、DM・メッセージ・投稿・プロフィールでは完全に非表示にします。
+// @version      2.9.55
+// @description  🔔通知パネル内だけを局所判定し、DM・スキのリアクション・投稿・プロフィールでは表示しません。
 // @match        https://note.com/*
 // @run-at       document-idle
 // @grant        GM.xmlHttpRequest
@@ -12,14 +12,14 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2954.js?v=2954a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2955.js?v=2955a
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2952.js?v=2952a
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VERSION='2.9.54';
+const VERSION='2.9.55';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
