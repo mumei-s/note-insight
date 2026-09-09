@@ -104,19 +104,19 @@ test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
   assert.equal(manifest.appVersion,"2026.09.09.16");
   assert.equal(manifest.notificationVersion,"2.9.59");
-  assert.equal(manifest.dashboardVersion,"1.4.1");
+  assert.equal(manifest.dashboardVersion,"1.4.2");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.16"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
-  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.1"/);
-  assert.match(dash,/@version\s+1\.4\.1/);
+  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);
+  assert.match(dash,/@version\s+1\.4\.2/);
 });
 
-test("Dashboard sync is independent from本人通知, auto-checks account, and has no duplicate numbered flow",async()=>{
+test("Dashboard v1.4.2 works without本人通知 and has Safari-first support panel",async()=>{
   const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),setup=await read("public/dashboard-setup.html"),api=await read("supabase/functions/insight-dashboard-data/index.ts");
   const dash=`${boot}\n${core}`;assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);assert.match(api,/noteId!==who\.noteId/);
-  for(const x of ["Dashboard同期ツール v1.4.1","本人通知は不要です","本人通知なしで読み込む","本人通知ありで読み込む","アカウントを照合中","note側の読込パネルは正常時には表示しません"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.doesNotMatch(setup,/本人連携だけ実行/);assert.doesNotMatch(setup,/① Dashboard同期/);assert.doesNotMatch(setup,/② 本人連携/);assert.doesNotMatch(setup,/③ 今すぐ公式Dashboard/);
-  for(const x of ["const VERSION='1.4.1'","installHideStyle(true)","INSIGHTアカウント照合中","通常時パネルは完全非表示"])assert.match(boot,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["Dashboard同期ツール v1.4.2","本人通知は不要です","本人通知なしで読み込む","本人通知ありで読み込む","対応環境・インストールあり／なしの手順","iPhone / iPad Safari","Userscripts / Tampermonkey","Dashboard同期 未インストール","Dashboard同期 インストール済み","本人通知なしで使う","本人通知も使う","本人通知をインストール / 更新","mumei_dashboard_pair","mumei_dashboard_sync"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["@grant        GM.xmlHttpRequest","@grant        GM.getValue","@grant        GM.setValue","@grant        GM_xmlhttpRequest","const VERSION='1.4.2'","directParams()","installHideStyle(true)","INSIGHTアカウント照合中"])assert.match(boot,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(setup,/本人連携だけ実行/);assert.doesNotMatch(setup,/② 本人連携/);assert.doesNotMatch(setup,/③ 今すぐ公式Dashboard/);
 });
 
 test("notification and social history server paths remain intact",async()=>{
