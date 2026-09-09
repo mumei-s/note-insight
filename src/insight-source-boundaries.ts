@@ -1,3 +1,4 @@
+import "./insight-ux-v11";
 const STYLE_ID="mumei-data-source-boundaries-style";
 const ENTRY_AT_KEY="mumei-insight-entry-at";
 const ENTRY_MODE_KEY="mumei-insight-entry-mode";
