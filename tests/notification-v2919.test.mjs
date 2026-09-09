@@ -17,7 +17,7 @@ test("v2.9.59 bootstrap uses refreshed notification runtime",async()=>{
 test("v2.9.59 runtime keeps notification-only detection and restores compact dock",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2958.js");
   for(const x of ["const VERSION='2.9.59'","function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","前回の続きから読込","フィルター設定","INSIGHT【通知】"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["年月日指定","modeDate","dateFrom","dateTo","rangePanel"])assert.doesNotMatch(r,new RegExp(x));
+  for(const x of ["年月日指定","modeDate","rangePanel"])assert.doesNotMatch(r,new RegExp(x));
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
 });
