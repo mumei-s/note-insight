@@ -24,7 +24,7 @@ test("v2.9.57 runtime detects notification tabs and excludes DM/reactions",async
   assert.match(r,/REACTION_RE/);
   assert.match(r,/スキした人/);
   assert.match(r,/リアクション一覧/);
-  assert.match(r,/data-mumei-notice-shell-v2957/);
+  assert.match(r,/SHELL='mumei-notice-shell-v2957'/);
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
 });
