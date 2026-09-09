@@ -3,28 +3,33 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.55 bootstrap uses locally-scoped notification runtime",async()=>{
-  const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.55/);
-  assert.match(boot,/runtime-v2955\.js\?v=2955a/);
+test("v2.9.56 bootstrap uses tab-first notification runtime",async()=>{
+  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2956.js");
+  assert.match(boot,/@version\s+2\.9\.56/);
+  assert.match(boot,/runtime-v2956\.js\?v=2956a/);
   assert.match(boot,/notification-autoscan-v2952\.js\?v=2952a/);
+  assert.match(boot,/notification-bootstrap-v2956\.js\?v=2956a/);
   assert.doesNotMatch(boot,/runtime-v2948\.js/);
-  assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,2);
-  assert.match(boot,/async function openMatchingInsight\(\)/);
+  assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,3);
+  assert.match(bridge,/async function openMatchingInsight\(\)/);
+  assert.match(bridge,/const VERSION='2\.9\.56'/);
 });
 
-test("v2.9.55 runtime only shows inside the real notification panel",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2955.js");
-  assert.match(r,/const VERSION='2\.9\.55'/);
+test("v2.9.56 runtime detects visible notification tabs first and excludes reactions",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2956.js");
+  assert.match(r,/const VERSION='2\.9\.56'/);
   assert.match(r,/function messagingContext\(\)/);
-  assert.match(r,/function localTabs\(root\)/);
-  assert.match(r,/function localReactionContext\(root\)/);
+  assert.match(r,/function isNoticeTabText\(t\)/);
+  assert.match(r,/function isNewsTabText\(t\)/);
   assert.match(r,/function findNoticeShell\(\)/);
+  assert.match(r,/function expandShell\(base\)/);
   assert.match(r,/REACTION_RE/);
   assert.match(r,/スキした人/);
   assert.match(r,/リアクション一覧/);
-  assert.match(r,/localTabs\(p\)&&!localReactionContext\(p\)/);
-  assert.match(r,/const shell=findNoticeShell\(\)/);
+  assert.match(r,/const notices=controls\.filter/);
+  assert.match(r,/const news=controls\.filter/);
+  assert.match(r,/commonAncestor\(a\.el,b\.el\)/);
+  assert.match(r,/localReactionContext\(shell\)/);
   assert.match(r,/document\.addEventListener\('click',clickHint,\{passive:true\}\)/);
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
@@ -37,12 +42,13 @@ test("lightweight autoscan keeps checkpoint automation without full div scan",as
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("installer and settings publish v2.9.55",async()=>{
+test("installer and settings publish v2.9.56",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.55/);
-  assert.match(update,/v2\.9\.55 をインストール／更新/);
+  assert.match(update,/最新版 v2\.9\.56/);
+  assert.match(update,/v2\.9\.56 をインストール／更新/);
+  assert.match(update,/通知 \/ お知らせ/);
   assert.match(update,/スキのリアクション/);
-  assert.match(setup,/最新版 v2\.9\.55/);
+  assert.match(setup,/最新版 v2\.9\.56/);
   assert.match(setup,/スキのリアクション/);
 });
 
@@ -74,6 +80,21 @@ test("public data completeness is an 8-slot grid with two fixed and six selectab
   assert.doesNotMatch(c,/DATA COMPLETENESS/);
 });
 
+test("TOP keeps saved login on URL/session check failure and compacts participant icons",async()=>{
+  const hub=await read("src/hub-home-v2.tsx"),css=await read("src/hub-home-v2.css"),shim=await read("src/hub-home.tsx");
+  assert.match(shim,/hub-home-v2/);
+  assert.match(hub,/const OWNER_NOTE_ID = "ss_yr"/);
+  assert.match(hub,/slice\(1, 5\)/);
+  assert.match(hub,/slice\(5\)/);
+  assert.match(hub,/hub-v2-primary/);
+  assert.match(hub,/hub-v2-compact4/);
+  assert.match(hub,/ほか \{rest\.length\}名を見る/);
+  assert.match(hub,/ログイン情報は保持しています/);
+  assert.match(hub,/forgetMemberSession\(activeAccount\.noteId\)/);
+  assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css,/hub-v2-more/);
+});
+
 test("analysis navigation is two-row visible and heavy graphs are collapsible",async()=>{
   const ux=await read("src/insight-source-boundaries.ts");
   assert.match(ux,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
@@ -84,11 +105,11 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.7");
-  assert.equal(manifest.notificationVersion,"2.9.55");
+  assert.equal(manifest.appVersion,"2026.09.09.8");
+  assert.equal(manifest.notificationVersion,"2.9.56");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.7"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.55"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.8"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.56"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
 
