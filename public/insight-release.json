@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.09.3",
+  "appVersion": "2026.09.09.4",
   "notificationVersion": "2.9.54",
   "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T15:12:00+09:00",
+  "releasedAt": "2026-09-09T15:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "本人通知v2.9.54: DM・メッセージ画面で通知パネルが残る不具合を修正。画面上に『通知』『お知らせ』タブが実際に見えている時だけ本人通知パネルを表示し、非表示通知DOMは判定対象外。DM系ルートでは即時非表示。"
+  "note": "INSIGHT本体v2026.09.09.4: DATA SOURCEは通常データ・本人通知・公式Dashboardの3行だけを常時表示し、取得範囲・版情報・データ精度注意を『⚠️ 注意・説明』へ集約。最新版時の本体表示は小型ステータス化し、新しい本体版・本人通知版・Dashboard同期版がある時だけ従来どおり目立つ更新表示を維持。"
 }
