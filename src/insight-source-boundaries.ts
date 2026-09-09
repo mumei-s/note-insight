@@ -1,7 +1,12 @@
 const STYLE_ID="mumei-data-source-boundaries-style";
+const ENTRY_AT_KEY="mumei-insight-entry-at";
+const ENTRY_MODE_KEY="mumei-insight-entry-mode";
 let graphsOpen=false;
 let runTimer=0;
 let lastRun=0;
+let initialEntryHandled=false;
+let navigationBound=false;
+const explicitNotificationEntry=(()=>{try{const q=new URLSearchParams(window.location.search).get("insightMode");const at=Number(sessionStorage.getItem(ENTRY_AT_KEY)||0),fresh=at>0&&Date.now()-at<20_000;return q==="notifications"||fresh}catch{return false}})();
 
 function installStyle(){
   if(document.getElementById(STYLE_ID))return;
@@ -26,7 +31,21 @@ function paintAnalysis(root:HTMLElement,toggle:HTMLButtonElement){
   root.classList.toggle("mumei-overview-graphs-collapsed",!graphsOpen);
   const label=graphsOpen?"▲ 詳細分析グラフを閉じる":"▼ 詳細分析グラフを開く（流入・波形・星図）";if(toggle.textContent!==label)toggle.textContent=label
 }
-function run(){lastRun=Date.now();installStyle();enhanceAnalysis()}
+function blurActive(){const a=document.activeElement;if(a instanceof HTMLElement&&a!==document.body)a.blur()}
+function openNormalTop(){window.dispatchEvent(new CustomEvent("mumei-insight-open-mode",{detail:"normal"}));requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:"auto"});blurActive()})}
+function normalizeInitialEntry(){
+  if(initialEntryHandled||!document.querySelector(".miv5"))return;
+  initialEntryHandled=true;
+  if(explicitNotificationEntry)return;
+  try{sessionStorage.removeItem(ENTRY_MODE_KEY);sessionStorage.removeItem(ENTRY_AT_KEY)}catch{}
+  window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:0},"",window.location.href);
+  window.setTimeout(openNormalTop,0)
+}
+function bindNavigation(){
+  if(navigationBound)return;navigationBound=true;
+  document.addEventListener("click",event=>{const target=event.target instanceof Element?event.target:null,button=target?.closest(".app-bottom-nav button");if(!button)return;const label=(button.textContent||"").replace(/\s+/g," ").trim();if(!/^INSIGHT(?:\s|$)/.test(label))return;try{sessionStorage.removeItem(ENTRY_MODE_KEY);sessionStorage.removeItem(ENTRY_AT_KEY)}catch{}window.setTimeout(openNormalTop,0)},{passive:true})
+}
+function run(){lastRun=Date.now();installStyle();bindNavigation();normalizeInitialEntry();enhanceAnalysis()}
 function scheduleRun(delay=180){if(runTimer)window.clearTimeout(runTimer);const elapsed=Date.now()-lastRun;runTimer=window.setTimeout(()=>{runTimer=0;run()},Math.max(delay,elapsed<250?250-elapsed:0))}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>scheduleRun(0),{once:true});else scheduleRun(0);
 const observer=new MutationObserver(()=>scheduleRun(220));observer.observe(document.documentElement,{subtree:true,childList:true});
