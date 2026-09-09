@@ -3,26 +3,28 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.54 bootstrap uses DM-safe runtime",async()=>{
+test("v2.9.55 bootstrap uses locally-scoped notification runtime",async()=>{
   const boot=await read("public/note-insight-notification-sync.user.js");
-  assert.match(boot,/@version\s+2\.9\.54/);
-  assert.match(boot,/runtime-v2954\.js\?v=2954a/);
+  assert.match(boot,/@version\s+2\.9\.55/);
+  assert.match(boot,/runtime-v2955\.js\?v=2955a/);
   assert.match(boot,/notification-autoscan-v2952\.js\?v=2952a/);
   assert.doesNotMatch(boot,/runtime-v2948\.js/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,2);
   assert.match(boot,/async function openMatchingInsight\(\)/);
 });
 
-test("v2.9.54 runtime is passive and never shows dock outside visible notification tabs",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2954.js");
-  assert.match(r,/const VERSION='2\.9\.54'/);
+test("v2.9.55 runtime only shows inside the real notification panel",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2955.js");
+  assert.match(r,/const VERSION='2\.9\.55'/);
   assert.match(r,/function messagingContext\(\)/);
-  assert.match(r,/function visibleNoticeContext\(\)/);
-  assert.match(r,/t==='通知'/);
-  assert.match(r,/t==='お知らせ'/);
-  assert.match(r,/function shown\(el\)/);
-  assert.match(r,/if\(!visibleNoticeContext\(\)\)return null/);
-  assert.match(r,/function resetOutsideNotice\(\)/);
+  assert.match(r,/function localTabs\(root\)/);
+  assert.match(r,/function localReactionContext\(root\)/);
+  assert.match(r,/function findNoticeShell\(\)/);
+  assert.match(r,/REACTION_RE/);
+  assert.match(r,/スキした人/);
+  assert.match(r,/リアクション一覧/);
+  assert.match(r,/localTabs\(p\)&&!localReactionContext\(p\)/);
+  assert.match(r,/const shell=findNoticeShell\(\)/);
   assert.match(r,/document\.addEventListener\('click',clickHint,\{passive:true\}\)/);
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
@@ -35,56 +37,57 @@ test("lightweight autoscan keeps checkpoint automation without full div scan",as
   assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("installer and settings publish v2.9.54",async()=>{
+test("installer and settings publish v2.9.55",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.54/);
-  assert.match(update,/v2\.9\.54 をインストール／更新/);
-  assert.match(update,/DM・メッセージ・投稿・プロフィール/);
-  assert.match(setup,/最新版 v2\.9\.54/);
-  assert.match(setup,/DM・メッセージ・投稿・プロフィール/);
+  assert.match(update,/最新版 v2\.9\.55/);
+  assert.match(update,/v2\.9\.55 をインストール／更新/);
+  assert.match(update,/スキのリアクション/);
+  assert.match(setup,/最新版 v2\.9\.55/);
+  assert.match(setup,/スキのリアクション/);
 });
 
-test("INSIGHT top is three primary sources with versions and update badges",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
+test("INSIGHT top is three compact source controls with built-in version status",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),main=await read("src/main.tsx");
   assert.match(main,/import "\.\/insight-source-boundaries"/);
-  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 公式Dashboard分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","↻ データ更新","本体更新"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 ダッシュボード","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","インストール / 更新"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(live,/AUTO DATA SYNC/);
-  assert.doesNotMatch(live,/miv5-release-alert/);
-  assert.match(ux,/⚠️ 注意・説明/);
-  assert.match(ux,/公開データ確認済み/);
-  assert.match(ux,/データ精度/);
+  assert.doesNotMatch(live,/↻ データ更新/);
+  assert.doesNotMatch(live,/miv5-sync-line/);
+  assert.match(css,/border-radius:18px/);
+  assert.match(css,/miv5-install-link/);
 });
 
-test("Dashboard install and read controls live inside Dashboard analysis",async()=>{
+test("Dashboard install and read controls stay available inside analysis",async()=>{
   const live=await read("src/member-insight-live-v2.tsx");
   assert.match(live,/miv5-dashboard-tools/);
-  assert.match(live,/公式Dashboard同期/);
+  assert.match(live,/ダッシュボード同期/);
   assert.match(live,/同期ツールをインストール/);
   assert.match(live,/新しい公式値を読み込む/);
   assert.match(live,/dashboardHref/);
 });
 
-test("public data completeness is compact and opens real history tabs",async()=>{
+test("public data completeness is an 8-slot grid with two fixed and six selectable slots",async()=>{
   const c=await read("src/member-insight-completeness.tsx"),css=await read("src/member-insight-completeness.css");
-  assert.match(c,/micmp-shortcuts/);
-  for(const x of ["記事","スキ","コメント","フォロワー","フォロー",".miu-nav button"])assert.match(c,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["GRID_KEY","DEFAULT_SLOTS","micmp-grid8","☰ 選択","⚠ 注意","表示する6枠","フォロー/フォロワー","PV・分析","mumei-insight-open-mode","公開データ確認済み","データ精度"])assert.match(c,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(c,/CANDIDATE_IDS/);
+  assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.doesNotMatch(c,/DATA COMPLETENESS/);
-  assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
 });
 
 test("analysis navigation is two-row visible and heavy graphs are collapsible",async()=>{
   const ux=await read("src/insight-source-boundaries.ts");
   assert.match(ux,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(ux,/詳細分析グラフを開く（流入・波形・星図）/);
+  assert.doesNotMatch(ux,/mumei-data-source-boundaries/);
 });
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.6");
-  assert.equal(manifest.notificationVersion,"2.9.54");
+  assert.equal(manifest.appVersion,"2026.09.09.7");
+  assert.equal(manifest.notificationVersion,"2.9.55");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.6"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.54"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.7"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.55"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
 
