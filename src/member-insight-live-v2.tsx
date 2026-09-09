@@ -11,12 +11,13 @@ import {
 import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
 import { MemberInsightSocialV2 } from "./member-insight-social-v2";
 import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
-import { MemberInsightAnalyticsFinal } from "./member-insight-analytics-final";
+import { MemberInsightAnalysisHub } from "./member-insight-analysis-hub";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
 import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
+import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
@@ -45,13 +46,13 @@ const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[fullRefreshSeq]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
   const running=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
-    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
+    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
     const y=window.scrollY;
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
     setMode(next);
@@ -165,9 +166,6 @@ export function MemberInsightLiveV2(){
   const dashboardLatest=release?.dashboardVersion||"";
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled!==dashboardLatest);
   const noteId=String(official?.member?.noteId||"").toLowerCase();
-  const role=noteId==="ss_yr"?"owner":"member";
-  const dashboardHref=`./dashboard-setup.html?from=insight-top&role=${role}&account=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`;
-  const notificationHref=`./notification-update.html?from=insight&role=${role}&latest=${encodeURIComponent(notificationLatest||"")}&return=${encodeURIComponent(window.location.href)}`;
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
@@ -176,12 +174,10 @@ export function MemberInsightLiveV2(){
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末 未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small>{notificationUpdateAvailable?<em>更新あり</em>:null}</button>
-          <a className="miv5-install-link" href={notificationHref}>インストール / 更新</a>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"未導入・必要な時だけ追加"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>更新あり</em>:null}</button>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 ダッシュボード</strong><small>{dashboardInstalled?`同期 v${dashboardInstalled}`:"同期ツール 未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
-          <a className="miv5-install-link" href={dashboardHref}>インストール / 更新</a>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"本人通知なしで分析可"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
         </div>
       </div>
     </section>
@@ -192,6 +188,6 @@ export function MemberInsightLiveV2(){
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
-    {mode==="analysis"?<div className="miv5-final-slot"><section className={`miv5-dashboard-tools ${dashboardUpdateAvailable?"needs-update":""}`}><div><b>📊 ダッシュボード同期</b><small>{dashboardInstalled?`この端末 v${dashboardInstalled}`:"この端末 未導入"}{dashboardLatest?`｜最新 v${dashboardLatest}`:""}</small></div><a href={dashboardHref}>{dashboardInstalled?dashboardUpdateAvailable?"同期ツールを更新／読み込み":"新しい公式値を読み込む":"同期ツールをインストール"}</a></section><MemberInsightAnalyticsFinal key={`analysis-${fullRefreshSeq}`} revision={revision} onBack={backMode}/></div>:null}
+    {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalysisHub revision={revision} onBack={backMode} noteId={noteId} dashboardInstalled={dashboardInstalled} notificationInstalled={notificationInstalled} dashboardLatest={dashboardLatest} notificationLatest={notificationLatest}/></div>:null}
   </div>;
 }
