@@ -44,11 +44,21 @@ test("installer and settings publish v2.9.54",async()=>{
   assert.match(setup,/DM・メッセージ・投稿・プロフィール/);
 });
 
-test("INSIGHT compact source panel separates normal,本人通知 and Dashboard without duplicate update CTA",async()=>{
+test("INSIGHT source UI keeps only actions visible and consolidates explanations",async()=>{
   const ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
   assert.match(main,/import "\.\/insight-source-boundaries"/);
-  for(const x of ["DATA SOURCE｜取得経路","✓ 通常データ","🔔 本人通知で追加取得","📊 公式Dashboard","公開記事","フォロー","フォロワー推移","通知履歴","メンシプ参加","掲示板返信","↻ データ更新","本体最新版","mumei-warning-folded","mumei-app-version-duplicate"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["DATA SOURCE｜取得経路","✓ 通常データ","🔔 本人通知で追加取得","📊 公式Dashboard","↻ データ更新","⚠️ 注意・説明","msb-attention-versions","データ精度","mumei-versions-relocated","mumei-warning-relocated","本体最新版"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(ux,/通常データを今すぐ更新/);
+});
+
+test("INSIGHT preserves prominent update indicators while hiding current-version duplicates",async()=>{
+  const ux=await read("src/insight-source-boundaries.ts"),live=await read("src/member-insight-live-v2.tsx");
+  assert.match(ux,/\.app-update\.update-ready/);
+  assert.match(ux,/mumei-dashboard-update-visible/);
+  assert.match(ux,/mumei-dashboard-needs-update/);
+  assert.match(ux,/attention\.classList\.toggle\("has-update",anyUpdate\)/);
+  assert.match(live,/miv5-release-alert app/);
+  assert.match(live,/miv5-release-alert notification/);
 });
 
 test("analysis navigation is two-row visible and heavy graphs are collapsible",async()=>{
@@ -60,10 +70,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.3");
+  assert.equal(manifest.appVersion,"2026.09.09.4");
   assert.equal(manifest.notificationVersion,"2.9.54");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.3"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.4"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.54"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
