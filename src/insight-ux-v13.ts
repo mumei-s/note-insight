@@ -19,6 +19,8 @@ section.miv5-update+.micmp{margin-top:2px!important}
 `;document.head.appendChild(s)
 }
 
+function setText(el:HTMLElement|null|undefined,text:string){if(el&&el.textContent!==text)el.textContent=text}
+function setHtml(el:HTMLElement|null|undefined,html:string){if(el&&el.innerHTML!==html)el.innerHTML=html}
 function activeAccount(){
   try{return String(localStorage.getItem("mumei-insight-active-account-v3")||sessionStorage.getItem("mumei-insight-notification-account")||"").replace(/^@/,"").toLowerCase()}catch{return""}
 }
@@ -30,27 +32,26 @@ function dashboardHref(scope:"base"|"with"="base",auto=false){return`./dashboard
 function ensureTopLink(card:HTMLElement,kind:"notice"|"dashboard"){
   let a=card.querySelector<HTMLAnchorElement>(`:scope > .miv5-install-link[data-v13="${kind}"]`);
   if(!a){a=document.createElement("a");a.className="miv5-install-link";a.dataset.v13=kind;card.appendChild(a)}
-  a.href=kind==="notice"?notificationHref():dashboardHref("base",false);
-  a.textContent="インストール / 更新";
+  const href=kind==="notice"?notificationHref():dashboardHref("base",false);if(a.getAttribute("href")!==href)a.href=href;
+  setText(a,"インストール / 更新");
 }
 function enhanceTop(){
   const root=document.querySelector<HTMLElement>(".miv5-update");if(!root)return;
   const notice=root.querySelector<HTMLElement>(".miv5-source-card.notice"),dashboard=root.querySelector<HTMLElement>(".miv5-source-card.dashboard");
   if(notice)ensureTopLink(notice,"notice");
-  if(dashboard){ensureTopLink(dashboard,"dashboard");const title=dashboard.querySelector<HTMLElement>(".miv5-source-main strong");if(title&&title.textContent!=="📊 ダッシュボード")title.textContent="📊 ダッシュボード";const span=dashboard.querySelector<HTMLElement>(".miv5-source-main span");if(span)span.textContent="公式Dashboard＋INSIGHT分析"}
+  if(dashboard){ensureTopLink(dashboard,"dashboard");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main strong"),"📊 ダッシュボード");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main span"),"公式Dashboard＋INSIGHT分析")}
 }
 
 function enhanceAnalysisHub(){
   const root=document.querySelector<HTMLElement>(".miah");if(!root)return;const cards=[...root.querySelectorAll<HTMLElement>(".miah-paths > article")];if(cards.length<2)return;
   const base=cards[0],withNotice=cards[1],baseButton=base.querySelector<HTMLButtonElement>("button"),noticeButton=withNotice.querySelector<HTMLButtonElement>("button");
-  const baseStrong=baseButton?.querySelector<HTMLElement>("strong"),baseSmall=baseButton?.querySelector<HTMLElement>("small"),noticeStrong=noticeButton?.querySelector<HTMLElement>("strong"),noticeSmall=noticeButton?.querySelector<HTMLElement>("small");
-  if(baseStrong)baseStrong.textContent="📊 本人通知なし";if(baseSmall)baseSmall.textContent="公式Dashboard＋INSIGHT";
-  if(noticeStrong)noticeStrong.textContent="🔔 本人通知あり";if(noticeSmall)noticeSmall.textContent="通常分析＋通知の追加分析";
-  const baseRead=base.querySelector<HTMLAnchorElement>(":scope > a");if(baseRead){baseRead.href=dashboardHref("base",true);baseRead.textContent="📥 本人通知なしで読込"}
+  setText(baseButton?.querySelector<HTMLElement>("strong"),"📊 本人通知なし");setText(baseButton?.querySelector<HTMLElement>("small"),"公式Dashboard＋INSIGHT");
+  setText(noticeButton?.querySelector<HTMLElement>("strong"),"🔔 本人通知あり");setText(noticeButton?.querySelector<HTMLElement>("small"),"通常分析＋通知の追加分析");
+  const baseRead=base.querySelector<HTMLAnchorElement>(":scope > a");if(baseRead){const href=dashboardHref("base",true);if(baseRead.getAttribute("href")!==href)baseRead.href=href;setText(baseRead,"📥 本人通知なしで読込")}
   let withRead=withNotice.querySelector<HTMLAnchorElement>(":scope > .miah-dashboard-with-read");if(!withRead){withRead=document.createElement("a");withRead.className="miah-dashboard-with-read";const after=withNotice.querySelector(":scope > button");after?.insertAdjacentElement("afterend",withRead)}
-  withRead.href=dashboardHref("with",true);withRead.textContent="📥 本人通知ありで読込";
+  const withHref=dashboardHref("with",true);if(withRead.getAttribute("href")!==withHref)withRead.href=withHref;setText(withRead,"📥 本人通知ありで読込");
   const other=[...withNotice.querySelectorAll<HTMLElement>(":scope > a,:scope > span")].filter(x=>x!==withRead);other.forEach(x=>x.classList.add("miah-secondary-install"));
-  const rule=root.querySelector<HTMLElement>(".miah-rule");if(rule)rule.innerHTML="<b>整理：</b>Dashboard読込に本人通知は不要。INSIGHTとnoteの<strong>同一アカウント照合だけ自動実行</strong>します。本人通知は右側の追加分析だけに使います。";
+  setHtml(root.querySelector<HTMLElement>(".miah-rule"),"<b>整理：</b>Dashboard読込に本人通知は不要。INSIGHTとnoteの<strong>同一アカウント照合だけ自動実行</strong>します。本人通知は右側の追加分析だけに使います。");
 }
 
 function run(){installStyle();enhanceTop();enhanceAnalysisHub()}
