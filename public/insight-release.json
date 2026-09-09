@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.09.5",
+  "appVersion": "2026.09.09.6",
   "notificationVersion": "2.9.54",
   "dashboardVersion": "1.4.0",
-  "releasedAt": "2026-09-09T15:58:00+09:00",
+  "releasedAt": "2026-09-09T16:18:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "公式Dashboard同期",
-  "note": "INSIGHT本体v2026.09.09.5: AUTO DATA SYNCを1行ステータスへ圧縮し、DATA SOURCEを本体ナビ化。通常データは本体履歴、本人通知はINSIGHT【通知】履歴、公式Dashboardは分析・記事別PVへ直接移動。取得範囲・版情報・精度注意は『⚠️ 注意・説明』へ収納し、最新版がある時のNEW/更新あり表示は外側に維持。"
+  "note": "INSIGHT本体v2026.09.09.6: AUTO DATA SYNC見出しと重複ボタンを廃止。最上段を『通常データ・本人通知・公式Dashboard分析』の3主ボタンに統合し、それぞれに端末版／本体版と更新あり表示を内包。Dashboard同期ツールのインストール・更新・読み込みは公式Dashboard分析内へ移動。公開データ確認済みは履歴へ直接入れる小型ショートカットへ圧縮し、注意・精度・公開一覧の説明は『⚠️ 注意・説明』へ収納。"
 }
