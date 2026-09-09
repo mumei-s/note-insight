@@ -44,37 +44,46 @@ test("installer and settings publish v2.9.54",async()=>{
   assert.match(setup,/DM・メッセージ・投稿・プロフィール/);
 });
 
-test("INSIGHT source UI is compact main navigation and consolidates explanations",async()=>{
-  const ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
+test("INSIGHT top is three primary sources with versions and update badges",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx"),ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
   assert.match(main,/import "\.\/insight-source-boundaries"/);
-  for(const x of ["DATA SOURCE｜本体ナビ","✓ 通常データ","🔔 本人通知で追加取得","📊 公式Dashboard","↻ データ更新","⚠️ 注意・説明","mumei-attention-versions","データ精度","mumei-versions-relocated","mumei-warning-relocated","本体最新版","SOURCE_TARGET_KEY","navigateHistory","insightMode","本体履歴へ","INSIGHT【通知】履歴へ","分析・記事別PVへ"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.doesNotMatch(ux,/通常データを今すぐ更新/);
+  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 公式Dashboard分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","↻ データ更新","本体更新"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(live,/AUTO DATA SYNC/);
+  assert.doesNotMatch(live,/miv5-release-alert/);
+  assert.match(ux,/⚠️ 注意・説明/);
+  assert.match(ux,/公開データ確認済み/);
+  assert.match(ux,/データ精度/);
 });
 
-test("AUTO DATA SYNC status is compact while release updates remain prominent",async()=>{
-  const ux=await read("src/insight-source-boundaries.ts"),live=await read("src/member-insight-live-v2.tsx");
-  assert.match(ux,/\.miv5-update>div:first-child>small\{display:none!important\}/);
-  assert.match(ux,/\.app-update\.update-ready/);
-  assert.match(ux,/mumei-dashboard-update-visible/);
-  assert.match(ux,/mumei-dashboard-needs-update/);
-  assert.match(ux,/attention\.classList\.toggle\("has-update",anyUpdate\)/);
-  assert.match(live,/miv5-release-alert app/);
-  assert.match(live,/miv5-release-alert notification/);
+test("Dashboard install and read controls live inside Dashboard analysis",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx");
+  assert.match(live,/miv5-dashboard-tools/);
+  assert.match(live,/公式Dashboard同期/);
+  assert.match(live,/同期ツールをインストール/);
+  assert.match(live,/新しい公式値を読み込む/);
+  assert.match(live,/dashboardHref/);
+});
+
+test("public data completeness is compact and opens real history tabs",async()=>{
+  const c=await read("src/member-insight-completeness.tsx"),css=await read("src/member-insight-completeness.css");
+  assert.match(c,/micmp-shortcuts/);
+  for(const x of ["記事","スキ","コメント","フォロワー","フォロー",".miu-nav button"])assert.match(c,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(c,/DATA COMPLETENESS/);
+  assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
 });
 
 test("analysis navigation is two-row visible and heavy graphs are collapsible",async()=>{
   const ux=await read("src/insight-source-boundaries.ts");
   assert.match(ux,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(ux,/全項目を2段表示・横スライド不要/);
   assert.match(ux,/詳細分析グラフを開く（流入・波形・星図）/);
 });
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.5");
+  assert.equal(manifest.appVersion,"2026.09.09.6");
   assert.equal(manifest.notificationVersion,"2.9.54");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.5"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.6"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.54"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
