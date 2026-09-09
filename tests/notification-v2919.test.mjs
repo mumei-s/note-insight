@@ -47,7 +47,7 @@ test("installer and settings publish v2.9.54",async()=>{
 test("INSIGHT source UI keeps only actions visible and consolidates explanations",async()=>{
   const ux=await read("src/insight-source-boundaries.ts"),main=await read("src/main.tsx");
   assert.match(main,/import "\.\/insight-source-boundaries"/);
-  for(const x of ["DATA SOURCE｜取得経路","✓ 通常データ","🔔 本人通知で追加取得","📊 公式Dashboard","↻ データ更新","⚠️ 注意・説明","msb-attention-versions","データ精度","mumei-versions-relocated","mumei-warning-relocated","本体最新版"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["DATA SOURCE｜取得経路","✓ 通常データ","🔔 本人通知で追加取得","📊 公式Dashboard","↻ データ更新","⚠️ 注意・説明","mumei-attention-versions","データ精度","mumei-versions-relocated","mumei-warning-relocated","本体最新版"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(ux,/通常データを今すぐ更新/);
 });
 
