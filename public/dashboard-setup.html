@@ -16,34 +16,34 @@
 <section class="hero">
 <small>OFFICIAL DASHBOARD CONNECTOR v1.4.2</small>
 <h1>📊 Dashboard読み込み</h1>
-<p><strong>本人通知は不要です。</strong> Dashboard同期ツールだけで、INSIGHTとnoteの同一アカウントを自動照合して公式値を取り込みます。</p>
+<p><strong>本人通知ツールは不要です。</strong> ただし、公式Dashboardを読み込むには<strong>Dashboard同期ツールのインストールが必要</strong>です。INSIGHTとnoteの同一アカウントを自動照合して公式値を取り込みます。</p>
 <span id="expected" class="account">INSIGHT対象を確認中…</span>
 <div id="result" class="status">Dashboard同期状態を確認中…</div>
-<div class="tool"><div><b>Dashboard同期ツール v1.4.2</b><small>初回または更新時だけ必要。iPhone/iPadはSafariを正式ルートにします。</small></div><button id="install" class="btn">インストール / 更新</button></div>
+<div class="tool"><div><b>Dashboard同期ツール v1.4.2</b><small>Dashboardを使う全員に必要。初回または更新時だけインストール / 更新します。</small></div><button id="install" class="btn">インストール / 更新</button></div>
 <div class="paths">
-<button id="base" class="path"><strong>📊 本人通知なしで読み込む</strong><small>公式Dashboard＋INSIGHT本体の分析。本人通知を入れていない参加者もこれで利用できます。</small></button>
-<button id="with" class="path notice"><strong>🔔 本人通知ありで読み込む</strong><small>通常分析に、保存済み本人通知の人物・交流・メンシプ等を追加します。</small></button>
+<button id="base" class="path"><strong>📊 Dashboard同期だけで読み込む</strong><small>本人通知ツールは不要。Dashboard同期ツールだけで公式Dashboard＋INSIGHT本体を分析します。</small></button>
+<button id="with" class="path notice"><strong>🔔 Dashboard＋本人通知で読み込む</strong><small>Dashboard同期に本人通知ツールを追加し、人物・交流・メンシプ等まで分析します。</small></button>
 </div>
-<div class="note"><strong>本人確認の別操作は不要です。</strong> 読込開始時にINSIGHT対象とnoteログイン中アカウントを自動照合します。</div>
+<div class="note"><strong>インストールなしで公式Dashboardを直接読むことはできません。</strong> 本人確認の別操作は不要で、読込開始時にINSIGHT対象とnoteログイン中アカウントを自動照合します。</div>
 </section>
-<details class="details"><summary>対応環境・インストールあり／なしの手順</summary><div>
+<details class="details"><summary>対応環境・Dashboard同期 未導入／導入済みの手順</summary><div>
 <p class="guide" id="guide">ブラウザを確認中…</p>
 <div class="support">
-<div class="support-row head"><b>環境</b><span>Dashboard</span><span>本人通知</span><span>導入方法</span></div>
-<div class="support-row"><b>iPhone / iPad Safari</b><span class="okmark">○</span><span class="okmark">○</span><span>Userscripts / Tampermonkey</span></div>
+<div class="support-row head"><b>環境</b><span>Dashboard同期</span><span>本人通知追加</span><span>導入方法</span></div>
+<div class="support-row"><b>iPhone / iPad Safari</b><span class="okmark">必須</span><span class="okmark">任意</span><span>Userscripts / Tampermonkey</span></div>
 <div class="support-row"><b>iOS Chrome / Edge / Firefox</b><span class="warnmark">Safariへ</span><span class="warnmark">Safariへ</span><span>SafariでINSIGHTを開く</span></div>
-<div class="support-row"><b>Mac Safari</b><span class="okmark">○</span><span class="okmark">○</span><span>Safari拡張</span></div>
-<div class="support-row"><b>PC Chrome / Edge / Firefox</b><span class="okmark">○</span><span class="okmark">○</span><span>Tampermonkey等</span></div>
-<div class="support-row"><b>Android</b><span class="okmark">○※</span><span class="okmark">○※</span><span>対応拡張を使えるブラウザ</span></div>
+<div class="support-row"><b>Mac Safari</b><span class="okmark">必須</span><span class="okmark">任意</span><span>Safari拡張</span></div>
+<div class="support-row"><b>PC Chrome / Edge / Firefox</b><span class="okmark">必須</span><span class="okmark">任意</span><span>Tampermonkey等</span></div>
+<div class="support-row"><b>Android</b><span class="okmark">必須※</span><span class="okmark">任意※</span><span>対応拡張を使えるブラウザ</span></div>
 </div>
 <div class="flow-grid">
-<div class="flow"><b>① Dashboard同期 未インストール</b><span>上の「インストール / 更新」→ 拡張機能で有効化 → この画面へ戻る → 読込ボタン。</span><em>本人通知のインストールは不要</em></div>
-<div class="flow"><b>② Dashboard同期 インストール済み</b><span>インストール操作は不要。そのまま「本人通知なし / あり」の読込ボタンを押す。</span><em>毎回の再インストール不要</em></div>
-<div class="flow"><b>③ 本人通知なしで使う</b><span>「📊 本人通知なしで読み込む」→ 公式Dashboard取得 → INSIGHTへ戻って通常分析。</span><em>Dashboard同期だけで利用可能</em></div>
-<div class="flow notice-flow"><b>④ 本人通知も使う</b><span>Dashboard通常分析に、人物・コメント・返信・メンシプ等の保存済み通知分析を追加。</span><em>追加分析を使う場合だけ本人通知を導入</em><a id="noticeInstall" class="mini-link notice" href="./notification-update.html">本人通知をインストール / 更新</a></div>
+<div class="flow"><b>① Dashboard同期ツールが未導入</b><span>上の「インストール / 更新」→ 拡張機能で有効化 → この画面へ戻る → 読込ボタン。</span><em>本人通知ツールは入れなくてOK</em></div>
+<div class="flow"><b>② Dashboard同期ツールを導入済み</b><span>再インストールは不要。そのまま「Dashboard同期だけ / Dashboard＋本人通知」の読込ボタンを押す。</span><em>毎回の再インストール不要</em></div>
+<div class="flow"><b>③ 本人通知を使わない</b><span>Dashboard同期ツールは必要。「📊 Dashboard同期だけで読み込む」→ 公式Dashboard取得 → INSIGHTへ戻って通常分析。</span><em>本人通知ツールだけ不要</em></div>
+<div class="flow notice-flow"><b>④ 本人通知も使う</b><span>Dashboard同期ツールに本人通知ツールを追加。人物・コメント・返信・メンシプ等の保存済み通知分析まで追加します。</span><em>追加分析を使う場合だけ本人通知を導入</em><a id="noticeInstall" class="mini-link notice" href="./notification-update.html">本人通知をインストール / 更新</a></div>
 </div>
 <div class="metrics"><div class="metric"><b>インプレッション</b><small>届いた量</small></div><div class="metric"><b>ページビュー</b><small>閲覧量</small></div><div class="metric"><b>スキ・コメント</b><small>反応</small></div><div class="metric"><b>売上</b><small>収益</small></div><div class="metric"><b>流入元</b><small>検索/SNS/通知等</small></div><div class="metric"><b>日別系列</b><small>時系列</small></div></div>
-<p class="guide">※ Androidはユーザースクリプト拡張を利用できるブラウザ環境が必要です。iPhone/iPadはSafariを正式ルートとします。</p>
+<p class="guide">※ Dashboard同期ツールは全利用者に必要です。本人通知ツールは追加分析を使う場合だけ必要です。Androidはユーザースクリプト拡張を利用できるブラウザ環境が必要。iPhone/iPadはSafariを正式ルートとします。</p>
 </div></details>
 </main>
 <script>
@@ -51,14 +51,14 @@ const VERSION='1.4.2',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1
 let autoStarted=false,child=null,poll=0,rawSince=0,fallbackUsed=false;
 expected.textContent=expectedAccount?`INSIGHT対象 @${expectedAccount}`:'INSIGHT対象はログイン中アカウントから照合';
 const UA=navigator.userAgent||'',platform=navigator.platform||'',isIOS=/iPhone|iPad|iPod/i.test(UA)||(platform==='MacIntel'&&navigator.maxTouchPoints>1),isSafari=/Safari/i.test(UA)&&!/Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPR|Android/i.test(UA),isIOSSafari=isIOS&&isSafari,isIOSOther=isIOS&&!isSafari,isAndroid=/Android/i.test(UA),isEdge=/EdgA|Edg\//i.test(UA),isFirefox=/Firefox/i.test(UA);
-if(isIOSSafari){guide.innerHTML='<strong>この端末：iPhone / iPad Safari</strong>｜Safari拡張の Userscripts または Tampermonkey を有効化し、設定 → Safari → 拡張機能 → 対象拡張で <b>note.com</b> と <b>mumei-s.github.io</b> を許可してください。.user.js が文字列表示でも自動で閉じません。';install.textContent='Safariでインストール / 更新'}else if(isIOSOther){guide.innerHTML='<strong>この端末：iPhone / iPad のSafari以外</strong>｜Dashboard/本人通知の導入はSafariで行います。<b>SafariでこのINSIGHTページを開いてください。</b>';install.textContent='Safariで開いてからインストール'}else if(isAndroid&&isEdge){guide.innerHTML='<strong>この端末：Android Edge</strong>｜Tampermonkey等の対応ユーザースクリプト環境を有効にしてください。'}else if(isAndroid&&isFirefox){guide.innerHTML='<strong>この端末：Android Firefox</strong>｜対応ユーザースクリプト環境を有効にしてください。'}else if(isSafari){guide.innerHTML='<strong>この端末：Safari</strong>｜Userscripts または Tampermonkey のSafari拡張を有効にし、note.com とINSIGHTを許可してください。'}else{guide.innerHTML='<strong>この端末：Chrome / Edge / Firefox系</strong>｜Tampermonkey等の対応ユーザースクリプト拡張を有効にしてください。'}
+if(isIOSSafari){guide.innerHTML='<strong>この端末：iPhone / iPad Safari</strong>｜Dashboard利用にはSafari拡張の Userscripts または Tampermonkey が必要です。設定 → Safari → 拡張機能 → 対象拡張で <b>note.com</b> と <b>mumei-s.github.io</b> を許可してください。本人通知ツールは追加分析を使う場合だけ必要です。';install.textContent='SafariでDashboard同期をインストール / 更新'}else if(isIOSOther){guide.innerHTML='<strong>この端末：iPhone / iPad のSafari以外</strong>｜Dashboard同期ツールの導入はSafariで行います。<b>SafariでこのINSIGHTページを開いてください。</b>';install.textContent='Safariで開いてからインストール'}else if(isAndroid&&isEdge){guide.innerHTML='<strong>この端末：Android Edge</strong>｜Dashboard利用にはTampermonkey等の対応ユーザースクリプト環境とDashboard同期ツールが必要です。'}else if(isAndroid&&isFirefox){guide.innerHTML='<strong>この端末：Android Firefox</strong>｜Dashboard利用には対応ユーザースクリプト環境とDashboard同期ツールが必要です。'}else if(isSafari){guide.innerHTML='<strong>この端末：Safari</strong>｜Dashboard利用にはUserscripts または Tampermonkey のSafari拡張とDashboard同期ツールが必要です。note.com とINSIGHTを許可してください。'}else{guide.innerHTML='<strong>この端末：Chrome / Edge / Firefox系</strong>｜Dashboard利用にはTampermonkey等の対応ユーザースクリプト拡張とDashboard同期ツールが必要です。'}
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
 const returnTo=safeReturn(q.get('return'));back.href=returnTo;{const u=new URL('./notification-update.html',location.href);u.searchParams.set('role',role);u.searchParams.set('return',returnTo);noticeInstall.href=u.href}
 function setScope(scope){try{sessionStorage.setItem(SCOPE_KEY,scope)}catch{}}
 function bridgeVersion(){return document.documentElement.getAttribute('data-mumei-dashboard-bridge')||''}
 function bridgeReady(){const ok=bridgeVersion()===VERSION;if(ok){localStorage.setItem('mumei-dashboard-tool-version',VERSION);localStorage.removeItem(INSTALL_PENDING);sessionStorage.removeItem(INSTALL_RELOAD)}return ok}
 function setBusy(v){base.disabled=v;withBtn.disabled=v}
-function showBridgeRequired(){result.className='status warn';result.innerHTML=isIOSSafari?`Safari拡張の <b>Dashboard同期ツール v${VERSION}</b> を有効にしてください。本人通知は不要です。`:isIOSOther?'iPhone/iPadではSafariでこのページを開き、Dashboard同期ツールを導入してください。':`初回・更新時だけ <b>Dashboard同期ツール v${VERSION}</b> をインストール／更新してください。本人通知は不要です。`}
+function showBridgeRequired(){result.className='status warn';result.innerHTML=isIOSSafari?`Safari拡張の <b>Dashboard同期ツール v${VERSION}</b> を有効にしてください。本人通知ツールは不要です。`:isIOSOther?'iPhone/iPadではSafariでこのページを開き、Dashboard同期ツールを導入してください。':`Dashboard利用には <b>Dashboard同期ツール v${VERSION}</b> のインストール／更新が必要です。本人通知ツールは不要です。`}
 async function call(action,extra={}){const h={'Content-Type':'application/json'};if(role==='owner')h['X-Owner-Token']=localStorage.getItem(OWNER)||'';else h['X-Insight-Token']=localStorage.getItem(MEMBER)||'';const r=await fetch(API,{method:'POST',headers:h,body:JSON.stringify({action,role,...extra}),cache:'no-store'}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||'DASHBOARD_SETUP_ERROR');if(expectedAccount&&p.noteId&&String(p.noteId).toLowerCase()!==expectedAccount)throw new Error(`INSIGHT_ACCOUNT_MISMATCH：@${expectedAccount} / @${p.noteId}`);return p}
 function show(p){const s=p?.lastSnapshot,paired=p?.paired;result.className='status '+(paired?'ok':'warn');result.innerHTML=`<b>@${p?.noteId||'—'}</b> ｜ Dashboard同期 ${paired?'準備済み':'初回照合待ち'}<br>${s?`最終保存 ${new Date(s.captured_at).toLocaleString('ja-JP')} / PV ${(Number(s.total_page_views)||0).toLocaleString()} / 売上 ¥${(Number(s.total_sales_yen)||0).toLocaleString()}`:'まだ公式Dashboardの保存はありません'}`}
 async function stats(){try{const p=await call('stats');show(p);return p}catch(e){result.className='status warn';result.textContent=e.message||'INSIGHTログインを確認してください';throw e}}
@@ -66,7 +66,7 @@ function directStatsUrl(p){const u=new URL('https://note.com/sitesettings/stats'
 async function startRead(scope){if(!bridgeReady()){showBridgeRequired();throw new Error('DASHBOARD_TOOL_V142_NOT_ACTIVE')}setScope(scope);setBusy(true);result.className='status';result.textContent='INSIGHTとnoteのアカウントを照合中…';const p=await call('pair-start');result.className='status ok';result.textContent=`✓ @${p.noteId} を照合。公式Dashboardへ移動して自動読込します…`;location.assign(directStatsUrl(p))}
 function markInstallPending(){localStorage.setItem(INSTALL_PENDING,JSON.stringify({at:Date.now(),version:VERSION}));sessionStorage.removeItem(INSTALL_RELOAD)}
 function openChild(url,name){child=window.open(url,name);if(!child){result.className='status warn';result.textContent='インストール用タブを開けませんでした。ポップアップ許可を確認してください。';return false}return true}
-function openInstaller(){if(isIOSOther){result.className='status warn';result.textContent='iPhone/iPadではSafariでこのページを開いてからインストールしてください。';return}markInstallPending();fallbackUsed=false;rawSince=0;clearInterval(poll);if(isIOSSafari||isSafari){result.className='status';result.innerHTML='Safariで .user.js を開きます。<b>Userscripts / Tampermonkey の拡張機能から追加</b>し、完了後このタブへ戻ってください。文字列表示でも自動で閉じません。';openChild(SCRIPT,'mumei-dashboard-install-safari');return}result.className='status';result.textContent='ユーザースクリプトのインストール画面を別タブで開いています…';if(!openChild(SCRIPT,'mumei-dashboard-install'))return;poll=setInterval(()=>{try{if(child.closed){clearInterval(poll);setTimeout(()=>verifyInstalled(true),300);return}const href=child.location.href||'';if(href.startsWith(location.origin)&&href.includes('note-insight-dashboard-sync.user.js')){if(!rawSince)rawSince=Date.now();if(Date.now()-rawSince>1800){child.close();if(!fallbackUsed){fallbackUsed=true;result.className='status warn';result.textContent='文字列表示を検知。別のインストールURLへ自動で切り替えます…';setTimeout(()=>{openChild(RAW,'mumei-dashboard-install-raw')},250)}else{clearInterval(poll);result.className='status warn';result.textContent='文字列表示のままです。ユーザースクリプト拡張の許可を確認してください。'}}}else rawSince=0}catch{rawSince=0}},300)}
+function openInstaller(){if(isIOSOther){result.className='status warn';result.textContent='iPhone/iPadではSafariでこのページを開いてからDashboard同期ツールをインストールしてください。';return}markInstallPending();fallbackUsed=false;rawSince=0;clearInterval(poll);if(isIOSSafari||isSafari){result.className='status';result.innerHTML='SafariでDashboard同期の .user.js を開きます。<b>Userscripts / Tampermonkey の拡張機能から追加</b>し、完了後このタブへ戻ってください。文字列表示でも自動で閉じません。';openChild(SCRIPT,'mumei-dashboard-install-safari');return}result.className='status';result.textContent='Dashboard同期ツールのインストール画面を別タブで開いています…';if(!openChild(SCRIPT,'mumei-dashboard-install'))return;poll=setInterval(()=>{try{if(child.closed){clearInterval(poll);setTimeout(()=>verifyInstalled(true),300);return}const href=child.location.href||'';if(href.startsWith(location.origin)&&href.includes('note-insight-dashboard-sync.user.js')){if(!rawSince)rawSince=Date.now();if(Date.now()-rawSince>1800){child.close();if(!fallbackUsed){fallbackUsed=true;result.className='status warn';result.textContent='文字列表示を検知。別のインストールURLへ自動で切り替えます…';setTimeout(()=>{openChild(RAW,'mumei-dashboard-install-raw')},250)}else{clearInterval(poll);result.className='status warn';result.textContent='文字列表示のままです。ユーザースクリプト拡張の許可を確認してください。'}}}else rawSince=0}catch{rawSince=0}},300)}
 function pendingInstall(){try{return JSON.parse(localStorage.getItem(INSTALL_PENDING)||'null')}catch{return null}}
 function verifyInstalled(force=false){const p=pendingInstall();if(!p||p.version!==VERSION)return;if(bridgeReady()){result.className='status ok';result.textContent=`✅ Dashboard同期 v${VERSION}｜最新版です`;setTimeout(()=>void autoStart(),250);return}if(!force&&Date.now()-Number(p.at||0)<1000)return;if(sessionStorage.getItem(INSTALL_RELOAD)!=='1'){sessionStorage.setItem(INSTALL_RELOAD,'1');location.reload();return}showBridgeRequired()}
 install.onclick=openInstaller;base.onclick=()=>void startRead('base').catch(e=>{if(e?.message!=='DASHBOARD_TOOL_V142_NOT_ACTIVE'){result.className='status warn';result.textContent=e.message||'Dashboard読込を開始できませんでした'}setBusy(false)});withBtn.onclick=()=>void startRead('with').catch(e=>{if(e?.message!=='DASHBOARD_TOOL_V142_NOT_ACTIVE'){result.className='status warn';result.textContent=e.message||'Dashboard読込を開始できませんでした'}setBusy(false)});
