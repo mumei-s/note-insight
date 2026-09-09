@@ -19,11 +19,12 @@ function clampRenderedRates(root: HTMLElement) {
     const parentText = textNode.parentElement?.textContent || "";
     const raw = textNode.nodeValue || "";
     if (!raw.includes("%") || !RATE_CONTEXT.test(parentText) || CHANGE_CONTEXT.test(parentText)) continue;
-    textNode.nodeValue = raw.replace(/(-?\d+(?:\.\d+)?)%/g, (_m, v) => {
+    const next = raw.replace(/(-?\d+(?:\.\d+)?)%/g, (_m, v) => {
       const n = Number(v);
       if (!Number.isFinite(n)) return "0.0%";
       return `${Math.max(0, Math.min(100, n)).toFixed(String(v).includes(".") ? 1 : 0)}%`;
     });
+    if (next !== raw) textNode.nodeValue = next;
   }
 }
 
