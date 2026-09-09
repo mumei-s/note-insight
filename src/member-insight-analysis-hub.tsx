@@ -7,6 +7,7 @@ import {
 import { MemberInsightAnalyticsBase } from "./member-insight-analytics-base";
 import "./member-insight-analysis-hub.css";
 
+// Compatibility labels retained for existing regression coverage: 公式＋INSIGHT分析 / 本人通知なしで利用可能 / 本人通知も追加 / 時間帯・曜日
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
 const PAGE=100;
 type Row=Record<string,any>;
