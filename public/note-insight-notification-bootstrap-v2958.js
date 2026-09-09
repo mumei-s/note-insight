@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const VERSION='2.9.58';
+const VERSION='2.9.59';
 const PAIR='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const MUTES='mumei_insight_magazine_mute_ids_v5:';
