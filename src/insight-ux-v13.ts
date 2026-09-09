@@ -22,9 +22,9 @@ function activeAccount(){
   try{return String(localStorage.getItem("mumei-insight-active-account-v3")||sessionStorage.getItem("mumei-insight-notification-account")||"").replace(/^@/,"").toLowerCase()}catch{return""}
 }
 function role(){return activeAccount()==="ss_yr"?"owner":"member"}
-function returnUrl(){return encodeURIComponent(window.location.href)}
+function returnUrl(mode=""){const u=new URL(window.location.href);if(mode)u.searchParams.set("insightMode",mode);return encodeURIComponent(u.href)}
 function notificationHref(){return`./notification-update.html?from=insight&role=${role()}&return=${returnUrl()}`}
-function dashboardHref(scope:"base"|"with"="base",auto=false){return`./dashboard-setup.html?from=insight&role=${role()}&scope=${scope}${auto?"&auto=1":""}&return=${returnUrl()}`}
+function dashboardHref(scope:"base"|"with"="base",auto=false){return`./dashboard-setup.html?from=insight&role=${role()}&scope=${scope}${auto?"&auto=1":""}&return=${returnUrl(auto?"analysis":"")}`}
 
 function ensureTopLink(card:HTMLElement,kind:"notice"|"dashboard"){
   let a=card.querySelector<HTMLAnchorElement>(`:scope > .miv5-install-link[data-v13="${kind}"]`);
@@ -45,7 +45,7 @@ function enhanceAnalysisHub(){
   const baseStrong=baseButton?.querySelector<HTMLElement>("strong"),baseSmall=baseButton?.querySelector<HTMLElement>("small"),noticeStrong=noticeButton?.querySelector<HTMLElement>("strong"),noticeSmall=noticeButton?.querySelector<HTMLElement>("small");
   if(baseStrong)baseStrong.textContent="📊 本人通知なし";if(baseSmall)baseSmall.textContent="公式Dashboard＋INSIGHT";
   if(noticeStrong)noticeStrong.textContent="🔔 本人通知あり";if(noticeSmall)noticeSmall.textContent="通常分析＋通知の追加分析";
-  let baseRead=base.querySelector<HTMLAnchorElement>(":scope > a");if(baseRead){baseRead.href=dashboardHref("base",true);baseRead.textContent="📥 本人通知なしで読込"}
+  const baseRead=base.querySelector<HTMLAnchorElement>(":scope > a");if(baseRead){baseRead.href=dashboardHref("base",true);baseRead.textContent="📥 本人通知なしで読込"}
   let withRead=withNotice.querySelector<HTMLAnchorElement>(":scope > .miah-dashboard-with-read");if(!withRead){withRead=document.createElement("a");withRead.className="miah-dashboard-with-read";const after=withNotice.querySelector(":scope > button");after?.insertAdjacentElement("afterend",withRead)}
   withRead.href=dashboardHref("with",true);withRead.textContent="📥 本人通知ありで読込";
   const other=[...withNotice.querySelectorAll<HTMLElement>(":scope > a,:scope > span")].filter(x=>x!==withRead);other.forEach(x=>x.classList.add("miah-secondary-install"));
