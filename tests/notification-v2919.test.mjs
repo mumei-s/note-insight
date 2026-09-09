@@ -114,10 +114,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.9");
+  assert.equal(manifest.appVersion,"2026.09.09.10");
   assert.equal(manifest.notificationVersion,"2.9.57");
   assert.equal(manifest.dashboardVersion,"1.4.0");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.9"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.10"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.57"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
