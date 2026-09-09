@@ -1,3 +1,4 @@
+export {};
 const STYLE_ID="mumei-insight-ux-v12-style";
 const COMMENTS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-comment-events";
 const TOKEN_KEY="mumei-insight-access-token";
