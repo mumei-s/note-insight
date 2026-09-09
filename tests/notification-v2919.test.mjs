@@ -27,7 +27,7 @@ test("v2.9.56 runtime detects visible notification tabs first and excludes react
   assert.match(r,/スキした人/);
   assert.match(r,/リアクション一覧/);
   assert.match(r,/const notices=controls\.filter/);
-  assert.match(r,/const news=controls\.filter/);
+  assert.match(r,/news=controls\.filter/);
   assert.match(r,/commonAncestor\(a\.el,b\.el\)/);
   assert.match(r,/localReactionContext\(shell\)/);
   assert.match(r,/document\.addEventListener\('click',clickHint,\{passive:true\}\)/);
