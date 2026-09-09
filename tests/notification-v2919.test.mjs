@@ -3,62 +3,54 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("v2.9.56 bootstrap uses tab-first notification runtime",async()=>{
-  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2956.js");
-  assert.match(boot,/@version\s+2\.9\.56/);
-  assert.match(boot,/runtime-v2956\.js\?v=2956a/);
-  assert.match(boot,/notification-autoscan-v2952\.js\?v=2952a/);
-  assert.match(boot,/notification-bootstrap-v2956\.js\?v=2956a/);
-  assert.doesNotMatch(boot,/runtime-v2948\.js/);
+test("v2.9.57 bootstrap uses tab-first runtime and upward resume autoscan",async()=>{
+  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2957.js");
+  assert.match(boot,/@version\s+2\.9\.57/);
+  assert.match(boot,/runtime-v2957\.js\?v=2957a/);
+  assert.match(boot,/notification-autoscan-v2957\.js\?v=2957a/);
+  assert.match(boot,/notification-bootstrap-v2957\.js\?v=2957a/);
   assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,3);
   assert.match(bridge,/async function openMatchingInsight\(\)/);
-  assert.match(bridge,/const VERSION='2\.9\.56'/);
+  assert.match(bridge,/const VERSION='2\.9\.57'/);
 });
 
-test("v2.9.56 runtime detects visible notification tabs first and excludes reactions",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2956.js");
-  assert.match(r,/const VERSION='2\.9\.56'/);
+test("v2.9.57 runtime detects notification tabs and excludes DM/reactions",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2957.js");
+  assert.match(r,/const VERSION='2\.9\.57'/);
   assert.match(r,/function messagingContext\(\)/);
   assert.match(r,/function isNoticeTabText\(t\)/);
   assert.match(r,/function isNewsTabText\(t\)/);
   assert.match(r,/function findNoticeShell\(\)/);
-  assert.match(r,/function expandShell\(base\)/);
   assert.match(r,/REACTION_RE/);
   assert.match(r,/スキした人/);
   assert.match(r,/リアクション一覧/);
-  assert.match(r,/const notices=controls\.filter/);
-  assert.match(r,/news=controls\.filter/);
-  assert.match(r,/commonAncestor\(a\.el,b\.el\)/);
-  assert.match(r,/localReactionContext\(shell\)/);
-  assert.match(r,/document\.addEventListener\('click',clickHint,\{passive:true\}\)/);
+  assert.match(r,/data-mumei-notice-shell-v2957/);
   assert.doesNotMatch(r,/setInterval\(/);
   assert.doesNotMatch(r,/capture:true/);
 });
 
-test("lightweight autoscan keeps checkpoint automation without full div scan",async()=>{
-  const r=await read("public/note-insight-notification-autoscan-v2952.js");
-  for(const x of ["CHUNK_STEPS=1","yieldUi","ANCHOR_LIMIT=240","TIME_LIMIT=100","saved.has(s)","boundarySignature:newBoundary","confirmedClientSignatures","host.scrollTop=original","自動保存（前回まで）"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+test("v2.9.57 autoscan resumes upward and stop saves checkpoint",async()=>{
+  const r=await read("public/note-insight-notification-autoscan-v2957.js");
+  for(const x of ["note-notification-resume-upward-v2957","前回の保存位置から上へ読込中","停止地点まで保存完了","次回ここから上へ","最新まで確認済み","resumeSignatureV2957","boundarySignature:newSig","FILTER_URL","location.assign(FILTER_URL)"])assert.match(r,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(r,/querySelectorAll\('li,\[role="listitem"\],article,div'\)/);
-  assert.doesNotMatch(r,/\bunread\b|aria-unread|is-unread/i);
 });
 
-test("installer and settings publish v2.9.56",async()=>{
+test("installer and settings publish v2.9.57",async()=>{
   const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");
-  assert.match(update,/最新版 v2\.9\.56/);
-  assert.match(update,/v2\.9\.56 をインストール／更新/);
-  assert.match(update,/通知 \/ お知らせ/);
-  assert.match(update,/スキのリアクション/);
-  assert.match(setup,/最新版 v2\.9\.56/);
-  assert.match(setup,/スキのリアクション/);
+  assert.match(update,/最新版 v2\.9\.57/);
+  assert.match(update,/v2\.9\.57 をインストール／更新/);
+  assert.match(update,/上方向（最新側）/);
+  assert.match(setup,/最新版 v2\.9\.57/);
+  assert.match(setup,/通知フィルター設定/);
+  assert.match(setup,/上方向（最新側）/);
 });
 
-test("INSIGHT top is three compact source controls with built-in version status",async()=>{
+test("INSIGHT top is three compact pill controls with explicit update status",async()=>{
   const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),main=await read("src/main.tsx");
   assert.match(main,/import "\.\/insight-source-boundaries"/);
   for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 ダッシュボード","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","インストール / 更新"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(live,/AUTO DATA SYNC/);
   assert.doesNotMatch(live,/↻ データ更新/);
-  assert.doesNotMatch(live,/miv5-sync-line/);
   assert.match(css,/border-radius:999px/);
   assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
   assert.match(css,/miv5-install-link/);
@@ -68,6 +60,15 @@ test("ordinary INSIGHT entry stays at top while notification deep-link remains t
   const ux=await read("src/insight-source-boundaries.ts");
   for(const x of ["explicitNotificationEntry","mumei-insight-entry-at","openNormalTop","mumei-insight-open-mode","window.scrollTo({top:0","blurActive","app-bottom-nav button"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(ux,/q==="notifications"\|\|fresh/);
+});
+
+test("notifications are grouped by day, reclassified daily, and always show kaomoji markers",async()=>{
+  const ux=await read("src/insight-source-boundaries.ts"),reclass=await read("supabase/functions/insight-notification-reclassify/index.ts"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
+  for(const x of ["KAOMOJI","mumei-kaomoji","mumei-notification-day-heading","ensureDailyReclassify","insight-notification-reclassify","RECLASSIFY_DAY_KEY"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["event_day_jst","reclassify_pending","last_reclassified_at","daily-v1","nextType=type===\"other\""])assert.match(reclass,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.match(ingest,/resume-upward-v\\d\+/);
+  assert.match(ingest,/event_day_jst:eventDay/);
+  assert.match(ingest,/reclassify_pending:type===\"other\"/);
 });
 
 test("Dashboard install and read controls stay available inside analysis",async()=>{
@@ -114,10 +115,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
   assert.equal(manifest.appVersion,"2026.09.09.9");
-  assert.equal(manifest.notificationVersion,"2.9.56");
+  assert.equal(manifest.notificationVersion,"2.9.57");
   assert.equal(manifest.dashboardVersion,"1.4.0");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.9"/);
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.56"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.57"/);
   assert.match(dash,/@version\s+1\.4\.0/);
 });
 
