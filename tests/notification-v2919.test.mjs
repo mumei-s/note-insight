@@ -74,11 +74,13 @@ test("notifications remain grouped by day, reclassified daily, and always show k
   assert.match(ingest,/event_day_jst:eventDay/);
 });
 
-test("INSIGHT top remains three compact source controls with clear update state",async()=>{
+test("INSIGHT top remains three compact source controls and linked data refresh stays tappable",async()=>{
   const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),ux13=await read("src/insight-ux-v13.ts");
-  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","manualRefreshRunning","waitForPublicSyncIdle","aria-label=\"連携データを更新\"","自動更新完了後に連携データを更新します"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(live,/className="miv5-source-main" disabled=\{dataBusy\}/);
   for(const x of ["📊 ダッシュボード","notification-update.html","dashboard-setup.html","インストール / 更新"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
+  assert.match(css,/\.miv5-source-main\{[^}]*pointer-events:auto!important/);
 });
 
 test("public data completeness remains 8-slot grid",async()=>{
@@ -100,10 +102,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.15");
+  assert.equal(manifest.appVersion,"2026.09.09.16");
   assert.equal(manifest.notificationVersion,"2.9.59");
   assert.equal(manifest.dashboardVersion,"1.4.1");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.15"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.16"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.1"/);
   assert.match(dash,/@version\s+1\.4\.1/);
