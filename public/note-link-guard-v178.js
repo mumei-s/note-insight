@@ -5,7 +5,7 @@
   if (page.__MUMEI_LINK_GUARD_178__) return;
   page.__MUMEI_LINK_GUARD_178__ = true;
 
-  const VERSION = '17.8.0';
+  const VERSION = '17.8.1';
   const DATA_KEY = 'mumei_likers_thin_dataset_v160';
   const RUN_PREFIX = 'mumei_likers_thin_run_v160';
   const PANEL = 'mumei-note-source-picker-v163';
@@ -281,8 +281,6 @@
   setInterval(() => {
     void autoHardenWhenComplete();
     void recoverOldPending();
-    const p = document.getElementById(PANEL);
-    const title = p?.querySelector('.mumei-title-text-v164') || p?.querySelector(':scope > .title');
-    if (title) title.textContent = '極薄＋通知｜セレクト v17.8';
+    // v18以降はパネルタイトルを書き換えない。
   }, 1200);
 })();
