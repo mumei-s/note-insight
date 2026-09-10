@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>INSIGHT スキ100取得</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#071018;color:#e8f5ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{min-height:100vh;display:grid;place-items:center;padding:22px;box-sizing:border-box}
+    .card{width:min(460px,100%);border:1px solid #244158;border-radius:18px;padding:20px;background:#0b1723;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+    h1{font-size:18px;margin:0 0 10px;color:#8feaff}.status{font-size:13px;line-height:1.65;color:#c9d8e4}.bad{color:#ffb6b6}.ok{color:#cfff64}button{width:100%;margin-top:14px;padding:11px;border:0;border-radius:11px;background:#cfff64;color:#172104;font-weight:900}
+  </style>
+</head>
+<body>
+<main><section class="card"><h1>INSIGHT → note編集</h1><div id="status" class="status">全記事のスキ履歴を取得しています…</div><button id="close" type="button" hidden>閉じる</button></section></main>
+<script>
+(() => {
+  'use strict';
+  const TOKEN_KEY = 'mumei-insight-access-token';
+  const ENDPOINT = 'https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-likes-export';
+  const EDITOR_ORIGIN = 'https://editor.note.com';
+  const status = document.getElementById('status');
+  const close = document.getElementById('close');
+  const q = new URLSearchParams(location.search);
+  const requestId = String(q.get('request') || '');
+  const count = Math.max(1, Math.min(300, Number(q.get('count') || 100)));
+  const unique = q.get('unique') !== '0';
+
+  function show(text, kind='') {
+    status.textContent = text;
+    status.className = `status ${kind}`;
+  }
+  function send(payload) {
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type:'MUMEI_INSIGHT_LIKES_V1', requestId, ...payload }, EDITOR_ORIGIN);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+  close.onclick = () => window.close();
+
+  async function run() {
+    if (!requestId) {
+      show('取得要求IDがありません。note編集画面から開き直してください。','bad');
+      close.hidden = false;
+      return;
+    }
+    const token = localStorage.getItem(TOKEN_KEY) || '';
+    if (!token) {
+      show('INSIGHTのログイン情報がありません。先にINSIGHTへログインしてから、note編集画面で「INSIGHT全体」を押してください。','bad');
+      send({ ok:false, error:'INSIGHT_LOGIN_REQUIRED' });
+      close.hidden = false;
+      return;
+    }
+    try {
+      const response = await fetch(ENDPOINT, {
+        method:'POST',
+        cache:'no-store',
+        headers:{ 'Content-Type':'application/json', 'X-Insight-Token':token },
+        body:JSON.stringify({ count, unique })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) throw new Error(String(payload?.error || `HTTP_${response.status}`));
+      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+      if (!rows.length) throw new Error('INSIGHT_LIKES_EMPTY');
+      const delivered = send({ ok:true, rows, count:rows.length, member:payload.member || null });
+      if (!delivered) {
+        show(`取得は完了しました（${rows.length}人）が、元のnote編集画面へ返せませんでした。note編集画面へ戻ってもう一度押してください。`,'bad');
+        close.hidden = false;
+        return;
+      }
+      show(`INSIGHTから ${rows.length}人 取得完了。note編集画面へ戻します。`,'ok');
+      setTimeout(() => window.close(), 650);
+    } catch (error) {
+      const message = error?.message || String(error);
+      send({ ok:false, error:message });
+      show(`取得失敗：${message}`,'bad');
+      close.hidden = false;
+    }
+  }
+  run();
+})();
+</script>
+</body>
+</html>
