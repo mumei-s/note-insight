@@ -5,7 +5,7 @@
   if (page.__MUMEI_START_CLEAN_177__) return;
   page.__MUMEI_START_CLEAN_177__ = true;
 
-  const VERSION = '17.7.0';
+  const VERSION = '17.7.1';
   const PANEL = 'mumei-note-source-picker-v163';
   const STATUS = 'mumei-note-source-status-v163';
   const DATA_KEY = 'mumei_likers_thin_dataset_v160';
@@ -71,8 +71,7 @@
       start.textContent = startWatching ? '準備中…' : '開始';
       start.title = '毎回最新データを取り直し、極薄画像準備まで自動';
     }
-    const title = p.querySelector('.mumei-title-text-v164') || p.querySelector(':scope > .title');
-    if (title) title.textContent = '極薄＋通知｜セレクト v17.7';
+    // v18以降はパネルタイトルの所有者を本体だけに固定する。
   }
 
   function cleanFreshStartState() {
