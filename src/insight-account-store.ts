@@ -158,6 +158,16 @@ export function currentStoredInsightAccount() {
   return null;
 }
 
+export function restoreStoredMemberSession() {
+  const current = currentStoredInsightAccount();
+  if (!current?.memberToken) return null;
+  localStorage.setItem(INSIGHT_TOKEN_KEY, current.memberToken);
+  if (current.applicantToken) localStorage.setItem(APPLICANT_KEY, current.applicantToken);
+  if (current.passcode) localStorage.setItem(PASSCODE_KEY, current.passcode);
+  setActiveId(current.noteId);
+  return current;
+}
+
 export function activateStoredInsightAccount(noteId: string) {
   const account = getStoredInsightAccount(noteId);
   if (!account) return null;
