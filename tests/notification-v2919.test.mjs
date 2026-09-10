@@ -72,7 +72,7 @@ test("notifications remain grouped by day, reclassified daily, and always show k
   const ux=await read("src/insight-source-boundaries.ts"),reclass=await read("supabase/functions/insight-notification-reclassify/index.ts"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   for(const x of ["KAOMOJI","mumei-kaomoji","mumei-notification-day-heading","ensureDailyReclassify","insight-notification-reclassify","RECLASSIFY_DAY_KEY"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   for(const x of ["event_day_jst","reclassify_pending","last_reclassified_at","daily-v2-exact-kind","nextType=type===\"other\""])assert.match(reclass,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["resume-upward-v\\d+","event_day_jst:eventDay","classification-independent-v2","stableSemantic","storedSource","circle_plan_join","board_like_comment","board_reply_comment"])assert.match(ingest,new RegExp(x));
+  for(const x of ["resume-upward-v\\d+","event_day_jst:eventDay","classification-independent-v2","stableSemantic","storedSource","circle_plan_join","board_like_comment","board_reply_comment"])assert.match(ingest,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
 test("INSIGHT top is one native four-card grid and linked data refresh stays tappable",async()=>{
@@ -84,7 +84,7 @@ test("INSIGHT top is one native four-card grid and linked data refresh stays tap
   assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css,/\.miv5-source-main\{[^}]*pointer-events:auto!important/);
   assert.doesNotMatch(index,/install-free-analysis-link\.js/);
-  for(const x of ["本人通知なし詳細分析","保存済み公開データを読み込み中","backgroundRefresh","restoreToken","本人通知・Dashboard同期なし"])assert.match(detail,new RegExp(x));
+  for(const x of ["本人通知なし詳細分析","保存済み公開データを読み込み中","backgroundRefresh","restoreToken","本人通知・Dashboard同期なし"])assert.match(detail,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
 test("public data completeness remains 8-slot grid",async()=>{
