@@ -108,14 +108,14 @@ test("release tracks are independent and current",async()=>{
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.16"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);
-  assert.match(dash,/@version\s+1\.4\.2/);
+  assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard v1.4.2 requires Dashboard sync, keeps本人通知 optional, and has Safari-first support panel",async()=>{
   const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),setup=await read("public/dashboard-setup.html"),api=await read("supabase/functions/insight-dashboard-data/index.ts");
   const dash=`${boot}\n${core}`;assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);assert.match(api,/noteId!==who\.noteId/);
   for(const x of ["Dashboard同期ツール v1.4.2","本人通知ツールは不要です","Dashboard同期だけで読み込む","Dashboard＋本人通知で読み込む","対応環境・Dashboard同期 未導入／導入済みの手順","iPhone / iPad Safari","Userscripts / Tampermonkey","Dashboard同期ツールが未導入","Dashboard同期ツールを導入済み","本人通知を使わない","本人通知も使う","本人通知をインストール / 更新","インストールなしで公式Dashboardを直接読むことはできません","mumei_dashboard_pair","mumei_dashboard_sync"])assert.match(setup,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["@grant        GM.xmlHttpRequest","@grant        GM.getValue","@grant        GM.setValue","@grant        GM_xmlhttpRequest","const VERSION='1.4.2'","directParams()","installHideStyle(true)","INSIGHTアカウント照合中"])assert.match(boot,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["@grant        GM.xmlHttpRequest","@grant        GM.getValue","@grant        GM.setValue","@grant        GM_xmlhttpRequest","const VERSION='1.4.2'","directPayload()","installHideStyle(true)","INSIGHTアカウント照合中"])assert.match(boot,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(setup,/本人連携だけ実行/);assert.doesNotMatch(setup,/② 本人連携/);assert.doesNotMatch(setup,/③ 今すぐ公式Dashboard/);
 });
 
