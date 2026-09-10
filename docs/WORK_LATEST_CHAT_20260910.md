@@ -1,28 +1,18 @@
 # WORK LATEST CHAT HANDOFF — 2026-09-10
 
-This file is the highest-priority handoff for the next Work/session.
+Latest requirement source: current ChatGPT conversation / 「実機確認修正Deploy」 continuation. Always fetch current `main`; never overwrite unrelated newer work. Preserve `docs/WORK_CURRENT_SOURCE.md` invariants. Real-device behavior overrides assumptions from CI.
 
-## Authority
-- Current ChatGPT conversation / 「実機確認修正Deploy」 continuation is the latest requirement source.
-- Fetch current GitHub `main` before every edit. Never overwrite newer unrelated work with stale state.
-- Preserve `docs/WORK_CURRENT_SOURCE.md` invariants and all unrelated completed INSIGHT features.
-- Real-device reports are authoritative; CI success alone does not prove a mobile visual bug is fixed.
+Release target: INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`.
 
-## Release target
-INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`.
+Implemented on `fix-latest-chat-20260910-v2`:
+- TOP: removed dynamically injected 4th analysis card; React now owns all 4 cards. Mobile 2x2, desktop 4 columns, content-height grid.
+- 通常データ: stale auto sync can be superseded/aborted; bounded busy UI; saved data remains usable.
+- 本人通知なし詳細分析: saved data renders before background public refresh; no notification/Dashboard userscript requirement; no fake PV/sales/traffic.
+- 通知 categories: one tap panel only; no long-press/reorder/draggable rail.
+- 本人通知 backend: classification-independent stable identity; exact membership kinds; article-update classification; resume captures normalized to feed-compatible source while preserving capture source.
+- Supabase production already updated: ingest v23 ACTIVE, reclassify exact-kind ACTIVE, DB classifier migration `notification_classifier_exact_actions_v7` applied.
+- Existing production data: 603 resume rows normalized for feed; 7 duplicate client-signature rows removed; known article updates backfilled.
+- Remaining other audit has no membership/comment/magazine known-form rows; residuals are historical capture noise or unsupported forms.
+- Update indicators remain per top item; no global banner.
 
-## Implemented
-- TOP blank-space structural repair: 4th 詳細分析 card moved from MutationObserver injection into the React source grid; index no longer loads install-free-analysis-link.js. One 2x2 mobile / 4-column desktop content-height grid remains.
-- 通常データ: forced manual refresh supersedes a stale auto refresh, abort/timeout ownership added, busy UI is bounded, saved data stays usable.
-- 本人通知なし詳細分析: saved public/member dashboard data displays first; public refresh is background; notification/Dashboard userscripts not required; no fabricated PV/sales/traffic.
-- 通知 selector: one compact tap panel, no long-press reorder/draggable category rail.
-- 本人通知 ingest: classification-independent stable event identity; exact circle_plan_join / board_like_* / board_reply_* handling; article-update classification; resume source normalized for feed while original capture source retained.
-- Supabase production: insight-notification-ingest-v2 v23 ACTIVE; reclassify exact-kind code ACTIVE; notification_classifier_exact_actions_v7 migration applied.
-- Existing production repair: 603 resume rows normalized for feed; 7 duplicate client-signature rows removed; known article updates reclassified.
-- Remaining `other` audit: no membership/comment/magazine known-form rows; residuals are old capture noise or unsupported forms such as 質問箱開始.
-- Update indicators stay per top item, no generic global banner.
-
-## Finalization
-Fix branch: `fix-latest-chat-20260910-v2`. Before promotion compare it against current main. Fast-forward only if main is a strict ancestor, then monitor userscript syntax, npm build, unified regressions, Pages artifact and deploy. Repair any CI failure before completion.
-
-After deploy, the Android top blank-space issue still requires actual production mobile observation. If this session cannot inspect an authenticated real mobile DOM, report that observation alone as Work/Android confirmation required; do not pretend CI proves it.
+Finalize by comparing branch to current main, fast-forwarding only if main is still its ancestor, then monitoring syntax/build/regression/Pages deploy. Fix any CI failure before declaring completion. Android blank-space acceptance still requires actual production mobile observation; do not treat CI as real-device proof.
