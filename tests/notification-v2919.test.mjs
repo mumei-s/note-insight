@@ -18,7 +18,7 @@ test("v2.9.59 autoscan resumes upward and saves the stop boundary",async()=>{
 });
 
 test("notification installer returns to INSIGHT and date filtering stays in INSIGHT",async()=>{
-  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.59","v2.9.59 をインストール／更新","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","child.close()","finishToVerify","mumei_insight_version_check"]);has(setup,["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"]);
+  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.59","v2.9.59 をインストール／更新","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","mumei_insight_version_check"]);has(setup,["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"]);
 });
 
 test("notification history keeps one shared date filter and all required categories",async()=>{
@@ -34,7 +34,7 @@ test("comment body recovery uses feed body, canonical comment history and delega
 });
 
 test("v15 TOP is normal-data, analysis, notification with detail beside account switch",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),mobile=await read("src/insight-mobile-v15.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(mobile,["miv5-source-card.normal{display:grid","miv5-source-card.dashboard{display:grid","miv5-source-card.notice{display:grid","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy{display:none","mumei-top-tool-install","dashboard-setup.html","notification-update.html","インストール / 更新","INSIGHT本体を更新"]);has(unified,["アカウント切替","miu-topactions"]);
+  const live=await read("src/member-insight-live-v2.tsx"),mobile=await read("src/insight-mobile-v15.ts"),ux13=await read("src/insight-ux-v13.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(mobile,["miv5-source-card.normal{display:grid","miv5-source-card.dashboard{display:grid","miv5-source-card.notice{display:grid","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy{display:none","mumei-top-tool-install","dashboard-setup.html","notification-update.html","インストール / 更新","INSIGHT本体を更新","@([A-Za-z0-9_-]+)"]);has(ux13,["📊 分析","Dashboard同期＋本人通知 必須","Dashboard分析はDashboard同期＋本人通知の2ツール必須"]);has(unified,["アカウント切替","miu-topactions"]);
 });
 
 test("public refresh remains abortable and cannot permanently disable the visible control",async()=>{
@@ -45,8 +45,8 @@ test("notification-free detail analysis is compact, explicit and graphed",async(
   const detail=await read("public/install-free-analysis-v2.html");has(detail,["<details class=\"section\"","分析をすべて開く","分析をすべて収納","1記事あたり平均スキ数","1記事あたり平均コメント数","1記事あたり平均反応数","平均反応数","反応＝スキ＋コメント","PVではありません","recentSpark","cadenceChart","daysChart","hoursChart","wordsChart","evergreenChart","articlesChart","overflow-x:hidden"]);
 });
 
-test("Dashboard analysis remains explicit two-way notification-free / notification-added split",async()=>{
-  const hub=await read("src/member-insight-analysis-hub.tsx"),ux13=await read("src/insight-ux-v13.ts"),live=await read("src/member-insight-live-v2.tsx");has(hub,["公式＋INSIGHT分析","本人通知なしで利用可能","本人通知も追加","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入・支援","時間帯・曜日","topActorShare","kind:\"all\""]);has(ux13,["📊 本人通知なし","🔔 本人通知あり","本人通知なしで読込","本人通知ありで読込","scope=${scope}","auto=1","insightMode","同一アカウント照合だけ自動実行"]);assert.match(live,/MemberInsightAnalysisHub/);
+test("Dashboard analysis requires Dashboard sync plus notification while detail analysis stays separate",async()=>{
+  const hub=await read("src/member-insight-analysis-hub.tsx"),ux13=await read("src/insight-ux-v13.ts"),live=await read("src/member-insight-live-v2.tsx");has(hub,["Dashboard同期＋本人通知の2つが必要","Dashboard分析の必須構成","公式Dashboard＋INSIGHT分析","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入/支援","topActorShare","kind:\"all\"","詳細分析"]);has(ux13,["Dashboard分析はDashboard同期＋本人通知の2ツール必須","旧v13の「本人通知なし/あり」2分岐DOM上書きは廃止"]);assert.doesNotMatch(ux13,/本人通知なしで読込/);assert.match(live,/MemberInsightAnalysisHub/);
 });
 
 test("ordinary INSIGHT entry stays at top while notification deep-link remains targeted",async()=>{
@@ -66,11 +66,11 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.10.4");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.10\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.1");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.1"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
-test("Dashboard v1.4.2 keeps notification optional and account matching enforced",async()=>{
-  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),setup=await read("public/dashboard-setup.html"),api=await read("supabase/functions/insight-dashboard-data/index.ts");const dash=`${boot}\n${core}`;assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);assert.match(api,/noteId!==who\.noteId/);has(setup,["Dashboard同期ツール v1.4.2","本人通知ツールは不要です","Dashboard同期だけで読み込む","Dashboard＋本人通知で読み込む","iPhone / iPad Safari","Userscripts / Tampermonkey","本人通知を使わない","本人通知も使う","mumei_dashboard_pair","mumei_dashboard_sync"]);has(boot,["@grant        GM.xmlHttpRequest","const VERSION='1.4.2'","directPayload()","INSIGHTアカウント照合中"]);
+test("Dashboard setup uses browser-specific panels and requires both tools",async()=>{
+  const boot=await read("public/note-insight-dashboard-sync.user.js"),core=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),setup=await read("public/dashboard-setup.html"),api=await read("supabase/functions/insight-dashboard-data/index.ts");const dash=`${boot}\n${core}`;assert.match(boot,/@match\s+https:\/\/note\.com\/\*/);assert.match(dash,/DASHBOARD_ACCOUNT_MISMATCH/);assert.match(api,/noteId!==who\.noteId/);has(setup,["Dashboard同期ツール","本人通知ツール","2つを使用します","この端末で使うもの","iPhone / iPad Safari","iPhone / iPad の Chrome・Edge・Firefox","Mac Safari","PC Chrome / Edge / Firefox","Android","Userscripts","Tampermonkey","Dashboard同期を入れる","本人通知を入れる","2つを確認してDashboardを読み込む","normalizeAccount","mumei_dashboard_pair","mumei_dashboard_sync"]);assert.doesNotMatch(setup,/本人通知ツールは不要/);assert.doesNotMatch(setup,/本人通知追加.*任意/);has(boot,["@grant        GM.xmlHttpRequest","const VERSION='1.4.2'","directPayload()","INSIGHTアカウント照合中"]);
 });
 
 test("notification and social history server paths remain intact",async()=>{
