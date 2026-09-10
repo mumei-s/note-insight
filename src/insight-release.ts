@@ -1,4 +1,5 @@
 import "./insight-mobile-v14";
+import "./insight-inline-updates-v1";
 
 export const CURRENT_INSIGHT_APP_VERSION = "2026.09.10.2";
 export const CURRENT_NOTIFICATION_VERSION = "2.9.59";
