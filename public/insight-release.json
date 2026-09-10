@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.10.4",
+  "appVersion": "2026.09.11.1",
   "notificationVersion": "2.9.59",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-10T22:40:00+09:00",
+  "releasedAt": "2026-09-11T01:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "TOPを通常データ・分析・本人通知の3列横並びへ強制固定。詳細分析は上段から非表示にしアカウント切替横だけへ配置。本人通知とDashboard同期のインストール/更新ボタンを各カード直下に常設。通常データ更新・INSIGHT本体更新・ツールのインストール更新は別操作として維持。"
+  "note": "Dashboard分析をDashboard同期＋本人通知の2ツール必須へ統一。iPad/iPhone Safariを最優先に、各ブラウザで何を使うか・拡張導入・Dashboard同期・本人通知・読込開始までをブラウザ別パネル化。TOP分析カードの本人通知不要表記を撤去し、アカウントID末尾記号による誤照合も修正。詳細分析は引き続きインストール不要。"
 }
