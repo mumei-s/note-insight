@@ -5,10 +5,10 @@ let timer=0;
 function installStyle(){
   if(document.getElementById(STYLE_ID))return;
   const s=document.createElement("style");s.id=STYLE_ID;s.textContent=`
-/* v13: top source strip must shrink to content height. */
-section.miv5-update{display:block!important;box-sizing:border-box!important;min-height:0!important;min-block-size:0!important;height:auto!important;block-size:auto!important;max-height:none!important;aspect-ratio:auto!important;overflow:visible!important;padding:4px!important;margin:2px auto 2px!important}
-section.miv5-update>.miv5-source-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-template-rows:max-content!important;grid-auto-rows:max-content!important;align-items:start!important;align-content:start!important;min-height:0!important;height:auto!important;max-height:none!important;gap:4px!important}
-section.miv5-update .miv5-source-card{display:grid!important;grid-template-rows:auto auto!important;align-content:start!important;align-self:start!important;min-height:0!important;height:auto!important;max-height:none!important;gap:3px!important}
+/* v13: top source strip must shrink to content height with no reserved blank area. */
+section.miv5-update{display:block!important;box-sizing:border-box!important;min-height:0!important;min-block-size:0!important;height:auto!important;block-size:auto!important;max-height:none!important;max-block-size:none!important;aspect-ratio:auto!important;overflow:visible!important;padding:4px!important;margin:2px auto 2px!important}
+section.miv5-update>.miv5-source-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-template-rows:max-content!important;grid-auto-rows:max-content!important;align-items:start!important;align-content:start!important;min-height:0!important;min-block-size:0!important;height:auto!important;block-size:auto!important;max-height:none!important;max-block-size:none!important;gap:4px!important;margin:0!important;padding:0!important}
+section.miv5-update .miv5-source-card{display:grid!important;grid-template-rows:auto auto!important;align-content:start!important;align-self:start!important;min-height:0!important;height:auto!important;max-height:none!important;gap:3px!important;margin:0!important}
 section.miv5-update .miv5-source-main{min-height:50px!important;height:auto!important;padding:7px 8px!important;border-radius:18px!important}
 section.miv5-update .miv5-install-link{min-height:25px!important;margin:0 2px 1px!important;border-radius:999px!important;font-size:8px!important}
 section.miv5-update+.micmp{margin-top:2px!important}
@@ -43,14 +43,9 @@ function enhanceTop(){
 }
 function fitTopHeight(){
   const root=document.querySelector<HTMLElement>(".miv5-update"),grid=root?.querySelector<HTMLElement>(":scope > .miv5-source-grid");if(!root||!grid)return;
-  root.querySelectorAll<HTMLElement>(".miv5-source-card").forEach(card=>{card.style.setProperty("min-height","0px","important");card.style.setProperty("height","auto","important");card.style.setProperty("max-height","none","important")});
-  root.style.setProperty("box-sizing","border-box","important");root.style.setProperty("min-height","0px","important");root.style.setProperty("height","auto","important");root.style.setProperty("max-height","none","important");
-  requestAnimationFrame(()=>{
-    const cs=getComputedStyle(root),g=grid.getBoundingClientRect();
-    const extra=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+(parseFloat(cs.borderTopWidth)||0)+(parseFloat(cs.borderBottomWidth)||0);
-    const needed=Math.max(1,Math.ceil(g.height+extra));
-    root.style.setProperty("height",`${needed}px`,"important");root.style.setProperty("min-height",`${needed}px`,"important");root.style.setProperty("max-height",`${needed}px`,"important")
-  })
+  root.querySelectorAll<HTMLElement>(".miv5-source-card").forEach(card=>{card.style.setProperty("min-height","0px","important");card.style.setProperty("height","auto","important");card.style.setProperty("max-height","none","important");card.style.setProperty("margin","0px","important")});
+  root.style.setProperty("box-sizing","border-box","important");root.style.setProperty("min-height","0px","important");root.style.setProperty("height","auto","important");root.style.setProperty("max-height","none","important");root.style.setProperty("min-block-size","0px","important");root.style.setProperty("block-size","auto","important");root.style.setProperty("max-block-size","none","important");
+  grid.style.setProperty("min-height","0px","important");grid.style.setProperty("height","auto","important");grid.style.setProperty("max-height","none","important");grid.style.setProperty("min-block-size","0px","important");grid.style.setProperty("block-size","auto","important");grid.style.setProperty("max-block-size","none","important");
 }
 
 function enhanceAnalysisHub(){
