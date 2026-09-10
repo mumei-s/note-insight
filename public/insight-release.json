@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.11.2",
+  "appVersion": "2026.09.11.3",
   "notificationVersion": "2.9.59",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-11T01:55:00+09:00",
+  "releasedAt": "2026-09-11T02:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard分析のアカウント表示はログイン中参加者のnoteIdを動的表示。旧『本人通知なし』固定ラベルを撤去し、Dashboard同期＋本人通知の2ツール必須表示へ統一。参加者ごとのDashboardデータはmember_idで分離したまま維持。"
+  "note": "Dashboard分析をINSIGHT Pro V3へ刷新。PV>Impなど集計範囲が一致しない記事はPV化率・改善余地計算から除外し、意味不明な100%超率や過大な潜在PVを廃止。公式値、データ品質、成長推移、本人内ベンチマーク、改善余地、流入分散、収益効率、曜日別、本人通知×PVクロス、記事総合ランキングを追加。全分析項目を収納ボタン化。"
 }
