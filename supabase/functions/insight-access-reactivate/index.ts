@@ -30,12 +30,12 @@ Deno.serve(async(req)=>{
       if(a.status==="pending")return json(req,{ok:false,error:"WAITING_OWNER_APPROVAL",application:safeApp(a)},409);
       if(a.status!=="approved"&&a.status!=="active")return json(req,{ok:false,error:"REACTIVATION_NOT_ALLOWED",application:safeApp(a)},409);
       if(!a.verified_at)return json(req,{ok:false,error:"IDENTITY_REVERIFY_REQUIRED",application:safeApp(a)},409);
-      const now=new Date().toISOString(),nextApplicantToken=randomHex(32),rotated=await sha256(nextApplicantToken);
-      const {data:active,error}=await sb.from("insight_access_applications").update({status:"active",revoked_at:null,verification_code_plain:null,verification_code_hash:null,verification_attempts:0,applicant_token_hash:rotated,updated_at:now}).eq("id",a.id).select().single();
+      const now=new Date().toISOString();
+      const {data:active,error}=await sb.from("insight_access_applications").update({status:"active",revoked_at:null,verification_code_plain:null,verification_code_hash:null,verification_attempts:0,updated_at:now}).eq("id",a.id).select().single();
       if(error)throw error;
       await activatePublic(active);
       const memberToken=await issueSession(active.id);
-      return json(req,{ok:true,reactivated:true,memberToken,applicantToken:nextApplicantToken,application:safeApp(active),message:"RETURNING_MEMBER_REACTIVATED"});
+      return json(req,{ok:true,reactivated:true,memberToken,application:safeApp(active),message:"RETURNING_MEMBER_REACTIVATED"});
     }
 
     if(action==="state"){
