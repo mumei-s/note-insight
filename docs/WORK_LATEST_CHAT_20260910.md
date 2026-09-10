@@ -1,18 +1,18 @@
 # WORK LATEST CHAT HANDOFF — 2026-09-10
 
-Latest requirement source: current ChatGPT conversation / 「実機確認修正Deploy」 continuation. Always fetch current `main`; never overwrite unrelated newer work. Preserve `docs/WORK_CURRENT_SOURCE.md` invariants. Real-device behavior overrides assumptions from CI.
+**LATEST REQUIREMENTS = current ChatGPT conversation, continuation of 「実機確認修正Deploy」.** Fetch current GitHub `main` before editing; never overwrite unrelated newer work. Preserve all invariants from `docs/WORK_CURRENT_SOURCE.md`. Real-device reports are authoritative; CI does not prove mobile rendering.
 
 Release target: INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`.
 
-Implemented on `fix-latest-chat-20260910-v2`:
-- TOP: removed dynamically injected 4th analysis card; React now owns all 4 cards. Mobile 2x2, desktop 4 columns, content-height grid.
-- 通常データ: stale auto sync can be superseded/aborted; bounded busy UI; saved data remains usable.
-- 本人通知なし詳細分析: saved data renders before background public refresh; no notification/Dashboard userscript requirement; no fake PV/sales/traffic.
-- 通知 categories: one tap panel only; no long-press/reorder/draggable rail.
-- 本人通知 backend: classification-independent stable identity; exact membership kinds; article-update classification; resume captures normalized to feed-compatible source while preserving capture source.
-- Supabase production already updated: ingest v23 ACTIVE, reclassify exact-kind ACTIVE, DB classifier migration `notification_classifier_exact_actions_v7` applied.
-- Existing production data: 603 resume rows normalized for feed; 7 duplicate client-signature rows removed; known article updates backfilled.
-- Remaining other audit has no membership/comment/magazine known-form rows; residuals are historical capture noise or unsupported forms.
-- Update indicators remain per top item; no global banner.
+Implemented on branch `fix-latest-chat-20260910-v2`:
+- TOP structural blank-space fix: no dynamically injected 4th card. React owns all four; mobile 2x2, desktop 4 columns, content-height grid.
+- 通常データ: forced manual refresh supersedes stale auto sync; abort/timeout ownership; bounded busy state; saved data stays usable.
+- 本人通知なし詳細分析: saved public data first, background refresh after; no notification/Dashboard userscript required; no fabricated PV/sales/traffic.
+- 通知 category UI: one compact tap selector only; no long-press/reorder/draggable category rail.
+- 本人通知 backend: classification-independent stable identity; exact membership kinds; article-update classification; resume capture source normalized for feed with original source preserved.
+- Supabase production updated: ingest v23 ACTIVE; reclassify exact-kind ACTIVE; DB migration `notification_classifier_exact_actions_v7` applied.
+- Existing data repaired: 603 resume rows normalized for feed; 7 duplicate client-signature rows removed; known article-update rows backfilled.
+- Remaining `other`: no known membership/comment/magazine forms in audit; residuals are old capture noise or unsupported forms.
+- Update indications remain per top item; no generic global banner.
 
-Finalize by comparing branch to current main, fast-forwarding only if main is still its ancestor, then monitoring syntax/build/regression/Pages deploy. Fix any CI failure before declaring completion. Android blank-space acceptance still requires actual production mobile observation; do not treat CI as real-device proof.
+Finalization: compare this branch to current main, fast-forward only if main is a strict ancestor, then monitor userscript syntax, npm build, unified regressions, Pages artifact and deploy. Repair any failure. Android top blank-space acceptance still requires actual production mobile observation; do not claim it from CI alone.
