@@ -62,8 +62,9 @@ Release target: **INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bri
 ## Current promotion checkpoint
 
 - Fix branch: `fix-latest-chat-20260910-v2`.
-- Latest changes update regression coverage for the native 4-card TOP, stable notification identity, exact membership kinds and INSIGHT `2026.09.10.1`.
-- Next step is fast-forwarding current `main` to this branch only after confirming `main` has not advanced independently, then watching GitHub Pages CI/build/regressions/deploy to completion.
+- Branch is based on the latest main that existed at the start of this continuation; compare against current main before promotion.
+- Regression coverage now matches native 4-card TOP, stable notification identity, exact membership kinds and INSIGHT `2026.09.10.1`.
+- Next step: fast-forward current main to the branch only if it is still a strict ancestor; then monitor GitHub Pages build/regressions/deploy until success.
 
 ## Required final verification
 
