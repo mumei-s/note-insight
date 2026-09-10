@@ -114,6 +114,13 @@ export function MemberInsightLiveV2(){
       if(run===publicSyncRun.current){running.current=false;if(publicSyncController.current===controller)publicSyncController.current=null}
     }
   }
+  async function waitForPublicSyncIdle(timeout=0){
+    if(!running.current)return true;
+    if(timeout<=0)return false;
+    const started=Date.now();
+    while(running.current&&Date.now()-started<timeout)await sleep(100);
+    return !running.current;
+  }
   // 旧挙動「自動更新完了後に連携データを更新します」は廃止。手動更新は待機せず古い実行を中断して再試行する。
   async function manualDataRefresh(){
     if(manualRefreshRunning.current){setStatus("更新処理は進行中です。保存済みデータはそのまま操作できます。");return}
