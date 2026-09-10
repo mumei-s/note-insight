@@ -7,7 +7,7 @@ const DETAIL_CLASS="mumei-detail-analysis-proxy";
 let timer=0;
 
 function clean(v:any){return String(v||"").replace(/\s+/g," ").trim()}
-function imp(el:HTMLElement|null,name:string,value:string){el?.style.setProperty(name,value,"important")}
+function imp(el:HTMLElement|null|undefined,name:string,value:string){el?.style.setProperty(name,value,"important")}
 function activeNoteId(){
   const links=[...document.querySelectorAll<HTMLAnchorElement>('.miu a[href*="note.com/"]')];
   const byText=links.find(a=>/@[A-Za-z0-9_-]+/.test(clean(a.textContent)));
