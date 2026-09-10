@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.11.1",
+  "appVersion": "2026.09.11.2",
   "notificationVersion": "2.9.59",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-11T01:20:00+09:00",
+  "releasedAt": "2026-09-11T01:55:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard分析をDashboard同期＋本人通知の2ツール必須へ統一。iPad/iPhone Safariを最優先に、各ブラウザで何を使うか・拡張導入・Dashboard同期・本人通知・読込開始までをブラウザ別パネル化。TOP分析カードの本人通知不要表記を撤去し、アカウントID末尾記号による誤照合も修正。詳細分析は引き続きインストール不要。"
+  "note": "Dashboard分析のアカウント表示はログイン中参加者のnoteIdを動的表示。旧『本人通知なし』固定ラベルを撤去し、Dashboard同期＋本人通知の2ツール必須表示へ統一。参加者ごとのDashboardデータはmember_idで分離したまま維持。"
 }
