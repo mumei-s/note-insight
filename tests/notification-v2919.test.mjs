@@ -46,7 +46,7 @@ test("notification-free detail analysis is compact, explicit and graphed",async(
 });
 
 test("Dashboard analysis requires Dashboard sync plus notification while detail analysis stays separate",async()=>{
-  const hub=await read("src/member-insight-analysis-hub.tsx"),ux13=await read("src/insight-ux-v13.ts"),live=await read("src/member-insight-live-v2.tsx");has(hub,["Dashboard同期＋本人通知の2つが必要","Dashboard分析の必須構成","公式Dashboard＋INSIGHT分析","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入/支援","topActorShare","kind:\"all\"","詳細分析"]);has(ux13,["Dashboard分析はDashboard同期＋本人通知の2ツール必須","旧v13の「本人通知なし/あり」2分岐DOM上書きは廃止"]);assert.doesNotMatch(ux13,/本人通知なしで読込/);assert.match(live,/MemberInsightAnalysisHub/);
+  const hub=await read("src/member-insight-analysis-hub.tsx"),ux13=await read("src/insight-ux-v13.ts"),baseCss=await read("src/member-insight-analytics-base.css"),live=await read("src/member-insight-live-v2.tsx");has(hub,["Dashboard同期＋本人通知の2つが必要","Dashboard分析の必須構成","公式Dashboard＋INSIGHT分析","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入/支援","topActorShare","kind:\"all\"","詳細分析"]);has(ux13,["Dashboard分析はDashboard同期＋本人通知の2ツール必須","旧v13の「本人通知なし/あり」2分岐DOM上書きは廃止"]);assert.doesNotMatch(ux13,/本人通知なしで読込/);assert.doesNotMatch(baseCss,/本人通知なし/);assert.match(live,/MemberInsightAnalysisHub/);
 });
 
 test("ordinary INSIGHT entry stays at top while notification deep-link remains targeted",async()=>{
@@ -66,7 +66,7 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.1");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.1"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.2");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.2"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard setup uses browser-specific panels and requires both tools",async()=>{
