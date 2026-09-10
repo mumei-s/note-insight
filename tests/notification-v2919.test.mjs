@@ -71,19 +71,20 @@ test("ordinary INSIGHT entry stays at top while notification deep-link remains t
 test("notifications remain grouped by day, reclassified daily, and always show kaomoji markers",async()=>{
   const ux=await read("src/insight-source-boundaries.ts"),reclass=await read("supabase/functions/insight-notification-reclassify/index.ts"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   for(const x of ["KAOMOJI","mumei-kaomoji","mumei-notification-day-heading","ensureDailyReclassify","insight-notification-reclassify","RECLASSIFY_DAY_KEY"])assert.match(ux,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  for(const x of ["event_day_jst","reclassify_pending","last_reclassified_at","daily-v1","nextType=type===\"other\""])assert.match(reclass,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(ingest,/resume-upward-v\\d\+/);
-  assert.match(ingest,/event_day_jst:eventDay/);
+  for(const x of ["event_day_jst","reclassify_pending","last_reclassified_at","daily-v2-exact-kind","nextType=type===\"other\""])assert.match(reclass,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["resume-upward-v\\d+","event_day_jst:eventDay","classification-independent-v2","stableSemantic","storedSource","circle_plan_join","board_like_comment","board_reply_comment"])assert.match(ingest,new RegExp(x));
 });
 
-test("INSIGHT top remains three compact source controls and linked data refresh stays tappable",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),ux13=await read("src/insight-ux-v13.ts"),index=await read("index.html");
-  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","manualRefreshRunning","waitForPublicSyncIdle","aria-label=\"連携データを更新\"","自動更新完了後に連携データを更新します"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+test("INSIGHT top is one native four-card grid and linked data refresh stays tappable",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),ux13=await read("src/insight-ux-v13.ts"),index=await read("index.html"),detail=await read("public/install-free-analysis-v2.html");
+  for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","🔎 詳細分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","manualRefreshRunning","waitForPublicSyncIdle","aria-label=\"連携データを更新\"","保存済みデータは利用可能"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(live,/className="miv5-source-main" disabled=\{dataBusy\}/);
   for(const x of ["📊 ダッシュボード","notification-update.html","dashboard-setup.html","インストール / 更新"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
-  assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
+  assert.match(css,/miv5-source-card\.detail/);
+  assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css,/\.miv5-source-main\{[^}]*pointer-events:auto!important/);
-  assert.doesNotMatch(index,/insight-update-check\.js/);
+  assert.doesNotMatch(index,/install-free-analysis-link\.js/);
+  for(const x of ["本人通知なし詳細分析","保存済み公開データを読み込み中","backgroundRefresh","restoreToken","本人通知・Dashboard同期なし"])assert.match(detail,new RegExp(x));
 });
 
 test("public data completeness remains 8-slot grid",async()=>{
@@ -105,10 +106,10 @@ test("analysis navigation is two-row visible and heavy graphs are collapsible",a
 
 test("release tracks are independent and current",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.09.16");
+  assert.equal(manifest.appVersion,"2026.09.10.1");
   assert.equal(manifest.notificationVersion,"2.9.59");
   assert.equal(manifest.dashboardVersion,"1.4.2");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.09\.16"/);
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.10\.1"/);
   assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);
   assert.match(dash,/@version\s+1\.4\.3/);
