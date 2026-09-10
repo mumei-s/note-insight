@@ -38,7 +38,7 @@ test("final TOP is stable normal-data, analysis, notification with detail beside
 });
 
 test("public refresh remains abortable and cannot permanently disable the visible control",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),detail=await read("public/install-free-analysis-v2.html");has(live,["AbortController","PUBLIC_SYNC_TIMEOUT","MANUAL_UI_TIMEOUT","publicSyncController","manualRefreshRunning","finally{manualRefreshRunning.current=false;setDataBusy(false)}"]);has(top,["miv5-source-card.normal:not(.mumei-has-app-update)","INSIGHT本体","mumei-has-app-update"]);has(detail,["watchdog=setTimeout","更新待ちを解除しました","busy=false;refresh.disabled=false"]);
+  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),detail=await read("public/install-free-analysis-v2.html");has(live,["AbortController","PUBLIC_SYNC_TIMEOUT","MANUAL_UI_TIMEOUT","publicSyncController","manualRefreshRunning","finally{manualRefreshRunning.current=false;setDataBusy(false)}"]);has(top,["miv5-source-card.normal:not(.mumei-has-app-update)","miv5-install-link.update-ready","mumei-has-app-update"]);has(detail,["watchdog=setTimeout","更新待ちを解除しました","busy=false;refresh.disabled=false"]);
 });
 
 test("notification-free detail analysis is compact, explicit and graphed",async()=>{
