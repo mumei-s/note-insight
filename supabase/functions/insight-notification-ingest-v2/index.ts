@@ -26,6 +26,9 @@ function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
+  if(/[?&]kind=board_reply_comment(?:&|$)/i.test(target))return"membership_board_reply";
+  if(/[?&]kind=(?:board_like_comment|board_like_post)(?:&|$)/i.test(target))return"membership_reaction";
+  if(/[?&]kind=circle_plan_join(?:&|$)/i.test(target))return"membership_join";
   const membershipTarget=/\/membership(?:[/?#]|$)|\/memberships?\//i.test(target);
   const membershipContext=membershipTarget||/(?:メンバーシップ|メンシプ|掲示板|メンバー特典|Member\s*Ship)/iu.test(t);
   if(membershipContext&&/(?:スキ|リアクション|いいね|反応)/.test(t)&&/(?:しました|されました|がありました|ありました|付きました|つきました)/.test(t))return"membership_reaction";
@@ -45,7 +48,7 @@ function classify(text:string,targetUrl:string|null){
   if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー|さん(?:他\d+名)?が(?:あなたを)?フォローしました|さんがあなたをフォロー)/.test(t))return"follow";
   if(!/マガジン/.test(t)&&/(?:フォロー|フォロワー)/.test(t)&&/(?:しました|されました|増えました|新しい)/.test(t))return"follow";
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
-  if(/(?:さんが記事を投稿しました|さんが新しい記事を投稿しました)/.test(t))return"creator_article_posted";
+  if(/(?:さんが(?:新しい)?記事を投稿しました|さんが(?:[^。]{0,120}メンバー特典マガジンの)?記事を更新しました)/.test(t))return"creator_article_posted";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
   if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さんがあなたの記事を購入しました)/.test(t))return"purchase";
   if(t.length<350&&/(?:さん(?:から|より).{0,30}(?:チップ|サポート).{0,80}(?:届きました|届いた|届き|受け取りました|受け取った|受け取り|もらいました|もらい|いただきました|いただき|贈られました|送られました)|(?:チップ|サポート).{0,100}(?:が届きました|が届いた|を受け取りました|を受け取った|をもらいました|をいただきました|を贈られました|を送られました)|(?:支援|応援金).{0,100}(?:届きました|受け取りました|もらいました|いただきました))/.test(t))return"tip";
@@ -71,15 +74,19 @@ async function identity(req:Request){
   return{memberId,noteId};
 }
 
-function semantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
+function legacySemantic(type:string,actor:string,target:string|null,raw:string,bucket:string){
   const compact=["follow","magazine_follow","magazine_article_added","my_article_magazine_added","magazine_join","membership_board","membership_board_reply","membership_reaction","membership_started","membership_plan","membership_join","purchase","tip","buzz","rating","points","quote","comment_like","like","creator_article_posted"].includes(type)&&!(type==="my_article_magazine_added"&&!target);
   return compact?`${type}|${actor}|${target||""}|${bucket}`:`${type}|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
+}
+function stableSemantic(clientSignature:string,actor:string,target:string|null,raw:string,bucket:string){
+  return clientSignature?`event-v2|client|${clientSignature}`:`event-v2|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
 }
 function allowedExplicitSource(source:string){
   if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
   return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
 }
 
+type ExistingRow={id:string;fingerprint:string;notification_type:string|null;meta:any};
 Deno.serve(async(req)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:H});
   if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
@@ -88,7 +95,7 @@ Deno.serve(async(req)=>{
     const suppliedNoteId=String(body?.noteId||"").trim().replace(/^@/,"").toLowerCase();
     if(!suppliedNoteId||suppliedNoteId!==who.noteId)return out({ok:false,error:"NOTIFICATION_ACCOUNT_MISMATCH",expectedNoteId:who.noteId},409);
     const incoming=Array.isArray(body?.notifications)?body.notifications.slice(0,1000):[];
-    let inserted=0,updated=0,blocked=0,skipped=0;
+    let inserted=0,updated=0,blocked=0,skipped=0,deduped=0;
     const sources=new Set<string>(),confirmedClientSignatures:string[]=[];
     for(const item of incoming){
       const meta=item?.meta&&typeof item.meta==="object"?item.meta:{},source=String(meta?.source||""),clientSignature=String(meta?.client_signature||"");
@@ -101,20 +108,34 @@ Deno.serve(async(req)=>{
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const eventDay=jstDay(at||new Date().toISOString());
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
-      const actor=actorUrl||actorName||"",fingerprint=await sha(semantic(type,actor,targetUrl,raw,bucket)),classifiedAt=new Date().toISOString();
-      const row={member_id:who.memberId,fingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v19-v2957",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt}};
-      const{data:existing}=await db.from("insight_notifications").select("id").eq("member_id",who.memberId).eq("fingerprint",fingerprint).maybeSingle();
-      const{error}=await db.from("insight_notifications").upsert(row,{onConflict:"member_id,fingerprint"});
-      if(error)throw error;
+      const actor=actorUrl||actorName||"",stableFingerprint=await sha(stableSemantic(clientSignature,actor,targetUrl,raw,bucket)),legacyFingerprint=await sha(legacySemantic(type,actor,targetUrl,raw,bucket)),legacyOtherFingerprint=await sha(legacySemantic("other",actor,targetUrl,raw,bucket)),classifiedAt=new Date().toISOString();
+      const fingerprints=[...new Set([stableFingerprint,legacyFingerprint,legacyOtherFingerprint])];
+      const{data:byFingerprint,error:findError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints);
+      if(findError)throw findError;
+      let candidates=(byFingerprint||[]) as ExistingRow[];
+      if(clientSignature){
+        const{data:bySignature,error:signatureError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8);
+        if(signatureError)throw signatureError;
+        const seen=new Set(candidates.map(x=>x.id));for(const x of (bySignature||[]) as ExistingRow[])if(!seen.has(x.id)){seen.add(x.id);candidates.push(x)}
+      }
+      const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,synced_note_id:who.noteId,classifier:"action-v20-stable-event",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:"classification-independent-v2"}};
+      if(preferred){
+        const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
+        if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
+        const{error:updateError}=await db.from("insight_notifications").update(row).eq("id",preferred.id);if(updateError)throw updateError;updated++;
+      }else{
+        const{error:insertError}=await db.from("insight_notifications").insert(row);if(insertError)throw insertError;inserted++;
+      }
       if(clientSignature)confirmedClientSignatures.push(clientSignature);
-      if(existing?.id)updated++;else inserted++;
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-v2957"});
-    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,blocked,skipped,sources:[...sources],confirmedClientSignatures:[...new Set(confirmedClientSignatures)]};
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-stable-v2"});
+    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmedClientSignatures:[...new Set(confirmedClientSignatures)]};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
     const message=e instanceof Error?e.message:"INGEST_ERROR";
+    console.error(message);
     return out({ok:false,error:message},/REQUIRED|INVALID|UNKNOWN/.test(message)?401:500);
   }
 });
