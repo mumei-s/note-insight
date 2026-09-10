@@ -3,35 +3,26 @@
 This file is the highest-priority handoff for the next Work/session.
 
 ## Authority
+- Current ChatGPT conversation / 「実機確認修正Deploy」 continuation is the latest requirement source.
+- Fetch current GitHub `main` before every edit. Never overwrite newer unrelated work with stale state.
+- Preserve `docs/WORK_CURRENT_SOURCE.md` invariants and all unrelated completed INSIGHT features.
+- Real-device reports are authoritative; CI success alone does not prove a mobile visual bug is fixed.
 
-- The user's current ChatGPT conversation / 「実機確認修正Deploy」 continuation is the latest specification.
-- Always fetch the current GitHub `main` before editing.
-- Never overwrite newer unrelated work with stale local state.
-- Existing `docs/WORK_CURRENT_SOURCE.md` remains authoritative for preserved historical invariants and completed functionality.
-- Real-device behavior reported by the user is authoritative. CI success alone does not prove a mobile/UI bug is fixed.
+## Release target
+INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`.
 
-## Current release target
+## Implemented
+- TOP blank-space structural repair: 4th 詳細分析 card moved from MutationObserver injection into the React source grid; index no longer loads install-free-analysis-link.js. One 2x2 mobile / 4-column desktop content-height grid remains.
+- 通常データ: forced manual refresh supersedes a stale auto refresh, abort/timeout ownership added, busy UI is bounded, saved data stays usable.
+- 本人通知なし詳細分析: saved public/member dashboard data displays first; public refresh is background; notification/Dashboard userscripts not required; no fabricated PV/sales/traffic.
+- 通知 selector: one compact tap panel, no long-press reorder/draggable category rail.
+- 本人通知 ingest: classification-independent stable event identity; exact circle_plan_join / board_like_* / board_reply_* handling; article-update classification; resume source normalized for feed while original capture source retained.
+- Supabase production: insight-notification-ingest-v2 v23 ACTIVE; reclassify exact-kind code ACTIVE; notification_classifier_exact_actions_v7 migration applied.
+- Existing production repair: 603 resume rows normalized for feed; 7 duplicate client-signature rows removed; known article updates reclassified.
+- Remaining `other` audit: no membership/comment/magazine known-form rows; residuals are old capture noise or unsupported forms such as 質問箱開始.
+- Update indicators stay per top item, no generic global banner.
 
-- INSIGHT: `2026.09.10.1`
-- 本人通知: `2.9.59`
-- Dashboard bridge: `1.4.2`
+## Finalization
+Fix branch: `fix-latest-chat-20260910-v2`. Before promotion compare it against current main. Fast-forward only if main is a strict ancestor, then monitor userscript syntax, npm build, unified regressions, Pages artifact and deploy. Repair any CI failure before completion.
 
-## Implemented in this continuation
-
-- TOP: removed runtime injection of the 4th detail-analysis card. All four cards now belong to the React DOM. Mobile layout is 2x2, desktop 4 columns, content-sized height.
-- 通常データ: manual refresh supersedes/aborts stale automatic public sync, has bounded busy UI, and keeps saved data usable.
-- 本人通知なし詳細分析: saved public data renders first, background refresh follows; no notification or Dashboard userscript is required; PV/sales/traffic are not guessed.
-- 通知 UI: remains one compact tap selector; no long-press reorder/draggable category rail.
-- 本人通知 backend: classification-independent event identity, exact membership target kinds, article-update classification, resume captures normalized to feed-compatible manual source while preserving original capture source.
-- Production Supabase: ingest Edge Function v23 ACTIVE; reclassify exact-kind code ACTIVE; DB classifier migration applied.
-- Production data repair: 603 resume-captured rows normalized for feed visibility; 7 duplicate client-signature rows removed; article-update known rows backfilled.
-- Remaining `other` audit found no membership/comment/magazine known-form rows. Remaining matches are historical capture noise or unsupported forms such as 質問箱開始.
-- Update notices remain per top item; no global update banner.
-
-## Production promotion rule
-
-The fix branch is `fix-latest-chat-20260910-v2`. It was built from the then-current main. Before promotion compare current main vs this branch and fast-forward only when main is a strict ancestor. Then monitor userscript syntax, npm build, unified regressions, Pages artifact and deploy. If any CI step fails, repair it before declaring completion.
-
-## Still requires observation after deploy
-
-The repeated Android top blank-space bug is not accepted by CI alone. After production deploy, open the actual mobile-sized production view and confirm no reserved vertical gap remains. If this normal chat cannot run a real authenticated mobile browser, mark that single observation as needing Work/Android confirmation rather than claiming it is fixed.
+After deploy, the Android top blank-space issue still requires actual production mobile observation. If this session cannot inspect an authenticated real mobile DOM, report that observation alone as Work/Android confirmation required; do not pretend CI proves it.
