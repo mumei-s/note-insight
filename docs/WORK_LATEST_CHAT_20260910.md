@@ -1,34 +1,44 @@
 # WORK LATEST CHAT HANDOFF — 2026-09-10
 
-Latest requirement source: current ChatGPT conversation continuing 「実機確認修正Deploy」. Always fetch current GitHub `main` before editing; preserve unrelated newer work and `docs/WORK_CURRENT_SOURCE.md` invariants. Real-device behavior is authoritative.
+Latest requirement source: current ChatGPT conversation continuing 「実機確認修正Deploy」. Always fetch current GitHub `main` before editing; preserve unrelated newer work and `docs/WORK_CURRENT_SOURCE.md` invariants. The latest Android screenshots in this conversation are authoritative for acceptance.
 
 ## Production checkpoint
 
-- INSIGHT: `2026.09.10.1`
+- INSIGHT: `2026.09.10.2`
 - 本人通知: `2.9.59`
 - Dashboard bridge: `1.4.2`
-- Code deployment checkpoint: `c4637cd57163b939f148b39ca58212771d271057`
-- GitHub Pages run: `34473673478` / run 1721
+- Latest code checkpoint before this documentation-only commit: `3b2d44cc97983f32e2b6e351215331f5a31f98f9`
+- GitHub Pages run: `34478627061` / run 1726
 - Build: success
 - Userscript syntax: success
 - Unified regressions: success
 - Pages deploy: success
-- Built artifact checked: release manifest contains `2026.09.10.1`; built index does not load `install-free-analysis-link.js`; built JS contains the native 詳細分析 card and nonblocking 通常データ statuses; install-free-analysis v2 assets are present.
+- Supabase `insight-notification-feed-final`: v16 ACTIVE, `verify_jwt=false` with custom `X-Insight-Token` auth.
 
-## Implemented
+## Latest implementation from Android screenshot findings
 
-- TOP blank-space structural repair: removed the separate MutationObserver-injected fourth card. React owns all four TOP cards. Mobile is a single 2x2 content-height grid; desktop is four columns. This removes the conflicting 3-column/2-column layout authorities that were present when the user observed the large blank area.
-- 通常データ: forced manual refresh supersedes/aborts stale automatic public sync; timeout/abort ownership is explicit; busy UI is bounded and saved data remains usable during retries.
-- 本人通知なし詳細分析: `install-free-analysis.html` routes to v2; saved public/member data renders before background public refresh; 本人通知 and Dashboard userscripts are not required; PV/sales/traffic are not fabricated.
-- 通知 category UI: one compact tap selector only; no long-press reorder/draggable category rail.
-- Update indicators: remain independent on each TOP item; no generic global update banner.
-- 本人通知 ingest: stable classification-independent event identity; exact `circle_plan_join`, `board_like_comment/post`, `board_reply_comment` classification; article-update notification classification; resume captures stored with feed-compatible manual source while original capture source is preserved.
-- Supabase production: `insight-notification-ingest-v2` v23 ACTIVE; exact-kind `insight-notification-reclassify` ACTIVE; DB migration `notification_classifier_exact_actions_v7` applied.
-- Existing production notification repair: 603 resume-captured rows normalized for feed visibility; 7 duplicate client-signature rows removed; known article-update rows backfilled.
-- `other` audit after repair: no remaining known membership/comment/magazine-form rows; remaining matches are historical capture noise or currently unsupported forms such as 質問箱開始.
+- TOP launcher is no longer four equal visible cards. `通常データ` is hidden from the top launcher and exposed as a compact `通常データ更新` control beside `アカウント切替` in `.miu-topactions`.
+- Remaining top controls are `本人通知 / ダッシュボード / 詳細分析` in one three-column row on mobile. Their separate under-card install links are hidden so they cannot create an uneven second grid row.
+- Blank-space handling is structural plus measured: `insight-mobile-v14.ts` reads the real `.miv5-source-grid` bounding height and constrains `.miv5-update` to that measured height with `ResizeObserver` follow-up. Pseudo-elements and legacy reserved block sizes are neutralized.
+- Legacy `insight-ux-v13.ts` now detects the v14 style, marks the launcher `data-mumei-v14=1`, and disables all v13 top-layout rules/inline height reset for the v14 launcher. This fixes the specificity race that could silently restore the old 2-column layout after v14 ran.
+- Per-item participant updates stay actionable in compact mode. Existing `本人通知` / `Dashboard` update states remain on their cards. Future INSIGHT app update state is surfaced on the `通常データ更新` proxy as `NEW INSIGHT本体更新` and routes to the hidden native app-update action, so moving the normal-data card does not lose update delivery.
+- 通常データ manual refresh remains bounded/abortable in React. The visible proxy never locks the account-control row and mirrors the hidden native refresh state while saved data remains usable.
+- 本人通知 comment-body display is repaired in two layers: notification feed dedupe preserves canonical `meta.body` and exports `comment_body`; mobile delegated disclosure reads saved feed body first, then queries `insight-comment-events` for the surrounding day and matches actor/article/time. This avoids the old v11/v12 class-mutation listener race.
+- Production comment audit for 2026-09-08 through 2026-09-10 found 58 canonical comment rows and all 58 contain non-empty bodies. The screenshot row for `【フォロバ100】凪` at 2026-09-08 22:08 JST has a matching canonical body in production.
+- Notification categories remain in the compact one-panel selector. Long-press (520 ms) now enables category reordering; order is stored locally in `mumei-notification-category-order-v14`.
+- 本人通知なし詳細分析 was rebuilt as collapsed `<details>` sections. All analysis groups are buttons/accordions by default, with open-all/close-all controls, compact two-column mobile arrangement, explicit metric labels (`平均スキ数`, `平均コメント数`, `平均反応数`), and explicit `反応=スキ+コメント` / `PVではありません` wording.
+- Graphs were added to every detailed-analysis group: overview bars, recent reaction sparkline, cadence bars, weekday bars, time-slot bars, title-word bars, evergreen bars, and article top-reaction bars.
+- Article list uses a smartphone-fit CSS grid instead of a wide table; title text ellipsizes to protect viewport width.
+- Detail-analysis refresh has an independent 20-second watchdog and restores the retry button/status while retaining saved analysis.
 
-## Still not accepted without real-device observation
+## Earlier notification/backend repairs retained
 
-The repeated Android TOP blank-space report must be checked on the actual production mobile rendering after this deployment. CI/artifact inspection proves the structural fix is deployed but is not a substitute for Android computed-layout observation. If the gap is still visible, Work must inspect the production DOM/computed styles around `.miv5-update`, `.miv5-source-grid`, `.miv5-source-card`, the following `.micmp`, wrappers, transforms, pseudo-elements and absolute descendants and fix the exact owner of the reserved height.
+- Stable classification-independent notification identity.
+- Exact `circle_plan_join`, `board_like_comment/post`, `board_reply_comment/post`, membership and article-update classification.
+- Resume capture normalization and feed-compatible provenance.
+- Existing 603 resume rows normalized, 7 duplicate client-signature rows removed, known article-update rows backfilled.
+- `other` audit had no remaining known membership/comment/magazine-form rows after repair.
 
-Also continue real-device functional confirmation for: 通常データ refresh returns from 更新中; 詳細分析 produces results without optional tools; 通知 selector is one panel; new本人通知 rows land in the correct category.
+## Acceptance remaining
+
+Code, build, regression tests, Supabase deployment and GitHub Pages deployment are complete. The only remaining acceptance check is visual/interactive confirmation on the user's actual Android browser after reloading the current production build: (1) no blank space below the three top cards, (2) `通常データ更新` appears beside `アカウント切替` and returns from busy state, (3) opening `コメント本文` displays the canonical body, (4) detailed analysis starts collapsed and fits the smartphone width, and (5) long-press category reordering persists.
