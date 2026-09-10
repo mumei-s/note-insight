@@ -20,7 +20,7 @@ function installerHref(kind:"dashboard"|"notice"){
   const id=activeNoteId(),role=roleFor(id),back=encodeURIComponent(window.location.href);
   if(kind==="notice")return`./notification-update.html?from=top&role=${role}&return=${back}`;
   const account=id?`&account=${encodeURIComponent(id)}`:"";
-  return`./dashboard-setup-v2.html?from=top&role=${role}${account}&return=${back}&auto=0`;
+  return`./dashboard-setup.html?from=top&role=${role}${account}&return=${back}&auto=0`;
 }
 
 function installStyle(){
