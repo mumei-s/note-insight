@@ -24,32 +24,39 @@ const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-r
 const AUTO_MS=120_000;
 const RELATION_MS=180_000;
 const QUIET_MS=2_500;
+const PUBLIC_SYNC_TIMEOUT=60_000;
+const MANUAL_UI_TIMEOUT=32_000;
 const ENTRY_MODE_KEY="mumei-insight-entry-mode";
 const APP_UPDATE_RESULT_KEY="mumei-insight-app-update-result";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
 function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
 
-async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000){
+async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000,externalSignal?:AbortSignal){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
   if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");
-  const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),timeout);
+  const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),timeout),forwardAbort=()=>c.abort();
+  if(externalSignal){if(externalSignal.aborted)c.abort();else externalSignal.addEventListener("abort",forwardAbort,{once:true})}
   try{
     const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({action,...extra}),cache:"no-store",signal:c.signal});
     const p=await r.json().catch(()=>({}));
     if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");
     return p;
-  }finally{window.clearTimeout(timer)}
+  }finally{
+    window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort",forwardAbort);
+  }
 }
 const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit"}).format(new Date());
+const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms));
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("公開データは自動更新中"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
     if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
@@ -87,30 +94,36 @@ export function MemberInsightLiveV2(){
     }catch{return false}finally{relationRunning.current=false}
   }
   async function publicSync(force=false){
-    if(running.current)return false;
     const now=Date.now();
+    if(running.current&&!force)return false;
     if(!force&&(document.visibilityState!=="visible"||now-lastInteraction.current<QUIET_MS||now-lastRun.current<AUTO_MS))return false;
-    running.current=true;lastRun.current=now;
+    if(force&&running.current)publicSyncController.current?.abort();
+    const run=++publicSyncRun.current,controller=new AbortController();
+    publicSyncController.current=controller;running.current=true;lastRun.current=now;
+    setStatus(force?"公開データを更新中…（保存済みデータは表示中）":"公開データを確認中…（保存済みデータは表示中）");
     try{
-      const p=await post(MEMBER,"sync",{},75_000);
+      const p=await post(MEMBER,"sync",{},PUBLIC_SYNC_TIMEOUT,controller.signal);
+      if(run!==publicSyncRun.current)return false;
       setStatus(`更新済み ${timeNow()}・記事確認${fmt(p.scannedArticles||0)}件 / 保存${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);
       setRevision(v=>v+1);void loadOfficial();void relationSync(force);return true;
-    }catch(e){setStatus(`次回再試行：${e instanceof Error?e.message:"一時エラー"}`);return false}
-    finally{running.current=false}
-  }
-  async function waitForPublicSyncIdle(timeout=80_000){
-    const started=Date.now();
-    while(running.current&&Date.now()-started<timeout)await new Promise<void>(resolve=>window.setTimeout(resolve,200));
-    return !running.current;
+    }catch(e){
+      if(run!==publicSyncRun.current)return false;
+      const message=controller.signal.aborted?"更新を切り替えました":e instanceof Error?e.message:"一時エラー";
+      setStatus(`保存済みデータを表示中・次回再試行：${message}`);return false;
+    }finally{
+      if(run===publicSyncRun.current){running.current=false;if(publicSyncController.current===controller)publicSyncController.current=null}
+    }
   }
   async function manualDataRefresh(){
-    if(manualRefreshRunning.current){setStatus("連携データを更新中…");return}
-    manualRefreshRunning.current=true;setDataBusy(true);setStatus(running.current?"自動更新完了後に連携データを更新します…":"連携データを更新中…");
+    if(manualRefreshRunning.current){setStatus("更新処理は進行中です。保存済みデータはそのまま操作できます。");return}
+    manualRefreshRunning.current=true;setDataBusy(true);
     try{
-      const idle=await waitForPublicSyncIdle();
-      if(!idle){setStatus("自動更新が長引いています。もう一度更新してください。");return}
-      const ok=await publicSync(true);
-      if(!ok)setStatus("連携データを更新できませんでした。もう一度お試しください。");
+      const result=await Promise.race([
+        publicSync(true).then(ok=>({settled:true,ok})),
+        sleep(MANUAL_UI_TIMEOUT).then(()=>({settled:false,ok:false})),
+      ]);
+      if(!result.settled)setStatus("更新はバックグラウンドで継続中です。ボタンは再操作できます。");
+      else if(!result.ok)setStatus("保存済みデータを表示中です。更新できなかった場合はもう一度押してください。");
     }finally{manualRefreshRunning.current=false;setDataBusy(false)}
   }
   async function updateInsightApp(){
@@ -123,7 +136,7 @@ export function MemberInsightLiveV2(){
       const latest=await checkRelease();
       const latestVersion=latest?.appVersion||CURRENT_INSIGHT_APP_VERSION;
       if(!versionDiffers(CURRENT_INSIGHT_APP_VERSION,latestVersion)){
-        const wait=Math.max(0,650-(Date.now()-started));if(wait)await new Promise<void>(resolve=>window.setTimeout(resolve,wait));
+        const wait=Math.max(0,650-(Date.now()-started));if(wait)await sleep(wait);
         setStatus(`INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} は最新版です。`);
         showAppFeedback(`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION}｜最新版です`,5000);
         return;
@@ -161,7 +174,7 @@ export function MemberInsightLiveV2(){
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
     const relationFirst=window.setTimeout(()=>void relationSync(true),900),first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>{void publicSync(false);void relationSync(false)},QUIET_MS)};
     document.addEventListener("visibilitychange",visible);
-    return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible)}
+    return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible);publicSyncRun.current++;publicSyncController.current?.abort();publicSyncController.current=null;running.current=false}
   },[]);
   useEffect(()=>{if(mode==="social")void relationSync(true)},[mode]);
   useEffect(()=>{
@@ -184,7 +197,7 @@ export function MemberInsightLiveV2(){
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
         <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="連携データを更新" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"連携データを更新しています":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
+          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="連携データを更新" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"更新確認中・保存済みデータは利用可能":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
@@ -192,6 +205,9 @@ export function MemberInsightLiveV2(){
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"本人通知なしで分析可"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
+        </div>
+        <div className="miv5-source-card detail">
+          <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
         </div>
       </div>
     </section>
