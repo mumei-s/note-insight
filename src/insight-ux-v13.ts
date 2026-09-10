@@ -45,7 +45,7 @@ function enhanceTop(){
   const root=document.querySelector<HTMLElement>(".miv5-update");if(!root)return;markV14(root);
   const notice=root.querySelector<HTMLElement>(".miv5-source-card.notice"),dashboard=root.querySelector<HTMLElement>(".miv5-source-card.dashboard");
   if(notice)ensureTopLink(notice,"notice");
-  if(dashboard){ensureTopLink(dashboard,"dashboard");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main strong"),"📊 分析");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main span"),"Dashboard同期＋本人通知")}
+  if(dashboard){ensureTopLink(dashboard,"dashboard");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main strong"),"📊 分析");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main small"),"Dashboard同期＋本人通知 必須");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main span"),"公式Dashboard＋INSIGHT")}
 }
 function fitTopHeight(){
   const root=document.querySelector<HTMLElement>(".miv5-update"),grid=root?.querySelector<HTMLElement>(":scope > .miv5-source-grid");if(!root||!grid||markV14(root))return;
