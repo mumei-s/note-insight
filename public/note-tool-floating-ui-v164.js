@@ -20,6 +20,8 @@
   let originLeft = 0;
   let originTop = 0;
   let mountedPanel = null;
+  let pointerMoved = false;
+  let pressedWhileMinimized = false;
 
   function readState() {
     try {
@@ -74,7 +76,7 @@
       #${PANEL_ID} .mumei-min-btn-v164{flex:0 0 30px!important;width:30px!important;height:28px!important;padding:0!important;margin:0!important;border:1px solid #475569!important;border-radius:7px!important;background:#111827!important;color:#fff!important;font-size:17px!important;line-height:26px!important;font-weight:900!important;touch-action:manipulation!important}
       #${PANEL_ID}.${MIN_CLASS}{width:154px!important;padding:6px 7px!important;overflow:hidden!important}
       #${PANEL_ID}.${MIN_CLASS}>:not(.title):not(#mumei-note-source-status-v163){display:none!important}
-      #${PANEL_ID}.${MIN_CLASS}>.title{margin-bottom:0!important}
+      #${PANEL_ID}.${MIN_CLASS}>.title{margin-bottom:0!important;cursor:pointer!important}
       #${PANEL_ID}.${MIN_CLASS} #mumei-note-source-status-v163{display:block!important;max-width:140px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;margin-top:2px!important;font-size:8px!important;opacity:.82!important}
       #mumei-direct-success-panel,#mumei-direct-success-btn,#mumei-notify-test-panel,#mumei-notify-test-btn,#mumei-notify-clean-btn,#mumei-card-system-toggle{display:none!important}
     `;
@@ -126,8 +128,9 @@
     if (pointerId == null || event.pointerId !== pointerId || !mountedPanel) return;
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) pointerMoved = true;
     if (!dragging) {
-      if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) cancelLongPress();
+      if (pointerMoved) cancelLongPress();
       return;
     }
     event.preventDefault();
@@ -139,7 +142,13 @@
 
   function onPointerUp(event) {
     if (pointerId == null || event.pointerId !== pointerId) return;
+    const panel = mountedPanel;
+    const wasDragging = dragging;
+    const shouldExpand = Boolean(panel && pressedWhileMinimized && !wasDragging && !pointerMoved);
     stopDrag(true);
+    pressedWhileMinimized = false;
+    pointerMoved = false;
+    if (shouldExpand && panel?.isConnected) setMinimized(panel, false, true);
   }
 
   function attach(panel) {
@@ -174,6 +183,8 @@
       pointerId = event.pointerId;
       startX = event.clientX;
       startY = event.clientY;
+      pointerMoved = false;
+      pressedWhileMinimized = panel.classList.contains(MIN_CLASS);
       const rect = panel.getBoundingClientRect();
       originLeft = rect.left;
       originTop = rect.top;
