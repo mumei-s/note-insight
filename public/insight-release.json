@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.09.16",
+  "appVersion": "2026.09.10.1",
   "notificationVersion": "2.9.59",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-10T05:55:00+09:00",
+  "releasedAt": "2026-09-10T18:52:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard同期v1.4.2: 本人通知なしでも公式Dashboardを直接読み込みできる導線を正式化。iPhone/iPadはSafariを正規ルートとし、Userscripts/Tampermonkey向けの新旧GM API互換を追加。Safariでは.user.jsの文字列表示を自動で閉じず、拡張機能から導入できるよう修正。Dashboard画面には対応ブラウザ表、Dashboard同期の未導入/導入済み、本人通知なし/ありの利用手順を折りたたみパネルへ収納。本人通知v2.9.59、INSIGHT本体v2026.09.09.16は据え置き。"
+  "note": "INSIGHT本体v2026.09.10.1: 更新通知を本体から独立。起動時・タブ復帰時・10分ごとに最新版を確認し、未確認の更新がある時だけ『NEW・本体更新』を表示。『最新版へ更新』でキャッシュ回避付き再読込、『あとで』はそのセッションだけ非表示。今後はinsight-release.jsonの更新だけで通知できるように修正。本人通知v2.9.59、Dashboard同期v1.4.2は維持。"
 }
