@@ -10,70 +10,28 @@ This file is the highest-priority handoff for the next Work/session.
 - Existing `docs/WORK_CURRENT_SOURCE.md` remains authoritative for preserved historical invariants and completed functionality.
 - Real-device behavior reported by the user is authoritative. CI success alone does not prove a mobile/UI bug is fixed.
 
-## 2026-09-10 implementation progress
+## Current release target
 
-Release target: **INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`**.
+- INSIGHT: `2026.09.10.1`
+- 本人通知: `2.9.59`
+- Dashboard bridge: `1.4.2`
 
-1. **TOP blank-space structural fix**
-   - Removed the runtime `install-free-analysis-link.js` injection from `index.html`.
-   - The 4th `詳細分析` card is now owned by `MemberInsightLiveV2` React DOM.
-   - TOP has one layout authority: mobile 2x2, desktop 4 columns, content-sized rows/height.
-   - The old situation (React 3-card grid + MutationObserver 4th card + separate 2-column CSS) is no longer active.
-   - Final Android real-device observation is still required after production deploy; do not claim visual acceptance until observed.
+## Implemented in this continuation
 
-2. **通常データ stuck at 更新中**
-   - Manual refresh no longer waits indefinitely for an automatic refresh.
-   - Forced manual refresh aborts/supersedes a stale running public sync.
-   - Public sync has explicit abort/timeout ownership.
-   - UI busy state releases after a bounded time and saved data remains usable while refresh retries.
+- TOP: removed runtime injection of the 4th detail-analysis card. All four cards now belong to the React DOM. Mobile layout is 2x2, desktop 4 columns, content-sized height.
+- 通常データ: manual refresh supersedes/aborts stale automatic public sync, has bounded busy UI, and keeps saved data usable.
+- 本人通知なし詳細分析: saved public data renders first, background refresh follows; no notification or Dashboard userscript is required; PV/sales/traffic are not guessed.
+- 通知 UI: remains one compact tap selector; no long-press reorder/draggable category rail.
+- 本人通知 backend: classification-independent event identity, exact membership target kinds, article-update classification, resume captures normalized to feed-compatible manual source while preserving original capture source.
+- Production Supabase: ingest Edge Function v23 ACTIVE; reclassify exact-kind code ACTIVE; DB classifier migration applied.
+- Production data repair: 603 resume-captured rows normalized for feed visibility; 7 duplicate client-signature rows removed; article-update known rows backfilled.
+- Remaining `other` audit found no membership/comment/magazine known-form rows. Remaining matches are historical capture noise or unsupported forms such as 質問箱開始.
+- Update notices remain per top item; no global update banner.
 
-3. **本人通知なし詳細分析**
-   - `public/install-free-analysis.html` now routes to `install-free-analysis-v2.html`.
-   - v2 restores saved member session token when possible.
-   - It renders saved public/dashboard member data first, then refreshes public data in background.
-   - 本人通知 and Dashboard userscripts are not required for this public-data-only analysis.
-   - PV/sales/traffic are not guessed.
+## Production promotion rule
 
-4. **本人通知 identity/classification**
-   - Production `insight-notification-ingest-v2` upgraded to stable classification-independent event identity.
-   - Client notification signature is the preferred stable identity; classification changes no longer create a second event identity.
-   - Existing legacy/stable candidates are consolidated during future ingest.
-   - Exact target kinds handled first: `circle_plan_join`, `board_like_comment/post`, `board_reply_comment`.
-   - Article update notices are classified as `creator_article_posted`.
-   - Resume-upward/downward captures are stored with a manual-sync-compatible feed source while original capture source is preserved.
+The fix branch is `fix-latest-chat-20260910-v2`. It was built from the then-current main. Before promotion compare current main vs this branch and fast-forward only when main is a strict ancestor. Then monitor userscript syntax, npm build, unified regressions, Pages artifact and deploy. If any CI step fails, repair it before declaring completion.
 
-5. **Production backend already applied**
-   - `insight-notification-ingest-v2`: production Edge Function v23 ACTIVE.
-   - `insight-notification-reclassify`: production exact-kind code ACTIVE.
-   - DB migration `notification_classifier_exact_actions_v7` applied so the DB BEFORE trigger no longer overwrites corrected exact kinds/article updates back to `other`.
-   - 603 existing resume-captured rows had their source normalized for current feed visibility while preserving capture provenance.
-   - 7 existing duplicate rows sharing the same client signature were removed, retaining the richest/latest representative.
-   - Remaining `other` audit after repair: no membership/comment/magazine-known-form rows; remaining matches are mostly old capture noise plus genuinely unsupported forms (e.g. 質問箱開始).
+## Still requires observation after deploy
 
-6. **通知 category UI**
-   - Keep ONE compact category selector.
-   - No long-press reorder, draggable category rail, or floating category controls.
-   - Tapping opens choices inside the same control; selecting closes it.
-
-7. **Update notifications**
-   - Keep independent top-item update state for INSIGHT app, 本人通知, Dashboard sync.
-   - Do not restore a redundant global update banner.
-
-## Current promotion checkpoint
-
-- Fix branch: `fix-latest-chat-20260910-v2`.
-- Branch is based on the latest main that existed at the start of this continuation; compare against current main before promotion.
-- Regression coverage now matches native 4-card TOP, stable notification identity, exact membership kinds and INSIGHT `2026.09.10.1`.
-- Next step: fast-forward current main to the branch only if it is still a strict ancestor; then monitor GitHub Pages build/regressions/deploy until success.
-
-## Required final verification
-
-After each new change:
-1. fetch latest main,
-2. run userscript syntax/build/regressions,
-3. deploy GitHub Pages and relevant Supabase changes,
-4. verify public production assets/pages,
-5. then verify Android/mobile real rendering for the persistent blank-space issue,
-6. record exact commit SHA / Actions run and any remaining real-device-only check.
-
-Do not simplify or remove unrelated completed INSIGHT features to make tests pass.
+The repeated Android top blank-space bug is not accepted by CI alone. After production deploy, open the actual mobile-sized production view and confirm no reserved vertical gap remains. If this normal chat cannot run a real authenticated mobile browser, mark that single observation as needing Work/Android confirmation rather than claiming it is fixed.
