@@ -34,7 +34,7 @@ test("comment body recovery uses feed body, canonical comment history and delega
 });
 
 test("v15 TOP is normal-data, analysis, notification with detail beside account switch",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),mobile=await read("src/insight-mobile-v15.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(mobile,["miv5-source-card.normal{display:block","miv5-source-card.dashboard{display:block","miv5-source-card.notice{display:block","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy{display:none","インストール / 更新","INSIGHT本体を更新"]);has(unified,["アカウント切替","miu-topactions"]);
+  const live=await read("src/member-insight-live-v2.tsx"),mobile=await read("src/insight-mobile-v15.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(mobile,["miv5-source-card.normal{display:grid","miv5-source-card.dashboard{display:grid","miv5-source-card.notice{display:grid","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy{display:none","mumei-top-tool-install","dashboard-setup.html","notification-update.html","インストール / 更新","INSIGHT本体を更新"]);has(unified,["アカウント切替","miu-topactions"]);
 });
 
 test("public refresh remains abortable and cannot permanently disable the visible control",async()=>{
@@ -66,7 +66,7 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.10.3");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.10\.3"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.10.4");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.10\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard v1.4.2 keeps notification optional and account matching enforced",async()=>{
