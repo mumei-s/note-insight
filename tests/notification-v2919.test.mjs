@@ -18,7 +18,7 @@ test("v2.9.59 autoscan resumes upward and saves the stop boundary",async()=>{
 });
 
 test("notification installer returns to INSIGHT and date filtering stays in INSIGHT",async()=>{
-  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.59","v2.9.59 をインストール／更新","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","mumei_insight_version_check"]);has(setup,["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"]);
+  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.59","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","mumei_insight_version_check"]);has(setup,["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"]);
 });
 
 test("notification history keeps one shared date filter and all required categories",async()=>{
@@ -45,8 +45,8 @@ test("notification-free detail analysis is compact, explicit and graphed",async(
   const detail=await read("public/install-free-analysis-v2.html");has(detail,["<details class=\"section\"","分析をすべて開く","分析をすべて収納","1記事あたり平均スキ数","1記事あたり平均コメント数","1記事あたり平均反応数","平均反応数","反応＝スキ＋コメント","PVではありません","recentSpark","cadenceChart","daysChart","hoursChart","wordsChart","evergreenChart","articlesChart","overflow-x:hidden"]);
 });
 
-test("Dashboard analysis requires Dashboard sync plus notification while detail analysis stays separate",async()=>{
-  const hub=await read("src/member-insight-analysis-hub.tsx"),ux13=await read("src/insight-ux-v13.ts"),baseCss=await read("src/member-insight-analytics-base.css"),live=await read("src/member-insight-live-v2.tsx");has(hub,["Dashboard同期＋本人通知の2つが必要","Dashboard分析の必須構成","公式Dashboard＋INSIGHT分析","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入/支援","topActorShare","kind:\"all\"","詳細分析"]);has(ux13,["Dashboard分析はDashboard同期＋本人通知の2ツール必須","旧v13の「本人通知なし/あり」2分岐DOM上書きは廃止"]);assert.doesNotMatch(ux13,/本人通知なしで読込/);assert.doesNotMatch(baseCss,/本人通知なし/);assert.match(live,/MemberInsightAnalysisHub/);
+test("Dashboard analysis uses Pro V3, rejects impossible PV conversion and stays collapsible",async()=>{
+  const hub=await read("src/member-insight-analysis-hub.tsx"),pro=await read("src/member-insight-analytics-pro-v3.tsx"),css=await read("src/member-insight-analytics-pro-v3.css"),ux13=await read("src/insight-ux-v13.ts"),baseCss=await read("src/member-insight-analytics-base.css"),live=await read("src/member-insight-live-v2.tsx");has(hub,["Dashboard同期＋本人通知の2つが必要","Dashboard分析の必須構成","公式Dashboard＋INSIGHT Pro分析","MemberInsightAnalyticsProV3","miah-fold","NOTIFICATION DEEP ANALYSIS","人物別反応","メンシプ","購入/支援","topActorShare","kind:\"all\"","詳細分析"]);has(pro,["INSIGHT PRO ANALYTICS V3","PV>Impは集計範囲不一致として率計算しない","以前の572%・1431.9%のような表示は出しません","PV改善余地","反応/1,000PV","流入分散度","本人通知 × PV クロス分析","記事総合ランキング","分析をすべて開く","すべて収納","conversion=comparable?pageViews/impressions*100:null"]);has(css,[".mipro-fold",".mipro-fold summary",".mipro-scatter",".mipro-table"]);has(ux13,["Dashboard分析はDashboard同期＋本人通知の2ツール必須","旧v13の「本人通知なし/あり」2分岐DOM上書きは廃止"]);assert.doesNotMatch(ux13,/本人通知なしで読込/);assert.doesNotMatch(baseCss,/本人通知なし/);assert.match(live,/MemberInsightAnalysisHub/);
 });
 
 test("ordinary INSIGHT entry stays at top while notification deep-link remains targeted",async()=>{
@@ -66,7 +66,7 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.2");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.2"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.3");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.3"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-mobile-v15"/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard setup uses browser-specific panels and requires both tools",async()=>{
