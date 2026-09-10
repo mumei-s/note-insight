@@ -1,4 +1,6 @@
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.10.1";
+import "./insight-mobile-v14";
+
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.10.2";
 export const CURRENT_NOTIFICATION_VERSION = "2.9.59";
 export const CURRENT_DASHBOARD_VERSION = "1.4.2";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
