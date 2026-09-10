@@ -12,7 +12,7 @@ This file is the highest-priority handoff for the next Work/session.
 
 ## 2026-09-10 implementation progress
 
-Implemented on the latest-main-based fix branch and being promoted to production:
+Release target: **INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bridge `1.4.2`**.
 
 1. **TOP blank-space structural fix**
    - Removed the runtime `install-free-analysis-link.js` injection from `index.html`.
@@ -44,7 +44,7 @@ Implemented on the latest-main-based fix branch and being promoted to production
 
 5. **Production backend already applied**
    - `insight-notification-ingest-v2`: production Edge Function v23 ACTIVE.
-   - `insight-notification-reclassify`: production exact-kind version deployed ACTIVE.
+   - `insight-notification-reclassify`: production exact-kind code ACTIVE.
    - DB migration `notification_classifier_exact_actions_v7` applied so the DB BEFORE trigger no longer overwrites corrected exact kinds/article updates back to `other`.
    - 603 existing resume-captured rows had their source normalized for current feed visibility while preserving capture provenance.
    - 7 existing duplicate rows sharing the same client signature were removed, retaining the richest/latest representative.
