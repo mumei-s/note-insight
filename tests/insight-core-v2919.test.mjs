@@ -7,7 +7,7 @@ test("production keeps unified INSIGHT wrapper and all main panels",async()=>{
   const app=await read("src/App.tsx"),live=await read("src/member-insight-live-v2.tsx"),analysisHub=await read("src/member-insight-analysis-hub.tsx"),full=await read("src/member-insight-unified-v4.tsx");
   assert.match(app,/MemberInsightLiveV2/);
   for(const x of ["MemberInsightUnifiedV4","MemberInsightCompleteness","MemberInsightCommentsFinal","MemberInsightFavoritesFinal","MemberInsightSocialV2","MemberInsightNotificationsFinal","MemberInsightAnalysisHub"])assert.match(live,new RegExp(x));
-  assert.match(analysisHub,/MemberInsightAnalyticsFinal/);
+  assert.match(analysisHub,/MemberInsightAnalyticsBase/);
   for(const x of ["スキ履歴","スキ順位","コメント","コメント順位","マガジン","お気に入り","フォロー","通知","記事","アカウント切替"])assert.match(full,new RegExp(x));
 });
 
