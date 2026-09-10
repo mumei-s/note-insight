@@ -59,6 +59,12 @@ Release target: **INSIGHT `2026.09.10.1` / 本人通知 `2.9.59` / Dashboard bri
    - Keep independent top-item update state for INSIGHT app, 本人通知, Dashboard sync.
    - Do not restore a redundant global update banner.
 
+## Current promotion checkpoint
+
+- Fix branch: `fix-latest-chat-20260910-v2`.
+- Latest changes update regression coverage for the native 4-card TOP, stable notification identity, exact membership kinds and INSIGHT `2026.09.10.1`.
+- Next step is fast-forwarding current `main` to this branch only after confirming `main` has not advanced independently, then watching GitHub Pages CI/build/regressions/deploy to completion.
+
 ## Required final verification
 
 After each new change:
