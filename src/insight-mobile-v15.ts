@@ -9,8 +9,9 @@ function imp(el:HTMLElement|null,name:string,value:string){el?.style.setProperty
 function clean(v:any){return String(v||"").replace(/\s+/g," ").trim()}
 function activeNoteId(){
   const links=[...document.querySelectorAll<HTMLAnchorElement>('.miu a[href*="note.com/"]')];
-  const byText=links.find(a=>/^@/.test(clean(a.textContent)));
-  if(byText)return clean(byText.textContent).replace(/^@/,"").toLowerCase();
+  const byText=links.find(a=>/@[A-Za-z0-9_-]+/.test(clean(a.textContent)));
+  const textMatch=byText?clean(byText.textContent).match(/@([A-Za-z0-9_-]+)/):null;
+  if(textMatch?.[1])return textMatch[1].toLowerCase();
   for(const a of links){try{const id=new URL(a.href).pathname.split('/').filter(Boolean)[0];if(id)return id.toLowerCase()}catch{}}
   return""
 }
@@ -19,7 +20,7 @@ function installerHref(kind:"dashboard"|"notice"){
   const id=activeNoteId(),role=roleFor(id),back=encodeURIComponent(window.location.href);
   if(kind==="notice")return`./notification-update.html?from=top&role=${role}&return=${back}`;
   const account=id?`&account=${encodeURIComponent(id)}`:"";
-  return`./dashboard-setup.html?from=top&role=${role}${account}&return=${back}&auto=0&scope=base`;
+  return`./dashboard-setup-v2.html?from=top&role=${role}${account}&return=${back}&auto=0`;
 }
 
 function installStyle(){
