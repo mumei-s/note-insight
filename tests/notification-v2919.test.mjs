@@ -42,14 +42,16 @@ test("INSIGHT notification history has one shared calendar filter for all catego
   for(const x of ["function jstDay","selectedDay:day||null","dated=day?filtered.filter","/^\\d{4}-\\d{2}-\\d{2}$/"])assert.match(feed,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
-test("INSIGHT compact UX measures top height and opens only real comment body",async()=>{
+test("INSIGHT notification categories stay in one tap panel and comments open only real body",async()=>{
   const base=await read("src/insight-source-boundaries.ts"),ux11=await read("src/insight-ux-v11.ts"),ux12=await read("src/insight-ux-v12.ts"),ux13=await read("src/insight-ux-v13.ts");
   assert.match(base,/import "\.\/insight-ux-v11"/);
   assert.match(base,/import "\.\/insight-ux-v13"/);
-  for(const x of ["mumei-history-frequency","mumei-notification-updated","grid-template-columns:repeat(3","grid-template-rows:repeat(2,34px)","mumei-all-tab","CAT_ORDER_KEY","長押しで並べ替え","mumei-comment-toggle","COMMENT_LABELS","mumei-comment-open"])assert.match(ux11,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["mumei-history-frequency","mumei-notification-updated","mumei-category-panel","mumei-category-toggle","mumei-category-open","mumeiSinglePanelBound","通知項目：","mumei-all-tab","mumei-comment-toggle","COMMENT_LABELS","mumei-comment-open"])assert.match(ux11,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["CAT_ORDER_KEY","長押しで並べ替え","mumei-moving","holdTimer"])assert.doesNotMatch(ux11,new RegExp(x));
   for(const x of ["mumei-comment-body","コメント本文","返信本文","insight-comment-events","コメント履歴から実本文を照合","実本文を特定できません","summary?.style.setProperty('display','block','important')"])assert.match(ux12,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(ux12,/通知文から本文部分を抽出/);
-  for(const x of ["fitTopHeight","grid-template-rows:max-content","box-sizing:border-box","root.style.setProperty(\"height\"","miv5-install-link","インストール / 更新","📊 ダッシュボード","miah-dashboard-with-read"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const x of ["fitTopHeight","grid-template-rows:max-content","box-sizing:border-box","grid.style.setProperty(\"height\",\"auto\"","miv5-install-link","インストール / 更新","📊 ダッシュボード","miah-dashboard-with-read"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(ux13,/const needed=/);
 });
 
 test("Dashboard analysis is an explicit two-way split for notification-free and notification-added reads",async()=>{
@@ -75,12 +77,13 @@ test("notifications remain grouped by day, reclassified daily, and always show k
 });
 
 test("INSIGHT top remains three compact source controls and linked data refresh stays tappable",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),ux13=await read("src/insight-ux-v13.ts");
+  const live=await read("src/member-insight-live-v2.tsx"),css=await read("src/member-insight-live-v2.css"),ux13=await read("src/insight-ux-v13.ts"),index=await read("index.html");
   for(const x of ["miv5-source-grid","✓ 通常データ","🔔 本人通知","📊 分析","appUpdateAvailable","notificationUpdateAvailable","dashboardUpdateAvailable","manualDataRefresh","manualRefreshRunning","waitForPublicSyncIdle","aria-label=\"連携データを更新\"","自動更新完了後に連携データを更新します"])assert.match(live,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(live,/className="miv5-source-main" disabled=\{dataBusy\}/);
   for(const x of ["📊 ダッシュボード","notification-update.html","dashboard-setup.html","インストール / 更新"])assert.match(ux13,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.match(css,/miv5-source-card\.needs-update \.miv5-source-main/);
   assert.match(css,/\.miv5-source-main\{[^}]*pointer-events:auto!important/);
+  assert.doesNotMatch(index,/insight-update-check\.js/);
 });
 
 test("public data completeness remains 8-slot grid",async()=>{
