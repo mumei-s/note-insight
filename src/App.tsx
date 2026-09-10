@@ -9,12 +9,20 @@ import { HubHome } from "./hub-home";
 import { ManagementPage } from "./management-page";
 import { MemberInsightLiveV2 } from "./member-insight-live-v2";
 import { OwnerGate } from "./owner-gate";
+import {
+  INSIGHT_TOKEN_KEY,
+  readStoredInsightAccounts,
+  rememberApplicant,
+  rememberMemberSession,
+  restoreStoredMemberSession,
+} from "./insight-account-store";
 import "./insight-polish-v1.css";
 
 const OWNER_KEY = "mumei-unified-owner-token";
-const MEMBER_KEY = "mumei-insight-access-token";
+const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const REACTIVATE_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const NOTIFICATION_TOOL_VERSION = "2.9.27";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
@@ -31,6 +39,21 @@ function currentRoute() {
 function isAdminRoute(route: string) { return ADMIN_ROUTES.has(route) || route.startsWith("owner-features/"); }
 function routeUrl(route: string) { const url = new URL(window.location.href); url.hash = route === "home" ? "" : route; return url.toString(); }
 function memberRoute(route: string) { return route === "owner-insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/"); }
+function initialMemberToken() {
+  const current = localStorage.getItem(MEMBER_KEY) || "";
+  if (current) return current;
+  return restoreStoredMemberSession()?.memberToken || "";
+}
+function isTransientSessionError(code: string, status: number) {
+  if (status >= 500 || status === 408 || status === 425 || status === 429) return true;
+  return /NETWORK|TIMEOUT|TEMPORARY|FETCH|ACCESS_ERROR|INTERNAL/i.test(code);
+}
+function isSessionInvalid(code: string) {
+  return /INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED/i.test(code);
+}
+function isMembershipInactive(code: string) {
+  return /INSIGHT_MEMBER_INACTIVE|INSIGHT_MEMBER_NOT_ACTIVE|REACTIVATION_NOT_ALLOWED|WAITING_OWNER_APPROVAL/i.test(code);
+}
 
 export function goTo(route: string) {
   const next = route || "home";
@@ -101,8 +124,26 @@ function BottomNav({ route }: { route: string }) {
 
 export function App() {
   const [route, setRoute] = useState(currentRoute);
+  const [memberToken, setMemberToken] = useState(initialMemberToken);
   const [validatedMemberToken, setValidatedMemberToken] = useState("");
   const [checkingMember, setCheckingMember] = useState(false);
+
+  useEffect(() => {
+    const sync = () => {
+      const next = localStorage.getItem(MEMBER_KEY) || restoreStoredMemberSession()?.memberToken || "";
+      setMemberToken(next);
+    };
+    window.addEventListener("mumei-insight-accounts", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener("pageshow", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.removeEventListener("mumei-insight-accounts", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("pageshow", sync);
+      window.removeEventListener("focus", sync);
+    };
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -156,7 +197,6 @@ export function App() {
   }, []);
 
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
-  const memberToken = localStorage.getItem(MEMBER_KEY) || "";
   const needsMember = memberRoute(route);
   useEffect(() => {
     let cancelled = false;
@@ -165,18 +205,80 @@ export function App() {
     setCheckingMember(true);
     const c = new AbortController();
     const timer = window.setTimeout(() => c.abort(), 20_000);
-    fetch(ACCESS_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":memberToken},body:JSON.stringify({action:"session"}),cache:"no-store",signal:c.signal})
-      .then(async r=>({ok:r.ok,p:await r.json().catch(()=>({}))}))
-      .then(({ok,p})=>{if(cancelled)return;if(ok&&p?.ok!==false){setValidatedMemberToken(memberToken)}else{localStorage.removeItem(MEMBER_KEY);setValidatedMemberToken("")}})
-      .catch(()=>{if(!cancelled)setValidatedMemberToken(memberToken)})
-      .finally(()=>{window.clearTimeout(timer);if(!cancelled)setCheckingMember(false)});
-    return()=>{cancelled=true;window.clearTimeout(timer);c.abort()};
-  },[memberToken,needsMember,validatedMemberToken]);
+
+    async function recoverExpiredSession(code: string) {
+      if (!isSessionInvalid(code)) return "";
+      const account = readStoredInsightAccounts().find((item) => item.memberToken === memberToken);
+      if (!account?.applicantToken) return "";
+      try {
+        const response = await fetch(REACTIVATE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
+          body: JSON.stringify({ action: "resume" }),
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false || !payload?.memberToken) return "";
+        if (payload?.applicantToken) rememberApplicant(payload.application, payload.applicantToken);
+        rememberMemberSession(payload.application, payload.memberToken, account.passcode);
+        return String(payload.memberToken);
+      } catch {
+        return "";
+      }
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(ACCESS_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Insight-Token": memberToken },
+          body: JSON.stringify({ action: "session" }),
+          cache: "no-store",
+          signal: c.signal,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (response.ok && payload?.ok !== false) {
+          setValidatedMemberToken(memberToken);
+          return;
+        }
+        const code = String(payload?.error || `HTTP_${response.status}`);
+        if (isSessionInvalid(code)) {
+          const recovered = await recoverExpiredSession(code);
+          if (cancelled) return;
+          if (recovered) {
+            setMemberToken(recovered);
+            setValidatedMemberToken(recovered);
+            return;
+          }
+          setValidatedMemberToken("");
+          return;
+        }
+        if (isMembershipInactive(code)) {
+          setValidatedMemberToken("");
+          return;
+        }
+        // Temporary API/server failures must never log participants out.
+        if (isTransientSessionError(code, response.status) || !response.ok) {
+          setValidatedMemberToken(memberToken);
+          return;
+        }
+        setValidatedMemberToken(memberToken);
+      } catch {
+        if (!cancelled) setValidatedMemberToken(memberToken);
+      } finally {
+        window.clearTimeout(timer);
+        if (!cancelled) setCheckingMember(false);
+      }
+    })();
+
+    return () => { cancelled = true; window.clearTimeout(timer); c.abort(); };
+  }, [memberToken, needsMember, validatedMemberToken]);
 
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   const memberValid = Boolean(memberToken && validatedMemberToken === memberToken);
   let page;
-  if (needsMember && memberToken && !memberValid && checkingMember) page = <div className="app-session-check"><div><b>INSIGHT</b><span>ログイン状態を1回だけ確認しています…</span></div></div>;
+  if (needsMember && memberToken && !memberValid && checkingMember) page = <div className="app-session-check"><div><b>INSIGHT</b><span>ログイン状態を確認しています。保存済み参加者は自動復帰します…</span></div></div>;
   else if (route === "access/insight") page = <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
