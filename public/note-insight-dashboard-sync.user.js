@@ -22,7 +22,8 @@
 
 (() => {
   'use strict';
-  const VERSION='1.4.3';
+  // Bridge protocol remains 1.4.2 so the existing setup page can detect the patched script.
+  const VERSION='1.4.2';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
