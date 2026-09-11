@@ -4,21 +4,21 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("v2.9.59 bootstrap uses refreshed notification runtime",async()=>{
-  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2958.js");
-  assert.match(boot,/@version\s+2\.9\.59/);has(boot,["runtime-v2958.js?v=2959a","notification-autoscan-v2958.js?v=2959a","notification-bootstrap-v2958.js?v=2959a"]);assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,3);has(bridge,["async function openMatchingInsight()","const VERSION='2.9.59'"]);
+test("v2.9.60 bootstrap uses complete-row notification autoscan",async()=>{
+  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2960.js");
+  assert.match(boot,/@version\s+2\.9\.60/);has(boot,["runtime-v2958.js?v=2960","notification-autoscan-v2960.js?v=2960","notification-bootstrap-v2960.js?v=2960"]);assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,3);has(bridge,["async function openMatchingInsight()","const VERSION='2.9.60'"]);
 });
 
-test("v2.9.59 runtime remains notification-only and compact",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2958.js");has(r,["const VERSION='2.9.59'","function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","前回の続きから読込","フィルター設定","INSIGHT【通知】"]);for(const x of ["年月日指定","modeDate","rangePanel"])assert.doesNotMatch(r,new RegExp(x));assert.doesNotMatch(r,/setInterval\(/);assert.doesNotMatch(r,/capture:true/);
+test("notification runtime remains notification-only and compact",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2958.js");has(r,["function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","前回の続きから読込","フィルター設定","INSIGHT【通知】"]);for(const x of ["年月日指定","modeDate","rangePanel"])assert.doesNotMatch(r,new RegExp(x));assert.doesNotMatch(r,/setInterval\(/);assert.doesNotMatch(r,/capture:true/);
 });
 
-test("v2.9.59 autoscan resumes upward and saves the stop boundary",async()=>{
-  const r=await read("public/note-insight-notification-autoscan-v2958.js");has(r,["note-notification-resume-upward-v2959","autoScan","前回保存位置から上へ読込中","停止地点まで保存","resumeSignatureV2959","FILTER_URL","location.assign(FILTER_URL)"]);for(const x of ["scanRange","modeDate","modeAll","年月日の範囲を確認してください","rangeFromV2958","rangeToV2958"])assert.doesNotMatch(r,new RegExp(x));
+test("v2.9.60 autoscan captures trusted notification rows and automatically continues saved chunks",async()=>{
+  const r=await read("public/note-insight-notification-autoscan-v2960.js");has(r,["note-notification-resume-upward-v2960","autoScan","前回保存位置から上へ自動読込中","停止地点まで保存","resumeSignatureV2960","rowish(el,trusted=false)","rowish(el,true)","safe-chunk-limit","continueAfter","autoScan(true)","全通知 保存完了","FILTER_URL","location.assign(FILTER_URL)"]);for(const x of ["scanRange","modeDate","modeAll","年月日の範囲を確認してください","rangeFromV2958","rangeToV2958"])assert.doesNotMatch(r,new RegExp(x));
 });
 
 test("notification installer returns to INSIGHT and date filtering stays in INSIGHT",async()=>{
-  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.59","日付指定はINSIGHTの【通知】側","RAW_SCRIPT","raw.githubusercontent.com","mumei_insight_version_check"]);has(setup,["最新版 v2.9.59","通知フィルター設定","checked===VERSION","location.replace(back)","日付指定はINSIGHTの【通知】履歴側"]);
+  const update=await read("public/notification-update.html"),setup=await read("public/notification-setup.html");has(update,["最新版 v2.9.60","通知一覧の全行を保存対象","判定できない新形式も「その他」","Edgeでこの画面を開く","Firefoxでこの画面を開く","RAW_SCRIPT","raw.githubusercontent.com","mumei_insight_version_check"]);has(setup,["最新版 v2.9.60","通知フィルター設定","checked===VERSION","location.replace(back)","全行を保存対象"]);
 });
 
 test("notification history keeps one shared date filter and all required categories",async()=>{
@@ -34,15 +34,15 @@ test("comment body recovery uses feed body, canonical comment history and delega
 });
 
 test("final TOP is stable normal-data, analysis, notification with detail beside account switch",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),release=await read("src/insight-release.ts"),ux13=await read("src/insight-ux-v13.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(top,["FINAL TOP: this is the only active TOP layout manager","miv5-source-card.normal{display:grid","miv5-source-card.dashboard{display:grid","miv5-source-card.notice{display:grid","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy","mumei-top-tool-install","mumei-canonical-install","dashboard-setup.html","notification-update.html","インストール / 更新","order:1","order:2","order:3"]);has(release,["insight-notification-enhancements-v17","insight-top-install-v16"]);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);has(ux13,["📊 分析","Dashboard同期＋本人通知 必須","Dashboard分析はDashboard同期＋本人通知の2ツール必須"]);has(unified,["アカウント切替","miu-topactions"]);
+  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),release=await read("src/insight-release.ts"),guide=await read("src/insight-update-guide-v18.ts"),ux13=await read("src/insight-ux-v13.ts"),unified=await read("src/member-insight-unified-v4.tsx");has(live,["miv5-source-card normal","🔔 本人通知","📊 分析","🔎 詳細分析","manualDataRefresh","aria-label=\"連携データを更新\""]);has(top,["FINAL TOP: this is the only active TOP layout manager","miv5-source-card.normal{display:grid","miv5-source-card.dashboard{display:grid","miv5-source-card.notice{display:grid","miv5-source-card.detail{display:none","grid-template-columns:repeat(3,minmax(0,1fr))","mumei-detail-analysis-proxy","mumei-public-refresh-proxy","mumei-top-tool-install","mumei-canonical-install","dashboard-setup.html","notification-update.html","インストール / 更新","order:1","order:2","order:3"]);has(release,["insight-notification-enhancements-v17","insight-top-install-v16","insight-update-guide-v18"]);has(guide,["⬆ 更新があります","必要な項目だけ表示","INSIGHT本体","本人通知","Dashboard同期","更新案内を開く"]);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);has(ux13,["📊 分析","Dashboard同期＋本人通知 必須","Dashboard分析はDashboard同期＋本人通知の2ツール必須"]);has(unified,["アカウント切替","miu-topactions"]);
 });
 
 test("public refresh remains abortable and cannot permanently disable the visible control",async()=>{
-  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),detail=await read("public/install-free-analysis-v2.html");has(live,["AbortController","PUBLIC_SYNC_TIMEOUT","MANUAL_UI_TIMEOUT","publicSyncController","manualRefreshRunning","finally{manualRefreshRunning.current=false;setDataBusy(false)}"]);has(top,["miv5-source-card.normal:not(.mumei-has-app-update)","miv5-install-link.update-ready","mumei-has-app-update"]);has(detail,["watchdog=setTimeout","更新待ちを解除しました","busy=false;refresh.disabled=false"]);
+  const live=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),detail=await read("public/install-free-analysis-v2.html");has(live,["AbortController","PUBLIC_SYNC_TIMEOUT","MANUAL_UI_TIMEOUT","publicSyncController","manualRefreshRunning","finally{manualRefreshRunning.current=false;setDataBusy(false)}"]);has(top,["miv5-source-card.normal:not(.mumei-has-app-update)","mumei-has-app-update"]);has(detail,["watchdog=setTimeout","更新待ちを解除しました","busy=false;refresh.disabled=false"]);
 });
 
-test("notification-free detail analysis is compact, explicit and graphed",async()=>{
-  const detail=await read("public/install-free-analysis-v2.html");has(detail,["<details class=\"section\"","分析をすべて開く","分析をすべて収納","1記事あたり平均スキ数","1記事あたり平均コメント数","1記事あたり平均反応数","平均反応数","反応＝スキ＋コメント","PVではありません","recentSpark","cadenceChart","daysChart","hoursChart","wordsChart","evergreenChart","articlesChart","overflow-x:hidden"]);
+test("notification-free detail analysis is compact, explicit, graphed and independently refreshable",async()=>{
+  const detail=await read("public/install-free-analysis-v2.html");has(detail,["<details class=\"section\"","分析をすべて開く","分析をすべて収納","1記事あたり平均スキ数","1記事あたり平均コメント数","1記事あたり平均反応数","平均反応数","反応＝スキ＋コメント","PVではありません","recentSpark","cadenceChart","daysChart","hoursChart","wordsChart","evergreenChart","articlesChart","backgroundRefresh(true)","post('sync',18000)","本人通知・Dashboard同期なし","overflow-x:hidden"]);
 });
 
 test("Dashboard analysis uses Pro V3, rejects impossible PV conversion and stays collapsible",async()=>{
@@ -54,7 +54,7 @@ test("ordinary INSIGHT entry stays at top while notification deep-link remains t
 });
 
 test("notifications remain grouped by day and exact-kind classification stays active",async()=>{
-  const ux=await read("src/insight-source-boundaries.ts"),reclass=await read("supabase/functions/insight-notification-reclassify/index.ts"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");has(ux,["KAOMOJI","mumei-kaomoji","mumei-notification-day-heading","ensureDailyReclassify","insight-notification-reclassify","RECLASSIFY_DAY_KEY"]);has(reclass,["event_day_jst","reclassify_pending","last_reclassified_at","daily-v2-exact-kind","nextType=type===\"other\""]);has(ingest,["resume-upward-v\\d+","event_day_jst:eventDay","classification-independent-v2","stableSemantic","storedSource","circle_plan_join","board_like_comment","board_reply_comment"]);
+  const ux=await read("src/insight-source-boundaries.ts"),reclass=await read("supabase/functions/insight-notification-reclassify/index.ts"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");has(ux,["KAOMOJI","mumei-kaomoji","mumei-notification-day-heading","ensureDailyReclassify","insight-notification-reclassify","RECLASSIFY_DAY_KEY"]);has(reclass,["event_day_jst","reclassify_pending","last_reclassified_at","daily-v2-exact-kind","nextType=type===\"other\""]);has(ingest,["resume-upward-v\\d+","event_day_jst:eventDay","classification-independent-v2","stableSemantic","storedSource","circle_plan_join","board_like_comment","board_reply_comment","return\"other\""]);
 });
 
 test("public completeness, saved login and participant presentation remain intact",async()=>{
@@ -66,7 +66,7 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.4");assert.equal(manifest.notificationVersion,"2.9.59");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.59"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-top-install-v16"/);assert.match(release,/import "\.\/insight-notification-enhancements-v17"/);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.5");assert.equal(manifest.notificationVersion,"2.9.60");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.60"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-top-install-v16"/);assert.match(release,/import "\.\/insight-notification-enhancements-v17"/);assert.match(release,/import "\.\/insight-update-guide-v18"/);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard setup uses browser-specific panels and requires both tools",async()=>{
