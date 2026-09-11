@@ -1,0 +1,19 @@
+(function(){
+'use strict';
+if(window.__mumeiNotificationFilterRestore2962)return;window.__mumeiNotificationFilterRestore2962=true;
+const VERSION='2.9.62',FRAME='mumei-v2948-frame',SETTINGS='https://mumei-s.github.io/note-insight/notification-filter.html';
+const GROUPS='mumei_insight_notification_groups_v1:',MUTES='mumei_insight_magazine_mute_ids_v5:';
+const clean=v=>String(v||'').replace(/\s+/g,' ').trim(),modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
+async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
+async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+function b64(v){return btoa(unescape(encodeURIComponent(v))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function creatorId(v){try{const raw=String(v||'').trim(),u=new URL(/^https?:\/\//i.test(raw)?raw:`https://note.com/${raw.replace(/^@/,'')}`),id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+function normalizeGroups(rawGroups,rawMutes){const out=[];for(const [i,g] of (Array.isArray(rawGroups)?rawGroups:[]).entries()){const ids=[...new Set([...(Array.isArray(g?.ids)?g.ids:[]),...(Array.isArray(g?.members)?g.members.map(x=>x?.id||x):[])].map(creatorId).filter(Boolean))];if(ids.length)out.push({name:clean(g?.name)||`グループ ${i+1}`,enabled:g?.enabled!==false,ids})}const seen=new Set(out.flatMap(g=>g.ids)),legacy=[...new Set((Array.isArray(rawMutes)?rawMutes:[]).map(creatorId).filter(Boolean))].filter(id=>!seen.has(id));if(legacy.length)out.push({name:'既存フィルター',enabled:true,ids:legacy});return out}
+async function payloadFor(id){const groups=await get(key(GROUPS,id),[]),mutes=await get(key(MUTES,id),[]);return{version:VERSION,noteId:id,groups:normalizeGroups(groups,mutes)}}
+function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+async function exportTo(url){const a=await account();if(!a)return;const target=new URL(url||SETTINGS),p=await payloadFor(a.id);target.searchParams.set('mumei_imported','1');target.searchParams.set('mumei_account',a.id);target.searchParams.set('mumei_existing',b64(JSON.stringify(p)));location.assign(target.href)}
+async function handleExportCommand(){const u=new URL(location.href);if(u.searchParams.get('mumei_filter_export')!=='1')return false;const a=await account(),back=safeReturn(u.searchParams.get('mumei_return')),expected=clean(u.searchParams.get('mumei_account')).replace(/^@/,'').toLowerCase();if(!a||!back)return true;if(expected&&expected!==a.id)return true;const p=await payloadFor(a.id),target=new URL(back);target.searchParams.set('mumei_imported','1');target.searchParams.set('mumei_account',a.id);target.searchParams.set('mumei_existing',b64(JSON.stringify(p)));location.replace(target.href);return true}
+let bound=false,tries=0;function bindSettings(){if(bound)return;try{const f=document.getElementById(FRAME),d=f?.contentDocument;if(!d){if(tries++<80)setTimeout(bindSettings,250);return}bound=true;d.addEventListener('click',e=>{const t=e.target;if(!(t instanceof d.defaultView.HTMLElement))return;if(t.id!=='settings'&&!t.closest?.('#settings'))return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void exportTo(SETTINGS+'?from=note')},true)}catch{bound=false;if(tries++<80)setTimeout(bindSettings,250)}}
+(async()=>{if(await handleExportCommand())return;setTimeout(bindSettings,150)})();
+window.addEventListener('pageshow',()=>{bound=false;tries=0;setTimeout(bindSettings,150)});
+})();
