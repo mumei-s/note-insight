@@ -138,14 +138,18 @@ export function rememberMemberSession(app: any, memberToken: string, passcode?: 
 
 export function currentStoredInsightAccount() {
   const accounts = readStoredInsightAccounts();
-  // The actually authenticated member session is the source of truth for the visible current account.
-  // A pending secondary application must never replace the visible logged-in identity merely because it was touched last.
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (token) {
     const selected = accounts.find((item) => item.memberToken === token);
     if (selected) return selected;
   }
   const active = activeId();
+  if (active) {
+    const selected = accounts.find((item) => item.noteId === active);
+    if (selected?.memberToken) return selected;
+  }
+  const newestLoggedIn = accounts.find((item) => item.memberToken && item.status !== "logged-out");
+  if (newestLoggedIn) return newestLoggedIn;
   if (active) {
     const selected = accounts.find((item) => item.noteId === active);
     if (selected) return selected;
@@ -159,13 +163,17 @@ export function currentStoredInsightAccount() {
 }
 
 export function restoreStoredMemberSession() {
+  const accounts = readStoredInsightAccounts();
   const current = currentStoredInsightAccount();
-  if (!current?.memberToken) return null;
-  localStorage.setItem(INSIGHT_TOKEN_KEY, current.memberToken);
-  if (current.applicantToken) localStorage.setItem(APPLICANT_KEY, current.applicantToken);
-  if (current.passcode) localStorage.setItem(PASSCODE_KEY, current.passcode);
-  setActiveId(current.noteId);
-  return current;
+  const selected = current?.memberToken ? current : accounts.find((item) => item.memberToken && item.status !== "logged-out") || null;
+  if (!selected?.memberToken) return null;
+  localStorage.setItem(INSIGHT_TOKEN_KEY, selected.memberToken);
+  if (selected.applicantToken) localStorage.setItem(APPLICANT_KEY, selected.applicantToken);
+  else localStorage.removeItem(APPLICANT_KEY);
+  if (selected.passcode) localStorage.setItem(PASSCODE_KEY, selected.passcode);
+  else localStorage.removeItem(PASSCODE_KEY);
+  setActiveId(selected.noteId);
+  return selected;
 }
 
 export function activateStoredInsightAccount(noteId: string) {
