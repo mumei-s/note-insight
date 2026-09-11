@@ -4,21 +4,25 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("v2.9.61 bootstrap keeps complete-row autoscan and filter safety",async()=>{
-  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2961.js"),safety=await read("public/note-insight-notification-filter-safety-v2961.js");
-  assert.match(boot,/@version\s+2\.9\.61/);has(boot,["runtime-v2958.js?v=2961","notification-filter-safety-v2961.js?v=2961","notification-autoscan-v2960.js?v=2961","notification-bootstrap-v2961.js?v=2961"]);assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,4);has(bridge,["async function openMatchingInsight()","const VERSION='2.9.61'"]);has(safety,["unsafeContainer","distinctNotificationDescendants","data-mumei-filter-container-restored","親コンテナ"]);
+test("v2.9.62 bootstrap keeps complete-row autoscan, safety and filter restore",async()=>{
+  const boot=await read("public/note-insight-notification-sync.user.js"),bridge=await read("public/note-insight-notification-bootstrap-v2962.js"),safety=await read("public/note-insight-notification-filter-safety-v2961.js"),restore=await read("public/note-insight-notification-filter-restore-v2962.js");
+  assert.match(boot,/@version\s+2\.9\.62/);has(boot,["runtime-v2958.js?v=2962","notification-filter-safety-v2961.js?v=2962","notification-filter-restore-v2962.js?v=2962","notification-autoscan-v2960.js?v=2962","notification-bootstrap-v2962.js?v=2962"]);assert.equal((boot.match(/\/\/ @require\s+/g)||[]).length,5);has(bridge,["async function openMatchingInsight()","const VERSION='2.9.62'"]);has(safety,["unsafeContainer","distinctNotificationDescendants","data-mumei-filter-container-restored","親コンテナ"]);has(restore,["mumei_filter_export","mumei_existing","normalizeGroups","既存フィルター","exportTo"]);
 });
 
 test("notification runtime remains notification-only and compact",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2958.js");has(r,["function messagingContext()","function findNoticeShell()","REACTION_RE","スキした人","リアクション一覧","SHELL='mumei-notice-shell-v2958'","前回の続きから読込","フィルター設定","INSIGHT【通知】"]);for(const x of ["年月日指定","modeDate","rangePanel"])assert.doesNotMatch(r,new RegExp(x));assert.doesNotMatch(r,/setInterval\(/);assert.doesNotMatch(r,/capture:true/);
 });
 
-test("v2.9.61 keeps all-row autoscan and automatic chunk continuation",async()=>{
+test("v2.9.62 keeps all-row autoscan and automatic chunk continuation",async()=>{
   const r=await read("public/note-insight-notification-autoscan-v2960.js");has(r,["note-notification-resume-upward-v2960","autoScan","前回保存位置から上へ自動読込中","停止地点まで保存","resumeSignatureV2960","rowish(el,trusted=false)","rowish(el,true)","safe-chunk-limit","continueAfter","autoScan(true)","全通知 保存完了","FILTER_URL","location.assign(FILTER_URL)"]);for(const x of ["scanRange","modeDate","modeAll","年月日の範囲を確認してください","rangeFromV2958","rangeToV2958"])assert.doesNotMatch(r,new RegExp(x));
 });
 
-test("notification installer returns to INSIGHT and exposes v2.9.61 browser guidance",async()=>{
-  const redirect=await read("public/notification-update.html"),update=await read("public/notification-update-v2961.html"),setupRedirect=await read("public/notification-setup.html"),setup=await read("public/notification-setup-v2961.html");has(redirect,["notification-update-v2961.html","v2.9.61"]);has(update,["最新版 v2.9.61","通知1行単位","Edgeでこの画面を開く","Firefoxでこの画面を開く","raw.githubusercontent.com","mumei_insight_version_check"]);has(setupRedirect,["notification-setup-v2961.html","v2.9.61"]);has(setup,["2.9.61","通知フィルター設定","checked===VERSION","location.replace(back)","全部消える"]);
+test("notification installer is popup-free and exposes every browser path",async()=>{
+  const redirect=await read("public/notification-update.html"),update=await read("public/notification-update-v2962.html"),setupRedirect=await read("public/notification-setup.html"),setup=await read("public/notification-setup-v2962.html");has(redirect,["notification-update-v2962.html","v2.9.62"]);has(update,["最新版 v2.9.62","Android Edge","Android Firefox","Android Chrome / その他","iPhone / iPad Safari","iPhone / iPad Chrome・Edge・Firefox","Mac Safari","PC Chrome / Edge / Firefox","Edgeでこの画面を開く","Firefoxでこの画面を開く","Userscriptsを入れる","Tampermonkey公式","同じタブ","別タブは使いません","script-page","script-raw","raw.githubusercontent.com","mumei_insight_version_check"]);assert.doesNotMatch(update,/window\.open\(/);has(setupRedirect,["notification-setup-v2962.html","v2.9.62"]);has(setup,["2.9.62","通知フィルター設定","checked===VERSION","location.replace(back)"]);
+});
+
+test("filter settings restore existing entries and accept profile/article URLs",async()=>{
+  const page=await read("public/notification-filter.html"),restore=await read("public/note-insight-notification-filter-restore-v2962.js");has(page,["登録済みをnoteから復元","プロフィールURL・記事URL・@ID・ID","mumei_existing","mergeGroups","削除せずマージ","note URL / 記事URL / @ID / ID","mumei_filter_export"]);has(restore,["mumei_existing","mumei_filter_export","mumei_insight_notification_groups_v1:","mumei_insight_magazine_mute_ids_v5:"]);assert.match(page,/u\.pathname\.split\('\/'\)\.filter\(Boolean\)\[0\]/);
 });
 
 test("filter safety never hides notification list parent containers",async()=>{
@@ -70,7 +74,7 @@ test("analysis navigation keeps heavy in-app graphs collapsible",async()=>{
 });
 
 test("release tracks are independent and current",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.5");assert.equal(manifest.notificationVersion,"2.9.61");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.61"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-top-install-v16"/);assert.match(release,/import "\.\/insight-notification-enhancements-v17"/);assert.match(release,/import "\.\/insight-update-guide-v18"/);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);assert.match(dash,/@version\s+1\.4\.3/);
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");assert.equal(manifest.appVersion,"2026.09.11.5");assert.equal(manifest.notificationVersion,"2.9.62");assert.equal(manifest.dashboardVersion,"1.4.2");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.11\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "2\.9\.62"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.2"/);assert.match(release,/import "\.\/insight-top-install-v16"/);assert.match(release,/import "\.\/insight-notification-enhancements-v17"/);assert.match(release,/import "\.\/insight-update-guide-v18"/);assert.doesNotMatch(release,/insight-mobile-v14|insight-mobile-v15|insight-top-install-dedupe-v1/);assert.match(dash,/@version\s+1\.4\.3/);
 });
 
 test("Dashboard setup uses browser-specific panels and requires both tools",async()=>{
