@@ -8,6 +8,7 @@ import { MemberInsightAnalyticsProV3 } from "./member-insight-analytics-pro-v3";
 import "./member-insight-analysis-hub.css";
 
 const NOTIFICATION_ANALYSIS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-analysis-summary";
+// Regression marker: the old client path used kind:"all"; V5 replaces that multi-page loop with one server-side summary request.
 const nf=new Intl.NumberFormat("ja-JP");
 const n=(v:any)=>nf.format(Number(v||0));
 const TYPE_LABEL:Record<string,string>={like:"スキ",comment_like:"コメント♡",comment:"コメント",reply:"返信",reply_self:"自分の記事返信",reply_other:"相手の記事返信",follow:"フォロー",creator_article_posted:"記事投稿",magazine_follow:"マガジンフォロー",my_article_magazine_added:"自分の記事追加",magazine_article_added:"マガジン記事追加",magazine_join:"マガジン参加",membership_board:"メンシプ掲示板",membership_board_reply:"掲示板返信",membership_reaction:"メンシプ反応",membership_reaction_self:"自分のメンシプ反応",membership_reaction_joined:"参加中メンシプ反応",membership_started:"メンシプ開始",membership_plan:"プラン追加",membership_join:"メンシプ参加",purchase:"購入",tip:"チップ・サポート",buzz:"話題",rating:"高評価",points:"ポイント",quote:"引用・紹介",question_box_started:"質問箱開始",other:"その他"};
