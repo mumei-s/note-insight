@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.12.1",
-  "notificationVersion": "2.9.65",
+  "appVersion": "2026.09.13.1",
+  "notificationVersion": "2.9.66",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-12T14:40:00+09:00",
+  "releasedAt": "2026-09-13T00:18:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知v2.9.65。Edge限定ではなくChrome/Firefox/Samsung Internet/Yahoo系/Safariをブラウザ別診断。SafariはiPhone/iPad/macOSを分離。通知保存側の読込器source許可不整合を修正し、本人通知あり/なし分析とグラフ強化を反映。"
+  "note": "本人通知v2.9.66。インストール済みなのに更新表示が変わらない不具合を修正。note側bootstrapの版返送を2.9.66へ統一し、更新画面がnotificationInstalledを受け取って保存。直接導入は別タブ化し、戻った時に実インストール版を自動確認。SafariはUserscripts導入後のnote実版確認を明示。"
 }
