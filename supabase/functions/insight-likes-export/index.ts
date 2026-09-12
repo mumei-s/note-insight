@@ -66,39 +66,51 @@ Deno.serve(async (req) => {
   try {
     const m = await member(req);
     const body = await req.json().catch(() => ({}));
-    const requested = Math.max(1, Math.min(300, Math.floor(Number(body?.count || 100))));
+    const requested = Math.max(1, Math.min(1500, Math.floor(Number(body?.count || 100))));
     const unique = body?.unique !== false;
     const dataMember = m.noteId.toLowerCase() === "ss_yr" ? "owner" : m.id;
-    const scanLimit = Math.min(3000, Math.max(400, requested * 12));
-
-    const { data, error } = await db
-      .from("insight_public_likes")
-      .select("article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at")
-      .eq("member_id", dataMember)
-      .order("liked_at", { ascending: false, nullsFirst: false })
-      .limit(scanLimit);
-    if (error) throw error;
+    const pageSize = 1000;
+    const scanLimit = Math.min(20000, Math.max(2000, requested * 10));
 
     const rows: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
-    for (const raw of data || []) {
-      const likerKey = String(raw?.liker_key || "").trim();
-      const actorUrl = String(raw?.actor_url || "").trim();
-      const urlname = urlnameFromUrl(actorUrl);
-      const identity = likerKey || urlname;
-      if (!identity || !urlname) continue;
-      if (unique && seen.has(identity)) continue;
-      seen.add(identity);
-      rows.push({
-        likerKey: identity,
-        urlname,
-        creator: String(raw?.actor_name || urlname),
-        actorUrl: actorUrl || `https://note.com/${urlname}`,
-        actorImageUrl: String(raw?.actor_image_url || ""),
-        likedAt: raw?.liked_at ? String(raw.liked_at) : null,
-        likedArticleKey: String(raw?.article_key || ""),
-      });
-      if (rows.length >= requested) break;
+    let scanned = 0;
+
+    while (rows.length < requested && scanned < scanLimit) {
+      const from = scanned;
+      const to = Math.min(scanLimit, from + pageSize) - 1;
+      const { data, error } = await db
+        .from("insight_public_likes")
+        .select("article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at")
+        .eq("member_id", dataMember)
+        .order("liked_at", { ascending: false, nullsFirst: false })
+        .range(from, to);
+      if (error) throw error;
+      const batch = data || [];
+      if (!batch.length) break;
+
+      for (const raw of batch) {
+        const likerKey = String(raw?.liker_key || "").trim();
+        const actorUrl = String(raw?.actor_url || "").trim();
+        const urlname = urlnameFromUrl(actorUrl);
+        const identity = likerKey || urlname;
+        if (!identity || !urlname) continue;
+        if (unique && seen.has(identity)) continue;
+        seen.add(identity);
+        rows.push({
+          likerKey: identity,
+          urlname,
+          creator: String(raw?.actor_name || urlname),
+          actorUrl: actorUrl || `https://note.com/${urlname}`,
+          actorImageUrl: String(raw?.actor_image_url || ""),
+          likedAt: raw?.liked_at ? String(raw.liked_at) : null,
+          likedArticleKey: String(raw?.article_key || ""),
+        });
+        if (rows.length >= requested) break;
+      }
+
+      scanned += batch.length;
+      if (batch.length < pageSize) break;
     }
 
     return reply(req, {
@@ -107,6 +119,7 @@ Deno.serve(async (req) => {
       member: { noteId: m.noteId, displayName: m.displayName },
       requested,
       unique,
+      scanned,
       count: rows.length,
       rows,
     });
