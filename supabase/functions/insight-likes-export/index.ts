@@ -8,6 +8,22 @@ const db = createClient(
 
 const ORIGIN = "https://mumei-s.github.io";
 
+type LikeRow = {
+  article_key?: unknown;
+  liker_key?: unknown;
+  actor_name?: unknown;
+  actor_url?: unknown;
+  actor_image_url?: unknown;
+  liked_at?: unknown;
+};
+
+type ArticleRow = {
+  article_key?: unknown;
+  title?: unknown;
+  url?: unknown;
+  publish_at?: unknown;
+};
+
 function headers(req: Request) {
   const origin = req.headers.get("origin") || "";
   return {
@@ -60,6 +76,26 @@ function urlnameFromUrl(value: unknown) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+function normalizeLike(raw: LikeRow) {
+  const likerKey = String(raw?.liker_key || "").trim();
+  const actorUrl = String(raw?.actor_url || "").trim();
+  const urlname = urlnameFromUrl(actorUrl);
+  const identity = likerKey || urlname;
+  if (!identity || !urlname) return null;
+  return {
+    identity,
+    row: {
+      likerKey: identity,
+      urlname,
+      creator: String(raw?.actor_name || urlname),
+      actorUrl: actorUrl || `https://note.com/${urlname}`,
+      actorImageUrl: String(raw?.actor_image_url || ""),
+      likedAt: raw?.liked_at ? String(raw.liked_at) : null,
+      likedArticleKey: String(raw?.article_key || ""),
+    },
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: headers(req) });
   if (req.method !== "POST") return reply(req, { ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -68,58 +104,91 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const requested = Math.max(1, Math.min(1500, Math.floor(Number(body?.count || 100))));
     const unique = body?.unique !== false;
+    const scope = String(body?.scope || "recent-likes");
     const dataMember = m.noteId.toLowerCase() === "ss_yr" ? "owner" : m.id;
-    const pageSize = 1000;
-    const scanLimit = Math.min(20000, Math.max(2000, requested * 10));
-
     const rows: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
+    const sourceArticles: Array<Record<string, unknown>> = [];
     let scanned = 0;
 
-    while (rows.length < requested && scanned < scanLimit) {
-      const from = scanned;
-      const to = Math.min(scanLimit, from + pageSize) - 1;
-      const { data, error } = await db
-        .from("insight_public_likes")
-        .select("article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at")
-        .eq("member_id", dataMember)
-        .order("liked_at", { ascending: false, nullsFirst: false })
-        .range(from, to);
-      if (error) throw error;
-      const batch = data || [];
-      if (!batch.length) break;
-
+    const pushBatch = (batch: LikeRow[]) => {
       for (const raw of batch) {
-        const likerKey = String(raw?.liker_key || "").trim();
-        const actorUrl = String(raw?.actor_url || "").trim();
-        const urlname = urlnameFromUrl(actorUrl);
-        const identity = likerKey || urlname;
-        if (!identity || !urlname) continue;
-        if (unique && seen.has(identity)) continue;
-        seen.add(identity);
-        rows.push({
-          likerKey: identity,
-          urlname,
-          creator: String(raw?.actor_name || urlname),
-          actorUrl: actorUrl || `https://note.com/${urlname}`,
-          actorImageUrl: String(raw?.actor_image_url || ""),
-          likedAt: raw?.liked_at ? String(raw.liked_at) : null,
-          likedArticleKey: String(raw?.article_key || ""),
-        });
+        const normalized = normalizeLike(raw);
+        if (!normalized) continue;
+        if (unique && seen.has(normalized.identity)) continue;
+        seen.add(normalized.identity);
+        rows.push(normalized.row);
         if (rows.length >= requested) break;
       }
+    };
 
-      scanned += batch.length;
-      if (batch.length < pageSize) break;
+    if (scope === "recent-articles") {
+      const { data: articles, error: articleError } = await db
+        .from("insight_public_articles")
+        .select("article_key,title,url,publish_at")
+        .eq("member_id", dataMember)
+        .order("publish_at", { ascending: false, nullsFirst: false })
+        .limit(80);
+      if (articleError) throw articleError;
+
+      for (const article of (articles || []) as ArticleRow[]) {
+        if (rows.length >= requested) break;
+        const articleKey = String(article?.article_key || "").trim();
+        if (!articleKey) continue;
+        const { data: likes, error: likeError } = await db
+          .from("insight_public_likes")
+          .select("article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at")
+          .eq("member_id", dataMember)
+          .eq("article_key", articleKey)
+          .order("liked_at", { ascending: false, nullsFirst: false })
+          .limit(Math.min(3000, Math.max(600, requested * 2)));
+        if (likeError) throw likeError;
+        const batch = (likes || []) as LikeRow[];
+        scanned += batch.length;
+        if (!batch.length) continue;
+        const before = rows.length;
+        pushBatch(batch);
+        if (rows.length > before) {
+          sourceArticles.push({
+            articleKey,
+            title: String(article?.title || ""),
+            url: String(article?.url || ""),
+            publishAt: article?.publish_at ? String(article.publish_at) : null,
+            scannedLikes: batch.length,
+            addedUnique: rows.length - before,
+          });
+        }
+      }
+    } else {
+      const pageSize = 1000;
+      const scanLimit = Math.min(20000, Math.max(2000, requested * 10));
+      while (rows.length < requested && scanned < scanLimit) {
+        const from = scanned;
+        const to = Math.min(scanLimit, from + pageSize) - 1;
+        const { data, error } = await db
+          .from("insight_public_likes")
+          .select("article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at")
+          .eq("member_id", dataMember)
+          .order("liked_at", { ascending: false, nullsFirst: false })
+          .range(from, to);
+        if (error) throw error;
+        const batch = (data || []) as LikeRow[];
+        if (!batch.length) break;
+        pushBatch(batch);
+        scanned += batch.length;
+        if (batch.length < pageSize) break;
+      }
     }
 
     return reply(req, {
       ok: true,
       source: "insight_public_likes",
+      scope,
       member: { noteId: m.noteId, displayName: m.displayName },
       requested,
       unique,
       scanned,
+      sourceArticles,
       count: rows.length,
       rows,
     });
