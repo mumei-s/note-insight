@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.11.5",
-  "notificationVersion": "2.9.62",
+  "appVersion": "2026.09.12.1",
+  "notificationVersion": "2.9.65",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-11T18:25:00+09:00",
+  "releasedAt": "2026-09-12T14:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知v2.9.62。既存フィルター登録をnote側Userscript保存領域から設定画面へ復元し、現在の設定へ削除せずマージ。プロフィールURL・記事URL・@ID・IDすべて入力可。v2.9.61のフィルター全消え防止、v2.9.60の全通知保存・未知形式other保持・120件区切り自動続き読込を維持。"
+  "note": "本人通知v2.9.65。Edge限定ではなくChrome/Firefox/Samsung Internet/Yahoo系/Safariをブラウザ別診断。SafariはiPhone/iPad/macOSを分離。通知保存側の読込器source許可不整合を修正し、本人通知あり/なし分析とグラフ強化を反映。"
 }
