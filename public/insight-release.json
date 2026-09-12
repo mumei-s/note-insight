@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.13.1",
-  "notificationVersion": "2.9.66",
+  "appVersion": "2026.09.13.2",
+  "notificationVersion": "2.9.68",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-13T00:18:00+09:00",
+  "releasedAt": "2026-09-13T08:05:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知v2.9.66。インストール済みなのに更新表示が変わらない不具合を修正。note側bootstrapの版返送を2.9.66へ統一し、更新画面がnotificationInstalledを受け取って保存。直接導入は別タブ化し、戻った時に実インストール版を自動確認。SafariはUserscripts導入後のnote実版確認を明示。"
+  "note": "本人通知v2.9.68。記事・コメント・他クリエイターページのリンク周辺を通知画面と誤認して固定パネルを表示する不具合を根本修正。旧3ボタンfallbackをreader本体から削除し、正規4ボタンは上部の通知操作直後またはnotifications専用画面だけで表示。"
 }
