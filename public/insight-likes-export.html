@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
-  <title>INSIGHT スキ100取得</title>
+  <title>INSIGHT スキ取得</title>
   <style>
     html,body{margin:0;min-height:100%;background:#071018;color:#e8f5ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
     main{min-height:100vh;display:grid;place-items:center;padding:22px;box-sizing:border-box}
@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-<main><section class="card"><h1>INSIGHT → note編集</h1><div id="status" class="status">全記事のスキ履歴を取得しています…</div><button id="close" type="button" hidden>閉じる</button></section></main>
+<main><section class="card"><h1>INSIGHT → note編集</h1><div id="status" class="status">直近のスキ履歴を人物重複なしで取得しています…</div><button id="close" type="button" hidden>閉じる</button></section></main>
 <script>
 (() => {
   'use strict';
@@ -24,7 +24,7 @@
   const close = document.getElementById('close');
   const q = new URLSearchParams(location.search);
   const requestId = String(q.get('request') || '');
-  const count = Math.max(1, Math.min(300, Number(q.get('count') || 100)));
+  const count = Math.max(1, Math.min(1500, Number(q.get('count') || 100)));
   const unique = q.get('unique') !== '0';
 
   function show(text, kind='') {
@@ -50,12 +50,13 @@
     }
     const token = localStorage.getItem(TOKEN_KEY) || '';
     if (!token) {
-      show('INSIGHTのログイン情報がありません。先にINSIGHTへログインしてから、note編集画面で「INSIGHT全体」を押してください。','bad');
+      show('INSIGHTのログイン情報がありません。先にINSIGHTへログインしてから、note編集画面で取得を実行してください。','bad');
       send({ ok:false, error:'INSIGHT_LOGIN_REQUIRED' });
       close.hidden = false;
       return;
     }
     try {
+      show(`INSIGHTから最大 ${count}人を取得中…`);
       const response = await fetch(ENDPOINT, {
         method:'POST',
         cache:'no-store',
