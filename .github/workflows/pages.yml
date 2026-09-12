@@ -37,7 +37,7 @@ jobs:
           node --check public/note-pon-editor-v6.user.js
       - run: npm run build
       - name: Unified INSIGHT regression tests
-        run: node --test tests/insight-core-v2919.test.mjs tests/favorite-reader-current.test.mjs tests/notification-v2919.test.mjs tests/polish-regression.test.mjs
+        run: node --test tests/insight-core-v2919.test.mjs tests/favorite-reader-current.test.mjs tests/notification-v2919.test.mjs tests/notification-dock-scope.test.mjs tests/polish-regression.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
