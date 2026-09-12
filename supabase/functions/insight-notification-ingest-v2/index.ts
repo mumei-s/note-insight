@@ -83,7 +83,7 @@ function stableSemantic(clientSignature:string,actor:string,target:string|null,r
 }
 function allowedExplicitSource(source:string){
   if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
-  return /^note-notification-(?:explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
+  return /^note-notification-(?:reader-v\d+|explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
 }
 function storedSource(source:string){return /^note-notification-resume-(?:upward|downward)-v\d+$/.test(source)?"note-notification-manual-sync-v2959":source}
 
@@ -120,7 +120,7 @@ Deno.serve(async(req)=>{
         const seen=new Set(candidates.map(x=>x.id));for(const x of (bySignature||[]) as ExistingRow[])if(!seen.has(x.id)){seen.add(x.id);candidates.push(x)}
       }
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v20-stable-event",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:"classification-independent-v2"}};
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v21-reader-source",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
