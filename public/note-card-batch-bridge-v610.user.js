@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 王子+INSIGHT 18.5
+// @name         無名S note 極薄＋通知 王子+INSIGHT 18.5.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.5.0
-// @description  #王子ごっこ全記事＋INSIGHTスキ人物重複なし最大500を最初から1つに統合。極薄画像へ各記事URL埋込→本物noteカード→同じ投稿で送信→投稿後カードのみ削除。
+// @version      18.5.1
+// @description  #王子ごっこ＋INSIGHTスキ人物重複なし最大500。#完了済みなら極薄画像・URL埋込・通知カードを保持したままINSIGHT分だけ後付け可能。最後は同じ投稿で送信し、投稿後カードのみ削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://mumei-s.github.io/note-insight/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-card-batch-bridge-v610.user.js
@@ -15,6 +15,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-lite-v183.js?v=18.2.0
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-prince-special-v184.js?v=18.4.0
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-prince-combined-v185.js?v=18.5.0
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-prince-append-v1851.js?v=18.5.1
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
