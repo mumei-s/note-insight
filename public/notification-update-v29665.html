@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+<title>本人通知 更新｜INSIGHT</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(680px,calc(100% - 14px));margin:auto;padding:10px 0 28px}.card{border:1px solid #35506b;border-radius:14px;background:#0d1620;padding:12px}h1{font-size:23px;margin:4px 0 8px}.badge{display:inline-flex;padding:4px 8px;border:1px solid #5ecde7;border-radius:999px;color:#bdf4ff;background:#102737;font-weight:950;font-size:11px}.note,.status{margin-top:8px;padding:9px;border:1px solid #3f5d75;border-radius:9px;background:#09131c;color:#c5e9f7;font-size:11px;line-height:1.55}.warn{border-color:#80652f;background:#211907;color:#ffe7a9}.ok{border-color:#47734f;background:#0e1d13;color:#b8ffca}.btn{width:100%;min-height:44px;margin-top:8px;border:1px solid #405c74;border-radius:9px;background:#122131;color:#e5f2ff;font-weight:950;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;padding:8px}.lime{background:#b6ff38;border-color:#b6ff38;color:#071016}.blue{background:#11374a;border-color:#55d8f1}.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.tiny{font-size:10px;color:#8fa2b5;line-height:1.55}.steps{margin-top:10px;padding:10px;border:1px solid #30485b;border-radius:10px;background:#09131d;font-size:11px;line-height:1.7}.steps b{color:#fff}.hide{display:none!important}@media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="wrap"><section class="card">
+<small>NOTIFICATION TOOL UPDATE</small>
+<h1>本人通知・更新</h1>
+<span class="badge">配布Hotfix v2.9.66.5</span>
+<div class="note"><b>文字列表示になる更新経路を修正しました。</b><br>Raw GitHub直結は使わず、INSIGHTと同じ <b>mumei-s.github.io</b> 配下から更新します。</div>
+<div id="status" class="status">更新方法を選んでください。</div>
+<a id="install" class="btn lime">① 本人通知を更新する</a>
+<a id="download" class="btn blue" download="mumei-note-insight-notification.user.js">② 文字列になる場合：更新ファイルを保存</a>
+<div class="steps"><b>②を使った場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification.user.js</b> を選択してください。<br><br>更新後は、開いているnoteタブを全部閉じてからnoteを開き直してください。</div>
+<div class="grid"><a id="edge" class="btn">Edgeでこの更新ページを開く</a><a id="firefox" class="btn">Firefoxでこの更新ページを開く</a></div>
+<button id="verify" class="btn" type="button">note側の本人通知基盤を確認</button>
+<a id="back" class="btn" href="./">INSIGHTへ戻る</a>
+<p class="tiny">Android Edge / Android Firefox / Android Chrome / Chromium系 / Samsung Internet / Yahooブラウザ / Yahooアプリ内ブラウザ / iPhone / iPad Safari / iPhone / iPad Chrome・Edge・Firefox / macOS Safari / PC Chrome / Edge / Firefox / Chromium 対応。SafariはUserscriptsを使用。Tampermonkey公式やUserscriptsを入れる導線は従来ページから利用できます。Raw直結は文字列表示対策のため、このページの主導線では使用しません。</p>
+</section></main>
+<script>
+const HOTFIX='2.9.66.5',BASE='2.9.66',q=new URLSearchParams(location.search),status=document.getElementById('status');
+const scriptUrl=new URL('./note-insight-notification-sync.user.js',location.href);scriptUrl.searchParams.set('install','29665');scriptUrl.searchParams.set('ts',String(Date.now()));
+const install=document.getElementById('install'),download=document.getElementById('download');install.href=scriptUrl.href;download.href=scriptUrl.href;
+function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
+const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
+function intent(pkg){const u=new URL(location.href);return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=${pkg};S.browser_fallback_url=${encodeURIComponent(u.href)};end`}
+document.getElementById('edge').href=intent('com.microsoft.emmx');document.getElementById('firefox').href=intent('org.mozilla.firefox');
+install.addEventListener('click',()=>{sessionStorage.setItem('mumei-hotfix-install','1');status.className='status';status.textContent='インストール画面へ移動します。文字列が出た場合は戻って②を使ってください。'});
+download.addEventListener('click',()=>{status.className='status ok';status.textContent='更新ファイルを保存します。保存後、Tampermonkeyの「ファイルからインポート」で読み込んでください。'});
+const checked=String(q.get('notificationInstalled')||'');if(checked){status.className='status '+(checked.startsWith(BASE)?'ok':'warn');status.textContent=checked.startsWith(BASE)?`✅ note側の本人通知基盤 v${checked} を確認。配布Hotfixは v${HOTFIX} です。`:`note側の確認版：${checked}`;}
+function verifyReturn(){const u=new URL(location.href);u.searchParams.delete('notificationInstalled');u.searchParams.delete('notificationCheckedAt');u.searchParams.delete('notificationUpdateResult');u.searchParams.set('return',back);return u.href}
+document.getElementById('verify').onclick=()=>location.assign(`https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(verifyReturn())}`);
+window.addEventListener('pageshow',()=>{if(sessionStorage.getItem('mumei-hotfix-install')==='1'&&!checked){status.className='status';status.textContent='戻りました。Tampermonkey側で更新確認が出なかった場合は②のファイル保存を使ってください。'}});
+</script>
+</body></html>
