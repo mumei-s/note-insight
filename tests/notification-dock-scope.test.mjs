@@ -16,6 +16,16 @@ test("notification reader never creates a global fallback dock", async () => {
   assert.ok(routeGuard >= 0 && globalRows > routeGuard, "document-wide notification scan must be route-gated");
 });
 
+test("primary notification dock requires an explicit notification-open intent", async () => {
+  const runtime = await read("public/note-insight-notification-runtime-v2958.js");
+  assert.match(runtime, /noticeIntentUntil/);
+  assert.match(runtime, /function explicitNoticeTrigger\(el\)/);
+  assert.match(runtime, /if\(!route&&!panelOpen&&Date\.now\(\)>noticeIntentUntil\)return null/);
+  assert.match(runtime, /if\(trigger\)\{noticeIntentUntil=Date\.now\(\)\+3000/);
+  assert.match(runtime, /if\(notificationRoute\(\)\)setTimeout\(\(\)=>void maintenance\(\),320\)/);
+  assert.doesNotMatch(runtime, /r\.top<180\|\|\/通知\|お知らせ\|メッセージ/);
+});
+
 test("notification safety layer contains no fallback-dock sentinel workaround", async () => {
   const safety = await read("public/note-insight-notification-filter-safety-v2961.js");
   assert.doesNotMatch(safety, /disableLegacyFallback/);
