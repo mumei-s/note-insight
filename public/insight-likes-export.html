@@ -26,6 +26,7 @@
   const requestId = String(q.get('request') || '');
   const count = Math.max(1, Math.min(1500, Number(q.get('count') || 100)));
   const unique = q.get('unique') !== '0';
+  const recentArticles = requestId.startsWith('prince500-');
 
   function show(text, kind='') {
     status.textContent = text;
@@ -56,24 +57,25 @@
       return;
     }
     try {
-      show(`INSIGHTから最大 ${count}人を取得中…`);
+      show(recentArticles ? `最近の記事から順に、重複なし最大 ${count}人を取得中…` : `INSIGHTから最大 ${count}人を取得中…`);
       const response = await fetch(ENDPOINT, {
         method:'POST',
         cache:'no-store',
         headers:{ 'Content-Type':'application/json', 'X-Insight-Token':token },
-        body:JSON.stringify({ count, unique })
+        body:JSON.stringify({ count, unique, scope:recentArticles?'recent-articles':'recent-likes' })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) throw new Error(String(payload?.error || `HTTP_${response.status}`));
       const rows = Array.isArray(payload?.rows) ? payload.rows : [];
       if (!rows.length) throw new Error('INSIGHT_LIKES_EMPTY');
-      const delivered = send({ ok:true, rows, count:rows.length, member:payload.member || null });
+      const delivered = send({ ok:true, rows, count:rows.length, member:payload.member || null, sourceArticles:payload.sourceArticles || [] });
       if (!delivered) {
         show(`取得は完了しました（${rows.length}人）が、元のnote編集画面へ返せませんでした。note編集画面へ戻ってもう一度押してください。`,'bad');
         close.hidden = false;
         return;
       }
-      show(`INSIGHTから ${rows.length}人 取得完了。note編集画面へ戻します。`,'ok');
+      const articleCount = Array.isArray(payload?.sourceArticles) ? payload.sourceArticles.length : 0;
+      show(recentArticles ? `最近の記事 ${articleCount}本から ${rows.length}人 取得完了。note編集画面へ戻します。` : `INSIGHTから ${rows.length}人 取得完了。note編集画面へ戻します。`,'ok');
       setTimeout(() => window.close(), 650);
     } catch (error) {
       const message = error?.message || String(error);
