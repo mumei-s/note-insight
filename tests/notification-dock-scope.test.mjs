@@ -16,13 +16,16 @@ test("notification reader never creates a global fallback dock", async () => {
   assert.ok(routeGuard >= 0 && globalRows > routeGuard, "document-wide notification scan must be route-gated");
 });
 
-test("primary notification dock requires an explicit notification-open intent", async () => {
+test("primary notification dock requires explicit intent or verified note notification rows", async () => {
   const runtime = await read("public/note-insight-notification-runtime-v2958.js");
   assert.match(runtime, /noticeIntentUntil/);
   assert.match(runtime, /function explicitNoticeTrigger\(el\)/);
-  assert.match(runtime, /if\(!route&&!panelOpen&&Date\.now\(\)>noticeIntentUntil\)return null/);
-  assert.match(runtime, /if\(trigger\)\{noticeIntentUntil=Date\.now\(\)\+3000/);
-  assert.match(runtime, /if\(notificationRoute\(\)\)setTimeout\(\(\)=>void maintenance\(\),320\)/);
+  assert.match(runtime, /function knownNoticeShell\(\)/);
+  assert.match(runtime, /document\.querySelectorAll\(ITEM\)/);
+  assert.match(runtime, /if\(!route&&!panelOpen&&Date\.now\(\)>noticeIntentUntil&&!known\)return null/);
+  assert.match(runtime, /if\(trigger\)\{noticeIntentUntil=Date\.now\(\)\+3500;showDock\(true\)/);
+  assert.match(runtime, /if\(notificationRoute\(\)\|\|knownNoticeShell\(\)\)setTimeout\(\(\)=>void maintenance\(\),220\)/);
+  assert.match(runtime, /new MutationObserver/);
   assert.doesNotMatch(runtime, /r\.top<180\|\|\/通知\|お知らせ\|メッセージ/);
 });
 
