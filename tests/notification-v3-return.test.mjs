@@ -17,3 +17,17 @@ test("V3 install auto-verifies and returns to the original INSIGHT page",async()
   assert.match(page,/location\.replace\(dest\.href\)/);
   assert.match(page,/INSIGHTへ戻ります/);
 });
+
+test("V3 wakes the notification dock when the popup was opened before remote core finished loading",async()=>{
+  const bootstrap=await read("public/note-insight-notification-bootstrap-v2966.js");
+  assert.match(bootstrap,/function strictOpenNoticeShell\(\)/);
+  assert.match(bootstrap,/function hasNotificationRows\(root\)/);
+  assert.match(bootstrap,/function wakeRuntime\(\)/);
+  assert.match(bootstrap,/data-mumei-v3-wakeup/);
+  assert.match(bootstrap,/function recoverAlreadyOpenNotice\(tries=0\)/);
+  assert.match(bootstrap,/setTimeout\(\(\)=>recoverAlreadyOpenNotice\(\),140\)/);
+  assert.match(bootstrap,/NOTICE_ITEM/);
+  assert.match(bootstrap,/TIME_TEXT/);
+  assert.match(bootstrap,/お知らせ/);
+  assert.match(bootstrap,/通知/);
+});
