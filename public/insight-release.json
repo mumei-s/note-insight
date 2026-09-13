@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.13.3",
-  "notificationVersion": "2.9.69",
+  "appVersion": "2026.09.13.4",
+  "notificationVersion": "3.0.0",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-13T15:45:00+09:00",
+  "releasedAt": "2026-09-13T20:45:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知",
+  "notificationLabel": "本人通知 V3",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知v2.9.69。旧3ボタン通知パネルを検出時に削除。読込エンジンを旧readerからbottom-up v2970へ切替え、最も古い通知側（下）から上へ読み、20件ごとに途中保存。更新判定もnote側の実動作版2.9.69へ統一。"
+  "note": "本人通知V3。既存2.xの更新が止まる端末向けに別IDの安定ローダーへ移行。V3導入後は通知本体をINSIGHT側から毎回最新版で取得し、通常のUserscript更新を不要化。旧2.x通知パネルはV3が無効化し、bottom-up読込と途中保存を継続。"
 }
