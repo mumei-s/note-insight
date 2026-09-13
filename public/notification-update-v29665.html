@@ -1,41 +1,31 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
-<title>本人通知 更新｜INSIGHT</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(680px,calc(100% - 14px));margin:auto;padding:10px 0 28px}.card{border:1px solid #35506b;border-radius:14px;background:#0d1620;padding:12px}h1{font-size:23px;margin:4px 0 8px}.badge{display:inline-flex;padding:4px 8px;border:1px solid #5ecde7;border-radius:999px;color:#bdf4ff;background:#102737;font-weight:950;font-size:11px}.note,.status{margin-top:8px;padding:9px;border:1px solid #3f5d75;border-radius:9px;background:#09131c;color:#c5e9f7;font-size:11px;line-height:1.55}.warn{border-color:#80652f;background:#211907;color:#ffe7a9}.ok{border-color:#47734f;background:#0e1d13;color:#b8ffca}.btn{width:100%;min-height:44px;margin-top:8px;border:1px solid #405c74;border-radius:9px;background:#122131;color:#e5f2ff;font-weight:950;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;padding:8px}.lime{background:#b6ff38;border-color:#b6ff38;color:#071016}.blue{background:#11374a;border-color:#55d8f1}.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.tiny{font-size:10px;color:#8fa2b5;line-height:1.55}.steps{margin-top:10px;padding:10px;border:1px solid #30485b;border-radius:10px;background:#09131d;font-size:11px;line-height:1.7}.steps b{color:#fff}@media(max-width:520px){.grid{grid-template-columns:1fr}}
-</style>
+<title>本人通知 V3｜INSIGHT</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(680px,calc(100% - 14px));margin:auto;padding:10px 0 28px}.card{border:1px solid #35506b;border-radius:14px;background:#0d1620;padding:12px}h1{font-size:23px;margin:4px 0 8px}.badge{display:inline-flex;padding:4px 8px;border:1px solid #5ecde7;border-radius:999px;color:#bdf4ff;background:#102737;font-weight:950;font-size:11px}.note,.status{margin-top:8px;padding:9px;border:1px solid #3f5d75;border-radius:9px;background:#09131c;color:#c5e9f7;font-size:11px;line-height:1.55}.warn{border-color:#80652f;background:#211907;color:#ffe7a9}.ok{border-color:#47734f;background:#0e1d13;color:#b8ffca}.btn{width:100%;min-height:44px;margin-top:8px;border:1px solid #405c74;border-radius:9px;background:#122131;color:#e5f2ff;font-weight:950;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;padding:8px}.lime{background:#b6ff38;border-color:#b6ff38;color:#071016}.blue{background:#11374a;border-color:#55d8f1}.tiny{font-size:10px;color:#8fa2b5;line-height:1.55}.steps{margin-top:10px;padding:10px;border:1px solid #30485b;border-radius:10px;background:#09131d;font-size:11px;line-height:1.7}.steps b{color:#fff}</style>
 </head>
-<body>
-<main class="wrap"><section class="card">
-<small>NOTIFICATION TOOL UPDATE</small>
-<h1>本人通知・更新</h1>
-<span class="badge">最新版 v2.9.69</span>
-<div class="note"><b>読込方式を修正しました。</b><br>古い通知側（下）から上へ読み、20件ごとに途中保存します。旧3ボタン通知パネルは検出時に削除します。</div>
-<div id="status" class="status">更新後は「note側の本人通知版を確認」を押してください。</div>
-<a id="install" class="btn lime">本人通知 v2.9.69 をインストール／更新</a>
-<a id="download" class="btn blue" download="mumei-note-insight-notification.user.js">文字列になる場合：更新ファイルを保存</a>
-<div class="steps"><b>ファイル保存を使う場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification.user.js</b> を選択してください。</div>
-<div class="grid"><a id="edge" class="btn">Edgeでこの更新ページを開く</a><a id="firefox" class="btn">Firefoxでこの更新ページを開く</a></div>
-<button id="verify" class="btn" type="button">note側の本人通知版を確認</button>
+<body><main class="wrap"><section class="card">
+<small>NOTIFICATION V3 MIGRATION</small><h1>本人通知 V3</h1><span class="badge">最新版 v3.0.0</span>
+<div class="note"><b>既存2.xの「更新されない」問題を回避する新方式です。</b><br>V3は別IDで新規導入し、通知本体はINSIGHT側から毎回最新版を取得します。以後、通常の本人通知更新は不要です。旧2.xが残っていてもV3が旧通知パネルを無効化します。</div>
+<div id="status" class="status">① V3を導入 → ② 「note側でV3を確認」の順で確認してください。</div>
+<a id="install" class="btn lime">① 本人通知 V3 を新規インストール</a>
+<a id="download" class="btn blue" download="mumei-note-insight-notification-v3.user.js">直接開けない場合：V3ファイルを保存</a>
+<div class="steps"><b>保存方式は確実です</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification-v3.user.js</b> を選択。<br>旧2.xは削除しなくて大丈夫です。</div>
+<button id="verify" class="btn" type="button">② note側でV3を確認</button>
 <a id="back" class="btn" href="./">INSIGHTへ戻る</a>
-<p class="tiny">更新判定はnote側で実際に動いているUserscript版を返して確認します。表示だけで更新済み扱いにはしません。</p>
+<p class="tiny">Chrome / Edge系ではTampermonkeyの「ユーザースクリプトを許可」または開発者モードが必要な場合があります。V3確認は表示だけでなく、note側で実際に動いている版を返します。</p>
 </section></main>
 <script>
-const VERSION='2.9.69',q=new URLSearchParams(location.search),status=document.getElementById('status');
-const scriptUrl=new URL('./note-insight-notification-sync.user.js',location.href);scriptUrl.searchParams.set('install','2970');scriptUrl.searchParams.set('ts',String(Date.now()));
+const VERSION='3.0.0',q=new URLSearchParams(location.search),status=document.getElementById('status');
+const scriptUrl=new URL('./note-insight-notification-v3.user.js',location.href);scriptUrl.searchParams.set('install','3000');scriptUrl.searchParams.set('ts',String(Date.now()));
 const install=document.getElementById('install'),download=document.getElementById('download');install.href=scriptUrl.href;download.href=scriptUrl.href;
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
 const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
-function intent(pkg){const u=new URL(location.href);return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=${pkg};S.browser_fallback_url=${encodeURIComponent(u.href)};end`}
-document.getElementById('edge').href=intent('com.microsoft.emmx');document.getElementById('firefox').href=intent('org.mozilla.firefox');
-install.addEventListener('click',()=>{status.className='status';status.textContent='本人通知 v2.9.69 のインストール画面へ移動します。更新後にこのページへ戻り、版確認を押してください。'});
-download.addEventListener('click',()=>{status.className='status ok';status.textContent='更新ファイルを保存します。Tampermonkeyの「ファイルからインポート」で読み込めます。'});
-const checked=String(q.get('notificationInstalled')||'');if(checked){localStorage.setItem('mumei-notification-tool-version',checked);status.className='status '+(checked===VERSION?'ok':'warn');status.textContent=checked===VERSION?`✅ note側で本人通知 v${VERSION} が動作中｜更新済み`:`⚠ note側で動作中：v${checked}｜最新版 v${VERSION} へ更新してください`;}
+install.addEventListener('click',()=>{sessionStorage.setItem('mumei-v3-install-pending','1');status.className='status';status.textContent='V3インストール画面で「インストール」を押してください。戻ったら下のV3確認を押します。'});
+download.addEventListener('click',()=>{sessionStorage.setItem('mumei-v3-install-pending','1');status.className='status ok';status.textContent='V3ファイルを保存しました。Tampermonkeyの「ファイルからインポート」で導入してください。'});
+const checked=String(q.get('notificationInstalled')||'');if(checked){localStorage.setItem('mumei-notification-tool-version',checked);sessionStorage.removeItem('mumei-v3-install-pending');status.className='status '+(checked===VERSION?'ok':'warn');status.textContent=checked===VERSION?`✅ note側で本人通知 V3 v${VERSION} が動作中｜導入完了`:`⚠ note側では ${checked} が動作中です。V3の新規インストールを完了してください`;}
 function verifyReturn(){const u=new URL(location.href);u.searchParams.delete('notificationInstalled');u.searchParams.delete('notificationCheckedAt');u.searchParams.delete('notificationUpdateResult');u.searchParams.set('return',back);return u.href}
 document.getElementById('verify').onclick=()=>location.assign(`https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(verifyReturn())}`);
-</script>
-</body></html>
+</script></body></html>
