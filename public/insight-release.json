@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.13.4",
-  "notificationVersion": "3.0.0",
+  "appVersion": "2026.09.13.5",
+  "notificationVersion": "3.0.1",
   "dashboardVersion": "1.4.2",
   "releasedAt": "2026-09-13T20:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3。既存2.xの更新が止まる端末向けに別IDの安定ローダーへ移行。V3導入後は通知本体をINSIGHT側から毎回最新版で取得し、通常のUserscript更新を不要化。旧2.x通知パネルはV3が無効化し、bottom-up読込と途中保存を継続。"
+  "note": "本人通知V3の表示・下から読込・保存確認を改善。返信、自記事のマガジン追加、メンシプ参加と未分類通知を保持。分析の円グラフ・期間・曜日・反応分布を追加。"
 }

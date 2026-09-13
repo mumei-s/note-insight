@@ -62,7 +62,7 @@ async function ensureDailyReclassify(){
   const day=jstDayNow(),key=RECLASSIFY_DAY_KEY+accountKey();
   try{if(localStorage.getItem(key)===day)return}catch{}
   reclassifyBusy=true;
-  try{const r=await fetch(RECLASSIFY,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({day}),cache:"no-store"});const p=await r.json().catch(()=>({}));if(r.ok&&p?.ok!==false){try{localStorage.setItem(key,day)}catch{}}}catch{}finally{reclassifyBusy=false}
+  try{let cursor:string|null=null;do{if(localStorage.getItem("mumei-insight-access-token")!==token)return;const r=await fetch(RECLASSIFY,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({day,cursor}),cache:"no-store"});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)return;cursor=p.nextCursor||null}while(cursor);try{localStorage.setItem(key,day)}catch{}}catch{}finally{reclassifyBusy=false}
 }
 function dayFromTimeText(v:string){const t=v.trim();const m=t.match(/(\d{4})[\/.年-](\d{1,2})[\/.月-](\d{1,2})/);if(!m)return t.split(/\s+/)[0]||"日時不明";return`${Number(m[2])}/${Number(m[3])}`}
 function enhanceNotificationRows(){

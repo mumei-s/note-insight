@@ -15,7 +15,7 @@ async function sha(v:string){
   return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 function clean(v:unknown,max=2000){return typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null}
-function cleanRaw(v:unknown){const x=clean(v,800);return x?x.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").trim():null}
+function cleanRaw(v:unknown){const x=clean(v,4000);return x?x.replace(/保完(?=(?:【|\s|$|\d))/gu,"").replace(/\s+/g," ").trim():null}
 function cleanTarget(v:unknown){
   const raw=clean(v,1200); if(!raw)return null;
   try{const u=new URL(raw);u.hash="";u.searchParams.delete("from");return u.toString()}catch{return raw}
@@ -26,6 +26,10 @@ function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(
 
 function classify(text:string,targetUrl:string|null){
   const t=text.replace(/\s+/g," ").trim(),target=targetUrl||"";
+  if(/^あなたの記事[がを].{0,500}(?:追加されました|追加しました)/u.test(t))return "my_article_magazine_added";
+  if(/[?&]kind=board_reply_(?:comment|post)(?:&|$)/i.test(target))return "membership_board_reply";
+  if(/さん(?:他\d+名)?があなたのコメントに返信しました/u.test(t))return /kind=board_|\/membership\//.test(target)?"membership_board_reply":"reply";
+  if(/^(?:.{0,160}さんが)?あなたのメンバーシップ.{0,100}(?:参加|加入|入会|メンバーになりました)/u.test(t))return "membership_join";
   if(/[?&]kind=board_reply_comment(?:&|$)/i.test(target))return"membership_board_reply";
   if(/[?&]kind=(?:board_like_comment|board_like_post)(?:&|$)/i.test(target))return"membership_reaction";
   if(/[?&]kind=circle_plan_join(?:&|$)/i.test(target))return"membership_join";
@@ -82,10 +86,11 @@ function stableSemantic(clientSignature:string,actor:string,target:string|null,r
   return clientSignature?`event-v2|client|${clientSignature}`:`event-v2|${canonicalText(raw)}|${actor}|${target||""}|${bucket}`;
 }
 function allowedExplicitSource(source:string){
+  if(source==="note-notification-reader-v2963")return true;
   if(["note-notification-auto-sync","note-notification-visible-sync","note-notification-passive-sync"].includes(source))return false;
-  return /^note-notification-(?:reader-v\d+|explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
+  return /^note-notification-(?:bottom-up-v(?:2970|3)|reader-v\d+|explicit-sync(?:-v\d+)?|manual-sync-v\d+|continuous-sync-v\d+|resume-upward-v\d+|resume-downward-v\d+)$/.test(source);
 }
-function storedSource(source:string){return /^note-notification-resume-(?:upward|downward)-v\d+$/.test(source)?"note-notification-manual-sync-v2959":source}
+function storedSource(source:string){if(source==="note-notification-reader-v2963")return "note-notification-manual-sync-v2963";return /^note-notification-resume-(?:upward|downward)-v\d+$/.test(source)?"note-notification-manual-sync-v2959":source}
 
 type ExistingRow={id:string;fingerprint:string;notification_type:string|null;meta:any};
 Deno.serve(async(req)=>{
@@ -103,14 +108,15 @@ Deno.serve(async(req)=>{
       sources.add(source||"(empty)");
       if(!allowedExplicitSource(source)){blocked++;continue}
       const raw=cleanRaw(item?.raw_text??item?.text);
-      if(!raw||raw.length<5||raw.length>700){skipped++;continue}
+      if(!raw||raw.length<5||raw.length>4000){skipped++;continue}
       const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
       const actorName=clean(item?.actor_name,200)||actorFromText(raw);
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const eventDay=jstDay(at||new Date().toISOString());
       const bucket=new Date(Math.floor(Date.parse(at||new Date().toISOString())/(5*60_000))*(5*60_000)).toISOString();
       const actor=actorUrl||actorName||"",stableFingerprint=await sha(stableSemantic(clientSignature,actor,targetUrl,raw,bucket)),legacyFingerprint=await sha(legacySemantic(type,actor,targetUrl,raw,bucket)),legacyOtherFingerprint=await sha(legacySemantic("other",actor,targetUrl,raw,bucket)),classifiedAt=new Date().toISOString();
-      const fingerprints=[...new Set([stableFingerprint,legacyFingerprint,legacyOtherFingerprint])];
+      const precise=String(meta.event_identity||"").startsWith("notice:")||String(meta.event_identity||"").startsWith("time:");
+      const fingerprints=precise?[stableFingerprint]:[...new Set([stableFingerprint,legacyFingerprint,legacyOtherFingerprint])];
       const{data:byFingerprint,error:findError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints);
       if(findError)throw findError;
       let candidates=(byFingerprint||[]) as ExistingRow[];
@@ -120,7 +126,7 @@ Deno.serve(async(req)=>{
         const seen=new Set(candidates.map(x=>x.id));for(const x of (bySignature||[]) as ExistingRow[])if(!seen.has(x.id)){seen.add(x.id);candidates.push(x)}
       }
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v21-reader-source",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:"classification-independent-v2"}};
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v21-reader-source",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}

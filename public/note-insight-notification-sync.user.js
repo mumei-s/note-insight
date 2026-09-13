@@ -20,9 +20,4 @@
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-sync.user.js
 // ==/UserScript==
-// compatibility-test-marker: runtime-v2958.js?v=2968
-// compatibility-test-marker: notification-filter-safety-v2961.js?v=2968
-// compatibility-test-marker: notification-filter-restore-v2962.js?v=2968
-// compatibility-test-marker: notification-reader-v2963.js?v=2968
-// compatibility-test-marker: notification-bootstrap-v2966.js?v=2968
 (function(){'use strict';})();

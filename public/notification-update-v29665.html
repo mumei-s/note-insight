@@ -7,22 +7,22 @@
 <style>*{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(680px,calc(100% - 14px));margin:auto;padding:10px 0 28px}.card{border:1px solid #35506b;border-radius:14px;background:#0d1620;padding:12px}h1{font-size:23px;margin:4px 0 8px}.badge{display:inline-flex;padding:4px 8px;border:1px solid #5ecde7;border-radius:999px;color:#bdf4ff;background:#102737;font-weight:950;font-size:11px}.note,.status{margin-top:8px;padding:9px;border:1px solid #3f5d75;border-radius:9px;background:#09131c;color:#c5e9f7;font-size:11px;line-height:1.55}.warn{border-color:#80652f;background:#211907;color:#ffe7a9}.ok{border-color:#47734f;background:#0e1d13;color:#b8ffca}.btn{width:100%;min-height:44px;margin-top:8px;border:1px solid #405c74;border-radius:9px;background:#122131;color:#e5f2ff;font-weight:950;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;padding:8px}.lime{background:#b6ff38;border-color:#b6ff38;color:#071016}.blue{background:#11374a;border-color:#55d8f1}.tiny{font-size:10px;color:#8fa2b5;line-height:1.55}.steps{margin-top:10px;padding:10px;border:1px solid #30485b;border-radius:10px;background:#09131d;font-size:11px;line-height:1.7}.steps b{color:#fff}</style>
 </head>
 <body><main class="wrap"><section class="card">
-<small>NOTIFICATION V3 MIGRATION</small><h1>本人通知 V3</h1><span class="badge">最新版 v3.0.0</span>
-<div class="note"><b>V3は一度だけ新規導入します。</b><br>インストール後にこの画面へ戻ると、自動でnote側の実動作版を確認し、v3.0.0確認後は元のINSIGHTへ自動で戻ります。<br><b>旧2.xは削除しなくて大丈夫です。</b> V3が旧通知パネルを無効化します。</div>
+<small>NOTIFICATION V3 MIGRATION</small><h1>本人通知 V3</h1><span class="badge">最新版 v3.0.1</span>
+<div class="note"><b>V3は一度だけ新規導入します。</b><br>インストール後にこの画面へ戻ると、自動でnote側の実動作版を確認し、v3.0.1確認後は元のINSIGHTへ自動で戻ります。<br><b>旧2.xは削除しなくて大丈夫です。</b> V3が旧通知パネルを無効化します。</div>
 <div id="status" class="status">V3をインストールしてください。完了後は自動確認してINSIGHTへ戻ります。</div>
 <a id="install" class="btn lime" target="_blank" rel="noopener">本人通知 V3 を新規インストール</a>
 <a id="download" class="btn blue" download="mumei-note-insight-notification-v3.user.js">直接開けない場合：V3ファイルを保存</a>
-<div class="steps"><b>ファイル保存の場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification-v3.user.js</b> を選択。導入後、この画面へ戻れば自動確認します。</div>
+<div class="steps"><b>端末別の導入</b><br>Android：拡張機能を使えるEdgeまたはFirefoxで導入。Chrome・Yahooではこのページを対応ブラウザで開いてください。<br>iPhone／iPad：SafariのUserscriptsにファイルを保存し、Safari設定で拡張機能とnote.comへのアクセスを有効にしてください。<br>PC：対応ブラウザのTampermonkeyへ導入。<br><b>Tampermonkeyでファイル保存の場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification-v3.user.js</b> を選択。導入後、この画面へ戻れば自動確認します。</div>
 <button id="verify" class="btn" type="button">V3を今すぐ確認</button>
 <a id="back" class="btn" href="./">INSIGHTへ戻る</a>
-<p class="tiny">自動でnote側でV3を確認し、確認成功時はINSIGHT側へ v3.0.0 を保存してから元画面へ戻ります。表示だけを更新済み扱いにはしません。</p>
+<p class="tiny">自動でnote側でV3を確認し、確認成功時はINSIGHT側へ v3.0.1 を保存してから元画面へ戻ります。表示だけを更新済み扱いにはしません。</p>
 </section></main>
 <script>
-const VERSION='3.0.0',KEY='mumei-notification-tool-version',PENDING='mumei-v3-install-pending',AWAY='mumei-v3-install-away',q=new URLSearchParams(location.search),status=document.getElementById('status');
-const scriptUrl=new URL('./note-insight-notification-v3.user.js',location.href);scriptUrl.searchParams.set('install','3000');scriptUrl.searchParams.set('ts',String(Date.now()));
+const VERSION='3.0.1',KEY='mumei-notification-tool-version',PENDING='mumei-v3-install-pending',AWAY='mumei-v3-install-away',q=new URLSearchParams(location.search),status=document.getElementById('status');
+const scriptUrl=new URL('./note-insight-notification-v3.user.js',location.href);scriptUrl.searchParams.set('install','3001');scriptUrl.searchParams.set('ts',String(Date.now()));
 const install=document.getElementById('install'),download=document.getElementById('download'),verify=document.getElementById('verify');install.href=scriptUrl.href;download.href=scriptUrl.href;
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
-const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
+const requestedBack=safeReturn(q.get('return'));const returnPage=new URL(requestedBack);const back=/notification-(?:update|setup)/.test(returnPage.pathname)?new URL('./',location.href).href:requestedBack;document.getElementById('back').href=back;
 function verifyReturn(){const u=new URL(location.href);u.searchParams.delete('notificationInstalled');u.searchParams.delete('notificationCheckedAt');u.searchParams.delete('notificationUpdateResult');u.searchParams.set('return',back);return u.href}
 function verifyUrl(){return `https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(verifyReturn())}`}
 let verifying=false;
@@ -31,7 +31,7 @@ function markAway(){if(sessionStorage.getItem(PENDING))sessionStorage.setItem(AW
 function runVerify(auto=false){if(verifying)return;verifying=true;status.className='status';status.textContent=auto?'V3インストール完了を確認中… note側で実動作版を確認します。':'note側でV3の実動作版を確認します。';setTimeout(()=>location.assign(verifyUrl()),180)}
 function maybeAutoVerify(){const started=Number(sessionStorage.getItem(PENDING)||0),away=sessionStorage.getItem(AWAY)==='1';if(!started||!away||Date.now()-started<700||verifying)return;runVerify(true)}
 install.addEventListener('click',()=>{markPending();status.className='status';status.textContent='V3インストール画面で「インストール」を押してください。完了後、この画面へ戻ると自動確認します。'});
-download.addEventListener('click',()=>{markPending();status.className='status ok';status.textContent='V3ファイルを保存しました。Tampermonkeyへインポート後、この画面へ戻ると自動確認します。'});
+download.addEventListener('click',()=>{markPending();status.className='status ok';status.textContent='V3ファイルの保存を開始しました。Tampermonkeyへインポート後、この画面へ戻ると自動確認します。'});
 verify.onclick=()=>runVerify(false);
 window.addEventListener('blur',markAway);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')markAway();else setTimeout(maybeAutoVerify,120)});window.addEventListener('focus',()=>setTimeout(maybeAutoVerify,120));window.addEventListener('pageshow',()=>setTimeout(maybeAutoVerify,120));
 const checked=String(q.get('notificationInstalled')||'');

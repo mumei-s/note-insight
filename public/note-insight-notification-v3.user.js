@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.0.0
+// @version      3.0.1
 // @description  一度だけ導入する安定ローダー。本人通知本体はINSIGHTから毎回最新版を取得し、今後の通常更新を不要にします。
 // @match        https://note.com/*
 // @run-at       document-start
@@ -20,7 +20,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.0.0';
+const VERSION='3.0.1';
 const BASE='https://mumei-s.github.io/note-insight/';
 const V3_FRAME='mumei-v3-notification-frame';
 const OLD_IDS=['mumei-v2948-frame','mumei-notice-reader-v2963'];
@@ -34,8 +34,9 @@ const COMPONENTS=[
 
 function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+const versionCheckUrl=location.href;
 function handleVersionCheck(){
-  const u=new URL(location.href);
+  const u=new URL(versionCheckUrl);
   if(u.searchParams.get('mumei_insight_version_check')!=='1')return false;
   const back=safeReturn(u.searchParams.get('mumei_return'));
   u.searchParams.delete('mumei_insight_version_check');u.searchParams.delete('mumei_return');
@@ -43,7 +44,9 @@ function handleVersionCheck(){
   if(back){const b=new URL(back);b.searchParams.set('notificationInstalled',VERSION);b.searchParams.set('notificationCheckedAt',String(Date.now()));b.searchParams.set('notificationUpdateResult','checked-v3');location.replace(b.href)}
   return true;
 }
-if(handleVersionCheck())return;
+const versionCheckRequested=new URL(versionCheckUrl).searchParams.get('mumei_insight_version_check')==='1';
+// Claim the check before installed legacy scripts can return an obsolete version.
+if(versionCheckRequested){const u=new URL(location.href);u.searchParams.delete('mumei_insight_version_check');u.searchParams.delete('mumei_return');history.replaceState(history.state,'',u.pathname+u.search+u.hash);}
 
 function looksOldDock(f){
   if(!(f instanceof HTMLIFrameElement)||f.id===V3_FRAME)return false;
@@ -86,22 +89,28 @@ function transform(name,code){
   if(name.includes('runtime-v2958')){
     s=s.replaceAll('__mumeiNotificationRuntime2958','__mumeiNotificationRuntimeV3');
     s=s.replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('mumei-v2958-style','mumei-v3-notification-style').replaceAll('mumei-v2958-hide','mumei-v3-notification-hide').replaceAll('mumei-v2958-boundary','mumei-v3-notification-boundary').replaceAll('mumei-notice-shell-v2958','mumei-notice-shell-v3');
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.0'");
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.1'");
   }else if(name.includes('filter-restore-v2962')){
     s=s.replaceAll('__mumeiNotificationFilterRestore2962','__mumeiNotificationFilterRestoreV3').replaceAll('mumei-v2948-frame',V3_FRAME);
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.0'");
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.1'");
   }else if(name.includes('autoscan-v2970')){
     s=s.replaceAll('__mumeiNotificationAutoscan2970','__mumeiNotificationAutoscanV3').replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3');
-    s=s.replace(/const VERSION='[^']*',PROTOCOL='[^']*'/,"const VERSION='3.0.0',PROTOCOL='3.0.0'");
+    s=s.replace(/const VERSION='[^']*',PROTOCOL='[^']*'/,"const VERSION='3.0.1',PROTOCOL='3.0.1'");
     s=s.replaceAll('note-notification-bottom-up-v2970','note-notification-bottom-up-v3');
   }else if(name.includes('filter-safety-v2961')){
     s=s.replaceAll('__mumeiNotificationFilterSafety2961','__mumeiNotificationFilterSafetyV3').replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3').replaceAll('data-mumei-input-shield-hidden','data-mumei-v3-input-shield-hidden');
   }else if(name.includes('bootstrap-v2966')){
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.0'").replaceAll('mumei-v2948-frame',V3_FRAME);
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.0.1'").replaceAll('mumei-v2948-frame',V3_FRAME);
+    if(versionCheckRequested)s=s.replace('if(handleVersionCheck())return;','');
   }
   return s;
 }
+let loading=false,ready=false;
+function loaderNotice(message){
+ const mount=()=>{let box=document.getElementById('mumei-v3-load-status');if(!box){box=document.createElement('div');box.id='mumei-v3-load-status';box.style.cssText='position:fixed;bottom:62px;left:8px;right:8px;z-index:2147483647;padding:10px;background:#102737;color:white;border:1px solid #55d8f1;border-radius:9px;font:12px system-ui;text-align:center';const label=document.createElement('span');box.append(label);const retry=document.createElement('button');retry.textContent='再接続';retry.style.cssText='margin-left:8px;padding:6px';retry.onclick=()=>startLoad();box.append(retry);(document.body||document.documentElement).append(box)}box.firstChild.textContent=message};if(document.documentElement)mount();else document.addEventListener('DOMContentLoaded',mount,{once:true});
+}
 async function loadLatest(){
+  if(!document.body)await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   sweepOld();
   for(const name of COMPONENTS){
     const url=BASE+name+'?v3='+Date.now();
@@ -110,7 +119,11 @@ async function loadLatest(){
     eval(src+'\n//# sourceURL='+url);
   }
   sweepOld();
+  ready=true;document.getElementById('mumei-v3-load-status')?.remove();
+  if(versionCheckRequested)handleVersionCheck();
   try{localStorage.setItem('mumei-notification-v3-loader',VERSION)}catch{}
 }
-loadLatest().catch(e=>{console.error('[INSIGHT通知V3]',e);sweepOld()});
+async function startLoad(){if(loading||ready)return;loading=true;try{await loadLatest()}catch(e){console.error('[INSIGHT通知V3]',e);loaderNotice('本人通知の接続に失敗しました。通信を確認して再接続してください。')}finally{loading=false}}
+window.addEventListener('online',()=>startLoad());
+startLoad();
 })();
