@@ -22,10 +22,13 @@ test("V3 wakes the notification dock when the popup was opened before remote cor
   const bootstrap=await read("public/note-insight-notification-bootstrap-v2966.js");
   assert.match(bootstrap,/function strictOpenNoticeShell\(\)/);
   assert.match(bootstrap,/function hasNotificationRows\(root\)/);
+  assert.match(bootstrap,/function knownNotificationRowsVisible\(\)/);
   assert.match(bootstrap,/function wakeRuntime\(\)/);
   assert.match(bootstrap,/data-mumei-v3-wakeup/);
   assert.match(bootstrap,/function recoverAlreadyOpenNotice\(tries=0\)/);
-  assert.match(bootstrap,/setTimeout\(\(\)=>recoverAlreadyOpenNotice\(\),140\)/);
+  assert.match(bootstrap,/setTimeout\(\(\)=>recoverAlreadyOpenNotice\(\),120\)/);
+  assert.match(bootstrap,/new MutationObserver/);
+  assert.match(bootstrap,/n\.matches\?\.\(NOTICE_ITEM\)/);
   assert.match(bootstrap,/NOTICE_ITEM/);
   assert.match(bootstrap,/TIME_TEXT/);
   assert.match(bootstrap,/お知らせ/);
