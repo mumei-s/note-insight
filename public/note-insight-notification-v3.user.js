@@ -52,6 +52,8 @@ function looksOldDock(f){
 }
 function neutralize(el){
   if(!(el instanceof HTMLElement)||el.id===V3_FRAME)return;
+  const already=el.getAttribute('data-mumei-v3-neutralized')==='1'&&el.style.getPropertyValue('display')==='none'&&el.style.getPropertyPriority('display')==='important'&&el.style.getPropertyValue('pointer-events')==='none';
+  if(already)return;
   el.style.setProperty('display','none','important');
   el.style.setProperty('visibility','hidden','important');
   el.style.setProperty('pointer-events','none','important');
@@ -68,7 +70,7 @@ function sweepOld(){
 function installOldGuard(){
   const start=()=>{
     sweepOld();
-    new MutationObserver(ms=>{let hit=false;for(const m of ms){if(m.type==='attributes'){const t=m.target;if(t instanceof HTMLIFrameElement&&looksOldDock(t)){neutralize(t);hit=true}}else if(m.type==='childList'){for(const n of m.addedNodes){if(n instanceof HTMLIFrameElement&&looksOldDock(n)){neutralize(n);hit=true}else if(n instanceof Element){for(const f of n.querySelectorAll?.('iframe')||[])if(looksOldDock(f)){neutralize(f);hit=true}}}}}if(!hit)sweepOld()}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class','hidden','aria-hidden']});
+    new MutationObserver(ms=>{for(const m of ms){if(m.type==='attributes'){const t=m.target;if(t instanceof HTMLIFrameElement&&looksOldDock(t))neutralize(t);continue}if(m.type==='childList'){for(const n of m.addedNodes){if(n instanceof HTMLIFrameElement&&looksOldDock(n))neutralize(n);else if(n instanceof Element){for(const f of n.querySelectorAll?.('iframe')||[])if(looksOldDock(f))neutralize(f)}}}}}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class','hidden','aria-hidden']});
   };
   if(document.documentElement)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
 }
