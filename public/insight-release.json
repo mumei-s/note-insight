@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.13.2",
-  "notificationVersion": "2.9.68",
+  "appVersion": "2026.09.13.3",
+  "notificationVersion": "2.9.69",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-13T08:05:00+09:00",
+  "releasedAt": "2026-09-13T15:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知v2.9.68。記事・コメント・他クリエイターページのリンク周辺を通知画面と誤認して固定パネルを表示する不具合を根本修正。旧3ボタンfallbackをreader本体から削除し、正規4ボタンは上部の通知操作直後またはnotifications専用画面だけで表示。"
+  "note": "本人通知v2.9.69。旧3ボタン通知パネルを検出時に削除。読込エンジンを旧readerからbottom-up v2970へ切替え、最も古い通知側（下）から上へ読み、20件ごとに途中保存。更新判定もnote側の実動作版2.9.69へ統一。"
 }
