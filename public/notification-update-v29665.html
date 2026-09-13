@@ -13,28 +13,28 @@
 <main class="wrap"><section class="card">
 <small>NOTIFICATION TOOL UPDATE</small>
 <h1>本人通知・更新</h1>
-<span class="badge">最新版 v2.9.68</span>
-<div class="note"><b>通知パネル誤表示を根本修正。</b><br>記事・コメント・他クリエイターページでは通知パネルを生成しません。正規4ボタンは上部の🔔通知を開いた時だけ表示します。</div>
-<div id="status" class="status">現在の版を確認できます。</div>
-<a id="install" class="btn lime">本人通知 v2.9.68 をインストール／更新</a>
+<span class="badge">最新版 v2.9.69</span>
+<div class="note"><b>読込方式を修正しました。</b><br>古い通知側（下）から上へ読み、20件ごとに途中保存します。旧3ボタン通知パネルは検出時に削除します。</div>
+<div id="status" class="status">更新後は「note側の本人通知版を確認」を押してください。</div>
+<a id="install" class="btn lime">本人通知 v2.9.69 をインストール／更新</a>
 <a id="download" class="btn blue" download="mumei-note-insight-notification.user.js">文字列になる場合：更新ファイルを保存</a>
 <div class="steps"><b>ファイル保存を使う場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification.user.js</b> を選択してください。</div>
 <div class="grid"><a id="edge" class="btn">Edgeでこの更新ページを開く</a><a id="firefox" class="btn">Firefoxでこの更新ページを開く</a></div>
 <button id="verify" class="btn" type="button">note側の本人通知版を確認</button>
 <a id="back" class="btn" href="./">INSIGHTへ戻る</a>
-<p class="tiny">Android Edge / Firefox / Chrome / Chromium系 / Samsung Internet / Yahoo系 / iPhone・iPad Safari / macOS Safari / PCブラウザ対応。SafariはUserscripts方式。</p>
+<p class="tiny">更新判定はnote側で実際に動いているUserscript版を返して確認します。表示だけで更新済み扱いにはしません。</p>
 </section></main>
 <script>
-const VERSION='2.9.68',q=new URLSearchParams(location.search),status=document.getElementById('status');
-const scriptUrl=new URL('./note-insight-notification-sync.user.js',location.href);scriptUrl.searchParams.set('install','2968');scriptUrl.searchParams.set('ts',String(Date.now()));
+const VERSION='2.9.69',q=new URLSearchParams(location.search),status=document.getElementById('status');
+const scriptUrl=new URL('./note-insight-notification-sync.user.js',location.href);scriptUrl.searchParams.set('install','2970');scriptUrl.searchParams.set('ts',String(Date.now()));
 const install=document.getElementById('install'),download=document.getElementById('download');install.href=scriptUrl.href;download.href=scriptUrl.href;
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
 const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
 function intent(pkg){const u=new URL(location.href);return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=${pkg};S.browser_fallback_url=${encodeURIComponent(u.href)};end`}
 document.getElementById('edge').href=intent('com.microsoft.emmx');document.getElementById('firefox').href=intent('org.mozilla.firefox');
-install.addEventListener('click',()=>{status.className='status';status.textContent='本人通知 v2.9.68 のインストール画面へ移動します。'});
+install.addEventListener('click',()=>{status.className='status';status.textContent='本人通知 v2.9.69 のインストール画面へ移動します。更新後にこのページへ戻り、版確認を押してください。'});
 download.addEventListener('click',()=>{status.className='status ok';status.textContent='更新ファイルを保存します。Tampermonkeyの「ファイルからインポート」で読み込めます。'});
-const checked=String(q.get('notificationInstalled')||'');if(checked){status.className='status '+(checked===VERSION?'ok':'warn');status.textContent=checked===VERSION?`✅ note側の本人通知 v${VERSION} を確認済み`:`note側の確認版：${checked} → 最新 ${VERSION}`;}
+const checked=String(q.get('notificationInstalled')||'');if(checked){localStorage.setItem('mumei-notification-tool-version',checked);status.className='status '+(checked===VERSION?'ok':'warn');status.textContent=checked===VERSION?`✅ note側で本人通知 v${VERSION} が動作中｜更新済み`:`⚠ note側で動作中：v${checked}｜最新版 v${VERSION} へ更新してください`;}
 function verifyReturn(){const u=new URL(location.href);u.searchParams.delete('notificationInstalled');u.searchParams.delete('notificationCheckedAt');u.searchParams.delete('notificationUpdateResult');u.searchParams.set('return',back);return u.href}
 document.getElementById('verify').onclick=()=>location.assign(`https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(verifyReturn())}`);
 </script>
