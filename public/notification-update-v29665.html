@@ -15,7 +15,7 @@
 <div class="steps"><b>ファイル保存の場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification-v3.user.js</b> を選択。導入後、この画面へ戻れば自動確認します。</div>
 <button id="verify" class="btn" type="button">V3を今すぐ確認</button>
 <a id="back" class="btn" href="./">INSIGHTへ戻る</a>
-<p class="tiny">確認成功時はINSIGHT側へ v3.0.0 を保存してから元画面へ戻ります。表示だけを更新済み扱いにはしません。</p>
+<p class="tiny">自動でnote側でV3を確認し、確認成功時はINSIGHT側へ v3.0.0 を保存してから元画面へ戻ります。表示だけを更新済み扱いにはしません。</p>
 </section></main>
 <script>
 const VERSION='3.0.0',KEY='mumei-notification-tool-version',PENDING='mumei-v3-install-pending',AWAY='mumei-v3-install-away',q=new URLSearchParams(location.search),status=document.getElementById('status');
