@@ -1,10 +1,12 @@
 {
-  "appVersion": "2026.09.14.3",
+  "appVersion": "2026.09.14.4",
   "notificationVersion": "3.1.3",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T14:55:00+09:00",
+  "bridgeVersion": "1.0.0",
+  "releasedAt": "2026-09-14T16:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.1",
   "dashboardLabel": "Dashboard同期",
-  "note": "本人通知V3.1.3。4ボタン通知パネルをremote core依存から切り離し、V3本体が直接生成・表示。ベル押下時に即表示し、下から自動読込・フィルター処理は同じパネルへ後から接続します。"
+  "bridgeLabel": "INSIGHT Bridge",
+  "note": "本人通知と公式Dashboard同期の導入をINSIGHT Bridge 1本へ統合。Tampermonkey公式インストール中継を別タブで使用し、生のuser.js文字列ページへ遷移しない。Bridge実動作を確認してからDashboard/本人通知を開始し、インストール後はINSIGHTへ自動復帰。"
 }
