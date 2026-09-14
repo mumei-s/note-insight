@@ -8,16 +8,16 @@ test("bottom-up notification core remains intact",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["tryAutoStart","autoStarted=true","read.click()","scheduleAutoStart","mumeiDockVisible"]);
+  has(watch,["tryAutoStart","autoStarted=true","read.click()","scheduleAutoStart","mumeiDockVisible","manualVisible","closeIntent"]);
   assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
 });
 
-test("notification V3.1.6 uses one stable display controller and one-shot recovery",async()=>{
+test("notification V3.1.6 uses one stable display controller",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v316-fix.js");
   assert.match(v3,/@version\s+3\.1\.6/);has(v3,["note-insight-notification-v316-fix.js?v=316","19b1beec55012b53bedcd93751af552f53c0cf8a/public/note-insight-notification-v3.user.js"]);
-  has(fix,["const VERSION='3.1.6'","mumei_insight_version_check","loader-checked-v316","likelyBell","oneShotShow","mumei-v3-notification-frame"]);
+  has(fix,["const VERSION='3.1.6'","mumei_insight_version_check","loader-checked-v316"]);
   assert.doesNotMatch(v3,/note-insight-notification-v315-fix\.js/);
-  assert.doesNotMatch(fix,/setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop|setTimeout\(directPulseLoop/);
+  assert.doesNotMatch(fix,/likelyBell|oneShotShow|mumei-v3-notification-frame|setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop|setTimeout\(directPulseLoop/);
 });
 
 test("notification runtime still exposes one four-control reading dock",async()=>{
