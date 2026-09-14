@@ -8,8 +8,8 @@ test("bottom-up notification core remains intact",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["tryAutoStart","autoStarted=true","read.click()","scheduleAutoStart","mumeiDockVisible","manualVisible","closeIntent"]);
-  assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
+  has(watch,["tryAutoStart","autoStarted=true","read.click()","mumeiAlwaysVisible","makeVisible","forceDock"]);
+  assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(|manualVisible|closeIntent|mumei-v3-notification-launcher/);
 });
 
 test("notification V3.1.6 uses one stable display controller",async()=>{
