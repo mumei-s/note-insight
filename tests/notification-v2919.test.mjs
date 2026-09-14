@@ -8,14 +8,15 @@ test("bottom-up notification core remains intact",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["tryAutoStart","autoStarted=true","read.click()","自動で下から読込を開始します"]);
+  has(watch,["tryAutoStart","autoStarted=true","read.click()","scheduleAutoStart","mumeiDockVisible"]);
+  assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
 });
 
-test("notification V3.1.3 directly owns the four-control dock",async()=>{
+test("notification V3.1.4 directly owns one stable four-control dock",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
-  assert.match(v3,/@version\s+3\.1\.3/);assert.match(v3,/const VERSION='3\.1\.3'/);
+  assert.match(v3,/@version\s+3\.1\.4/);assert.match(v3,/const VERSION='3\.1\.4'/);
   has(v3,["DOCK_HTML","ensureDirectDock","showDirectDock","likelyBell","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","note-insight-notification-dock-watch-v312.js"]);
-  assert.doesNotMatch(v3,/\/\/ @require\s+/);
+  assert.doesNotMatch(v3,/directPulseLoop|directIntentUntil|setTimeout\(directPulseLoop|\/\/ @require\s+/);
 });
 
 test("notification runtime still exposes one four-control reading dock",async()=>{
@@ -44,9 +45,9 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
 
 test("release tracks only the two active tools",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.6");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
-  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.3/);
+  assert.equal(manifest.appVersion,"2026.09.14.7");assert.equal(manifest.notificationVersion,"3.1.4");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.4"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.4/);
 });
 
 test("private notification categories and dense analysis remain intact",async()=>{
