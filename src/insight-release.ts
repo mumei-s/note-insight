@@ -1,3 +1,4 @@
+import "./insight-dashboard-label-v19";
 import "./insight-notification-enhancements-v17";
 import "./insight-notification-ui-v18";
 import "./insight-inline-updates-v1";
@@ -5,8 +6,8 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.11";
-export const CURRENT_NOTIFICATION_VERSION = "3.1.7";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.12";
+export const CURRENT_NOTIFICATION_VERSION = "3.1.8";
 export const CURRENT_DASHBOARD_VERSION = "1.4.4";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";

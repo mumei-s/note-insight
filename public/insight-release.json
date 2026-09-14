@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.11",
-  "notificationVersion": "3.1.7",
+  "appVersion": "2026.09.14.12",
+  "notificationVersion": "3.1.8",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T19:58:00+09:00",
+  "releasedAt": "2026-09-14T14:18:47.346Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.1.7",
-  "dashboardLabel": "Dashboard同期",
-  "note": "note側の本人通知操作を1個の可動ボタンへ収納し、タップ時だけ操作パネルを展開。長押し移動と位置保存、自動読込を維持。INSIGHT【通知】は通知項目を1ボタンへ収納し、本人通知なしで取得できる公開系の重複項目を表示対象から外します。"
+  "notificationLabel": "本人通知 V3.1.8",
+  "dashboardLabel": "ダッシュボード同期",
+  "note": "通知とダッシュボードを1本で導入。20件ごとの確認済み保存位置・未送信分の引継ぎ・初回完了後の差分読み込み。小型可動ボタンと4列パネルは維持。"
 }
