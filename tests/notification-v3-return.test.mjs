@@ -17,9 +17,9 @@ test("setup center bypasses Tampermonkey intermediary on Edge and keeps the INSI
   assert.doesNotMatch(page,/window\.open\(/);
 });
 
-test("notification update is a dedicated recoverable page while older routes still redirect",async()=>{
+test("notification update persists confirmed version before returning to INSIGHT",async()=>{
   for(const path of ["public/notification-setup.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html"]){const page=await read(path);assert.match(page,/tool-setup\.html/)}
-  const update=await read("public/notification-update.html");assert.match(update,/本人通知 V3\.1\.5/);assert.match(update,/Raw文字列/);assert.match(update,/更新確認してINSIGHTへ戻る/);assert.match(update,/raw\.githubusercontent\.com/);
+  const update=await read("public/notification-update.html");assert.match(update,/本人通知 V3\.1\.6/);assert.match(update,/Raw文字列/);assert.match(update,/更新確認してINSIGHTへ戻る/);assert.match(update,/raw\.githubusercontent\.com/);assert.match(update,/localStorage\.setItem\('mumei-notification-tool-version',installed\)/);assert.match(update,/dest\.searchParams\.set\('notificationInstalled',installed\)/);
 });
 
 test("retired Bridge is a no-op compatibility stub",async()=>{
@@ -30,11 +30,11 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.doesNotMatch(b,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js|note-insight-dashboard-sync\.user\.js/);
 });
 
-test("V3.1.5 adds stable recovery around the proven four-button V3 core",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v315-fix.js");
-  assert.match(v3,/@version\s+3\.1\.5/);assert.match(v3,/note-insight-notification-v315-fix\.js/);assert.match(v3,/19b1beec55012b53bedcd93751af552f53c0cf8a\/public\/note-insight-notification-v3\.user\.js/);
-  assert.match(fix,/const VERSION='3\.1\.5'/);assert.match(fix,/mumei_insight_version_check/);assert.match(fix,/function likelyBell\(el\)/);assert.match(fix,/フィルター設定/);assert.match(fix,/INSIGHT【通知】/);assert.match(fix,/surfaceOpen/);
-  assert.doesNotMatch(fix,/directPulseLoop|setTimeout\(directPulseLoop/);
+test("V3.1.6 keeps stable V3 core and removes the second continuous display controller",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v316-fix.js");
+  assert.match(v3,/@version\s+3\.1\.6/);assert.match(v3,/note-insight-notification-v316-fix\.js/);assert.match(v3,/19b1beec55012b53bedcd93751af552f53c0cf8a\/public\/note-insight-notification-v3\.user\.js/);assert.doesNotMatch(v3,/note-insight-notification-v315-fix\.js/);
+  assert.match(fix,/const VERSION='3\.1\.6'/);assert.match(fix,/mumei_insight_version_check/);assert.match(fix,/function likelyBell\(el\)/);assert.match(fix,/function oneShotShow\(\)/);
+  assert.doesNotMatch(fix,/setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop/);
 });
 
 test("bell open auto-starts bottom-up scan once without display pulsing",async()=>{
