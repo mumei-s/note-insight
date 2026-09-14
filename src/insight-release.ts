@@ -3,8 +3,8 @@ import "./insight-inline-updates-v1";
 import "./insight-top-install-v16";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.2";
-export const CURRENT_NOTIFICATION_VERSION = "3.1.2";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.3";
+export const CURRENT_NOTIFICATION_VERSION = "3.1.3";
 export const CURRENT_DASHBOARD_VERSION = "1.4.4";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
