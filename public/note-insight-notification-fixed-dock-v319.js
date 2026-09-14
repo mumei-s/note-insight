@@ -2,14 +2,20 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFixedDock319)return;window.__mumeiNotificationFixedDock319=true;
+// V3.1.9 owns the visible controls. Prevent the old collapsible controllers from starting.
+window.__mumeiNotificationDockWatchV312=true;
+window.__mumeiNotificationLauncherV317=true;
 window.__mumeiNotificationCompactDock=true;
-const FRAME='mumei-v3-notification-frame',ROOT='mumei-v3-fixed-dock',OLD_LAUNCHER='mumei-v3-notification-launcher';
+const VERSION='3.1.9',FRAME='mumei-v3-notification-frame',ROOT='mumei-v3-fixed-dock',OLD_LAUNCHER='mumei-v3-notification-launcher';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const FILTER='https://mumei-s.github.io/note-insight/notification-filter.html?from=note';
 const INSIGHT='https://mumei-s.github.io/note-insight/notification-entry.html?from=note&insightMode=notifications#dashboard';
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let autoStarted=false,autoTimer=0,mirrorTimer=0,lastStatus='';
+function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+const bootUrl=new URL(location.href),versionBack=bootUrl.searchParams.get('mumei_insight_version_check')==='1'?safeReturn(bootUrl.searchParams.get('mumei_return')):'';
+if(versionBack){bootUrl.searchParams.delete('mumei_insight_version_check');bootUrl.searchParams.delete('mumei_return');history.replaceState(history.state,'',bootUrl.pathname+bootUrl.search+bootUrl.hash);(async()=>{for(let i=0;i<70;i++){if(localStorage.getItem('mumei-notification-v3-loader'))break;await sleep(120)}const b=new URL(versionBack);b.searchParams.set('notificationInstalled',VERSION);b.searchParams.set('notificationCheckedAt',String(Date.now()));b.searchParams.set('notificationUpdateResult','fixed-dock-v319');location.replace(b.href)})()}
 function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1||r.bottom<=0||r.right<=0)return false;const s=getComputedStyle(el);return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>.01}
 function notificationSurface(root){if(!(root instanceof Element)||!visible(root))return false;if(root.matches?.(ITEM)||root.querySelector?.(ITEM))return true;const t=clean(root.textContent);if(!t||t.length>9000)return false;return /(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/u.test(t)&&/(?:スキ|コメント|返信|フォロー|マガジン|メンバーシップ|掲示板|購入|サポート|通知|お知らせ)/u.test(t)}
 function anySurface(){if(document.visibilityState==='hidden')return false;for(const el of document.querySelectorAll(ITEM))if(visible(el))return true;for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],.m-navbarNotice,[class*="notification" i],[class*="notice" i]'))if(notificationSurface(el))return true;return /^\/notifications(?:\/|$)/i.test(location.pathname)}
