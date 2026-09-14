@@ -12,11 +12,11 @@ test("bottom-up notification core remains intact",async()=>{
   assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
 });
 
-test("notification V3.1.4 directly owns one stable four-control dock",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js");
-  assert.match(v3,/@version\s+3\.1\.4/);assert.match(v3,/const VERSION='3\.1\.4'/);
-  has(v3,["DOCK_HTML","ensureDirectDock","showDirectDock","likelyBell","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","note-insight-notification-dock-watch-v312.js"]);
-  assert.doesNotMatch(v3,/directPulseLoop|directIntentUntil|setTimeout\(directPulseLoop|\/\/ @require\s+/);
+test("notification V3.1.5 wraps stable V3 core and adds dock recovery",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v315-fix.js");
+  assert.match(v3,/@version\s+3\.1\.5/);has(v3,["note-insight-notification-v315-fix.js?v=315","19b1beec55012b53bedcd93751af552f53c0cf8a/public/note-insight-notification-v3.user.js"]);
+  has(fix,["const VERSION='3.1.5'","mumei_insight_version_check","loader-checked-v315","フィルター設定","INSIGHT【通知】","likelyBell","surfaceOpen","mumei-v3-notification-frame"]);
+  assert.doesNotMatch(fix,/directPulseLoop|setTimeout\(directPulseLoop/);
 });
 
 test("notification runtime still exposes one four-control reading dock",async()=>{
@@ -25,17 +25,17 @@ test("notification runtime still exposes one four-control reading dock",async()=
 });
 
 test("one setup center directly opens userscripts and never uses the broken Tampermonkey intermediary",async()=>{
-  const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),bridge=await read("public/note-insight-bridge.user.js");
+  const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
   has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","Dashboard同期を直接インストール／更新","本人通知を直接インストール／更新","target=\"_blank\"","note-insight-dashboard-sync.user.js","note-insight-notification-v3.user.js","Import from URL","mumei-direct-install-pending","location.replace(back)"]);
   assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません/);
-  has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);
-  assert.doesNotMatch(top,/Bridge 設定 \/ 更新|INSIGHT Bridge 必須|notification-update\.html|dashboard-setup\.html/);
+  has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);has(route,["notification-update.html","miv5-source-card.notice"]);
   has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
   assert.doesNotMatch(bridge,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js/);
 });
 
-test("every former setup route redirects to the one setup center",async()=>{
-  for(const path of ["public/notification-setup.html","public/notification-update.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html","public/dashboard-setup.html"]){const p=await read(path);assert.match(p,/tool-setup\.html/)}
+test("legacy setup routes redirect while notification update uses dedicated recovery page",async()=>{
+  for(const path of ["public/notification-setup.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html","public/dashboard-setup.html"]){const p=await read(path);assert.match(p,/tool-setup\.html/)}
+  const update=await read("public/notification-update.html");has(update,["本人通知 V3.1.5","インストール / 更新","Raw文字列","更新確認してINSIGHTへ戻る","raw.githubusercontent.com"]);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
@@ -45,9 +45,9 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
 
 test("release tracks only the two active tools",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.7");assert.equal(manifest.notificationVersion,"3.1.4");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
-  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.4"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.4/);
+  assert.equal(manifest.appVersion,"2026.09.14.8");assert.equal(manifest.notificationVersion,"3.1.5");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.5"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.5/);
 });
 
 test("private notification categories and dense analysis remain intact",async()=>{
