@@ -29,12 +29,15 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.doesNotMatch(b,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js|note-insight-dashboard-sync\.user\.js/);
 });
 
-test("V3.1.3 owns the visible four-button dock before remote cores finish",async()=>{
+test("V3.1.4 owns one stable four-button dock without a rapid redisplay loop",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
-  assert.match(v3,/@version\s+3\.1\.3/);assert.match(v3,/const DOCK_HTML=/);assert.match(v3,/function ensureDirectDock\(\)/);assert.match(v3,/function showDirectDock\(/);assert.match(v3,/function likelyBell\(el\)/);assert.match(v3,/下から読込/);assert.match(v3,/フィルターOFF/);assert.match(v3,/フィルター設定/);assert.match(v3,/INSIGHT【通知】/);
+  assert.match(v3,/@version\s+3\.1\.4/);assert.match(v3,/const VERSION='3\.1\.4'/);assert.match(v3,/const DOCK_HTML=/);assert.match(v3,/function ensureDirectDock\(\)/);assert.match(v3,/function showDirectDock\(/);assert.match(v3,/function likelyBell\(el\)/);assert.match(v3,/下から読込/);assert.match(v3,/フィルターOFF/);assert.match(v3,/フィルター設定/);assert.match(v3,/INSIGHT【通知】/);
+  assert.doesNotMatch(v3,/directPulseLoop|directIntentUntil|setTimeout\(directPulseLoop/);
 });
 
-test("bell open auto-starts bottom-up scan once per open surface",async()=>{
+test("bell open auto-starts bottom-up scan once without display pulsing",async()=>{
   const watch=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(watch,/function forceDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
+  assert.match(watch,/function showDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/function scheduleAutoStart\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(watch,/mumeiDockVisible/);
+  assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
+  assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
 });
