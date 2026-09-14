@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.10",
+  "appVersion": "2026.09.14.11",
   "notificationVersion": "3.1.7",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T19:05:00+09:00",
+  "releasedAt": "2026-09-14T19:58:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.1.7",
   "dashboardLabel": "Dashboard同期",
-  "note": "本人通知の4ボタンパネルをnote上で常時表示。旧ランチャーやベルDOM検出を表示条件から外し、通知一覧を開いた時だけ下から自動読込を開始します。"
+  "note": "note側の本人通知操作を1個の可動ボタンへ収納し、タップ時だけ操作パネルを展開。長押し移動と位置保存、自動読込を維持。INSIGHT【通知】は通知項目を1ボタンへ収納し、本人通知なしで取得できる公開系の重複項目を表示対象から外します。"
 }
