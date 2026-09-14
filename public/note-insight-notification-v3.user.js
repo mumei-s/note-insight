@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.1.1
+// @version      3.1.2
 // @description  本人通知V3の単一ローダー。通知読込本体を自動取得し、失敗時は自動再試行と前回成功キャッシュで復旧します。
 // @match        https://note.com/*
 // @run-at       document-start
@@ -20,12 +20,13 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.1.1';
+const VERSION='3.1.2';
 const BASE='https://mumei-s.github.io/note-insight/';
 const V3_FRAME='mumei-v3-notification-frame';
 const OLD_IDS=['mumei-v2948-frame','mumei-notice-reader-v2963'];
 const ESSENTIAL=[
   'note-insight-notification-runtime-v2958.js',
+  'note-insight-notification-dock-watch-v312.js',
   'note-insight-notification-autoscan-v2970.js',
   'note-insight-notification-bootstrap-v2966.js'
 ];
@@ -117,18 +118,18 @@ function transform(name,code){
   if(name.includes('runtime-v2958')){
     s=s.replaceAll('__mumeiNotificationRuntime2958','__mumeiNotificationRuntimeV3');
     s=s.replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('mumei-v2958-style','mumei-v3-notification-style').replaceAll('mumei-v2958-hide','mumei-v3-notification-hide').replaceAll('mumei-v2958-boundary','mumei-v3-notification-boundary').replaceAll('mumei-notice-shell-v2958','mumei-notice-shell-v3');
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.1'");
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.2'");
   }else if(name.includes('filter-restore-v2962')){
     s=s.replaceAll('__mumeiNotificationFilterRestore2962','__mumeiNotificationFilterRestoreV3').replaceAll('mumei-v2948-frame',V3_FRAME);
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.1'");
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.2'");
   }else if(name.includes('autoscan-v2970')){
     s=s.replaceAll('__mumeiNotificationAutoscan2970','__mumeiNotificationAutoscanV3').replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3');
-    s=s.replace(/const VERSION='[^']*',PROTOCOL='[^']*'/,"const VERSION='3.1.1',PROTOCOL='3.1.1'");
+    s=s.replace(/const VERSION='[^']*',PROTOCOL='[^']*'/,"const VERSION='3.1.2',PROTOCOL='3.1.2'");
     s=s.replaceAll('note-notification-bottom-up-v2970','note-notification-bottom-up-v3');
   }else if(name.includes('filter-safety-v2961')){
     s=s.replaceAll('__mumeiNotificationFilterSafety2961','__mumeiNotificationFilterSafetyV3').replaceAll('mumei-v2948-frame',V3_FRAME).replaceAll('data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3').replaceAll('data-mumei-input-shield-hidden','data-mumei-v3-input-shield-hidden');
   }else if(name.includes('bootstrap-v2966')){
-    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.1'").replaceAll('mumei-v2948-frame',V3_FRAME);
+    s=s.replace(/const VERSION='[^']*'/,"const VERSION='3.1.2'").replaceAll('mumei-v2948-frame',V3_FRAME);
     if(versionCheckRequested)s=s.replace('if(handleVersionCheck())return;','')
   }
   return s
