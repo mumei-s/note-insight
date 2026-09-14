@@ -3,20 +3,24 @@ import "./insight-inline-updates-v1";
 import "./insight-top-install-v16";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.3";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.14.4";
 export const CURRENT_NOTIFICATION_VERSION = "3.1.3";
 export const CURRENT_DASHBOARD_VERSION = "1.4.4";
+export const CURRENT_BRIDGE_VERSION = "1.0.0";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
+export const BRIDGE_VERSION_STORAGE_KEY = "mumei-insight-bridge-version";
 
 export type InsightRelease = {
   appVersion: string;
   notificationVersion: string;
   dashboardVersion: string;
+  bridgeVersion?: string;
   releasedAt?: string;
   appLabel?: string;
   notificationLabel?: string;
   dashboardLabel?: string;
+  bridgeLabel?: string;
 };
 
 export function versionDiffers(current: string, latest: string) {
@@ -35,9 +39,11 @@ export async function fetchInsightRelease(): Promise<InsightRelease> {
     appVersion: String(payload.appVersion),
     notificationVersion: String(payload.notificationVersion),
     dashboardVersion: String(payload.dashboardVersion),
+    bridgeVersion: payload.bridgeVersion ? String(payload.bridgeVersion) : undefined,
     releasedAt: payload.releasedAt ? String(payload.releasedAt) : undefined,
     appLabel: payload.appLabel ? String(payload.appLabel) : undefined,
     notificationLabel: payload.notificationLabel ? String(payload.notificationLabel) : undefined,
     dashboardLabel: payload.dashboardLabel ? String(payload.dashboardLabel) : undefined,
+    bridgeLabel: payload.bridgeLabel ? String(payload.bridgeLabel) : undefined,
   };
 }
