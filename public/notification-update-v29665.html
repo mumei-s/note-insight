@@ -8,9 +8,9 @@
 </head>
 <body><main class="wrap"><section class="card">
 <small>NOTIFICATION V3 MIGRATION</small><h1>本人通知 V3</h1><span class="badge">最新版 v3.0.1</span>
-<div class="note"><b>V3は一度だけ新規導入します。</b><br>インストール後にこの画面へ戻ると、自動でnote側の実動作版を確認し、v3.0.1確認後は元のINSIGHTへ自動で戻ります。<br><b>旧2.xは削除しなくて大丈夫です。</b> V3が旧通知パネルを無効化します。</div>
+<div class="note"><b>V3は一度だけ新規導入します。</b><br>インストール後は自動でnote側の実動作版を確認し、v3.0.1確認後は元のINSIGHTへ自動で戻ります。<br><b>.user.js が文字列表示になった場合も、対応可能な同一タブは自動で回収して確認へ進みます。</b><br><b>旧2.xは削除しなくて大丈夫です。</b> V3が旧通知パネルを無効化します。</div>
 <div id="status" class="status">V3をインストールしてください。完了後は自動確認してINSIGHTへ戻ります。</div>
-<a id="install" class="btn lime" target="_blank" rel="noopener">本人通知 V3 を新規インストール</a>
+<a id="install" class="btn lime" target="_blank">本人通知 V3 を新規インストール</a>
 <a id="download" class="btn blue" download="mumei-note-insight-notification-v3.user.js">直接開けない場合：V3ファイルを保存</a>
 <div class="steps"><b>端末別の導入</b><br>Android：拡張機能を使えるEdgeまたはFirefoxで導入。Chrome・Yahooではこのページを対応ブラウザで開いてください。<br>iPhone／iPad：SafariのUserscriptsにファイルを保存し、Safari設定で拡張機能とnote.comへのアクセスを有効にしてください。<br>PC：対応ブラウザのTampermonkeyへ導入。<br><b>Tampermonkeyでファイル保存の場合</b><br>Tampermonkey → ダッシュボード → ユーティリティ → <b>ファイルからインポート</b> → 保存した <b>mumei-note-insight-notification-v3.user.js</b> を選択。導入後、この画面へ戻れば自動確認します。</div>
 <button id="verify" class="btn" type="button">V3を今すぐ確認</button>
@@ -25,15 +25,22 @@ function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='htt
 const requestedBack=safeReturn(q.get('return'));const returnPage=new URL(requestedBack);const back=/notification-(?:update|setup)/.test(returnPage.pathname)?new URL('./',location.href).href:requestedBack;document.getElementById('back').href=back;
 function verifyReturn(){const u=new URL(location.href);u.searchParams.delete('notificationInstalled');u.searchParams.delete('notificationCheckedAt');u.searchParams.delete('notificationUpdateResult');u.searchParams.set('return',back);return u.href}
 function verifyUrl(){return `https://note.com/?mumei_insight_version_check=1&mumei_return=${encodeURIComponent(verifyReturn())}`}
-let verifying=false;
+let verifying=false,installWindow=null,verifyWindow=null,verifyWatchdog=0;
 function markPending(){sessionStorage.setItem(PENDING,String(Date.now()));sessionStorage.setItem(AWAY,'0')}
 function markAway(){if(sessionStorage.getItem(PENDING))sessionStorage.setItem(AWAY,'1')}
-function runVerify(auto=false){if(verifying)return;verifying=true;status.className='status';status.textContent=auto?'V3インストール完了を確認中… note側で実動作版を確認します。':'note側でV3の実動作版を確認します。';setTimeout(()=>location.assign(verifyUrl()),180)}
+function destination(){const dest=new URL(back);dest.searchParams.set('notificationInstalled',VERSION);dest.searchParams.set('notificationCheckedAt',String(Date.now()));dest.searchParams.set('notificationUpdateResult','checked-v3');return dest}
+function finishVerified(){if(verifyWatchdog)clearTimeout(verifyWatchdog);verifyWatchdog=0;verifying=false;localStorage.setItem(KEY,VERSION);sessionStorage.removeItem(PENDING);sessionStorage.removeItem(AWAY);try{if(verifyWindow&&!verifyWindow.closed)verifyWindow.close()}catch{}status.className='status ok';status.textContent=`✅ note側で本人通知 V3 v${VERSION} を確認済み。INSIGHTへ戻ります…`;setTimeout(()=>location.replace(destination().href),450)}
+function watchVerifyWindow(){if(verifyWatchdog)clearTimeout(verifyWatchdog);verifyWatchdog=setTimeout(()=>{if(!verifying)return;verifying=false;try{if(verifyWindow&&!verifyWindow.closed)verifyWindow.close()}catch{}status.className='status warn';status.textContent='⚠ V3の実動作を確認できませんでした。V3を有効化してから「V3を今すぐ確認」を押してください。'},7000)}
+function runVerify(auto=false,reuseWindow=null){if(verifying)return;verifying=true;status.className='status';status.textContent=auto?'V3インストール完了を確認中… note側で実動作版を確認します。':'note側でV3の実動作版を確認します。';const url=verifyUrl();let w=reuseWindow;try{if(w&&!w.closed){w.location.replace(url);verifyWindow=w}else{w=window.open(url,'mumeiV3Verify');verifyWindow=w}}catch{w=null}if(w){watchVerifyWindow();return}setTimeout(()=>location.assign(url),180)}
 function maybeAutoVerify(){const started=Number(sessionStorage.getItem(PENDING)||0),away=sessionStorage.getItem(AWAY)==='1';if(!started||!away||Date.now()-started<700||verifying)return;runVerify(true)}
-install.addEventListener('click',()=>{markPending();status.className='status';status.textContent='V3インストール画面で「インストール」を押してください。完了後、この画面へ戻ると自動確認します。'});
+function isRawInstallWindow(w){try{if(!w||w.closed)return false;const u=new URL(w.location.href);return u.origin===location.origin&&u.pathname===scriptUrl.pathname}catch{return false}}
+function recoverRawInstall(){if(!isRawInstallWindow(installWindow))return false;status.className='status';status.textContent='V3ファイルの文字列表示を検出しました。タブを自動で回収してV3の実動作確認へ進みます。';markAway();runVerify(true,installWindow);return true}
+function armRawRecovery(){setTimeout(()=>{if(!verifying)recoverRawInstall()},2800);setTimeout(()=>{if(!verifying)recoverRawInstall()},5200)}
+install.addEventListener('click',e=>{e.preventDefault();markPending();status.className='status';status.textContent='V3インストール画面を開いています。完了後は自動確認してINSIGHTへ戻ります。';installWindow=window.open(scriptUrl.href,'mumeiV3Install');if(!installWindow){status.className='status warn';status.textContent='別タブを開けませんでした。このタブでV3を開きます。';setTimeout(()=>location.assign(scriptUrl.href),120);return}markAway();armRawRecovery()});
 download.addEventListener('click',()=>{markPending();status.className='status ok';status.textContent='V3ファイルの保存を開始しました。Tampermonkeyへインポート後、この画面へ戻ると自動確認します。'});
 verify.onclick=()=>runVerify(false);
+window.addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.type!=='mumei-v3-verified'||e.data?.version!==VERSION)return;finishVerified()});
 window.addEventListener('blur',markAway);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')markAway();else setTimeout(maybeAutoVerify,120)});window.addEventListener('focus',()=>setTimeout(maybeAutoVerify,120));window.addEventListener('pageshow',()=>setTimeout(maybeAutoVerify,120));
 const checked=String(q.get('notificationInstalled')||'');
-if(checked){localStorage.setItem(KEY,checked);if(checked===VERSION){sessionStorage.removeItem(PENDING);sessionStorage.removeItem(AWAY);status.className='status ok';status.textContent=`✅ note側で本人通知 V3 v${VERSION} を確認済み。INSIGHTへ戻ります…`;const dest=new URL(back);dest.searchParams.set('notificationInstalled',VERSION);dest.searchParams.set('notificationCheckedAt',String(Date.now()));dest.searchParams.set('notificationUpdateResult','checked-v3');setTimeout(()=>location.replace(dest.href),650)}else{sessionStorage.removeItem(PENDING);sessionStorage.removeItem(AWAY);status.className='status warn';status.textContent=`⚠ note側では ${checked} が動作中です。V3が実行されていません。V3を有効化して再確認してください`;}}
+if(checked){localStorage.setItem(KEY,checked);if(checked===VERSION){sessionStorage.removeItem(PENDING);sessionStorage.removeItem(AWAY);status.className='status ok';status.textContent=`✅ note側で本人通知 V3 v${VERSION} を確認済み。INSIGHTへ戻ります…`;let handed=false;try{if(window.opener&&window.opener!==window){window.opener.postMessage({type:'mumei-v3-verified',version:VERSION},location.origin);handed=true;setTimeout(()=>window.close(),120)}}catch{}if(!handed)setTimeout(()=>location.replace(destination().href),650)}else{sessionStorage.removeItem(PENDING);sessionStorage.removeItem(AWAY);status.className='status warn';status.textContent=`⚠ note側では ${checked} が動作中です。V3が実行されていません。V3を有効化して再確認してください`;}}
 </script></body></html>
