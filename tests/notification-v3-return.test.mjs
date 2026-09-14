@@ -30,16 +30,16 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.doesNotMatch(b,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js|note-insight-dashboard-sync\.user\.js/);
 });
 
-test("V3.1.6 keeps stable V3 core and removes the second continuous display controller",async()=>{
+test("V3.1.6 keeps stable V3 core and delegates display to dock-watch only",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v316-fix.js");
   assert.match(v3,/@version\s+3\.1\.6/);assert.match(v3,/note-insight-notification-v316-fix\.js/);assert.match(v3,/19b1beec55012b53bedcd93751af552f53c0cf8a\/public\/note-insight-notification-v3\.user\.js/);assert.doesNotMatch(v3,/note-insight-notification-v315-fix\.js/);
-  assert.match(fix,/const VERSION='3\.1\.6'/);assert.match(fix,/mumei_insight_version_check/);assert.match(fix,/function likelyBell\(el\)/);assert.match(fix,/function oneShotShow\(\)/);
-  assert.doesNotMatch(fix,/setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop/);
+  assert.match(fix,/const VERSION='3\.1\.6'/);assert.match(fix,/mumei_insight_version_check/);assert.match(fix,/loader-checked-v316/);
+  assert.doesNotMatch(fix,/likelyBell|oneShotShow|mumei-v3-notification-frame|setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop/);
 });
 
-test("bell open auto-starts bottom-up scan once without display pulsing",async()=>{
+test("bell keeps dock visible until user closes it and auto-starts bottom-up scan",async()=>{
   const watch=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(watch,/function showDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/function scheduleAutoStart\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(watch,/mumeiDockVisible/);
-  assert.doesNotMatch(watch,/wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
+  assert.match(watch,/function showDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/function scheduleAutoStart\(\)/);assert.match(watch,/manualVisible/);assert.match(watch,/function closeIntent\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(watch,/mumeiDockVisible/);
+  assert.doesNotMatch(watch,/scheduleHide|wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
   assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
 });
