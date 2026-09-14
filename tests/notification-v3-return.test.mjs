@@ -3,30 +3,30 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("setup center keeps the INSIGHT tab and installs Bridge through Tampermonkey official intermediary",async()=>{
+test("setup center uses the proven Tampermonkey intermediary and auto-return flow",async()=>{
   const page=await read("public/tool-setup.html");
   assert.match(page,/script_installation\.php#url=/);
-  assert.match(page,/target="_blank"/);
-  assert.match(page,/mumei-insight-bridge-install-pending/);
-  assert.match(page,/mumei-insight-bridge-version/);
-  assert.match(page,/function returnIfInstalled\(\)/);
+  assert.match(page,/window\.open\(installer\(kind\),'_blank'\)/);
+  assert.match(page,/mumei-dashboard-install-pending-current/);
+  assert.match(page,/mumei-notification-install-pending-current/);
+  assert.match(page,/mumei_insight_version_check/);
+  assert.match(page,/notificationInstalled/);
   assert.match(page,/location\.replace\(back\)/);
-  assert.match(page,/ユーザースクリプトを許可/);
-  assert.doesNotMatch(page,/location\.assign\(scriptUrl|dash-install|notice-install/);
+  assert.match(page,/Dashboard同期をインストール／更新/);
+  assert.match(page,/本人通知をインストール／更新/);
+  assert.doesNotMatch(page,/ONE BRIDGE SETUP|mumei-insight-bridge-install-pending|Bridgeが実行されていません/);
 });
 
 test("all former notification pages only redirect to setup center",async()=>{
   for(const path of ["public/notification-setup.html","public/notification-update.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html"]){const page=await read(path);assert.match(page,/tool-setup\.html/)}
 });
 
-test("Bridge loads notification and Dashboard runtimes from one installed userscript",async()=>{
+test("retired Bridge is a no-op compatibility stub",async()=>{
   const b=await read("public/note-insight-bridge.user.js");
-  assert.match(b,/@version\s+1\.0\.0/);
-  assert.match(b,/note-insight-notification-v3\.user\.js/);
-  assert.match(b,/note-insight-dashboard-sync-core-v1\.1\.0\.js/);
-  assert.match(b,/note-insight-dashboard-sync\.user\.js/);
-  assert.match(b,/mumei-insight-bridge-version/);
-  assert.match(b,/mumei-insight-bridge-ready/);
+  assert.match(b,/@version\s+1\.0\.1/);
+  assert.match(b,/互換停止版/);
+  assert.match(b,/このBridgeは何も起動しません/);
+  assert.doesNotMatch(b,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js|note-insight-dashboard-sync\.user\.js/);
 });
 
 test("V3.1.3 owns the visible four-button dock before remote cores finish",async()=>{
