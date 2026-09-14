@@ -12,32 +12,33 @@ test("bottom-up notification core remains intact",async()=>{
   assert.doesNotMatch(watch,/setTimeout\(pulse,180\)|function pulse\(|mumeiAlwaysVisible|forceDock/);
 });
 
-test("notification V3.1.8 keeps version return and compact movable control",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-loader-v318.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(v3,/@version\s+3\.1\.8/);
-  has(v3,["note-insight-notification-loader-v318.js?v=318","tool-setup.html"]);
-  has(fix,["const VERSION='3.1.8'","mumei_insight_version_check","runtime-checked-v318"]);
-  has(watch,["mumeiNotificationCompactDock","🔔 INSIGHT","× 通知","520","savePos","nudgeReader"]);
-  assert.doesNotMatch(v3,/note-insight-notification-v317-fix\.js/);has(fix,["if(essentialOk)","handleVersionCheck()","note-insight-dashboard-integrated-v318.js"]);
+test("notification V3.1.9 keeps version return and permanent four-column control",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js");
+  assert.match(v3,/@version\s+3\.1\.9/);
+  has(v3,["note-insight-notification-fixed-dock-v319.js?v=319","note-insight-notification-loader-v318.js?v=319","tool-setup.html"]);
+  has(loader,["const VERSION='3.1.8'","runtime-checked-v318","note-insight-dashboard-integrated-v318.js"]);
+  has(fixed,["const VERSION='3.1.9'","mumei-v3-fixed-dock","grid-template-columns:repeat(4,minmax(0,1fr))","notificationInstalled',VERSION","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"]);
+  assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
+  assert.doesNotMatch(fixed,/bindDrag|savePos|mumei-notification-launcher-position-v1/);
 });
 
-test("notification runtime still exposes the four operations inside the compact panel",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2958.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
+test("notification runtime still exposes the four operations",async()=>{
+  const r=await read("public/note-insight-notification-runtime-v2958.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js");
   has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
-  has(watch,["追加読込・保存","フィルターOFF","フィルター設定","INSIGHT【通知】"]);
+  has(fixed,["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","clickLegacy('read')","clickLegacy('filter')"]);
 });
 
-test("one setup center directly opens userscripts and never uses the broken Tampermonkey intermediary",async()=>{
+test("one setup center uses one unified userscript and never requires Tampermonkey reinstall",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","通知＋ダッシュボードを直接インストール／更新","本人通知を実働確認／連携","target=\"_blank\"","note-insight-notification-v3.user.js","Import from URL","mumei-direct-install-pending","この画面で連携を続けられます"]);
-  assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません/);
+  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","通知＋ダッシュボードをインストール／更新","本人通知を実働確認／連携","note-insight-notification-v3.user.js","mumei-direct-install-pending","Tampermonkey自体を入れ直す必要はありません","このまま連携できます"]);
+  assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません|Import from URL|target="_blank"/);
   has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);has(route,["notification-update.html","miv5-source-card.notice"]);
   has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
 });
 
-test("legacy setup routes redirect while notification update persists confirmed version",async()=>{
+test("legacy setup routes and notification update converge on the unified setup center",async()=>{
   for(const path of ["public/notification-setup.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html","public/dashboard-setup.html"]){const p=await read(path);assert.match(p,/tool-setup\.html/)}
-  const update=await read("public/notification-update.html");has(update,["本人通知 V3.1.8","インストール / 更新","Raw文字列","更新確認してINSIGHTへ戻る","raw.githubusercontent.com","mumei-notification-tool-version","dest.searchParams.set('notificationInstalled',installed)"]);
+  const update=await read("public/notification-update.html");has(update,["INSIGHT 統合更新","本人通知とダッシュボードは同じ1本で更新します","tool-setup.html"]);assert.doesNotMatch(update,/Raw文字列|raw\.githubusercontent\.com|Import from URL/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
@@ -45,11 +46,11 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
   for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/);
 });
 
-test("release tracks two active tools and loads compact notification selector",async()=>{
+test("release tracks V3.1.9 and loads compact notification selector",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js"),ui=await read("src/insight-notification-ui-v18.ts");
-  assert.equal(manifest.appVersion,"2026.09.14.12");assert.equal(manifest.notificationVersion,"3.1.8");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
-  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.8"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);assert.match(release,/insight-notification-ui-v18/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.8/);has(ui,["通知項目：","mumei-notification-category-button","PUBLIC_DUPLICATE_LABELS"]);
+  assert.equal(manifest.appVersion,"2026.09.14.13");assert.equal(manifest.notificationVersion,"3.1.9");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.9"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);assert.match(release,/insight-notification-ui-v18/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.9/);has(ui,["通知項目：","mumei-notification-category-button","PUBLIC_DUPLICATE_LABELS"]);
 });
 
 test("private notification categories stay dense while public duplicates are excluded",async()=>{
