@@ -4,12 +4,12 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("bottom-up notification core remains intact",async()=>{
+test("bottom-up notification core remains intact and existing V3.1.8 installs receive the fixed dock hotfix",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["tryAutoStart","autoStarted=true","read.click()","ensureLauncher","bindDrag","追加読込・保存","mumei-notification-launcher-position-v1"]);
-  assert.doesNotMatch(watch,/setTimeout\(pulse,180\)|function pulse\(|mumeiAlwaysVisible|forceDock/);
+  has(watch,["note-insight-notification-fixed-dock-v319.js","__mumeiNotificationFixedDock319","__mumeiNotificationLauncherV317=true","removeOld","fetchFixed"]);
+  assert.doesNotMatch(watch,/ensureLauncher|bindDrag|savePos|mumei-notification-launcher-position-v1/);
 });
 
 test("notification V3.1.9 keeps version return and permanent four-column control",async()=>{
