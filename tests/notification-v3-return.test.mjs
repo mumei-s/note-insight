@@ -18,6 +18,14 @@ test("V3 install auto-verifies and returns to the original INSIGHT page",async()
   assert.match(page,/INSIGHTへ戻ります/);
 });
 
+test("V3 settings also auto-return after a verified install result",async()=>{
+  const page=await read("public/notification-setup-v2966.html");
+  assert.match(page,/const checked=String\(q\.get\('notificationInstalled'\)\|\|''\)/);
+  assert.match(page,/if\(checked===VERSION\)/);
+  assert.match(page,/確認完了。INSIGHTへ戻ります/);
+  assert.match(page,/setTimeout\(\(\)=>location\.replace\(back\),900\)/);
+});
+
 test("V3 wakes the notification dock when the popup was opened before remote core finished loading",async()=>{
   const bootstrap=await read("public/note-insight-notification-bootstrap-v2966.js");
   assert.match(bootstrap,/function strictOpenNoticeShell\(\)/);
