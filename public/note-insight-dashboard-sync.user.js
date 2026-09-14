@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.4.3
+// @version      1.4.4
 // @description  INSIGHTの読込ボタンから公式Dashboardを本人通知なしでも同期。直接遷移でもアカウント照合・読込・INSIGHT復帰まで自動実行します。
 // @match        https://note.com/*
+// @match        https://mumei-s.github.io/note-insight/tool-setup.html*
 // @match        https://mumei-s.github.io/note-insight/dashboard-setup.html*
 // @run-at       document-start
 // @grant        GM.xmlHttpRequest
@@ -15,15 +16,14 @@
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=143a
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=144
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
 
 (() => {
   'use strict';
-  // Bridge protocol remains 1.4.2 so the existing setup page can detect the patched script.
-  const VERSION='1.4.2';
+  const VERSION='1.4.4';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
@@ -45,9 +45,9 @@
   function installHideStyle(forceAll=false){if(document.getElementById(HIDE_STYLE_ID))return;const s=document.createElement('style');s.id=HIDE_STYLE_ID;s.textContent=forceAll?'#mumei-dashboard-sync{display:none!important}':'#mumei-dashboard-sync{display:none!important}#mumei-dashboard-sync[data-mumei-recovery="1"]{display:block!important}';(document.head||document.documentElement).appendChild(s)}
 
   if(location.origin==='https://mumei-s.github.io'){
-    installHideStyle(true);
+    installHideStyle(true);markVersion();
     const markBridge=()=>{if(document.documentElement)document.documentElement.setAttribute('data-mumei-dashboard-bridge',VERSION)};
-    const cleanup=()=>{document.getElementById('mumei-dashboard-sync')?.remove();markBridge()};
+    const cleanup=()=>{document.getElementById('mumei-dashboard-sync')?.remove();markVersion();markBridge()};
     const saveHandoff=async()=>{const el=document.getElementById(HANDOFF_ID),raw=el?.getAttribute('data-payload')||'';if(!raw)return;try{const p=JSON.parse(raw);if(!/^\d{8}$/.test(String(p.code||''))||!/^[a-z0-9_-]+$/i.test(String(p.noteId||'')))throw new Error('HANDOFF_INVALID');p.version=VERSION;p.savedAt=Date.now();await gmSet(HANDOFF_KEY,JSON.stringify(p));document.documentElement?.setAttribute('data-mumei-dashboard-handoff-saved','1');document.dispatchEvent(new Event('mumei-dashboard-handoff-saved'))}catch(e){document.documentElement?.setAttribute('data-mumei-dashboard-handoff-saved','0');document.documentElement?.setAttribute('data-mumei-dashboard-handoff-error',String(e?.message||e));document.dispatchEvent(new Event('mumei-dashboard-handoff-saved'))}};
     markBridge();document.addEventListener('mumei-dashboard-handoff',()=>void saveHandoff());if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',cleanup,{once:true});else cleanup();window.addEventListener('pageshow',cleanup);new MutationObserver(cleanup).observe(document.documentElement,{subtree:true,childList:true});return;
   }
