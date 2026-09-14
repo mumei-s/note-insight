@@ -3,18 +3,18 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("setup center uses the proven Tampermonkey intermediary and auto-return flow",async()=>{
+test("setup center bypasses Tampermonkey intermediary on Edge and keeps the INSIGHT tab",async()=>{
   const page=await read("public/tool-setup.html");
-  assert.match(page,/script_installation\.php#url=/);
-  assert.match(page,/window\.open\(installer\(kind\),'_blank'\)/);
-  assert.match(page,/mumei-dashboard-install-pending-current/);
-  assert.match(page,/mumei-notification-install-pending-current/);
-  assert.match(page,/mumei_insight_version_check/);
-  assert.match(page,/notificationInstalled/);
+  assert.match(page,/Dashboard同期を直接インストール／更新/);
+  assert.match(page,/本人通知を直接インストール／更新/);
+  assert.match(page,/target="_blank"/);
+  assert.match(page,/note-insight-dashboard-sync\.user\.js/);
+  assert.match(page,/note-insight-notification-v3\.user\.js/);
+  assert.match(page,/mumei-direct-install-pending/);
   assert.match(page,/location\.replace\(back\)/);
-  assert.match(page,/Dashboard同期をインストール／更新/);
-  assert.match(page,/本人通知をインストール／更新/);
-  assert.doesNotMatch(page,/ONE BRIDGE SETUP|mumei-insight-bridge-install-pending|Bridgeが実行されていません/);
+  assert.match(page,/Import from URL/);
+  assert.doesNotMatch(page,/script_installation\.php#url=/);
+  assert.doesNotMatch(page,/window\.open\(/);
 });
 
 test("all former notification pages only redirect to setup center",async()=>{
