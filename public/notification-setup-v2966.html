@@ -5,4 +5,5 @@ async function call(action){const h={'Content-Type':'application/json'};h[role==
 if(hasInsightSession){(async()=>{try{show(await call('stats'))}catch(e){pairState.className='status warn';pairState.textContent=e.message||'本人連携を確認できませんでした'}})()}else{pairState.className='status ok';pairState.textContent='✅ インストール専用モード｜このブラウザでINSIGHTへの再ログインは不要です';pair.disabled=true;pair.textContent='元のINSIGHTブラウザで本人連携を確認';pair.setAttribute('aria-disabled','true')}
 pair.onclick=async()=>{if(!hasInsightSession)return;pair.disabled=true;try{const p=await call('pair-start');show(p);const u=new URL(p.noteUrl),ret=new URL('./notification-entry.html',location.href);if(noteId)ret.searchParams.set('account',noteId);u.searchParams.set('mumei_return',ret.href);location.href=u.href}catch(e){pairState.textContent=e.message||'本人連携を開始できませんでした';pair.disabled=false}};
 if(installed===VERSION)update.textContent='本人通知 V3 v3.0.1 を再確認';
+if(checked===VERSION){version.className='status ok';version.textContent=`✅ 本人通知 V3 v${VERSION}｜確認完了。INSIGHTへ戻ります…`;window.setTimeout(()=>location.replace(back),900)}
 </script></body></html>
