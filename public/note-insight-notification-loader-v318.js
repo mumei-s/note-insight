@@ -78,8 +78,10 @@ function looksOldDock(f){
   }catch{return false}
 }
 function neutralize(el){
-  if(!(el instanceof HTMLElement)||el.id===V3_FRAME)return;
-  el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');el.style.setProperty('pointer-events','none','important');el.style.setProperty('width','0','important');el.style.setProperty('height','0','important');el.style.setProperty('max-width','0','important');el.style.setProperty('max-height','0','important');el.setAttribute('data-mumei-v3-neutralized','1')
+ if(!(el instanceof HTMLElement)||el.id===V3_FRAME)return;
+ const values={display:'none',visibility:'hidden','pointer-events':'none',width:'0px',height:'0px','max-width':'0px','max-height':'0px'};
+ for(const [name,value] of Object.entries(values))if(el.style.getPropertyValue(name)!==value||el.style.getPropertyPriority(name)!=='important')el.style.setProperty(name,value,'important');
+ if(el.getAttribute('data-mumei-v3-neutralized')!=='1')el.setAttribute('data-mumei-v3-neutralized','1');
 }
 function sweepOld(){clearLegacyStatus();for(const id of OLD_IDS){const el=document.getElementById(id);if(el)neutralize(el)}for(const f of document.querySelectorAll('iframe'))if(looksOldDock(f))neutralize(f)}
 function installOldGuard(){
