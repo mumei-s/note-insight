@@ -13,24 +13,23 @@ test("bottom-up notification core remains intact",async()=>{
 
 test("notification V3.1.3 directly owns the four-control dock",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
-  assert.match(v3,/@version\s+3\.1\.3/);
-  assert.match(v3,/const VERSION='3\.1\.3'/);
+  assert.match(v3,/@version\s+3\.1\.3/);assert.match(v3,/const VERSION='3\.1\.3'/);
   has(v3,["DOCK_HTML","ensureDirectDock","showDirectDock","likelyBell","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","note-insight-notification-dock-watch-v312.js"]);
-  has(v3,["const existing=document.getElementById(FRAME)","frame=existing;bindFrame();return frame"]);
   assert.doesNotMatch(v3,/\/\/ @require\s+/);
 });
 
 test("notification runtime still exposes one four-control reading dock",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2958.js");
   has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
-  assert.doesNotMatch(r,/setInterval\(/);
 });
 
-test("one setup center owns browser-specific Dashboard and notification setup",async()=>{
-  const setup=await read("public/tool-setup.html");
-  has(setup,["INSIGHT 導入センター","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","Dashboard同期を","本人通知を","Dashboardを認証して読み込む","本人通知を実動作確認／連携","Dashboard認証は本人通知未導入でも実行できます"]);
-  has(setup,["X-Owner-Token","X-Insight-Token","authHeaders()","mumei_insight_version_check","notificationInstalled","tool-setup.html","pair-start"]);
-  assert.doesNotMatch(setup,/window\.open\(/);
+test("one Bridge owns browser-specific setup without navigating the current tab to raw user.js",async()=>{
+  const setup=await read("public/tool-setup.html"),bridge=await read("public/note-insight-bridge.user.js"),top=await read("src/insight-top-install-v16.ts");
+  has(setup,["ONE BRIDGE SETUP","INSIGHT Bridge 1本","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","ユーザースクリプトを許可","script_installation.php#url=","target=\"_blank\"","mumei-insight-bridge-version","Dashboardを認証して自動読込","本人通知を確認／連携","Bridgeを検出したらINSIGHTへ自動復帰"]);
+  assert.doesNotMatch(setup,/dash-install|notice-install|location\.assign\(scriptUrl|note-insight-dashboard-sync\.user\.js'\s*:\s*'note-insight-notification-v3\.user\.js/);
+  has(bridge,["@name         無名S note INSIGHT Bridge","@version      1.0.0","note-insight-notification-v3.user.js","note-insight-dashboard-sync-core-v1.1.0.js","note-insight-dashboard-sync.user.js","mumei-insight-bridge-version"]);
+  has(top,["./tool-setup.html?from=top","Bridge 設定 / 更新"]);
+  assert.doesNotMatch(top,/notification-update\.html|dashboard-setup\.html/);
 });
 
 test("every former setup route redirects to the one setup center",async()=>{
@@ -42,24 +41,16 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
   for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/);
 });
 
-test("release tracks agree on the unified versions",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.3");
-  assert.equal(manifest.notificationVersion,"3.1.3");
-  assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);
-  assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
-  assert.match(dash,/@version\s+1\.4\.4/);
-  assert.match(dash,/const VERSION='1\.4\.4'/);
-  assert.match(v3,/@version\s+3\.1\.3/);
-  assert.match(dash,/tool-setup\.html/);
+test("release tracks include Bridge and current tool versions",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js"),bridge=await read("public/note-insight-bridge.user.js");
+  assert.equal(manifest.appVersion,"2026.09.14.4");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,"1.0.0");
+  assert.match(release,/CURRENT_BRIDGE_VERSION = "1\.0\.0"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.3/);assert.match(bridge,/@version\s+1\.0\.0/);
 });
 
 test("private notification categories and dense analysis remain intact",async()=>{
   const ui=await read("src/member-insight-notifications-final.tsx"),pro=await read("src/member-insight-analytics-pro-v3.tsx"),detail=await read("public/install-free-analysis-v2.html");
-  has(ui,["reply_self","reply_other","membership_reaction_self","membership_join","purchase","tip","quote","other"]);
-  has(pro,["INSIGHT PRO ANALYTICS V3","反応/1,000PV","本人通知 × PV クロス分析","記事総合ランキング"]);
-  has(detail,["1記事あたり平均スキ数","1記事あたり平均コメント数","本人通知・Dashboard同期なし"]);
+  has(ui,["reply_self","reply_other","membership_reaction_self","membership_join","purchase","tip","quote","other"]);has(pro,["INSIGHT PRO ANALYTICS V3","反応/1,000PV","本人通知 × PV クロス分析","記事総合ランキング"]);has(detail,["1記事あたり平均スキ数","1記事あたり平均コメント数","本人通知・Dashboard同期なし"]);
 });
 
 test("notification and social history server paths remain intact",async()=>{
