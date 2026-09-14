@@ -5,16 +5,17 @@ const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
 test("bottom-up notification core remains intact",async()=>{
-  const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
+  has(watch,["tryAutoStart","autoStarted=true","read.click()","自動で下から読込を開始します"]);
 });
 
-test("notification V3.1.1 is the single resilient loader and removes old failure docks",async()=>{
+test("notification V3.1.2 is the single resilient loader and removes old failure docks",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
-  assert.match(v3,/@version\s+3\.1\.1/);
-  assert.match(v3,/const VERSION='3\.1\.1'/);
-  has(v3,["note-insight-notification-runtime-v2958.js","note-insight-notification-autoscan-v2970.js","note-insight-notification-bootstrap-v2966.js","mumei-v3-notification-frame","mumei-v3-core-cache:","scheduleRetry","sweepOld","本人通知の接続に失敗","再接続してください"]);
+  assert.match(v3,/@version\s+3\.1\.2/);
+  assert.match(v3,/const VERSION='3\.1\.2'/);
+  has(v3,["note-insight-notification-runtime-v2958.js","note-insight-notification-dock-watch-v312.js","note-insight-notification-autoscan-v2970.js","note-insight-notification-bootstrap-v2966.js","mumei-v3-notification-frame","mumei-v3-core-cache:","scheduleRetry","sweepOld","本人通知の接続に失敗","再接続してください"]);
   assert.doesNotMatch(v3,/\/\/ @require\s+/);
 });
 
@@ -41,14 +42,15 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
 });
 
 test("release tracks agree on the unified versions",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.1");
-  assert.equal(manifest.notificationVersion,"3.1.1");
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
+  assert.equal(manifest.appVersion,"2026.09.14.2");
+  assert.equal(manifest.notificationVersion,"3.1.2");
   assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.1"/);
+  assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.2"/);
   assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
   assert.match(dash,/@version\s+1\.4\.4/);
   assert.match(dash,/const VERSION='1\.4\.4'/);
+  assert.match(v3,/@version\s+3\.1\.2/);
   assert.match(dash,/tool-setup\.html/);
 });
 
