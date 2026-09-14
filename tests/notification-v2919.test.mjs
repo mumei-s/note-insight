@@ -23,13 +23,14 @@ test("notification runtime still exposes one four-control reading dock",async()=
   has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
 });
 
-test("one Bridge owns browser-specific setup without navigating the current tab to raw user.js",async()=>{
-  const setup=await read("public/tool-setup.html"),bridge=await read("public/note-insight-bridge.user.js"),top=await read("src/insight-top-install-v16.ts");
-  has(setup,["ONE BRIDGE SETUP","INSIGHT Bridge 1本","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","ユーザースクリプトを許可","script_installation.php#url=","target=\"_blank\"","mumei-insight-bridge-version","Dashboardを認証して自動読込","本人通知を確認／連携","Bridgeを検出したらINSIGHTへ自動復帰"]);
-  assert.doesNotMatch(setup,/dash-install|notice-install|location\.assign\(scriptUrl|note-insight-dashboard-sync\.user\.js'\s*:\s*'note-insight-notification-v3\.user\.js/);
-  has(bridge,["@name         無名S note INSIGHT Bridge","@version      1.0.0","note-insight-notification-v3.user.js","note-insight-dashboard-sync-core-v1.1.0.js","note-insight-dashboard-sync.user.js","mumei-insight-bridge-version"]);
-  has(top,["./tool-setup.html?from=top","Bridge 設定 / 更新"]);
-  assert.doesNotMatch(top,/notification-update\.html|dashboard-setup\.html/);
+test("one setup center uses the historically proven Tampermonkey installer flow for each tool",async()=>{
+  const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),bridge=await read("public/note-insight-bridge.user.js");
+  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","script_installation.php#url=","Dashboard同期をインストール／更新","本人通知をインストール／更新","Dashboardを認証して今すぐ読込","本人通知を確認／連携","window.open(installer(kind),'_blank')","mumei_insight_version_check","location.replace(back)"]);
+  assert.doesNotMatch(setup,/ONE BRIDGE SETUP|INSIGHT Bridge 1本|Bridgeが実行されていません/);
+  has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);
+  assert.doesNotMatch(top,/Bridge 設定 \/ 更新|INSIGHT Bridge 必須|notification-update\.html|dashboard-setup\.html/);
+  has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
+  assert.doesNotMatch(bridge,/note-insight-notification-v3\.user\.js|note-insight-dashboard-sync-core-v1\.1\.0\.js/);
 });
 
 test("every former setup route redirects to the one setup center",async()=>{
@@ -41,11 +42,11 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
   for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/);
 });
 
-test("release tracks include Bridge and current tool versions",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js"),bridge=await read("public/note-insight-bridge.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.4");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,"1.0.0");
-  assert.match(release,/CURRENT_BRIDGE_VERSION = "1\.0\.0"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.3/);assert.match(bridge,/@version\s+1\.0\.0/);
+test("release tracks only the two active tools",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
+  assert.equal(manifest.appVersion,"2026.09.14.5");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.3/);
 });
 
 test("private notification categories and dense analysis remain intact",async()=>{
