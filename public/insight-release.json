@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.5",
+  "appVersion": "2026.09.14.6",
   "notificationVersion": "3.1.3",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T16:22:00+09:00",
+  "releasedAt": "2026-09-14T17:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.1",
   "dashboardLabel": "Dashboard同期",
-  "note": "Bridge前提を撤去。実機で動作していたTampermonkey公式インストール画面→完了検知→note側実働確認→INSIGHT自動復帰の導線へ戻し、Dashboard同期1.4.4と本人通知3.1.3を同じ導入センターから個別に確実起動します。"
+  "note": "Android EdgeでTampermonkey 5.5系のscript_installation.php中継が停止する実機症状に対応。中継ページを使わずGitHub Pages上の.user.jsを直接別タブで開き、元の導入センターを保持。戻った後は1回だけ再確認し、失敗時のみURL取込フォールバックを表示します。"
 }
