@@ -3,48 +3,45 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("V3 install auto-verifies and returns to the original INSIGHT page",async()=>{
-  const page=await read("public/notification-update-v29665.html");
-  assert.match(page,/target="_blank"/);
+test("V3.1 uses one canonical same-tab installer and auto-verifies on return",async()=>{
+  const page=await read("public/notification-setup.html");
+  assert.match(page,/const VERSION='3\.1\.0'/);
+  assert.match(page,/note-insight-notification-v3\.user\.js/);
   assert.match(page,/mumei-v3-install-pending/);
-  assert.match(page,/mumei-v3-install-away/);
-  assert.match(page,/function maybeAutoVerify\(\)/);
+  assert.match(page,/function maybeVerify\(\)/);
+  assert.match(page,/window\.addEventListener\('pageshow'/);
   assert.match(page,/window\.addEventListener\('focus'/);
-  assert.match(page,/document\.addEventListener\('visibilitychange'/);
-  assert.match(page,/localStorage\.setItem\(KEY,checked\)/);
-  assert.match(page,/notificationInstalled',VERSION/);
-  assert.match(page,/notificationUpdateResult','checked-v3'/);
-  assert.match(page,/location\.replace\(destination\(\)\.href\)/);
-  assert.match(page,/INSIGHTへ戻ります/);
-});
-
-test("V3 installer automatically recovers a raw userscript text tab",async()=>{
-  const page=await read("public/notification-update-v29665.html");
-  assert.match(page,/window\.open\(scriptUrl\.href,'mumeiV3Install'\)/);
-  assert.match(page,/function isRawInstallWindow\(w\)/);
-  assert.match(page,/u\.origin===location\.origin&&u\.pathname===scriptUrl\.pathname/);
-  assert.match(page,/function recoverRawInstall\(\)/);
-  assert.match(page,/文字列表示を検出しました/);
-  assert.match(page,/runVerify\(true,installWindow\)/);
-  assert.match(page,/setTimeout\(\(\)=>\{if\(!verifying\)recoverRawInstall\(\)\},2800\)/);
-});
-
-test("V3 verification uses a controlled child and reports success to its opener",async()=>{
-  const page=await read("public/notification-update-v29665.html");
-  assert.match(page,/window\.open\(url,'mumeiV3Verify'\)/);
-  assert.match(page,/window\.addEventListener\('message'/);
-  assert.match(page,/e\.data\?\.type!=='mumei-v3-verified'/);
-  assert.match(page,/window\.opener\.postMessage\(\{type:'mumei-v3-verified',version:VERSION\},location\.origin\)/);
-  assert.match(page,/setTimeout\(\(\)=>window\.close\(\),120\)/);
-  assert.match(page,/V3の実動作を確認できませんでした/);
-});
-
-test("V3 settings also auto-return after a verified install result",async()=>{
-  const page=await read("public/notification-setup-v2966.html");
-  assert.match(page,/const checked=String\(q\.get\('notificationInstalled'\)\|\|''\)/);
+  assert.match(page,/mumei_insight_version_check/);
+  assert.match(page,/notificationInstalled/);
   assert.match(page,/if\(checked===VERSION\)/);
   assert.match(page,/確認完了。INSIGHTへ戻ります/);
-  assert.match(page,/setTimeout\(\(\)=>location\.replace\(back\),900\)/);
+  assert.match(page,/location\.replace\(back\)/);
+  assert.doesNotMatch(page,/target="_blank"/);
+  assert.doesNotMatch(page,/window\.open\(/);
+});
+
+test("all former notification install and settings routes collapse into the canonical page",async()=>{
+  for(const path of ["public/notification-update.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html"]){
+    const page=await read(path);
+    assert.match(page,/notification-setup\.html/);
+    assert.doesNotMatch(page,/mumeiV3Install|recoverRawInstall|mumeiV3Verify/);
+  }
+});
+
+test("V3.1 loader removes the sticky failure panel and recovers core with retry plus cache",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js");
+  assert.match(v3,/@version\s+3\.1\.0/);
+  assert.match(v3,/const ESSENTIAL=/);
+  assert.match(v3,/const OPTIONAL=/);
+  assert.match(v3,/mumei-v3-core-cache:/);
+  assert.match(v3,/function scheduleRetry\(\)/);
+  assert.match(v3,/function clearLegacyStatus\(\)/);
+  assert.match(v3,/componentText/);
+  assert.match(v3,/GM\.xmlHttpRequest/);
+  assert.match(v3,/fetchText/);
+  assert.match(v3,/mumei-v3-load-status/);
+  assert.doesNotMatch(v3,/function loaderNotice\(/);
+  assert.doesNotMatch(v3,/本人通知の接続に失敗しました/);
 });
 
 test("V3 wakes the notification dock when the popup was opened before remote core finished loading",async()=>{
@@ -57,7 +54,6 @@ test("V3 wakes the notification dock when the popup was opened before remote cor
   assert.match(bootstrap,/function recoverAlreadyOpenNotice\(tries=0\)/);
   assert.match(bootstrap,/setTimeout\(\(\)=>recoverAlreadyOpenNotice\(\),120\)/);
   assert.match(bootstrap,/new MutationObserver/);
-  assert.match(bootstrap,/n\.matches\?\.\(NOTICE_ITEM\)/);
   assert.match(bootstrap,/NOTICE_ITEM/);
   assert.match(bootstrap,/TIME_TEXT/);
   assert.match(bootstrap,/お知らせ/);
