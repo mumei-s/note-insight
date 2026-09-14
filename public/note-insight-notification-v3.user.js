@@ -14,7 +14,7 @@
 // @connect      mumei-s.github.io
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-launcher-v317.js?v=317
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v316-fix.js?v=316
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v317-fix.js?v=317
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/19b1beec55012b53bedcd93751af552f53c0cf8a/public/note-insight-notification-v3.user.js
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js
