@@ -3,11 +3,12 @@
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationDockWatchV312)return;window.__mumeiNotificationDockWatchV312=true;
 window.__mumeiNotificationDockControllerReady=true;
-const FRAME='mumei-v3-notification-frame';
+const FRAME='mumei-v3-notification-frame',LEGACY_LAUNCHER='mumei-v3-notification-launcher';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 let primary=null,autoStarted=false,resetTimer=0,styleObserver=null;
 const HTML=`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:system-ui,-apple-system,sans-serif}.dock{height:48px;padding:3px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:25px 15px;gap:2px;border:1px solid #355063;border-radius:10px;background:#0e1c26;box-shadow:0 -4px 14px rgba(0,0,0,.34)}button{display:flex;align-items:center;justify-content:center;text-align:center;min-width:0;height:25px;margin:0;padding:0 4px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 8px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.on{background:#17422f;border-color:#56a77b}.ins{border-color:#55d8f1;background:#11374a}.health{grid-column:1/-1;height:15px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:1px solid #355063;border-radius:5px;background:#091923;color:#c5d8e5;font:850 7px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.saving{color:#fff0a7}.error{color:#ffd2d7}.done{color:#c8ffda}</style><div class="dock"><button id="read">下から読込</button><button id="filter">フィルターOFF</button><button id="settings">フィルター設定</button><button id="ins" class="ins">INSIGHT【通知】</button><div id="health" class="health">🔔 本人通知パネル準備済み</div></div>`;
+function removeLauncher(){document.getElementById(LEGACY_LAUNCHER)?.remove()}
 function makeVisible(f){
   if(!(f instanceof HTMLIFrameElement))return;
   f.dataset.mumeiDockVisible='1';
@@ -27,6 +28,7 @@ function makeVisible(f){
   f.removeAttribute('hidden');f.setAttribute('aria-hidden','false');
 }
 function ensureDock(){
+  removeLauncher();
   let f=document.getElementById(FRAME);
   if(!(f instanceof HTMLIFrameElement)){
     f=document.createElement('iframe');f.id=FRAME;f.title='INSIGHT 本人通知';f.srcdoc=HTML;
@@ -76,7 +78,7 @@ function tryAutoStart(){
   }catch{return false}
 }
 function maybeReset(){clearTimeout(resetTimer);resetTimer=setTimeout(()=>{if(!anySurface())autoStarted=false},400)}
-function inspect(){forceDock();if(anySurface())tryAutoStart();else maybeReset()}
+function inspect(){removeLauncher();forceDock();if(anySurface())tryAutoStart();else maybeReset()}
 function fallbackLinks(){
   const f=frame();const bind=()=>{try{
     const d=f.contentDocument;if(!d||d.documentElement.dataset.mumeiFallbackLinks==='1'||f.dataset.bound==='1')return;
@@ -86,8 +88,8 @@ function fallbackLinks(){
   }catch{}};
   f.addEventListener('load',()=>setTimeout(bind,40),{once:true});setTimeout(bind,1200)
 }
-function boot(){forceDock();fallbackLinks();inspect();
-  new MutationObserver(ms=>{let relevant=false;for(const m of ms){for(const n of m.addedNodes){if(!(n instanceof Element))continue;if(n.matches?.(ITEM)||n.querySelector?.(ITEM)||n.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]')){relevant=true;break}}if(relevant)break}if(relevant||anySurface())inspect();else maybeReset()}).observe(document.documentElement,{subtree:true,childList:true});
+function boot(){removeLauncher();forceDock();fallbackLinks();inspect();
+  new MutationObserver(ms=>{let relevant=false;for(const m of ms){for(const n of m.addedNodes){if(!(n instanceof Element))continue;if(n.id===LEGACY_LAUNCHER){n.remove();continue}if(n.matches?.(ITEM)||n.querySelector?.(ITEM)||n.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]')){relevant=true;break}}if(relevant)break}removeLauncher();if(relevant||anySurface())inspect();else maybeReset()}).observe(document.documentElement,{subtree:true,childList:true});
   document.addEventListener('click',()=>setTimeout(inspect,80),true);
   addEventListener('pageshow',()=>setTimeout(inspect,80));
   addEventListener('focus',()=>setTimeout(inspect,80));
