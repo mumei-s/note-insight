@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.8",
-  "notificationVersion": "3.1.5",
+  "appVersion": "2026.09.14.9",
+  "notificationVersion": "3.1.6",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T18:28:00+09:00",
+  "releasedAt": "2026-09-14T18:40:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.1.5",
+  "notificationLabel": "本人通知 V3.1.6",
   "dashboardLabel": "Dashboard同期",
-  "note": "本人通知の4ボタン表示、フィルター設定導線、更新後のINSIGHT復帰、Raw文字列時の再実行導線を修正。更新確認は外部本体読込完了を待たず親Userscript起動時に戻る。"
+  "note": "本人通知パネルのチカチカを修正。V3.1.5の連続再表示制御を廃止し、安定版V3.1.4+dock-watchの1系統へ統一。更新確認済み版をINSIGHTへ確実に保存し、更新あり表示を解除。"
 }
