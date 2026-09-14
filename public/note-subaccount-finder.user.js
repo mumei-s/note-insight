@@ -1,17 +1,20 @@
 // ==UserScript==
-// @name         note 巡回BOOST｜タグ検索・スキ・マガジン v5.1
+// @name         note 巡回BOOST｜URL・#・マガジン v5.2
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      5.1.0
-// @description  既存の途中進捗・複数マガジン・自動再開を維持。時間ごとの上限・API固定待機・1件ごとの固定待機を廃止し、設定可能な24時間上限だけで制御。BOOST風の高コントラストUIへ更新。
+// @version      5.2.0
+// @description  URLまたは#から巡回。記事URLはスキした人から巡回し、マガジンURLは追加先として利用。24時間上限＋403/429適応リミッター、途中再開・自動再開・複数マガジンを維持。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-subaccount-finder.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-subaccount-finder.user.js
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-subaccount-finder-v52-preflight.js?v=5.2.0
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/77843a09e9bc671716af5fa0ac0448ef095eabdc/public/note-subaccount-finder.user.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/47874424d2f601f0c9c526d36c7c480860f9ce06/public/note-subaccount-finder-v44-patch.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/897cd77f69a5fc1524236b30c41ef20917b6a347/public/note-subaccount-finder-v45-drag.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/f2fd0aed0b5070ec356226240a71b4583f780e24/public/note-subaccount-finder-v46-magbatch.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/6ebedeef4659048a5431845aef13f3ba21e9c7eb/public/note-subaccount-finder-v48-multimag.js
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/1c6d7d91425da7ef00fe6355f1eadbc17f8bf5cd/public/note-subaccount-finder-v51-limitonly.js
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-subaccount-finder-v52-compact.js?v=5.2.0
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-subaccount-finder-v52-fix1.js?v=5.2.0
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
