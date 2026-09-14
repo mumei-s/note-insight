@@ -14,8 +14,29 @@ test("V3 install auto-verifies and returns to the original INSIGHT page",async()
   assert.match(page,/localStorage\.setItem\(KEY,checked\)/);
   assert.match(page,/notificationInstalled',VERSION/);
   assert.match(page,/notificationUpdateResult','checked-v3'/);
-  assert.match(page,/location\.replace\(dest\.href\)/);
+  assert.match(page,/location\.replace\(destination\(\)\.href\)/);
   assert.match(page,/INSIGHTへ戻ります/);
+});
+
+test("V3 installer automatically recovers a raw userscript text tab",async()=>{
+  const page=await read("public/notification-update-v29665.html");
+  assert.match(page,/window\.open\(scriptUrl\.href,'mumeiV3Install'\)/);
+  assert.match(page,/function isRawInstallWindow\(w\)/);
+  assert.match(page,/u\.origin===location\.origin&&u\.pathname===scriptUrl\.pathname/);
+  assert.match(page,/function recoverRawInstall\(\)/);
+  assert.match(page,/文字列表示を検出しました/);
+  assert.match(page,/runVerify\(true,installWindow\)/);
+  assert.match(page,/setTimeout\(\(\)=>\{if\(!verifying\)recoverRawInstall\(\)\},2800\)/);
+});
+
+test("V3 verification uses a controlled child and reports success to its opener",async()=>{
+  const page=await read("public/notification-update-v29665.html");
+  assert.match(page,/window\.open\(url,'mumeiV3Verify'\)/);
+  assert.match(page,/window\.addEventListener\('message'/);
+  assert.match(page,/e\.data\?\.type!=='mumei-v3-verified'/);
+  assert.match(page,/window\.opener\.postMessage\(\{type:'mumei-v3-verified',version:VERSION\},location\.origin\)/);
+  assert.match(page,/setTimeout\(\(\)=>window\.close\(\),120\)/);
+  assert.match(page,/V3の実動作を確認できませんでした/);
 });
 
 test("V3 settings also auto-return after a verified install result",async()=>{
