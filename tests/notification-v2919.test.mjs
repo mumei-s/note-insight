@@ -12,13 +12,13 @@ test("bottom-up notification core remains intact",async()=>{
   assert.doesNotMatch(watch,/setTimeout\(pulse,180\)|function pulse\(|mumeiAlwaysVisible|forceDock/);
 });
 
-test("notification V3.1.7 keeps version return and compact movable control",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v317-fix.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(v3,/@version\s+3\.1\.7/);
-  has(v3,["note-insight-notification-v317-fix.js?v=317","19b1beec55012b53bedcd93751af552f53c0cf8a/public/note-insight-notification-v3.user.js"]);
-  has(fix,["const VERSION='3.1.7'","mumei_insight_version_check","loader-checked-v317"]);
+test("notification V3.1.8 keeps version return and compact movable control",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-loader-v318.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
+  assert.match(v3,/@version\s+3\.1\.8/);
+  has(v3,["note-insight-notification-loader-v318.js?v=318","tool-setup.html"]);
+  has(fix,["const VERSION='3.1.8'","mumei_insight_version_check","runtime-checked-v318"]);
   has(watch,["mumeiNotificationCompactDock","🔔 INSIGHT","× 通知","520","savePos","nudgeReader"]);
-  assert.doesNotMatch(fix,/setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop/);
+  assert.doesNotMatch(v3,/note-insight-notification-v317-fix\.js/);has(fix,["if(essentialOk)","handleVersionCheck()","note-insight-dashboard-integrated-v318.js"]);
 });
 
 test("notification runtime still exposes the four operations inside the compact panel",async()=>{
@@ -29,7 +29,7 @@ test("notification runtime still exposes the four operations inside the compact 
 
 test("one setup center directly opens userscripts and never uses the broken Tampermonkey intermediary",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","Dashboard同期を直接インストール／更新","本人通知を直接インストール／更新","target=\"_blank\"","note-insight-dashboard-sync.user.js","note-insight-notification-v3.user.js","Import from URL","mumei-direct-install-pending","location.replace(back)"]);
+  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","通知＋ダッシュボードを直接インストール／更新","本人通知を実働確認／連携","target=\"_blank\"","note-insight-notification-v3.user.js","Import from URL","mumei-direct-install-pending","この画面で連携を続けられます"]);
   assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません/);
   has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);has(route,["notification-update.html","miv5-source-card.notice"]);
   has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
@@ -37,7 +37,7 @@ test("one setup center directly opens userscripts and never uses the broken Tamp
 
 test("legacy setup routes redirect while notification update persists confirmed version",async()=>{
   for(const path of ["public/notification-setup.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html","public/dashboard-setup.html"]){const p=await read(path);assert.match(p,/tool-setup\.html/)}
-  const update=await read("public/notification-update.html");has(update,["本人通知 V3.1.7","インストール / 更新","Raw文字列","更新確認してINSIGHTへ戻る","raw.githubusercontent.com","mumei-notification-tool-version","dest.searchParams.set('notificationInstalled',installed)"]);
+  const update=await read("public/notification-update.html");has(update,["本人通知 V3.1.8","インストール / 更新","Raw文字列","更新確認してINSIGHTへ戻る","raw.githubusercontent.com","mumei-notification-tool-version","dest.searchParams.set('notificationInstalled',installed)"]);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
@@ -47,9 +47,9 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
 
 test("release tracks two active tools and loads compact notification selector",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js"),ui=await read("src/insight-notification-ui-v18.ts");
-  assert.equal(manifest.appVersion,"2026.09.14.11");assert.equal(manifest.notificationVersion,"3.1.7");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
-  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.7"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);assert.match(release,/insight-notification-ui-v18/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.7/);has(ui,["通知項目：","mumei-notification-category-button","PUBLIC_DUPLICATE_LABELS"]);
+  assert.equal(manifest.appVersion,"2026.09.14.12");assert.equal(manifest.notificationVersion,"3.1.8");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.8"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);assert.match(release,/insight-notification-ui-v18/);
+  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.8/);has(ui,["通知項目：","mumei-notification-category-button","PUBLIC_DUPLICATE_LABELS"]);
 });
 
 test("private notification categories stay dense while public duplicates are excluded",async()=>{
