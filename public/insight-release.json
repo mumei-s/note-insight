@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.9",
-  "notificationVersion": "3.1.6",
+  "appVersion": "2026.09.14.10",
+  "notificationVersion": "3.1.7",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T18:40:00+09:00",
+  "releasedAt": "2026-09-14T19:05:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.1.6",
+  "notificationLabel": "本人通知 V3.1.7",
   "dashboardLabel": "Dashboard同期",
-  "note": "本人通知パネルのチカチカを修正。V3.1.5の連続再表示制御を廃止し、安定版V3.1.4+dock-watchの1系統へ統一。更新確認済み版をINSIGHTへ確実に保存し、更新あり表示を解除。"
+  "note": "本人通知本体の読込やnoteのベルDOMに依存せず表示できる常駐『🔔 INSIGHT』ランチャーを追加。ランチャーから4ボタンパネルを直接開閉でき、通知本体が後から接続しても表示状態を同期する。"
 }
