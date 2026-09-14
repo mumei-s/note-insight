@@ -37,9 +37,10 @@ test("V3.1.6 keeps stable V3 core and delegates display to dock-watch only",asyn
   assert.doesNotMatch(fix,/likelyBell|oneShotShow|mumei-v3-notification-frame|setInterval\s*\(|MutationObserver|surfaceOpen|directPulseLoop/);
 });
 
-test("bell keeps dock visible until user closes it and auto-starts bottom-up scan",async()=>{
+test("four-button dock is always visible and notification surface auto-starts bottom-up scan",async()=>{
   const watch=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(watch,/function showDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/function scheduleAutoStart\(\)/);assert.match(watch,/manualVisible/);assert.match(watch,/function closeIntent\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(watch,/mumeiDockVisible/);
-  assert.doesNotMatch(watch,/scheduleHide|wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
+  assert.match(watch,/function makeVisible\(/);assert.match(watch,/function forceDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/mumeiAlwaysVisible/);assert.match(watch,/display','block','important/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);
+  assert.match(watch,/下から読込/);assert.match(watch,/フィルターOFF/);assert.match(watch,/フィルター設定/);assert.match(watch,/INSIGHT【通知】/);
+  assert.doesNotMatch(watch,/mumei-v3-notification-launcher|manualVisible|closeIntent|scheduleHide|wakeRuntime|setTimeout\(pulse,180\)|function pulse\(/);
   assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
 });
