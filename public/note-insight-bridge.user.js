@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT Bridge
 // @namespace    https://mumei-s.github.io/note-insight/bridge
-// @version      1.0.1
+// @version      1.0.0
 // @description  INSIGHTの本人通知と公式Dashboard同期を1本で起動する共通Bridge。今後の機能更新はBridgeから自動取得します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -23,7 +23,7 @@
 
 (function(){
 'use strict';
-const VERSION='1.0.1';
+const VERSION='1.0.0';
 const BASE='https://mumei-s.github.io/note-insight/';
 const CACHE='mumei-insight-bridge-cache:';
 const HEARTBEAT='mumei-insight-bridge-version';
