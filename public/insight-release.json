@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.13.5",
-  "notificationVersion": "3.0.1",
+  "notificationVersion": "3.1.0",
   "dashboardVersion": "1.4.2",
-  "releasedAt": "2026-09-13T20:45:00+09:00",
+  "releasedAt": "2026-09-14T09:50:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3",
+  "notificationLabel": "本人通知 V3.1",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3の表示・下から読込・保存確認を改善。返信、自記事のマガジン追加、メンシプ参加と未分類通知を保持。分析の円グラフ・期間・曜日・反応分布を追加。"
+  "note": "本人通知をV3.1.0へ一本化。旧インストール画面を廃止して単一入口へ統合し、ポップアップ方式と常駐接続失敗パネルを撤去。通知コアは自動再試行と前回成功キャッシュで復旧します。"
 }
