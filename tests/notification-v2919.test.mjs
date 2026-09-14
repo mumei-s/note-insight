@@ -23,10 +23,10 @@ test("notification runtime still exposes one four-control reading dock",async()=
   has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
 });
 
-test("one setup center uses the historically proven Tampermonkey installer flow for each tool",async()=>{
+test("one setup center directly opens userscripts and never uses the broken Tampermonkey intermediary",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","script_installation.php#url=","Dashboard同期をインストール／更新","本人通知をインストール／更新","Dashboardを認証して今すぐ読込","本人通知を確認／連携","window.open(installer(kind),'_blank')","mumei_insight_version_check","location.replace(back)"]);
-  assert.doesNotMatch(setup,/ONE BRIDGE SETUP|INSIGHT Bridge 1本|Bridgeが実行されていません/);
+  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","Dashboard同期を直接インストール／更新","本人通知を直接インストール／更新","target=\"_blank\"","note-insight-dashboard-sync.user.js","note-insight-notification-v3.user.js","Import from URL","mumei-direct-install-pending","location.replace(back)"]);
+  assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません/);
   has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);
   assert.doesNotMatch(top,/Bridge 設定 \/ 更新|INSIGHT Bridge 必須|notification-update\.html|dashboard-setup\.html/);
   has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
@@ -44,7 +44,7 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
 
 test("release tracks only the two active tools",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.14.5");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
+  assert.equal(manifest.appVersion,"2026.09.14.6");assert.equal(manifest.notificationVersion,"3.1.3");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
   assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.1\.3"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);
   assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.1\.3/);
 });
