@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.1",
-  "notificationVersion": "3.1.1",
+  "appVersion": "2026.09.14.2",
+  "notificationVersion": "3.1.2",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T10:45:00+09:00",
+  "releasedAt": "2026-09-14T13:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.1",
   "dashboardLabel": "Dashboard同期",
-  "note": "導入をブラウザ別パネルの1画面へ統合。Dashboard認証のowner/member判定を修正し、本人通知V3.1.1で旧接続失敗パネルを無効化。"
+  "note": "本人通知V3.1.2。noteのベル押下・通知DOM出現を監視し、下から読込／フィルターON-OFF／フィルター設定／INSIGHT【通知】の4ボタンドックを先に復帰させる専用監視を必須コア化。"
 }
