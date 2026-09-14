@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.12",
-  "notificationVersion": "3.1.8",
+  "appVersion": "2026.09.14.13",
+  "notificationVersion": "3.1.9",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T14:18:47.346Z",
+  "releasedAt": "2026-09-14T14:53:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.1.8",
+  "notificationLabel": "本人通知 V3.1.9",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知とダッシュボードを1本で導入。20件ごとの確認済み保存位置・未送信分の引継ぎ・初回完了後の差分読み込み。小型可動ボタンと4列パネルは維持。"
+  "note": "通知＋ダッシュボードは1本で更新。格納ランチャーを廃止し、4列操作を画面下部へ常時固定。旧iframeは内部処理専用にして、表示ボタンは親画面で直接反応させる。"
 }
