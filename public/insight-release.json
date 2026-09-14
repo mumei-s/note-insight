@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.14.6",
-  "notificationVersion": "3.1.3",
+  "appVersion": "2026.09.14.7",
+  "notificationVersion": "3.1.4",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-14T17:40:00+09:00",
+  "releasedAt": "2026-09-14T17:52:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.1",
   "dashboardLabel": "Dashboard同期",
-  "note": "Android EdgeでTampermonkey 5.5系のscript_installation.php中継が停止する実機症状に対応。中継ページを使わずGitHub Pages上の.user.jsを直接別タブで開き、元の導入センターを保持。戻った後は1回だけ再確認し、失敗時のみURL取込フォールバックを表示します。"
+  "note": "本人通知パネルの高速点滅を修正。V3本体とdock-watchの180ms再表示ループ・疑似クリック競合を廃止し、パネル表示を1回だけ行う安定方式へ変更。自動下から読込・4ボタン・フィルター・INSIGHT導線は維持。"
 }
