@@ -29,18 +29,26 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.match(b,/このBridgeは何も起動しません/);
 });
 
-test("V3.1.7 keeps version return and hands visible dock to dock-watch",async()=>{
+test("V3.1.7 keeps version return and delegates controls to the compact dock-watch",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),fix=await read("public/note-insight-notification-v317-fix.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(v3,/@version\s+3\.1\.7/);assert.match(v3,/note-insight-notification-v317-fix\.js/);assert.match(v3,/19b1beec55012b53bedcd93751af552f53c0cf8a\/public\/note-insight-notification-v3\.user\.js/);
   assert.match(fix,/const VERSION='3\.1\.7'/);assert.match(fix,/mumei_insight_version_check/);assert.match(fix,/loader-checked-v317/);
-  assert.match(watch,/function makeVisible\(/);assert.match(watch,/function forceDock\(/);assert.match(watch,/removeLauncher/);
+  assert.match(watch,/mumeiNotificationCompactDock/);assert.match(watch,/mumei-notification-launcher-position-v1/);assert.match(watch,/520/);
 });
 
-test("four-button dock is always visible and notification surface auto-starts bottom-up scan",async()=>{
+test("notification controls stay in one movable button and auto-start bottom-up scan while collapsed",async()=>{
   const watch=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(watch,/function makeVisible\(/);assert.match(watch,/function forceDock\(/);assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/mumeiAlwaysVisible/);assert.match(watch,/display','block','important/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);
-  assert.match(watch,/下から読込/);assert.match(watch,/フィルターOFF/);assert.match(watch,/フィルター設定/);assert.match(watch,/INSIGHT【通知】/);
-  assert.match(watch,/LEGACY_LAUNCHER/);assert.match(watch,/removeLauncher/);
-  assert.doesNotMatch(watch,/manualVisible|closeIntent|scheduleHide|setTimeout\(pulse,180\)|function pulse\(/);
+  assert.match(watch,/🔔 INSIGHT/);assert.match(watch,/× 通知/);assert.match(watch,/function ensureLauncher\(/);assert.match(watch,/function bindDrag\(/);assert.match(watch,/savePos/);assert.match(watch,/localStorage\.setItem\(POS/);
+  assert.match(watch,/追加読込・保存/);assert.match(watch,/フィルターOFF/);assert.match(watch,/フィルター設定/);assert.match(watch,/INSIGHT【通知】/);
+  assert.match(watch,/function tryAutoStart\(\)/);assert.match(watch,/autoStarted=true/);assert.match(watch,/read\.click\(\)/);assert.match(watch,/display',open\?'block':'none'/);
+  assert.match(watch,/本人通知本体を再接続中/);assert.match(watch,/接続修復のため1回だけ再読込/);
+  assert.doesNotMatch(watch,/mumeiAlwaysVisible|forceDock|setTimeout\(pulse,180\)|function pulse\(/);
   assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
+});
+
+test("INSIGHT notifications collapse category choices into one selector",async()=>{
+  const ui=await read("src/insight-notification-ui-v18.ts"),release=await read("src/insight-release.ts");
+  assert.match(release,/insight-notification-ui-v18/);
+  assert.match(ui,/mumei-notification-category-button/);assert.match(ui,/通知項目：/);assert.match(ui,/data-mumei-category-open/);assert.match(ui,/mumeiCategoryOpen="0"/);assert.match(ui,/PUBLIC_DUPLICATE_LABELS/);
+  for(const label of ["スキ","人物フォロー","通常コメント","記事投稿"])assert.match(ui,new RegExp(label));
 });
