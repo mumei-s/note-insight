@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.3",
-  "notificationVersion": "3.2.8",
+  "appVersion": "2026.09.16.4",
+  "notificationVersion": "3.2.9",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T17:10:00Z",
+  "releasedAt": "2026-09-15T18:10:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.8",
+  "notificationLabel": "本人通知 V3.2.9",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "更新済みなのに通知パネルが出ない回帰を修正。親Userscript自身に固定4列の救済パネルを持たせ、通知ページでは外部部品の読込成否に関係なく表示する。dock・reader・loaderは個別起動し、1部品の失敗で全停止しない。"
+  "note": "通知画面の下部4列を親Userscriptの1パネルへ固定。note側より先にボタン操作を受けるため、4ボタン無反応を防止。手動読み込み・フィルター・設定・INSIGHTの操作結果を即時表示し、部品は個別起動する。"
 }
