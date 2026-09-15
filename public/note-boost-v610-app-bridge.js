@@ -1,0 +1,53 @@
+(() => {
+'use strict';
+if (window.__NOTE_BOOST_APP_BRIDGE_V610__) return;
+window.__NOTE_BOOST_APP_BRIDGE_V610__ = true;
+const APP_ORIGIN='https://mumei-s.github.io';
+if(location.origin!==APP_ORIGIN || !location.pathname.startsWith('/note-insight/boost-app/')) return;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function parseHeaders(raw=''){const out={};for(const line of String(raw).split(/\r?\n/)){const i=line.indexOf(':');if(i>0)out[line.slice(0,i).trim().toLowerCase()]=line.slice(i+1).trim()}return out}
+function gm(url,init={},wantText=false){
+  const absolute=new URL(url,'https://note.com').href;
+  return new Promise((resolve,reject)=>{
+    GM_xmlhttpRequest({
+      method:String(init.method||'GET').toUpperCase(),url:absolute,
+      headers:{accept:wantText?'text/html,application/xhtml+xml':'application/json',...(init.headers||{})},
+      data:init.body==null?undefined:String(init.body),anonymous:false,timeout:25000,
+      onload:r=>{const hs=parseHeaders(r.responseHeaders||'');let data=r.responseText||'';if(!wantText){try{data=data?JSON.parse(data):{}}catch{data={text:data}}}if(r.status<200||r.status>=300){const e=new Error(`${r.status} ${r.statusText||''}`.trim());e.status=r.status;e.body=data;const ra=hs['retry-after'];e.retryAfter=ra?(/^\d+$/.test(ra)?Number(ra)*1000:Math.max(0,Date.parse(ra)-Date.now())):0;reject(e);return}resolve(data)},
+      ontimeout:()=>{const e=new Error('通信タイムアウト');e.status=408;reject(e)},
+      onerror:r=>{const e=new Error(`通信エラー${r?.status?` ${r.status}`:''}`);e.status=Number(r?.status||0);reject(e)}
+    });
+  });
+}
+const req=(u,i)=>gm(u,i,false), textReq=(u,i)=>gm(u,i,true);
+function noteObj(j){const d=j?.data??j??{};return d.note||d}
+function likeBool(j){const n=noteObj(j);for(const k of ['isLiked','is_liked','liked','hasLiked'])if(typeof n?.[k]==='boolean')return n[k];return null}
+function keyOf(n){return String(n?.key||n?.note_key||n?.noteKey||n?.slug||'')}
+function userOf(n){return n?.user||n?.creator||n?.note_user||{}}
+function thumbOf(n){for(const x of [n?.eyecatch_url,n?.eyecatch,n?.eyecatch_image,n?.eyecatchImage,n?.image_url,n?.thumbnail_url,n?.image?.url,n?.thumbnail?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
+function normalizeNotes(j){const d=j?.data??j??{},b=d.notes??d.contents??j?.notes??[];return Array.isArray(b)?b:(Array.isArray(b?.contents)?b.contents:(Array.isArray(b?.notes)?b.notes:[]))}
+function normalizeUsers(j){const d=j?.data??j??{},a=Array.isArray(d)?d:(d.likes||d.users||d.contents||d.likers||[]);return(Array.isArray(a)?a:[]).map(x=>x?.user||x?.creator||x).filter(Boolean)}
+function magAdded(m){for(const k of ['is_added','isAdded','has_note','hasNote','included','is_included','isIncluded','contains_note','containsNote','is_note_added','isNoteAdded'])if(typeof m?.[k]==='boolean')return m[k];return null}
+function histKey(kind){return`noteBoostBridge:${kind}`}
+function hist(kind){try{return JSON.parse(localStorage.getItem(histKey(kind))||'[]').filter(x=>Date.now()-Number(x.t)<86400000)}catch{return[]}}
+function saveHist(kind,a){localStorage.setItem(histKey(kind),JSON.stringify(a.slice(-500)))}
+function guardKey(kind){return`noteBoostBridge:guard:${kind}`}
+function guard(kind){try{return JSON.parse(localStorage.getItem(guardKey(kind))||'{"until":0,"reason":""}')}catch{return{until:0,reason:''}}}
+function setGuard(kind,until,reason){localStorage.setItem(guardKey(kind),JSON.stringify({until,reason}))}
+function limitStatus(kind){const a=hist(kind),now=Date.now(),hour=a.filter(x=>now-Number(x.t)<3600000),g=guard(kind);let until=Number(g.until||0);if(hour.length>=18)until=Math.max(until,Number(hour[0].t)+3600000);if(a.length>=80)until=Math.max(until,Number(a[0].t)+86400000);return{hour:hour.length,day:a.length,until,reason:until>now?(g.reason||'上限保護'):''}}
+function enforce(kind){const s=limitStatus(kind);if(s.until>Date.now()){const e=new Error(`LIMIT ${kind}`);e.code='LIMIT';e.limit=s;throw e}}
+function pushHist(kind,key){const a=hist(kind);a.push({t:Date.now(),key});saveHist(kind,a)}
+async function who(){const j=await req('/api/v2/current_user'),d=j?.data??j??{},u=d.user||d;return{urlname:String(u.urlname||u.url_name||u.username||''),name:String(u.nickname||u.name||''),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||''}}
+async function creatorContents({id,page=1}){const j=await req(`/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${page}`),d=j?.data??j??{},a=Array.isArray(d.contents)?d.contents:(Array.isArray(d.notes)?d.notes:(Array.isArray(d)?d:[]));return{items:a.map(n=>{const u=userOf(n);return{key:keyOf(n),id:n.id??n.note_id??n.noteId??null,urlname:String(u.urlname||u.url_name||u.username||id),name:String(u.nickname||u.name||id),title:String(n.name||n.title||keyOf(n)),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??n.likes_count??n.likesCount??0)||0,publishAt:n.publishAt||n.publish_at||n.createdAt||n.created_at||'',rawUser:u}}),last:Boolean(d.isLastPage??d.is_last_page??false)}}
+async function hashtagNotes({tag,page=1}){const j=await req(`/api/v3/hashtags/${encodeURIComponent(tag)}/notes?order=new&page=${page}`),a=normalizeNotes(j);return{items:a.map(n=>{const u=userOf(n);return{key:keyOf(n),id:n.id??n.note_id??n.noteId??null,urlname:String(u.urlname||u.url_name||u.username||''),name:String(u.nickname||u.name||''),title:String(n.name||n.title||keyOf(n)),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??0)||0,rawUser:u}}),last:a.length<50}}
+async function articleLikes({key,page=1}){const j=await req(`/api/v3/notes/${encodeURIComponent(key)}/likes?page=${page}&per_page=100`),a=normalizeUsers(j);return{users:a.map(u=>({urlname:String(u.urlname||u.url_name||u.username||''),name:String(u.nickname||u.name||''),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||''})),last:a.length<100}}
+async function noteDetail({key}){const j=await req(`/api/v3/notes/${encodeURIComponent(key)}`),n=noteObj(j),u=userOf(n);return{key:keyOf(n)||key,id:n.id??n.note_id??n.noteId??null,title:String(n.name||n.title||key),urlname:String(u.urlname||u.url_name||u.username||''),name:String(u.nickname||u.name||''),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??n.likes_count??0)||0,liked:likeBool(j),body:n.body||n.body_html||n.bodyHtml||n.content||n.content_html||'',rawUser:u}}
+async function creatorProfile({id}){for(const ep of [`/api/v2/creators/${encodeURIComponent(id)}`,`/api/v1/creators/${encodeURIComponent(id)}`]){try{const j=await req(ep),d=j?.data??j??{},u=d.creator||d.user||d;return{id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||'',bio:String(u.bio||u.description||u.profile||''),followers:Number(u.followers_count??u.follower_count??u.followersCount??0)||0,following:Number(u.following_count??u.followingCount??0)||0}}catch{}}const c=await creatorContents({id,page:1}),u=c.items[0]?.rawUser||{};return{id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||'',bio:String(u.bio||u.description||''),followers:Number(u.followers_count??u.follower_count??0)||0,following:Number(u.following_count??0)||0}}
+async function magazineCreators({url,page=1}){const u=new URL(url);u.searchParams.set('page',String(page));const html=await textReq(u.href),d=new DOMParser().parseFromString(html,'text/html'),out=[],seen=new Set();for(const a of d.querySelectorAll('a[href]')){let x;try{x=new URL(a.getAttribute('href'),u)}catch{continue}const pp=x.pathname.split('/').filter(Boolean),i=pp.indexOf('n');if(i<1||!pp[i+1])continue;const id=pp[i-1].toLowerCase(),key=pp[i+1];if(seen.has(id))continue;seen.add(id);out.push({urlname:id,key,title:(a.textContent||key).trim().slice(0,160),url:x.href})}return{items:out,last:out.length===0}}
+async function editableMagazines({key}){const j=await req(`/api/v1/my/magazines?includes_editable=true&note_key=${encodeURIComponent(key)}`),d=j?.data??j??{},a=d.magazines||j?.magazines||[];return(Array.isArray(a)?a:[]).map(m=>({key:String(m.key||''),name:String(m.name||m.title||m.key||''),image:m.image_url||m.imageUrl||m.thumbnail_url||m.cover_image_url||m.image?.url||'',url:m.url||m.magazine_url||m.magazineUrl||'',added:magAdded(m),raw:m}))}
+async function addMagazine({magKey,noteId,noteKey}){enforce('mags');try{await req(`/api/v1/our/magazines/${encodeURIComponent(magKey)}/notes`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({note_id:noteId,note_key:noteKey})})}catch(e){if(e.status===403)setGuard('mags',Date.now()+3600000,'403検出・60分保護');if(e.status===429)setGuard('mags',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}pushHist('mags',`${magKey}:${noteKey}`);await sleep(500);let verified=null,target=null;try{const a=await editableMagazines({key:noteKey});target=a.find(x=>x.key===magKey)||null;verified=target?.added===true?true:(target?.added===false?false:null)}catch{}return{ok:true,verified,target,limit:limitStatus('mags')}}
+async function likeNote({key}){enforce('likes');const before=await noteDetail({key});if(before.liked===true)return{ok:true,state:'preexisting',limit:limitStatus('likes')};try{await req(`/api/v3/notes/${encodeURIComponent(key)}/likes`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})}catch(e){if(e.status===403)setGuard('likes',Date.now()+3600000,'403検出・60分保護');if(e.status===429)setGuard('likes',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}for(const w of [250,650,1200]){await sleep(w);const after=await noteDetail({key});if(after.liked===true){pushHist('likes',key);return{ok:true,state:'liked_now',limit:limitStatus('likes')}}}throw new Error('スキ反映を確認できませんでした')}
+const actions={who,creatorContents,hashtagNotes,articleLikes,noteDetail,creatorProfile,magazineCreators,editableMagazines,addMagazine,likeNote,limitStatus:async({kind})=>limitStatus(kind)};
+window.addEventListener('message',async e=>{if(e.origin!==APP_ORIGIN)return;const m=e.data||{};if(m.type==='NOTE_BOOST_APP_INIT'){window.postMessage({type:'NOTE_BOOST_APP_READY',token:m.token,version:'6.1.0'},APP_ORIGIN);return}if(m.type!=='NOTE_BOOST_APP_REQUEST'||!actions[m.action])return;try{const data=await actions[m.action](m.args||{});window.postMessage({type:'NOTE_BOOST_APP_RESPONSE',token:m.token,id:m.id,ok:true,data},APP_ORIGIN)}catch(err){window.postMessage({type:'NOTE_BOOST_APP_RESPONSE',token:m.token,id:m.id,ok:false,error:String(err?.message||err),status:Number(err?.status||0),code:err?.code||'',limit:err?.limit||null},APP_ORIGIN)}});
+window.postMessage({type:'NOTE_BOOST_APP_BOOT',version:'6.1.0'},APP_ORIGIN);
+})();
