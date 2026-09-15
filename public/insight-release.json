@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.4",
+  "appVersion": "2026.09.16.5",
   "notificationVersion": "3.2.9",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T18:10:00Z",
+  "releasedAt": "2026-09-15T19:05:00Z",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.2.9",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知画面の下部4列を親Userscriptの1パネルへ固定。note側より先にボタン操作を受けるため、4ボタン無反応を防止。手動読み込み・フィルター・設定・INSIGHTの操作結果を即時表示し、部品は個別起動する。"
+  "note": "本人通知のブラウザ入口を細い横長リストへ統一し、対応・非対応を明示。ブラウザ別の更新・初回導入・権限確認だけを表示し、確認画面は別タブでV3.2.9の実働まで判定する。"
 }

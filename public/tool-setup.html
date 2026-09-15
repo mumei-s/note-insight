@@ -1,23 +1,159 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0"><meta http-equiv="Pragma" content="no-cache"><title>INSIGHT インストール / 更新</title><style>
-*{box-sizing:border-box}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,sans-serif}.wrap{width:min(620px,calc(100% - 20px));margin:auto;padding:10px 0 28px}.back{display:inline-flex;min-height:34px;align-items:center;color:#79eaff;text-decoration:none;font-weight:900;font-size:13px}.card{border:1px solid #31506a;border-radius:14px;background:#0a1722;padding:13px}h1{margin:2px 0 4px;font-size:22px}.lead{margin:0 0 8px;color:#a8c0d1;font-size:12px;line-height:1.55}.panel{margin-top:10px;border:1px solid #2d465a;border-radius:10px;background:#07131c;padding:10px}.step-title{font-size:15px;margin:0 0 7px}.mini{margin:5px 0 0;color:#8ca2b3;font-size:11px;line-height:1.5}.group-label{font-size:11px;color:#abc1d0;margin:7px 0 4px}.browser-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.browser-choice{min-height:35px;border:1px solid #486b82;border-radius:999px;background:#102330;color:#eef8ff;padding:4px 10px;font:800 12px/1.15 system-ui;cursor:pointer;white-space:normal}.browser-choice[aria-pressed="true"]{border:2px solid #7ee4ed;background:#173e4b;color:#fff}.tip{margin-top:6px;padding:7px 8px;border:1px solid #38546a;border-radius:8px;background:#08141e;color:#bfd1df;font-size:11px;line-height:1.55}.steps{display:grid;gap:6px;margin-top:7px}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:40px;border:1px solid #486b82;border-radius:9px;background:#10283a;color:#e9f8ff;text-decoration:none;font:900 13px/1.25 system-ui;text-align:center;padding:7px 9px}.gold{background:#2a210b;border-color:#846e35;color:#ffe7a7}.green{background:#123124;border-color:#5bc68b;color:#dcffea}.btn[aria-disabled="true"],.btn:disabled{opacity:.42;pointer-events:none}.result{margin-top:8px;padding:10px;border:1px solid #3b5b72;border-radius:9px;background:#08131d;font-size:13px;font-weight:850;line-height:1.45}.ok{border-color:#3d7a5f!important;background:#0b1d16!important;color:#baffd6!important}.warn{border-color:#806730!important;background:#201807!important;color:#ffe2a0!important}.bad{border-color:#8e4343!important;background:#251010!important;color:#ffd0d0!important}.fallback{display:none;margin-top:8px;padding:8px;border:1px solid #806730;border-radius:9px;background:#201807;color:#ffe2a0;font-size:11px;line-height:1.5}.fallback.show{display:block}[hidden]{display:none!important}summary{cursor:pointer;font-size:12px;font-weight:800;min-height:30px;align-content:center}#pageUrl{width:100%;font-size:11px;padding:7px;margin-top:6px;color:#eef8ff;background:#061019;border:1px solid #486b82;border-radius:6px}a{color:#91e9ff}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #fff;outline-offset:2px}@media(max-width:360px){.wrap{width:min(620px,calc(100% - 14px))}.card{padding:10px}.browser-choice{font-size:11px;padding:3px 7px}}
-</style></head><body><main class="wrap"><a id="back" class="back">← INSIGHTへ戻る</a><section class="card"><h1>INSIGHT インストール / 更新</h1><p class="lead">本人通知＋ダッシュボード同期は1本です。<br>すでにTampermonkeyを使っている場合、入れ直しは不要です。</p>
-<section class="panel"><h2 class="step-title">1　ブラウザを選ぶ</h2><p class="mini" id="detected"></p><p class="group-label">Android</p><div class="browser-grid"><button class="browser-choice" data-browser="android-edge" type="button">Edge</button><button class="browser-choice" data-browser="android-firefox" type="button">Firefox</button><button class="browser-choice" data-browser="android-other" type="button">Chrome・その他</button></div><p class="group-label">iPhone・iPad</p><div class="browser-grid"><button class="browser-choice" data-browser="ios-safari" type="button">Safari</button><button class="browser-choice" data-browser="ios-other" type="button">Chrome・Edge・その他</button></div><p class="group-label">パソコン</p><div class="browser-grid"><button class="browser-choice" data-browser="pc-edge" type="button">Edge</button><button class="browser-choice" data-browser="pc-chrome" type="button">Chrome</button><button class="browser-choice" data-browser="pc-firefox" type="button">Firefox</button><button class="browser-choice" data-browser="mac-safari" type="button">Safari（Mac）</button></div></section>
-<section class="panel"><h2 id="device" class="step-title">2　インストール / 更新</h2><div id="tip" class="tip"></div><div id="switchBrowser" hidden><button id="copyPage" type="button" class="btn green">この設定画面のリンクをコピー</button><input id="pageUrl" readonly aria-label="設定画面のURL"><p class="mini">コピー先はTampermonkeyではありません。対応ブラウザのアドレス欄で、この設定画面を開くためだけに使います。</p></div><div id="updateFlow"><div class="tip" id="currentSteps"></div><details class="panel" id="textHelp"><summary>更新が見つからない時だけ：INSIGHTをインストール / 更新</summary><div class="tip" id="recoverySteps"></div><a id="install" class="btn gold">更新ファイルを直接開く</a><p class="mini">TampermonkeyにURLを貼り付ける操作はありません。文字だけの画面になったら閉じ、上の通常手順で更新してください。</p></details><details class="panel"><summary>初めて使う方だけ：拡張機能を準備</summary><div class="tip" id="firstSteps"></div><a id="extensionGuide" class="btn" target="_blank" rel="noopener">拡張機能の公式案内を開く</a></details></div></section>
-<section class="panel" id="confirmFlow"><h2 class="step-title">3　更新を確認</h2><div class="steps"><button id="verify" class="btn green" type="button">更新されたか確認する</button></div><div id="verifyResult" class="result" role="status" aria-live="polite">未確認｜更新後は自動確認します。必要なら上のボタンでも確認できます。</div><p class="mini" id="versionLine"></p></section><div id="fallback" class="fallback" role="status"></div></section></main><script>
-const NOTICE_KEY='mumei-notification-tool-version',PENDING='mumei-direct-install-pending',RAW='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js',q=new URLSearchParams(location.search),install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult'),fallback=document.getElementById('fallback');let release={notificationVersion:'3.2.9'},autoCheckBusy=false;
-function norm(v){const m=String(v||'').match(/@?([A-Za-z0-9_-]+)/);return m?m[1].toLowerCase():''}const expected=norm(q.get('account'));function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>INSIGHT インストール / 更新</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,sans-serif}
+    .wrap{width:min(620px,calc(100% - 20px));margin:auto;padding:10px 0 28px}.back{display:inline-flex;min-height:34px;align-items:center;color:#79eaff;text-decoration:none;font-weight:900;font-size:13px}
+    .card{border:1px solid #31506a;border-radius:14px;background:#0a1722;padding:13px}h1{margin:2px 0 4px;font-size:22px}.lead{margin:0 0 8px;color:#a8c0d1;font-size:12px;line-height:1.55}
+    .panel{margin-top:10px;border:1px solid #2d465a;border-radius:10px;background:#07131c;padding:10px}.step-title{font-size:15px;margin:0 0 7px}.mini{margin:5px 0 0;color:#8ca2b3;font-size:11px;line-height:1.5}
+    .group-label{font-size:10px;color:#abc1d0;margin:7px 0 3px}.browser-grid{display:grid;grid-template-columns:1fr;gap:3px}
+    .browser-choice{width:100%;min-height:29px;border:1px solid #486b82;border-radius:7px;background:#102330;color:#eef8ff;padding:3px 8px;font:800 11px/1.15 system-ui;cursor:pointer;display:flex;align-items:center;justify-content:space-between;text-align:left}
+    .browser-choice small{font-size:9px;color:#9dffbd}.browser-choice[data-supported="false"] small{color:#ffabb2}.browser-choice[aria-pressed="true"]{border:2px solid #7ee4ed;background:#173e4b;color:#fff;padding:2px 7px}
+    .tip{margin-top:6px;padding:7px 8px;border:1px solid #38546a;border-radius:8px;background:#08141e;color:#bfd1df;font-size:11px;line-height:1.6}.steps{display:grid;gap:6px;margin-top:7px}
+    .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:40px;border:1px solid #486b82;border-radius:9px;background:#10283a;color:#e9f8ff;text-decoration:none;font:900 13px/1.25 system-ui;text-align:center;padding:7px 9px}.gold{background:#2a210b;border-color:#846e35;color:#ffe7a7}.green{background:#123124;border-color:#5bc68b;color:#dcffea}.btn[aria-disabled="true"]{opacity:.42;pointer-events:none}
+    .result{margin-top:8px;padding:10px;border:1px solid #3b5b72;border-radius:9px;background:#08131d;font-size:13px;font-weight:850;line-height:1.45}.ok{border-color:#3d7a5f!important;background:#0b1d16!important;color:#baffd6!important}.warn{border-color:#806730!important;background:#201807!important;color:#ffe2a0!important}.bad{border-color:#8e4343!important;background:#251010!important;color:#ffd0d0!important}
+    .fallback{display:none;margin-top:8px;padding:8px;border:1px solid #806730;border-radius:9px;background:#201807;color:#ffe2a0;font-size:11px;line-height:1.5}.fallback.show{display:block}[hidden]{display:none!important}summary{cursor:pointer;font-size:12px;font-weight:800;min-height:30px;align-content:center}
+    #pageUrl{width:100%;font-size:11px;padding:7px;margin-top:6px;color:#eef8ff;background:#061019;border:1px solid #486b82;border-radius:6px}a{color:#91e9ff}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #fff;outline-offset:2px}
+    @media(max-width:360px){.wrap{width:min(620px,calc(100% - 14px))}.card{padding:10px}.browser-choice{font-size:10px;padding:3px 6px}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <a id="back" class="back">← INSIGHTへ戻る</a>
+  <section class="card">
+    <h1>INSIGHT インストール / 更新</h1>
+    <p class="lead">本人通知＋ダッシュボード同期は1本です。<br>すでにTampermonkey／Userscriptsがある方は、入れ直しません。</p>
+
+    <section class="panel">
+      <h2 class="step-title">1　ブラウザを選ぶ</h2>
+      <p class="mini" id="detected"></p>
+      <p class="group-label">Android</p>
+      <div class="browser-grid">
+        <button class="browser-choice" data-browser="android-edge" data-supported="true" type="button"><span>Edge</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="android-firefox" data-supported="true" type="button"><span>Firefox</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="android-other" data-supported="false" type="button"><span>Chrome・その他</span><small>× 非対応</small></button>
+      </div>
+      <p class="group-label">iPhone・iPad</p>
+      <div class="browser-grid">
+        <button class="browser-choice" data-browser="ios-safari" data-supported="true" type="button"><span>Safari</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="ios-other" data-supported="false" type="button"><span>Chrome・Edge・その他</span><small>× 非対応</small></button>
+      </div>
+      <p class="group-label">パソコン</p>
+      <div class="browser-grid">
+        <button class="browser-choice" data-browser="pc-edge" data-supported="true" type="button"><span>Edge</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="pc-chrome" data-supported="true" type="button"><span>Chrome</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="pc-firefox" data-supported="true" type="button"><span>Firefox</span><small>○ 対応</small></button>
+        <button class="browser-choice" data-browser="mac-safari" data-supported="true" type="button"><span>Safari（Mac）</span><small>○ 対応</small></button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 id="device" class="step-title">2　インストール / 更新</h2>
+      <div id="tip" class="tip"></div>
+      <div id="switchBrowser" hidden>
+        <button id="copyPage" type="button" class="btn green">この設定画面のリンクをコピー</button>
+        <input id="pageUrl" readonly aria-label="設定画面のURL">
+        <p class="mini">Tampermonkeyには貼り付けません。対応ブラウザのアドレス欄で、この設定画面を開くためだけに使います。</p>
+      </div>
+      <div id="updateFlow">
+        <div class="tip" id="currentSteps"></div>
+        <details class="panel" id="textHelp">
+          <summary>更新が見つからない時だけ：INSIGHTをインストール / 更新</summary>
+          <div class="tip" id="recoverySteps"></div>
+          <a id="install" class="btn gold">更新ファイルを直接開く</a>
+          <p class="mini">URLを貼り付ける操作はありません。文字だけの画面なら閉じ、上の通常手順へ戻ってください。</p>
+        </details>
+        <details class="panel">
+          <summary>初めて使う方だけ</summary>
+          <div class="tip" id="firstSteps"></div>
+          <a id="extensionGuide" class="btn" target="_blank" rel="noopener">拡張機能の公式案内を開く</a>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel" id="confirmFlow">
+      <h2 class="step-title">3　成功したか確認</h2>
+      <div class="steps"><a id="verify" class="btn green" target="_blank" rel="noopener">更新できたか確認する</a></div>
+      <div id="verifyResult" class="result" role="status" aria-live="polite">未確認｜実際にV3.2.9が動くか確認します。</div>
+      <p class="mini" id="versionLine"></p>
+      <div class="tip" id="verifyHelp"></div>
+    </section>
+    <div id="fallback" class="fallback" role="status"></div>
+  </section>
+</main>
+
+<script>
+const NOTICE_KEY='mumei-notification-tool-version';
+const RAW='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
+const q=new URLSearchParams(location.search),install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult'),fallback=document.getElementById('fallback');
+let release={notificationVersion:'3.2.9'};
+function norm(v){const m=String(v||'').match(/@?([A-Za-z0-9_-]+)/);return m?m[1].toLowerCase():''}
+const expected=norm(q.get('account'));
+function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
+const back=safeReturn(q.get('return'));document.getElementById('back').href=back;
 const UA=navigator.userAgent||'',platform=navigator.platform||'',isIOS=/iPhone|iPad|iPod/i.test(UA)||(platform==='MacIntel'&&navigator.maxTouchPoints>1),isSafari=/Safari/i.test(UA)&&!/Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPR|Android/i.test(UA),isAndroid=/Android/i.test(UA),isEdge=/EdgA|Edg\//i.test(UA),isFirefox=/Firefox|FxiOS/i.test(UA),isMac=!isIOS&&/Macintosh/i.test(UA);
 function env(){if(isIOS)return isSafari?'ios-safari':'ios-other';if(isAndroid)return isEdge?'android-edge':isFirefox?'android-firefox':'android-other';if(isMac&&isSafari)return'mac-safari';return isEdge?'pc-edge':isFirefox?'pc-firefox':'pc-chrome'}
-const names={'android-edge':'Android の Edge','android-firefox':'Android の Firefox','android-other':'Android の Chrome・その他','ios-safari':'iPhone・iPad の Safari','ios-other':'iPhone・iPad の Safari以外','mac-safari':'Mac の Safari','pc-edge':'パソコンの Edge','pc-chrome':'パソコンの Chrome','pc-firefox':'パソコンの Firefox'};let selected=Object.hasOwn(names,q.get('browser'))?q.get('browser'):env();
-function script(){return RAW}function isSwitch(){return selected==='android-other'||selected==='ios-other'}
-function normalSteps(k){if(k==='ios-safari'||k==='mac-safari')return'① Userscriptsを開く　→　② INSIGHTを更新　→　③ この画面へ戻る。Userscriptsの入れ直しは不要です。';if(k.includes('firefox'))return'① Firefoxの拡張機能からTampermonkeyを開く　→　② メニューの「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。';return'① ブラウザのメニューから「拡張機能」→「Tampermonkey」を開く　→　② Tampermonkeyのメニューで「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。'}
-function recovery(k){if(k==='ios-safari'||k==='mac-safari')return'Userscripts側にINSIGHTが無い場合だけ、下の更新ファイルを開いてUserscriptsで取り込んでください。';return'更新一覧にINSIGHTが出ない場合だけ、下の更新ファイルを開きます。Tampermonkeyの確認画面が出たら「更新」を押してください。URLを貼り付ける場所はありません。'}
-function paintInstall(){const k=selected,blocked=isSwitch(),safari=k==='ios-safari'||k==='mac-safari';document.querySelectorAll('[data-browser]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.browser===k)));document.getElementById('detected').textContent='自動判定：'+names[env()]+'。違う場合だけ変更してください。';document.getElementById('device').textContent='2　'+names[k]+'で'+(blocked?'開き直す':'更新する');document.getElementById('tip').textContent=blocked?(k==='ios-other'?'Safariでこの設定画面を開いてください。':'Tampermonkeyが使えるEdgeまたはFirefoxで、この設定画面を開いてください。'):'すでに使っている方は、Tampermonkey／Userscriptsを入れ直しません。次の3手だけです。';document.getElementById('currentSteps').textContent=normalSteps(k);document.getElementById('switchBrowser').hidden=!blocked;document.getElementById('updateFlow').hidden=blocked;document.getElementById('confirmFlow').hidden=blocked;install.href=script();install.target='_blank';install.rel='noopener';install.removeAttribute('download');install.toggleAttribute('aria-disabled',blocked);verify.disabled=blocked;document.getElementById('recoverySteps').textContent=recovery(k);document.getElementById('firstSteps').textContent=safari?'初めて使う場合だけ、Safariの拡張機能「Userscripts」を準備してください。':'初めて使う場合だけ、Tampermonkeyを準備してください。すでに入っている方はここを開きません。';document.getElementById('extensionGuide').href=safari?'https://apps.apple.com/app/userscripts/id1463298887':'https://www.tampermonkey.net/';const page=new URL(location.href);page.searchParams.delete('browser');document.getElementById('pageUrl').value=page.href}
+const names={'android-edge':'Android の Edge','android-firefox':'Android の Firefox','android-other':'Android の Chrome・その他','ios-safari':'iPhone・iPad の Safari','ios-other':'iPhone・iPad の Safari以外','mac-safari':'Mac の Safari','pc-edge':'パソコンの Edge','pc-chrome':'パソコンの Chrome','pc-firefox':'パソコンの Firefox'};
+let selected=Object.hasOwn(names,q.get('browser'))?q.get('browser'):env();
+function isSwitch(){return selected==='android-other'||selected==='ios-other'}
+function isSafariChoice(k){return k==='ios-safari'||k==='mac-safari'}
+function isChromiumChoice(k){return k==='android-edge'||k==='pc-edge'||k==='pc-chrome'}
+function normalSteps(k){
+  if(isSafariChoice(k))return'① Userscriptsを開く　→　② INSIGHTを更新　→　③ この画面へ戻る。Userscriptsの入れ直しは不要です。';
+  if(k==='android-firefox')return'① Firefoxの「拡張機能」からTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。';
+  if(k==='pc-firefox')return'① Firefox右上のTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。';
+  if(k==='android-edge')return'① Edgeのメニュー →「拡張機能」→「Tampermonkey」　→　② Tampermonkeyのメニュー →「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。';
+  return'① ブラウザ右上のTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。';
+}
+function recovery(k){
+  if(isSafariChoice(k))return'UserscriptsにINSIGHTが無い場合だけ、下の更新ファイルを開いて取り込みます。';
+  if(isChromiumChoice(k))return'更新が出ない場合は、Tampermonkeyを有効にし、「ユーザースクリプトを許可」または「開発者モード」をONにしてから、下の更新ファイルを開きます。';
+  return'更新が出ない場合はTampermonkeyが有効か確認し、下の更新ファイルを開きます。確認画面が出たら「更新」を押します。';
+}
+function firstTimeSteps(k){
+  if(isSafariChoice(k))return'Userscriptsをインストールして一度開き、Safariの「拡張機能」でUserscriptsをONにします。その後この画面へ戻り「更新ファイルを直接開く」を押します。';
+  if(isChromiumChoice(k))return'Tampermonkeyをインストールし、拡張機能設定で「ユーザースクリプトを許可」または「開発者モード」をONにします。その後この画面へ戻り「更新ファイルを直接開く」を押します。';
+  return'Tampermonkeyをインストールして有効にします。その後この画面へ戻り「更新ファイルを直接開く」を押します。';
+}
+function verifyText(k){
+  if(isSafariChoice(k))return'確認用の新しいタブがnoteの通知画面のままなら、Safariの「拡張機能」でUserscriptsとnote.comの許可を確認してください。成功すると、この設定画面へ戻り「✅ 更新済み」と表示されます。';
+  if(isChromiumChoice(k))return'確認用の新しいタブがnoteの通知画面のままなら、Tampermonkeyの「ユーザースクリプトを許可」または「開発者モード」と、INSIGHTがONかを確認してください。成功すると「✅ 更新済み」と表示されます。';
+  return'確認用の新しいタブがnoteの通知画面のままなら、TampermonkeyとINSIGHTがONか確認してください。成功すると「✅ 更新済み」と表示されます。';
+}
 function versionCheckUrl(){const u=new URL('https://note.com/notifications');u.searchParams.set('mumei_insight_version_check','1');const ret=new URL('./tool-setup.html',location.href);if(expected)ret.searchParams.set('account',expected);ret.searchParams.set('return',back);ret.searchParams.set('browser',selected);u.searchParams.set('mumei_return',ret.href);return u.href}
-function pending(){try{return JSON.parse(localStorage.getItem(PENDING)||'null')}catch{return null}}
-function showResult(){const returned=q.get('notificationInstalled')||'',current=returned||localStorage.getItem(NOTICE_KEY)||'',checkedAt=Number(q.get('notificationCheckedAt')||0),fresh=Boolean(returned)&&checkedAt>0,latest=release.notificationVersion||'不明';document.getElementById('versionLine').textContent=`現在：${current?`V${current}`:'未確認'} ／ 最新：V${latest}`;result.className='result';if(fresh&&current===latest){result.classList.add('ok');result.textContent=`✅ 更新済み｜V${current} が起動しています`;localStorage.setItem(NOTICE_KEY,current);localStorage.removeItem(PENDING);fallback.classList.remove('show');return}if(fresh&&current&&current!==latest){result.classList.add('warn');result.textContent=`⚠ 未更新｜現在 V${current} → 最新 V${latest}`;fallback.textContent='Tampermonkeyで更新を確定してから、もう一度「更新されたか確認する」を押してください。';fallback.classList.add('show');return}if(q.get('notificationUpdateResult')&&!current){result.classList.add('bad');result.textContent='⚠ 確認失敗｜INSIGHTスクリプトが起動していません';return}if(current===latest){result.classList.add('warn');result.textContent=`前回記録 V${current}｜今回はまだ実働確認していません`;return}result.classList.add('warn');result.textContent=current?`更新確認が必要｜記録 V${current} → 最新 V${latest}`:'未確認｜更新後は自動確認します'}
-function autoVerifyAfterInstall(){if(autoCheckBusy||q.get('notificationInstalled'))return;const p=pending(),age=p?Date.now()-Number(p.at||0):0;if(!p||age<800||age>600000)return;autoCheckBusy=true;result.className='result';result.textContent='更新後の起動版を自動確認しています…';setTimeout(()=>location.replace(versionCheckUrl()),60)}
+function paintInstall(){
+  const k=selected,blocked=isSwitch(),safari=isSafariChoice(k);
+  document.querySelectorAll('[data-browser]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.browser===k)));
+  document.getElementById('detected').textContent='自動判定：'+names[env()]+'。違う場合だけ変更してください。';
+  document.getElementById('device').textContent='2　'+names[k]+'で'+(blocked?'開き直す':'更新する');
+  document.getElementById('tip').textContent=blocked?(k==='ios-other'?'本人通知はSafariで使います。この設定画面をSafariで開いてください。':'Android Chromeでは本人通知を実行できません。EdgeまたはFirefoxで、この設定画面を開いてください。'):'すでに使っている方は入れ直しません。次の3手だけです。';
+  document.getElementById('currentSteps').textContent=normalSteps(k);
+  document.getElementById('switchBrowser').hidden=!blocked;document.getElementById('updateFlow').hidden=blocked;document.getElementById('confirmFlow').hidden=blocked;
+  install.href=RAW;install.target='_blank';install.rel='noopener';install.toggleAttribute('aria-disabled',blocked);
+  verify.href=versionCheckUrl();verify.toggleAttribute('aria-disabled',blocked);
+  document.getElementById('recoverySteps').textContent=recovery(k);document.getElementById('firstSteps').textContent=firstTimeSteps(k);document.getElementById('verifyHelp').textContent=verifyText(k);
+  document.getElementById('extensionGuide').href=safari?'https://apps.apple.com/app/userscripts/id1463298887':'https://www.tampermonkey.net/';
+  const page=new URL(location.href);page.searchParams.delete('browser');document.getElementById('pageUrl').value=page.href;
+}
+function showResult(){
+  const returned=q.get('notificationInstalled')||'',current=returned||localStorage.getItem(NOTICE_KEY)||'',checkedAt=Number(q.get('notificationCheckedAt')||0),fresh=Boolean(returned)&&checkedAt>0,latest=release.notificationVersion||'不明';
+  document.getElementById('versionLine').textContent=`現在：${current?`V${current}`:'未確認'} ／ 最新：V${latest}`;result.className='result';
+  if(fresh&&current===latest){result.classList.add('ok');result.textContent=`✅ 更新済み｜V${current} が実際に起動しました`;localStorage.setItem(NOTICE_KEY,current);fallback.classList.remove('show');return}
+  if(fresh&&current&&current!==latest){result.classList.add('warn');result.textContent=`⚠ 未更新｜現在 V${current} → 最新 V${latest}`;fallback.textContent='Tampermonkey／Userscriptsで更新後、もう一度「更新できたか確認する」を押してください。';fallback.classList.add('show');return}
+  if(current===latest){result.classList.add('warn');result.textContent=`前回記録 V${current}｜このブラウザではまだ実働確認していません`;return}
+  result.classList.add('warn');result.textContent=current?`実働確認が必要｜記録 V${current} → 最新 V${latest}`:'未確認｜更新後に実働確認してください';
+}
 async function loadRelease(){try{const r=await fetch('./insight-release.json?ts='+Date.now(),{cache:'no-store'});if(r.ok)release={...release,...await r.json()}}catch{}showResult()}
-document.querySelectorAll('[data-browser]').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.browser;const u=new URL(location.href);u.searchParams.set('browser',selected);history.replaceState(null,'',u.href);paintInstall()}));document.getElementById('copyPage').addEventListener('click',async()=>{const i=document.getElementById('pageUrl'),b=document.getElementById('copyPage');try{await navigator.clipboard.writeText(i.value);b.textContent='コピーしました'}catch{i.focus();i.select();b.textContent='リンクを長押ししてコピー'}});install.addEventListener('click',e=>{if(install.getAttribute('aria-disabled')==='true'){e.preventDefault();return}localStorage.setItem(PENDING,JSON.stringify({at:Date.now(),url:script()}));autoCheckBusy=false;result.className='result';result.textContent='更新ファイルを開きます。Tampermonkeyの確認画面が出た場合だけ「更新」を押し、このページへ戻ってください。'});verify.addEventListener('click',()=>{autoCheckBusy=true;result.className='result';result.textContent='確認中…';location.replace(versionCheckUrl())});
-paintInstall();void loadRelease();window.addEventListener('pageshow',()=>{showResult();setTimeout(autoVerifyAfterInstall,100)});window.addEventListener('focus',()=>{showResult();setTimeout(autoVerifyAfterInstall,100)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(autoVerifyAfterInstall,100)});
-</script></body></html>
+document.querySelectorAll('[data-browser]').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.browser;const u=new URL(location.href);u.searchParams.set('browser',selected);history.replaceState(null,'',u.href);paintInstall()}));
+document.getElementById('copyPage').addEventListener('click',async()=>{const i=document.getElementById('pageUrl'),b=document.getElementById('copyPage');try{await navigator.clipboard.writeText(i.value);b.textContent='コピーしました'}catch{i.focus();i.select();b.textContent='リンクを長押ししてコピー'}});
+install.addEventListener('click',e=>{if(install.getAttribute('aria-disabled')==='true'){e.preventDefault();return}result.className='result';result.textContent='更新ファイルを開きます。確認画面が出た場合だけ「更新」を押してください。'});
+verify.addEventListener('click',e=>{if(verify.getAttribute('aria-disabled')==='true'){e.preventDefault();return}verify.href=versionCheckUrl();result.className='result';result.textContent='新しいタブでV3.2.9の実働を確認します…'});
+paintInstall();void loadRelease();
+</script>
+</body>
+</html>

@@ -51,7 +51,7 @@ test('active package uses V3.2.9 with one parent-owned fixed dock',()=>{
   const loader=read('public/note-insight-notification-loader-v318.js');
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.appVersion,'2026.09.16.4');
+  assert.equal(manifest.appVersion,'2026.09.16.5');
   assert.equal(manifest.notificationVersion,'3.2.9');
   assert.equal(manifest.dashboardVersion,'1.4.4');
   assert.match(v3,/@version\s+3\.2\.9/);
@@ -63,8 +63,8 @@ test('active package uses V3.2.9 with one parent-owned fixed dock',()=>{
   assert.doesNotMatch(v3.split('// ==/UserScript==')[0],/@require/);
   assert.match(setup,/INSIGHTをインストール \/ 更新/);
   assert.match(setup,/ユーザースクリプトの更新を確認/);
-  assert.match(setup,/TampermonkeyにURLを貼り付ける操作はありません/);
-  assert.match(setup,/更新されたか確認する/);
+  assert.match(setup,/URLを貼り付ける操作はありません/);
+  assert.match(setup,/更新できたか確認する/);
   assert.match(setup,/https:\/\/note\.com\/notifications/);
   assert.match(dock,/window\.__mumeiV3ParentDock/);
   assert.match(reader,/mumei-v3-reader-status/);
@@ -85,4 +85,3 @@ test('seven-day selection still compares against the preceding seven days',()=>{
   assert.equal(r.prev7,1);
   assert.equal(r.ownArticleAdds,1);
 });
-

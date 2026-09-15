@@ -6,7 +6,7 @@ const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 test("installer keeps participant steps compact and raw update route",async()=>{
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);
-  assert.match(page,/更新されたか確認する/);
+  assert.match(page,/更新できたか確認する/);
   assert.match(page,/Tampermonkey/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
   assert.match(page,/https:\/\/note\.com\/notifications/);
@@ -59,4 +59,3 @@ test("INSIGHT notifications keep one category selector",async()=>{
   assert.match(release,/insight-notification-ui-v18/);
   assert.match(ui,/mumei-notification-category-button/);assert.match(ui,/通知項目：/);assert.match(ui,/PUBLIC_DUPLICATE_LABELS/);
 });
-
