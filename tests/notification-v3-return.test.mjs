@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("installer keeps participant steps compact and removes setup-page settings clutter",async()=>{
+test("installer keeps participant steps compact and restores raw install flow",async()=>{
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);
   assert.match(page,/INSIGHTをインストール \/ 更新/);
@@ -11,19 +11,24 @@ test("installer keeps participant steps compact and removes setup-page settings 
   assert.match(page,/✅ 更新済み/);
   assert.match(page,/⚠ 未更新/);
   assert.match(page,/Tampermonkey/);
-  assert.match(page,/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/本人通知を実働確認|ダッシュボードを読み込む|初回の連携・読み込み|通知フィルター設定|Import from URL|script_installation\.php#url=|window\.open\(/);
+  assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
+  assert.match(page,/https:\/\/note\.com\/notifications/);
+  assert.doesNotMatch(page,/本人通知を実働確認|ダッシュボードを読み込む|初回の連携・読み込み|通知フィルター設定|Import from URL|script_installation\.php#url=|window\.open\(|文字列になった/);
 });
 
-test("V3.2.6 one-script bootstrap loads current reader dock and loader without @require",async()=>{
+test("V3.2.7 one-script bootstrap returns version check before remote component loading",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.6/);
+  assert.match(v3,/@version\s+3\.2\.7/);
+  assert.match(v3,/function directVersionCheck\(\)/);
+  assert.match(v3,/runtime-checked-v327/);
+  assert.match(v3,/location\.replace\(dest\.href\)/);
+  assert.ok(v3.indexOf('if(directVersionCheck())return')<v3.indexOf("await run('note-insight-notification-reader-v322.js')"));
   assert.match(v3,/await run\('note-insight-notification-reader-v322\.js'\)/);
   assert.match(v3,/await run\('note-insight-notification-dock-watch-v312\.js'\)/);
   assert.match(v3,/await run\('note-insight-notification-loader-v318\.js'\)/);
-  assert.match(v3,/mumei-v326-component-cache/);
+  assert.match(v3,/mumei-v327-component-cache/);
   assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
-  assert.match(loader,/const VERSION='3\.2\.6'/);assert.match(loader,/runtime-checked-v326/);
+  assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
   assert.match(dock,/function startReader\(\)/);assert.match(dock,/window\.__mumeiV3Reader322/);assert.match(dock,/api\.scan\(\)/);assert.match(dock,/mumei-v3-read-request/);assert.match(reader,/mumei-v3-read-request/);assert.match(reader,/rediscoverPanel/);
 });
 
