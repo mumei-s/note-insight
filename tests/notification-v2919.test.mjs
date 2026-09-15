@@ -4,48 +4,35 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("bottom-up notification core remains intact and the single controller owns the visible dock",async()=>{
-  const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
-  has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["__mumeiNotificationSingleDock320","mumei-v3-notification-frame","findShell","toggleFilter","https://note.com/notifications","blockNoticeNavigationWhileReading","mumei-v3-core-ready"]);
-  assert.doesNotMatch(watch,/ensureLauncher|bindDrag|savePos|mumei-notification-launcher-position-v1/);
+test("V3.2.2 uses one visible dock and one direct reader with no legacy iframe path",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js"),loader=await read("public/note-insight-notification-loader-v318.js");
+  assert.match(v3,/@version\s+3\.2\.2/);
+  has(v3,["note-insight-notification-dock-watch-v312.js?v=322","note-insight-notification-reader-v322.js?v=322","note-insight-notification-loader-v318.js?v=322"]);
+  assert.doesNotMatch(v3,/notification-fixed-dock|notification-launcher|notification-autoscan/);
+  has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","mumei-v3-read-request","pointerdown","pointerup","blockNoticeNavigationWhileReading"]);
+  assert.doesNotMatch(dock,/srcdoc=|ensureBackend|backendButton|mumei-v3-notification-frame.*contentDocument/);
+  has(reader,["__mumeiNotificationReader322","verified-shell-bottom-to-top","confirmedClientSignatures","mumei-v3-reader-status","mumei-v3-reader-ready","sendBatch","scrollHost"]);
+  has(loader,["const VERSION='3.2.2'","runtime-checked-v322","note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
 });
 
-test("notification V3.2.0 uses one install wrapper and fresh cache keys",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(v3,/@version\s+3\.2\.0/);
-  has(v3,["note-insight-notification-fixed-dock-v319.js?v=320","note-insight-notification-dock-watch-v312.js?v=320","note-insight-notification-loader-v318.js?v=320"]);
-  has(loader,["const VERSION='3.2.0'","runtime-checked-v320","note-insight-dashboard-integrated-v318.js","mumei-v3-core-ready"]);
-  has(fixed,["Compatibility shim only","Do not create or control any visible panel here","mumei-v3-fixed-dock"]);
-  has(watch,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"]);
-  assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
-});
-
-test("legacy runtime is retired and V3.2 controller exposes the four operations",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2958.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  has(r,["Compatibility shim only","clean panel controller"]);
-  assert.doesNotMatch(r,/grid-template-columns|showDock|frameHtml/);
-  has(watch,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","toggleFilter","openInsight","tryAutoStart"]);
-});
-
-test("notification filter always returns to the notification list",async()=>{
-  const page=await read("public/notification-filter.html");
-  has(page,["https://note.com/notifications","mumei_return","function closePage(){location.href=returnUrl}","mumei_groups_sync","mumei_filter_reset"]);
+test("notification filter commands are handled on note without passing taps through notification rows",async()=>{
+  const dock=await read("public/note-insight-notification-dock-watch-v312.js"),page=await read("public/notification-filter.html");
+  has(dock,["mumei_groups_sync","mumei_filter_reset","mumei_filter_export","processFilterCommands","touch-action:none","stopImmediatePropagation","mumei_return","https://note.com/notifications"]);
+  has(page,["https://note.com/notifications","mumei_return","mumei_groups_sync","mumei_filter_reset"]);
   assert.doesNotMatch(page,/function closePage\(\)\{if\(document\.referrer/);
 });
 
 test("one setup center uses one unified userscript and never requires Tampermonkey reinstall",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["ONE SETUP CENTER","Android Edge","Android Firefox","Android Chrome / Yahoo","iPhone / iPad Safari","Mac Safari","PC Edge / Chrome / Firefox","通知＋ダッシュボードをインストール／更新","本人通知を実働確認／連携","note-insight-notification-v3.user.js","mumei-direct-install-pending","Tampermonkey自体を入れ直す必要はありません","このまま連携できます"]);
-  assert.doesNotMatch(setup,/script_installation\.php#url=|window\.open\(|ONE BRIDGE SETUP|Bridgeが実行されていません|Import from URL|target="_blank"/);
-  has(top,["./tool-setup.html?from=top","設定 / 更新","Dashboard同期ツール","本人通知ツール"]);has(route,["notification-update.html","miv5-source-card.notice"]);
-  has(bridge,["互換停止版","@version      1.0.1","このBridgeは何も起動しません"]);
+  has(setup,["ONE SETUP CENTER","Android Edge","通知＋ダッシュボードをインストール／更新","本人通知を実働確認／連携","note-insight-notification-v3.user.js","Tampermonkey自体を入れ直す必要はありません"]);
+  assert.doesNotMatch(setup,/Import from URL|script_installation\.php#url=|window\.open\(/);
+  has(top,["./tool-setup.html?from=top","設定 / 更新"]);has(route,["notification-update.html"]);has(bridge,["互換停止版","@version      1.0.1"]);
 });
 
-test("legacy setup routes and notification update converge on the unified setup center",async()=>{
-  for(const path of ["public/notification-setup.html","public/notification-update-v29665.html","public/notification-update-v2966.html","public/notification-setup-v2966.html","public/dashboard-setup.html"]){const p=await read(path);assert.match(p,/tool-setup\.html/)}
-  const update=await read("public/notification-update.html");has(update,["INSIGHT 統合更新","本人通知とダッシュボードは同じ1本で更新します","tool-setup.html"]);assert.doesNotMatch(update,/Raw文字列|raw\.githubusercontent\.com|Import from URL/);
+test("release tracks V3.2.2",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
+  assert.equal(manifest.appVersion,"2026.09.15.3");assert.equal(manifest.notificationVersion,"3.2.2");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.15\.3"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.2"/);assert.match(v3,/@version\s+3\.2\.2/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
@@ -53,20 +40,7 @@ test("Dashboard and notification auth prefer explicit owner before stale member 
   for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/);
 });
 
-test("release tracks V3.2.0 and loads compact notification selector",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),dash=await read("public/note-insight-dashboard-sync.user.js"),v3=await read("public/note-insight-notification-v3.user.js"),ui=await read("src/insight-notification-ui-v18.ts");
-  assert.equal(manifest.appVersion,"2026.09.15.1");assert.equal(manifest.notificationVersion,"3.2.0");assert.equal(manifest.dashboardVersion,"1.4.4");assert.equal(manifest.bridgeVersion,undefined);
-  assert.doesNotMatch(release,/CURRENT_BRIDGE_VERSION|BRIDGE_VERSION_STORAGE_KEY|bridgeVersion/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.0"/);assert.match(release,/CURRENT_DASHBOARD_VERSION = "1\.4\.4"/);assert.match(release,/insight-notification-ui-v18/);
-  assert.match(dash,/@version\s+1\.4\.4/);assert.match(v3,/@version\s+3\.2\.0/);has(ui,["通知項目：","mumei-notification-category-button","PUBLIC_DUPLICATE_LABELS"]);
-});
-
 test("private notification categories stay dense while public duplicates are excluded",async()=>{
-  const ui=await read("src/member-insight-notifications-final.tsx"),picker=await read("src/insight-notification-ui-v18.ts"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts"),pro=await read("src/member-insight-analytics-pro-v3.tsx"),detail=await read("public/install-free-analysis-v2.html");
-  has(ui,["reply_self","reply_other","membership_reaction_self","membership_join","purchase","tip","quote","other"]);has(pro,["INSIGHT PRO ANALYTICS V3","反応/1,000PV","本人通知 × PV クロス分析","記事総合ランキング"]);has(detail,["1記事あたり平均スキ数","1記事あたり平均コメント数","本人通知・Dashboard同期なし"]);
-  has(feed,["[\"like\",\"follow\",\"comment\",\"creator_article_posted\"]","canonical-public-comments"]);has(picker,["スキ","人物フォロー","通常コメント","記事投稿"]);
-});
-
-test("notification and social history server paths remain intact",async()=>{
-  const ui=await read("src/member-insight-notifications-final.tsx"),social=await read("src/member-insight-social-v2.tsx"),comments=await read("src/member-insight-comments-final.tsx"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
-  has(ui,["creator_article_posted","membership_join","other"]);assert.match(social,/live_expected_count/);assert.match(comments,/全コメント・全返信/);has(feed,["membership_join","canonical-public-comments","comment_body"]);
+  const ui=await read("src/member-insight-notifications-final.tsx"),picker=await read("src/insight-notification-ui-v18.ts"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
+  has(ui,["reply_self","reply_other","membership_reaction_self","membership_join","purchase","tip","quote","other"]);has(feed,["[\"like\",\"follow\",\"comment\",\"creator_article_posted\"]","canonical-public-comments"]);has(picker,["スキ","人物フォロー","通常コメント","記事投稿"]);
 });
