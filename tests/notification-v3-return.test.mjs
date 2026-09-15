@@ -19,7 +19,7 @@ test("V3.2.8 returns version check before rescue or remote loading",async()=>{
   assert.match(v3,/function directVersionCheck\(\)/);
   assert.match(v3,/runtime-checked-v328/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
-  assert.ok(v3.indexOf('if(directVersionCheck())return')<v3.indexOf('startRescue()'));
+  assert.ok(v3.indexOf('if(directVersionCheck())return')<v3.indexOf("if(isNote){startRescue();"));
   assert.match(v3,/mumei-v328-component-cache/);
   assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
   assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
