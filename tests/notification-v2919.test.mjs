@@ -24,7 +24,7 @@ test("notification filter commands are handled on note without passing taps thro
 
 test("one setup center uses one unified userscript and never requires Tampermonkey reinstall",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["ONE SETUP CENTER","Android Edge","通知＋ダッシュボードをインストール／更新","本人通知を実働確認／連携","note-insight-notification-v3.user.js","Tampermonkey自体を入れ直す必要はありません"]);
+  has(setup,["INSIGHT かんたん設定","Android の Edge","通知＋ダッシュボードをインストール／更新","本人通知を実働確認／連携","note-insight-notification-v3.user.js","Tampermonkey自体を入れ直す必要はありません"]);
   assert.doesNotMatch(setup,/Import from URL|script_installation\.php#url=|window\.open\(/);
   has(top,["./tool-setup.html?from=top","設定 / 更新"]);has(route,["notification-update.html"]);has(bridge,["互換停止版","@version      1.0.1"]);
 });
