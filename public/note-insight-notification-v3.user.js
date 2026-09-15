@@ -30,6 +30,7 @@ const BASE='https://mumei-s.github.io/note-insight/';
 const CACHE='mumei-v326-component-cache:';
 const GENERIC='mumei-component-cache:';
 const isNote=location.hostname==='note.com';
+const isDashboardSetup=!isNote&&/\/dashboard-setup\.html$/i.test(location.pathname);
 const modern=()=>Boolean(globalThis.GM);
 async function getValue(k,d=''){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function setValue(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
@@ -37,6 +38,6 @@ function gmText(url){return new Promise((resolve,reject)=>{const req={method:'GE
 async function source(name){const url=BASE+name+'?v=326&ts='+Date.now();let last=null;for(let i=0;i<3;i++){try{const t=await gmText(url);if(t.trim()){await setValue(CACHE+name,t);await setValue(GENERIC+name,t);return t}}catch(e){last=e}try{const r=await fetch(url,{cache:'no-store'});if(r.ok){const t=await r.text();if(t.trim()){await setValue(CACHE+name,t);await setValue(GENERIC+name,t);return t}}}catch(e){last=e}await new Promise(r=>setTimeout(r,180+i*260))}const exact=String(await getValue(CACHE+name,'')||'');if(exact.trim())return exact;const generic=String(await getValue(GENERIC+name,'')||'');if(generic.trim())return generic;throw last||new Error('EMPTY_'+name)}
 async function run(name){const src=await source(name);(0,eval)(src+'\n//# sourceURL='+(BASE+name));}
 function fatal(e){console.error('[INSIGHT V3.2.6]',e);try{localStorage.setItem('mumei-notification-v3-error',String(e?.message||e))}catch{}}
-async function boot(){try{if(isNote){await run('note-insight-notification-reader-v322.js');await run('note-insight-notification-dock-watch-v312.js')}await run('note-insight-notification-loader-v318.js');try{localStorage.setItem('mumei-notification-v3-loader',VERSION)}catch{}}catch(e){fatal(e)}}
+async function boot(){try{if(isNote){await run('note-insight-notification-reader-v322.js');await run('note-insight-notification-dock-watch-v312.js');await run('note-insight-notification-loader-v318.js')}else if(isDashboardSetup){await run('note-insight-notification-loader-v318.js')}try{localStorage.setItem('mumei-notification-v3-loader',VERSION)}catch{}}catch(e){fatal(e)}}
 void boot();
 })();
