@@ -4,28 +4,30 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("bottom-up notification core remains intact and the live controller owns one dock only",async()=>{
+test("bottom-up notification core remains intact and the clean controller owns the only visible dock",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["__mumeiNotificationSingleDock320","strictShellOpen","forceFrame","toggleFilter","https://note.com/notifications","mumei-v3-fixed-dock"]);
+  has(watch,["__mumeiNotificationPanelCleanV1","mumei-v3-panel-clean-v1","mumei-v3-notification-frame","strictShell","toggleFilter","https://note.com/notifications","blockNoticeNavigationWhileReading"]);
   assert.doesNotMatch(watch,/ensureLauncher|bindDrag|savePos|mumei-notification-launcher-position-v1/);
 });
 
-test("notification V3.1.9 keeps version return and four-column control",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js");
+test("notification V3.1.9 keeps one install wrapper while legacy fixed dock is retired",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(v3,/@version\s+3\.1\.9/);
   has(v3,["note-insight-notification-fixed-dock-v319.js?v=319","note-insight-notification-loader-v318.js?v=319","tool-setup.html"]);
   has(loader,["const VERSION='3.1.8'","runtime-checked-v318","note-insight-dashboard-integrated-v318.js"]);
-  has(fixed,["const VERSION='3.1.9'","mumei-v3-fixed-dock","grid-template-columns:repeat(4,minmax(0,1fr))","notificationInstalled',VERSION","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"]);
+  has(fixed,["Compatibility shim only","Do not create or control any visible panel here","mumei-v3-fixed-dock"]);
+  has(watch,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"]);
   assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
   assert.doesNotMatch(fixed,/bindDrag|savePos|mumei-notification-launcher-position-v1/);
 });
 
-test("notification runtime still exposes the four operations",async()=>{
+test("legacy runtime is retired and clean controller exposes the four operations",async()=>{
   const r=await read("public/note-insight-notification-runtime-v2958.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
-  has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
-  has(watch,["toggleFilter","FILTER","INSIGHT","tryAutoStart","readerReady"]);
+  has(r,["Compatibility shim only","clean panel controller"]);
+  assert.doesNotMatch(r,/grid-template-columns|showDock|frameHtml/);
+  has(watch,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","toggleFilter","openInsight","autoStart"]);
 });
 
 test("notification filter always returns to the notification list",async()=>{
