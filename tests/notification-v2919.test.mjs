@@ -4,15 +4,15 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("bottom-up notification core remains intact and existing V3.1.8 installs receive the fixed dock hotfix",async()=>{
+test("bottom-up notification core remains intact and the live controller owns one dock only",async()=>{
   const bridge=await read("public/note-insight-notification-bootstrap-v2966.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(bridge,["recoverAlreadyOpenNotice","wakeRuntime","data-mumei-v3-wakeup","knownNotificationRowsVisible"]);
   has(reader,["verified-shell-bottom-to-top","confirmedClientSignatures","scrollHost","sendBatch","slice().reverse()","下から読込"]);
-  has(watch,["note-insight-notification-fixed-dock-v319.js","__mumeiNotificationFixedDock319","__mumeiNotificationLauncherV317=true","removeOld","fetchFixed"]);
+  has(watch,["__mumeiNotificationSingleDock320","strictShellOpen","forceFrame","toggleFilter","https://note.com/notifications","mumei-v3-fixed-dock"]);
   assert.doesNotMatch(watch,/ensureLauncher|bindDrag|savePos|mumei-notification-launcher-position-v1/);
 });
 
-test("notification V3.1.9 keeps version return and permanent four-column control",async()=>{
+test("notification V3.1.9 keeps version return and four-column control",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js");
   assert.match(v3,/@version\s+3\.1\.9/);
   has(v3,["note-insight-notification-fixed-dock-v319.js?v=319","note-insight-notification-loader-v318.js?v=319","tool-setup.html"]);
@@ -23,9 +23,15 @@ test("notification V3.1.9 keeps version return and permanent four-column control
 });
 
 test("notification runtime still exposes the four operations",async()=>{
-  const r=await read("public/note-insight-notification-runtime-v2958.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js");
+  const r=await read("public/note-insight-notification-runtime-v2958.js"),watch=await read("public/note-insight-notification-dock-watch-v312.js");
   has(r,["grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","前回保存ここまで"]);
-  has(fixed,["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","clickLegacy('read')","clickLegacy('filter')"]);
+  has(watch,["toggleFilter","FILTER","INSIGHT","tryAutoStart","readerReady"]);
+});
+
+test("notification filter always returns to the notification list",async()=>{
+  const page=await read("public/notification-filter.html");
+  has(page,["https://note.com/notifications","mumei_return","function closePage(){location.href=returnUrl}","mumei_groups_sync","mumei_filter_reset"]);
+  assert.doesNotMatch(page,/function closePage\(\)\{if\(document\.referrer/);
 });
 
 test("one setup center uses one unified userscript and never requires Tampermonkey reinstall",async()=>{
