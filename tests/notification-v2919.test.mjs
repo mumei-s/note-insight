@@ -4,15 +4,15 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.2.4 uses one visible dock and one direct reader with no legacy iframe path",async()=>{
+test("V3.2.5 uses one visible dock and directly starts the reader with event fallback",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.2\.4/);
+  assert.match(v3,/@version\s+3\.2\.5/);
   has(v3,["note-insight-notification-dock-watch-v312.js","note-insight-notification-reader-v322.js","note-insight-notification-loader-v318.js"]);
   assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
-  has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","mumei-v3-read-request","touch-action:manipulation","window.addEventListener('click',onClick,true)","blockNoticeNavigationWhileReading"]);
+  has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","mumei-v3-read-request","touch-action:manipulation","window.addEventListener('click',onClick,true)","blockNoticeNavigationWhileReading","function startReader()","window.__mumeiV3Reader322","api.scan()","読込開始…"]);
   assert.doesNotMatch(dock,/pointerdown|pointerup|touch-action:none|srcdoc=|ensureBackend|backendButton|mumei-v3-notification-frame.*contentDocument/);
   has(reader,["__mumeiNotificationReader322","verified-shell-bottom-to-top","confirmedClientSignatures","mumei-v3-reader-status","mumei-v3-reader-ready","sendBatch","scrollHost"]);
-  has(loader,["const VERSION='3.2.4'","runtime-checked-v324","note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
+  has(loader,["const VERSION='3.2.5'","runtime-checked-v325","note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
 });
 
 test("notification filter commands are handled on note without passing taps through notification rows",async()=>{
@@ -29,10 +29,10 @@ test("one setup center uses one unified userscript and never requires Tampermonk
   has(top,["./tool-setup.html?from=top","設定 / 更新"]);has(route,["notification-update.html"]);has(bridge,["互換停止版","@version      1.0.1"]);
 });
 
-test("release tracks V3.2.4",async()=>{
+test("release tracks V3.2.5",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.15.5");assert.equal(manifest.notificationVersion,"3.2.4");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.15\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.4"/);assert.match(v3,/@version\s+3\.2\.4/);
+  assert.equal(manifest.appVersion,"2026.09.15.6");assert.equal(manifest.notificationVersion,"3.2.5");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.15\.6"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.5"/);assert.match(v3,/@version\s+3\.2\.5/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
