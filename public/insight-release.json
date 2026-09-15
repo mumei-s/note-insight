@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.15.1",
-  "notificationVersion": "3.2.0",
+  "appVersion": "2026.09.15.2",
+  "notificationVersion": "3.2.1",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T00:45:00Z",
+  "releasedAt": "2026-09-15T02:43:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.0",
+  "notificationLabel": "本人通知 V3.2.1",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知UIを作り直し。通知一覧だけに1段4列パネルを表示し、旧パネルを停止。読込エンジンと同一iframeへ統合し、note内SPA遷移とダッシュボード遷移も監視する。"
+  "note": "通知4列をiframe表示から親DOM直描画へ変更し、下の通知行へのタップ貫通を防止。読込本体は非表示バックエンドへ分離して確実に接続し、ダッシュボード本体も早期ロードする。"
 }
