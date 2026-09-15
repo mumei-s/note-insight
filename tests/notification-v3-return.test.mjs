@@ -12,16 +12,16 @@ test("setup center uses one direct userscript update and keeps participant steps
   assert.doesNotMatch(page,/Import from URL|script_installation\.php#url=|window\.open\(/);
 });
 
-test("V3.2.4 bundles the direct dock and reader and lazily loads dashboard runtime",async()=>{
+test("V3.2.5 bundles the direct dock and reader and lazily loads dashboard runtime",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.4/);
+  assert.match(v3,/@version\s+3\.2\.5/);
   assert.match(v3,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(v3,/note-insight-notification-reader-v322\.js/);
   assert.match(v3,/note-insight-notification-loader-v318\.js/);
   assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
-  assert.match(loader,/const VERSION='3\.2\.4'/);assert.match(loader,/runtime-checked-v324/);
+  assert.match(loader,/const VERSION='3\.2\.5'/);assert.match(loader,/runtime-checked-v325/);
   assert.match(v3,/componentText\('note-insight-dashboard-integrated-v318\.js'\)/);
-  assert.match(dock,/mumei-v3-read-request/);assert.match(reader,/mumei-v3-read-request/);
+  assert.match(dock,/function startReader\(\)/);assert.match(dock,/window\.__mumeiV3Reader322/);assert.match(dock,/api\.scan\(\)/);assert.match(dock,/mumei-v3-read-request/);assert.match(reader,/mumei-v3-read-request/);
 });
 
 test("notification controls use one compact four-column panel and native click capture",async()=>{
