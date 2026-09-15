@@ -2,28 +2,74 @@
 'use strict';
 if(window.__NOTE_BOOST_V536_CLARITY__)return;
 window.__NOTE_BOOST_V536_CLARITY__=true;
+
 const K='note巡回BOOST_v531';
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const load=(k,fb)=>{try{return JSON.parse(localStorage.getItem(`${K}:${k}`))??fb}catch{return fb}};
-const save=(k,v)=>{try{localStorage.setItem(`${K}:${k}`,JSON.stringify(v))}catch{}};
-let lastKey='',seq=0;const cache=new Map(),magCache=new Map();
+let activeKey='',activeState='checking',seq=0,cardObserver=null;
+const cache=new Map();
+const setText=(el,text)=>{if(el&&el.textContent!==text)el.textContent=text};
 function q(){const a=load('queue',[]);return Array.isArray(a)?a:[]}
 function idx(){return Math.max(0,Number(load('index',0))||0)}
 function cur(){return q()[idx()]||null}
 function done(s){return s==='preexisting'||s==='liked_now'}
 function readLiked(j){const d=j?.data??j??{},n=d.note||d;for(const k of ['isLiked','is_liked','liked','hasLiked'])if(typeof n?.[k]==='boolean')return n[k];return null}
-function resultMap(){const r=load('results',{});return r&&typeof r==='object'?r:{}}
-function savePreexisting(x){if(!x?.key)return;const r=resultMap();if(!r[x.key]){r[x.key]={state:'preexisting',urlname:x.urlname,name:x.name||x.urlname,title:x.title||x.key,t:Date.now()};save('results',r)}}
-function ensureBand(){const card=$('#nb532-card');if(!card)return null;let e=$('#nb536-currentlike');if(!e){e=document.createElement('div');e.id='nb536-currentlike';e.style.cssText='margin:6px 0;padding:8px 10px;border:1px solid #466b7d;border-radius:9px;background:#07151e;color:#fff;font:950 12px/1.35 system-ui;text-align:center;letter-spacing:.02em';const top=card.querySelector('.nb532-top');if(top)top.insertAdjacentElement('afterend',e);else card.prepend(e)}return e}
-function paint(state,x){const e=ensureBand();if(!e||!x)return;let text='🔎 この人のスキ状態を確認中';let border='#466b7d',bg='#07151e';if(x.likeState==='liked_now'){text='❤️ この人は今回スキ済み ✓';border='#d95079';bg='#32101b'}else if(x.likeState==='preexisting'||state==='preexisting'){text='💗 この人は元からスキ済み ✓';border='#c94d98';bg='#2a1024'}else if(state==='unliked'){text='♡ この人は未スキ';border='#6d8794';bg='#101a20'}else if(state==='error'){text='⚠ この人のスキ状態を判定できません';border='#b06a54';bg='#2b1710'}e.textContent=text;e.style.borderColor=border;e.style.background=bg;const st=$('#nb532-status');if(st){st.textContent=`現在 @${x.urlname||'?'}｜${text.replace(/^.[^ ]* /,'')}`;st.dataset.bad=state==='error'?'1':'0'}const b=$('#nb532-like');if(b){if(x.likeState==='liked_now')b.textContent='❤️ 今回済';else if(x.likeState==='preexisting'||state==='preexisting')b.textContent='💗 元から済';else if(state==='unliked')b.textContent='♡ スキ';else b.textContent='🔎 判定中'}}
-async function probe(force=false){const x=cur();if(!x?.key)return;const key=String(x.key);if(key!==lastKey){lastKey=key;seq++;paint('checking',x)}if(done(x.likeState)){paint(x.likeState,x);return}const c=cache.get(key);if(!force&&c&&Date.now()-c.t<30000){paint(c.state,x);return}const s=++seq;try{const r=await fetch(`/api/v3/notes/${encodeURIComponent(key)}`,{credentials:'include',headers:{accept:'application/json'}});if(!r.ok)throw 0;const j=await r.json();if(s!==seq||cur()?.key!==key)return;const liked=readLiked(j),state=liked===true?'preexisting':liked===false?'unliked':'error';cache.set(key,{state,t:Date.now()});if(state==='preexisting')savePreexisting(x);paint(state,x)}catch{if(s===seq&&cur()?.key===key)paint('error',x)}}
-function fixHistory(){const r=resultMap(),a=q();for(const row of $$('.nb532-state-row')){const i=Number(row.dataset.i),x=a[i],s=x?.likeState||r[x?.key]?.state||'pending';row.dataset.state=s;const span=row.querySelector('span');if(span)span.textContent=s==='preexisting'?'💗元から':s==='liked_now'?'❤️今回':'⏸未処理'}}
-function directImage(v){if(typeof v==='string'&&/^https?:\/\//.test(v))return v;return''}
-function imageFrom(o,depth=0){if(!o||depth>4)return'';if(typeof o==='string')return'';if(Array.isArray(o)){for(const v of o){const x=imageFrom(v,depth+1);if(x)return x}return''}if(typeof o!=='object')return'';for(const [k,v] of Object.entries(o)){if(/image|thumb|cover|eyecatch|photo|icon|picture/i.test(k)){const d=directImage(v);if(d)return d;const x=imageFrom(v,depth+1);if(x)return x}}for(const v of Object.values(o)){if(v&&typeof v==='object'){const x=imageFrom(v,depth+1);if(x)return x}}return''}
-function pageFrom(o,key){for(const k of ['url','magazine_url','magazineUrl','share_url','shareUrl','note_url','noteUrl']){const v=o?.[k];if(typeof v==='string'&&/^https?:\/\//.test(v))return v}const u=o?.user||o?.creator||o?.owner||{},n=String(u.urlname||u.url_name||u.username||o?.urlname||o?.creator_urlname||'').replace(/^@/,'');return n?`https://note.com/${encodeURIComponent(n)}/m/${encodeURIComponent(key)}`:''}
-async function magThumb(key){if(magCache.has(key))return magCache.get(key);const p=(async()=>{let meta=(load('magMeta535',{})||{})[key]||{};let img=imageFrom(meta);if(img)return img;for(const ep of [`/api/v1/magazines/${encodeURIComponent(key)}`,`/api/v2/magazines/${encodeURIComponent(key)}`]){try{const r=await fetch(ep,{credentials:'include',headers:{accept:'application/json'}});if(!r.ok)continue;const j=await r.json(),d=j?.data??j??{};meta=Object.assign({},meta,d.magazine||d);img=imageFrom(meta);if(img)return img}catch{}}const page=pageFrom(meta,key);if(page)try{const r=await fetch(page,{credentials:'include'});if(r.ok){const html=await r.text(),doc=new DOMParser().parseFromString(html,'text/html');img=doc.querySelector('meta[property="og:image"],meta[name="twitter:image"]')?.content||'';if(img)return img}}catch{}return''})();magCache.set(key,p);return p}
-async function thumbs(){const labels=$$('#nb532-ml label');for(const label of labels){const cb=label.querySelector('input[type="checkbox"]'),key=cb?.value;if(!key)continue;if(label.querySelector('img'))continue;const img=await magThumb(key);if(!img)continue;const ph=label.querySelector('.nb532-magph');const el=document.createElement('img');el.src=img;el.alt='';el.loading='lazy';if(ph)ph.replaceWith(el);else label.prepend(el)}}
-function tick(){const x=cur();const key=String(x?.key||'');if(key&&key!==lastKey){lastKey='';void probe(true)}else if(key)void probe(false);fixHistory();if($('#nb532-ml'))void thumbs();const h=$('#nb532-panel .nb532-head b');if(h)h.textContent='巡回BOOST 5.3.6'}
-function boot(){tick();new MutationObserver(()=>{clearTimeout(window.__nb536t);window.__nb536t=setTimeout(tick,60)}).observe(document.documentElement,{subtree:true,childList:true});setInterval(tick,900)}
+function ensureBand(){
+  const card=$('#nb532-card');if(!card)return null;let e=$('#nb536-currentlike');
+  if(!e){e=document.createElement('div');e.id='nb536-currentlike';e.style.cssText='margin:6px 0;padding:8px 10px;border:1px solid #466b7d;border-radius:9px;background:#07151e;color:#fff;font:950 12px/1.35 system-ui;text-align:center;letter-spacing:.02em';const top=card.querySelector('.nb532-top');if(top)top.insertAdjacentElement('afterend',e);else card.prepend(e)}
+  return e;
+}
+function paint(state,x){
+  const e=ensureBand();if(!e||!x)return;activeState=state;
+  let text='🔎 この人のスキ状態を確認中',btn='🔎 確認中',border='#466b7d',bg='#07151e';
+  if(x.likeState==='liked_now'){text='❤️ この人は今回スキ済み ✓';btn='❤️ 今回済';border='#d95079';bg='#32101b'}
+  else if(x.likeState==='preexisting'||state==='preexisting'){text='💗 この人は元からスキ済み ✓';btn='💗 元から済';border='#c94d98';bg='#2a1024'}
+  else if(state==='unliked'){text='♡ この人は未スキ';btn='♡ スキ';border='#6d8794';bg='#101a20'}
+  else if(state==='error'){text='⚠ この人のスキ状態を判定できません';btn='♡ 判定不能';border='#b06a54';bg='#2b1710'}
+  setText(e,text);if(e.style.borderColor!==border)e.style.borderColor=border;if(e.style.background!==bg)e.style.background=bg;
+  const b=$('#nb532-like');setText(b,btn);
+  const strong=$('#nb532-card .nb532-top strong');setText(strong,text.replace(/^.[^ ]* /,''));
+  const st=$('#nb532-status');if(st){setText(st,`現在 @${x.urlname||'?'}｜${text}`);st.dataset.bad=state==='error'?'1':'0'}
+}
+async function probe(force=false){
+  const x=cur();if(!x?.key)return;const key=String(x.key);
+  if(key!==activeKey){activeKey=key;activeState='checking';seq++;paint('checking',x)}
+  if(done(x.likeState)){paint(x.likeState,x);return}
+  const c=cache.get(key);if(!force&&c&&Date.now()-c.t<30000){paint(c.state,x);return}
+  const s=++seq;
+  try{const r=await fetch(`/api/v3/notes/${encodeURIComponent(key)}`,{credentials:'include',headers:{accept:'application/json'}});if(!r.ok)throw 0;const j=await r.json();if(s!==seq||cur()?.key!==key)return;const liked=readLiked(j),state=liked===true?'preexisting':liked===false?'unliked':'error';cache.set(key,{state,t:Date.now()});paint(state,cur())}
+  catch{if(s===seq&&cur()?.key===key)paint('error',cur())}
+}
+function fixHistory(){const a=q();for(const row of $$('.nb532-state-row')){const i=Number(row.dataset.i),x=a[i],s=x?.likeState||'pending';row.dataset.state=s;const span=row.querySelector('span');setText(span,s==='preexisting'?'💗元から':s==='liked_now'?'❤️今回':'⏸未処理')}}
+function updateVersion(){setText($('#nb532-panel .nb532-head b'),'巡回BOOST 5.3.7')}
+function onCardChanged(){
+  const x=cur(),key=String(x?.key||'');if(!key)return;
+  updateVersion();
+  if(key!==activeKey){activeKey='';void probe(true);return}
+  // コアがカードを再描画して帯が消えた場合だけ、取得済み状態を戻す。
+  if(!$('#nb536-currentlike'))paint(activeState,x);
+}
+function attachCard(){
+  const card=$('#nb532-card');if(!card||cardObserver)return false;
+  cardObserver=new MutationObserver(()=>{clearTimeout(window.__nb536CardT);window.__nb536CardT=setTimeout(onCardChanged,0)});
+  cardObserver.observe(card,{childList:true,subtree:true});onCardChanged();return true;
+}
+// 元からスキ済みで「次へ」を押した場合はコアの安全判定を通して完了記録してから進む。
+document.addEventListener('click',e=>{
+  const t=e.target instanceof Element?e.target.closest('#nb532-next,#nb533-prev,#nb532-start,#nb532-states'):null;
+  if(!t)return;
+  if(t.id==='nb532-next'&&activeState==='preexisting'){
+    const x=cur();if(x&&!done(x.likeState)){e.preventDefault();e.stopImmediatePropagation();$('#nb532-like')?.click();return}
+  }
+  if(t.id==='nb532-states')setTimeout(fixHistory,0);
+  setTimeout(()=>{attachCard();onCardChanged()},0);
+},true);
+
+function boot(){
+  updateVersion();
+  if(attachCard())return;
+  const root=document.body||document.documentElement;
+  const wait=new MutationObserver(()=>{if(attachCard())wait.disconnect()});wait.observe(root,{childList:true,subtree:true});
+}
 if(document.readyState==='loading')addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
