@@ -19,17 +19,18 @@ test('account change blocks transmitting a previous-account outbox',async()=>{co
 
 test('active notification scripts parse',()=>{for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v322.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js'])assert.doesNotThrow(()=>new Function(read(name)))});
 
-test('all four controls respond and a pointer tap is not fired twice by its click',async()=>{
+test('all four controls respond and read calls the reader directly with event fallback',async()=>{
  const{w}=env();try{
   w.history.replaceState(null,'','/notifications');
   const source=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});",'window.controls={ensureRoot,showDock};').replaceAll('location.href=u.href','window.testDestination=u.href');
   w.eval(source);w.__mumeiV3Reader322Ready=true;
-  const root=w.controls.ensureRoot();let reads=0;w.document.addEventListener('mumei-v3-read-request',()=>reads++);
-  root.querySelector('[data-act="read"]').click();assert.equal(reads,1);
+  const root=w.controls.ensureRoot();let directReads=0,fallbackReads=0;w.__mumeiV3Reader322={scan:()=>{directReads++}};w.document.addEventListener('mumei-v3-read-request',()=>fallbackReads++);
+  root.querySelector('[data-act="read"]').click();assert.equal(directReads,1);assert.equal(fallbackReads,0);
   root.querySelector('[data-act="filter"]').click();await new Promise(r=>setTimeout(r,20));assert.match(root.querySelector('[data-act="filter"]').textContent,/ON/);
   root.querySelector('[data-act="settings"]').click();await new Promise(r=>setTimeout(r,20));assert.match(w.testDestination,/notification-filter.html/);
   root.querySelector('[data-act="ins"]').click();await new Promise(r=>setTimeout(r,20));assert.match(w.testDestination,/notification-entry.html/);assert.match(w.testDestination,/account=fixture/);
-  const readButton=root.querySelector('[data-act="read"]');readButton.dispatchEvent(new w.Event('pointerdown',{bubbles:true,cancelable:true}));readButton.dispatchEvent(new w.Event('pointerup',{bubbles:true,cancelable:true}));readButton.click();assert.equal(reads,2);
+  const readButton=root.querySelector('[data-act="read"]');readButton.dispatchEvent(new w.Event('pointerdown',{bubbles:true,cancelable:true}));readButton.dispatchEvent(new w.Event('pointerup',{bubbles:true,cancelable:true}));readButton.click();assert.equal(directReads,2);assert.equal(fallbackReads,0);
+  delete w.__mumeiV3Reader322;readButton.click();assert.equal(fallbackReads,1);
  }finally{w.close()}
 });
 test('installer preserves the setup tab and never treats a stored version as a fresh confirmation',async()=>{
