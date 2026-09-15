@@ -3,7 +3,7 @@
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReader322)return;window.__mumeiNotificationReader322=true;
 
-const VERSION='3.2.3',PROTOCOL='3.2.3';
+const VERSION='3.2.4',PROTOCOL='3.2.4';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:';
 const SHELL='[data-mumei-notice-shell-v3="1"]';

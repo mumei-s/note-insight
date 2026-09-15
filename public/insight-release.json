@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.15.4",
-  "notificationVersion": "3.2.3",
+  "appVersion": "2026.09.15.5",
+  "notificationVersion": "3.2.4",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T06:50:00Z",
+  "releasedAt": "2026-09-15T08:10:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.3",
+  "notificationLabel": "本人通知 V3.2.4",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "固定4列パネル。依存ファイルを1本に同梱し、更新URLを統一。更新確認は明示操作、文字列表示時は既存Tampermonkeyから更新。"
+  "note": "固定4列パネルの操作を標準clickへ一本化。touch-actionをmanipulationへ変更し、通知用コードを軽量化。更新確認は既存Tampermonkeyから行う。"
 }
