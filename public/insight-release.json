@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.1",
-  "notificationVersion": "3.2.6",
+  "appVersion": "2026.09.16.2",
+  "notificationVersion": "3.2.7",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T16:25:00Z",
+  "releasedAt": "2026-09-15T16:35:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.6",
+  "notificationLabel": "本人通知 V3.2.7",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知画面の4列パネル検出を強化し、設定ボタンから従来の通知フィルター設定へ戻す。導入ページは細い横長ブラウザ選択と明確な更新確認だけに簡素化。"
+  "note": "インストール／更新URLをraw配信へ戻し、文字列表示導線を解消。更新確認はV3.2.7本体が最優先で処理し、note通知画面から必ず導入ページへ戻して起動版を明示する。"
 }
