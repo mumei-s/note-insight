@@ -4,21 +4,18 @@ import test from "node:test";
 
 const read = (p) => readFile(new URL(`../${p}`, import.meta.url), "utf8");
 
-test("notification reader never creates a global fallback dock", async () => {
-  const reader = await read("public/note-insight-notification-reader-v2963.js");
-  assert.doesNotMatch(reader, /fallbackHtml/);
-  assert.doesNotMatch(reader, /ensureFallback/);
-  assert.doesNotMatch(reader, /mumei-notice-reader-v2963/);
-  assert.match(reader, /function notificationRoute\(\)/);
-  assert.match(reader, /if\(!notificationRoute\(\)\)return null/);
-  const routeGuard = reader.indexOf("if(!notificationRoute())return null");
-  const globalRows = reader.indexOf("const all=rows(document)");
-  assert.ok(routeGuard >= 0 && globalRows > routeGuard, "document-wide notification scan must be route-gated");
+test("direct reader has no global fallback dock or legacy frame dependency", async () => {
+  const reader = await read("public/note-insight-notification-reader-v322.js");
+  assert.doesNotMatch(reader, /fallbackHtml|ensureFallback|mumei-notice-reader-v2963|contentDocument/);
+  assert.match(reader, /data-mumei-notice-shell-v3/);
+  assert.match(reader, /mumei-v3-read-request/);
+  assert.match(reader, /mumei-v3-reader-status/);
+  assert.match(reader, /verified-shell-bottom-to-top/);
 });
 
 test("single notification panel requires notification intent or route and excludes messages", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(panel, /__mumeiNotificationSingleDock320/);
+  assert.match(panel, /__mumeiNotificationDock322/);
   assert.match(panel, /function findShell\(\)/);
   assert.match(panel, /function messageContext\(\)/);
   assert.match(panel, /intentUntil/);
@@ -27,21 +24,18 @@ test("single notification panel requires notification intent or route and exclud
   assert.match(panel, /replaceState/);
   assert.match(panel, /blockNoticeNavigationWhileReading/);
   assert.match(panel, /notificationRoute\(\)/);
-  assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos/);
+  assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("legacy notification runtime is only a compatibility shim", async () => {
+test("settings and read operations do not use notification-row click forwarding", async () => {
+  const panel = await read("public/note-insight-notification-dock-watch-v312.js");
+  assert.match(panel, /pointerdown/);assert.match(panel,/pointerup/);assert.match(panel,/touch-action:none/);assert.match(panel,/stopImmediatePropagation/);
+  assert.match(panel, /function openSettings\(\)/);assert.match(panel,/mumei-v3-read-request/);
+  assert.doesNotMatch(panel, /backendButton|ensureBackend|contentDocument/);
+});
+
+test("legacy notification runtime remains only a compatibility shim", async () => {
   const runtime = await read("public/note-insight-notification-runtime-v2958.js");
   assert.match(runtime, /Compatibility shim only/);
-  assert.match(runtime, /clean panel controller/);
-  assert.doesNotMatch(runtime, /frameHtml|showDock|grid-template-columns/);
-});
-
-test("notification safety layer contains no fallback-dock sentinel workaround", async () => {
-  const safety = await read("public/note-insight-notification-filter-safety-v2961.js");
-  assert.doesNotMatch(safety, /disableLegacyFallback/);
-  assert.doesNotMatch(safety, /FALLBACK_SENTINEL/);
-  assert.doesNotMatch(safety, /mumei-notice-reader-v2963/);
-  assert.match(safety, /distinctNotificationDescendants/);
-  assert.match(safety, /data-mumei-filter-container-restored/);
+  assert.doesNotMatch(runtime, /grid-template-columns|showDock|frameHtml/);
 });
