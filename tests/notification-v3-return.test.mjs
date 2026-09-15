@@ -30,16 +30,16 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.match(b,/このBridgeは何も起動しません/);
 });
 
-test("V3.1.9 keeps compatibility requires while the old fixed dock is retired",async()=>{
+test("V3.2.0 loads fresh single-dock and backend-only loader files",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.1\.9/);assert.match(v3,/note-insight-notification-fixed-dock-v319\.js\?v=319/);assert.match(v3,/note-insight-notification-loader-v318\.js\?v=319/);assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
-  assert.match(fixed,/Compatibility shim only/);assert.match(fixed,/Do not create or control any visible panel here/);assert.match(loader,/const VERSION='3\.1\.8'/);
+  assert.match(v3,/@version\s+3\.2\.0/);assert.match(v3,/note-insight-notification-fixed-dock-v319\.js\?v=320/);assert.match(v3,/note-insight-notification-dock-watch-v312\.js\?v=320/);assert.match(v3,/note-insight-notification-loader-v318\.js\?v=320/);assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
+  assert.match(fixed,/Compatibility shim only/);assert.match(fixed,/Do not create or control any visible panel here/);assert.match(loader,/const VERSION='3\.2\.0'/);assert.match(loader,/mumei-v3-core-ready/);
 });
 
 test("notification controls use one compact four-column panel with no collapse launcher",async()=>{
   const panel=await read("public/note-insight-notification-dock-watch-v312.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
   assert.match(panel,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);assert.match(panel,/bottom:max\(10px/);assert.match(panel,/下から読込/);assert.match(panel,/フィルターOFF/);assert.match(panel,/フィルター設定/);assert.match(panel,/INSIGHT【通知】/);
-  assert.match(panel,/mumei-v3-panel-clean-v1/);assert.match(panel,/mumei-v3-notification-frame/);assert.match(panel,/function routeChanged\(\)/);assert.match(panel,/pushState/);assert.match(panel,/replaceState/);assert.match(panel,/blockNoticeNavigationWhileReading/);
+  assert.match(panel,/mumei-v3-notification-frame/);assert.match(panel,/function routeChanged\(\)/);assert.match(panel,/pushState/);assert.match(panel,/replaceState/);assert.match(panel,/blockNoticeNavigationWhileReading/);assert.match(panel,/function findShell\(\)/);
   assert.doesNotMatch(panel,/🔔 INSIGHT|× 通知パネル|bindDrag|savePos|ensureLauncher/);assert.match(fixed,/Compatibility shim only/);
   assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
 });
