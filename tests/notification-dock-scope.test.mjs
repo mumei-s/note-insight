@@ -16,18 +16,18 @@ test("notification reader never creates a global fallback dock", async () => {
   assert.ok(routeGuard >= 0 && globalRows > routeGuard, "document-wide notification scan must be route-gated");
 });
 
-test("clean notification panel requires a verified notification shell and excludes messages", async () => {
+test("single notification panel requires notification intent or route and excludes messages", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(panel, /__mumeiNotificationPanelCleanV1/);
-  assert.match(panel, /function strictShell\(\)/);
+  assert.match(panel, /__mumeiNotificationSingleDock320/);
+  assert.match(panel, /function findShell\(\)/);
   assert.match(panel, /function messageContext\(\)/);
-  assert.match(panel, /function currentShell\(\)/);
-  assert.match(panel, /rows\(el\)\.length/);
+  assert.match(panel, /intentUntil/);
   assert.match(panel, /data-mumei-notice-shell-v3/);
   assert.match(panel, /pushState/);
   assert.match(panel, /replaceState/);
   assert.match(panel, /blockNoticeNavigationWhileReading/);
-  assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|noticeIntentUntil/);
+  assert.match(panel, /notificationRoute\(\)/);
+  assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos/);
 });
 
 test("legacy notification runtime is only a compatibility shim", async () => {
