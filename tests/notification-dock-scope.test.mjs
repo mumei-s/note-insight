@@ -27,9 +27,12 @@ test("single notification panel requires notification intent or route and exclud
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("settings and read operations do not use notification-row click forwarding", async () => {
+test("settings and read operations use one native click path without pointer interception", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(panel, /pointerdown/);assert.match(panel,/pointerup/);assert.match(panel,/touch-action:none/);assert.match(panel,/stopImmediatePropagation/);
+  assert.match(panel,/touch-action:manipulation/);
+  assert.match(panel,/window\.addEventListener\('click',onClick,true\)/);
+  assert.match(panel,/stopImmediatePropagation/);
+  assert.doesNotMatch(panel,/pointerdown|pointerup|touch-action:none/);
   assert.match(panel, /function openSettings\(\)/);assert.match(panel,/mumei-v3-read-request/);
   assert.doesNotMatch(panel, /backendButton|ensureBackend|contentDocument/);
 });
