@@ -30,17 +30,17 @@ test("retired Bridge is a no-op compatibility stub",async()=>{
   assert.match(b,/このBridgeは何も起動しません/);
 });
 
-test("V3.1.9 loads the permanent dock before the existing core loader",async()=>{
+test("V3.1.9 keeps compatibility requires while the old fixed dock is retired",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),loader=await read("public/note-insight-notification-loader-v318.js");
   assert.match(v3,/@version\s+3\.1\.9/);assert.match(v3,/note-insight-notification-fixed-dock-v319\.js\?v=319/);assert.match(v3,/note-insight-notification-loader-v318\.js\?v=319/);assert.doesNotMatch(v3,/note-insight-notification-launcher-v317\.js/);
-  assert.match(fixed,/const VERSION='3\.1\.9'/);assert.match(fixed,/notificationInstalled',VERSION/);assert.match(fixed,/fixed-dock-v319/);assert.match(loader,/const VERSION='3\.1\.8'/);
+  assert.match(fixed,/Compatibility shim only/);assert.match(fixed,/Do not create or control any visible panel here/);assert.match(loader,/const VERSION='3\.1\.8'/);
 });
 
-test("notification controls are always fixed in four columns with no collapse launcher",async()=>{
-  const fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(fixed,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);assert.match(fixed,/bottom:max\(10px/);assert.match(fixed,/下から読込/);assert.match(fixed,/フィルターOFF/);assert.match(fixed,/フィルター設定/);assert.match(fixed,/INSIGHT【通知】/);
-  assert.match(fixed,/__mumeiNotificationDockWatchV312=true/);assert.match(fixed,/__mumeiNotificationLauncherV317=true/);assert.match(fixed,/removeLauncher/);assert.doesNotMatch(fixed,/🔔 INSIGHT|× 通知パネル|bindDrag|savePos/);
-  assert.match(fixed,/function onClick\(e\)/);assert.match(fixed,/clickLegacy\('read'\)/);assert.match(fixed,/clickLegacy\('filter'\)/);assert.match(fixed,/function autoStart\(\)/);assert.match(fixed,/read\.click\(\)/);
+test("notification controls use one compact four-column panel with no collapse launcher",async()=>{
+  const panel=await read("public/note-insight-notification-dock-watch-v312.js"),fixed=await read("public/note-insight-notification-fixed-dock-v319.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.match(panel,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);assert.match(panel,/bottom:max\(10px/);assert.match(panel,/下から読込/);assert.match(panel,/フィルターOFF/);assert.match(panel,/フィルター設定/);assert.match(panel,/INSIGHT【通知】/);
+  assert.match(panel,/mumei-v3-panel-clean-v1/);assert.match(panel,/mumei-v3-notification-frame/);assert.match(panel,/function routeChanged\(\)/);assert.match(panel,/pushState/);assert.match(panel,/replaceState/);assert.match(panel,/blockNoticeNavigationWhileReading/);
+  assert.doesNotMatch(panel,/🔔 INSIGHT|× 通知パネル|bindDrag|savePos|ensureLauncher/);assert.match(fixed,/Compatibility shim only/);
   assert.match(reader,/verified-shell-bottom-to-top/);assert.match(reader,/slice\(\)\.reverse\(\)/);
 });
 
