@@ -168,6 +168,28 @@ function updateStatusClarity(){
     if(spans[2])spans[2].textContent=`⏸未処理 ${pend}`;
   }
 }
+function simplifyNav(){
+  const actions=$('#nb532-card .nb532-actions');
+  const hiddenPrev=$('#nb532-prev');
+  const bottomNext=$('#nb532-next2');
+  if(actions&&hiddenPrev&&!$('#nb533-prev')){
+    const b=document.createElement('button');
+    b.id='nb533-prev';
+    b.textContent='戻る';
+    b.addEventListener('click',e=>{e.preventDefault();hiddenPrev.click()});
+    const next=$('#nb532-next');
+    if(next)actions.insertBefore(b,next);else actions.appendChild(b);
+  }
+  if(hiddenPrev)hiddenPrev.style.display='none';
+  if(bottomNext)bottomNext.style.display='none';
+  const nav=$('#nb532-card .nb532-nav');
+  if(nav){
+    nav.style.gridTemplateColumns='1fr';
+    const small=nav.querySelector('small');
+    if(small){small.style.display='block';small.style.textAlign='center';}
+  }
+  if(actions)actions.style.gridTemplateColumns='repeat(5,minmax(0,1fr))';
+}
 function updateLimiterUI(){
   const box=$('#nb532-limits');if(!box)return;
   const a=stats('likes'),m=stats('mags');
@@ -178,7 +200,7 @@ function updateLimiterUI(){
 }
 function updateVersion(){
   const h=$('#nb532-panel .nb532-head b');
-  if(h)h.textContent='巡回BOOST 5.3.3';
+  if(h)h.textContent='巡回BOOST 5.3.4';
   const cfgBox=$('#nb532-settings');
   if(cfgBox&&!$('#nb533-limiter-note')){
     const n=document.createElement('div');n.id='nb533-limiter-note';
@@ -190,7 +212,7 @@ function updateVersion(){
     }
   }
 }
-function tick(){cleanup();updateVersion();updateLimiterUI();updateStatusClarity()}
+function tick(){cleanup();updateVersion();updateLimiterUI();updateStatusClarity();simplifyNav()}
 function boot(){
   cleanup();tick();
   const mo=new MutationObserver(()=>{clearTimeout(window.__nb533PatchT);window.__nb533PatchT=setTimeout(tick,60)});
