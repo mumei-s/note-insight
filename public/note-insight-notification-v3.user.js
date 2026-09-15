@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.1.9
-// @description  本人通知V3。画面下部の4列操作を常時固定し、途中保存・差分読込・ダッシュボード同期を1本に統合。
+// @version      3.1.9.1
+// @description  本人通知V3。通知一覧だけに新しい1段4列パネルを表示し、旧パネルを停止。途中保存・差分読込・ダッシュボード同期を1本に統合。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/tool-setup.html*
 // @match        https://mumei-s.github.io/note-insight/dashboard-setup.html*
@@ -18,6 +18,7 @@
 // @connect      mumei-s.github.io
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-fixed-dock-v319.js?v=319
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-dock-watch-v312.js?v=3191
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-loader-v318.js?v=319
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js
@@ -25,5 +26,5 @@
 
 (function(){
 'use strict';
-try{localStorage.setItem('mumei-notification-v3-wrapper','3.1.9')}catch{}
+try{localStorage.setItem('mumei-notification-v3-wrapper','3.1.9.1')}catch{}
 })();
