@@ -1,17 +1,16 @@
 // ==UserScript==
-// @name         note BOOST App Bridge v6.1.0
+// @name         note 巡回BOOST｜専用アプリ v6.2.0
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.1.0
-// @description  巡回BOOST専用アプリ内からTampermonkey経由でnoteへ直接通信。note画面にはUIを表示せず、noteトップを開かない。
-// @match        https://mumei-s.github.io/note-insight/boost-app/*
+// @version      6.2.0
+// @description  通常のnote画面には何も表示せず、https://note.com/?boost_app=1 の時だけ巡回BOOST専用アプリとして起動します。
+// @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/1062adad32c268dc0daff72d713b98ae45bdfdf3/public/note-boost-v610-app-bridge.js
-// @grant        GM_xmlhttpRequest
-// @connect      note.com
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/989790e81bb12c0fcbb6cde264c3bf4aa42cbb48/public/note-boost-v620-dedicated-app.js
+// @grant        none
 // @run-at       document-start
 // ==/UserScript==
 (() => {
   'use strict';
-  // v6.1.0: dedicated app only. No note.com page UI or window.opener bridge.
+  // v6.2.0: same-origin dedicated app. Normal note pages remain untouched.
 })();
