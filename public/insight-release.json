@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.15.6",
-  "notificationVersion": "3.2.5",
+  "appVersion": "2026.09.16.1",
+  "notificationVersion": "3.2.6",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T12:06:00Z",
+  "releasedAt": "2026-09-15T16:25:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.5",
+  "notificationLabel": "本人通知 V3.2.6",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "下から読込の起動をイベント依存だけにせず、readerのscanを直接実行する二重経路へ修正。固定4列パネル・フィルター・INSIGHT導線は維持。"
+  "note": "通知画面の4列パネル検出を強化し、設定ボタンから従来の通知フィルター設定へ戻す。導入ページは細い横長ブラウザ選択と明確な更新確認だけに簡素化。"
 }
