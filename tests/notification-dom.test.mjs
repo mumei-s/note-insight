@@ -41,3 +41,23 @@ test('installer preserves the setup tab and never treats a stored version as a f
   const install=w.document.getElementById('install');assert.equal(new URL(install.href).search,'');assert.equal(install.target,'_blank');assert.ok(w.localStorage.getItem('mumei-direct-install-pending'));assert.equal(w.location.pathname,'/note-insight/tool-setup.html');assert.ok(w.document.getElementById('copyUrl'));assert.ok(w.document.getElementById('verify'));
  }finally{w.close()}
 });
+
+test('browser-specific setup restores controls after switching and preserves the chosen route',async()=>{
+ const dom=new JSDOM(read('tool-setup.html'),{url:'https://mumei-s.github.io/note-insight/tool-setup.html?account=fixture&browser=android-edge',runScripts:'outside-only'}),w=dom.window;
+ try{
+  w.fetch=async url=>({ok:true,json:async()=>String(url).includes('insight-release')?{notificationVersion:'3.2.3'}:{ok:true,noteId:'fixture'}});
+  w.eval(w.document.querySelector('script').textContent);await new Promise(r=>setTimeout(r,30));
+  const d=w.document;
+  for(const key of ['android-other','android-firefox','ios-other','ios-safari','pc-edge','pc-chrome','pc-firefox','mac-safari','android-edge']){
+   d.querySelector(`[data-browser="${key}"]`).click();const blocked=key.endsWith('other');
+   assert.equal(d.getElementById('updateFlow').hidden,blocked);assert.equal(d.getElementById('confirmFlow').hidden,blocked);assert.equal(d.getElementById('verify').disabled,blocked);assert.equal(d.getElementById('dash').disabled,blocked);assert.equal(d.getElementById('notice').disabled,blocked);
+   assert.equal(d.querySelectorAll('[aria-pressed="true"]').length,1);assert.equal(new URL(w.location.href).searchParams.get('browser'),key);
+   assert.equal(new URL(w.eval('versionCheckUrl()')).searchParams.get('mumei_return').includes('browser='+key),true);
+   assert.equal(d.getElementById('install').hasAttribute('download'),false);
+   if(key==='ios-safari')assert.match(d.getElementById('recoverySteps').textContent,/Userscripts/);
+  }
+  assert.match(d.getElementById('recoverySteps').textContent,/Edgeの「≡」/);
+  assert.equal(new URL(d.getElementById('pageUrl').value).searchParams.get('account'),'fixture');
+  assert.equal(new URL(d.getElementById('pageUrl').value).searchParams.has('browser'),false);
+ }finally{w.close()}
+});
