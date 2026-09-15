@@ -3,14 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 
-test("installer keeps participant steps compact and raw update route",async()=>{
+test("installer keeps participant steps compact with same-page confirmation",async()=>{
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);
-  assert.match(page,/更新できたか確認する/);
+  assert.match(page,/この画面で更新結果を確認/);
   assert.match(page,/Tampermonkey/);
-  assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.match(page,/https:\/\/note\.com\/notifications/);
-  assert.doesNotMatch(page,/Import from URL|script_installation\.php#url=|window\.open\(|文字列になった/);
+  assert.match(page,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-v3\.user\.js/);
+  assert.match(page,/script_installation\.php#url=/);
+  assert.match(page,/mumei-notification-v3-loader/);
+  assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
 test("V3.2.9 returns version check before rescue or remote loading",async()=>{

@@ -27,15 +27,15 @@ test("notification filter settings stay on notification route",async()=>{
 
 test("installer remains a slim update route",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","更新できたか確認する","raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js","https://note.com/notifications"]);
-  assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|script_installation\.php#url=/);
+  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","この画面で更新結果を確認","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","runtimeCheck","script_installation.php#url="]);
+  assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
   has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
 });
 
 test("release tracks V3.2.9",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.16.5");assert.equal(manifest.notificationVersion,"3.2.9");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.9"/);assert.match(v3,/@version\s+3\.2\.9/);
+  assert.equal(manifest.appVersion,"2026.09.16.6");assert.equal(manifest.notificationVersion,"3.2.9");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.6"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.9"/);assert.match(v3,/@version\s+3\.2\.9/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
