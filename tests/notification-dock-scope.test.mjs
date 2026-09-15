@@ -16,17 +16,25 @@ test("notification reader never creates a global fallback dock", async () => {
   assert.ok(routeGuard >= 0 && globalRows > routeGuard, "document-wide notification scan must be route-gated");
 });
 
-test("primary notification dock requires explicit intent or verified note notification rows", async () => {
+test("clean notification panel requires a verified notification shell and excludes messages", async () => {
+  const panel = await read("public/note-insight-notification-dock-watch-v312.js");
+  assert.match(panel, /__mumeiNotificationPanelCleanV1/);
+  assert.match(panel, /function strictShell\(\)/);
+  assert.match(panel, /function messageContext\(\)/);
+  assert.match(panel, /function currentShell\(\)/);
+  assert.match(panel, /rows\(el\)\.length/);
+  assert.match(panel, /data-mumei-notice-shell-v3/);
+  assert.match(panel, /pushState/);
+  assert.match(panel, /replaceState/);
+  assert.match(panel, /blockNoticeNavigationWhileReading/);
+  assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|noticeIntentUntil/);
+});
+
+test("legacy notification runtime is only a compatibility shim", async () => {
   const runtime = await read("public/note-insight-notification-runtime-v2958.js");
-  assert.match(runtime, /noticeIntentUntil/);
-  assert.match(runtime, /function explicitNoticeTrigger\(el\)/);
-  assert.match(runtime, /function knownNoticeShell\(\)/);
-  assert.match(runtime, /document\.querySelectorAll\(ITEM\)/);
-  assert.match(runtime, /if\(!route&&!panelOpen&&Date\.now\(\)>noticeIntentUntil&&!known\)return null/);
-  assert.match(runtime, /if\(trigger\)\{noticeIntentUntil=Date\.now\(\)\+3500;showDock\(true\)/);
-  assert.match(runtime, /if\(notificationRoute\(\)\|\|knownNoticeShell\(\)\)setTimeout\(\(\)=>void maintenance\(\),220\)/);
-  assert.match(runtime, /new MutationObserver/);
-  assert.doesNotMatch(runtime, /r\.top<180\|\|\/通知\|お知らせ\|メッセージ/);
+  assert.match(runtime, /Compatibility shim only/);
+  assert.match(runtime, /clean panel controller/);
+  assert.doesNotMatch(runtime, /frameHtml|showDock|grid-template-columns/);
 });
 
 test("notification safety layer contains no fallback-dock sentinel workaround", async () => {
