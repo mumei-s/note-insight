@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.15.3",
-  "notificationVersion": "3.2.2",
+  "appVersion": "2026.09.15.4",
+  "notificationVersion": "3.2.3",
   "dashboardVersion": "1.4.4",
   "releasedAt": "2026-09-15T06:50:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.2",
+  "notificationLabel": "本人通知 V3.2.3",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知を直結構成へ変更。4列パネルの下から読込は専用readerを直接呼び、フィルター設定はタップを完全に遮断して設定画面だけへ遷移する。旧iframe・旧格納パネル経路は読み込まない。"
+  "note": "固定4列パネル。依存ファイルを1本に同梱し、更新URLを統一。更新確認は明示操作、文字列表示時は既存Tampermonkeyから更新。"
 }

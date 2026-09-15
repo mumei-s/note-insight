@@ -12,14 +12,14 @@ test("setup center uses one direct userscript update and keeps participant steps
   assert.doesNotMatch(page,/Import from URL|script_installation\.php#url=|window\.open\(/);
 });
 
-test("V3.2.2 loads the direct dock reader and dashboard loader only",async()=>{
+test("V3.2.3 loads the direct dock reader and dashboard loader only",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.2/);
-  assert.match(v3,/note-insight-notification-dock-watch-v312\.js\?v=322/);
-  assert.match(v3,/note-insight-notification-reader-v322\.js\?v=322/);
-  assert.match(v3,/note-insight-notification-loader-v318\.js\?v=322/);
-  assert.doesNotMatch(v3,/notification-fixed-dock|notification-launcher|notification-autoscan/);
-  assert.match(loader,/const VERSION='3\.2\.2'/);assert.match(loader,/runtime-checked-v322/);
+  assert.match(v3,/@version\s+3\.2\.3/);
+  assert.match(v3,/note-insight-notification-dock-watch-v312\.js/);
+  assert.match(v3,/note-insight-notification-reader-v322\.js/);
+  assert.match(v3,/note-insight-notification-loader-v318\.js/);
+  assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
+  assert.match(loader,/const VERSION='3\.2\.3'/);assert.match(loader,/runtime-checked-v323/);
   assert.match(dock,/mumei-v3-read-request/);assert.match(reader,/mumei-v3-read-request/);
 });
 
@@ -44,3 +44,4 @@ test("INSIGHT notifications collapse category choices into one selector",async()
   assert.match(release,/insight-notification-ui-v18/);
   assert.match(ui,/mumei-notification-category-button/);assert.match(ui,/通知項目：/);assert.match(ui,/PUBLIC_DUPLICATE_LABELS/);
 });
+

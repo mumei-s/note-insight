@@ -18,3 +18,26 @@ test('partial acknowledgement leaves only missing rows in outbox',async()=>{cons
 test('account change blocks transmitting a previous-account outbox',async()=>{const{dom,w,values}=env();try{const api=expose(w,reader,['sendBatch','readOutbox']);values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'different'}})});let sent=false;w.GM.xmlHttpRequest=()=>{sent=true};await assert.rejects(api.sendBatch([{raw_text:'Aさんが返信しました',meta:{event_identity:'notice:1'}}],{id:'fixture'},new Set()),/NOTE_ACCOUNT_CHANGED/);assert.equal(sent,false);assert.equal(api.readOutbox('fixture').length,1)}finally{dom.window.close()}});
 
 test('active notification scripts parse',()=>{for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v322.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js'])assert.doesNotThrow(()=>new Function(read(name)))});
+
+test('all four controls respond and a pointer tap is not fired twice by its click',async()=>{
+ const{w}=env();try{
+  w.history.replaceState(null,'','/notifications');
+  const source=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});",'window.controls={ensureRoot,showDock};').replaceAll('location.href=u.href','window.testDestination=u.href');
+  w.eval(source);w.__mumeiV3Reader322Ready=true;
+  const root=w.controls.ensureRoot();let reads=0;w.document.addEventListener('mumei-v3-read-request',()=>reads++);
+  root.querySelector('[data-act="read"]').click();assert.equal(reads,1);
+  root.querySelector('[data-act="filter"]').click();await new Promise(r=>setTimeout(r,20));assert.match(root.querySelector('[data-act="filter"]').textContent,/ON/);
+  root.querySelector('[data-act="settings"]').click();await new Promise(r=>setTimeout(r,20));assert.match(w.testDestination,/notification-filter.html/);
+  root.querySelector('[data-act="ins"]').click();await new Promise(r=>setTimeout(r,20));assert.match(w.testDestination,/notification-entry.html/);assert.match(w.testDestination,/account=fixture/);
+  const readButton=root.querySelector('[data-act="read"]');readButton.dispatchEvent(new w.Event('pointerdown',{bubbles:true,cancelable:true}));readButton.dispatchEvent(new w.Event('pointerup',{bubbles:true,cancelable:true}));readButton.click();assert.equal(reads,2);
+ }finally{w.close()}
+});
+test('installer preserves the setup tab and never treats a stored version as a fresh confirmation',async()=>{
+ const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+ try{
+  w.fetch=async url=>({ok:true,json:async()=>String(url).includes('insight-release')?{notificationVersion:'3.2.3',dashboardVersion:'1.4.4'}:{ok:true,noteId:'fixture'}});
+  w.localStorage.setItem('mumei-notification-tool-version','3.2.3');w.localStorage.setItem('mumei-direct-install-pending',JSON.stringify({at:Date.now()-10000}));
+  w.eval(w.document.querySelector('script').textContent);await new Promise(r=>setTimeout(r,30));
+  const install=w.document.getElementById('install');assert.equal(new URL(install.href).search,'');assert.equal(install.target,'_blank');assert.ok(w.localStorage.getItem('mumei-direct-install-pending'));assert.equal(w.location.pathname,'/note-insight/tool-setup.html');assert.ok(w.document.getElementById('copyUrl'));assert.ok(w.document.getElementById('verify'));
+ }finally{w.close()}
+});

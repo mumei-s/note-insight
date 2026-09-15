@@ -3,7 +3,7 @@
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReader322)return;window.__mumeiNotificationReader322=true;
 
-const VERSION='3.2.2',PROTOCOL='3.2.2';
+const VERSION='3.2.3',PROTOCOL='3.2.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:';
 const SHELL='[data-mumei-notice-shell-v3="1"]';
@@ -73,7 +73,7 @@ async function scan(){
   await set(key(CHECK,a.id),{...latest,lastCheckAt:Date.now(),manualNewCount:count,manualSeenCount:seen.size,historyComplete:cp.historyComplete===true||complete,lastError:''});
   status(`${stop?'停止・':''}${count}件保存確認｜${seen.size}件読取${complete?'':'｜続きは次回'}`,'done','下から読込');
  }catch(e){capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now()})}catch{}}status(`⚠ ${String(e?.message||e)}`,'error',/連携/.test(String(e?.message||e))?'連携必要':'再読込')}
- finally{if(host&&host.isConnected){try{host.scrollTop=startTop}catch{}}active=null;scanning=false;stop=false;setTimeout(()=>status('','idle','下から読込'),1500)}
+ finally{if(host&&host.isConnected){try{host.scrollTop=startTop}catch{}}active=null;scanning=false;stop=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
 }
 
 document.addEventListener('mumei-v3-read-request',()=>void scan());

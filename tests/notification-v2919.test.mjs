@@ -4,15 +4,15 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.2.2 uses one visible dock and one direct reader with no legacy iframe path",async()=>{
+test("V3.2.3 uses one visible dock and one direct reader with no legacy iframe path",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.2\.2/);
-  has(v3,["note-insight-notification-dock-watch-v312.js?v=322","note-insight-notification-reader-v322.js?v=322","note-insight-notification-loader-v318.js?v=322"]);
-  assert.doesNotMatch(v3,/notification-fixed-dock|notification-launcher|notification-autoscan/);
+  assert.match(v3,/@version\s+3\.2\.3/);
+  has(v3,["note-insight-notification-dock-watch-v312.js","note-insight-notification-reader-v322.js","note-insight-notification-loader-v318.js"]);
+  assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
   has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","mumei-v3-read-request","pointerdown","pointerup","blockNoticeNavigationWhileReading"]);
   assert.doesNotMatch(dock,/srcdoc=|ensureBackend|backendButton|mumei-v3-notification-frame.*contentDocument/);
   has(reader,["__mumeiNotificationReader322","verified-shell-bottom-to-top","confirmedClientSignatures","mumei-v3-reader-status","mumei-v3-reader-ready","sendBatch","scrollHost"]);
-  has(loader,["const VERSION='3.2.2'","runtime-checked-v322","note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
+  has(loader,["const VERSION='3.2.3'","runtime-checked-v323","note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
 });
 
 test("notification filter commands are handled on note without passing taps through notification rows",async()=>{
@@ -29,10 +29,10 @@ test("one setup center uses one unified userscript and never requires Tampermonk
   has(top,["./tool-setup.html?from=top","設定 / 更新"]);has(route,["notification-update.html"]);has(bridge,["互換停止版","@version      1.0.1"]);
 });
 
-test("release tracks V3.2.2",async()=>{
+test("release tracks V3.2.3",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.15.3");assert.equal(manifest.notificationVersion,"3.2.2");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.15\.3"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.2"/);assert.match(v3,/@version\s+3\.2\.2/);
+  assert.equal(manifest.appVersion,"2026.09.15.4");assert.equal(manifest.notificationVersion,"3.2.3");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.15\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.3"/);assert.match(v3,/@version\s+3\.2\.3/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{
@@ -44,3 +44,4 @@ test("private notification categories stay dense while public duplicates are exc
   const ui=await read("src/member-insight-notifications-final.tsx"),picker=await read("src/insight-notification-ui-v18.ts"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");
   has(ui,["reply_self","reply_other","membership_reaction_self","membership_join","purchase","tip","quote","other"]);has(feed,["[\"like\",\"follow\",\"comment\",\"creator_article_posted\"]","canonical-public-comments"]);has(picker,["スキ","人物フォロー","通常コメント","記事投稿"]);
 });
+
