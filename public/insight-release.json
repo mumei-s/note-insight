@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.15.5",
-  "notificationVersion": "3.2.4",
+  "appVersion": "2026.09.15.6",
+  "notificationVersion": "3.2.5",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T08:10:00Z",
+  "releasedAt": "2026-09-15T12:20:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.4",
+  "notificationLabel": "本人通知 V3.2.5",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "固定4列パネルの操作を標準clickへ一本化。touch-actionをmanipulationへ変更し、通知用コードを軽量化。更新確認は既存Tampermonkeyから行う。"
+  "note": "下から読込の起動をイベント依存だけにせず、readerのscanを直接実行する二重経路へ修正。固定4列パネル・フィルター・INSIGHT導線は維持。"
 }
