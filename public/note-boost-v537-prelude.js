@@ -10,7 +10,12 @@ function syncRoute(){
   document.documentElement.classList.toggle('nb-boost-article-route',isArticlePath());
 }
 const style=document.createElement('style');
-style.textContent='.nb-boost-article-route #nb532-open,.nb-boost-article-route #nb532-panel,.nb-boost-article-route #nb532-modal{display:none!important;visibility:hidden!important;pointer-events:none!important}';
+style.textContent=`
+.nb-boost-article-route #nb532-open,
+.nb-boost-article-route #nb532-panel,
+.nb-boost-article-route #nb532-modal{display:none!important;visibility:hidden!important;pointer-events:none!important}
+#nb532-prev,#nb532-next2{display:none!important}
+`;
 (document.head||document.documentElement).appendChild(style);
 syncRoute();
 
