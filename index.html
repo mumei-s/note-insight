@@ -49,6 +49,18 @@
       (function () {
         try {
           const url = new URL(window.location.href);
+          const mode = String(url.searchParams.get("insightMode") || "");
+          const notificationAccount = String(url.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
+          if (mode === "notifications") {
+            sessionStorage.setItem("mumei-insight-entry-mode", "notifications");
+            sessionStorage.setItem("mumei-insight-entry-at", String(Date.now()));
+            if (/^[a-z0-9_-]+$/.test(notificationAccount)) sessionStorage.setItem("mumei-insight-notification-account", notificationAccount);
+            if (!url.hash.includes("dashboard")) {
+              url.hash = "dashboard";
+              history.replaceState(history.state, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : "") + url.hash);
+            }
+          }
+
           const result = url.searchParams.get("notificationSync");
           const resultKey = "mumei-insight-notification-sync-result-v1";
           if (result === "done" || result === "error") {
@@ -62,7 +74,7 @@
             history.replaceState(history.state, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : "") + url.hash);
           }
         } catch {
-          // Notification result handling must never block INSIGHT itself.
+          // Notification entry/result handling must never block INSIGHT itself.
         }
       })();
       document.addEventListener("click", function (event) {
