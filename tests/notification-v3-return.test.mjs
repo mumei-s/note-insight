@@ -15,20 +15,22 @@ test("installer keeps participant steps compact with same-page confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.13 returns version check before rescue or remote loading",async()=>{
+test("V3.2.21 preloads reader and dock and returns version checks safely",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.13/);
+  assert.match(v3,/@version\s+3\.2\.21/);
   assert.match(v3,/function directVersionCheck\(\)/);
-  assert.match(v3,/runtime-checked-v329/);
+  assert.match(v3,/runtime-checked-v3221/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
-  assert.ok(v3.indexOf('async function boot(){if(directVersionCheck())return')<v3.indexOf("await loadPart('note-insight-notification-dock-watch-v312.js')"));
+  assert.ok(v3.indexOf('async function boot(){if(directVersionCheck())return')>0);
   assert.match(v3,/mumei-v329-component-cache/);
-  assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
+  const meta=v3.split("// ==/UserScript==")[0];
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3221/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3221/);
   assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
   assert.match(dock,/ensureReader/);assert.match(reader,/mumei-v3-read-request/);
 });
 
-test("parent rescue dock is fixed four-column with bounded bell-start grace",async()=>{
+test("parent rescue dock remains safe fallback with bounded bell-start grace",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
   assert.match(v3,/mumei-v3-rescue-dock-v329/);
   assert.match(v3,/position:fixed/);
@@ -44,17 +46,21 @@ test("parent rescue dock is fixed four-column with bounded bell-start grace",asy
   assert.match(v3,/rescueIntentUntil=Date\.now\(\)\+6000/);
   assert.match(v3,/function handleIntentClose\(/);
   assert.match(v3,/rescueIntentUntil=0;rescueIntentHref=''/);
-  assert.doesNotMatch(v3,/rescueIntentUntil=Date\.now\(\)\+30000/);
+  assert.match(v3,/function pinNoteReturn\(\)/);
+  assert.match(v3,/history\.replaceState\(history\.state,'','\/notifications'\)/);
+  assert.match(v3,/note-insight\/\?insightMode=notifications#dashboard/);
+  assert.doesNotMatch(v3,/notification-entry\.html\?from=note/);
   assert.match(v3,/window\.addEventListener\('click',handleRescueClick,true\)/);
   assert.match(v3,/window\.__mumeiV3ParentDock=true/);
 });
 
-test("remote parts load independently with dock before reader",async()=>{
+test("runtime keeps dynamic loader only as fallback after required dock/reader",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
   assert.match(v3,/async function loadPart\(name\)/);
-  const boot=v3.indexOf('async function boot()'),dock=v3.indexOf("loadPart('note-insight-notification-dock-watch-v312.js')",boot);
-  const reader=v3.indexOf('ensureReaderReady()',dock),loader=v3.indexOf("loadPart('note-insight-notification-loader-v318.js')",reader);
-  assert.ok(boot>0&&dock>boot&&reader>dock&&loader>reader);
+  assert.match(v3,/if\(!window\.__mumeiNotificationDock322\)await loadPart\('note-insight-notification-dock-watch-v312\.js'\)/);
+  assert.match(v3,/const ready=readerApi\(\)/);
+  assert.match(v3,/loadPart\('note-insight-notification-reader-v323\.js'\)/);
+  assert.match(v3,/loadPart\('note-insight-notification-loader-v318\.js'\)/);
   assert.match(v3,/mumei-notification-v329-component:/);
 });
 
