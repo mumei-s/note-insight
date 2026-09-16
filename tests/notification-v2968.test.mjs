@@ -86,6 +86,7 @@ test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock'
   assert.match(index,/mumei-insight-start-notification-sync-v1/);
   assert.match(index,/notification-entry\.html/);
   assert.match(index,/mumei-insight-access-token/);
+  assert.match(index,/mumei-notification-v3-loader/);
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
