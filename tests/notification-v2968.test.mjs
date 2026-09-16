@@ -42,7 +42,7 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch sync',()=>{
+test('active package keeps the V3.2.13 parent dock and never blocks INSIGHT launch',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
@@ -73,6 +73,9 @@ test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch
   assert.match(dashboardSetup,/mumei_insight_sync_seed/);
   assert.match(dashboardSetup,/if\(seed\)/);
   assert.match(dashboardSetup,/INSIGHT 自動同期を準備中/);
+  assert.match(dashboardSetup,/RUNTIME_TIMEOUT/);
+  assert.match(dashboardSetup,/returnToInsight/);
+  assert.match(dashboardSetup,/location\.replace\(dest\.href\)/);
   assert.match(dashboardSetup,/location\.replace\(u\.href\)/);
   assert.match(dock,/function parentDock\(\)/);
   assert.match(dock,/document\.documentElement\.contains\(p\)/);
@@ -93,13 +96,11 @@ test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch
   assert.match(entry,/mumei_insight_sync_seed/);
   assert.doesNotMatch(entry,/new URL\('https:\/\/note\.com\/'\)/);
   assert.match(entry,/notificationSync/);
-  assert.match(index,/mumei-insight-start-notification-sync-v1/);
-  assert.match(index,/notification-entry\.html/);
-  assert.match(index,/mumei-insight-access-token/);
-  assert.match(index,/mumei-notification-v3-loader/);
-  assert.match(index,/mumei-notification-tool-version/);
-  assert.match(index,/Date\.now\(\) - last < 8000/);
-  assert.doesNotMatch(index,/Date\.now\(\) - last < 60000/);
+  assert.match(index,/mumei-insight-notification-sync-result-v1/);
+  assert.match(index,/notificationSync/);
+  assert.doesNotMatch(index,/mumei-insight-start-notification-sync-v1/);
+  assert.doesNotMatch(index,/notification-entry\.html/);
+  assert.doesNotMatch(index,/window\.location\.replace\(entry\.href\)/);
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
