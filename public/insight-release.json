@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.9",
-  "notificationVersion": "3.2.12",
+  "appVersion": "2026.09.16.10",
+  "notificationVersion": "3.2.13",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-16T06:52:25Z",
+  "releasedAt": "2026-09-16T11:13:45Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.12",
+  "notificationLabel": "本人通知 V3.2.13",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知パネルを画面下へ戻し、自動・手動読込を読込本体へ直結。フィルター設定の復帰先を常にnote通知へ固定する。"
+  "note": "通知一覧の描画完了を待って自動読込し、一覧が開いている間はパネルを維持。ダッシュボード自動読込の再実行も復旧する。"
 }

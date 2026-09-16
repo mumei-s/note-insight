@@ -4,9 +4,9 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.2.12 owns the only visible fixed dock and loads remote parts independently",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.2\.12/);
+test("V3.2.13 owns the only visible fixed dock and loads remote parts independently",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js"),loader=await read("public/note-insight-notification-loader-v318.js");
+  assert.match(v3,/@version\s+3\.2\.13/);
   has(v3,["mumei-v329-component-cache:","mumei-v3-rescue-dock-v329","grid-template-columns:repeat(4,minmax(0,1fr))","手動読み込み","フィルターOFF","INSIGHT","window.addEventListener('click',handleRescueClick,true)","window.__mumeiV3ParentDock=true","function placeRescue(","visualViewport","function startRescue()","async function loadPart(name)","runtime-checked-v329"]);
   const boot=v3.indexOf('async function boot()'),dockLoad=v3.indexOf("loadPart('note-insight-notification-dock-watch-v312.js')",boot),readerReady=v3.indexOf('ensureReaderReady()',dockLoad),loaderLoad=v3.indexOf("loadPart('note-insight-notification-loader-v318.js')",readerReady);
   assert.ok(boot>0&&dockLoad>boot&&readerReady>dockLoad&&loaderLoad>readerReady);
@@ -14,7 +14,7 @@ test("V3.2.12 owns the only visible fixed dock and loads remote parts independen
   assert.match(v3,/@updateURL\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
   has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","data-act=\"settings\">設定","mumei-v3-read-request","touch-action:manipulation","window.addEventListener('click',onClick,true)"]);
   assert.doesNotMatch(dock,/pointerdown|pointerup|touch-action:none|srcdoc=/);
-  has(reader,["__mumeiNotificationReader322","confirmedClientSignatures","mumei-v3-reader-status","sendBatch","rediscoverPanel"]);
+  has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","mumei-v3-reader-status","sendBatch","rediscoverPanel"]);
   has(loader,["note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
 });
 
@@ -34,10 +34,10 @@ test("installer remains a slim update route",async()=>{
   has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
 });
 
-test("release tracks V3.2.12",async()=>{
+test("release tracks V3.2.13",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.16.9");assert.equal(manifest.notificationVersion,"3.2.12");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.9"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.12"/);assert.match(v3,/@version\s+3\.2\.12/);
+  assert.equal(manifest.appVersion,"2026.09.16.10");assert.equal(manifest.notificationVersion,"3.2.13");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.10"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.13"/);assert.match(v3,/@version\s+3\.2\.13/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{

@@ -111,6 +111,7 @@
       if(!looksダッシュボード()){setCoreStatus('公式ダッシュボードへ移動中…');if(location.pathname!=='/sitesettings/stats'){location.assign('https://note.com/sitesettings/stats');return}}
       await startRead();
     }catch(e){ensureCorePanel();showPanel();setCoreStatus(`⚠ ${e?.message||e}｜自動読込に失敗した時だけこの復旧パネルを表示します`,'warn')}
+    finally{booting=false}
   }
   const run=()=>void boot();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();window.addEventListener('pageshow',run);window.addEventListener('popstate',run);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')run()});
 })();

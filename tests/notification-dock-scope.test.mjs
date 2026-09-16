@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (p) => readFile(new URL(`../${p}`, import.meta.url), "utf8");
 
 test("direct reader has no global fallback dock or legacy frame dependency", async () => {
-  const reader = await read("public/note-insight-notification-reader-v322.js");
+  const reader = await read("public/note-insight-notification-reader-v323.js");
   assert.doesNotMatch(reader, /fallbackHtml|ensureFallback|mumei-notice-reader-v2963|contentDocument/);
   assert.match(reader, /data-mumei-notice-shell-v3/);
   assert.match(reader, /mumei-v3-read-request/);

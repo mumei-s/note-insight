@@ -15,9 +15,9 @@ test("installer keeps participant steps compact with same-page confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.12 returns version check before rescue or remote loading",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.12/);
+test("V3.2.13 returns version check before rescue or remote loading",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
+  assert.match(v3,/@version\s+3\.2\.13/);
   assert.match(v3,/function directVersionCheck\(\)/);
   assert.match(v3,/runtime-checked-v329/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
@@ -37,7 +37,7 @@ test("parent rescue dock is fixed four-column and independent of note notificati
   assert.match(v3,/visualViewport/);
   assert.match(v3,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   for(const label of ["手動読み込み","フィルターOFF","設定","INSIGHT"])assert.match(v3,new RegExp(label));
-  assert.match(v3,/notificationRoute\(\)\|\|Date\.now\(\)<rescueIntentUntil/);
+  assert.match(v3,/notificationSurfaceOpen\(\)\|\|Date\.now\(\)<rescueIntentUntil/);
   assert.match(v3,/window\.addEventListener\('click',handleRescueClick,true\)/);
   assert.match(v3,/window\.__mumeiV3ParentDock=true/);
 });
