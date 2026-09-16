@@ -42,7 +42,7 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package uses V3.2.13 with one parent-owned fixed dock',()=>{
+test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
@@ -67,7 +67,9 @@ test('active package uses V3.2.13 with one parent-owned fixed dock',()=>{
   assert.match(setup,/この画面で更新結果を確認/);
   assert.match(setup,/mumei-notification-v3-loader/);
   assert.doesNotMatch(setup,/https:\/\/note\.com\/notifications/);
-  assert.match(dock,/window\.__mumeiV3ParentDock/);
+  assert.match(dock,/function parentDock\(\)/);
+  assert.match(dock,/document\.documentElement\.contains\(p\)/);
+  assert.match(dock,/display',on\?'grid':'none'/);
   assert.match(reader,/mumei-v3-reader-status/);
   assert.match(reader,/confirmedClientSignatures/);
   assert.match(reader,/rediscoverPanel/);
