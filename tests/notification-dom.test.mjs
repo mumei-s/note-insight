@@ -9,7 +9,7 @@ const reader=read('note-insight-notification-reader-v323.js');
 const v3=read('note-insight-notification-v3.user.js');
 
 function env(){
-  const dom=new JSDOM('<button id="bell" aria-label="通知">🔔</button><main><section id="popup" role="dialog"><div id="list"></div></section></main>',{url:'https://note.com/notifications',runScripts:'outside-only',pretendToBeVisual:true});
+  const dom=new JSDOM('<button id="bell" aria-label="通知">🔔</button><main><section id="popup" role="dialog"><button>通知</button><button>お知らせ</button><div id="list"></div></section></main>',{url:'https://note.com/notifications',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window;
   w.HTMLElement.prototype.getBoundingClientRect=function(){return {width:320,height:180,left:0,top:20,right:320,bottom:200}};
   w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'fixture'}})});
