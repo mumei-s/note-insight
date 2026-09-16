@@ -15,17 +15,17 @@ test("installer keeps participant steps compact with same-page confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.21 preloads reader and dock and returns version checks safely",async()=>{
+test("V3.2.23 preloads reader and dock and returns version checks safely",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.21/);
+  assert.match(v3,/@version\s+3\.2\.23/);
   assert.match(v3,/function directVersionCheck\(\)/);
-  assert.match(v3,/runtime-checked-v3221/);
+  assert.match(v3,/runtime-checked-v3223/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
   assert.ok(v3.indexOf('async function boot(){if(directVersionCheck())return')>0);
   assert.match(v3,/mumei-v329-component-cache/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3221/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3221/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3223/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3223/);
   assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
   assert.match(dock,/ensureReader/);assert.match(reader,/mumei-v3-read-request/);
 });
@@ -38,7 +38,7 @@ test("parent rescue dock remains safe fallback with bounded bell-start grace",as
   assert.match(v3,/Math\.max\(10,bottomObstruction\(root\)\+8\)/);
   assert.match(v3,/visualViewport/);
   assert.match(v3,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  for(const label of ["手動読み込み","フィルターOFF","設定","INSIGHT"])assert.match(v3,new RegExp(label));
+  for(const label of ["手動読み込み","フィルターOFF","フィルター登録","INSIGHT"])assert.match(v3,new RegExp(label));
   assert.match(v3,/function notificationSurfaceOpen\(\)/);
   assert.match(v3,/function intentActive\(\)/);
   assert.match(v3,/function showRescue\(on\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
