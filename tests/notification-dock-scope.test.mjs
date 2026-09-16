@@ -13,32 +13,40 @@ test("direct reader has no global fallback dock or legacy frame dependency", asy
   assert.match(reader, /verified-shell-bottom-to-top/);
 });
 
-test("single notification panel requires a verified notification surface or notifications route", async () => {
+test("single notification panel uses a bounded bell grace then the verified notification surface", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel, /__mumeiNotificationDock322/);
   assert.match(panel, /function findShell\(\)/);
   assert.match(panel, /function messageContext\(\)/);
   assert.match(panel, /intentUntil/);
+  assert.match(panel, /bellGraceUntil/);
+  assert.match(panel, /bellHref/);
+  assert.match(panel, /function bellGrace\(\)/);
   assert.match(panel, /data-mumei-notice-shell-v3/);
   assert.match(panel, /pushState/);
   assert.match(panel, /replaceState/);
   assert.match(panel, /blockNoticeNavigationWhileReading/);
   assert.match(panel, /notificationRoute\(\)/);
-  assert.match(panel, /const open=notificationRoute\(\)\|\|Boolean\(shell\)/);
-  assert.match(panel, /allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\)/);
-  assert.doesNotMatch(panel, /const open=.*intentUntil/);
-  assert.match(panel, /function topClick\([^)]*\).*showDock\(false\)/s);
-  assert.doesNotMatch(panel, /function topClick\([^)]*\).*showDock\(true\)/s);
+  assert.match(panel, /const open=notificationRoute\(\)\|\|Boolean\(shell\)\|\|bellGrace\(\)/);
+  assert.match(panel, /allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\|\|bellGrace\(\)\)/);
+  assert.match(panel, /function topClick\([^)]*\).*bellGraceUntil=Date\.now\(\)\+6000.*showDock\(true\).*startBellReader\(\)/s);
+  assert.match(panel, /function routeChanged\(\).*bellGraceUntil=0;bellHref=''.*showDock\(false\)/s);
+  assert.doesNotMatch(panel, /bellGraceUntil=Date\.now\(\)\+30000/);
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("parent rescue dock also refuses creator-page intent-only display and read", async () => {
+test("parent rescue dock restores bell-first launch but clears it on close or navigation", async () => {
   const parent = await read("public/note-insight-notification-v3.user.js");
-  assert.match(parent, /function notificationSurfaceOpen\(\).*notificationRoute\(\)\|\|visibleElement\(shell\)/s);
-  assert.match(parent, /function showRescue\(on\).*allowed=Boolean\(on\)&&notificationSurfaceOpen\(\)/s);
-  assert.match(parent, /function refreshRescue\(\).*showRescue\(notificationSurfaceOpen\(\)\)/s);
-  assert.match(parent, /function scheduleAutoRead\([^)]*\).*if\(notificationSurfaceOpen\(\)\)/s);
-  assert.doesNotMatch(parent, /notificationSurfaceOpen\(\)\|\|Date\.now\(\)<rescueIntentUntil/);
+  assert.match(parent, /function notificationSurfaceOpen\(\).*notificationRoute\(\)\|\|visibleElement\(shell\)\|\|visibleNoticeRows\(\)/s);
+  assert.match(parent, /function intentActive\(\)/);
+  assert.match(parent, /rescueIntentHref/);
+  assert.match(parent, /function showRescue\(on\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
+  assert.match(parent, /function refreshRescue\(\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
+  assert.match(parent, /function scheduleAutoRead\([^)]*\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
+  assert.match(parent, /function handleNotificationIntent\([^)]*\).*rescueIntentUntil=Date\.now\(\)\+6000.*showRescue\(true\)/s);
+  assert.match(parent, /function handleIntentClose\(/);
+  assert.match(parent, /rescueIntentUntil=0;rescueIntentHref=''/);
+  assert.doesNotMatch(parent, /rescueIntentUntil=Date\.now\(\)\+30000/);
 });
 
 test("settings and read operations use one native click path without pointer interception", async () => {
@@ -58,6 +66,8 @@ test("dock can self-heal the reader after parent loader failure", async () => {
   assert.match(panel, /readerRetryAt/);
   assert.match(panel, /READER_API_MISSING/);
   assert.match(panel, /healParentLoadError/);
+  assert.match(panel, /async function startBellReader\(\)/);
+  assert.match(panel, /readyToScan/);
 });
 
 test("legacy notification runtime remains only a compatibility shim", async () => {
