@@ -46,6 +46,7 @@ test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
+  const dashboardSetup=read('public/dashboard-setup.html');
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
   const reader=read('public/note-insight-notification-reader-v323.js');
   const loader=read('public/note-insight-notification-loader-v318.js');
@@ -69,6 +70,10 @@ test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch
   assert.match(setup,/この画面で更新結果を確認/);
   assert.match(setup,/mumei-notification-v3-loader/);
   assert.doesNotMatch(setup,/https:\/\/note\.com\/notifications/);
+  assert.match(dashboardSetup,/mumei_insight_sync_seed/);
+  assert.match(dashboardSetup,/if\(seed\)/);
+  assert.match(dashboardSetup,/INSIGHT 自動同期を準備中/);
+  assert.match(dashboardSetup,/location\.replace\(u\.href\)/);
   assert.match(dock,/function parentDock\(\)/);
   assert.match(dock,/document\.documentElement\.contains\(p\)/);
   assert.match(dock,/display',on\?'grid':'none'/);
@@ -93,6 +98,8 @@ test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch
   assert.match(index,/mumei-insight-access-token/);
   assert.match(index,/mumei-notification-v3-loader/);
   assert.match(index,/mumei-notification-tool-version/);
+  assert.match(index,/Date\.now\(\) - last < 8000/);
+  assert.doesNotMatch(index,/Date\.now\(\) - last < 60000/);
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
