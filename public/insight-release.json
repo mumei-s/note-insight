@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.17.1",
-  "notificationVersion": "3.2.21",
+  "appVersion": "2026.09.17.2",
+  "notificationVersion": "3.2.23",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-17T03:58:00+09:00",
+  "releasedAt": "2026-09-17T07:48:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.21",
+  "notificationLabel": "本人通知 V3.2.23",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知Readerと4列dockをuserscript起動時に先読みし、読込部品の後読み失敗を回避。設定の戻り先はnote通知へ固定し、INSIGHTは本体へ直行。保存済み参加者は明示ログアウトを除きセッションを自動復旧する。"
+  "note": "本人通知は保存済み境界から追加分だけを読み取り、境界を見失っても全履歴読込へ切り替えず安全停止。二重読込要求を無視し、通知から戻った位置を復元。4列パネルの設定はフィルター登録へ変更し、INSIGHTは通知画面へ直行。"
 }
