@@ -13,12 +13,11 @@ test("direct reader has no global fallback dock or legacy frame dependency", asy
   assert.match(reader, /verified-shell-bottom-to-top/);
 });
 
-test("single notification panel uses a bounded bell grace then the verified notification surface", async () => {
+test("single notification panel uses bounded bell grace and only keeps a visible verified shell", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel, /__mumeiNotificationDock322/);
   assert.match(panel, /function findShell\(\)/);
   assert.match(panel, /function messageContext\(\)/);
-  assert.match(panel, /intentUntil/);
   assert.match(panel, /bellGraceUntil/);
   assert.match(panel, /bellHref/);
   assert.match(panel, /function bellGrace\(\)/);
@@ -27,26 +26,23 @@ test("single notification panel uses a bounded bell grace then the verified noti
   assert.match(panel, /replaceState/);
   assert.match(panel, /blockNoticeNavigationWhileReading/);
   assert.match(panel, /notificationRoute\(\)/);
-  assert.match(panel, /const open=notificationRoute\(\)\|\|Boolean\(shell\)\|\|bellGrace\(\)/);
+  assert.match(panel, /const open=notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\|\|bellGrace\(\)/);
   assert.match(panel, /allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\|\|bellGrace\(\)\)/);
-  assert.match(panel, /function topClick\([^)]*\).*bellGraceUntil=Date\.now\(\)\+6000.*showDock\(true\).*startBellReader\(\)/s);
-  assert.match(panel, /function routeChanged\(\).*bellGraceUntil=0;bellHref=''.*showDock\(false\)/s);
+  assert.match(panel, /function topClick\([^)]*\).*bellGraceUntil=Date\.now\(\)\+7000.*showDock\(true\).*startBellReader\(\)/s);
+  assert.match(panel, /function routeChanged\(\).*bellGraceUntil=0;bellHref='';intentUntil=0.*showDock\(false\)/s);
   assert.doesNotMatch(panel, /bellGraceUntil=Date\.now\(\)\+30000/);
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("parent rescue dock restores bell-first launch but clears it on close or navigation", async () => {
+test("installed parent rescue remains compatible while remote dock can neutralize it without reinstall", async () => {
   const parent = await read("public/note-insight-notification-v3.user.js");
-  assert.match(parent, /function notificationSurfaceOpen\(\).*notificationRoute\(\)\|\|visibleElement\(shell\)\|\|visibleNoticeRows\(\)/s);
-  assert.match(parent, /function intentActive\(\)/);
-  assert.match(parent, /rescueIntentHref/);
-  assert.match(parent, /function showRescue\(on\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
-  assert.match(parent, /function refreshRescue\(\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
-  assert.match(parent, /function scheduleAutoRead\([^)]*\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
-  assert.match(parent, /function handleNotificationIntent\([^)]*\).*rescueIntentUntil=Date\.now\(\)\+6000.*showRescue\(true\)/s);
-  assert.match(parent, /function handleIntentClose\(/);
-  assert.match(parent, /rescueIntentUntil=0;rescueIntentHref=''/);
-  assert.doesNotMatch(parent, /rescueIntentUntil=Date\.now\(\)\+30000/);
+  const dock = await read("public/note-insight-notification-dock-watch-v312.js");
+  assert.match(parent, /mumei-v3-rescue-dock-v329/);
+  assert.match(parent, /function handleNotificationIntent\(/);
+  assert.match(dock, /function neutralizeParentDock\(\)/);
+  assert.match(dock, /mumei-v3-parent-dock-sentinel-v320/);
+  assert.match(dock, /p\.replaceWith\(s\)/);
+  assert.match(dock, /function showDock\(on\)/);
 });
 
 test("settings and read operations use one native click path without pointer interception", async () => {
@@ -55,19 +51,44 @@ test("settings and read operations use one native click path without pointer int
   assert.match(panel,/window\.addEventListener\('click',onClick,true\)/);
   assert.match(panel,/stopImmediatePropagation/);
   assert.doesNotMatch(panel,/pointerdown|pointerup|touch-action:none/);
-  assert.match(panel, /function openSettings\(\)/);assert.match(panel,/mumei-v3-read-request|ensureReader/);
+  assert.match(panel, /function openSettings\(\)/);
+  assert.match(panel,/async function ensureReader\(force=false\)/);
   assert.doesNotMatch(panel, /backendButton|ensureBackend|contentDocument/);
 });
 
-test("dock can self-heal the reader after parent loader failure", async () => {
+test("dock uses the current reader immediately and self-heals by one forced reload after a real reader error", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel, /READER_URL/);
-  assert.match(panel, /async function ensureReader\(\)/);
+  assert.match(panel, /async function ensureReader\(force=false\)/);
   assert.match(panel, /readerRetryAt/);
   assert.match(panel, /READER_API_MISSING/);
-  assert.match(panel, /healParentLoadError/);
+  assert.match(panel, /const existing=readerApi\(\),api=existing\|\|await ensureReader\(forceReader&&!existing\)/);
+  assert.match(panel, /async function repairAfterReaderError\(message\)/);
+  assert.match(panel, /readerReloadedOnce/);
+  assert.match(panel, /ensureReader\(true\)/);
   assert.match(panel, /async function startBellReader\(\)/);
-  assert.match(panel, /readyToScan/);
+});
+
+test("settings back target and INSIGHT target are explicit and never inherit a creator page", async () => {
+  const panel = await read("public/note-insight-notification-dock-watch-v312.js");
+  assert.match(panel, /function pinBackToNotifications\(\).*history\.replaceState\(history\.state,'','\/notifications'\)/s);
+  assert.match(panel, /FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
+  assert.match(panel, /mumei_return','https:\/\/note\.com\/notifications'/);
+  assert.match(panel, /INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
+  assert.match(panel, /notificationAccount/);
+  assert.doesNotMatch(panel, /const INSIGHT=.*notification-entry\.html/);
+});
+
+test("ingest token bridge is origin-locked and never posts a token to a wildcard target", async () => {
+  const bridge = await read("public/notification-token-bridge.html");
+  assert.match(bridge, /TARGET='https:\/\/note\.com'/);
+  assert.match(bridge, /document\.referrer/);
+  assert.match(bridge, /ref\.origin!==TARGET/);
+  assert.match(bridge, /insight-notification-import-token/);
+  assert.match(bridge, /action:'issue'/);
+  assert.match(bridge, /noteId!==expected/);
+  assert.match(bridge, /parent\.postMessage\(\{type:TYPE,\.\.\.data\},TARGET\)/);
+  assert.doesNotMatch(bridge, /postMessage\([^\n]+,\s*['"]\*['"]\)/);
 });
 
 test("legacy notification runtime remains only a compatibility shim", async () => {
