@@ -49,6 +49,8 @@ test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock'
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
   const reader=read('public/note-insight-notification-reader-v323.js');
   const loader=read('public/note-insight-notification-loader-v318.js');
+  const entry=read('public/notification-entry.html');
+  const index=read('index.html');
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
   assert.equal(manifest.appVersion,'2026.09.16.10');
@@ -74,6 +76,16 @@ test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock'
   assert.match(reader,/confirmedClientSignatures/);
   assert.match(reader,/rediscoverPanel/);
   assert.match(loader,/mumei-dashboard-flow-v143/);
+  assert.match(loader,/notificationSyncBridge/);
+  assert.match(loader,/waitReaderFinal/);
+  assert.match(loader,/mumei_insight_sync/);
+  assert.match(loader,/NOTE_ACCOUNT_MISMATCH/);
+  assert.match(entry,/https:\/\/note\.com\/notifications/);
+  assert.match(entry,/mumei_insight_sync/);
+  assert.match(entry,/notificationSync/);
+  assert.match(index,/mumei-insight-start-notification-sync-v1/);
+  assert.match(index,/notification-entry\.html/);
+  assert.match(index,/mumei-insight-access-token/);
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);

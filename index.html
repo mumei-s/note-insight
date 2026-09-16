@@ -46,6 +46,39 @@
     <div id="insight-tool-row"><div><strong>INSIGHTツール</strong><a href="./notification-setup.html?from=insight&role=owner" target="_blank" rel="noopener">本人通知を設定</a><a href="#evidence">ダッシュボード資料庫</a></div></div>
     <div id="root"></div>
     <script>
+      (function () {
+        try {
+          const url = new URL(window.location.href);
+          const result = url.searchParams.get("notificationSync");
+          const guardKey = "mumei-insight-start-notification-sync-v1";
+          const resultKey = "mumei-insight-notification-sync-result-v1";
+          if (result === "done" || result === "error") {
+            sessionStorage.setItem(guardKey, String(Date.now()));
+            sessionStorage.setItem(resultKey, JSON.stringify({
+              state: result,
+              error: url.searchParams.get("notificationSyncError") || "",
+              at: Number(url.searchParams.get("notificationSyncedAt") || Date.now()),
+              noteAccount: url.searchParams.get("notificationNoteAccount") || ""
+            }));
+            for (const key of ["notificationSync","notificationSyncedAt","notificationSyncId","notificationSyncError","notificationNoteAccount"]) url.searchParams.delete(key);
+            history.replaceState(history.state, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : "") + url.hash);
+            return;
+          }
+          const token = localStorage.getItem("mumei-insight-access-token") || "";
+          if (!token) return;
+          const last = Number(sessionStorage.getItem(guardKey) || 0);
+          if (Date.now() - last < 60000) return;
+          sessionStorage.setItem(guardKey, String(Date.now()));
+          const entry = new URL("./notification-entry.html", window.location.href);
+          entry.searchParams.set("from", "insight-start");
+          entry.searchParams.set("return", window.location.href);
+          const active = String(localStorage.getItem("mumei-insight-active-account-v3") || "").trim().replace(/^@/, "").toLowerCase();
+          if (/^[a-z0-9_-]+$/.test(active)) entry.searchParams.set("account", active);
+          window.location.replace(entry.href);
+        } catch {
+          // Notification startup sync must never block INSIGHT itself.
+        }
+      })();
       document.addEventListener("click", function (event) {
         const target = event.target instanceof Element ? event.target.closest('a[href*="notification-setup.html"]') : null;
         if (!target || target.target === "_blank") return;
