@@ -79,7 +79,7 @@
     <section class="panel" id="confirmFlow">
       <h2 class="step-title">3　成功したか確認</h2>
       <div class="steps"><button id="verify" class="btn green" type="button">この画面で更新結果を確認</button></div>
-      <div id="verifyResult" class="result" role="status" aria-live="polite">確認中｜この画面だけでV3.2.9の起動を確認します。</div>
+      <div id="verifyResult" class="result" role="status" aria-live="polite">確認中｜この画面だけでV3.2.10の起動を確認します。</div>
       <p class="mini" id="versionLine"></p>
       <div class="tip" id="verifyHelp"></div>
     </section>
@@ -92,7 +92,7 @@ const NOTICE_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const SCRIPT='https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js';
 const q=new URLSearchParams(location.search),install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult'),fallback=document.getElementById('fallback');
-let release={notificationVersion:'3.2.9'};
+let release={notificationVersion:'3.2.10'};
 const runtimeCheck=q.get('runtimeCheck')==='1';
 if(runtimeCheck)localStorage.removeItem(RUNTIME_KEY);
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
@@ -126,7 +126,7 @@ function verifyText(k){
   if(isChromiumChoice(k))return'確認ではnoteやクリエイターページを開きません。この設定画面だけを再読み込みし、Tampermonkeyで動いているINSIGHTの版を確認します。';
   return'確認ではnoteへ移動しません。この設定画面だけでTampermonkeyのINSIGHTを確認します。';
 }
-function scriptUrl(){return SCRIPT+'?v=329&ts='+Date.now()}
+function scriptUrl(){return SCRIPT+'?v=3210&ts='+Date.now()}
 function installUrl(k){return isSafariChoice(k)?scriptUrl():'https://www.tampermonkey.net/script_installation.php#url='+encodeURIComponent(scriptUrl())}
 function runtimeCheckUrl(){const u=new URL(location.href);u.searchParams.set('runtimeCheck','1');u.searchParams.set('checkAt',String(Date.now()));u.searchParams.set('browser',selected);for(const k of ['notificationInstalled','notificationCheckedAt','notificationUpdateResult'])u.searchParams.delete(k);return u.href}
 function paintInstall(){

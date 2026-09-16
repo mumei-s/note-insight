@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.6",
-  "notificationVersion": "3.2.9",
+  "appVersion": "2026.09.16.7",
+  "notificationVersion": "3.2.10",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-15T21:30:04Z",
+  "releasedAt": "2026-09-16T01:09:00Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.9",
+  "notificationLabel": "本人通知 V3.2.10",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の更新結果を設定画面上で実働判定し、noteや無関係なクリエイターページへ移動しない。文字列表示だけでは更新済みにせず、V3.2.9の起動成功を明示する。"
+  "note": "本人通知の4列固定パネルをスマホの表示領域・下部ナビ・セーフエリアに合わせて自動配置し、画面下へ隠れないよう補正する。"
 }
