@@ -79,7 +79,9 @@ test('active package keeps the V3.2.13 parent dock and never blocks INSIGHT laun
   assert.match(dashboardSetup,/location\.replace\(u\.href\)/);
   assert.match(dock,/function parentDock\(\)/);
   assert.match(dock,/document\.documentElement\.contains\(p\)/);
-  assert.match(dock,/allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\)/);
+  assert.match(dock,/allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\|\|bellGrace\(\)\)/);
+  assert.match(dock,/bellGraceUntil=Date\.now\(\)\+6000/);
+  assert.match(dock,/startBellReader/);
   assert.match(dock,/forceParentDockHidden/);
   assert.match(dock,/ensureReader/);
   assert.match(reader,/mumei-v3-reader-status/);
