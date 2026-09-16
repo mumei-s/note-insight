@@ -77,10 +77,12 @@ test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock'
   assert.match(reader,/rediscoverPanel/);
   assert.match(loader,/mumei-dashboard-flow-v143/);
   assert.match(loader,/notificationSyncBridge/);
-  assert.match(loader,/waitReaderFinal/);
+  assert.match(loader,/openNotificationSurface/);
+  assert.match(loader,/findNotificationTrigger/);
   assert.match(loader,/mumei_insight_sync/);
   assert.match(loader,/NOTE_ACCOUNT_MISMATCH/);
-  assert.match(entry,/https:\/\/note\.com\/notifications/);
+  assert.match(entry,/new URL\('https:\/\/note\.com\/'\)/);
+  assert.doesNotMatch(entry,/https:\/\/note\.com\/notifications/);
   assert.match(entry,/mumei_insight_sync/);
   assert.match(entry,/notificationSync/);
   assert.match(index,/mumei-insight-start-notification-sync-v1/);
