@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.16.8",
-  "notificationVersion": "3.2.11",
+  "appVersion": "2026.09.16.9",
+  "notificationVersion": "3.2.12",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-16T02:00:50Z",
+  "releasedAt": "2026-09-16T06:52:25Z",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.11",
+  "notificationLabel": "本人通知 V3.2.12",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "全対応ブラウザの更新を正規userscript直接方式へ統一し、note通知から開いた先より戻ると元の通知位置を復元する。"
+  "note": "通知パネルを画面下へ戻し、自動・手動読込を読込本体へ直結。フィルター設定の復帰先を常にnote通知へ固定する。"
 }

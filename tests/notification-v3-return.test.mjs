@@ -15,9 +15,9 @@ test("installer keeps participant steps compact with same-page confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.11 returns version check before rescue or remote loading",async()=>{
+test("V3.2.12 returns version check before rescue or remote loading",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.11/);
+  assert.match(v3,/@version\s+3\.2\.12/);
   assert.match(v3,/function directVersionCheck\(\)/);
   assert.match(v3,/runtime-checked-v329/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
@@ -33,7 +33,7 @@ test("parent rescue dock is fixed four-column and independent of note notificati
   assert.match(v3,/mumei-v3-rescue-dock-v329/);
   assert.match(v3,/position:fixed/);
   assert.match(v3,/function placeRescue\(/);
-  assert.match(v3,/mobile\?58:12/);
+  assert.match(v3,/Math\.max\(10,bottomObstruction\(root\)\+8\)/);
   assert.match(v3,/visualViewport/);
   assert.match(v3,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   for(const label of ["手動読み込み","フィルターOFF","設定","INSIGHT"])assert.match(v3,new RegExp(label));
@@ -45,16 +45,15 @@ test("parent rescue dock is fixed four-column and independent of note notificati
 test("remote parts load independently with dock before reader",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
   assert.match(v3,/async function loadPart\(name\)/);
-  const dock=v3.indexOf("loadPart('note-insight-notification-dock-watch-v312.js')");
-  const reader=v3.indexOf("loadPart('note-insight-notification-reader-v322.js')");
-  const loader=v3.indexOf("loadPart('note-insight-notification-loader-v318.js')");
-  assert.ok(dock>0&&reader>dock&&loader>reader);
+  const boot=v3.indexOf('async function boot()'),dock=v3.indexOf("loadPart('note-insight-notification-dock-watch-v312.js')",boot);
+  const reader=v3.indexOf('ensureReaderReady()',dock),loader=v3.indexOf("loadPart('note-insight-notification-loader-v318.js')",reader);
+  assert.ok(boot>0&&dock>boot&&reader>dock&&loader>reader);
   assert.match(v3,/mumei-notification-v329-component:/);
 });
 
 test("filter settings always return to note notifications",async()=>{
   const page=await read("public/notification-filter.html"),dock=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(page,/https:\/\/note\.com\/notifications/);assert.match(page,/mumei_return/);assert.match(page,/mumei_groups_sync/);assert.match(page,/mumei_filter_reset/);
+  assert.match(page,/const returnUrl='https:\/\/note\.com\/notifications'/);assert.doesNotMatch(page,/safeNoteReturn/);assert.match(page,/mumei_groups_sync/);assert.match(page,/mumei_filter_reset/);
   assert.match(dock,/processFilterCommands/);assert.match(dock,/mumei_groups_sync/);assert.match(dock,/mumei_filter_reset/);
 });
 

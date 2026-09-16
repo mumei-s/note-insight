@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-if(window.__mumeiNotificationReader322)return;window.__mumeiNotificationReader322=true;
+if(window.__mumeiNotificationReader322&&window.__mumeiV3Reader322?.scan)return;window.__mumeiNotificationReader322=true;
 
 const VERSION='3.2.6',PROTOCOL='3.2.6';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
