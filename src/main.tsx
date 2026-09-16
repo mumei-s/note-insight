@@ -61,8 +61,8 @@ function resumeCandidate() {
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
   if (requestedNotificationAccount) return getStoredInsightAccount(requestedNotificationAccount);
   if (joinId) return getStoredInsightAccount(joinId);
-  const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
-  return onMemberScreen ? currentStoredInsightAccount() : null;
+  const recoverableRoute = window.location.hash.includes("access/insight") || window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
+  return recoverableRoute ? currentStoredInsightAccount() : null;
 }
 
 async function tryReturningMemberResume() {
