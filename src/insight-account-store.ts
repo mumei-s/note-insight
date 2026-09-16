@@ -22,45 +22,82 @@ function cleanId(value: unknown) {
   return String(value || "").trim().replace(/^@/, "").toLowerCase();
 }
 
+function cleanStoredAccount(raw: any): StoredInsightAccount | null {
+  const noteId = cleanId(raw?.noteId);
+  if (!noteId) return null;
+  return {
+    noteId,
+    displayName: typeof raw?.displayName === "string" ? raw.displayName : null,
+    imageUrl: typeof raw?.imageUrl === "string" ? raw.imageUrl : null,
+    status: typeof raw?.status === "string" ? raw.status : "unknown",
+    memberToken: typeof raw?.memberToken === "string" && raw.memberToken ? raw.memberToken : undefined,
+    applicantToken: typeof raw?.applicantToken === "string" && raw.applicantToken ? raw.applicantToken : undefined,
+    passcode: typeof raw?.passcode === "string" && raw.passcode ? raw.passcode : undefined,
+    updatedAt: Number(raw?.updatedAt || 0),
+  };
+}
+
+export function mergeStoredAccount(a: StoredInsightAccount, b: StoredInsightAccount): StoredInsightAccount {
+  const newer = Number(a.updatedAt || 0) >= Number(b.updatedAt || 0) ? a : b;
+  const older = newer === a ? b : a;
+  const status = newer.status && newer.status !== "unknown" ? newer.status : older.status || "unknown";
+  return {
+    noteId: newer.noteId || older.noteId,
+    displayName: newer.displayName ?? older.displayName ?? null,
+    imageUrl: newer.imageUrl ?? older.imageUrl ?? null,
+    status,
+    memberToken: newer.memberToken || older.memberToken,
+    applicantToken: newer.applicantToken || older.applicantToken,
+    passcode: newer.passcode || older.passcode,
+    updatedAt: Math.max(Number(a.updatedAt || 0), Number(b.updatedAt || 0)),
+  };
+}
+
 function normalizeList(input: unknown): StoredInsightAccount[] {
   if (!Array.isArray(input)) return [];
   const map = new Map<string, StoredInsightAccount>();
   for (const raw of input) {
-    const id = cleanId(raw?.noteId);
-    if (!id) continue;
-    const next: StoredInsightAccount = {
-      noteId: id,
-      displayName: typeof raw?.displayName === "string" ? raw.displayName : null,
-      imageUrl: typeof raw?.imageUrl === "string" ? raw.imageUrl : null,
-      status: typeof raw?.status === "string" ? raw.status : "unknown",
-      memberToken: typeof raw?.memberToken === "string" && raw.memberToken ? raw.memberToken : undefined,
-      applicantToken: typeof raw?.applicantToken === "string" && raw.applicantToken ? raw.applicantToken : undefined,
-      passcode: typeof raw?.passcode === "string" && raw.passcode ? raw.passcode : undefined,
-      updatedAt: Number(raw?.updatedAt || 0),
-    };
-    const old = map.get(id);
-    map.set(id, old && old.updatedAt > next.updatedAt ? { ...next, ...old } : { ...old, ...next });
+    const next = cleanStoredAccount(raw);
+    if (!next) continue;
+    const old = map.get(next.noteId);
+    map.set(next.noteId, old ? mergeStoredAccount(old, next) : next);
   }
   return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function readStoredInsightAccounts(): StoredInsightAccount[] {
+function readJsonList(key: string) {
   try {
-    const current = normalizeList(JSON.parse(localStorage.getItem(ACCOUNT_STORE_KEY) || "[]"));
-    if (current.length) return current;
-    const legacy = normalizeList(JSON.parse(localStorage.getItem(LEGACY_ACCOUNT_STORE_KEY) || "[]"));
-    if (legacy.length) {
-      localStorage.setItem(ACCOUNT_STORE_KEY, JSON.stringify(legacy));
-      return legacy;
-    }
-    return [];
+    return JSON.parse(localStorage.getItem(key) || "[]");
   } catch {
     return [];
   }
 }
 
+export function readStoredInsightAccounts(): StoredInsightAccount[] {
+  const current = normalizeList(readJsonList(ACCOUNT_STORE_KEY));
+  const legacy = normalizeList(readJsonList(LEGACY_ACCOUNT_STORE_KEY));
+  const merged = normalizeList([...current, ...legacy]).map((item) => {
+    if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1") return item;
+    return {
+      ...item,
+      memberToken: undefined,
+      status: item.status === "active" ? "logged-out" : item.status,
+    };
+  }).slice(0, 12);
+
+  const repaired = JSON.stringify(merged);
+  if ((current.length || legacy.length) && localStorage.getItem(ACCOUNT_STORE_KEY) !== repaired) {
+    localStorage.setItem(ACCOUNT_STORE_KEY, repaired);
+  }
+  return merged;
+}
+
 function write(accounts: StoredInsightAccount[]) {
-  localStorage.setItem(ACCOUNT_STORE_KEY, JSON.stringify(normalizeList(accounts).slice(0, 12)));
+  const safe = normalizeList(accounts).map((item) => {
+    if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1") return item;
+    return { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status };
+  }).slice(0, 12);
+  localStorage.setItem(ACCOUNT_STORE_KEY, JSON.stringify(safe));
   window.dispatchEvent(new Event("mumei-insight-accounts"));
 }
 
@@ -79,7 +116,8 @@ function upsert(next: StoredInsightAccount) {
   if (!id) return;
   const accounts = readStoredInsightAccounts();
   const old = accounts.find((item) => item.noteId === id);
-  const merged: StoredInsightAccount = { ...old, ...next, noteId: id, updatedAt: Date.now() };
+  const prepared: StoredInsightAccount = { ...next, noteId: id, updatedAt: Date.now() };
+  const merged = old ? mergeStoredAccount(old, prepared) : prepared;
   write([merged, ...accounts.filter((item) => item.noteId !== id)]);
 }
 
@@ -119,6 +157,7 @@ export function rememberMemberSession(app: any, memberToken: string, passcode?: 
   const noteId = cleanId(app?.noteId);
   if (!noteId || !memberToken) return;
   const existing = getStoredInsightAccount(noteId);
+  localStorage.removeItem(EXPLICIT_LOGOUT_KEY_PREFIX + noteId);
   upsert({
     noteId,
     displayName: app.displayName || existing?.displayName || null,
@@ -131,7 +170,6 @@ export function rememberMemberSession(app: any, memberToken: string, passcode?: 
   });
   setActiveId(noteId);
   localStorage.setItem(INSIGHT_TOKEN_KEY, memberToken);
-  localStorage.removeItem(EXPLICIT_LOGOUT_KEY_PREFIX + noteId);
   if (existing?.applicantToken) localStorage.setItem(APPLICANT_KEY, existing.applicantToken);
   else localStorage.removeItem(APPLICANT_KEY);
   if (passcode || existing?.passcode) localStorage.setItem(PASSCODE_KEY, passcode || existing!.passcode!);
@@ -150,7 +188,7 @@ export function currentStoredInsightAccount() {
     const selected = accounts.find((item) => item.noteId === active);
     if (selected?.memberToken) return selected;
   }
-  const newestLoggedIn = accounts.find((item) => item.memberToken && item.status !== "logged-out");
+  const newestLoggedIn = accounts.find((item) => item.memberToken && item.status !== "logged-out" && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1");
   if (newestLoggedIn) return newestLoggedIn;
   if (active) {
     const selected = accounts.find((item) => item.noteId === active);
@@ -161,9 +199,6 @@ export function currentStoredInsightAccount() {
     const selected = accounts.find((item) => item.applicantToken === applicant);
     if (selected) return selected;
   }
-  // If only the active/common pointers were lost, keep the verified local identity usable.
-  // The list is newest-first, so this restores the last-used recoverable account without
-  // forcing a participant through profile verification again. Explicit logout still wins.
   const recoverable = accounts.find((item) => item.applicantToken && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1");
   if (recoverable) return recoverable;
   return null;
@@ -172,7 +207,9 @@ export function currentStoredInsightAccount() {
 export function restoreStoredMemberSession() {
   const accounts = readStoredInsightAccounts();
   const current = currentStoredInsightAccount();
-  const selected = current?.memberToken ? current : accounts.find((item) => item.memberToken && item.status !== "logged-out") || null;
+  const selected = current?.memberToken && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + current.noteId) !== "1"
+    ? current
+    : accounts.find((item) => item.memberToken && item.status !== "logged-out" && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1") || null;
   if (!selected?.memberToken) return null;
   localStorage.setItem(INSIGHT_TOKEN_KEY, selected.memberToken);
   if (selected.applicantToken) localStorage.setItem(APPLICANT_KEY, selected.applicantToken);
@@ -187,7 +224,7 @@ export function activateStoredInsightAccount(noteId: string) {
   const account = getStoredInsightAccount(noteId);
   if (!account) return null;
   setActiveId(account.noteId);
-  if (account.memberToken) localStorage.setItem(INSIGHT_TOKEN_KEY, account.memberToken);
+  if (account.memberToken && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) !== "1") localStorage.setItem(INSIGHT_TOKEN_KEY, account.memberToken);
   else localStorage.removeItem(INSIGHT_TOKEN_KEY);
   if (account.applicantToken) localStorage.setItem(APPLICANT_KEY, account.applicantToken);
   else localStorage.removeItem(APPLICANT_KEY);
