@@ -19,7 +19,6 @@ try{
     }else missing=true;
   }
 }catch{missing=Boolean(requested)}
-
 function enterInsight(){
   const u=originalReturn?new URL(originalReturn):new URL('./',location.href);
   if(!originalReturn){u.searchParams.set('insightMode','notifications');u.hash='dashboard'}
@@ -36,20 +35,19 @@ function enterInsight(){
   else{title.textContent='⚠️ 🔔通知の自動同期を完了できませんでした';detail.textContent=syncError==='PAIR_REQUIRED'?'本人通知の連携を確認してください。INSIGHT自体はそのまま開きます。':'INSIGHTはそのまま開きます。次回起動時に再試行します。'}
   setTimeout(()=>location.replace(u.href),syncState==='done'?120:650);
 }
-
 if(syncState==='done'||syncState==='error'){
   enterInsight();
 }else{
-  if(requested&&switched){title.textContent=`🔔 @${requested} の本人通知を自動同期中…`;detail.textContent='noteの🔔を自動で開き、通知を読み込み・保存してINSIGHTへ戻ります。'}
+  if(requested&&switched){title.textContent=`🔔 @${requested} の本人通知を自動同期中…`;detail.textContent='同期要求を保存してからnoteの🔔を自動で開きます。操作は不要です。'}
   else if(requested&&missing){title.textContent=`🔔 @${requested} の本人通知を確認中…`;detail.textContent='note側の同一アカウントを確認してから同期します。'}
   const back=new URL(location.href);
   for(const k of['notificationSync','notificationSyncedAt','notificationSyncId','notificationSyncError','notificationNoteAccount'])back.searchParams.delete(k);
   const id=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-z0-9_-]/gi,'').slice(0,80);
-  const note=new URL('https://note.com/');
-  note.searchParams.set('mumei_insight_sync','1');
-  note.searchParams.set('mumei_return',back.href);
-  note.searchParams.set('mumei_sync_id',id);
-  if(requested)note.searchParams.set('mumei_account',requested);
-  setTimeout(()=>location.replace(note.href),120);
+  const seed=new URL('./dashboard-setup.html',location.href);
+  seed.searchParams.set('mumei_insight_sync_seed','1');
+  seed.searchParams.set('mumei_return',back.href);
+  seed.searchParams.set('mumei_sync_id',id);
+  if(requested)seed.searchParams.set('mumei_account',requested);
+  setTimeout(()=>location.replace(seed.href),120);
 }
 </script></body></html>
