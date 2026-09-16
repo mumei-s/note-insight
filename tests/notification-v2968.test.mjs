@@ -118,11 +118,19 @@ test('active package keeps V3.2.13 installed wrapper while the remote dock owns 
   assert.match(entry,/mumei_insight_sync_seed/);
   assert.doesNotMatch(entry,/new URL\('https:\/\/note\.com\/'\)/);
   assert.match(entry,/notificationSync/);
+
   assert.match(index,/mumei-insight-notification-sync-result-v1/);
   assert.match(index,/notificationSync/);
+  assert.match(index,/url\.searchParams\.get\("insightMode"\)/);
+  assert.match(index,/mode === "notifications"/);
+  assert.match(index,/mumei-insight-entry-mode/);
+  assert.match(index,/mumei-insight-notification-account/);
+  assert.match(index,/url\.hash = "dashboard"/);
   assert.doesNotMatch(index,/mumei-insight-start-notification-sync-v1/);
   assert.doesNotMatch(index,/notification-entry\.html/);
   assert.doesNotMatch(index,/window\.location\.replace\(entry\.href\)/);
+  assert.doesNotMatch(index,/note\.com\/notifications/);
+
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
