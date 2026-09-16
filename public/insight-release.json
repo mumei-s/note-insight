@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.17.1",
+  "appVersion": "2026.09.16.10",
   "notificationVersion": "3.2.13",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-16T16:05:00Z",
+  "releasedAt": "2026-09-16T16:12:23Z",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知 V3.2.13",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "🔔を開くと前回の保存完了位置を探し、そこから新しい通知側へ読み上げながら保存・INSIGHT【通知】反映する。前回位置が見つからない場合のみ通常読込へ安全に切り替える。"
+  "note": "🔔を開くと前回の保存完了位置を探し、そこから新しい通知側へ下→上で読み込み、保存確認後にINSIGHT【通知】へ反映する。前回位置が見つからない場合のみ通常読込へ安全に切り替える。"
 }
