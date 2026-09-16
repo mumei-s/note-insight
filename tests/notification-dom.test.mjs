@@ -2,48 +2,98 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {JSDOM} from 'jsdom';
+
 const read=p=>fs.readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 const dock=read('note-insight-notification-dock-watch-v312.js');
 const reader=read('note-insight-notification-reader-v323.js');
 const v3=read('note-insight-notification-v3.user.js');
-function env(){const dom=new JSDOM('<button id="bell" aria-label="通知">🔔</button><main><a class="background">背景の記事です</a></main><section id="popup" role="dialog" hidden><button>通知</button><button>お知らせ</button><div id="list"></div></section>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;w.HTMLElement.prototype.getBoundingClientRect=function(){return {width:320,height:200,left:0,top:40,right:320,bottom:240}};w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'fixture'}})});const values=new Map();w.GM={getValue:async(k,d)=>values.get(k)??d,setValue:async(k,v)=>values.set(k,v)};return{dom,w,values}}
+
+function env(){
+  const dom=new JSDOM('<button id="bell" aria-label="通知">🔔</button><main><section id="popup" role="dialog"><div id="list"></div></section></main>',{url:'https://note.com/notifications',runScripts:'outside-only',pretendToBeVisual:true});
+  const w=dom.window;
+  w.HTMLElement.prototype.getBoundingClientRect=function(){return {width:320,height:180,left:0,top:20,right:320,bottom:200}};
+  w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'fixture'}})});
+  const values=new Map();
+  w.GM={getValue:async(k,d)=>values.get(k)??d,setValue:async(k,v)=>values.set(k,v)};
+  return{dom,w,values};
+}
 function expose(w,src,names){w.eval(src.replace(/\}\)\(\);?\s*$/,'window.testAPI={'+names.join(',')+'};})();'));return w.testAPI}
 function exposeDock(w){const src=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});\n})();","window.testAPI={findShell,showDock,ensureRoot};\n})();");w.eval(src);return w.testAPI}
 
-test('dock recognizes the opened notification shell and keeps a notifications-route fallback',()=>{const{dom,w}=env();try{w.history.replaceState(null,'','/notifications');const api=exposeDock(w),popup=w.document.getElementById('popup');popup.hidden=false;w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem">Aさんがコメントしました3分前</a>';assert.equal(api.findShell().id,'popup');api.showDock(true);const root=w.document.querySelector('[data-mumei-notification-dock="1"]');assert.ok(root);assert.equal(root.querySelectorAll('button').length,4);assert.equal(root.querySelector('[data-act="settings"]').textContent,'設定');popup.hidden=true;assert.equal(api.findShell().tagName,'MAIN')}finally{dom.window.close()}});
+test('active notification scripts parse',()=>{
+  for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
+});
 
-test('reader can rediscover a notification panel when the dock marker is missing',()=>{const{dom,w}=env();try{w.history.replaceState(null,'','/notifications');const popup=w.document.getElementById('popup');popup.hidden=false;w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem" href="https://note.com/a/n/n1">Aさんがコメントしました3分前</a>';const api=expose(w,reader,['panel','rediscoverPanel']);assert.equal(api.panel().id,'popup');assert.equal(popup.getAttribute('data-mumei-notice-shell-v3'),'1')}finally{dom.window.close()}});
+test('dock shows four current controls and direct INSIGHT notification destination',()=>{
+  const{dom,w}=env();
+  try{
+    const api=exposeDock(w),popup=w.document.getElementById('popup');
+    popup.setAttribute('data-mumei-notice-shell-v3','1');
+    w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem">Aさんが返信しました 1分前</a>';
+    assert.equal(api.findShell().id,'popup');
+    api.showDock(true);
+    const root=w.document.querySelector('[data-mumei-notification-dock="1"]');
+    assert.ok(root);
+    assert.equal(root.querySelectorAll('button').length,4);
+    assert.equal(root.querySelector('[data-act="read"]').textContent,'手動読み込み');
+    assert.equal(root.querySelector('[data-act="settings"]').textContent,'フィルター登録');
+    assert.equal(root.querySelector('[data-act="ins"]').textContent,'INSIGHT');
+    assert.match(dock,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
+    assert.doesNotMatch(dock,/notification-entry\.html/);
+  }finally{dom.window.close()}
+});
 
-test('direct reader extracts rows and sends oldest-to-newest without iframe forwarding',async()=>{const{dom,w,values}=env();try{const popup=w.document.getElementById('popup');popup.hidden=false;popup.setAttribute('data-mumei-notice-shell-v3','1');w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem" data-notification-id="new" href="https://note.com/a/n/n1?c=c1">Aさんがあなたのコメントに返信しました3分前</a><a class="m-navbarNoticeItem" data-notification-id="old" href="https://note.com/a/m/m1">未知の通知3分前</a>';const api=expose(w,reader,['rows','rowData','panel','sendBatch','sig','scan']);assert.equal(api.panel().id,'popup');const rs=api.rows(popup);assert.equal(rs.length,2);assert.match(api.rowData(rs[0]).target_url,/n1\?c=c1/);values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');const sent=[];w.GM.xmlHttpRequest=o=>{const batch=JSON.parse(o.data).notifications;sent.push(...batch.map(x=>x.meta.event_identity));o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:batch.map(api.sig)})})};await api.scan();assert.deepEqual(sent,['notice:old','notice:new']);assert.equal(values.get('mumei_insight_notification_saved_v2919:fixture').length,2)}finally{dom.window.close()}});
+test('reader extracts visible notifications and sends oldest first',async()=>{
+  const{dom,w,values}=env();
+  try{
+    const popup=w.document.getElementById('popup');popup.setAttribute('data-mumei-notice-shell-v3','1');
+    w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem" data-notification-id="new" href="https://note.com/a/n/n1?c=c1">Aさんがあなたのコメントに返信しました3分前</a><a class="m-navbarNoticeItem" data-notification-id="old" href="https://note.com/a/m/m1">未知の通知3分前</a>';
+    const api=expose(w,reader,['rows','rowData','panel','sendBatch','sig','scan']);
+    assert.equal(api.panel().id,'popup');
+    values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');
+    const sent=[];
+    w.GM.xmlHttpRequest=o=>{const batch=JSON.parse(o.data).notifications;sent.push(...batch.map(x=>x.meta.event_identity));o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:batch.map(api.sig)})})};
+    await api.scan();
+    assert.deepEqual(sent,['notice:old','notice:new']);
+    assert.equal(values.get('mumei_insight_notification_saved_v2919:fixture').length,2);
+  }finally{dom.window.close()}
+});
 
-test('partial acknowledgement leaves only missing rows in outbox',async()=>{const{dom,w,values}=env();try{const api=expose(w,reader,['sendBatch','sig','readOutbox']),a={id:'fixture'},saved=new Set();values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');const input=['old','new'].map(id=>({raw_text:id+'さんが返信しました',target_url:'https://note.com/a/n/n1',meta:{event_identity:'notice:'+id}}));w.GM.xmlHttpRequest=o=>o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:[api.sig(input[0])]})});await assert.rejects(api.sendBatch(input,a,saved),/未保存/);assert.equal(api.readOutbox('fixture').length,1);assert.equal(api.readOutbox('fixture')[0].meta.event_identity,'notice:new')}finally{dom.window.close()}});
+test('reader is incremental, marks saved boundary, and has no full-history fallback',()=>{
+  assert.match(reader,/VERSION='3\.2\.23'/);
+  assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);
+  assert.match(reader,/checkpoint-stop-v3223/);
+  assert.match(reader,/ここまで保存済み/);
+  assert.match(reader,/MAX_SCROLL_STEPS=42/);
+  assert.match(reader,/MAX_READ_ROWS=420/);
+  assert.match(reader,/読込中です。二重開始はしません。/);
+  assert.match(reader,/BOUNDARY_NOT_FOUND_SAFE_STOP/);
+  assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback|全体照合へ切替/);
+});
 
-test('account change blocks transmitting a previous-account outbox',async()=>{const{dom,w,values}=env();try{const api=expose(w,reader,['sendBatch','readOutbox']);values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'different'}})});let sent=false;w.GM.xmlHttpRequest=()=>{sent=true};await assert.rejects(api.sendBatch([{raw_text:'Aさんが返信しました',meta:{event_identity:'notice:1'}}],{id:'fixture'},new Set()),/NOTE_ACCOUNT_CHANGED/);assert.equal(sent,false);assert.equal(api.readOutbox('fixture').length,1)}finally{dom.window.close()}});
+test('V3.2.23 wrapper ships current reader, filter registration, return restore and direct INSIGHT',()=>{
+  const meta=v3.split('// ==/UserScript==')[0];
+  assert.match(v3,/@version\s+3\.2\.23/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3223/);
+  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3223/);
+  assert.match(v3,/フィルター登録/);
+  assert.match(v3,/notification-filter\.html\?from=note&v=3223/);
+  assert.match(v3,/function captureNotificationReturn\(/);
+  assert.match(v3,/function restoreNotificationReturn\(/);
+  assert.match(v3,/note-insight\/\?insightMode=notifications#dashboard/);
+  assert.doesNotMatch(v3,/notification-entry\.html\?from=note/);
+});
 
-test('active notification scripts parse',()=>{for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)))});
-
-test('parent fallback captures four taps with notification-safe destinations',async()=>{const{w}=env();try{w.history.replaceState(null,'','/notifications');const source=v3.replace('void boot();','window.parentControls={startRescue,placeRescue};').replace("location.href='https://mumei-s.github.io/note-insight/notification-filter.html?from=note&v=3221&ts='+Date.now();return","window.testDestination='settings';return").replace('location.href=u.href}}',"window.testDestination='insight'}}");w.eval(source);let reads=0,filters=0;w.__mumeiV3Reader323={scan:async()=>{reads++},readyToScan:()=>true};w.__mumeiV3Dock322={toggleFilter:async()=>{filters++;return true}};w.parentControls.startRescue();const root=w.document.getElementById('mumei-v3-rescue-dock-v329');assert.ok(root);assert.equal(root.querySelectorAll('button').length,4);root.querySelector('[data-r="read"]').click();await new Promise(r=>setTimeout(r,10));assert.equal(reads,1);root.querySelector('[data-r="filter"]').click();await new Promise(r=>setTimeout(r,20));assert.equal(filters,1);assert.match(root.querySelector('[data-r="filter"]').textContent,/ON/);root.querySelector('[data-r="settings"]').click();assert.equal(w.testDestination,'settings');assert.equal(w.location.pathname,'/notifications');root.querySelector('[data-r="ins"]').click();await new Promise(r=>setTimeout(r,20));assert.equal(w.testDestination,'insight')}finally{w.close()}});
-
-test('parent dock stays close to the visible page bottom without double-counting mobile chrome',()=>{const{w}=env();try{Object.defineProperty(w,'innerWidth',{value:360,configurable:true});Object.defineProperty(w,'innerHeight',{value:800,configurable:true});const viewport={offsetTop:0,height:740,addEventListener(){}};Object.defineProperty(w,'visualViewport',{value:viewport,configurable:true});w.history.replaceState(null,'','/notifications');w.eval(v3.replace('void boot();','window.parentControls={startRescue,placeRescue};'));w.parentControls.startRescue();const root=w.document.getElementById('mumei-v3-rescue-dock-v329');assert.ok(root);assert.equal(root.style.display,'grid');assert.equal(Number(root.dataset.bottomInset),10);viewport.height=580;w.parentControls.placeRescue(root);assert.equal(Number(root.dataset.bottomInset),10);assert.match(root.style.bottom,/10px/);assert.equal(root.style.top,'auto');assert.equal(root.style.transform,'none')}finally{w.close()}});
-
-test('bell-first dock appears immediately but clears when navigation leaves the bell surface',async()=>{const{w}=env();try{w.eval(v3.replace('void boot();','window.parentControls={startRescue,refreshRescue};'));w.parentControls.startRescue();const root=w.document.getElementById('mumei-v3-rescue-dock-v329');assert.equal(root.style.display,'none');w.document.getElementById('bell').click();assert.equal(root.style.display,'grid');w.history.pushState(null,'','/unrelated_creator');await new Promise(r=>setTimeout(r,20));assert.equal(root.style.display,'none');const popup=w.document.getElementById('popup');popup.hidden=false;popup.setAttribute('data-mumei-notice-shell-v3','1');w.document.getElementById('list').innerHTML='<div class="notificationItem">Aさんが返信しました 1分前</div>';w.parentControls.refreshRescue();assert.equal(root.style.display,'grid');popup.hidden=true;w.parentControls.refreshRescue();assert.equal(root.style.display,'none')}finally{w.close()}});
-
-test('automatic notification loading starts once the bell surface becomes reader-ready',async()=>{const{w}=env();try{let ready=false,scans=0;w.__mumeiV3Reader323={scan:async()=>{scans++},isScanning:()=>scans>0,readyToScan:()=>ready};w.eval(v3.replace('void boot();','window.parentControls={startRescue,scheduleAutoRead};'));w.parentControls.startRescue();w.document.getElementById('bell').click();await new Promise(r=>setTimeout(r,80));assert.equal(scans,0);const popup=w.document.getElementById('popup');popup.hidden=false;popup.setAttribute('data-mumei-notice-shell-v3','1');w.document.getElementById('list').innerHTML='<div class="notificationItem">Aさんが返信しました 1分前</div>';ready=true;await new Promise(r=>setTimeout(r,260));assert.equal(scans,1)}finally{w.close()}});
-
-test('notification target return reopens the bell and restores the opened row',async()=>{const{w}=env();try{const popup=w.document.getElementById('popup'),list=w.document.getElementById('list'),bell=w.document.getElementById('bell');popup.hidden=false;list.innerHTML='<div class="notificationItem"><a href="https://note.com/a/n/n1">Aさんがあなたの記事にコメントしました 3分前</a></div>';const source=v3.replace('void boot();','window.parentControls={startRescue,restoreNotificationReturn};');w.eval(source);w.parentControls.startRescue();const first=list.querySelector('a');first.addEventListener('click',e=>e.preventDefault());first.click();const saved=JSON.parse(w.sessionStorage.getItem('mumei-v3-notification-return-v3213'));assert.equal(saved.source,'https://note.com/');assert.match(saved.href,/\/a\/n\/n1/);popup.hidden=true;list.textContent='';bell.addEventListener('click',()=>{popup.hidden=false;list.innerHTML='<div class="notificationItem"><a href="https://note.com/a/n/n1">Aさんがあなたの記事にコメントしました 3分前</a></div>'});await w.parentControls.restoreNotificationReturn();const restored=list.querySelector('.notificationItem');assert.ok(restored);assert.match(restored.style.outline,/55d8f1/);assert.equal(w.sessionStorage.getItem('mumei-v3-notification-return-v3213'),null)}finally{w.close()}});
-
-test('notification route starts the real reader automatically and manual loading never stays preparing',async()=>{const{w}=env();try{w.history.replaceState(null,'','/notifications');let scans=0;w.__mumeiV3Reader323={scan:async()=>{scans++},isScanning:()=>false,readyToScan:()=>true};w.eval(v3.replace('void boot();','window.parentControls={startRescue,scheduleAutoRead};'));w.parentControls.startRescue();w.parentControls.scheduleAutoRead(0);await new Promise(r=>setTimeout(r,25));assert.equal(scans,1);const readButton=w.document.querySelector('[data-r="read"]');readButton.click();await new Promise(r=>setTimeout(r,20));assert.equal(scans,2);assert.doesNotMatch(readButton.textContent,/準備中/);assert.match(v3,/async function ensureReaderReady\(\)/);assert.doesNotMatch(v3,/textContent='準備中…'/)}finally{w.close()}});
-
-test('filter settings ignore every supplied creator return and always use note notifications',async()=>{const html=read('notification-filter.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-filter.html?mumei_return=https%3A%2F%2Fnote.com%2Funknown_creator',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({noteId:'fixture',paired:true})});const script=w.document.querySelector('script').textContent.replace("const returnUrl='https://note.com/notifications';","window.testReturn='https://note.com/notifications';const returnUrl=window.testReturn;");w.eval(script);assert.equal(w.testReturn,'https://note.com/notifications');assert.doesNotMatch(html,/safeNoteReturn|q\.get\('mumei_return'\)/)}finally{w.close()}});
-
-test('all four remote dock controls use direct reader and fixed destinations',async()=>{const{w}=env();try{w.history.replaceState(null,'','/notifications');const source=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});",'window.controls={ensureRoot,showDock};').replaceAll("setTimeout(()=>location.assign(u.href),0)","window.testDestination=u.href");w.eval(source);const root=w.controls.ensureRoot();let directReads=0;w.__mumeiV3Reader322={scan:()=>{directReads++}};root.querySelector('[data-act="read"]').click();await new Promise(r=>setTimeout(r,5));assert.equal(directReads,1);root.querySelector('[data-act="filter"]').click();await new Promise(r=>setTimeout(r,20));assert.match(root.querySelector('[data-act="filter"]').textContent,/ON/);root.querySelector('[data-act="settings"]').click();await new Promise(r=>setTimeout(r,5));assert.match(w.testDestination,/notification-filter\.html/);assert.equal(w.location.pathname,'/notifications');root.querySelector('[data-act="ins"]').click();await new Promise(r=>setTimeout(r,20));const target=new URL(w.testDestination);assert.equal(target.origin,'https://mumei-s.github.io');assert.equal(target.pathname,'/note-insight/');assert.equal(target.searchParams.get('insightMode'),'notifications');assert.equal(target.searchParams.get('notificationAccount'),'fixture');assert.doesNotMatch(w.testDestination,/notification-entry\.html/);assert.equal(w.location.pathname,'/notifications');assert.match(dock,/async function ensureReader\(force=false\)/);assert.match(dock,/READER_API_MISSING/)}finally{w.close()}});
-
-test('V3.2.21 wrapper requires reader and dock before wrapper execution',()=>{const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.21/);assert.match(v3,/runtime-checked-v3221/);assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3221/);assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3221/);assert.match(v3,/function pinNoteReturn\(\)/);assert.match(v3,/note-insight\/\?insightMode=notifications#dashboard/);assert.doesNotMatch(v3,/notification-entry\.html\?from=note/)});
-
-test('installer still opens the real userscript directly',async()=>{const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html?browser=android-edge',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.21',dashboardVersion:'1.4.4'})});w.eval(w.document.querySelector('script').textContent);await new Promise(r=>setTimeout(r,30));const install=w.document.getElementById('install'),handoff=new URL(install.href);assert.equal(handoff.origin,'https://mumei-s.github.io');assert.equal(handoff.pathname,'/note-insight/note-insight-notification-v3.user.js');assert.doesNotMatch(install.href,/script_installation\.php/);assert.equal(install.target,'_blank');assert.equal(w.location.pathname,'/note-insight/tool-setup.html');assert.match(w.document.getElementById('currentSteps').textContent,/ユーザースクリプトの更新を確認/)}finally{w.close()}});
-
-test('version confirmation reloads only the setup page',async()=>{const dom=new JSDOM(read('tool-setup.html'),{url:'https://mumei-s.github.io/note-insight/tool-setup.html?account=fixture&browser=android-edge',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.21'})});w.eval(w.document.querySelector('script').textContent);await new Promise(r=>setTimeout(r,20));const u=new URL(w.eval('runtimeCheckUrl()'));assert.equal(u.origin,'https://mumei-s.github.io');assert.equal(u.pathname,'/note-insight/tool-setup.html');assert.equal(u.searchParams.get('runtimeCheck'),'1');assert.equal(u.searchParams.get('browser'),'android-edge');assert.notEqual(u.searchParams.get('checkAt'),null)}finally{w.close()}});
-
-test('browser-specific setup keeps slim route controls',async()=>{const html=read('tool-setup.html');assert.match(html,/\.browser-grid\{display:grid;grid-template-columns:1fr;gap:3px\}/);assert.doesNotMatch(html,/grid-template-columns:repeat\(2/);assert.match(html,/URLを貼り付ける操作はありません/)});
-
-test('dashboard launcher releases its boot lock so automatic reading can retry',()=>{const source=read('note-insight-dashboard-integrated-v318.js');assert.match(source,/finally\{booting=false\}/);assert.match(source,/window\.addEventListener\('pageshow',run\)/);assert.match(source,/visibilityState==='visible'/)});
+test('installer opens only current V3.2.23 userscript and checks same-page runtime state',()=>{
+  const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
+  try{
+    w.eval(w.document.querySelector('script').textContent);
+    const install=w.document.getElementById('install'),u=new URL(install.href);
+    assert.equal(u.origin,'https://mumei-s.github.io');
+    assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
+    assert.match(w.document.querySelector('.version').textContent,/3\.2\.23/);
+    assert.match(html,/mumei-notification-v3-loader/);
+    assert.match(html,/URLを貼り付ける操作はありません/);
+    assert.doesNotMatch(html,/2\.9\.27|script_installation\.php|https:\/\/note\.com\/notifications/);
+  }finally{w.close()}
+});
