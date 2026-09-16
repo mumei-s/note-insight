@@ -42,7 +42,7 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package uses V3.2.10 with one parent-owned fixed dock',()=>{
+test('active package uses V3.2.11 with one parent-owned fixed dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
@@ -51,10 +51,10 @@ test('active package uses V3.2.10 with one parent-owned fixed dock',()=>{
   const loader=read('public/note-insight-notification-loader-v318.js');
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.appVersion,'2026.09.16.7');
-  assert.equal(manifest.notificationVersion,'3.2.10');
+  assert.equal(manifest.appVersion,'2026.09.16.8');
+  assert.equal(manifest.notificationVersion,'3.2.11');
   assert.equal(manifest.dashboardVersion,'1.4.4');
-  assert.match(v3,/@version\s+3\.2\.10/);
+  assert.match(v3,/@version\s+3\.2\.11/);
   assert.match(v3,/runtime-checked-v329/);
   assert.match(v3,/mumei-v3-rescue-dock-v329/);
   assert.match(v3,/window\.addEventListener\('click',handleRescueClick,true\)/);

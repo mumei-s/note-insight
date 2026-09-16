@@ -4,9 +4,9 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.2.10 owns the only visible fixed dock and loads remote parts independently",async()=>{
+test("V3.2.11 owns the only visible fixed dock and loads remote parts independently",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.2\.10/);
+  assert.match(v3,/@version\s+3\.2\.11/);
   has(v3,["mumei-v329-component-cache:","mumei-v3-rescue-dock-v329","grid-template-columns:repeat(4,minmax(0,1fr))","手動読み込み","フィルターOFF","INSIGHT","window.addEventListener('click',handleRescueClick,true)","window.__mumeiV3ParentDock=true","function placeRescue(","visualViewport","function startRescue()","async function loadPart(name)","runtime-checked-v329"]);
   assert.ok(v3.indexOf("loadPart('note-insight-notification-dock-watch-v312.js')")<v3.indexOf("loadPart('note-insight-notification-reader-v322.js')"));
   assert.ok(v3.indexOf("loadPart('note-insight-notification-reader-v322.js')")<v3.indexOf("loadPart('note-insight-notification-loader-v318.js')"));
@@ -27,15 +27,16 @@ test("notification filter settings stay on notification route",async()=>{
 
 test("installer remains a slim update route",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","この画面で更新結果を確認","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","runtimeCheck","script_installation.php#url="]);
+  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","この画面で更新結果を確認","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","runtimeCheck","Userscript URL detection","Legacy"]);
+  assert.doesNotMatch(setup,/script_installation\.php#url=/);
   assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
   has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
 });
 
-test("release tracks V3.2.10",async()=>{
+test("release tracks V3.2.11",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.16.7");assert.equal(manifest.notificationVersion,"3.2.10");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.7"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.10"/);assert.match(v3,/@version\s+3\.2\.10/);
+  assert.equal(manifest.appVersion,"2026.09.16.8");assert.equal(manifest.notificationVersion,"3.2.11");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.16\.8"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.11"/);assert.match(v3,/@version\s+3\.2\.11/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{

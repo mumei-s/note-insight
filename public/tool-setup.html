@@ -27,7 +27,7 @@
   <a id="back" class="back">← INSIGHTへ戻る</a>
   <section class="card">
     <h1>INSIGHT インストール / 更新</h1>
-    <p class="lead">本人通知＋ダッシュボード同期は1本です。<br>すでにTampermonkey／Userscriptsがある方は、入れ直しません。</p>
+    <p class="lead">本人通知＋ダッシュボード同期は1本です。<br>すでにTampermonkeyがある方は、入れ直しません。</p>
 
     <section class="panel">
       <h2 class="step-title">1　ブラウザを選ぶ</h2>
@@ -65,8 +65,8 @@
         <details class="panel" id="textHelp">
           <summary>更新が見つからない時だけ：INSIGHTをインストール / 更新</summary>
           <div class="tip" id="recoverySteps"></div>
-          <a id="install" class="btn gold">INSIGHTを取り込む</a>
-          <p class="mini">URLを貼り付ける操作はありません。文字列だけの画面では更新されていません。そのタブを閉じ、上の通常手順へ戻ってください。</p>
+          <a id="install" class="btn gold">INSIGHTをTampermonkeyで開く</a>
+          <p class="mini">URLを貼り付ける操作はありません。Tampermonkeyの確認画面で「更新」を押します。文字列だけが表示された場合は、そのタブを閉じて上の案内を確認してください。</p>
         </details>
         <details class="panel">
           <summary>初めて使う方だけ</summary>
@@ -79,7 +79,7 @@
     <section class="panel" id="confirmFlow">
       <h2 class="step-title">3　成功したか確認</h2>
       <div class="steps"><button id="verify" class="btn green" type="button">この画面で更新結果を確認</button></div>
-      <div id="verifyResult" class="result" role="status" aria-live="polite">確認中｜この画面だけでV3.2.10の起動を確認します。</div>
+      <div id="verifyResult" class="result" role="status" aria-live="polite">確認中｜この画面だけでV3.2.11の起動を確認します。</div>
       <p class="mini" id="versionLine"></p>
       <div class="tip" id="verifyHelp"></div>
     </section>
@@ -92,7 +92,7 @@ const NOTICE_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const SCRIPT='https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js';
 const q=new URLSearchParams(location.search),install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult'),fallback=document.getElementById('fallback');
-let release={notificationVersion:'3.2.10'};
+let release={notificationVersion:'3.2.11'};
 const runtimeCheck=q.get('runtimeCheck')==='1';
 if(runtimeCheck)localStorage.removeItem(RUNTIME_KEY);
 function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:new URL('./',location.href).href}catch{return new URL('./',location.href).href}}
@@ -105,29 +105,32 @@ function isSwitch(){return selected==='android-other'||selected==='ios-other'}
 function isSafariChoice(k){return k==='ios-safari'||k==='mac-safari'}
 function isChromiumChoice(k){return k==='android-edge'||k==='pc-edge'||k==='pc-chrome'}
 function normalSteps(k){
-  if(isSafariChoice(k))return'① Userscriptsを開く　→　② INSIGHTを更新　→　③ この画面へ戻る。戻ると自動で確認します。Userscriptsの入れ直しは不要です。';
+  if(isSafariChoice(k))return'① Safariの拡張機能からTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。Tampermonkeyの入れ直しは不要です。';
   if(k==='android-firefox')return'① Firefoxの「拡張機能」からTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。戻ると自動で確認します。';
   if(k==='pc-firefox')return'① Firefox右上のTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。戻ると自動で確認します。';
   if(k==='android-edge')return'① Edgeのメニュー →「拡張機能」→「Tampermonkey」　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。戻ると自動で確認します。';
   return'① ブラウザ右上のTampermonkeyを開く　→　②「ユーザースクリプトの更新を確認」　→　③ この画面へ戻る。戻ると自動で確認します。';
 }
 function recovery(k){
-  if(isSafariChoice(k))return'UserscriptsにINSIGHTが無い場合だけ、下からINSIGHTを取り込みます。';
-  if(isChromiumChoice(k))return'更新一覧にINSIGHTが出ない場合だけ、Tampermonkeyを有効にし、「ユーザースクリプトを許可」または「開発者モード」をONにしてから下のボタンを押します。';
+  if(isSafariChoice(k))return'TampermonkeyにINSIGHTが無い場合だけ、下のボタンから直接取り込みます。確認画面で「インストール」または「更新」を押します。';
+  if(k==='android-edge')return'まず下のボタンを押します。文字列だけになった場合だけ、Tampermonkeyの設定モードを「上級者」→「Userscript URL detection」を「Legacy」→ Edgeを再起動して、もう一度押します。';
+  if(k==='pc-edge'||k==='pc-chrome')return'更新一覧にINSIGHTが出ない場合だけ、Tampermonkeyを有効にし、「ユーザースクリプトを許可」または「開発者モード」をONにしてから下のボタンを押します。';
   return'更新一覧にINSIGHTが出ない場合だけTampermonkeyを有効にし、下のボタンを押します。確認画面が出たら「更新」を押します。';
 }
 function firstTimeSteps(k){
-  if(isSafariChoice(k))return'Userscriptsをインストールして一度開き、Safariの「拡張機能」でUserscriptsをONにします。その後この画面へ戻り「INSIGHTを取り込む」を押します。';
-  if(isChromiumChoice(k))return'Tampermonkeyをインストールし、拡張機能設定で「ユーザースクリプトを許可」または「開発者モード」をONにします。その後この画面へ戻り「INSIGHTを取り込む」を押します。';
+  if(isSafariChoice(k))return'Tampermonkeyをインストールして一度開き、Safariの「拡張機能」でTampermonkeyをONにしてnote.comとこの設定画面へのアクセスを許可します。その後「INSIGHTをTampermonkeyで開く」を押します。';
+  if(k==='android-edge')return'Tampermonkeyをインストールして一度開き、設定モードを「上級者」、Userscript URL detectionを「Legacy」にしてEdgeを再起動します。その後この画面へ戻り「INSIGHTをTampermonkeyで開く」を押します。';
+  if(k==='pc-edge'||k==='pc-chrome')return'Tampermonkeyをインストールし、拡張機能設定で「ユーザースクリプトを許可」または「開発者モード」をONにします。その後この画面へ戻り「INSIGHTをTampermonkeyで開く」を押します。';
   return'Tampermonkeyをインストールして有効にします。その後この画面へ戻り「INSIGHTを取り込む」を押します。';
 }
 function verifyText(k){
-  if(isSafariChoice(k))return'確認ではnoteやクリエイターページを開きません。この設定画面だけを再読み込みし、Userscriptsで動いているINSIGHTの版を確認します。';
+  if(isSafariChoice(k))return'確認ではnoteやクリエイターページを開きません。この設定画面だけを再読み込みし、Tampermonkeyで動いているINSIGHTの版を確認します。';
   if(isChromiumChoice(k))return'確認ではnoteやクリエイターページを開きません。この設定画面だけを再読み込みし、Tampermonkeyで動いているINSIGHTの版を確認します。';
   return'確認ではnoteへ移動しません。この設定画面だけでTampermonkeyのINSIGHTを確認します。';
 }
-function scriptUrl(){return SCRIPT+'?v=3210&ts='+Date.now()}
-function installUrl(k){return isSafariChoice(k)?scriptUrl():'https://www.tampermonkey.net/script_installation.php#url='+encodeURIComponent(scriptUrl())}
+function scriptUrl(){return SCRIPT+'?v=3211&ts='+Date.now()}
+function installUrl(){return scriptUrl()}
+function extensionUrl(k){if(isSafariChoice(k))return'https://apps.apple.com/app/tampermonkey/id6738342400';if(k==='android-firefox')return'https://addons.mozilla.org/ja/android/addon/tampermonkey/';if(k==='pc-firefox')return'https://addons.mozilla.org/ja/firefox/addon/tampermonkey/';if(k==='pc-chrome')return'https://www.tampermonkey.net/index.php?browser=chrome&locale=ja';return'https://www.tampermonkey.net/index.php?browser=edge&locale=ja'}
 function runtimeCheckUrl(){const u=new URL(location.href);u.searchParams.set('runtimeCheck','1');u.searchParams.set('checkAt',String(Date.now()));u.searchParams.set('browser',selected);for(const k of ['notificationInstalled','notificationCheckedAt','notificationUpdateResult'])u.searchParams.delete(k);return u.href}
 function paintInstall(){
   const k=selected,blocked=isSwitch(),safari=isSafariChoice(k);
@@ -140,23 +143,23 @@ function paintInstall(){
   install.href=installUrl(k);install.target='_blank';install.rel='noopener';install.toggleAttribute('aria-disabled',blocked);
   verify.toggleAttribute('aria-disabled',blocked);
   document.getElementById('recoverySteps').textContent=recovery(k);document.getElementById('firstSteps').textContent=firstTimeSteps(k);document.getElementById('verifyHelp').textContent=verifyText(k);
-  document.getElementById('extensionGuide').href=safari?'https://apps.apple.com/app/userscripts/id1463298887':'https://www.tampermonkey.net/';
+  document.getElementById('extensionGuide').href=extensionUrl(k);
   const page=new URL(location.href);page.searchParams.delete('browser');document.getElementById('pageUrl').value=page.href;
 }
 function showResult(final=false){
   const returned=q.get('notificationInstalled')||'',runtime=localStorage.getItem(RUNTIME_KEY)||'',current=runtime||returned||localStorage.getItem(NOTICE_KEY)||'',checkedAt=Number(q.get('notificationCheckedAt')||0),fresh=Boolean(runtimeCheck&&runtime)||Boolean(returned&&checkedAt>0),latest=release.notificationVersion||'不明';
   document.getElementById('versionLine').textContent=`現在：${current?`V${current}`:'未確認'} ／ 最新：V${latest}`;result.className='result';
   if(fresh&&current===latest){result.classList.add('ok');result.textContent=`✅ 更新済み｜V${current} がこの画面で起動しました`;localStorage.setItem(NOTICE_KEY,current);fallback.classList.remove('show');return}
-  if(fresh&&current&&current!==latest){result.classList.add('warn');result.textContent=`⚠ 未更新｜現在 V${current} → 最新 V${latest}`;fallback.textContent='Tampermonkey／Userscriptsで更新後、もう一度「この画面で更新結果を確認」を押してください。';fallback.classList.add('show');return}
+  if(fresh&&current&&current!==latest){result.classList.add('warn');result.textContent=`⚠ 未更新｜現在 V${current} → 最新 V${latest}`;fallback.textContent='Tampermonkeyで更新後、もう一度「この画面で更新結果を確認」を押してください。';fallback.classList.add('show');return}
   if(runtimeCheck&&!final){result.textContent='確認中｜この画面でINSIGHTの起動を待っています…';return}
-  if(runtimeCheck&&final){result.classList.add('bad');result.textContent='⚠ 未確認｜この画面でINSIGHTが起動しませんでした';fallback.textContent='Tampermonkey／UserscriptsでINSIGHTをONにし、このページへのアクセスを許可してから、もう一度確認してください。';fallback.classList.add('show');return}
+  if(runtimeCheck&&final){result.classList.add('bad');result.textContent='⚠ 未確認｜この画面でINSIGHTが起動しませんでした';fallback.textContent='TampermonkeyでINSIGHTをONにし、このページへのアクセスを許可してから、もう一度確認してください。';fallback.classList.add('show');return}
   if(current===latest){result.classList.add('warn');result.textContent=`検出 V${current}｜下のボタンで今回の起動を確認できます`;return}
   result.classList.add('warn');result.textContent=current?`実働確認が必要｜記録 V${current} → 最新 V${latest}`:'未確認｜更新後に実働確認してください';
 }
 async function loadRelease(){try{const r=await fetch('./insight-release.json?ts='+Date.now(),{cache:'no-store'});if(r.ok)release={...release,...await r.json()}}catch{}showResult()}
 document.querySelectorAll('[data-browser]').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.browser;const u=new URL(location.href);u.searchParams.set('browser',selected);history.replaceState(null,'',u.href);paintInstall()}));
 document.getElementById('copyPage').addEventListener('click',async()=>{const i=document.getElementById('pageUrl'),b=document.getElementById('copyPage');try{await navigator.clipboard.writeText(i.value);b.textContent='コピーしました'}catch{i.focus();i.select();b.textContent='リンクを長押ししてコピー'}});
-install.addEventListener('click',e=>{if(install.getAttribute('aria-disabled')==='true'){e.preventDefault();return}result.className='result';result.textContent='Tampermonkey／Userscriptsへ渡します。文字列だけなら更新されていないため、そのタブを閉じて戻ってください。'});
+install.addEventListener('click',e=>{if(install.getAttribute('aria-disabled')==='true'){e.preventDefault();return}result.className='result';result.textContent='INSIGHT本体を直接開きます。Tampermonkeyの確認画面が出たら「更新」を押してください。'});
 verify.addEventListener('click',e=>{if(verify.getAttribute('aria-disabled')==='true'){e.preventDefault();return}result.className='result';result.textContent='この画面で確認中…';location.replace(runtimeCheckUrl())});
 let blurredAt=0,autoReturn=false;
 addEventListener('blur',()=>{blurredAt=Date.now()});

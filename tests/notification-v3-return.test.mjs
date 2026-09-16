@@ -9,14 +9,15 @@ test("installer keeps participant steps compact with same-page confirmation",asy
   assert.match(page,/この画面で更新結果を確認/);
   assert.match(page,/Tampermonkey/);
   assert.match(page,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-v3\.user\.js/);
-  assert.match(page,/script_installation\.php#url=/);
+  assert.doesNotMatch(page,/script_installation\.php#url=/);
+  assert.match(page,/function installUrl\(\)\{return scriptUrl\(\)\}/);
   assert.match(page,/mumei-notification-v3-loader/);
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.10 returns version check before rescue or remote loading",async()=>{
+test("V3.2.11 returns version check before rescue or remote loading",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v322.js");
-  assert.match(v3,/@version\s+3\.2\.10/);
+  assert.match(v3,/@version\s+3\.2\.11/);
   assert.match(v3,/function directVersionCheck\(\)/);
   assert.match(v3,/runtime-checked-v329/);
   assert.match(v3,/location\.replace\(dest\.href\)/);
