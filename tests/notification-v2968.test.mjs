@@ -42,7 +42,7 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock',()=>{
+test('active package keeps the V3.2.13 parent dock and persistent INSIGHT launch sync',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
@@ -79,16 +79,20 @@ test('active package keeps the V3.2.13 parent dock and a DOM-safe fallback dock'
   assert.match(loader,/notificationSyncBridge/);
   assert.match(loader,/openNotificationSurface/);
   assert.match(loader,/findNotificationTrigger/);
-  assert.match(loader,/mumei_insight_sync/);
+  assert.match(loader,/markNotificationSheet/);
+  assert.match(loader,/mumei_insight_pending_sync_v1/);
+  assert.match(loader,/seedNotificationSync/);
+  assert.match(loader,/mumei-insight-auto-sync-v1/);
   assert.match(loader,/NOTE_ACCOUNT_MISMATCH/);
-  assert.match(entry,/new URL\('https:\/\/note\.com\/'\)/);
-  assert.doesNotMatch(entry,/https:\/\/note\.com\/notifications/);
-  assert.match(entry,/mumei_insight_sync/);
+  assert.match(entry,/dashboard-setup\.html/);
+  assert.match(entry,/mumei_insight_sync_seed/);
+  assert.doesNotMatch(entry,/new URL\('https:\/\/note\.com\/'\)/);
   assert.match(entry,/notificationSync/);
   assert.match(index,/mumei-insight-start-notification-sync-v1/);
   assert.match(index,/notification-entry\.html/);
   assert.match(index,/mumei-insight-access-token/);
   assert.match(index,/mumei-notification-v3-loader/);
+  assert.match(index,/mumei-notification-tool-version/);
   assert.match(picker,/通知項目：/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
