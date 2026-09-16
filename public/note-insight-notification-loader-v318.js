@@ -69,13 +69,36 @@ async function waitReader(timeout=20000){
  }
  throw new Error('SYNC_TIMEOUT_READER');
 }
-async function waitReaderReady(api,timeout=15000){
- const started=Date.now();
+function visibleControl(el){
+ if(!(el instanceof Element))return false;
+ const r=el.getBoundingClientRect();
+ if(r.width<1||r.height<1||r.bottom<=0||r.right<=0||r.left>=innerWidth||r.top>=innerHeight)return false;
+ const s=getComputedStyle(el);
+ return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>.01&&!el.hasAttribute('disabled')&&el.getAttribute('aria-hidden')!=='true';
+}
+function notificationControl(el){
+ if(!(el instanceof Element))return false;
+ const href=String(el.getAttribute('href')||'');
+ const t=[el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].filter(Boolean).join(' ');
+ return /\/notifications(?:[/?#]|$)/i.test(href)||/(?:通知|お知らせ)/u.test(t)||/notification|notice/i.test(t);
+}
+function findNotificationTrigger(){
+ const controls=[...document.querySelectorAll('button,a,[role="button"],[role="tab"]')].filter(visibleControl);
+ const exact=controls.find(el=>notificationControl(el)&&!/(?:設定|フィルター|INSIGHT)/u.test(String(el.textContent||'')));
+ if(exact)return exact;
+ return null;
+}
+async function openNotificationSurface(api,timeout=18000){
+ const started=Date.now();let lastClick=0;
  while(Date.now()-started<timeout){
   if(typeof api.isScanning==='function'&&api.isScanning())return'scanning';
   if(typeof api.readyToScan!=='function'||api.readyToScan())return'ready';
-  if(Date.now()-started>2500&&/^\/notifications(?:\/|$)/i.test(location.pathname))return'ready';
-  await delay(120);
+  const now=Date.now();
+  if(now-lastClick>1200){
+   const trigger=findNotificationTrigger();
+   if(trigger){try{trigger.click()}catch{}lastClick=now}
+  }
+  await delay(150);
  }
  throw new Error('NOTIFICATION_LIST_NOT_READY');
 }
@@ -102,7 +125,7 @@ async function notificationSyncBridge(){
   if(req.expected&&req.expected!==noteId)throw new Error('NOTE_ACCOUNT_MISMATCH');
   const api=await waitReader();
   const finalPromise=waitReaderFinal();
-  const mode=await waitReaderReady(api);
+  const mode=await openNotificationSurface(api);
   if(mode!=='scanning'&&!(typeof api.isScanning==='function'&&api.isScanning()))void api.scan();
   const result=await finalPromise;
   if(result.kind==='error')throw new Error(result.message||'NOTIFICATION_SYNC_ERROR');
