@@ -10,7 +10,9 @@ test("direct reader has no global fallback dock or legacy frame dependency", asy
   assert.match(reader, /data-mumei-notice-shell-v3/);
   assert.match(reader, /mumei-v3-read-request/);
   assert.match(reader, /mumei-v3-reader-status/);
-  assert.match(reader, /verified-shell-bottom-to-top/);
+  assert.match(reader, /incremental-top-to-checkpoint/);
+  assert.match(reader, /ここまで保存済み/);
+  assert.doesNotMatch(reader, /fullFallback|loadAbsoluteBottom/);
 });
 
 test("single notification panel uses bounded bell grace and only keeps a visible verified shell", async () => {
@@ -45,13 +47,14 @@ test("installed parent rescue remains compatible while remote dock can neutraliz
   assert.match(dock, /function showDock\(on\)/);
 });
 
-test("settings and read operations use one native click path without pointer interception", async () => {
+test("filter registration and read operations use one native click path without pointer interception", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel,/touch-action:manipulation/);
   assert.match(panel,/window\.addEventListener\('click',onClick,true\)/);
   assert.match(panel,/stopImmediatePropagation/);
   assert.doesNotMatch(panel,/pointerdown|pointerup|touch-action:none/);
   assert.match(panel, /function openSettings\(\)/);
+  assert.match(panel, /フィルター登録/);
   assert.match(panel,/async function ensureReader\(force=false\)/);
   assert.doesNotMatch(panel, /backendButton|ensureBackend|contentDocument/);
 });
@@ -69,7 +72,7 @@ test("dock uses the current reader immediately and self-heals by one forced relo
   assert.match(panel, /async function startBellReader\(\)/);
 });
 
-test("settings back target and INSIGHT target are explicit and never inherit a creator page", async () => {
+test("filter back target and INSIGHT target are explicit and never inherit a creator page", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel, /function pinBackToNotifications\(\).*history\.replaceState\(history\.state,'','\/notifications'\)/s);
   assert.match(panel, /FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
