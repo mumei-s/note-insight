@@ -1,58 +1,118 @@
-(async function(){
+(function(){
 'use strict';
-/* compatibility markers: rediscoverPanel confirmedClientSignatures mumei-v3-reader-status */
 if(location.hostname!=='note.com')return;
-const LEGACY='https://mumei-s.github.io/note-insight/note-insight-notification-reader-v323-legacy.js?v=resume-20260917b';
-const CHECK='mumei_insight_notification_checkpoint_v2922:';
+if(window.__mumeiNotificationReader323&&window.__mumeiV3Reader323?.scan)return;window.__mumeiNotificationReader323=true;
+
+const VERSION='3.2.13',PROTOCOL='3.2.13';
+const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
+const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:';
+const SHELL='[data-mumei-notice-shell-v3="1"]';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[class*="NotificationItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const TIME_RE=/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)/u;
+const EXCLUDE=new Set(['settings','sitesettings','membership','memberships','notifications','messages','search','explore','login','signup']);
+const OUTBOX='mumei-notification-outbox-v323:';
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const modern=()=>Boolean(globalThis.GM);
+const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
+
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
-async function currentId(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j);return String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase()}catch{return''}}
-function legacyText(){return new Promise((resolve,reject)=>{const req={method:'GET',url:LEGACY,headers:{'Cache-Control':'no-cache'},timeout:20000,onload:r=>r.status>=200&&r.status<300?resolve(String(r.responseText||'')):reject(new Error('LEGACY_HTTP_'+r.status)),onerror:()=>reject(new Error('LEGACY_NETWORK_ERROR')),ontimeout:()=>reject(new Error('LEGACY_TIMEOUT'))};try{if(modern()&&typeof GM.xmlHttpRequest==='function'){GM.xmlHttpRequest(req);return}if(typeof GM_xmlhttpRequest==='function'){GM_xmlhttpRequest(req);return}}catch{}fetch(LEGACY,{cache:'no-store'}).then(r=>r.ok?r.text():Promise.reject(new Error('LEGACY_HTTP_'+r.status))).then(resolve,reject)})}
-function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}
-function rows(){return [...document.querySelectorAll(ITEM)].filter(visible).filter(el=>{const t=clean(el.textContent);return t.length>=3&&t.length<=4000&&(el.matches('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')||TIME_RE.test(t))})}
-function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push(u.href)}catch{}}return out}
-function legacySig(el){const raw=clean(el.textContent),ls=links(el),actor=ls.find(u=>{try{const p=new URL(u).pathname.split('/').filter(Boolean);return p.length===1}catch{return false}})||'',target=ls.find(u=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(u))||'';return[stripTime(raw),String(target).split('#')[0],String(actor).split('?')[0]].join('|')}
-function scrollHost(){const rs=rows();let x=rs[0];while(x){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;x=x.parentElement}return document.scrollingElement||document.documentElement}
-function status(message,label='下から自動読込',kind='saving'){document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail:{message,kind,label}}))}
-async function findCheckpoint(host,boundary){if(!boundary)return false;let stable=0,last=-1;for(let i=0;i<100;i++){if(rows().some(r=>legacySig(r)===boundary))return true;host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);await sleep(280);const h=host.scrollHeight;if(h===last)stable++;else stable=0;last=h;if(stable>=4)break}return rows().some(r=>legacySig(r)===boundary)}
-let swallowed=false;const swallow=e=>{if(!swallowed){swallowed=true;e.stopImmediatePropagation()}};document.addEventListener('mumei-v3-reader-ready',swallow,true);
-try{
- const src=await legacyText();
- if(!src.trim())throw new Error('LEGACY_READER_EMPTY');
- (0,eval)(src+'\n//# sourceURL='+LEGACY);
-}finally{document.removeEventListener('mumei-v3-reader-ready',swallow,true)}
-const api=window.__mumeiV3Reader323;if(!api||typeof api.scan!=='function')throw new Error('LEGACY_READER_NOT_READY');
-const original=api.scan.bind(api);let resumeRunning=false,resumeStop=false;
-api.scan=async function(){
- if(resumeRunning){
-  resumeStop=true;
-  try{if(typeof api.isScanning==='function'&&api.isScanning())await original()}catch{}
-  return;
- }
- const id=await currentId(),cp=id?await get(CHECK+id,{}):{};
- if(!id||cp?.historyComplete!==true||!cp?.boundaryLegacySignature)return original();
- resumeRunning=true;resumeStop=false;const host=scrollHost(),restore=Number(host?.scrollTop||0);
+async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
+function request(url,body,headers={}){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
+function shown(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1||r.right<=0||r.bottom<=0||r.left>=innerWidth||r.top>=innerHeight)return false;for(let p=el,d=0;p&&d++<14;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.hasAttribute('inert')||s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)<=.01)return false}return true}
+function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean),id=(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!EXCLUDE.has(id)?id:''}catch{return''}}
+async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.textContent);return t.length>=3&&t.length<=4000&&(trusted||TIME_RE.test(t))}
+function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
+function rediscoverPanel(){for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],aside,section,main,[role="main"]')){if(!shown(el))continue;if(rows(el).length){el.setAttribute('data-mumei-notice-shell-v3','1');return el}}if(/^\/notifications(?:\/|$)/i.test(location.pathname)){const main=document.querySelector('main,[role="main"]');if(main&&shown(main)){main.setAttribute('data-mumei-notice-shell-v3','1');return main}}return null}
+function panel(){const p=document.querySelector(SHELL);return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:rediscoverPanel()}
+function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}return p.scrollHeight>p.clientHeight+20?p:null}
+function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
+function estimatedTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(!m)return null;const scale={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*scale[m[2]]).toISOString()}
+function eventIdentity(el,raw,tm){const id=el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||el.querySelector('[data-notification-id]')?.getAttribute('data-notification-id');if(id)return'notice:'+id;for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.href);for(const k of['notification_id','notice_id','c','comment_id'])if(u.searchParams.get(k))return'notice:'+u.searchParams.get(k)}catch{}}if(tm&&!Number.isNaN(Date.parse(tm)))return'time:'+new Date(tm).toISOString();const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(m){const scale={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000},at=Date.now()-Number(m[1])*scale[m[2]],bucket=Math.max(60000,scale[m[2]]);return'estimated:'+Math.floor(at/bucket)+':'+bucket}return'label:'+(clean(raw).match(TIME_RE)?.[0]||'unknown')}
+function rowData(el){const raw=clean(el.textContent);if(!raw||raw.length>4000)return null;const ls=links(el),actor=ls.find(x=>creatorId(x.u))||null,target=ls.find(x=>/[?&]kind=/.test(x.u))||ls.find(x=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(x.u))||null,tm=el.querySelector('time[datetime]')?.getAttribute('datetime')||el.querySelector('[datetime]')?.getAttribute('datetime')||null,m=stripTime(raw).match(/^(.{1,180}?)\s*さん/u);let img=null;for(const x of el.querySelectorAll('img[src]')){const src=String(x.currentSrc||x.src||'');if(src&&!/cover|ogp|magazine/i.test(src)){img=src;break}}return{raw_text:raw,actor_name:actor?.t||m?.[1]||null,actor_url:actor?.u||null,actor_image_url:img,target_title:target?.t||null,target_url:target?.u||null,source_url:target?.u||actor?.u||'https://note.com/',occurred_at:tm||estimatedTime(raw),meta:{source:'note-notification-manual-sync-v2968',capture_source:'note-notification-reader-v323',userscript:VERSION,protocol:PROTOCOL,scan_mode:'verified-shell-bottom-to-top',event_identity:eventIdentity(el,raw,tm),verified_shell:true,time_estimated:!tm,article_url:ls.find(x=>/\/n\//.test(x.u))?.u||null,magazine_url:ls.find(x=>/\/m\//.test(x.u))?.u||null,links:ls.map(x=>({url:x.u,title:x.t}))}}}
+const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
+const legacySig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0]].join('|');
+function readOutbox(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
+function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(rs))}
+function retain(id,rs){const m=new Map(readOutbox(id).map(r=>[sig(r),r]));for(const r of rs)m.set(sig(r),r);writeOutbox(id,[...m.values()])}
+function status(message,kind='info',label=''){document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail:{message:String(message||''),kind,label,scanning}}))}
+async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,input.filter(r=>!saved.has(sig(r))));const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');let total=0;for(let i=0;i<input.length;i+=20){const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));const p=await request(INGEST,{noteId:a.id,notifications:payload},{'X-Ingest-Token':token});const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];for(const s of confirmed)saved.add(s);await set(key(SAVED,a.id),[...saved]);if(confirmed.length){const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:legacySig(last),boundaryAt:now,boundarySource:'reader-confirmed-v326'});document.dispatchEvent(new Event('mumei-notification-checkpoint'))}writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));total+=confirmed.length;if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します')}return total}
+
+let scanning=false,stop=false,active=null;
+function capturePending(){if(!active)return;const{a,p,saved}=active;try{const rs=rows(p).slice().reverse().map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs)}catch{}}
+function pauseCapture(){capturePending();stop=true}
+addEventListener('pagehide',pauseCapture,{capture:true});
+addEventListener('popstate',pauseCapture,{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
+
+async function scan(){
+ if(scanning){stop=true;capturePending();status('停止地点まで保存します…','saving','保存中…');return}
+ scanning=true;stop=false;let a=null,saved=null,count=0,seen=new Set(),p=null,host=null,startTop=0,complete=false,resumed=false;
+ status('通知を読み込みます…','saving','■ 停止保存');
  try{
-  status('前回の保存完了位置を探しています…','前回位置へ');
-  const found=host?await findCheckpoint(host,cp.boundaryLegacySignature):false;
-  if(!found){status('前回位置を確認できないため通常読込へ切り替えます','通常読込');return await original()}
-  const boundaryRow=rows().find(r=>legacySig(r)===cp.boundaryLegacySignature);if(boundaryRow)try{boundaryRow.scrollIntoView({block:'center',behavior:'auto'})}catch{}
-  status('前回保存位置から新しい通知へ、下→上で読み込みます…','下から自動読込');
-  let last=Infinity,guard=0;
-  while(host&&host.scrollTop>1&&!resumeStop&&guard++<100){
-   await original();
-   if(resumeStop)break;
-   const step=Math.max(180,Math.floor(host.clientHeight*.72));host.scrollTop=Math.max(0,host.scrollTop-step);await sleep(220);
-   if(host.scrollTop===last)break;last=host.scrollTop;
+  p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
+  a=await account();if(!a)throw new Error('noteログインを確認してください');
+  if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
+  let cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]),previous=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);saved=new Set(previous);active={a,p,saved};
+  count+=await sendBatch(readOutbox(a.id),a,saved);
+  cp=await get(key(CHECK,a.id),cp);
+  host=scrollHost(p);if(host)startTop=host.scrollTop;
+  const current=()=>rows(p).map(el=>{const r=rowData(el);if(r)el.dataset.mumeiReaderSignature=sig(r);return r}).filter(Boolean);
+  const overlap=()=>cp.historyComplete===true&&current().some(r=>previous.has(sig(r)));
+  const capture=async()=>{const rs=current().slice().reverse();for(const r of rs)seen.add(sig(r));retain(a.id,rs.filter(r=>!saved.has(sig(r))));if(readOutbox(a.id).length>=20)count+=await sendBatch(readOutbox(a.id),a,saved);status(`読込 ${seen.size}件｜保存 ${count}件`,'saving','■ 停止保存')};
+
+  if(host&&cp.historyComplete===true&&cp.boundaryLegacySignature){
+   status('前回の保存完了位置を探しています…','saving','前回位置へ');
+   let found=current().some(r=>legacySig(r)===cp.boundaryLegacySignature),stable=0,lastHeight=-1;
+   for(let i=0;i<100&&!stop&&!found;i++){
+    if(panel()!==p)throw new Error('通知一覧を閉じたため中断しました');
+    host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);await sleep(300);
+    found=current().some(r=>legacySig(r)===cp.boundaryLegacySignature);
+    const h=host.scrollHeight;if(h===lastHeight)stable++;else stable=0;lastHeight=h;if(stable>=4&&!found)break;
+   }
+   if(found&&!stop){
+    const boundaryEl=rows(p).find(el=>{const r=rowData(el);return r&&legacySig(r)===cp.boundaryLegacySignature});
+    if(boundaryEl)try{boundaryEl.scrollIntoView({block:'center',behavior:'auto'})}catch{}
+    await sleep(100);resumed=true;
+    status('前回保存位置から新しい通知へ、下→上で読み込みます…','saving','下から自動読込');
+    let lastTop=Infinity,guard=0;
+    while(!stop&&host.scrollTop>1&&guard++<100){
+     await capture();
+     const step=Math.max(180,Math.floor(host.clientHeight*.72));host.scrollTop=Math.max(0,host.scrollTop-step);await sleep(220);
+     if(host.scrollTop===lastTop)break;lastTop=host.scrollTop;
+    }
+    await capture();count+=await sendBatch(readOutbox(a.id),a,saved);complete=!stop;
+   }else if(!stop){
+    status('前回位置を確認できないため通常読込へ切り替えます','saving','通常読込');
+    try{host.scrollTop=startTop}catch{}await sleep(100);
+   }
   }
-  if(!resumeStop)await original();
-  else status('停止位置まで保存しました。次回は保存済み位置から再開します','停止保存','done');
- }finally{try{if(host)host.scrollTop=restore}catch{}resumeRunning=false;resumeStop=false}
-};
-window.__mumeiV3Reader323=api;window.__mumeiV3Reader323Ready=true;document.dispatchEvent(new Event('mumei-v3-reader-ready'));
+
+  if(!resumed&&!stop){
+   await capture();
+   if(host&&!overlap()){
+    let stable=0,last=-1;
+    for(let i=0;i<70&&!stop;i++){
+     if(panel()!==p)throw new Error('通知一覧を閉じたため中断しました');
+     host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);await sleep(320);await capture();if(overlap()){complete=true;break}
+     const h=host.scrollHeight;if(h===last)stable++;else stable=0;last=h;if(stable>=3){complete=true;break}
+    }
+   }else complete=true;
+   await capture();count+=await sendBatch(readOutbox(a.id),a,saved);complete=complete&&!stop;
+  }
+
+  const latest=await get(key(CHECK,a.id),{}),visibleRows=current();const top=visibleRows.find(r=>saved.has(sig(r)));if(top){latest.boundarySignature=sig(top);latest.boundaryEventIdentity=top.meta?.event_identity;latest.boundaryLegacySignature=legacySig(top)}
+  await set(key(CHECK,a.id),{...latest,lastCheckAt:Date.now(),manualNewCount:count,manualSeenCount:seen.size,historyComplete:cp.historyComplete===true||complete,lastError:'',lastScanMode:resumed?'checkpoint-bottom-to-top':'normal-bottom-scan'});
+  document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+  status(`${stop?'停止・':''}${count}件保存確認｜${seen.size}件読取${resumed?'｜前回位置から反映':complete?'':'｜続きは次回'}`,'done',resumed?'下→上 完了':'下から読込');
+ }catch(e){capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now()})}catch{}}status(`⚠ ${String(e?.message||e)}`,'error',/連携/.test(String(e?.message||e))?'連携必要':'再読込')}
+ finally{if(host&&host.isConnected){try{host.scrollTop=startTop}catch{}}active=null;scanning=false;stop=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
+}
+
+document.addEventListener('mumei-v3-read-request',()=>void scan());
+function readyToScan(){const p=panel();return Boolean(p&&rows(p).length)}
+window.__mumeiV3Reader323={scan,isScanning:()=>scanning,readyToScan};
+window.__mumeiV3Reader323Ready=true;
+document.dispatchEvent(new Event('mumei-v3-reader-ready'));
 })();
