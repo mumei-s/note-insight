@@ -42,7 +42,7 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package uses V3.2.21 with required reader and dock before live controls',()=>{
+test('active package uses V3.2.23 with incremental checkpoint reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
@@ -55,18 +55,18 @@ test('active package uses V3.2.21 with required reader and dock before live cont
   const index=read('index.html');
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.appVersion,'2026.09.17.1');
-  assert.equal(manifest.notificationVersion,'3.2.21');
+  assert.equal(manifest.appVersion,'2026.09.17.2');
+  assert.equal(manifest.notificationVersion,'3.2.23');
   assert.equal(manifest.dashboardVersion,'1.4.4');
-  assert.match(v3,/@version\s+3\.2\.21/);
-  assert.match(v3,/runtime-checked-v3221/);
+  assert.match(v3,/@version\s+3\.2\.23/);
+  assert.match(v3,/runtime-checked-v3223/);
   assert.match(v3,/mumei-v3-rescue-dock-v329/);
   assert.match(v3,/window\.addEventListener\('click',handleRescueClick,true\)/);
   assert.match(v3,/window\.__mumeiV3ParentDock=true/);
   for(const part of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-loader-v318.js'])assert.match(v3,new RegExp(part.replaceAll('.','\\.')));
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3221/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3221/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3223/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3223/);
   assert.match(v3,/function pinNoteReturn\(\)/);
   assert.match(v3,/history\.replaceState\(history\.state,'','\/notifications'\)/);
   assert.match(v3,/new URL\('https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'\)/);
@@ -111,7 +111,9 @@ test('active package uses V3.2.21 with required reader and dock before live cont
   assert.match(reader,/mumei-v3-reader-status/);
   assert.match(reader,/confirmedClientSignatures/);
   assert.match(reader,/rediscoverPanel/);
-  assert.match(reader,/scan_mode:'verified-shell-bottom-to-top'/);
+  assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);
+  assert.match(reader,/ここまで保存済み/);
+  assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback/);
   assert.match(loader,/mumei-dashboard-flow-v143/);
   assert.match(loader,/notificationSyncBridge/);
   assert.match(loader,/openNotificationSurface/);
