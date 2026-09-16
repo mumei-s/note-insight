@@ -68,7 +68,7 @@
           const notificationRuntime = localStorage.getItem("mumei-notification-v3-loader") || localStorage.getItem("mumei-notification-tool-version") || "";
           if (!token || !notificationRuntime) return;
           const last = Number(sessionStorage.getItem(guardKey) || 0);
-          if (Date.now() - last < 60000) return;
+          if (Date.now() - last < 8000) return;
           sessionStorage.setItem(guardKey, String(Date.now()));
           const entry = new URL("./notification-entry.html", window.location.href);
           entry.searchParams.set("from", "insight-start");
