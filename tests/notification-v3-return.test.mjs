@@ -28,7 +28,7 @@ test("V3.2.13 returns version check before rescue or remote loading",async()=>{
   assert.match(dock,/ensureReader/);assert.match(reader,/mumei-v3-read-request/);
 });
 
-test("parent rescue dock is fixed four-column and requires a verified notification surface",async()=>{
+test("parent rescue dock is fixed four-column with bounded bell-start grace",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js");
   assert.match(v3,/mumei-v3-rescue-dock-v329/);
   assert.match(v3,/position:fixed/);
@@ -38,9 +38,13 @@ test("parent rescue dock is fixed four-column and requires a verified notificati
   assert.match(v3,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   for(const label of ["手動読み込み","フィルターOFF","設定","INSIGHT"])assert.match(v3,new RegExp(label));
   assert.match(v3,/function notificationSurfaceOpen\(\)/);
-  assert.match(v3,/function showRescue\(on\).*allowed=Boolean\(on\)&&notificationSurfaceOpen\(\)/s);
-  assert.match(v3,/function refreshRescue\(\).*showRescue\(notificationSurfaceOpen\(\)\)/s);
-  assert.doesNotMatch(v3,/notificationSurfaceOpen\(\)\|\|Date\.now\(\)<rescueIntentUntil/);
+  assert.match(v3,/function intentActive\(\)/);
+  assert.match(v3,/function showRescue\(on\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
+  assert.match(v3,/function refreshRescue\(\).*notificationSurfaceOpen\(\)\|\|intentActive\(\)/s);
+  assert.match(v3,/rescueIntentUntil=Date\.now\(\)\+6000/);
+  assert.match(v3,/function handleIntentClose\(/);
+  assert.match(v3,/rescueIntentUntil=0;rescueIntentHref=''/);
+  assert.doesNotMatch(v3,/rescueIntentUntil=Date\.now\(\)\+30000/);
   assert.match(v3,/window\.addEventListener\('click',handleRescueClick,true\)/);
   assert.match(v3,/window\.__mumeiV3ParentDock=true/);
 });
