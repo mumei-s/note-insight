@@ -65,7 +65,7 @@
             return;
           }
           const token = localStorage.getItem("mumei-insight-access-token") || "";
-          const notificationRuntime = localStorage.getItem("mumei-notification-v3-loader") || "";
+          const notificationRuntime = localStorage.getItem("mumei-notification-v3-loader") || localStorage.getItem("mumei-notification-tool-version") || "";
           if (!token || !notificationRuntime) return;
           const last = Number(sessionStorage.getItem(guardKey) || 0);
           if (Date.now() - last < 60000) return;
