@@ -59,6 +59,11 @@ async function readJson(response: Response) {
   return response.json().catch(() => ({}));
 }
 
+function resumeCandidate() {
+  const recoverableRoute = window.location.hash.includes("access/insight") || window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
+  return recoverableRoute ? currentStoredInsightAccount() : null;
+}
+
 function resumeCandidates() {
   const out: ReturnType<typeof readStoredInsightAccounts> = [];
   const seen = new Set<string>();
@@ -70,7 +75,7 @@ function resumeCandidates() {
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
   if (requestedNotificationAccount) add(getStoredInsightAccount(requestedNotificationAccount));
   if (joinId) add(getStoredInsightAccount(joinId));
-  add(currentStoredInsightAccount());
+  add(resumeCandidate());
   for (const account of readStoredInsightAccounts()) add(account);
   return out;
 }
