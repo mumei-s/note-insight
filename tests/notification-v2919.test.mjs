@@ -12,7 +12,7 @@ test("V3.2.13 owns the only visible fixed dock and loads remote parts independen
   assert.ok(boot>0&&dockLoad>boot&&readerReady>dockLoad&&loaderLoad>readerReady);
   assert.doesNotMatch(v3.split("// ==/UserScript==")[0],/@require/);
   assert.match(v3,/@updateURL\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","data-act=\"settings\">設定","mumei-v3-read-request","touch-action:manipulation","window.addEventListener('click',onClick,true)"]);
+  has(dock,["__mumeiNotificationDock322","grid-template-columns:repeat(4,minmax(0,1fr))","data-act=\"settings\">設定","ensureReader","READER_URL","touch-action:manipulation","window.addEventListener('click',onClick,true)"]);
   assert.doesNotMatch(dock,/pointerdown|pointerup|touch-action:none|srcdoc=/);
   has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","mumei-v3-reader-status","sendBatch","rediscoverPanel"]);
   has(loader,["note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
