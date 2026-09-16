@@ -42,12 +42,13 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package keeps the V3.2.13 parent dock and never blocks INSIGHT launch',()=>{
+test('active package keeps V3.2.13 installed wrapper while the remote dock owns live controls',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
   const setup=read('public/tool-setup.html');
   const dashboardSetup=read('public/dashboard-setup.html');
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
+  const bridge=read('public/notification-token-bridge.html');
   const reader=read('public/note-insight-notification-reader-v323.js');
   const loader=read('public/note-insight-notification-loader-v318.js');
   const entry=read('public/notification-entry.html');
@@ -77,13 +78,30 @@ test('active package keeps the V3.2.13 parent dock and never blocks INSIGHT laun
   assert.match(dashboardSetup,/returnToInsight/);
   assert.match(dashboardSetup,/location\.replace\(dest\.href\)/);
   assert.match(dashboardSetup,/location\.replace\(u\.href\)/);
-  assert.match(dock,/function parentDock\(\)/);
-  assert.match(dock,/document\.documentElement\.contains\(p\)/);
+
+  assert.match(dock,/function neutralizeParentDock\(\)/);
+  assert.match(dock,/mumei-v3-parent-dock-sentinel-v320/);
+  assert.match(dock,/p\.replaceWith\(s\)/);
   assert.match(dock,/allowed=Boolean\(on\)&&\(notificationRoute\(\)\|\|Boolean\(shell&&visible\(shell\)\)\|\|bellGrace\(\)\)/);
-  assert.match(dock,/bellGraceUntil=Date\.now\(\)\+6000/);
+  assert.match(dock,/bellGraceUntil=Date\.now\(\)\+7000/);
   assert.match(dock,/startBellReader/);
-  assert.match(dock,/forceParentDockHidden/);
-  assert.match(dock,/ensureReader/);
+  assert.match(dock,/async function ensureReader\(force=false\)/);
+  assert.match(dock,/const existing=readerApi\(\),api=existing\|\|await ensureReader\(forceReader&&!existing\)/);
+  assert.match(dock,/function pinBackToNotifications\(\)/);
+  assert.match(dock,/history\.replaceState\(history\.state,'','\/notifications'\)/);
+  assert.match(dock,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
+  assert.match(dock,/notificationAccount/);
+  assert.doesNotMatch(dock,/const INSIGHT=.*notification-entry\.html/);
+  assert.match(dock,/notification-token-bridge\.html/);
+  assert.match(dock,/repairAfterTokenError/);
+  assert.match(dock,/repairAfterReaderError/);
+
+  assert.match(bridge,/TARGET='https:\/\/note\.com'/);
+  assert.match(bridge,/ref\.origin!==TARGET/);
+  assert.match(bridge,/action:'issue'/);
+  assert.match(bridge,/noteId!==expected/);
+  assert.doesNotMatch(bridge,/postMessage\([^\n]+,\s*['"]\*['"]\)/);
+
   assert.match(reader,/mumei-v3-reader-status/);
   assert.match(reader,/confirmedClientSignatures/);
   assert.match(reader,/rediscoverPanel/);
