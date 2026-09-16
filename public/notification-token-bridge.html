@@ -1,0 +1,29 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-store"><title>INSIGHT notification token bridge</title></head><body><script>
+(async()=>{
+'use strict';
+const TARGET='https://note.com';
+const TYPE='mumei-insight-ingest-token';
+function send(data){try{parent.postMessage({type:TYPE,...data},TARGET)}catch{}}
+try{
+  if(parent===window)throw new Error('EMBED_REQUIRED');
+  let ref;try{ref=new URL(document.referrer)}catch{throw new Error('REFERRER_REQUIRED')}
+  if(ref.origin!==TARGET)throw new Error('NOTE_ORIGIN_REQUIRED');
+  const q=new URLSearchParams(location.search),expected=String(q.get('account')||'').trim().replace(/^@/,'').toLowerCase();
+  if(!/^[a-z0-9_-]+$/.test(expected))throw new Error('ACCOUNT_REQUIRED');
+  const OWNER='mumei-unified-owner-token',MEMBER='mumei-insight-access-token';
+  const owner=localStorage.getItem(OWNER)||'',member=localStorage.getItem(MEMBER)||'';
+  let role='',token='';
+  if(expected==='ss_yr'&&owner){role='owner';token=owner}
+  else if(member){role='member';token=member}
+  else if(owner){role='owner';token=owner}
+  else throw new Error('INSIGHT_LOGIN_REQUIRED');
+  const headers={'Content-Type':'application/json'};headers[role==='owner'?'X-Owner-Token':'X-Insight-Token']=token;
+  const r=await fetch('https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token',{method:'POST',headers,body:JSON.stringify({action:'issue',role}),cache:'no-store'});
+  const p=await r.json().catch(()=>({}));
+  if(!r.ok||!p?.ok||!p?.ingestToken)throw new Error(p?.error||`HTTP_${r.status}`);
+  const noteId=String(p.noteId||'').trim().replace(/^@/,'').toLowerCase();
+  if(noteId!==expected)throw new Error('NOTE_ACCOUNT_MISMATCH');
+  send({ok:true,noteId,token:String(p.ingestToken),expiresAt:String(p.expiresAt||'')});
+}catch(e){send({ok:false,error:String(e?.message||e||'TOKEN_BRIDGE_ERROR')})}
+})();
+</script></body></html>
