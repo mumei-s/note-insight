@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { installApiBridge, registerServiceWorker } from "./api";
 import {
+  EXPLICIT_LOGOUT_KEY_PREFIX,
   INSIGHT_TOKEN_KEY,
+  currentStoredInsightAccount,
   getStoredInsightAccount,
   rememberApplication,
   rememberMemberSession,
@@ -20,6 +22,7 @@ const OWNER_PENDING_SEEN_KEY = "mumei-owner-pending-seen-v1";
 const ACCOUNT_ROUTE_REFRESH_KEY = "mumei-account-route-refresh-v1";
 const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
+const requestedNotificationAccount = String(initialUrl.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
 
 // The public INSIGHT URL must stay inside INSIGHT. Notification capture runs from note itself;
 // opening/reloading the app must never bounce the user to note or the installer.
@@ -54,15 +57,24 @@ async function readJson(response: Response) {
   return response.json().catch(() => ({}));
 }
 
-async function tryReturningMemberResume() {
+function resumeCandidate() {
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
-  if (!joinId) return;
+  if (requestedNotificationAccount) return getStoredInsightAccount(requestedNotificationAccount);
+  if (joinId) return getStoredInsightAccount(joinId);
+  const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
+  return onMemberScreen ? currentStoredInsightAccount() : null;
+}
+
+async function tryReturningMemberResume() {
   const onAccessScreen = window.location.hash.includes("access/insight");
   const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
   if (!onAccessScreen && !onMemberScreen) return;
-  if (localStorage.getItem(INSIGHT_TOKEN_KEY) && !onAccessScreen) return;
-  const account = getStoredInsightAccount(joinId);
+  const account = resumeCandidate();
   if (!account?.applicantToken) return;
+  if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") return;
+
+  const currentToken = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+  if (currentToken && account.memberToken === currentToken && account.status !== "logged-out") return;
 
   try {
     const response = await fetch(REACTIVATE, {
@@ -75,13 +87,15 @@ async function tryReturningMemberResume() {
     if (response.ok && payload?.memberToken && payload?.application) {
       rememberMemberSession(payload.application, payload.memberToken, account.passcode);
       localStorage.removeItem(JOIN_NOTE_KEY);
-      sessionStorage.removeItem(`mumei-approved-reload:${joinId}`);
-      showAccessNotice("🔔 参加が許可されました。本人確認済みアカウントを再開しました。");
+      sessionStorage.removeItem(`mumei-approved-reload:${account.noteId}`);
+      showAccessNotice("INSIGHTの保存済み本人確認からログイン状態を復旧しました。");
       if (window.location.hash !== "#dashboard") window.location.hash = "dashboard";
       return;
     }
     if (payload?.error !== "IDENTITY_REVERIFY_REQUIRED") return;
 
+    const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
+    if (!joinId || joinId !== account.noteId) return;
     const statusResponse = await fetch(ACCESS, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
@@ -91,14 +105,14 @@ async function tryReturningMemberResume() {
     const statusPayload = await readJson(statusResponse);
     if (!statusResponse.ok || statusPayload?.application?.status !== "approved") return;
     rememberApplication(statusPayload.application, statusPayload.application?.verificationCode || account.passcode);
-    showAccessNotice("🔔 OWNERが参加を許可しました。本人確認へ進んでください。");
+    showAccessNotice("OWNERが参加を許可しました。本人確認へ進んでください。");
     const reloadKey = `mumei-approved-reload:${joinId}`;
     if (onAccessScreen && sessionStorage.getItem(reloadKey) !== "1") {
       sessionStorage.setItem(reloadKey, "1");
       window.setTimeout(() => window.location.reload(), 350);
     }
   } catch {
-    // Access recovery must never block the app itself.
+    // Network/API failures must never convert a participant into a logged-out state.
   }
 }
 
