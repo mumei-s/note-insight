@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>INSIGHT ログイン引継ぎ</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111b;color:#eaf6ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,#153149 0,#07111b 46%,#050a10 100%);padding:24px 16px 40px}
+main{width:min(560px,100%);margin:0 auto}.card{border:1px solid #29465c;background:rgba(8,20,31,.94);border-radius:18px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.34)}
+h1{font-size:24px;margin:0 0 8px}p{color:#a8bdcc;line-height:1.65;margin:8px 0 16px}.mode{font-size:12px;color:#78dff6;font-weight:800;margin-bottom:14px}
+button,input{width:100%;min-height:48px;border-radius:12px;font:inherit}button{border:1px solid #37748f;background:#0f3850;color:#effbff;font-weight:800;padding:10px 14px}button:disabled{opacity:.55}button.secondary{background:#111c27;border-color:#31485c;color:#cfe7f4}
+input{border:1px solid #355064;background:#061019;color:#fff;padding:0 14px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}.code{display:block;padding:16px;border-radius:14px;background:#02070b;border:1px solid #3c6d81;color:#7eeaff;font:900 20px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center;word-break:break-all;margin:12px 0}.stack{display:grid;gap:10px}.status{margin-top:14px;border-radius:12px;padding:12px 14px;background:#0a1823;color:#cfe7f4;font-size:13px;line-height:1.55}.status.err{border:1px solid #8b4350;color:#ffd5dc;background:#241016}.hidden{display:none!important}.note{font-size:11px;color:#8298a8;margin-top:14px}.back{display:inline-block;color:#8ceeff;text-decoration:none;margin-bottom:14px}
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="./#access/insight">← INSIGHTログインへ</a>
+<section class="card">
+<div class="mode" id="mode">INSIGHT SESSION TRANSFER</div>
+<h1>ログイン引継ぎ</h1>
+<p id="intro">ブラウザ間ではログイン情報を共有できません。ログイン済みブラウザでワンタイムコードを発行し、新しいブラウザで入力してください。</p>
+<div id="issuer" class="stack hidden">
+<button id="issue">このブラウザから引継ぎコードを発行</button>
+<div id="issuedBox" class="hidden">
+<code class="code" id="issuedCode"></code>
+<button class="secondary" id="copy">コードをコピー</button>
+<p class="note">有効時間は10分・1回限りです。新しいブラウザでこのページを開き、コードを入力してください。</p>
+</div>
+</div>
+<div id="redeemer" class="stack hidden">
+<input id="codeInput" autocomplete="one-time-code" placeholder="INSIGHT-XXXXXXXXXXXX" maxlength="20">
+<button id="redeem">コードでこのブラウザにログイン</button>
+<p class="note">コードはログイン済みの別ブラウザから発行してください。</p>
+</div>
+<div class="status" id="status">確認中…</div>
+</section>
+</main>
+<script>
+(()=>{
+'use strict';
+const TOKEN_KEY='mumei-insight-access-token';
+const STORE_KEY='mumei-insight-saved-accounts-v3';
+const ACTIVE_KEY='mumei-insight-active-account-v3';
+const LOGOUT_PREFIX='mumei-insight-explicit-logout:';
+const ENDPOINT='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-code-login';
+const $=id=>document.getElementById(id);
+const issuer=$('issuer'),redeemer=$('redeemer'),status=$('status'),issuedBox=$('issuedBox'),issuedCode=$('issuedCode'),input=$('codeInput');
+function setStatus(text,err=false){status.textContent=text;status.classList.toggle('err',err)}
+function readAccounts(){try{const v=JSON.parse(localStorage.getItem(STORE_KEY)||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
+function saveSession(app,token){
+ const id=String(app?.noteId||'').trim().replace(/^@/,'').toLowerCase(); if(!id||!token)throw new Error('SESSION_SAVE_FAILED');
+ const list=readAccounts().filter(x=>String(x?.noteId||'').toLowerCase()!==id);
+ list.unshift({noteId:id,displayName:app?.displayName||null,imageUrl:app?.imageUrl||null,status:'active',memberToken:token,updatedAt:Date.now()});
+ localStorage.setItem(STORE_KEY,JSON.stringify(list.slice(0,12)));
+ localStorage.setItem(TOKEN_KEY,token); localStorage.setItem(ACTIVE_KEY,id); localStorage.removeItem(LOGOUT_PREFIX+id);
+ try{window.dispatchEvent(new Event('mumei-insight-accounts'))}catch{}
+}
+async function call(action,body={},token=''){
+ const headers={'Content-Type':'application/json'}; if(token)headers['X-Insight-Token']=token;
+ const r=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify({action,...body}),cache:'no-store'}); const p=await r.json().catch(()=>({}));
+ if(!r.ok||p?.ok===false)throw new Error(String(p?.error||`HTTP_${r.status}`)); return p;
+}
+function refreshMode(){
+ const token=localStorage.getItem(TOKEN_KEY)||'';
+ issuer.classList.toggle('hidden',!token); redeemer.classList.toggle('hidden',!!token);
+ if(token)setStatus('このブラウザにはINSIGHTログインがあります。別ブラウザへ引き継ぐコードを発行できます。');
+ else setStatus('このブラウザは未ログインです。ログイン済みブラウザで発行したコードを入力してください。');
+}
+$('issue').addEventListener('click',async()=>{
+ const token=localStorage.getItem(TOKEN_KEY)||''; if(!token){refreshMode();return}
+ $('issue').disabled=true; setStatus('引継ぎコードを発行中…');
+ try{const p=await call('issue',{},token); issuedCode.textContent=p.transferCode||''; issuedBox.classList.remove('hidden'); setStatus('コードを発行しました。10分以内にEdge側で入力してください。')}
+ catch(e){setStatus(`発行できません: ${e.message||e}`,true)}finally{$('issue').disabled=false}
+});
+$('copy').addEventListener('click',async()=>{const v=issuedCode.textContent||'';try{await navigator.clipboard.writeText(v);setStatus('コードをコピーしました。')}catch{setStatus('コピーできません。コードを長押ししてコピーしてください。',true)}});
+$('redeem').addEventListener('click',async()=>{
+ const code=String(input.value||'').trim().toUpperCase(); if(!/^INSIGHT-[A-F0-9]{12}$/.test(code)){setStatus('コード形式を確認してください。',true);return}
+ $('redeem').disabled=true; setStatus('Edge用ログインを発行中…');
+ try{const p=await call('redeem',{passcode:code}); saveSession(p.application,p.memberToken); setStatus('ログイン復旧成功。INSIGHTへ移動します。'); setTimeout(()=>location.replace('./#dashboard'),350)}
+ catch(e){setStatus(`ログインできません: ${e.message||e}`,true)}finally{$('redeem').disabled=false}
+});
+input.addEventListener('input',()=>{input.value=input.value.toUpperCase()});
+refreshMode();
+})();
+</script>
+</body>
+</html>
