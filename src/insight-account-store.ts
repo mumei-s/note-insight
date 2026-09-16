@@ -4,6 +4,7 @@ export const PASSCODE_KEY = "mumei-insight-passcode";
 export const ACCOUNT_STORE_KEY = "mumei-insight-saved-accounts-v3";
 export const ACCESS_INTENT_KEY = "mumei-insight-access-intent";
 export const ACTIVE_ACCOUNT_KEY = "mumei-insight-active-account-v3";
+export const EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:";
 const LEGACY_ACCOUNT_STORE_KEY = "mumei-insight-saved-accounts-v2";
 
 export type StoredInsightAccount = {
@@ -130,6 +131,7 @@ export function rememberMemberSession(app: any, memberToken: string, passcode?: 
   });
   setActiveId(noteId);
   localStorage.setItem(INSIGHT_TOKEN_KEY, memberToken);
+  localStorage.removeItem(EXPLICIT_LOGOUT_KEY_PREFIX + noteId);
   if (existing?.applicantToken) localStorage.setItem(APPLICANT_KEY, existing.applicantToken);
   else localStorage.removeItem(APPLICANT_KEY);
   if (passcode || existing?.passcode) localStorage.setItem(PASSCODE_KEY, passcode || existing!.passcode!);
@@ -207,6 +209,7 @@ export function forgetInsightAccount(noteId: string) {
   if (removed?.memberToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === removed.memberToken) localStorage.removeItem(INSIGHT_TOKEN_KEY);
   if (removed?.applicantToken && localStorage.getItem(APPLICANT_KEY) === removed.applicantToken) localStorage.removeItem(APPLICANT_KEY);
   if (activeId() === id) setActiveId("");
+  localStorage.removeItem(EXPLICIT_LOGOUT_KEY_PREFIX + id);
 }
 
 export function setAccessIntent(intent: "login" | "apply" | "switch") {
