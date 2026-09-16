@@ -7,6 +7,7 @@ import {
   INSIGHT_TOKEN_KEY,
   currentStoredInsightAccount,
   getStoredInsightAccount,
+  readStoredInsightAccounts,
   rememberApplication,
   rememberMemberSession,
 } from "./insight-account-store";
@@ -23,6 +24,7 @@ const ACCOUNT_ROUTE_REFRESH_KEY = "mumei-account-route-refresh-v1";
 const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 const requestedNotificationAccount = String(initialUrl.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
+let memberResumeRunning = false;
 
 // The public INSIGHT URL must stay inside INSIGHT. Notification capture runs from note itself;
 // opening/reloading the app must never bounce the user to note or the installer.
@@ -57,62 +59,114 @@ async function readJson(response: Response) {
   return response.json().catch(() => ({}));
 }
 
-function resumeCandidate() {
+function resumeCandidates() {
+  const out: ReturnType<typeof readStoredInsightAccounts> = [];
+  const seen = new Set<string>();
+  const add = (account: ReturnType<typeof getStoredInsightAccount> | null | undefined) => {
+    if (!account?.noteId || seen.has(account.noteId)) return;
+    seen.add(account.noteId);
+    out.push(account);
+  };
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
-  if (requestedNotificationAccount) return getStoredInsightAccount(requestedNotificationAccount);
-  if (joinId) return getStoredInsightAccount(joinId);
-  const recoverableRoute = window.location.hash.includes("access/insight") || window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
-  return recoverableRoute ? currentStoredInsightAccount() : null;
+  if (requestedNotificationAccount) add(getStoredInsightAccount(requestedNotificationAccount));
+  if (joinId) add(getStoredInsightAccount(joinId));
+  add(currentStoredInsightAccount());
+  for (const account of readStoredInsightAccounts()) add(account);
+  return out;
+}
+
+function transientStatus(status: number) {
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+}
+
+async function validateCurrentMemberToken() {
+  const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+  if (!token) return "missing" as const;
+  try {
+    const response = await fetch(ACCESS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Insight-Token": token },
+      body: JSON.stringify({ action: "session" }),
+      cache: "no-store",
+    });
+    const payload = await readJson(response);
+    if (response.ok && payload?.ok !== false && payload?.application) {
+      const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
+      rememberMemberSession(payload.application, token, stored?.passcode);
+      if (window.location.hash.includes("access/insight")) window.location.hash = "dashboard";
+      return "valid" as const;
+    }
+    if (transientStatus(response.status)) return "temporary" as const;
+    const code = String(payload?.error || "");
+    if (/INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED|INSIGHT_MEMBER_INACTIVE/.test(code) || response.status === 401 || response.status === 403) return "invalid" as const;
+    return "temporary" as const;
+  } catch {
+    return "temporary" as const;
+  }
+}
+
+async function handleIdentityReverify(account: ReturnType<typeof readStoredInsightAccounts>[number]) {
+  const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
+  if (!joinId || joinId !== account.noteId) return false;
+  const statusResponse = await fetch(ACCESS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken || "" },
+    body: JSON.stringify({ action: "application-status" }),
+    cache: "no-store",
+  });
+  const statusPayload = await readJson(statusResponse);
+  if (!statusResponse.ok || statusPayload?.application?.status !== "approved") return false;
+  rememberApplication(statusPayload.application, statusPayload.application?.verificationCode || account.passcode);
+  showAccessNotice("OWNERが参加を許可しました。本人確認へ進んでください。");
+  const reloadKey = `mumei-approved-reload:${joinId}`;
+  if (window.location.hash.includes("access/insight") && sessionStorage.getItem(reloadKey) !== "1") {
+    sessionStorage.setItem(reloadKey, "1");
+    window.setTimeout(() => window.location.reload(), 350);
+  }
+  return true;
 }
 
 async function tryReturningMemberResume() {
   const onAccessScreen = window.location.hash.includes("access/insight");
   const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
   if (!onAccessScreen && !onMemberScreen) return;
-  const account = resumeCandidate();
-  if (!account?.applicantToken) return;
-  if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") return;
-
-  const currentToken = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
-  if (currentToken && account.memberToken === currentToken && account.status !== "logged-out") return;
+  if (memberResumeRunning) return;
+  memberResumeRunning = true;
 
   try {
-    const response = await fetch(REACTIVATE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
-      body: JSON.stringify({ action: "resume" }),
-      cache: "no-store",
-    });
-    const payload = await readJson(response);
-    if (response.ok && payload?.memberToken && payload?.application) {
-      rememberMemberSession(payload.application, payload.memberToken, account.passcode);
-      localStorage.removeItem(JOIN_NOTE_KEY);
-      sessionStorage.removeItem(`mumei-approved-reload:${account.noteId}`);
-      showAccessNotice("INSIGHTの保存済み本人確認からログイン状態を復旧しました。");
-      if (window.location.hash !== "#dashboard") window.location.hash = "dashboard";
-      return;
-    }
-    if (payload?.error !== "IDENTITY_REVERIFY_REQUIRED") return;
+    const tokenState = await validateCurrentMemberToken();
+    if (tokenState === "valid" || tokenState === "temporary") return;
 
-    const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
-    if (!joinId || joinId !== account.noteId) return;
-    const statusResponse = await fetch(ACCESS, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
-      body: JSON.stringify({ action: "application-status" }),
-      cache: "no-store",
-    });
-    const statusPayload = await readJson(statusResponse);
-    if (!statusResponse.ok || statusPayload?.application?.status !== "approved") return;
-    rememberApplication(statusPayload.application, statusPayload.application?.verificationCode || account.passcode);
-    showAccessNotice("OWNERが参加を許可しました。本人確認へ進んでください。");
-    const reloadKey = `mumei-approved-reload:${joinId}`;
-    if (onAccessScreen && sessionStorage.getItem(reloadKey) !== "1") {
-      sessionStorage.setItem(reloadKey, "1");
-      window.setTimeout(() => window.location.reload(), 350);
+    for (const account of resumeCandidates()) {
+      if (!account.applicantToken) continue;
+      if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") continue;
+      try {
+        const response = await fetch(REACTIVATE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
+          body: JSON.stringify({ action: "resume" }),
+          cache: "no-store",
+        });
+        const payload = await readJson(response);
+        if (response.ok && payload?.memberToken && payload?.application) {
+          rememberMemberSession(payload.application, payload.memberToken, account.passcode);
+          localStorage.removeItem(JOIN_NOTE_KEY);
+          sessionStorage.removeItem(`mumei-approved-reload:${account.noteId}`);
+          showAccessNotice(`@${account.noteId} のログイン状態を復旧しました。`);
+          if (window.location.hash !== "#dashboard") window.location.hash = "dashboard";
+          return;
+        }
+        if (transientStatus(response.status)) return;
+        if (payload?.error === "IDENTITY_REVERIFY_REQUIRED" && await handleIdentityReverify(account)) return;
+        // One stale/inactive saved account must never block another active saved account.
+        continue;
+      } catch {
+        // A network failure is temporary; do not churn all saved identities while offline.
+        return;
+      }
     }
-  } catch {
-    // Network/API failures must never convert a participant into a logged-out state.
+  } finally {
+    memberResumeRunning = false;
   }
 }
 
@@ -163,6 +217,7 @@ window.addEventListener("mumei-insight-accounts", () => {
 });
 window.addEventListener("hashchange", () => {
   if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
+  void tryReturningMemberResume();
 });
 
 void tryReturningMemberResume();
