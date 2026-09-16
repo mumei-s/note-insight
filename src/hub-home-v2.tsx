@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  EXPLICIT_LOGOUT_KEY_PREFIX,
   INSIGHT_TOKEN_KEY,
   activateStoredInsightAccount,
   currentStoredInsightAccount,
@@ -136,6 +137,7 @@ export function HubHome() {
         setAccountMessage(`@${activeAccount.noteId} は退会しました。`);
       } else {
         try { await post(SELF, "logout", { "X-Insight-Token": token }); } catch { /* local logout still completes */ }
+        localStorage.setItem(EXPLICIT_LOGOUT_KEY_PREFIX + activeAccount.noteId, "1");
         forgetMemberSession(activeAccount.noteId);
         setAccountMessage(`@${activeAccount.noteId} をログアウトしました。`);
       }
