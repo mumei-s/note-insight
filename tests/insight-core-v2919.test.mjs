@@ -54,6 +54,14 @@ test("TOP twice exits while note navigation does not log out",async()=>{
   assert.doesNotMatch(app,/note-exit[^\n]*logout/i);
 });
 
+test("saved participant remains recoverable when active pointers disappear",async()=>{
+  const store=await read("src/insight-account-store.ts"),main=await read("src/main.tsx");
+  assert.match(store,/const recoverable = accounts\.find\(\(item\) => item\.applicantToken && localStorage\.getItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ item\.noteId\) !== "1"\)/);
+  assert.match(store,/if \(recoverable\) return recoverable/);
+  assert.match(main,/recoverableRoute \? currentStoredInsightAccount\(\) : null/);
+  assert.match(main,/localStorage\.getItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ account\.noteId\) === "1"/);
+});
+
 test("notification setup still locks storage to actual note account",async()=>{
   const setup=await read("public/notification-import.html"),ingest=await read("supabase/functions/insight-notification-ingest-v2/index.ts");
   for(const x of ["pair-start","noteId","X-Owner-Token","X-Insight-Token","mumei_return","通知フィルター・グループ管理"])assert.match(setup,new RegExp(x));
