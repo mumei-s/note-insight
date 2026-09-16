@@ -161,6 +161,11 @@ export function currentStoredInsightAccount() {
     const selected = accounts.find((item) => item.applicantToken === applicant);
     if (selected) return selected;
   }
+  // If only the active/common pointers were lost, keep the verified local identity usable.
+  // The list is newest-first, so this restores the last-used recoverable account without
+  // forcing a participant through profile verification again. Explicit logout still wins.
+  const recoverable = accounts.find((item) => item.applicantToken && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + item.noteId) !== "1");
+  if (recoverable) return recoverable;
   return null;
 }
 
