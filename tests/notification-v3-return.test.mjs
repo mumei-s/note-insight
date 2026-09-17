@@ -18,7 +18,7 @@ test("V3.2.36 preloads bottom-up reader, checkpoint and fixed five-panel runtime
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
-  assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/notification-filter\\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);
+  assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/notification-filter\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(reader,/bottom-up-from-saved-line/);assert.match(reader,/saved-line-bottom-up-v324/);
 });
 
