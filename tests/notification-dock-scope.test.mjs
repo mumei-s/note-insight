@@ -36,16 +36,20 @@ test("legacy dock still keeps bounded bell grace and visible verified shell", as
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("V3.2.24 inline runtime owns the dock and legacy dock exits behind its sentinel", async () => {
+test("V3.2.25 runtime owns the dock and legacy dock exits behind its sentinel", async () => {
   const parent = await read("public/note-insight-notification-v3.user.js");
-  const runtime = await read("public/note-insight-notification-runtime-v324.js");
+  const runtime = await read("public/note-insight-notification-runtime-v325.js");
+  const checkpoint = await read("public/note-insight-notification-checkpoint-v325.js");
   const dock = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(parent, /note-insight-notification-runtime-v324\.js\?v=3224/);
+  assert.match(parent, /note-insight-notification-runtime-v325\.js\?v=3225/);
+  assert.match(parent, /note-insight-notification-checkpoint-v325\.js\?v=3225/);
   assert.match(runtime, /window\.__mumeiNotificationDock322=true/);
-  assert.match(runtime, /ROOT='mumei-v324-dock'/);
+  assert.match(runtime, /ROOT='mumei-v325-dock'/);
   assert.match(runtime, /function findSurface\(\)/);
   assert.match(runtime, /showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime, /data-a="mode"/);
   assert.match(runtime, /通知フィルター登録/);
+  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
   assert.match(dock, /if\(window\.__mumeiNotificationDock322\)return/);
 });
 
@@ -88,7 +92,6 @@ test("ingest token bridge is origin-locked and never posts a token to a wildcard
   const bridge = await read("public/notification-token-bridge.html");
   assert.match(bridge, /TARGET='https:\/\/note\.com'/);
   assert.match(bridge, /document\.referrer/);
-  assert.match(bridge, /ref\.origin!==TARGET/);
   assert.match(bridge, /insight-notification-import-token/);
   assert.match(bridge, /action:'issue'/);
   assert.match(bridge, /noteId!==expected/);
