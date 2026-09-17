@@ -6,15 +6,32 @@ if(window.__mumeiNotificationSettingsRoute332)return;window.__mumeiNotificationS
 const ROOT='mumei-v325-dock';
 const OLD='mumei-v325-filter-settings';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter.html';
+const LABEL='設定';
+const TITLE='通知フィルター設定を開く';
+let scheduled=false;
 
 function button(){return document.querySelector(`#${ROOT} [data-a="settings"]`)}
-function relabel(){const b=button();if(b){b.textContent='設定';b.title='通知フィルター設定を開く'}document.getElementById(OLD)?.remove()}
+function relabel(){
+  const b=button();
+  if(b){
+    if(b.textContent!==LABEL)b.textContent=LABEL;
+    if(b.title!==TITLE)b.title=TITLE;
+  }
+  const old=document.getElementById(OLD);
+  if(old)old.remove();
+}
+function scheduleRelabel(){
+  if(scheduled)return;
+  scheduled=true;
+  requestAnimationFrame(()=>{scheduled=false;relabel()});
+}
 function openSettings(){
   const u=new URL(SETTINGS);
   u.searchParams.set('from','note');
   u.searchParams.set('mumei_return','https://note.com/notifications');
   u.searchParams.set('ts',String(Date.now()));
-  document.getElementById(OLD)?.remove();
+  const old=document.getElementById(OLD);
+  if(old)old.remove();
   location.assign(u.href);
 }
 function intercept(e){
@@ -27,7 +44,18 @@ function intercept(e){
 }
 
 document.addEventListener('click',intercept,true);
-new MutationObserver(relabel).observe(document.documentElement,{subtree:true,childList:true});
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',relabel,{once:true});else relabel();
-window.__mumeiNotificationSettingsRoute332={openSettings,relabel};
+const observer=new MutationObserver(ms=>{
+  let relevant=false;
+  for(const m of ms){
+    for(const n of m.addedNodes){
+      if(!(n instanceof Element))continue;
+      if(n.id===ROOT||n.querySelector?.(`#${ROOT}`)||n.matches?.(`#${ROOT} [data-a="settings"]`)||n.querySelector?.(`#${ROOT} [data-a="settings"]`)){relevant=true;break}
+    }
+    if(relevant)break;
+  }
+  if(relevant)scheduleRelabel();
+});
+observer.observe(document.documentElement,{subtree:true,childList:true});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleRelabel,{once:true});else scheduleRelabel();
+window.__mumeiNotificationSettingsRoute332={openSettings,relabel,scheduleRelabel};
 })();
