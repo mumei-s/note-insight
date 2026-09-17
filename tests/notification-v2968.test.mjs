@@ -82,13 +82,8 @@ test('active package uses V3.2.24 with notification-only inline runtime and incr
   assert.match(setup,/mumei-notification-tool-version/);
   assert.match(setup,/確認ボタンも不要/);
   assert.doesNotMatch(setup,/https:\/\/note\.com\/notifications/);
-  assert.match(dashboardSetup,/mumei_insight_sync_seed/);
-  assert.match(dashboardSetup,/if\(seed\)/);
-  assert.match(dashboardSetup,/INSIGHT 自動同期を準備中/);
-  assert.match(dashboardSetup,/RUNTIME_TIMEOUT/);
-  assert.match(dashboardSetup,/returnToInsight/);
-  assert.match(dashboardSetup,/location\.replace\(dest\.href\)/);
-  assert.match(dashboardSetup,/location\.replace\(u\.href\)/);
+  assert.match(dashboardSetup,/location\.replace\(new URL\('\.\/'/);
+  assert.doesNotMatch(dashboardSetup,/mumei_insight_sync_seed|INSIGHT 自動同期を準備中|RUNTIME_TIMEOUT/);
 
   assert.match(dock,/function neutralizeParentDock\(\)/);
   assert.match(dock,/mumei-v3-parent-dock-sentinel-v320/);
