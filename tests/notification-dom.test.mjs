@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
 
 const read=p=>fs.readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
@@ -31,20 +30,29 @@ test('fixed runtime declares exactly five bottom actions including auto mode',()
   assert.match(settingsRoute,/textContent='設定'/);
 });
 
-test('reader extracts visible notifications and sends oldest first',async()=>{
+test('reader sends visible notifications from the lower side upward',async()=>{
   const{dom,w,values}=env();try{const popup=w.document.getElementById('popup');popup.setAttribute('data-mumei-notice-shell-v3','1');w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem" data-notification-id="new" href="https://note.com/a/n/n1?c=c1">Aさんがあなたのコメントに返信しました3分前</a><a class="m-navbarNoticeItem" data-notification-id="old" href="https://note.com/a/m/m1">未知の通知3分前</a>';const api=expose(w,reader,['rows','rowData','panel','sendBatch','sig','scan']);assert.equal(api.panel().id,'popup');values.set('mumei_insight_notification_sync_token_v2:fixture','fixture-only');const sent=[];w.GM.xmlHttpRequest=o=>{const batch=JSON.parse(o.data).notifications;sent.push(...batch.map(x=>x.meta.event_identity));o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:batch.map(api.sig)})})};await api.scan();assert.deepEqual(sent,['notice:old','notice:new']);assert.equal(values.get('mumei_insight_notification_saved_v2919:fixture').length,2)}finally{dom.window.close()}
 });
 
-test('reader scrolls downward to the completion boundary and resumes from that saved boundary next time',()=>{
-  assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);assert.match(reader,/host\.scrollTop=0/);assert.match(reader,/host\.scrollTop=Math\.min\(max,before\+amount\)/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/BOUNDARY_NOT_FOUND_SAFE_STOP/);assert.match(reader,/boundarySignature/);assert.match(reader,/boundaryEventIdentity/);assert.match(reader,/function boundaryMatch/);assert.match(reader,/checkpoint-stop-v3223/);
+test('reader starts from the lower side, marks the completion line, and next run reads only above it',()=>{
+  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);
+  assert.match(reader,/scan_strategy:'saved-line-bottom-up-v324'/);
+  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
+  assert.match(reader,/ここまで保存済み/);
+  assert.match(reader,/BOUNDARY_NOT_FOUND_SAFE_STOP/);
+  assert.match(reader,/boundarySignature/);
+  assert.match(reader,/boundaryEventIdentity/);
+  assert.match(reader,/function boundaryMatch/);
+  assert.match(reader,/reader-bottom-up-confirmed-v324/);
+  assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
 test('persistent checkpoint mirrors the saved boundary across page closes',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/)});
 
-test('V3.2.32 wrapper activates fixed five-panel runtime and dedicated settings route',()=>{
-  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.32/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3232/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3232/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3232/);assert.match(meta,/note-insight-notification-settings-route-v332\.js\?v=3232/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/fixed-five-dock-settings-v3232/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/async function safeScan/);assert.match(settingsRoute,/notification-filter\.html/);assert.match(settingsRoute,/stopImmediatePropagation/);
+test('V3.2.33 wrapper activates bottom-up reader, fixed five-panel runtime and dedicated settings route',()=>{
+  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.33/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3233/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3233/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3233/);assert.match(meta,/note-insight-notification-settings-route-v332\.js\?v=3233/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3233/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/async function safeScan/);assert.match(settingsRoute,/notification-filter\.html/);assert.match(settingsRoute,/stopImmediatePropagation/);
 });
 
 test('installer opens canonical userscript and keeps visible copy versionless',async()=>{
-  const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.32'})});w.eval(w.document.querySelector('script').textContent);await new Promise(resolve=>setTimeout(resolve,0));const install=w.document.getElementById('install'),u=new URL(install.href);assert.equal(u.origin,'https://mumei-s.github.io');assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');assert.match(install.textContent,/最新版をインストール \/ 更新/);assert.match(html,/insight-release\.json/);assert.doesNotMatch(html,/本人通知 V\d/);assert.match(html,/ブラウザ別インストール/);assert.match(html,/5パネル/);assert.match(html,/次回からはその保存位置を境界/);assert.match(html,/URLを貼り付ける操作はありません/);assert.match(html,/確認ボタンも不要/)}finally{dom.window.close()}
+  const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.33'})});w.eval(w.document.querySelector('script').textContent);await new Promise(resolve=>setTimeout(resolve,0));const install=w.document.getElementById('install'),u=new URL(install.href);assert.equal(u.origin,'https://mumei-s.github.io');assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');assert.match(install.textContent,/最新版をインストール \/ 更新/);assert.match(html,/insight-release\.json/);assert.doesNotMatch(html,/本人通知 V\d/);assert.match(html,/ブラウザ別インストール/);assert.match(html,/5パネル/);assert.match(html,/次回からはその保存位置を境界/);assert.match(html,/URLを貼り付ける操作はありません/);assert.match(html,/確認ボタンも不要/)}finally{dom.window.close()}
 });
