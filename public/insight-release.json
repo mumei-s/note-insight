@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.38",
+  "notificationVersion": "3.2.39",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T08:05:00+09:00",
+  "releasedAt": "2026-09-18T08:08:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知は従来の下部固定5パネル版へ復帰。読込｜自動/手動｜フィルター｜設定｜INSIGHT。追加の上段読み込みパネルは廃止し、全ページDOM監視も使用しない。"
+  "note": "本人通知は従来の下部固定5パネル。表示判定は実際に表示できていた最終版のベル検出・通知面検出へ復帰し、全ページMutationObserverは使わず低頻度確認で維持する。"
 }
