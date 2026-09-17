@@ -30,13 +30,13 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.33 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
+test('active package uses V3.2.34 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/tool-setup.html'),runtime=read('public/note-insight-notification-runtime-v327.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.33');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.2\.33/);assert.match(v3,/bottom-up-saved-line-v3233/);
+  assert.equal(manifest.notificationVersion,'3.2.34');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.2\.33/);assert.match(v3,/bottom-up-saved-line-v3234/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3233','note-insight-notification-checkpoint-v325.js?v=3233','note-insight-notification-runtime-v327.js?v=3233','note-insight-notification-settings-route-v332.js?v=3233'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3234','note-insight-notification-checkpoint-v325.js?v=3234','note-insight-notification-runtime-v327.js?v=3234','note-insight-notification-settings-route-v332.js?v=3234'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);
   assert.match(setup,/最新版をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/確認ボタンも不要/);
