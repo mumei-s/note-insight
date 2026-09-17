@@ -30,7 +30,8 @@ test("V3.2.34 loads bottom-up reader, fixed five-panel runtime plus dedicated se
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
- assert.match(runtime,/autoMode=true/);\n assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
+ assert.match(runtime,/autoMode=true/);
+ assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);
  assert.match(runtime,/safeScan/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
