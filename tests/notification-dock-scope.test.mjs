@@ -15,7 +15,7 @@ test("direct reader has no global fallback dock or legacy frame dependency", asy
   assert.doesNotMatch(reader, /fullFallback|loadAbsoluteBottom/);
 });
 
-test("single notification panel uses bounded bell grace and only keeps a visible verified shell", async () => {
+test("legacy dock still keeps bounded bell grace and visible verified shell", async () => {
   const panel = await read("public/note-insight-notification-dock-watch-v312.js");
   assert.match(panel, /__mumeiNotificationDock322/);
   assert.match(panel, /function findShell\(\)/);
@@ -36,15 +36,17 @@ test("single notification panel uses bounded bell grace and only keeps a visible
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("installed parent rescue remains compatible while remote dock can neutralize it without reinstall", async () => {
+test("V3.2.24 inline runtime owns the dock and legacy dock exits behind its sentinel", async () => {
   const parent = await read("public/note-insight-notification-v3.user.js");
+  const runtime = await read("public/note-insight-notification-runtime-v324.js");
   const dock = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(parent, /mumei-v3-rescue-dock-v329/);
-  assert.match(parent, /function handleNotificationIntent\(/);
-  assert.match(dock, /function neutralizeParentDock\(\)/);
-  assert.match(dock, /mumei-v3-parent-dock-sentinel-v320/);
-  assert.match(dock, /p\.replaceWith\(s\)/);
-  assert.match(dock, /function showDock\(on\)/);
+  assert.match(parent, /note-insight-notification-runtime-v324\.js\?v=3224/);
+  assert.match(runtime, /window\.__mumeiNotificationDock322=true/);
+  assert.match(runtime, /ROOT='mumei-v324-dock'/);
+  assert.match(runtime, /function findSurface\(\)/);
+  assert.match(runtime, /showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime, /通知フィルター登録/);
+  assert.match(dock, /if\(window\.__mumeiNotificationDock322\)return/);
 });
 
 test("filter registration and read operations use one native click path without pointer interception", async () => {
