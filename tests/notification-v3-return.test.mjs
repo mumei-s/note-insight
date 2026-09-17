@@ -16,39 +16,40 @@ test("installer keeps participant steps compact with automatic confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.27 preloads reader, persistent checkpoint, stable runtime and fallback dock",async()=>{
+test("V3.2.28 preloads reader, persistent checkpoint, bell-intent runtime and fallback dock",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.27/);
-  assert.match(v3,/runtime-checked-v3227/);
+  assert.match(v3,/@version\s+3\.2\.28/);
+  assert.match(v3,/runtime-checked-v3228/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3227/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3227/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3227/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3227/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3228/);
+  assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3228/);
+  assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3228/);
+  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3228/);
   assert.doesNotMatch(meta,/surface-guard-v326/);
   assert.match(runtime,/window\.__mumeiNotificationDock322=true/);
+  assert.match(runtime,/__mumeiNotificationRuntime328/);
   assert.match(runtime,/function findSurface\(/);
-  assert.match(runtime,/function scheduleHide\(/);
-  assert.match(runtime,/function confirmHide\(/);
-  assert.match(runtime,/dockVisible/);
+  assert.match(runtime,/function popupSurface\(/);
+  assert.match(runtime,/function bellTrigger\(/);
+  assert.match(runtime,/intentUntil=Date\.now\(\)\+7000/);
+  assert.match(runtime,/async function waitForRows\(/);
   assert.match(runtime,/data-a="mode"/);
   assert.match(runtime,/mumei_insight_notification_auto_v325:/);
   assert.match(runtime,/通知フィルター登録/);
-  assert.match(runtime,/async function openSettings\(/);
-  assert.doesNotMatch(runtime,/notification-filter\.html/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
   assert.match(checkpoint,/localStorage\.setItem/);
-  assert.match(checkpoint,/async function restore\(/);
   assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
   assert.match(dock,/ensureReader/);assert.match(reader,/mumei-v3-read-request/);
 });
 
-test("notification panel uses one strict surface owner and delayed confirmed hide",async()=>{
+test("notification panel shows before rows load and hides only after confirmed close",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/\[role="dialog"\],\[role="menu"\],\[popover\]/);
-  assert.match(runtime,/exact\(root,'通知'\)&&exact\(root,'お知らせ'\)/);
-  assert.match(runtime,/hideTimer=setTimeout\(confirmHide,450\)/);
-  assert.match(runtime,/if\(dockVisible===Boolean\(on\)\)return/);
+  assert.match(runtime,/function popupSurface\(\).*exact\(root,'通知'\)&&exact\(root,'お知らせ'\).*return root/s);
+  assert.doesNotMatch(runtime,/if\(!visible\(root\)\|\|!rows\(root\)\.length\)continue/);
+  assert.match(runtime,/function routeSurface\(\).*notificationRoute\(\)/s);
+  assert.match(runtime,/function scheduleHide\(delay=750\)/);
+  assert.match(runtime,/if\(dockVisible===want\)return/);
+  assert.match(runtime,/if\(bellIntent\(\)\)\{await activateIntent\(\);return\}/);
   assert.match(runtime,/cleanupVisuals/);
   assert.doesNotMatch(runtime,/SurfaceGuard326|surface-guard-v326/);
 });
