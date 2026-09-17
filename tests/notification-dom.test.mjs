@@ -89,14 +89,18 @@ test('V3.2.29 wrapper uses the canonical dock instead of the obsolete five-butto
   assert.match(runtime,/VERSION='3\.2\.28'/);
 });
 
-test('installer opens canonical V3.2.29 userscript and uses automatic confirmation',()=>{
+test('installer opens canonical userscript and keeps visible copy versionless',()=>{
   const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
   try{
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.29'})});
     w.eval(w.document.querySelector('script').textContent);
     const install=w.document.getElementById('install'),u=new URL(install.href);
     assert.equal(u.origin,'https://mumei-s.github.io');
     assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
-    assert.match(w.document.querySelector('.version').textContent,/3\.2\.29/);
+    assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');
+    assert.match(install.textContent,/最新版をインストール \/ 更新/);
+    assert.match(html,/insight-release\.json/);
+    assert.doesNotMatch(html,/V3\.2\.29|本人通知 V\d/);
     assert.match(html,/4列パネル/);
     assert.match(html,/ブラウザ別インストール/);
     assert.match(html,/mumei-notification-v3-loader/);
