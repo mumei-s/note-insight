@@ -42,7 +42,7 @@ test('active package uses V3.2.36 with bottom-up resume, persistent checkpoint a
   assert.match(setup,/最新版をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/確認ボタンも不要/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ['read','mode','filter','settings','ins'])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
-  assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/notification-filter\\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/safeScan/);
+  assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/notification-filter\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/safeScan/);
   assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
