@@ -16,40 +16,55 @@ test("installer keeps participant steps compact with automatic confirmation",asy
   assert.doesNotMatch(page,/Import from URL|window\.open\(|https:\/\/note\.com\/notifications|mumei_insight_version_check/);
 });
 
-test("V3.2.24 preloads reader, inline runtime and fallback dock",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),runtime=await read("public/note-insight-notification-runtime-v324.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.24/);
-  assert.match(v3,/runtime-checked-v3224/);
+test("V3.2.25 preloads reader, persistent checkpoint, compact runtime and fallback dock",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),runtime=await read("public/note-insight-notification-runtime-v325.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),loader=await read("public/note-insight-notification-loader-v318.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
+  assert.match(v3,/@version\s+3\.2\.25/);
+  assert.match(v3,/runtime-checked-v3225/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3224/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v324\.js\?v=3224/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3224/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v325\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3225/);
   assert.match(runtime,/window\.__mumeiNotificationDock322=true/);
   assert.match(runtime,/function findSurface\(/);
   assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime,/data-a="mode"/);
+  assert.match(runtime,/mumei_insight_notification_auto_v325:/);
   assert.match(runtime,/通知フィルター登録/);
   assert.match(runtime,/async function openSettings\(/);
   assert.doesNotMatch(runtime,/notification-filter\.html/);
+  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
+  assert.match(checkpoint,/localStorage\.setItem/);
+  assert.match(checkpoint,/async function restore\(/);
   assert.match(loader,/note-insight-dashboard-integrated-v318\.js/);
   assert.match(dock,/ensureReader/);assert.match(reader,/mumei-v3-read-request/);
 });
 
 test("notification panel is restricted to an actual notification surface",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v324.js");
+  const runtime=await read("public/note-insight-notification-runtime-v325.js");
   assert.match(runtime,/function findSurface\(\)/);
   assert.match(runtime,/^function showRoot\(on\)/m);
   assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
-  assert.match(runtime,/if\(\^?\/notifications|\/notifications/);
+  assert.match(runtime,/\/notifications/);
   assert.doesNotMatch(runtime,/bellGraceUntil|intentUntil|rescueIntentUntil/);
 });
 
 test("inline filter registration keeps users on note",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v324.js");
+  const runtime=await read("public/note-insight-notification-runtime-v325.js");
   assert.match(runtime,/通知フィルター登録/);
   assert.match(runtime,/GRP='mumei_insight_notification_groups_v1:'/);
   assert.match(runtime,/MUT='mumei_insight_magazine_mute_ids_v5:'/);
   assert.match(runtime,/FIL='mumei_insight_magazine_filter_enabled_v3:'/);
   assert.doesNotMatch(runtime,/notification-filter\.html/);
+});
+
+test("auto/manual mode is persisted per note account",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v325.js");
+  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
+  assert.match(runtime,/async function initMode\(/);
+  assert.match(runtime,/async function toggleMode\(/);
+  assert.match(runtime,/autoMode\?'自動':'手動'/);
+  assert.match(runtime,/if\(!autoMode\|\|!shell\|\|!rows\(shell\)\.length\)return/);
 });
 
 test("INSIGHT notifications keep one category selector",async()=>{
