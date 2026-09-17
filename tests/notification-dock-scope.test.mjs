@@ -36,13 +36,15 @@ test("legacy dock still keeps bounded bell grace and visible verified shell", as
   assert.doesNotMatch(panel, /ensureLauncher|bindDrag|savePos|srcdoc=/);
 });
 
-test("V3.2.25 runtime owns the dock and legacy dock exits behind its sentinel", async () => {
+test("V3.2.26 runtime owns the dock, guard confines overlays, and legacy dock exits behind its sentinel", async () => {
   const parent = await read("public/note-insight-notification-v3.user.js");
   const runtime = await read("public/note-insight-notification-runtime-v325.js");
   const checkpoint = await read("public/note-insight-notification-checkpoint-v325.js");
+  const guard = await read("public/note-insight-notification-surface-guard-v326.js");
   const dock = await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(parent, /note-insight-notification-runtime-v325\.js\?v=3225/);
-  assert.match(parent, /note-insight-notification-checkpoint-v325\.js\?v=3225/);
+  assert.match(parent, /note-insight-notification-runtime-v325\.js\?v=3226/);
+  assert.match(parent, /note-insight-notification-checkpoint-v325\.js\?v=3226/);
+  assert.match(parent, /note-insight-notification-surface-guard-v326\.js\?v=3226/);
   assert.match(runtime, /window\.__mumeiNotificationDock322=true/);
   assert.match(runtime, /ROOT='mumei-v325-dock'/);
   assert.match(runtime, /function findSurface\(\)/);
@@ -50,6 +52,8 @@ test("V3.2.25 runtime owns the dock and legacy dock exits behind its sentinel", 
   assert.match(runtime, /data-a="mode"/);
   assert.match(runtime, /通知フィルター登録/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
+  assert.match(guard,/__mumeiNotificationSurfaceGuard326/);
+  assert.match(guard,/cleanupVisuals/);
   assert.match(dock, /if\(window\.__mumeiNotificationDock322\)return/);
 });
 
