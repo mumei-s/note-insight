@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>INSIGHT インストール / 更新</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}.wrap{width:min(560px,calc(100% - 20px));margin:auto;padding:14px 0 34px}.back{display:inline-flex;align-items:center;min-height:38px;color:#80eaff;text-decoration:none;font-weight:900}.card{border:1px solid #31506a;border-radius:16px;background:#0a1722;padding:16px}.eyebrow{font-size:11px;color:#86cfe3;letter-spacing:.08em}.title{margin:6px 0 2px;font-size:28px;font-weight:950;line-height:1.2}.version{margin:0 0 8px;font-size:18px;font-weight:900;color:#8feaff}.lead{margin:0 0 14px;color:#b9cad7;line-height:1.65;font-size:13px}.notice{padding:10px;border:1px solid #38637c;border-radius:10px;background:#081722;color:#cfefff;font-size:12px;line-height:1.65}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;margin-top:12px;border:1px solid #61c98c;border-radius:11px;background:#123626;color:#edfff4;text-decoration:none;font:950 16px/1.2 system-ui;text-align:center;padding:10px}.verify{border-color:#56cfe9;background:#103144;color:#e9fbff}.result{margin-top:10px;padding:10px;border:1px solid #3b5b72;border-radius:9px;background:#08131d;font-size:12px;font-weight:800;line-height:1.55}.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}.mini{margin:10px 0 0;color:#94aaba;font-size:11px;line-height:1.6}.steps{margin-top:14px;padding-top:12px;border-top:1px solid #263d4e}.steps b{display:block;margin-bottom:6px}.steps p{margin:5px 0;color:#c1d1dc;font-size:12px;line-height:1.6}
@@ -34,10 +35,9 @@
 <script>
 const VERSION='3.2.23';
 const RUNTIME_KEY='mumei-notification-v3-loader';
-function scriptUrl(){return 'https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js'}
-function installUrl(){return scriptUrl()}
+function scriptUrl(){return 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js'}
 const install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult');
-install.href=installUrl();
+install.href=scriptUrl();
 function safeBack(v){try{const u=new URL(String(v||''));return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
 const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;
 function check(){const active=String(localStorage.getItem(RUNTIME_KEY)||'');if(active===VERSION){result.className='result ok';result.textContent='✓ V3.2.23 起動確認済み。更新できています。';return true}result.className='result warn';result.textContent=active?`現在の起動確認: V${active}。V3.2.23へ更新してください。`:'V3.2.23の起動確認待ちです。更新後にこの画面へ戻ってください。';return false}
