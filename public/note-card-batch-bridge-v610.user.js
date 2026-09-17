@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.6.0
+// @name         無名S note 極薄＋通知 URL/# 18.6.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.6.0
-// @description  記事URLまたは#から人物を抽出し、最新・最古・固定・本日昨日の4方式で1人1記事を選択。極薄画像＋埋込URL、通常通知カード、投稿後カードだけ削除を維持。最後に確認用サブ垢記事を1件追加。巡回BOOSTは使用しない。
+// @version      18.6.1
+// @description  記事URLまたは#から人物を抽出し、最新・最古・固定・本日昨日の4方式で1人1記事を選択。極薄画像＋埋込URL、通常通知カード、投稿後カードだけ削除を維持。最後に確認用サブ垢記事を1件追加。王子専用フロー内の巡回連携だけ外し、通常のnote巡回BOOSTは従来どおり保持。
 // @match        https://editor.note.com/*
 // @updateURL    https://mumei-s.github.io/note-insight/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-card-batch-bridge-v610.user.js
