@@ -6,21 +6,8 @@ page.__MUMEI_GENERIC_STABILITY_187__=true;
 
 const PANEL='mumei-note-source-picker-v163';
 const STYLE='mumei-generic-stability-v187-style';
-const TUNE_PREFIX='mumei_safe_upload_tuning_v179';
 const FLOAT_STATE='mumei_note_floating_ui_v164';
-const CHUNK=10;
 
-function articleKey(){return location.pathname.match(/(?:^|\/)(n[a-z0-9]{8,})(?:\/|$)/i)?.[1]||''}
-function tuneKey(){return `${TUNE_PREFIX}:${articleKey()||'unknown'}`}
-function lockTen(){
-  if(!articleKey())return;
-  try{
-    const now=JSON.parse(localStorage.getItem(tuneKey())||'{}')||{};
-    if(Number(now.chunk)!==CHUNK||Number(now.streak)!==0||now.locked!==true){
-      localStorage.setItem(tuneKey(),JSON.stringify({...now,chunk:CHUNK,streak:0,locked:true,updatedAt:Date.now()}));
-    }
-  }catch(_){ }
-}
 function css(){
   if(document.getElementById(STYLE)||!document.head)return;
   const s=document.createElement('style');s.id=STYLE;s.textContent=`
@@ -74,6 +61,6 @@ function attachDrag(){
   },true);
 }
 
-lockTen();css();attachDrag();
-setInterval(()=>{lockTen();css();attachDrag()},350);
+css();attachDrag();
+setInterval(()=>{css();attachDrag()},350);
 })();
