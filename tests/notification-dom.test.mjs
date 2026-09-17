@@ -6,6 +6,7 @@ import {JSDOM} from 'jsdom';
 const read=p=>fs.readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 const dock=read('note-insight-notification-dock-watch-v312.js');
 const reader=read('note-insight-notification-reader-v323.js');
+const runtime=read('note-insight-notification-runtime-v324.js');
 const v3=read('note-insight-notification-v3.user.js');
 
 function env(){
@@ -21,10 +22,10 @@ function expose(w,src,names){w.eval(src.replace(/\}\)\(\);?\s*$/,'window.testAPI
 function exposeDock(w){const src=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});\n})();","window.testAPI={findShell,showDock,ensureRoot};\n})();");w.eval(src);return w.testAPI}
 
 test('active notification scripts parse',()=>{
-  for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
+  for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-runtime-v324.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
 });
 
-test('dock shows four current controls and direct INSIGHT notification destination',()=>{
+test('legacy dock remains valid fallback and direct INSIGHT notification destination',()=>{
   const{dom,w}=env();
   try{
     const api=exposeDock(w),popup=w.document.getElementById('popup');
@@ -39,7 +40,6 @@ test('dock shows four current controls and direct INSIGHT notification destinati
     assert.equal(root.querySelector('[data-act="settings"]').textContent,'フィルター登録');
     assert.equal(root.querySelector('[data-act="ins"]').textContent,'INSIGHT');
     assert.match(dock,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
-    assert.doesNotMatch(dock,/notification-entry\.html/);
   }finally{dom.window.close()}
 });
 
@@ -71,29 +71,34 @@ test('reader is incremental, marks saved boundary, and has no full-history fallb
   assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback|全体照合へ切替/);
 });
 
-test('V3.2.23 wrapper ships current reader, filter registration, return restore and direct INSIGHT',()=>{
+test('V3.2.24 wrapper loads current reader and inline runtime',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.2\.23/);
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3223/);
-  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3223/);
-  assert.match(v3,/フィルター登録/);
-  assert.match(v3,/notification-filter\.html\?from=note&v=3223/);
-  assert.match(v3,/function captureNotificationReturn\(/);
-  assert.match(v3,/function restoreNotificationReturn\(/);
-  assert.match(v3,/note-insight\/\?insightMode=notifications#dashboard/);
-  assert.doesNotMatch(v3,/notification-entry\.html\?from=note/);
+  assert.match(v3,/@version\s+3\.2\.24/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3224/);
+  assert.match(meta,/note-insight-notification-runtime-v324\.js\?v=3224/);
+  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3224/);
+  assert.match(v3,/runtime-checked-v3224/);
+  assert.match(runtime,/ROOT='mumei-v324-dock'/);
+  assert.match(runtime,/通知フィルター登録/);
+  assert.match(runtime,/async function openSettings\(/);
+  assert.match(runtime,/function findSurface\(/);
+  assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime,/note-insight\/\?insightMode=notifications#dashboard/);
+  assert.doesNotMatch(runtime,/notification-filter\.html/);
 });
 
-test('installer opens only current V3.2.23 userscript and checks same-page runtime state',()=>{
+test('installer opens canonical V3.2.24 userscript and uses automatic runtime confirmation',()=>{
   const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
   try{
     w.eval(w.document.querySelector('script').textContent);
     const install=w.document.getElementById('install'),u=new URL(install.href);
     assert.equal(u.origin,'https://mumei-s.github.io');
     assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
-    assert.match(w.document.querySelector('.version').textContent,/3\.2\.23/);
+    assert.match(w.document.querySelector('.version').textContent,/3\.2\.24/);
     assert.match(html,/mumei-notification-v3-loader/);
+    assert.match(html,/mumei-notification-tool-version/);
     assert.match(html,/URLを貼り付ける操作はありません/);
+    assert.match(html,/確認ボタンも不要/);
     assert.doesNotMatch(html,/2\.9\.27|script_installation\.php|https:\/\/note\.com\/notifications/);
   }finally{w.close()}
 });
