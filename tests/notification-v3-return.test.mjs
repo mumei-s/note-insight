@@ -7,34 +7,48 @@ test("installer keeps participant steps compact with automatic confirmation",asy
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);assert.match(page,/最新版かどうか自動確認します/);assert.match(page,/insight-release\.json/);assert.match(page,/Tampermonkey/);
   assert.match(page,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/本人通知 V\d|V3\.2\.30/);assert.match(page,/mumei-notification-v3-loader/);assert.match(page,/mumei-notification-tool-version/);assert.match(page,/確認ボタンも不要/);
+  assert.doesNotMatch(page,/本人通知 V\d|V3\.2\.31/);assert.match(page,/mumei-notification-v3-loader/);assert.match(page,/mumei-notification-tool-version/);assert.match(page,/確認ボタンも不要/);
 });
 
-test("V3.2.30 preloads reader, checkpoint and compact launcher",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.30/);assert.match(v3,/compact-launcher-v3230/);
+test("V3.2.31 preloads reader, checkpoint and fixed five-panel runtime",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
+  assert.match(v3,/@version\s+3\.2\.31/);assert.match(v3,/fixed-five-dock-v3231/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3230/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3230/);assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3230/);
-  assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js|surface-guard-v326/);
-  assert.match(dock,/mumei-v3-launcher-v330/);assert.match(dock,/mumei-v3-tray-v330/);assert.match(dock,/🔔 INSIGHT/);
-  assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  for(const act of ["read","filter","settings","ins"])assert.match(dock,new RegExp(`data-act=\\"${act}\\"`));
-  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(reader,/mumei-v3-read-request/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3231/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3231/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3231/);
+  assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
+  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
+  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
+  assert.match(runtime,/mumei_insight_notification_auto_v325:/);
+  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(reader,/incremental-top-to-checkpoint/);
 });
 
-test("launcher appears while notification surface opens and auto-read starts when rows arrive",async()=>{
-  const dock=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.match(dock,/bellGraceUntil=Date\.now\(\)\+7000/);assert.match(dock,/showLauncher\(true\)/);assert.match(dock,/if\(!shell\|\|autoStarted\|\|!rows\(shell\)\.length\)return/);assert.match(dock,/void requestRead\(false\)/);
+test("five-panel dock appears on the notification surface and auto mode runs scans",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(runtime,/bottom:calc\(env\(safe-area-inset-bottom,0px\) \+ 10px\)!important/);
+  assert.match(runtime,/async function activate\(next\)/);
+  assert.match(runtime,/showRoot\(true\)/);
+  assert.match(runtime,/maybeAuto\(\)/);
+  assert.match(runtime,/async function safeScan\(\)/);
+  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore\?\.\(\)/);
 });
 
-test("filter registration opens the dedicated settings page and returns to note notifications",async()=>{
-  const dock=await read("public/note-insight-notification-dock-watch-v312.js"),page=await read("public/notification-filter.html");
-  assert.match(dock,/notification-filter\.html/);assert.match(dock,/function openSettings\(\)/);assert.match(dock,/mumei_return/);assert.match(page,/通知フィルター設定/);assert.match(page,/returnUrl='https:\/\/note\.com\/notifications'/);
+test("auto mode is saved per note account and can be switched off",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
+  assert.match(runtime,/autoMode=id\?Boolean\(await get\(AUTO\+id,true\)\):true/);
+  assert.match(runtime,/autoMode=!autoMode/);
+  assert.match(runtime,/await set\(AUTO\+id,autoMode\)/);
+  assert.match(runtime,/自動読み込みON。タップで手動へ/);
+  assert.match(runtime,/自動読み込みOFF。タップで自動へ/);
 });
 
-test("automatic incremental reading is default and there is no auto/manual mode button",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js");
-  assert.doesNotMatch(v3,/note-insight-notification-runtime-v327\.js/);assert.doesNotMatch(dock,/data-a="mode"|mumei_insight_notification_auto_v325:/);assert.match(dock,/async function tryAutoStart\(/);assert.match(dock,/追加読込/);
+test("checkpoint reading only adds notifications beyond the last confirmed save position",async()=>{
+  const reader=await read("public/note-insight-notification-reader-v323.js");
+  assert.match(reader,/checkpoint-stop-v3223/);
+  assert.match(reader,/boundarySignature/);
+  assert.match(reader,/boundaryEventIdentity/);
+  assert.match(reader,/function boundaryMatch/);
+  assert.match(reader,/ここまで保存済み/);
 });
 
 test("INSIGHT notifications keep one category selector",async()=>{
