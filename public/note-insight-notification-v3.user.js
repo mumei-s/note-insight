@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.25
-// @description  本人通知V3。保存位置をページ終了後も保持し、自動/手動を切替できるコンパクト通知パネルで追加分だけ読み込む。
+// @version      3.2.26
+// @description  本人通知V3。保存位置を永続保持し、自動/手動を切替。通知画面を離れたら保存線・読込結果など通知UIを即消去。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-idle
@@ -17,17 +17,18 @@
 // @connect      mumei-s.github.io
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3225
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3225
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v325.js?v=3225
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-dock-watch-v312.js?v=3225
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3226
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3226
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v325.js?v=3226
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-surface-guard-v326.js?v=3226
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-dock-watch-v312.js?v=3226
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.2.25';
+const VERSION='3.2.26';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 if(location.hostname==='mumei-s.github.io'){
@@ -39,6 +40,6 @@ try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const q=new URLSearchParams(location.search);
 if(q.get('mumei_insight_version_check')==='1'){
   const raw=q.get('mumei_return')||'';
-  try{const back=new URL(raw);if(back.origin==='https://mumei-s.github.io'&&back.pathname.startsWith('/note-insight/')){back.searchParams.set('notificationInstalled',VERSION);back.searchParams.set('notificationCheckedAt',String(Date.now()));back.searchParams.set('notificationUpdateResult','runtime-checked-v3225');location.replace(back.href)}}catch{}
+  try{const back=new URL(raw);if(back.origin==='https://mumei-s.github.io'&&back.pathname.startsWith('/note-insight/')){back.searchParams.set('notificationInstalled',VERSION);back.searchParams.set('notificationCheckedAt',String(Date.now()));back.searchParams.set('notificationUpdateResult','runtime-checked-v3226');location.replace(back.href)}}catch{}
 }
 })();
