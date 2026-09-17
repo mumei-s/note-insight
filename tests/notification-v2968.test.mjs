@@ -30,10 +30,9 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.28 with persistent checkpoint, mode toggle and bell-intent runtime',()=>{
+test('active package uses V3.2.29 with persistent checkpoint and canonical four-button dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
-  const runtime=read('public/note-insight-notification-runtime-v327.js');
   const checkpoint=read('public/note-insight-notification-checkpoint-v325.js');
   const setup=read('public/tool-setup.html');
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
@@ -41,30 +40,27 @@ test('active package uses V3.2.28 with persistent checkpoint, mode toggle and be
   const index=read('index.html');
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.28');
-  assert.match(v3,/@version\s+3\.2\.28/);
-  assert.match(v3,/runtime-checked-v3228/);
+  assert.equal(manifest.notificationVersion,'3.2.29');
+  assert.match(v3,/@version\s+3\.2\.29/);
+  assert.match(v3,/dock-4col-v3229/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3228','note-insight-notification-checkpoint-v325.js?v=3228','note-insight-notification-runtime-v327.js?v=3228','note-insight-notification-dock-watch-v312.js?v=3228'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3229','note-insight-notification-checkpoint-v325.js?v=3229','note-insight-notification-dock-watch-v312.js?v=3229'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js/);
   assert.doesNotMatch(v3,/surface-guard-v326/);
-  assert.match(runtime,/__mumeiNotificationRuntime328/);
-  assert.match(runtime,/function popupSurface\(\)/);
-  assert.match(runtime,/function bellTrigger\(/);
-  assert.match(runtime,/intentUntil=Date\.now\(\)\+7000/);
-  assert.match(runtime,/async function waitForRows\(timeout=5000\)/);
-  assert.match(runtime,/function scheduleHide\(delay=750\)/);
-  assert.match(runtime,/data-a="mode"/);
-  assert.match(runtime,/通知フィルター登録/);
-  assert.doesNotMatch(runtime,/notification-filter\.html/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
   assert.match(checkpoint,/localStorage\.setItem/);
-  assert.match(setup,/V3\.2\.28/);
+  assert.match(setup,/V3\.2\.29/);
+  assert.match(setup,/4列パネル/);
+  assert.match(setup,/ブラウザ別インストール/);
   assert.match(setup,/確認ボタンも不要/);
+  assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(dock,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
   assert.match(dock,/function neutralizeParentDock\(\)/);
   assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);
   assert.match(reader,/ここまで保存済み/);
   assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback/);
   assert.match(index,/mode === "notifications"/);
+  assert.match(index,/body:has\(\.app-route-shell\)/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
