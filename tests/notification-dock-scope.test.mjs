@@ -9,31 +9,27 @@ test("direct reader has no global fallback dock or legacy frame dependency",asyn
  assert.match(reader,/data-mumei-notice-shell-v3/);assert.match(reader,/incremental-top-to-checkpoint/);assert.match(reader,/ここまで保存済み/);assert.doesNotMatch(reader,/fullFallback|loadAbsoluteBottom/);
 });
 
-test("legacy dock remains a bounded fallback",async()=>{
+test("canonical dock remains bounded to the notification surface",async()=>{
  const panel=await read("public/note-insight-notification-dock-watch-v312.js");
  assert.match(panel,/__mumeiNotificationDock322/);assert.match(panel,/bellGraceUntil/);assert.match(panel,/bellGraceUntil=Date\.now\(\)\+7000/);assert.match(panel,/notificationRoute\(\)/);assert.doesNotMatch(panel,/ensureLauncher|bindDrag|srcdoc=/);
 });
 
-test("V3.2.28 runtime owns dock lifecycle and bell intent before rows load",async()=>{
+test("V3.2.29 delegates dock ownership to the canonical four-button dock",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
- const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const dock=await read("public/note-insight-notification-dock-watch-v312.js");
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3228/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3228/);
+ assert.match(parent,/@version\s+3\.2\.29/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3229/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3229/);
+ assert.match(parent,/note-insight-notification-dock-watch-v312\.js\?v=3229/);
+ assert.doesNotMatch(parent,/note-insight-notification-runtime-v327\.js/);
  assert.doesNotMatch(parent,/surface-guard-v326/);
- assert.match(runtime,/window\.__mumeiNotificationDock322=true/);
- assert.match(runtime,/__mumeiNotificationRuntime328/);
- assert.match(runtime,/function popupSurface\(\)/);
- assert.match(runtime,/function bellTrigger\(/);
- assert.match(runtime,/function bellIntent\(\)/);
- assert.match(runtime,/intentUntil=Date\.now\(\)\+7000/);
- assert.match(runtime,/async function activateIntent\(\)/);
- assert.match(runtime,/async function waitForRows\(timeout=5000\)/);
- assert.match(runtime,/function scheduleHide\(delay=750\)/);
- assert.match(runtime,/data-a="mode"/);assert.match(runtime,/通知フィルター登録/);
+ assert.match(parent,/dock-4col-v3229/);
+ assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+ assert.match(dock,/data-act="read"/);assert.match(dock,/data-act="filter"/);assert.match(dock,/data-act="settings"/);assert.match(dock,/data-act="ins"/);
+ assert.match(dock,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
+ assert.match(dock,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
- assert.match(dock,/if\(window\.__mumeiNotificationDock322\)return/);
 });
 
 test("filter registration and read operations use one native click path without pointer interception",async()=>{
@@ -41,9 +37,10 @@ test("filter registration and read operations use one native click path without 
  assert.match(panel,/touch-action:manipulation/);assert.match(panel,/window\.addEventListener\('click',onClick,true\)/);assert.doesNotMatch(panel,/pointerdown|pointerup|touch-action:none/);assert.match(panel,/フィルター登録/);
 });
 
-test("filter back target and INSIGHT target are explicit and never inherit a creator page",async()=>{
+test("filter and INSIGHT targets are explicit and never inherit a creator page",async()=>{
  const panel=await read("public/note-insight-notification-dock-watch-v312.js");
  assert.match(panel,/history\.replaceState\(history\.state,'','\/notifications'\)/);
+ assert.match(panel,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
  assert.match(panel,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
  assert.doesNotMatch(panel,/const INSIGHT=.*notification-entry\.html/);
 });
