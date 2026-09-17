@@ -10,7 +10,7 @@ test("V3.2.36 loads bottom-up reader, persistent checkpoint and fixed five-panel
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3236/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3236/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3236/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/SHOULD_NOT_REQUIRE_SETTINGS_ROUTE/);
+  assert.doesNotMatch(v3,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
   has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3236"]);
   has(checkpoint,["mumei_insight_notification_checkpoint_local_v325:","localStorage.setItem","async function restore(","async function persist(","ここまで保存済み"]);
