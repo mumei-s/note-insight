@@ -89,11 +89,12 @@ test('V3.2.29 wrapper uses the canonical dock instead of the obsolete five-butto
   assert.match(runtime,/VERSION='3\.2\.28'/);
 });
 
-test('installer opens canonical userscript and keeps visible copy versionless',()=>{
+test('installer opens canonical userscript and keeps visible copy versionless',async()=>{
   const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
   try{
     w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.29'})});
     w.eval(w.document.querySelector('script').textContent);
+    await new Promise(resolve=>setTimeout(resolve,0));
     const install=w.document.getElementById('install'),u=new URL(install.href);
     assert.equal(u.origin,'https://mumei-s.github.io');
     assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
@@ -108,5 +109,5 @@ test('installer opens canonical userscript and keeps visible copy versionless',(
     assert.match(html,/URLを貼り付ける操作はありません/);
     assert.match(html,/確認ボタンも不要/);
     assert.doesNotMatch(html,/2\.9\.27|script_installation\.php|https:\/\/note\.com\/notifications/);
-  }finally{w.close()}
+  }finally{dom.window.close()}
 });
