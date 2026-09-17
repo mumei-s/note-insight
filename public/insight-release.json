@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.37",
+  "notificationVersion": "3.2.38",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T07:40:00+09:00",
+  "releasedAt": "2026-09-18T08:05:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知に常時表示の読み込みパネルを追加。通知を開くと『通知を読み込む』が必ず表示され、待機・読込中・保存完了・再読込をその場で確認できる。全ページDOM監視は使わない。"
+  "note": "本人通知は従来の下部固定5パネル版へ復帰。読込｜自動/手動｜フィルター｜設定｜INSIGHT。追加の上段読み込みパネルは廃止し、全ページDOM監視も使用しない。"
 }
