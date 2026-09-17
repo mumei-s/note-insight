@@ -42,10 +42,11 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package uses V3.2.24 with notification-only inline runtime and incremental checkpoint reader',()=>{
+test('active package uses V3.2.25 with persistent checkpoint, mode toggle and incremental reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
-  const runtime=read('public/note-insight-notification-runtime-v324.js');
+  const runtime=read('public/note-insight-notification-runtime-v325.js');
+  const checkpoint=read('public/note-insight-notification-checkpoint-v325.js');
   const setup=read('public/tool-setup.html');
   const dashboardSetup=read('public/dashboard-setup.html');
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
@@ -57,23 +58,30 @@ test('active package uses V3.2.24 with notification-only inline runtime and incr
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
   assert.equal(manifest.appVersion,'2026.09.17.2');
-  assert.equal(manifest.notificationVersion,'3.2.24');
+  assert.equal(manifest.notificationVersion,'3.2.25');
   assert.equal(manifest.dashboardVersion,'1.4.4');
-  assert.match(v3,/@version\s+3\.2\.24/);
-  assert.match(v3,/runtime-checked-v3224/);
-  for(const part of ['note-insight-notification-runtime-v324.js','note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js'])assert.match(v3,new RegExp(part.replaceAll('.','\\.')));
+  assert.match(v3,/@version\s+3\.2\.25/);
+  assert.match(v3,/runtime-checked-v3225/);
+  for(const part of ['note-insight-notification-runtime-v325.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js'])assert.match(v3,new RegExp(part.replaceAll('.','\\.')));
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3224/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v324\.js\?v=3224/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3224/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v325\.js\?v=3225/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3225/);
   assert.match(runtime,/window\.__mumeiNotificationDock322=true/);
-  assert.match(runtime,/ROOT='mumei-v324-dock'/);
+  assert.match(runtime,/ROOT='mumei-v325-dock'/);
   assert.match(runtime,/function findSurface\(\)/);
   assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime,/data-a="mode"/);
+  assert.match(runtime,/mumei_insight_notification_auto_v325:/);
   assert.match(runtime,/通知フィルター登録/);
   assert.match(runtime,/async function openSettings\(/);
   assert.doesNotMatch(runtime,/notification-filter\.html/);
   assert.match(runtime,/note-insight\/\?insightMode=notifications#dashboard/);
+  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
+  assert.match(checkpoint,/localStorage\.setItem/);
+  assert.match(checkpoint,/async function restore\(/);
+  assert.match(checkpoint,/addEventListener\('pagehide'/);
   assert.match(setup,/INSIGHTをインストール \/ 更新/);
   assert.match(setup,/ユーザースクリプトの更新を確認/);
   assert.match(setup,/URLを貼り付ける操作はありません/);
