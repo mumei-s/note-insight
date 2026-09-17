@@ -12,16 +12,18 @@ test("direct reader keeps checkpoint incremental behavior",async()=>{
  assert.match(reader,/MAX_SCROLL_STEPS/);
 });
 
-test("V3.2.31 loads the fixed five-panel runtime",async()=>{
+test("V3.2.32 loads fixed five-panel runtime plus dedicated settings route",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
- assert.match(parent,/@version\s+3\.2\.31/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3231/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3231/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3231/);
+ const route=await read("public/note-insight-notification-settings-route-v332.js");
+ assert.match(parent,/@version\s+3\.2\.32/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3232/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3232/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3232/);
+ assert.match(parent,/note-insight-notification-settings-route-v332\.js\?v=3232/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
- assert.match(parent,/fixed-five-dock-v3231/);
+ assert.match(parent,/fixed-five-dock-settings-v3232/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
@@ -30,6 +32,10 @@ test("V3.2.31 loads the fixed five-panel runtime",async()=>{
  assert.match(runtime,/safeScan/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
+ assert.match(route,/notification-filter\.html/);
+ assert.match(route,/mumei_return/);
+ assert.match(route,/textContent='設定'/);
+ assert.match(route,/stopImmediatePropagation/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -49,6 +55,13 @@ test("reader saves a confirmed boundary and subsequent scans use it",async()=>{
  assert.match(reader,/boundaryLegacySignature:legacySig\(last\)/);
  assert.match(reader,/function boundaryMatch/);
  assert.match(reader,/checkpoint-stop-v3223/);
+});
+
+test("settings route never uses creator-profile fallback",async()=>{
+ const route=await read("public/note-insight-notification-settings-route-v332.js");
+ assert.match(route,/https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html/);
+ assert.match(route,/https:\/\/note\.com\/notifications/);
+ assert.doesNotMatch(route,/creator|profile|location\.href\s*=\s*['"]https:\/\/note\.com\/[^n]/i);
 });
 
 test("ingest token bridge is origin-locked",async()=>{
