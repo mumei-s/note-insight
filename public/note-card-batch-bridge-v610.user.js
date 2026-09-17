@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.6.2
+// @name         無名S note 極薄＋通知 URL/# 18.6.3
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.6.2
-// @description  記事URLまたは#から人物を抽出し、最新・最古・固定・本日昨日の4方式で1人1記事を選択。極薄画像＋埋込URL、通常通知カード、投稿後カードだけ削除を維持。最後に確認用サブ垢記事を1件追加。王子専用フロー内の巡回連携だけ外し、通常のnote巡回BOOSTは従来どおり保持。
+// @version      18.6.3
+// @description  記事URLまたは#から人物を抽出し、最新・最古・固定・本日昨日の4方式で1人1記事を選択。極薄画像は実績済みの10枚単位へ固定し、各画像へ記事URLを付与して保存。送で通知カード生成、投稿後カードだけ削除。小型パネルはドラッグ移動可。通常のnote巡回BOOSTは従来どおり保持。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -13,6 +13,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-link-guard-v178.js?v=17.8.1
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-tool-floating-ui-v164.js?v=16.4.1
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-prince-special-v184.js?v=18.6.0
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-generic-stability-v187.js?v=18.7.0
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
