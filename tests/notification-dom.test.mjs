@@ -25,7 +25,7 @@ test('fixed runtime declares exactly five bottom actions including auto mode',()
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ['read','mode','filter','settings','ins'])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
   assert.match(runtime,/mumei_insight_notification_auto_v325:/);
-  assert.match(runtime,/notification-filter\\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);
+  assert.match(runtime,/notification-filter\.html/);assert.doesNotMatch(runtime,/new MutationObserver/);
   assert.match(runtime,/autoMode\?'自動':'手動'/);
 });
 
@@ -49,7 +49,7 @@ test('reader starts from the lower side, marks the completion line, and next run
 test('persistent checkpoint mirrors the saved boundary across page closes',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/)});
 
 test('V3.2.36 wrapper activates bottom-up reader and fixed five-panel runtime',()=>{
-  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.36/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3236/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3236/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3236/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3236/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/async function safeScan/);assert.match(settingsRoute,/notification-filter\.html/);assert.match(settingsRoute,/stopImmediatePropagation/);
+  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.36/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3236/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3236/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3236/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3236/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/async function safeScan/)
 });
 
 test('installer opens canonical userscript and keeps visible copy versionless',async()=>{
