@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.23",
+  "notificationVersion": "3.2.24",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-17T07:48:00+09:00",
+  "releasedAt": "2026-09-17T17:15:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.23",
+  "notificationLabel": "本人通知 V3.2.24",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知は保存済み境界から追加分だけを読み取り、境界を見失っても全履歴読込へ切り替えず安全停止。二重読込要求を無視し、通知から戻った位置を復元。4列パネルの設定はフィルター登録へ変更し、INSIGHTは通知画面へ直行。"
+  "note": "本人通知V3.2.24。更新済み判定を自動反映。4列パネルは実際の🔔通知画面だけに表示。Readerを同梱して手動読込の部品エラーを回避。フィルター登録は以前の通知画面内インライン設定へ戻し、既存登録を維持。"
 }
