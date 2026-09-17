@@ -20,7 +20,7 @@ test("V3.2.34 loads bottom-up reader, fixed five-panel runtime plus dedicated se
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const route=await read("public/note-insight-notification-settings-route-v332.js");
- assert.match(parent,/@version\s+3\.2\.33/);
+ assert.match(parent,/@version\s+3\.2\.34/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3234/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3234/);
  assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3234/);
