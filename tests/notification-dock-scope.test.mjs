@@ -9,22 +9,22 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/bottom-up-from-saved-line/);
  assert.match(reader,/saved-line-bottom-up-v324/);
  assert.match(reader,/ここまで保存済み/);
- assert.match(reader,/boundarySignature/);
+ assert.match(reader,/boundarySignature/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/reader-recovered-saved-v325/);
  assert.match(reader,/MAX_SEEK_STEPS/);
  assert.match(reader,/MAX_READ_STEPS/);
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.39 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.40 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
- assert.match(parent,/@version\s+3\.2\.39/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3239/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3239/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3239/);
+ assert.match(parent,/@version\s+3\.2\.40/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3240/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3240/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3240/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
- assert.match(parent,/bottom-up-saved-line-v3239/);
+ assert.match(parent,/bottom-up-saved-line-v3240/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
