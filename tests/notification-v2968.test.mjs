@@ -30,53 +30,28 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.29 with persistent checkpoint and canonical four-button dock',()=>{
+test('active package uses V3.2.30 with persistent checkpoint and compact four-action launcher',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
-  const v3=read('public/note-insight-notification-v3.user.js');
-  const checkpoint=read('public/note-insight-notification-checkpoint-v325.js');
-  const setup=read('public/tool-setup.html');
-  const dock=read('public/note-insight-notification-dock-watch-v312.js');
-  const reader=read('public/note-insight-notification-reader-v323.js');
-  const index=read('index.html');
-  const picker=read('src/insight-notification-ui-v18.ts');
-  const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.29');
-  assert.match(v3,/@version\s+3\.2\.29/);
-  assert.match(v3,/dock-4col-v3229/);
+  const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/tool-setup.html'),dock=read('public/note-insight-notification-dock-watch-v312.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
+  assert.equal(manifest.notificationVersion,'3.2.30');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.2\.30/);assert.match(v3,/compact-launcher-v3230/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3229','note-insight-notification-checkpoint-v325.js?v=3229','note-insight-notification-dock-watch-v312.js?v=3229'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3230','note-insight-notification-checkpoint-v325.js?v=3230','note-insight-notification-dock-watch-v312.js?v=3230'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js/);
-  assert.doesNotMatch(v3,/surface-guard-v326/);
-  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
-  assert.match(checkpoint,/localStorage\.setItem/);
-  assert.match(setup,/最新版をインストール \/ 更新/);
-  assert.match(setup,/insight-release\.json/);
-  assert.doesNotMatch(setup,/V3\.2\.29|本人通知 V\d/);
-  assert.match(setup,/4列パネル/);
-  assert.match(setup,/ブラウザ別インストール/);
-  assert.match(setup,/確認ボタンも不要/);
-  assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(dock,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
-  assert.match(dock,/function neutralizeParentDock\(\)/);
-  assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);
-  assert.match(reader,/ここまで保存済み/);
-  assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback/);
-  assert.match(index,/mode === "notifications"/);
-  assert.doesNotMatch(index,/insight-tool-row/);
-  assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
-  assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
+  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);
+  assert.match(setup,/最新版をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/確認ボタンも不要/);
+  assert.match(dock,/mumei-v3-launcher-v330/);assert.match(dock,/mumei-v3-tray-v330/);assert.match(dock,/🔔 INSIGHT/);assert.match(dock,/追加読込/);assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);assert.match(dock,/notification-filter\.html/);assert.match(dock,/pointerdown/);assert.doesNotMatch(dock,/textContent='読込部品エラー'/);
+  assert.match(reader,/scan_mode:'incremental-top-to-checkpoint'/);assert.match(reader,/ここまで保存済み/);assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback/);
+  assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
   const store=read('src/insight-account-store.ts'),main=read('src/main.tsx'),home=read('src/hub-home-v2.tsx');
-  assert.match(store,/EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:"/);
-  assert.match(home,/localStorage\.setItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ activeAccount\.noteId, "1"\)/);
-  assert.match(main,/function resumeCandidate\(\)/);
+  assert.match(store,/EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:"/);assert.match(home,/localStorage\.setItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ activeAccount\.noteId, "1"\)/);assert.match(main,/function resumeCandidate\(\)/);
 });
 
 test('seven-day selection still compares against the preceding seven days',()=>{
   const {summarize}=helpers('supabase/functions/insight-notification-analysis-summary/index.ts',['summarize']);
   const row=days=>({notification_type:'my_article_magazine_added',occurred_at:new Date(Date.now()-days*86400000).toISOString(),actor_name:'A'});
-  const recent=row(1),previous=row(9);const r=summarize([recent],'ss_yr',false,1,7,[recent,previous]);
-  assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);
+  const recent=row(1),previous=row(9);const r=summarize([recent],'ss_yr',false,1,7,[recent,previous]);assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);
 });
