@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.30",
+  "notificationVersion": "3.2.31",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T05:18:00+09:00",
+  "releasedAt": "2026-09-18T05:34:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知は小型の可動INSIGHTボタンを正本に戻し、タップ時だけ4操作（追加読込／フィルター／フィルター登録／INSIGHT）を表示。通知を開いた時の追加分自動読込と保存位置、専用フィルター設定画面への導線を維持する。"
+  "note": "本人通知は通知画面下部の固定5パネルを正本とする。読込／自動ON-OFF／フィルター／登録／INSIGHT。自動ON時は通知一覧を自動読込し、確認済みの保存位置をチェックポイントとして保持、次回以降はその位置より新しい追加分だけを保存する。"
 }
