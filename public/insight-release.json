@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.24",
+  "notificationVersion": "3.2.25",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-17T17:15:00+09:00",
+  "releasedAt": "2026-09-18T00:33:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.24",
+  "notificationLabel": "本人通知 V3.2.25",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.24。更新済み判定を自動反映。4列パネルは実際の🔔通知画面だけに表示。Readerを同梱して手動読込の部品エラーを回避。フィルター登録は以前の通知画面内インライン設定へ戻し、既存登録を維持。"
+  "note": "本人通知V3.2.25。保存済み境界をページ終了後も永続保持し、次回は追加分だけ確認。通知パネルは5列コンパクト表示にし、自動／手動をアカウント別に切替・保持できる。"
 }
