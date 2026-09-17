@@ -7,12 +7,12 @@ test("installer keeps participant steps compact with automatic confirmation",asy
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);assert.match(page,/最新版かどうか自動確認します/);assert.match(page,/insight-release\.json/);assert.match(page,/Tampermonkey/);
   assert.match(page,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/本人通知 V\d|V3\.2\.33/);assert.match(page,/mumei-notification-v3-loader/);assert.match(page,/mumei-notification-tool-version/);assert.match(page,/確認ボタンも不要/);
+  assert.doesNotMatch(page,/本人通知 V\d|V3\.2\.34/);assert.match(page,/mumei-notification-v3-loader/);assert.match(page,/mumei-notification-tool-version/);assert.match(page,/確認ボタンも不要/);
 });
 
 test("V3.2.34 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.33/);assert.match(v3,/bottom-up-saved-line-v3234/);
+  assert.match(v3,/@version\s+3\.2\.34/);assert.match(v3,/bottom-up-saved-line-v3234/);
   const meta=v3.split("// ==/UserScript==")[0];
   assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3234/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3234/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3234/);assert.match(meta,/note-insight-notification-settings-route-v332\.js\?v=3234/);
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
