@@ -9,40 +9,42 @@ test("direct reader has no global fallback dock or legacy frame dependency",asyn
  assert.match(reader,/data-mumei-notice-shell-v3/);assert.match(reader,/incremental-top-to-checkpoint/);assert.match(reader,/ここまで保存済み/);assert.doesNotMatch(reader,/fullFallback|loadAbsoluteBottom/);
 });
 
-test("canonical dock remains bounded to the notification surface",async()=>{
+test("compact launcher is bounded to the notification surface",async()=>{
  const panel=await read("public/note-insight-notification-dock-watch-v312.js");
- assert.match(panel,/__mumeiNotificationDock322/);assert.match(panel,/bellGraceUntil/);assert.match(panel,/bellGraceUntil=Date\.now\(\)\+7000/);assert.match(panel,/notificationRoute\(\)/);assert.doesNotMatch(panel,/ensureLauncher|bindDrag|srcdoc=/);
+ assert.match(panel,/__mumeiNotificationDock322/);assert.match(panel,/bellGraceUntil/);assert.match(panel,/bellGraceUntil=Date\.now\(\)\+7000/);assert.match(panel,/notificationRoute\(\)/);
+ assert.match(panel,/mumei-v3-launcher-v330/);assert.match(panel,/mumei-v3-tray-v330/);assert.match(panel,/showLauncher\(open\)/);
+ assert.doesNotMatch(panel,/srcdoc=/);
 });
 
-test("V3.2.29 delegates dock ownership to the canonical four-button dock",async()=>{
- const parent=await read("public/note-insight-notification-v3.user.js");
- const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
- const dock=await read("public/note-insight-notification-dock-watch-v312.js");
- assert.match(parent,/@version\s+3\.2\.29/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3229/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3229/);
- assert.match(parent,/note-insight-notification-dock-watch-v312\.js\?v=3229/);
+test("V3.2.30 uses the compact launcher with four actions",async()=>{
+ const parent=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),dock=await read("public/note-insight-notification-dock-watch-v312.js");
+ assert.match(parent,/@version\s+3\.2\.30/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3230/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3230/);
+ assert.match(parent,/note-insight-notification-dock-watch-v312\.js\?v=3230/);
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v327\.js/);
- assert.doesNotMatch(parent,/surface-guard-v326/);
- assert.match(parent,/dock-4col-v3229/);
+ assert.match(parent,/compact-launcher-v3230/);
  assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
- assert.match(dock,/data-act="read"/);assert.match(dock,/data-act="filter"/);assert.match(dock,/data-act="settings"/);assert.match(dock,/data-act="ins"/);
+ for(const act of ["read","filter","settings","ins"])assert.match(dock,new RegExp(`data-act=\\"${act}\\"`));
+ assert.match(dock,/🔔 INSIGHT/);assert.match(dock,/追加読込/);assert.match(dock,/フィルター登録/);
  assert.match(dock,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
  assert.match(dock,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
 });
 
-test("filter registration and read operations use one native click path without pointer interception",async()=>{
+test("launcher tap expands and long press moves without replacing the read label with an error",async()=>{
  const panel=await read("public/note-insight-notification-dock-watch-v312.js");
- assert.match(panel,/touch-action:manipulation/);assert.match(panel,/window\.addEventListener\('click',onClick,true\)/);assert.doesNotMatch(panel,/pointerdown|pointerup|touch-action:none/);assert.match(panel,/フィルター登録/);
+ assert.match(panel,/setTray\(!trayOpen\)/);assert.match(panel,/pointerdown/);assert.match(panel,/pointermove/);assert.match(panel,/450/);assert.match(panel,/savePos\(b\)/);
+ assert.match(panel,/touch-action:none/);assert.match(panel,/touch-action:manipulation/);
+ assert.doesNotMatch(panel,/textContent='読込部品エラー'/);
 });
 
-test("filter and INSIGHT targets are explicit and never inherit a creator page",async()=>{
+test("filter registration and INSIGHT targets are explicit",async()=>{
  const panel=await read("public/note-insight-notification-dock-watch-v312.js");
  assert.match(panel,/history\.replaceState\(history\.state,'','\/notifications'\)/);
- assert.match(panel,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
- assert.match(panel,/INSIGHT='https:\/\/mumei-s\.github\.io\/note-insight\/\?insightMode=notifications#dashboard'/);
- assert.doesNotMatch(panel,/const INSIGHT=.*notification-entry\.html/);
+ assert.match(panel,/notification-filter\.html/);assert.match(panel,/mumei_return/);
+ assert.match(panel,/note-insight\/\?insightMode=notifications#dashboard/);
+ assert.doesNotMatch(panel,/notification-entry\.html/);
 });
 
 test("ingest token bridge is origin-locked",async()=>{
