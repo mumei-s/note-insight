@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.25",
+  "notificationVersion": "3.2.26",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T00:33:00+09:00",
+  "releasedAt": "2026-09-18T01:38:00+09:00",
   "appLabel": "INSIGHT本体",
-  "notificationLabel": "本人通知 V3.2.25",
+  "notificationLabel": "本人通知 V3.2.26",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.25。保存済み境界をページ終了後も永続保持し、次回は追加分だけ確認。通知パネルは5列コンパクト表示にし、自動／手動をアカウント別に切替・保持できる。"
+  "note": "本人通知V3.2.26。V3.2.25の保存位置永続化と自動／手動切替を維持し、通知画面を離れた際に保存済み線・読込結果帯・通知用UIが通常ページへ残らないよう通知面を厳密に限定。"
 }
