@@ -1,47 +1,10 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">
 <title>INSIGHT インストール / 更新</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}.wrap{width:min(560px,calc(100% - 20px));margin:auto;padding:14px 0 34px}.back{display:inline-flex;align-items:center;min-height:38px;color:#80eaff;text-decoration:none;font-weight:900}.card{border:1px solid #31506a;border-radius:16px;background:#0a1722;padding:16px}.eyebrow{font-size:11px;color:#86cfe3;letter-spacing:.08em}.title{margin:6px 0 2px;font-size:28px;font-weight:950;line-height:1.2}.version{margin:0 0 8px;font-size:18px;font-weight:900;color:#8feaff}.lead{margin:0 0 14px;color:#b9cad7;line-height:1.65;font-size:13px}.notice{padding:10px;border:1px solid #38637c;border-radius:10px;background:#081722;color:#cfefff;font-size:12px;line-height:1.65}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;margin-top:12px;border:1px solid #61c98c;border-radius:11px;background:#123626;color:#edfff4;text-decoration:none;font:950 16px/1.2 system-ui;text-align:center;padding:10px}.verify{border-color:#56cfe9;background:#103144;color:#e9fbff}.result{margin-top:10px;padding:10px;border:1px solid #3b5b72;border-radius:9px;background:#08131d;font-size:12px;font-weight:800;line-height:1.55}.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}.mini{margin:10px 0 0;color:#94aaba;font-size:11px;line-height:1.6}.steps{margin-top:14px;padding-top:12px;border-top:1px solid #263d4e}.steps b{display:block;margin-bottom:6px}.steps p{margin:5px 0;color:#c1d1dc;font-size:12px;line-height:1.6}
-</style>
+<style>*{box-sizing:border-box}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}.wrap{width:min(560px,calc(100% - 20px));margin:auto;padding:14px 0 34px}.back{display:inline-flex;align-items:center;min-height:38px;color:#80eaff;text-decoration:none;font-weight:900}.card{border:1px solid #31506a;border-radius:16px;background:#0a1722;padding:16px}.eyebrow{font-size:11px;color:#86cfe3;letter-spacing:.08em}.title{margin:6px 0 2px;font-size:28px;font-weight:950;line-height:1.2}.version{margin:0 0 8px;font-size:18px;font-weight:900;color:#8feaff}.lead{margin:0 0 14px;color:#b9cad7;line-height:1.65;font-size:13px}.notice{padding:10px;border:1px solid #38637c;border-radius:10px;background:#081722;color:#cfefff;font-size:12px;line-height:1.65}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;margin-top:12px;border:1px solid #61c98c;border-radius:11px;background:#123626;color:#edfff4;text-decoration:none;font:950 16px/1.2 system-ui;text-align:center;padding:10px}.result{margin-top:10px;padding:10px;border:1px solid #3b5b72;border-radius:9px;background:#08131d;font-size:12px;font-weight:800;line-height:1.55}.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}.mini{margin:10px 0 0;color:#94aaba;font-size:11px;line-height:1.6}.steps{margin-top:14px;padding-top:12px;border-top:1px solid #263d4e}.steps b{display:block;margin-bottom:6px}.steps p{margin:5px 0;color:#c1d1dc;font-size:12px;line-height:1.6}</style>
 </head>
-<body>
-<main class="wrap">
-<a id="back" class="back" href="./?insightMode=notifications#dashboard">← INSIGHT【通知】へ戻る</a>
-<section class="card">
-<div class="eyebrow">PRIVATE NOTIFICATION</div>
-<h1 class="title">INSIGHTをインストール / 更新</h1>
-<div class="version">本人通知 V3.2.23</div>
-<p class="lead">旧 v2.9系の中間ページは使いません。OWNERも参加者も、このV3を1本だけ使います。</p>
-<div class="notice"><b>更新内容</b><br>通知は保存済み地点より上の<strong>追加分だけ</strong>読み取ります。保存済み地点には「ここまで保存済み」の線を表示し、地点を見失っても全履歴を永久に読み続けません。</div>
-<a id="install" class="btn" href="#">V3.2.23をインストール / 更新</a>
-<button id="verify" class="btn verify" type="button">この画面で更新結果を確認</button>
-<div id="verifyResult" class="result">確認中…</div>
-<div class="steps">
-<b>更新方法</b>
-<p>① 上の「V3.2.23をインストール / 更新」を押す → ② Tampermonkeyの確認画面で「更新」または「インストール」 → ③ この画面へ戻って確認。</p>
-<p>TampermonkeyにすでにINSIGHTがある場合は、Tampermonkeyの「ユーザースクリプトの更新を確認」からでも更新できます。</p>
-<p><strong>URLを貼り付ける操作はありません。</strong></p>
-</div>
-<p class="mini">インストール後はnoteを再読み込みしてください。4列パネルは「手動読み込み / フィルター / フィルター登録 / INSIGHT」です。</p>
-</section>
-</main>
-<script>
-const VERSION='3.2.23';
-const RUNTIME_KEY='mumei-notification-v3-loader';
-function scriptUrl(){return 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js'}
-const install=document.getElementById('install'),verify=document.getElementById('verify'),result=document.getElementById('verifyResult');
-install.href=scriptUrl();
-function safeBack(v){try{const u=new URL(String(v||''));return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
-const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;
-function check(){const active=String(localStorage.getItem(RUNTIME_KEY)||'');if(active===VERSION){result.className='result ok';result.textContent='✓ V3.2.23 起動確認済み。更新できています。';return true}result.className='result warn';result.textContent=active?`現在の起動確認: V${active}。V3.2.23へ更新してください。`:'V3.2.23の起動確認待ちです。更新後にこの画面へ戻ってください。';return false}
-verify.addEventListener('click',check);addEventListener('pageshow',()=>setTimeout(check,100));addEventListener('focus',()=>setTimeout(check,120));check();
-</script>
-</body>
-</html>
+<body><main class="wrap"><a id="back" class="back" href="./?insightMode=notifications#dashboard">← INSIGHT【通知】へ戻る</a><section class="card"><div class="eyebrow">PRIVATE NOTIFICATION</div><h1 class="title">INSIGHTをインストール / 更新</h1><div class="version">本人通知 V3.2.24</div><p class="lead">この版で、更新判定・読み込み・表示範囲・フィルター登録をまとめて修正します。</p><div class="notice"><b>V3.2.24</b><br>4列パネルは<strong>🔔通知画面だけ</strong>に表示。手動読み込みは同梱Readerを直接使用。フィルター登録は別ページではなく、以前のように<strong>通知画面内の登録パネル</strong>で操作します。</div><a id="install" class="btn" href="#">V3.2.24をインストール / 更新</a><div id="verifyResult" class="result">更新後、この画面かINSIGHTを開くと自動で導入版を確認します。</div><div class="steps"><b>更新方法</b><p>① 上のボタン → ② Tampermonkeyで「更新」または「インストール」 → ③ noteを再読み込み。</p><p><strong>確認ボタンは廃止しました。</strong> 更新済み判定は自動で行います。</p></div><p class="mini">同じ名前・namespaceのV3を更新するため、旧V3と二重導入にはしません。</p></section></main>
+<script>const VERSION='3.2.24',RUNTIME_KEY='mumei-notification-v3-loader',TOOL_KEY='mumei-notification-tool-version';const install=document.getElementById('install'),result=document.getElementById('verifyResult');install.href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v324.user.js';function safeBack(v){try{const u=new URL(String(v||''));return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;function check(){const a=String(localStorage.getItem(TOOL_KEY)||localStorage.getItem(RUNTIME_KEY)||'');if(a===VERSION){result.className='result ok';result.textContent='✓ V3.2.24 起動確認済み。更新できています。';return}result.className='result warn';result.textContent=a?`現在の起動確認: V${a}。V3.2.24へ更新してください。`:'V3.2.24の起動確認待ちです。更新後にnoteまたはINSIGHTを開いてください。'}addEventListener('pageshow',()=>setTimeout(check,100));addEventListener('focus',()=>setTimeout(check,120));addEventListener('mumei-notification-version-changed',check);check();</script></body></html>
