@@ -7,8 +7,7 @@ const read=p=>fs.readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 const dock=read('note-insight-notification-dock-watch-v312.js');
 const reader=read('note-insight-notification-reader-v323.js');
 const checkpoint=read('note-insight-notification-checkpoint-v325.js');
-const runtime=read('note-insight-notification-runtime-v325.js');
-const guard=read('note-insight-notification-surface-guard-v326.js');
+const runtime=read('note-insight-notification-runtime-v327.js');
 const v3=read('note-insight-notification-v3.user.js');
 
 function env(){
@@ -24,7 +23,7 @@ function expose(w,src,names){w.eval(src.replace(/\}\)\(\);?\s*$/,'window.testAPI
 function exposeDock(w){const src=dock.replace("if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});\n})();","window.testAPI={findShell,showDock,ensureRoot};\n})();");w.eval(src);return w.testAPI}
 
 test('active notification scripts parse',()=>{
-  for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-runtime-v325.js','note-insight-notification-surface-guard-v326.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
+  for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-runtime-v327.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
 });
 
 test('legacy dock remains valid fallback and direct INSIGHT notification destination',()=>{
@@ -84,44 +83,43 @@ test('persistent checkpoint mirrors the saved boundary across page closes',()=>{
   assert.match(checkpoint,/ここまで保存済み/);
 });
 
-test('surface guard removes notification-only overlays outside notification UI',()=>{
-  assert.match(guard,/VERSION='3\.2\.26'/);
-  assert.match(guard,/function strictSurface\(\)/);
-  assert.match(guard,/function cleanupVisuals\(\)/);
-  assert.match(guard,/mumei-v3-saved-boundary-v3223/);
-  assert.match(guard,/mumei-v3-reader-progress-v3223/);
-  assert.match(guard,/mumei-v325-dock/);
-  assert.match(guard,/if\(!enforce\(\)\)return 0/);
+test('V3.2.27 runtime owns visibility without an external fighting guard',()=>{
+  assert.match(runtime,/VERSION='3\.2\.27'/);
+  assert.match(runtime,/function findSurface\(\)/);
+  assert.match(runtime,/function scheduleHide\(\)/);
+  assert.match(runtime,/function confirmHide\(\)/);
+  assert.match(runtime,/hideTimer=setTimeout\(confirmHide,450\)/);
+  assert.match(runtime,/if\(dockVisible===Boolean\(on\)\)return/);
+  assert.match(runtime,/function cleanupVisuals\(\)/);
+  assert.doesNotMatch(v3,/surface-guard-v326/);
 });
 
-test('V3.2.26 wrapper loads checkpoint, compact auto/manual runtime and surface guard',()=>{
+test('V3.2.27 wrapper loads checkpoint and stable auto/manual runtime',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.2\.26/);
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3226/);
-  assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3226/);
-  assert.match(meta,/note-insight-notification-runtime-v325\.js\?v=3226/);
-  assert.match(meta,/note-insight-notification-surface-guard-v326\.js\?v=3226/);
-  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3226/);
-  assert.match(v3,/runtime-checked-v3226/);
+  assert.match(v3,/@version\s+3\.2\.27/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3227/);
+  assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3227/);
+  assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3227/);
+  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3227/);
+  assert.match(v3,/runtime-checked-v3227/);
   assert.match(runtime,/ROOT='mumei-v325-dock'/);
   assert.match(runtime,/data-a="mode"/);
   assert.match(runtime,/autoMode\?'自動':'手動'/);
   assert.match(runtime,/mumei_insight_notification_auto_v325:/);
   assert.match(runtime,/通知フィルター登録/);
   assert.match(runtime,/function findSurface\(/);
-  assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
   assert.match(runtime,/note-insight\/\?insightMode=notifications#dashboard/);
   assert.doesNotMatch(runtime,/notification-filter\.html/);
 });
 
-test('installer opens canonical V3.2.26 userscript and uses automatic runtime confirmation',()=>{
+test('installer opens canonical V3.2.27 userscript and uses automatic runtime confirmation',()=>{
   const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
   try{
     w.eval(w.document.querySelector('script').textContent);
     const install=w.document.getElementById('install'),u=new URL(install.href);
     assert.equal(u.origin,'https://mumei-s.github.io');
     assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
-    assert.match(w.document.querySelector('.version').textContent,/3\.2\.26/);
+    assert.match(w.document.querySelector('.version').textContent,/3\.2\.27/);
     assert.match(html,/mumei-notification-v3-loader/);
     assert.match(html,/mumei-notification-tool-version/);
     assert.match(html,/URLを貼り付ける操作はありません/);
