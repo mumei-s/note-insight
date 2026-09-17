@@ -15,22 +15,22 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.33 loads bottom-up reader, fixed five-panel runtime plus dedicated settings route",async()=>{
+test("V3.2.34 loads bottom-up reader, fixed five-panel runtime plus dedicated settings route",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const route=await read("public/note-insight-notification-settings-route-v332.js");
  assert.match(parent,/@version\s+3\.2\.33/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3233/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3233/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3233/);
- assert.match(parent,/note-insight-notification-settings-route-v332\.js\?v=3233/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3234/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3234/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3234/);
+ assert.match(parent,/note-insight-notification-settings-route-v332\.js\?v=3234/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
- assert.match(parent,/bottom-up-saved-line-v3233/);
+ assert.match(parent,/bottom-up-saved-line-v3234/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
- assert.match(runtime,/autoMode=true/);
+ assert.match(runtime,/autoMode=true/);\n assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);
  assert.match(runtime,/safeScan/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
