@@ -26,7 +26,7 @@ test('active notification scripts parse',()=>{
   for(const name of ['note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-runtime-v327.js','note-insight-notification-loader-v318.js','note-insight-dashboard-integrated-v318.js','note-insight-notification-v3.user.js'])assert.doesNotThrow(()=>new Function(read(name)));
 });
 
-test('legacy dock remains valid fallback and direct INSIGHT notification destination',()=>{
+test('canonical dock remains valid and targets INSIGHT notifications directly',()=>{
   const{dom,w}=env();
   try{
     const api=exposeDock(w),popup=w.document.getElementById('popup');
@@ -75,43 +75,30 @@ test('persistent checkpoint mirrors the saved boundary across page closes',()=>{
   assert.match(checkpoint,/ここまで保存済み/);
 });
 
-test('V3.2.28 shows the panel before rows exist and waits for rows before scanning',()=>{
-  assert.match(runtime,/VERSION='3\.2\.28'/);
-  assert.match(runtime,/function popupSurface\(\)/);
-  assert.match(runtime,/if\(!visible\(root\)\)continue;if\(exact\(root,'通知'\)&&exact\(root,'お知らせ'\)\)return root/);
-  assert.doesNotMatch(runtime,/if\(!visible\(root\)\|\|!rows\(root\)\.length\)continue/);
-  assert.match(runtime,/function bellTrigger\(/);
-  assert.match(runtime,/intentUntil=Date\.now\(\)\+7000/);
-  assert.match(runtime,/async function waitForRows\(timeout=5000\)/);
-  assert.match(runtime,/async function activateIntent\(\)/);
-  assert.match(runtime,/function scheduleHide\(delay=750\)/);
-  assert.doesNotMatch(v3,/surface-guard-v326/);
-});
-
-test('V3.2.28 wrapper loads checkpoint and stable auto/manual runtime',()=>{
+test('V3.2.29 wrapper uses the canonical dock instead of the obsolete five-button runtime',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.2\.28/);
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3228/);
-  assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3228/);
-  assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3228/);
-  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3228/);
-  assert.match(v3,/runtime-checked-v3228/);
-  assert.match(runtime,/ROOT='mumei-v325-dock'/);
-  assert.match(runtime,/data-a="mode"/);
-  assert.match(runtime,/autoMode\?'自動':'手動'/);
-  assert.match(runtime,/通知フィルター登録/);
-  assert.match(runtime,/note-insight\/\?insightMode=notifications#dashboard/);
-  assert.doesNotMatch(runtime,/notification-filter\.html/);
+  assert.match(v3,/@version\s+3\.2\.29/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3229/);
+  assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3229/);
+  assert.match(meta,/note-insight-notification-dock-watch-v312\.js\?v=3229/);
+  assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js/);
+  assert.match(v3,/dock-4col-v3229/);
+  assert.match(dock,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(dock,/FILTER_BASE='https:\/\/mumei-s\.github\.io\/note-insight\/notification-filter\.html'/);
+  assert.match(dock,/note-insight\/\?insightMode=notifications#dashboard/);
+  assert.match(runtime,/VERSION='3\.2\.28'/);
 });
 
-test('installer opens canonical V3.2.28 userscript and uses automatic runtime confirmation',()=>{
+test('installer opens canonical V3.2.29 userscript and uses automatic confirmation',()=>{
   const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;
   try{
     w.eval(w.document.querySelector('script').textContent);
     const install=w.document.getElementById('install'),u=new URL(install.href);
     assert.equal(u.origin,'https://mumei-s.github.io');
     assert.equal(u.pathname,'/note-insight/note-insight-notification-v3.user.js');
-    assert.match(w.document.querySelector('.version').textContent,/3\.2\.28/);
+    assert.match(w.document.querySelector('.version').textContent,/3\.2\.29/);
+    assert.match(html,/4列パネル/);
+    assert.match(html,/ブラウザ別インストール/);
     assert.match(html,/mumei-notification-v3-loader/);
     assert.match(html,/mumei-notification-tool-version/);
     assert.match(html,/URLを貼り付ける操作はありません/);
