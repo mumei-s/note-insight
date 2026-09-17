@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.24',PROTOCOL='3.2.24';
+const VERSION='3.2.25',PROTOCOL='3.2.25';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -61,34 +61,63 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 function boundaryMatch(r,cp){if(!r||!cp)return false;if(cp.boundaryEventIdentity&&r.meta?.event_identity===cp.boundaryEventIdentity)return true;if(cp.boundarySignature&&sig(r)===cp.boundarySignature)return true;if(cp.boundaryLegacySignature&&legacySig(r)===cp.boundaryLegacySignature)return true;return false}
 function hasBoundary(cp){return Boolean(cp?.boundaryEventIdentity||cp?.boundarySignature||cp?.boundaryLegacySignature)}
 function findBoundaryElement(p,cp){for(const el of rows(p)){const r=rowData(el);if(r&&boundaryMatch(r,cp))return el}return null}
+function findSavedRecoveryElement(p,saved){
+  if(!saved?.size)return null;
+  for(const el of rows(p)){
+    const r=rowData(el);
+    if(r&&saved.has(sig(r)))return{el,row:r};
+  }
+  return null
+}
+async function persistRecoveredBoundary(a,cp,row,source){
+  if(!a?.id||!row)return cp;
+  const now=Date.now();
+  const next={...cp,boundarySignature:sig(row),boundaryEventIdentity:row.meta?.event_identity,boundaryLegacySignature:legacySig(row),boundaryAt:now,boundarySource:source||'reader-recovered-saved-v325',lastError:'',lastRunStopped:false,version:VERSION};
+  await set(key(CHECK,a.id),next);
+  document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+  return next
+}
 function saveReturnPosition(p,host,el){try{const r=rowData(el);if(!r)return;sessionStorage.setItem(NAV_RETURN,JSON.stringify({href:location.href,legacy:legacySig(r),scrollTop:host?.scrollTop||0,at:Date.now()}))}catch{}}
 async function restoreReturnPosition(){if(!/^\/notifications(?:\/|$)/i.test(location.pathname))return;let st=null;try{st=JSON.parse(sessionStorage.getItem(NAV_RETURN)||'null')}catch{}if(!st||Date.now()-Number(st.at||0)>30*60*1000)return;for(let i=0;i<28;i++){const p=panel();if(p){const host=scrollHost(p),els=rows(p);for(const el of els){const r=rowData(el);if(r&&legacySig(r)===st.legacy){try{el.scrollIntoView({block:'center',behavior:'auto'});if(host&&Number.isFinite(st.scrollTop))host.scrollTop=st.scrollTop}catch{}sessionStorage.removeItem(NAV_RETURN);return}}if(host){const max=Math.max(0,host.scrollHeight-host.clientHeight);if(host.scrollTop<max-2)host.scrollTop=Math.min(max,host.scrollTop+Math.max(220,Math.floor(host.clientHeight*.8)))}}await sleep(180)}}
 
 document.addEventListener('click',e=>{const p=panel();if(!p)return;const a=e.target?.closest?.('a[href]');if(!a||!p.contains(a))return;let u;try{u=new URL(a.href,location.href)}catch{return}if(!u.hostname.endsWith('note.com'))return;const el=a.closest(ITEM+',li,[role="listitem"]');if(!el)return;saveReturnPosition(p,scrollHost(p),el)},{capture:true});
 
-async function seekStart(p,host,cp){
+async function seekStart(p,host,cp,saved){
  const needBoundary=hasBoundary(cp);
+ let recovery=null;
+ const rememberRecovery=()=>{const hit=findSavedRecoveryElement(p,saved);if(hit&&!recovery)recovery=hit};
  if(!host){
   const el=needBoundary?findBoundaryElement(p,cp):null;
-  if(needBoundary&&!el)return{ok:false,boundaryFound:false,reason:'BOUNDARY_NOT_FOUND_SAFE_STOP'};
-  if(el)markBoundary(el);
-  return{ok:true,boundaryFound:Boolean(el)};
+  if(el){markBoundary(el);return{ok:true,boundaryFound:true,recovered:false}}
+  if(needBoundary){
+   rememberRecovery();
+   if(recovery){markBoundary(recovery.el);return{ok:true,boundaryFound:true,recovered:true,recoveryRow:recovery.row}}
+   return{ok:true,boundaryFound:false,recovered:true,rebase:true}
+  }
+  return{ok:true,boundaryFound:false,recovered:false};
  }
  try{host.scrollTop=0}catch{}
  await sleep(100);
  let stable=0,lastTop=-1;
  for(let step=0;step<MAX_SEEK_STEPS;step++){
   const el=needBoundary?findBoundaryElement(p,cp):null;
-  if(el){markBoundary(el);try{el.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(80);return{ok:true,boundaryFound:true}}
+  if(el){markBoundary(el);try{el.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(80);return{ok:true,boundaryFound:true,recovered:false}}
+  if(needBoundary)rememberRecovery();
   const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
   if(before>=max-2){stable++;if(stable>=2)break}else{const amount=Math.max(220,Math.floor(host.clientHeight*.86));host.scrollTop=Math.min(max,before+amount);await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
   if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break;
  }
- if(needBoundary)return{ok:false,boundaryFound:false,reason:'BOUNDARY_NOT_FOUND_SAFE_STOP'};
+ if(needBoundary){
+  const exact=findBoundaryElement(p,cp);
+  if(exact){markBoundary(exact);return{ok:true,boundaryFound:true,recovered:false}}
+  const hit=findSavedRecoveryElement(p,saved)||recovery;
+  if(hit){markBoundary(hit.el);try{hit.el.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(80);return{ok:true,boundaryFound:true,recovered:true,recoveryRow:hit.row}}
+  const max=Math.max(0,host.scrollHeight-host.clientHeight);try{host.scrollTop=max}catch{}await sleep(80);
+  return{ok:true,boundaryFound:false,recovered:true,rebase:true};
+ }
  const max=Math.max(0,host.scrollHeight-host.clientHeight);try{host.scrollTop=max}catch{}await sleep(80);
- return{ok:true,boundaryFound:false};
+ return{ok:true,boundaryFound:false,recovered:false};
 }
-
 async function collectBottomUp(p,host,cp){
  const needBoundary=hasBoundary(cp);
  const collected=[],seen=new Set();
@@ -122,21 +151,32 @@ async function scan(){
   let cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
   count+=await sendBatch(readOutbox(a.id),a,saved);
   cp=await get(key(CHECK,a.id),cp);host=scrollHost(p);
-  const start=await seekStart(p,host,cp);
-  if(!start.ok){safetyStop=true;throw new Error(start.reason||'BOUNDARY_NOT_FOUND_SAFE_STOP')}
-  status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
+  const start=await seekStart(p,host,cp,saved);
+  if(start.recoveryRow){
+    cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v325');
+    status('保存済み通知から完了ラインを復元しました。上方向の追加分を読み込みます…','saving','ライン復元');
+  }else if(start.rebase){
+    cp={};
+    status('完了ラインを再作成しています。保存済み判定を使って下側から上方向へ確認します…','saving','ライン再作成');
+  }else{
+    status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
+  }
   const result=await collectBottomUp(p,host,cp);p=result.p;host=result.host;
-  if(hasBoundary(cp)&&!result.boundaryFound){safetyStop=true;throw new Error('BOUNDARY_NOT_FOUND_SAFE_STOP')}
   if(result.collected.length)count+=await sendBatch(result.collected,a,saved);
-  const latest=await get(key(CHECK,a.id),{}),now=Date.now();
+  let latest=await get(key(CHECK,a.id),{}),now=Date.now();
+  if(start.rebase&&!hasBoundary(latest)){
+    const recovered=findSavedRecoveryElement(p,saved);
+    if(recovered){latest=await persistRecoveredBoundary(a,latest,recovered.row,'reader-rebased-visible-v325');markBoundary(recovered.el)}
+  }
   await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,historyComplete:false,version:VERSION});
   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
   const boundaryEl=findBoundaryElement(p,latest);if(boundaryEl)markBoundary(boundaryEl);
   const remain=readOutbox(a.id).length;
   if(remain)status(`⚠ ${remain}件は次回保存待ち｜下→上 ${result.seenCount}件確認`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain});
+  else if(start.recovered||start.rebase)status(`✓ 完了ラインを復元・再作成｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
   else if(hasBoundary(cp))status(`✓ 完了ラインから上だけ確認｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
   else status(`✓ 下側から上方向へ保存完了｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
- }catch(e){if(!safetyStop)capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'bottom-up-from-saved-line',lastRunStopped:safetyStop,version:VERSION})}catch{}}const pending=a?readOutbox(a.id).length:0;const raw=String(e?.message||e),msg=raw==='BOUNDARY_NOT_FOUND_SAFE_STOP'?'保存済み完了ラインを確認できないため安全停止しました':raw;status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending})}
+ }catch(e){if(!safetyStop)capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'bottom-up-from-saved-line',lastRunStopped:safetyStop,version:VERSION})}catch{}}const pending=a?readOutbox(a.id).length:0;const raw=String(e?.message||e),msg=raw==='BOUNDARY_NOT_FOUND_SAFE_STOP'?'完了ラインを復元できなかったため再読込してください':raw;status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending})}
  finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
 }
 
