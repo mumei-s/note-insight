@@ -42,12 +42,11 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).classifiedRate,0);
 });
 
-test('active package uses V3.2.26 with persistent checkpoint, mode toggle, surface guard and incremental reader',()=>{
+test('active package uses V3.2.27 with persistent checkpoint, mode toggle and stable single-owner runtime',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js');
-  const runtime=read('public/note-insight-notification-runtime-v325.js');
+  const runtime=read('public/note-insight-notification-runtime-v327.js');
   const checkpoint=read('public/note-insight-notification-checkpoint-v325.js');
-  const guard=read('public/note-insight-notification-surface-guard-v326.js');
   const setup=read('public/tool-setup.html');
   const dashboardSetup=read('public/dashboard-setup.html');
   const dock=read('public/note-insight-notification-dock-watch-v312.js');
@@ -59,21 +58,23 @@ test('active package uses V3.2.26 with persistent checkpoint, mode toggle, surfa
   const picker=read('src/insight-notification-ui-v18.ts');
   const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
   assert.equal(manifest.appVersion,'2026.09.17.2');
-  assert.equal(manifest.notificationVersion,'3.2.26');
+  assert.equal(manifest.notificationVersion,'3.2.27');
   assert.equal(manifest.dashboardVersion,'1.4.4');
-  assert.match(v3,/@version\s+3\.2\.26/);
-  assert.match(v3,/runtime-checked-v3226/);
-  for(const part of ['note-insight-notification-runtime-v325.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-surface-guard-v326.js','note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js'])assert.match(v3,new RegExp(part.replaceAll('.','\\.')));
+  assert.match(v3,/@version\s+3\.2\.27/);
+  assert.match(v3,/runtime-checked-v3227/);
+  for(const part of ['note-insight-notification-runtime-v327.js','note-insight-notification-checkpoint-v325.js','note-insight-notification-dock-watch-v312.js','note-insight-notification-reader-v323.js'])assert.match(v3,new RegExp(part.replaceAll('.','\\.')));
+  assert.doesNotMatch(v3,/surface-guard-v326/);
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3226/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3226/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v325\.js\?v=3226/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-surface-guard-v326\.js\?v=3226/);
-  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3226/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3227/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3227/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3227/);
+  assert.match(meta,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-dock-watch-v312\.js\?v=3227/);
   assert.match(runtime,/window\.__mumeiNotificationDock322=true/);
   assert.match(runtime,/ROOT='mumei-v325-dock'/);
   assert.match(runtime,/function findSurface\(\)/);
-  assert.match(runtime,/showRoot\(Boolean\(shell\)\)/);
+  assert.match(runtime,/function scheduleHide\(\)/);
+  assert.match(runtime,/function confirmHide\(\)/);
+  assert.match(runtime,/if\(dockVisible===Boolean\(on\)\)return/);
   assert.match(runtime,/data-a="mode"/);
   assert.match(runtime,/mumei_insight_notification_auto_v325:/);
   assert.match(runtime,/通知フィルター登録/);
@@ -84,9 +85,6 @@ test('active package uses V3.2.26 with persistent checkpoint, mode toggle, surfa
   assert.match(checkpoint,/localStorage\.setItem/);
   assert.match(checkpoint,/async function restore\(/);
   assert.match(checkpoint,/addEventListener\('pagehide'/);
-  assert.match(guard,/function strictSurface\(\)/);
-  assert.match(guard,/function cleanupVisuals\(\)/);
-  assert.match(guard,/if\(!enforce\(\)\)return 0/);
   assert.match(setup,/INSIGHTをインストール \/ 更新/);
   assert.match(setup,/ユーザースクリプトの更新を確認/);
   assert.match(setup,/URLを貼り付ける操作はありません/);
