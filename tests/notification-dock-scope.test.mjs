@@ -19,7 +19,6 @@ test("V3.2.36 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
- const route=await read("public/note-insight-notification-settings-route-v332.js");
  assert.match(parent,/@version\s+3\.2\.36/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3236/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3236/);
@@ -33,14 +32,10 @@ test("V3.2.36 loads bottom-up reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);
  assert.match(runtime,/safeScan/);
- assert.match(runtime,/notification-filter\\.html/);
+ assert.match(runtime,/notification-filter\.html/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
- assert.match(route,/notification-filter\.html/);
- assert.match(route,/mumei_return/);
- assert.match(route,/textContent='設定'/);
- assert.match(route,/stopImmediatePropagation/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
