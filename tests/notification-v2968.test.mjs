@@ -49,7 +49,9 @@ test('active package uses V3.2.29 with persistent checkpoint and canonical four-
   assert.doesNotMatch(v3,/surface-guard-v326/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);
   assert.match(checkpoint,/localStorage\.setItem/);
-  assert.match(setup,/V3\.2\.29/);
+  assert.match(setup,/最新版をインストール \/ 更新/);
+  assert.match(setup,/insight-release\.json/);
+  assert.doesNotMatch(setup,/V3\.2\.29|本人通知 V\d/);
   assert.match(setup,/4列パネル/);
   assert.match(setup,/ブラウザ別インストール/);
   assert.match(setup,/確認ボタンも不要/);
@@ -60,7 +62,7 @@ test('active package uses V3.2.29 with persistent checkpoint and canonical four-
   assert.match(reader,/ここまで保存済み/);
   assert.doesNotMatch(reader,/loadAbsoluteBottom|fullFallback/);
   assert.match(index,/mode === "notifications"/);
-  assert.match(index,/body:has\(\.app-route-shell\)/);
+  assert.doesNotMatch(index,/insight-tool-row/);
   assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);
   assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
