@@ -28,9 +28,10 @@ test("notification filter registration uses the dedicated settings page and retu
   assert.doesNotMatch(setup,/フィルターグループを作成|フィルターを全部解除/);
 });
 
-test("installer remains a compact automatic-confirmation V3.2.29 update route",async()=>{
+test("installer stays versionless and resolves latest notification version from release manifest",async()=>{
   const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");
-  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","本人通知 V3.2.29","4列パネル","ブラウザ別インストール","この画面で更新結果を確認","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","mumei-notification-tool-version","ユーザースクリプトの更新を確認","URLを貼り付ける操作はありません","確認ボタンも不要"]);
+  has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","本人通知ツール","最新版をインストール / 更新","4列パネル","ブラウザ別インストール","最新版かどうか自動確認します","insight-release.json","notificationVersion","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","mumei-notification-tool-version","ユーザースクリプトの更新を確認","URLを貼り付ける操作はありません","確認ボタンも不要"]);
+  assert.doesNotMatch(setup,/V3\.2\.29|本人通知 V\d|V3\.2\.29をインストール/);
   assert.doesNotMatch(setup,/script_installation\.php#url=/);
   assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|https:\/\/note\.com\/notifications|mumei_insight_version_check|2\.9\.27/);
   has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
