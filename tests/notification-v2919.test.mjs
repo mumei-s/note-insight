@@ -4,17 +4,17 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.2.38 loads bottom-up reader, persistent checkpoint and fixed five-panel dock",async()=>{
+test("V3.2.39 loads bottom-up reader, persistent checkpoint and fixed five-panel dock",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),loader=await read("public/note-insight-notification-loader-v318.js");
-  assert.match(v3,/@version\s+3\.2\.38/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3238/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3238/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3238/);
+  assert.match(v3,/@version\s+3\.2\.39/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3239/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3239/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3239/);
   assert.doesNotMatch(v3,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
-  has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3238"]);
+  has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3239"]);
   has(checkpoint,["mumei_insight_notification_checkpoint_local_v325:","localStorage.setItem","async function restore(","async function persist(","ここまで保存済み"]);
-  has(runtime,["notification-filter.html","mumei-v325-dock","data-a=\"read\"","data-a=\"mode\"","data-a=\"filter\"","data-a=\"settings\"","data-a=\"ins\"","mumei_insight_notification_auto_v325:","async function initMode(","async function toggleMode(","function maybeAuto(","async function safeScan("]);
+  has(runtime,["notification-filter.html","event?.composedPath","mumei-v325-dock","data-a=\"read\"","data-a=\"mode\"","data-a=\"filter\"","data-a=\"settings\"","data-a=\"ins\"","mumei_insight_notification_auto_v325:","async function initMode(","async function toggleMode(","function maybeAuto(","async function safeScan("]);
   assert.doesNotMatch(runtime,/new MutationObserver/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","bottom-up-from-saved-line","saved-line-bottom-up-v324","ここまで保存済み","boundarySignature","boundaryEventIdentity","完了ラインから上方向へ、追加分だけ読み込みます"]);
@@ -29,11 +29,11 @@ test("five-panel dock contains manual read, auto toggle, filter, registration an
 });
 
 test("installer stays versionless and resolves latest notification version from release manifest",async()=>{
-  const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","本人通知ツール","最新版をインストール / 更新","ブラウザ別インストール","最新版かどうか自動確認します","insight-release.json","notificationVersion","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","mumei-notification-tool-version","ユーザースクリプトの更新を確認","URLを貼り付ける操作はありません","確認ボタンも不要"]);assert.doesNotMatch(setup,/本人通知 V\d|V3\.2\.38をインストール/);assert.doesNotMatch(setup,/script_installation\.php#url=/);assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|https:\/\/note\.com\/notifications|mumei_insight_version_check|2\.9\.27/);has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
+  const setup=await read("public/tool-setup.html"),top=await read("src/insight-top-install-v16.ts"),route=await read("src/insight-notification-update-route-v1.ts"),bridge=await read("public/note-insight-bridge.user.js");has(setup,["INSIGHT インストール / 更新","INSIGHTをインストール / 更新","本人通知ツール","最新版をインストール / 更新","ブラウザ別インストール","最新版かどうか自動確認します","insight-release.json","notificationVersion","mumei-s.github.io/note-insight/note-insight-notification-v3.user.js","mumei-notification-v3-loader","mumei-notification-tool-version","ユーザースクリプトの更新を確認","URLを貼り付ける操作はありません","確認ボタンも不要"]);assert.doesNotMatch(setup,/本人通知 V\d|V3\.2\.39をインストール/);assert.doesNotMatch(setup,/script_installation\.php#url=/);assert.doesNotMatch(setup,/本人通知を実働確認|ダッシュボードを読み込む|Import from URL|https:\/\/note\.com\/notifications|mumei_insight_version_check|2\.9\.27/);has(top,["./tool-setup.html?from=top"]);has(route,["notification-update.html"]);has(bridge,["互換停止版"]);
 });
 
-test("release tracks V3.2.38 without putting the version in the user-facing label",async()=>{
-  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");assert.equal(manifest.appVersion,"2026.09.17.2");assert.equal(manifest.notificationVersion,"3.2.38");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.17\.2"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.38"/);assert.match(v3,/@version\s+3\.2\.38/);
+test("release tracks V3.2.39 without putting the version in the user-facing label",async()=>{
+  const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");assert.equal(manifest.appVersion,"2026.09.17.2");assert.equal(manifest.notificationVersion,"3.2.39");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.17\.2"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.2\.39"/);assert.match(v3,/@version\s+3\.2\.39/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
