@@ -22,7 +22,7 @@ test('active notification scripts parse',()=>{
 });
 
 test('compact launcher expands to the four current actions',()=>{
-  const{dom,w}=env();try{const api=exposeDock(w),popup=w.document.getElementById('popup');popup.setAttribute('data-mumei-notice-shell-v3','1');w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem">Aさんが返信しました 1分前</a>';assert.equal(api.findShell().id,'popup');const launcher=api.ensureLauncher(),tray=api.ensureTray();assert.equal(launcher.textContent,'🔔 INSIGHT');assert.equal(tray.querySelectorAll('button').length,4);assert.equal(tray.querySelector('[data-act="read"]').textContent,'追加読込');assert.equal(tray.querySelector('[data-act="settings"]').textContent,'フィルター登録');assert.equal(tray.querySelector('[data-act="ins"]').textContent,'INSIGHT');api.showLauncher(true);api.setTray(true);assert.equal(tray.style.display,'grid');}finally{dom.window.close()}
+  const{dom,w}=env();try{const api=exposeDock(w);w.document.getElementById('list').innerHTML='<a class="m-navbarNoticeItem">Aさんが返信しました 1分前</a>';const detected=api.findShell(),row=w.document.querySelector('.m-navbarNoticeItem');assert.ok(detected);assert.ok(detected.contains(row));const launcher=api.ensureLauncher(),tray=api.ensureTray();assert.equal(launcher.textContent,'🔔 INSIGHT');assert.equal(tray.querySelectorAll('button').length,4);assert.equal(tray.querySelector('[data-act="read"]').textContent,'追加読込');assert.equal(tray.querySelector('[data-act="settings"]').textContent,'フィルター登録');assert.equal(tray.querySelector('[data-act="ins"]').textContent,'INSIGHT');api.showLauncher(true);api.setTray(true);assert.equal(tray.style.display,'grid');}finally{dom.window.close()}
 });
 
 test('reader extracts visible notifications and sends oldest first',async()=>{
