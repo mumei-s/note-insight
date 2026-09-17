@@ -31,7 +31,7 @@ function mount(){
  if(box.querySelector('.mumei-generic-controls-v189'))return true;
  const row=document.createElement('div');row.className='mumei-generic-controls-v189';
  row.innerHTML='<button type="button" data-g="image">画</button><button type="button" data-g="send">送</button><button type="button" data-g="delete">削</button><button type="button" data-g="reset">初期化</button>';
- const note=document.createElement('div');note.className='mumei-generic-controls-v189-note';note.textContent='画＝最初の＋→画像は1回だけ／以降10枚ずつ自動';
+ const note=document.createElement('div');note.className='mumei-generic-controls-v189-note';note.textContent='画＝＋→画像1回／元の一括方式で最大80枚';
  box.append(row,note);
  row.addEventListener('click',e=>{
    const b=e.target.closest('button[data-g]');if(!b)return;
