@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.48
+// @version      3.2.49
 // @description  本人通知V3。通知画面下部に5パネルを固定し、自動ON/OFF・手動読込・フィルター・設定・INSIGHTを操作します。通知は下側から上方向へ読み、完了ラインより上の追加分だけを次回保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -15,22 +15,82 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @connect      mumei-s.github.io
+// @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3245
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3245
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3248
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3249
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.2.48';
+const VERSION='3.2.49';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 if(location.hostname==='mumei-s.github.io'){
   try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
+  if(location.pathname==='/note-insight/notification-filter-settings.html'){
+    const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:';
+    const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
+    const account=(new URLSearchParams(location.search).get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
+    const modern=()=>Boolean(globalThis.GM);
+    const gmGet=async(k,d)=>{try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
+    const gmSet=async(k,v)=>{try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
+    const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
+    const norm=raw=>(Array.isArray(raw)?raw:[]).map((g,i)=>({name:clean(g?.name)||`グループ ${i+1}`,enabled:g?.enabled!==false,ids:[...new Set((Array.isArray(g?.ids)?g.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}));
+    const send=(type,payload={})=>window.postMessage({source:BRIDGE,type,...payload},location.origin);
+    const xhr=url=>new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn){reject(new Error('xhr unavailable'));return}fn({method:'GET',url,headers:{Accept:'application/json,text/html;q=0.9,*/*;q=0.8'},onload:r=>resolve(r),onerror:()=>reject(new Error('request failed')),ontimeout:()=>reject(new Error('request timeout'))})});
+    const profileCache=new Map();
+    const profile=async id=>{
+      if(profileCache.has(id))return profileCache.get(id);
+      const p=(async()=>{
+        try{
+          const r=await xhr('https://note.com/api/v2/creators/'+encodeURIComponent(id));
+          if(Number(r.status)>=200&&Number(r.status)<300){
+            const j=JSON.parse(r.responseText||'{}'),d=j?.data??j??{};
+            const nickname=clean(d.nickname||d.name||id),profileImageUrl=clean(d.profileImageUrl||d.profile_image_url||d.avatarUrl||'');
+            if(nickname!==id||profileImageUrl)return{id,nickname,profileImageUrl}
+          }
+        }catch{}
+        try{
+          const r=await xhr('https://note.com/'+encodeURIComponent(id));
+          const doc=new DOMParser().parseFromString(r.responseText||'','text/html');
+          const title=clean(doc.querySelector('meta[property="og:title"]')?.content||doc.title||id).replace(/\s*｜\s*note.*$/u,'');
+          const image=clean(doc.querySelector('meta[property="og:image"]')?.content||'');
+          return{id,nickname:title||id,profileImageUrl:image}
+        }catch{return{id,nickname:id,profileImageUrl:''}}
+      })();
+      profileCache.set(id,p);
+      return p
+    };
+    const loadState=async()=>{
+      if(!/^[a-z0-9_-]+$/.test(account)){send('error',{message:'noteアカウントを確認できません'});return}
+      let groups=norm(await gmGet(GRP+account,[]));
+      if(!groups.length){
+        const legacy=await gmGet(MUT+account,[]);
+        if(Array.isArray(legacy)&&legacy.length)groups=[{name:'通知フィルター',enabled:true,ids:[...new Set(legacy.map(String).map(x=>x.toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}]
+      }
+      send('state',{groups,filterOn:Boolean(await gmGet(FIL+account,false))})
+    };
+    addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window||e.data?.source!==PAGE)return;const d=e.data;if(d.account!==account)return;(async()=>{
+      try{
+        if(d.type==='load')await loadState();
+        else if(d.type==='save'){
+          const groups=norm(d.groups);
+          await gmSet(GRP+account,groups);
+          await gmSet(MUT+account,[...new Set(groups.filter(g=>g.enabled).flatMap(g=>g.ids))]);
+          send('saved')
+        }else if(d.type==='profiles'){
+          const ids=[...new Set((Array.isArray(d.ids)?d.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];
+          send('profiles',{profiles:await Promise.all(ids.map(profile))})
+        }
+      }catch(err){send('error',{message:clean(err?.message||'設定処理に失敗しました')})}
+    })()});
+    void loadState();
+  }
   return;
 }
 if(location.hostname!=='note.com')return;
