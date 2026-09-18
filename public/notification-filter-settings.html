@@ -41,14 +41,21 @@ button{border:1px solid #466b82;border-radius:8px;background:#112b3b;color:#e7f8
 <script>
 (function(){
 'use strict';
-const NOTE='https://note.com/?mumei_open_notifications=1';
+const NOTE='https://note.com/?mumei_filter_return=bell';
 const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const q=new URLSearchParams(location.search),account=(q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
 const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status');
-let groups=[],profiles={},loaded=false,saveTimer=0,statusTimer=0;
+let groups=[],profiles={},loaded=false,saveTimer=0,statusTimer=0,returning=false,returnTimer=0;
 const opened=new Set();
 
-function returnToBell(){location.replace(NOTE)}
+function returnToBell(){
+  if(returning)return;
+  returning=true;
+  setStatus('🔔通知へ戻っています…');
+  post('return-bell');
+  clearTimeout(returnTimer);
+  returnTimer=setTimeout(()=>location.replace(NOTE),1400)
+}
 history.replaceState({mumeiFilter:true},'',location.href);
 history.pushState({mumeiFilterGuard:true},'',location.href);
 addEventListener('popstate',returnToBell);
@@ -119,6 +126,9 @@ addEventListener('message',e=>{
     render();setStatus('@'+account+' の設定を読み込みました','ok')
   }else if(d.type==='saved'){
     setStatus('保存しました','ok')
+  }else if(d.type==='return-ready'){
+    clearTimeout(returnTimer);
+    location.replace(NOTE)
   }else if(d.type==='profiles'){
     for(const p of d.profiles||[])if(p&&p.id)profiles[p.id]=p;
     if(loaded)render()
