@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.46';
+const VERSION='3.2.47';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:';
@@ -13,6 +13,7 @@ const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem" i],[class*="notificat
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const modern=()=>Boolean(globalThis.GM);
 let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false;
+const profileCache=new Map();
 let dockVisible=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0;
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
@@ -35,7 +36,7 @@ function bellTrigger(target,event){const seen=new Set(),xs=[];const add=el=>{if(
 function mountUiInSurface(){const host=shell&&shell.isConnected?shell:null;if(!host)return;const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
 function markSurface(next){if(shell&&shell!==next)shell.removeAttribute('data-mumei-notice-shell-v3');shell=next;if(shell){shell.setAttribute('data-mumei-notice-shell-v3','1');mountUiInSurface()}}
 async function account(){if(accountId)return accountId;try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=clean(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))accountId=id}catch{}return accountId}
-function ensureStyle(){if(document.getElementById(ROOT+'-style'))return;const s=document.createElement('style');s.id=ROOT+'-style';s.textContent=`.${HIDE}{display:none!important}#${ROOT}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 10px)!important;z-index:2147483647!important;height:38px!important;display:none;grid-template-columns:minmax(54px,.72fr) minmax(46px,.62fr) minmax(70px,1fr) minmax(48px,.66fr) minmax(68px,.9fr);gap:3px;padding:4px;border:1px solid #355063;border-radius:9px;background:#0e1c26;box-shadow:0 -3px 10px #0006;box-sizing:border-box!important;font-family:system-ui,-apple-system,sans-serif}#${ROOT} button{min-width:0;height:28px;padding:0 4px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 9.5px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${ROOT} button.mode.auto{background:#17422f;border-color:#56a77b;color:#d6ffe7}#${ROOT} button.mode.manual{background:#3c2c10;border-color:#92712f;color:#ffe8ad}#${ROOT} button.on{background:#17422f;border-color:#56a77b}#${ROOT} button.ins{border-color:#55d8f1;background:#11374a}#${ROOT} button.err{border-color:#c95b68;color:#ffd5da}#${SETTINGS}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 54px)!important;z-index:2147483647!important;max-height:68vh!important;overflow:auto!important;padding:10px!important;border:1px solid #49687d!important;border-radius:11px!important;background:#07131d!important;color:#e8f6ff!important;box-shadow:0 12px 30px #000c!important;font:850 11px/1.4 system-ui!important}#${SETTINGS} h3{margin:0 0 8px;font-size:14px}#${SETTINGS} .g{border:1px solid #2d4b60;border-radius:9px;background:#0a1924;padding:8px;margin:7px 0}#${SETTINGS} .gh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}#${SETTINGS} input[type=text]{width:100%;height:34px;border:1px solid #3f5f74;border-radius:7px;background:#0b1b27;color:#fff;padding:0 8px}#${SETTINGS} button{min-height:32px;border:1px solid #4a6a80;border-radius:7px;background:#112a3a;color:#dff7ff;font-weight:900}#${SETTINGS} .members{display:grid;gap:5px;margin-top:7px}#${SETTINGS} .m{display:grid;grid-template-columns:minmax(0,1fr) 54px;gap:5px;align-items:center}#${SETTINGS} .add{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;margin-top:7px}#${SETTINGS} .footer{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}`;(document.head||document.documentElement).appendChild(s)}
+function ensureStyle(){if(document.getElementById(ROOT+'-style'))return;const s=document.createElement('style');s.id=ROOT+'-style';s.textContent=`.${HIDE}{display:none!important}#${ROOT}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 10px)!important;z-index:2147483647!important;height:38px!important;display:none;grid-template-columns:minmax(54px,.72fr) minmax(46px,.62fr) minmax(70px,1fr) minmax(48px,.66fr) minmax(68px,.9fr);gap:3px;padding:4px;border:1px solid #355063;border-radius:9px;background:#0e1c26;box-shadow:0 -3px 10px #0006;box-sizing:border-box!important;font-family:system-ui,-apple-system,sans-serif}#${ROOT} button{min-width:0;height:28px;padding:0 4px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 9.5px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${ROOT} button.mode.auto{background:#17422f;border-color:#56a77b;color:#d6ffe7}#${ROOT} button.mode.manual{background:#3c2c10;border-color:#92712f;color:#ffe8ad}#${ROOT} button.on{background:#17422f;border-color:#56a77b}#${ROOT} button.ins{border-color:#55d8f1;background:#11374a}#${ROOT} button.err{border-color:#c95b68;color:#ffd5da}#${SETTINGS}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 54px)!important;z-index:2147483647!important;max-height:68vh!important;overflow:auto!important;padding:10px!important;border:1px solid #49687d!important;border-radius:11px!important;background:#07131d!important;color:#e8f6ff!important;box-shadow:0 12px 30px #000c!important;font:850 11px/1.4 system-ui!important}#${SETTINGS} h3{margin:0 0 8px;font-size:14px}#${SETTINGS} .g{border:1px solid #2d4b60;border-radius:9px;background:#0a1924;padding:8px;margin:7px 0}#${SETTINGS} .gh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}#${SETTINGS} input[type=text]{width:100%;height:34px;border:1px solid #3f5f74;border-radius:7px;background:#0b1b27;color:#fff;padding:0 8px}#${SETTINGS} button{min-height:32px;border:1px solid #4a6a80;border-radius:7px;background:#112a3a;color:#dff7ff;font-weight:900}#${SETTINGS} .members{display:grid;gap:5px;margin-top:7px}#${SETTINGS} .m{display:grid;grid-template-columns:minmax(0,1fr) 54px;gap:5px;align-items:center}#${SETTINGS} .who{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;align-items:center;min-width:0}#${SETTINGS} .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#142634;border:1px solid #35576d}#${SETTINGS} .who-txt{min-width:0}#${SETTINGS} .nick{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .uid{font-size:10px;color:#9db3c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .add{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;margin-top:7px}#${SETTINGS} .footer{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}`;(document.head||document.documentElement).appendChild(s)}
 function runPrimaryDockAction(b){const a=b?.dataset?.a;if(a==='read')void manualRead(b);else if(a==='mode')void toggleMode();else if(a==='filter')void toggleFilter()}
 function ensureRoot(){let r=document.getElementById(ROOT);if(r){if(shell&&shell.isConnected&&r.parentElement!==shell)shell.appendChild(r);return r}r=document.createElement('div');r.id=ROOT;r.innerHTML='<button type="button" data-a="read">読込</button><button type="button" class="mode auto" data-a="mode">自動</button><button type="button" data-a="filter">フィルター</button><button data-a="settings">設定</button><button class="ins" data-a="ins">INSIGHT</button>';(document.body||document.documentElement).appendChild(r);
 const primary=e=>{const b=e.target instanceof Element?e.target.closest('button[data-a="read"],button[data-a="mode"],button[data-a="filter"]'):null;if(!b)return null;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return b};
@@ -63,6 +64,20 @@ async function applyFilter(){if(!shell||!visible(shell))return;paintFilter();con
 function scheduleFilter(){clearTimeout(filterTimer);filterTimer=setTimeout(()=>void applyFilter(),140)}
 async function toggleFilter(){await initFilter();filterOn=!filterOn;const id=await account();if(id)await set(FIL+id,filterOn);paintFilter();await applyFilter()}
 function parseId(v){const raw=clean(v);if(!raw)return'';try{const u=new URL(/^https?:\/\//i.test(raw)?raw:`https://note.com/${raw.replace(/^@/,'')}`),id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+async function creatorProfile(id){
+  const key=String(id||'').toLowerCase();
+  if(profileCache.has(key))return profileCache.get(key);
+  const task=(async()=>{
+    try{
+      const r=await fetch('/api/v2/creators/'+encodeURIComponent(key),{credentials:'include',cache:'no-store'});
+      if(!r.ok)throw new Error('profile '+r.status);
+      const j=await r.json(),d=j?.data??j??{};
+      return{id:key,nickname:clean(d.nickname||d.name||key),profileImageUrl:clean(d.profileImageUrl||d.profile_image_url||d.avatarUrl||'')}
+    }catch{return{id:key,nickname:key,profileImageUrl:''}}
+  })();
+  profileCache.set(key,task);
+  return task
+}
 async function openSettings(){
   if(!dockVisible)return;
   await initFilter();
@@ -80,9 +95,17 @@ async function openSettings(){
       const mem=box.querySelector('.members');
       g.ids.forEach((id,j)=>{
         const r=document.createElement('div');r.className='m';
-        r.innerHTML=`<span>@${id}</span><button data-delm>削除</button>`;
-        r.querySelector('[data-delm]').onclick=async()=>{g.ids.splice(j,1);await saveGroups(gs);render()};
-        mem.appendChild(r)
+        const who=document.createElement('div');who.className='who';
+        const img=document.createElement('img');img.className='avatar';img.alt='';img.loading='lazy';
+        const txt=document.createElement('div');txt.className='who-txt';
+        const nick=document.createElement('div');nick.className='nick';nick.textContent='読み込み中…';
+        const uid=document.createElement('div');uid.className='uid';uid.textContent='@'+id;
+        txt.append(nick,uid);who.append(img,txt);
+        const del=document.createElement('button');del.type='button';del.dataset.delm='1';del.textContent='削除';
+        r.append(who,del);
+        del.onclick=async()=>{g.ids.splice(j,1);await saveGroups(gs);render()};
+        mem.appendChild(r);
+        void creatorProfile(id).then(info=>{if(!r.isConnected)return;nick.textContent=info.nickname||('@'+id);uid.textContent='@'+id;if(info.profileImageUrl){img.src=info.profileImageUrl;img.style.visibility='visible'}else{img.removeAttribute('src');img.style.visibility='hidden'}})
       });
       box.querySelector('[data-on]').onchange=async e=>{g.enabled=e.target.checked;await saveGroups(gs)};
       box.querySelector('[data-name]').onchange=async e=>{g.name=clean(e.target.value)||`グループ ${i+1}`;await saveGroups(gs);render()};
