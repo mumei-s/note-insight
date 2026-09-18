@@ -43,9 +43,18 @@ const legacySig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0]
 function readOutbox(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
 function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(rs))}
 function retain(id,rs){const m=new Map(readOutbox(id).map(r=>[sig(r),r]));for(const r of rs)m.set(sig(r),r);writeOutbox(id,[...m.values()])}
-function progressNode(){let el=document.getElementById(PROGRESS_ID);if(el)return el;el=document.createElement('div');el.id=PROGRESS_ID;el.setAttribute('role','status');el.style.cssText='position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 58px);z-index:2147483646;display:none;padding:7px 10px;border:1px solid #3c5d72;border-radius:9px;background:rgba(7,18,27,.96);color:#dff7ff;font:900 11px/1.35 system-ui,-apple-system,sans-serif;box-shadow:0 -2px 8px rgba(0,0,0,.28);pointer-events:none;text-align:center';(document.body||document.documentElement).appendChild(el);return el}
+function progressNode(){let el=document.getElementById(PROGRESS_ID);if(el)return el;el=document.createElement('div');el.id=PROGRESS_ID;el.setAttribute('role','status');el.style.cssText='position:fixed;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 54px);z-index:2147483646;display:none;max-width:min(72vw,360px);padding:4px 7px;border:1px solid #3c5d72;border-radius:7px;background:rgba(7,18,27,.94);color:#dff7ff;font:900 9.5px/1.25 system-ui,-apple-system,sans-serif;box-shadow:0 -1px 5px rgba(0,0,0,.24);pointer-events:none;text-align:center';(document.body||document.documentElement).appendChild(el);return el}
 let progressTimer=0;
-function paintProgress(message,kind){const el=progressNode();clearTimeout(progressTimer);el.textContent=String(message||'');el.style.display=message?'block':'none';el.style.borderColor=kind==='error'?'#c95b68':kind==='done'?'#56a77b':'#3c5d72';el.style.color=kind==='error'?'#ffd5da':kind==='done'?'#caffda':'#dff7ff';if(kind==='done'||kind==='error')progressTimer=setTimeout(()=>{if(el.isConnected)el.style.display='none'},15000)}
+function paintProgress(message,kind){
+  const el=progressNode();
+  clearTimeout(progressTimer);
+  if(kind!=='done'&&kind!=='error'){el.style.display='none';el.textContent='';return}
+  el.textContent=String(message||'');
+  el.style.display=message?'block':'none';
+  el.style.borderColor=kind==='error'?'#c95b68':'#56a77b';
+  el.style.color=kind==='error'?'#ffd5da':'#caffda';
+  progressTimer=setTimeout(()=>{if(el.isConnected)el.style.display='none'},kind==='error'?6000:2500)
+}
 function status(message,kind='info',label='',extra={}){paintProgress(message,kind);document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail:{message:String(message||''),kind,label,scanning,...extra}}))}
 function clearBoundary(){document.getElementById(BOUNDARY_ID)?.remove()}
 function markBoundary(el){clearBoundary();if(!(el instanceof Element)||!el.parentNode)return;const line=document.createElement('div');line.id=BOUNDARY_ID;line.textContent='ここまで保存済み';line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';el.parentNode.insertBefore(line,el)}
