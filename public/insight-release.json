@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.53",
+  "notificationVersion": "3.2.54",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T06:35:00+09:00",
+  "releasedAt": "2026-09-19T05:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHTトップの本人通知カードを『ON/OFF』『設定/更新』の2分割に変更。OFF時は本人通知機能全体を停止し、note側の追加パネル・自動読込・フィルター表示等を出さない。通知から他画面へ移動した際の5パネル即時除去も継続。"
+  "note": "通知行をpointerdown時点で検知して5パネルを即時除去し、DM・記事等へ移動後に古い通知DOMが一瞬残っていてもパネルを再表示しない抑止を追加。次にユーザーが🔔を開いた時だけ再表示を許可する。"
 }
