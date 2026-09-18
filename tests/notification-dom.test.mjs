@@ -57,6 +57,39 @@ test('V3.2.51 wrapper activates bottom-up reader and fixed five-panel runtime',(
   const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.51/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3245/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3251/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3245/);assert.match(v3,/#mumei-v325-dock \[data-a="settings"\]/);assert.match(v3,/#mumei-v3-tray-v330 \[data-act="settings"\]/);assert.match(v3,/api\.openSettings/);assert.match(v3,/notification-filter-settings\.html/);assert.match(v3,/mumei-filter-page-v1/);assert.match(v3,/mumei-filter-bridge-v1/);assert.match(v3,/@connect\s+note\.com/);assert.doesNotMatch(v3,/e\.source!==window/);assert.match(v3,/mumei_filter_return/);assert.match(v3,/mumei_insight_return_bell_v1/);assert.match(v3,/return-bell/);assert.match(v3,/return-ready/);assert.match(v3,/isNotificationOpen/);assert.match(v3,/openNotificationBell/);assert.match(runtime,/function runPrimaryDockAction/);assert.match(runtime,/type="button" data-a="read"/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/function mountUiInSurface/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/function leadDisplayName/);assert.match(runtime,/function profileCandidates/);assert.match(runtime,/function filterRows/);assert.match(runtime,/function leadCreatorId/);assert.doesNotMatch(runtime,/magazineNoise\(text\(el\)\)&&creatorIds\(el\)/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.match(runtime,/function openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.doesNotMatch(runtime,/autoDoneForSession=false;markSurface\(null\);showRoot\(false\);cleanupVisuals\(\)/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/async function safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/li,\[role="listitem"\]/);assert.doesNotMatch(runtime,/new MutationObserver/)
 });
 
-test('installer opens canonical userscript and keeps visible copy versionless',async()=>{
-  const settingsPage=read('notification-filter-settings.html');assert.match(settingsPage,/← noteの🔔通知へ戻る/);assert.match(settingsPage,/アイコン|avatar/);assert.match(settingsPage,/表示名|className='name'/);assert.match(settingsPage,/@ID|className='id'/);assert.match(settingsPage,/history\.pushState/);assert.match(settingsPage,/mumei_filter_return=bell/);assert.match(settingsPage,/return-bell/);assert.match(settingsPage,/return-ready/);assert.match(settingsPage,/returnToBell/);assert.match(settingsPage,/className='summary'/);assert.match(settingsPage,/className='body'/);assert.match(settingsPage,/opened\.has/);assert.match(settingsPage,/className='avatar'/);const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.51'})});for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);await new Promise(resolve=>setTimeout(resolve,0));const install=w.document.getElementById('install'),u=new URL(install.href);assert.equal(u.origin,'https://raw.githubusercontent.com');assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');assert.match(install.textContent,/最新版をインストール \/ 更新/);assert.match(html,/insight-release\.json/);assert.doesNotMatch(html,/本人通知 V\d/);assert.match(html,/ブラウザ別インストール/);assert.match(html,/class="browser"/);assert.match(html,/data-browser="android-edge"/);assert.match(html,/data-browser="android-firefox"/);assert.match(html,/data-browser="android-other"/);assert.match(html,/data-browser="ios-safari"/);assert.match(html,/data-browser="ios-other"/);assert.match(html,/data-browser="pc-edge"/);assert.match(html,/data-browser="pc-chrome"/);assert.match(html,/data-browser="pc-firefox"/);assert.match(html,/data-browser="pc-opera"/);assert.match(html,/data-browser="mac-safari"/);assert.match(html,/Yahoo!ブラウザー/);assert.match(html,/apps\.apple\.com\/jp\/app\/userscripts\/id1463298887/);assert.match(html,/tampermonkey\.net\/index\.php\?browser=safari/);assert.match(html,/addons\.mozilla\.org\/android\/addon\/tampermonkey/);assert.match(html,/play\.google\.com\/store\/apps\/details\?id=com\.microsoft\.emmx/);assert.match(html,/play\.google\.com\/store\/apps\/details\?id=org\.mozilla\.firefox/);assert.match(html,/5パネル/);assert.match(html,/次回からはその保存位置を境界/);assert.match(html,/URLを貼り付ける操作はありません/);assert.match(html,/確認ボタンも不要/);assert.match(html,/from==='note'\|\|from==='notifications'/);assert.doesNotMatch(html,/notification-filter\.html/)}finally{dom.window.close()}
+test('installer is isolated behind a redirect shell and stays versionless',async()=>{
+  const settingsPage=read('notification-filter-settings.html');
+  assert.match(settingsPage,/← noteの🔔通知へ戻る/);
+  assert.match(settingsPage,/className='summary'/);
+  assert.match(settingsPage,/className='body'/);
+
+  const redirect=read('tool-setup.html');
+  assert.match(redirect,/notification-browser-install\.html/);
+  assert.match(redirect,/location\.replace\(target\.href\)/);
+  assert.doesNotMatch(redirect,/ブラウザ別インストール|raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
+
+  const html=read('notification-browser-install.html');
+  const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-browser-install.html',runScripts:'outside-only'});
+  const w=dom.window;
+  try{
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.51'})});
+    for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const install=w.document.getElementById('install'),u=new URL(install.href);
+    assert.equal(u.origin,'https://raw.githubusercontent.com');
+    assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');
+    assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');
+    assert.match(install.textContent,/最新版をインストール \/ 更新/);
+    assert.match(html,/mumei-installer-boundary/);
+    assert.match(html,/insight-release\.json/);
+    assert.doesNotMatch(html,/本人通知 V\d|V3\.2\.51/);
+    assert.match(html,/ブラウザ別インストール/);
+    for(const id of ['android-edge','android-firefox','android-other','ios-safari','ios-other','pc-edge','pc-chrome','pc-firefox','pc-opera','mac-safari'])assert.match(html,new RegExp('data-browser="'+id+'"'));
+    assert.match(html,/Yahoo!ブラウザー/);
+    assert.match(html,/apps\.apple\.com\/jp\/app\/userscripts\/id1463298887/);
+    assert.match(html,/tampermonkey\.net\/index\.php\?browser=safari/);
+    assert.match(html,/addons\.mozilla\.org\/android\/addon\/tampermonkey/);
+    assert.match(html,/play\.google\.com\/store\/apps\/details\?id=com\.microsoft\.emmx/);
+    assert.match(html,/play\.google\.com\/store\/apps\/details\?id=org\.mozilla\.firefox/);
+  }finally{dom.window.close()}
 });
