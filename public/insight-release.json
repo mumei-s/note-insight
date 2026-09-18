@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.41",
+  "notificationVersion": "3.2.42",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T09:26:00+09:00",
+  "releasedAt": "2026-09-18T13:50:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "自動モードは🔔を1回開くごとに自動読込1回だけ。開いたままの再読込はしない。読込中表示は処理状態で、自動モード表示とは別。完了通知は小型化し2.5秒で消える。"
+  "note": "通知パネルの設定は専用の通知フィルター設定だけに統一。旧インライン設定は廃止し、旧runtime経由でも専用ページへ強制転送。設定遷移はreplaceで元のクリエイターページを履歴に残さない。"
 }
