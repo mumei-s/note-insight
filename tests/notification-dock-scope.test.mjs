@@ -9,7 +9,7 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/bottom-up-from-saved-line/);
  assert.match(reader,/saved-line-bottom-up-v324/);
  assert.match(reader,/ここまで保存済み/);
- assert.match(reader,/boundarySignature/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/reader-recovered-saved-v325/);
+ assert.match(reader,/boundarySignature/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/reader-recovered-saved-v326/);
  assert.match(reader,/MAX_SEEK_STEPS/);
  assert.match(reader,/MAX_READ_STEPS/);
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
@@ -19,6 +19,7 @@ test("V3.2.43 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
+ const reader=await read("public/note-insight-notification-reader-v323.js");
  assert.match(parent,/@version\s+3\.2\.43/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3243/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3243/);
@@ -54,7 +55,7 @@ test("reader saves a confirmed completion boundary and subsequent scans move upw
  assert.match(reader,/boundaryEventIdentity:last\.meta\?\.event_identity/);
  assert.match(reader,/boundaryLegacySignature:legacySig\(last\)/);
  assert.match(reader,/function boundaryMatch/);
- assert.match(reader,/reader-bottom-up-confirmed-v324/);
+ assert.match(reader,/reader-bottom-up-confirmed-v326/);
  assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
