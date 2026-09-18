@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<script>(function(){const q=new URLSearchParams(location.search),from=q.get('from');if(from==='note'||from==='notifications')location.replace('https://note.com/notifications')})();</script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>INSIGHT インストール / 更新</title>
+<meta name="mumei-installer-boundary" content="LOCKED-INDEPENDENT-V1">
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:dark}
+body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+.wrap{width:min(620px,calc(100% - 16px));margin:auto;padding:8px 0 28px}
+.back{display:inline-flex;align-items:center;min-height:34px;color:#80eaff;text-decoration:none;font-weight:900;font-size:12px}
+.card{border:1px solid #31506a;border-radius:14px;background:#0a1722;padding:12px}
+.eyebrow{font-size:9px;color:#86cfe3;letter-spacing:.08em}
+h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
+.toolname{margin:0 0 6px;font-size:15px;font-weight:900;color:#8feaff}
+.lead{margin:0 0 8px;color:#a9bfce;line-height:1.5;font-size:11px}
+.notice{padding:8px;border:1px solid #38637c;border-radius:9px;background:#081722;color:#cfefff;font-size:10px;line-height:1.55}
+.install{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:9px;border:1px solid #61c98c;border-radius:9px;background:#123626;color:#edfff4;text-decoration:none;font:950 14px/1.2 system-ui;text-align:center;padding:8px}
+.result{margin-top:7px;padding:8px;border:1px solid #3b5b72;border-radius:8px;background:#08131d;font-size:10px;font-weight:800;line-height:1.5}
+.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}
+.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}
+.section{margin-top:12px;padding-top:10px;border-top:1px solid #263d4e}
+.section h2{font-size:15px;margin:0 0 6px}
+.detected{margin:6px 0 7px;padding:7px 8px;border:1px solid #3b657f;border-radius:8px;background:#0b1b27;color:#ccefff;font-weight:900;font-size:10px}
+.device-label{margin:9px 2px 4px;color:#92aaba;font-size:9px;font-weight:900;letter-spacing:.04em}
+.browser-list{display:grid;gap:4px}
+.browser{border:1px solid #304f64;border-radius:8px;background:#091824;overflow:hidden}
+.browser[open]{border-color:#5b94ad}
+.browser.active{border-color:#65d6ef;box-shadow:0 0 0 1px #65d6ef inset}
+.browser summary{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;min-height:36px;padding:6px 9px;cursor:pointer}
+.browser summary::-webkit-details-marker{display:none}
+.bname{min-width:0;font-size:11px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:8.5px;font-weight:900;border:1px solid #41627a;border-radius:999px;padding:2px 6px;white-space:nowrap;color:#caeaff}
+.badge.good{border-color:#3f7e5d;color:#caffda;background:#0d2419}
+.badge.switch{border-color:#806d38;color:#ffe6a3;background:#211a09}
+.browser-body{padding:0 8px 8px;border-top:1px solid #233f50}
+.browser-body p{margin:7px 0;color:#b2c5d2;font-size:10px;line-height:1.55}
+.actions{display:grid;gap:5px}
+.action{display:flex;align-items:center;justify-content:center;min-height:34px;border:1px solid #42677e;border-radius:7px;background:#10293a;color:#ddf6ff;text-decoration:none;font-weight:900;font-size:10px;text-align:center;padding:6px}
+.action.primary{border-color:#5abf85;background:#123124;color:#e5ffed}
+.action.alt{border-color:#7a6532;background:#251d08;color:#ffe6a8}
+.small{margin-top:6px;color:#839baa;font-size:8.8px;line-height:1.5}
+.copyrow{display:grid;grid-template-columns:1fr;gap:5px}
+.copybtn{min-height:32px;border:1px solid #42677e;border-radius:7px;background:#10293a;color:#ddf6ff;font-weight:900;font-size:10px}
+.foot{margin-top:10px;color:#8ea4b3;font-size:9px;line-height:1.5}
+@media(max-width:360px){.wrap{width:min(620px,calc(100% - 10px))}.card{padding:9px}.browser summary{padding:5px 7px}.bname{font-size:10px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<a id="back" class="back" href="./?insightMode=notifications#dashboard">← INSIGHT【通知】へ戻る</a>
+<section class="card">
+<div class="eyebrow">PRIVATE NOTIFICATION / 設定</div>
+<h1>INSIGHTをインストール / 更新</h1>
+<div class="toolname">本人通知ツール</div>
+<p class="lead">使っている端末とブラウザのパネルだけ開いて進めます。すでに導入済みなら、拡張機能の入れ直しは不要です。</p>
+<div class="notice"><b>通知画面は下部固定の5パネル。</b><br>「読込 / 自動ON・OFF / フィルター / 設定 / INSIGHT」。保存済み境界より新しい通知だけを追加保存します。</div>
+<a id="install" class="install" href="#">最新版をインストール / 更新</a>
+<div id="verifyResult" class="result">最新版かどうか自動確認します。</div>
+
+<section class="section">
+<h2>ブラウザ別インストール</h2>
+<div id="detected" class="detected">使用環境を確認中…</div>
+
+<div class="device-label">ANDROID</div>
+<div class="browser-list">
+<details class="browser" data-browser="android-edge">
+<summary><span class="bname">Microsoft Edge</span><span class="badge good">推奨</span></summary>
+<div class="browser-body">
+<p>EdgeでTampermonkeyを有効にしてから、上の「最新版をインストール / 更新」を押します。</p>
+<div class="actions"><a class="action primary" href="https://www.tampermonkey.net/index.php?browser=edge&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkeyを準備</a></div>
+<div class="small">導入後：Edge → 拡張機能 → Tampermonkey → INSIGHTがONか確認。</div>
+</div>
+</details>
+
+<details class="browser" data-browser="android-firefox">
+<summary><span class="bname">Firefox</span><span class="badge good">対応</span></summary>
+<div class="browser-body">
+<p>Firefox AndroidはTampermonkeyアドオンに対応しています。追加後、このページ上部からINSIGHTを入れます。</p>
+<div class="actions"><a class="action primary" href="https://addons.mozilla.org/android/addon/tampermonkey/" target="_blank" rel="noopener noreferrer">Firefox用Tampermonkey</a></div>
+</div>
+</details>
+
+<details class="browser" data-browser="android-other">
+<summary><span class="bname">Chrome / Yahoo!ブラウザー / その他</span><span class="badge switch">EdgeかFirefoxへ</span></summary>
+<div class="browser-body">
+<p>この環境では本人通知用userscriptを直接動かさず、EdgeまたはFirefoxへ移します。Chrome Androidは拡張機能を端末上で実行できません。</p>
+<div class="actions">
+<a class="action primary" href="https://play.google.com/store/apps/details?id=com.microsoft.emmx" target="_blank" rel="noopener noreferrer">Edgeを入れる</a>
+<a class="action" href="https://play.google.com/store/apps/details?id=org.mozilla.firefox" target="_blank" rel="noopener noreferrer">Firefoxを入れる</a>
+</div>
+<div class="copyrow"><button class="copybtn" data-copy-page type="button">この設定画面のURLをコピー</button></div>
+<div class="small">新しいブラウザを開いたら、この設定画面を開いて該当パネルから続けます。</div>
+</div>
+</details>
+</div>
+
+<div class="device-label">IPHONE / IPAD</div>
+<div class="browser-list">
+<details class="browser" data-browser="ios-safari">
+<summary><span class="bname">Safari</span><span class="badge good">推奨</span></summary>
+<div class="browser-body">
+<p>SafariではUserscriptsを使う方法が簡単です。Userscriptsを有効化後、Safariでこのページに戻り、上の「最新版をインストール / 更新」を押します。</p>
+<div class="actions">
+<a class="action primary" href="https://apps.apple.com/jp/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscriptsを開く</a>
+<a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkeyを使う場合はこちら</a>
+</div>
+<div class="small">Userscripts：Safari → 拡張機能 → UserscriptsをON → note.comを許可。Tampermonkeyを選ぶ場合はApp Store側の表示内容を確認して進めます。</div>
+</div>
+</details>
+
+<details class="browser" data-browser="ios-other">
+<summary><span class="bname">Chrome / Edge / Yahoo!ブラウザー等</span><span class="badge switch">Safariへ</span></summary>
+<div class="browser-body">
+<p>iPhone / iPadの本人通知はSafariで設定します。Safariへ切り替えて、この設定画面を開き直します。</p>
+<div class="actions"><a class="action primary" href="https://apps.apple.com/jp/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscriptsを準備</a></div>
+<div class="copyrow"><button class="copybtn" data-copy-page type="button">この設定画面のURLをコピー</button></div>
+</div>
+</details>
+</div>
+
+<div class="device-label">WINDOWS / LINUX / CHROMEBOOK</div>
+<div class="browser-list">
+<details class="browser" data-browser="pc-edge">
+<summary><span class="bname">Microsoft Edge</span><span class="badge good">対応</span></summary>
+<div class="browser-body"><p>Edge用Tampermonkeyを追加し、上の更新ボタンからINSIGHTを導入します。</p><div class="actions"><a class="action primary" href="https://www.tampermonkey.net/index.php?browser=edge&locale=ja" target="_blank" rel="noopener noreferrer">Edge用Tampermonkey</a></div></div>
+</details>
+
+<details class="browser" data-browser="pc-chrome">
+<summary><span class="bname">Chrome / Brave / Vivaldi / Chromium</span><span class="badge good">対応</span></summary>
+<div class="browser-body"><p>Chrome系ブラウザ用Tampermonkeyを追加し、上の更新ボタンからINSIGHTを導入します。</p><div class="actions"><a class="action primary" href="https://www.tampermonkey.net/index.php?browser=chrome&locale=ja" target="_blank" rel="noopener noreferrer">Chrome系Tampermonkey</a></div></div>
+</details>
+
+<details class="browser" data-browser="pc-firefox">
+<summary><span class="bname">Firefox</span><span class="badge good">対応</span></summary>
+<div class="browser-body"><p>Firefox用Tampermonkeyを追加し、上の更新ボタンからINSIGHTを導入します。</p><div class="actions"><a class="action primary" href="https://addons.mozilla.org/firefox/addon/tampermonkey/" target="_blank" rel="noopener noreferrer">Firefox用Tampermonkey</a></div></div>
+</details>
+
+<details class="browser" data-browser="pc-opera">
+<summary><span class="bname">Opera</span><span class="badge good">対応</span></summary>
+<div class="browser-body"><p>Opera用Tampermonkeyを追加し、上の更新ボタンからINSIGHTを導入します。</p><div class="actions"><a class="action primary" href="https://www.tampermonkey.net/index.php?browser=opera&locale=ja" target="_blank" rel="noopener noreferrer">Opera用Tampermonkey</a></div></div>
+</details>
+</div>
+
+<div class="device-label">MAC</div>
+<div class="browser-list">
+<details class="browser" data-browser="mac-safari">
+<summary><span class="bname">Safari（Mac）</span><span class="badge good">対応</span></summary>
+<div class="browser-body">
+<p>Mac SafariはUserscriptsまたはTampermonkeyで使えます。どちらか一方を用意して、上の更新ボタンからINSIGHTを導入します。</p>
+<div class="actions">
+<a class="action primary" href="https://apps.apple.com/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscripts</a>
+<a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkey</a>
+</div>
+</div>
+</details>
+</div>
+</section>
+
+<div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。</div>
+</section>
+</main>
+<script>
+const RUNTIME_KEY='mumei-notification-v3-loader',TOOL_KEY='mumei-notification-tool-version',RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
+const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
+let latest='',browserId='other';
+function rawScriptUrl(){return RAW_SCRIPT}
+function safeBack(v){try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;
+function env(){
+  const ua=navigator.userAgent||'',platform=navigator.platform||'',ios=/(iPhone|iPad|iPod)/i.test(ua)||(platform==='MacIntel'&&navigator.maxTouchPoints>1),android=/Android/i.test(ua),safari=/Safari/i.test(ua)&&!/(Chrome|CriOS|Edg|EdgiOS|FxiOS|OPR|Android)/i.test(ua),edge=/EdgA|EdgiOS|Edg\//i.test(ua),firefox=/FxiOS|Firefox/i.test(ua),opera=/OPR\//i.test(ua),yahoo=/YJApp|Yahoo/i.test(ua),mac=!ios&&/Macintosh/i.test(ua);
+  if(ios)return safari?'ios-safari':'ios-other';
+  if(android){if(edge)return'android-edge';if(firefox)return'android-firefox';return'android-other'}
+  if(mac&&safari)return'mac-safari';
+  if(edge)return'pc-edge';
+  if(firefox)return'pc-firefox';
+  if(opera)return'pc-opera';
+  return'pc-chrome'
+}
+const names={
+'android-edge':'Android / Edge',
+'android-firefox':'Android / Firefox',
+'android-other':'Android / Chrome・Yahoo!ブラウザー等',
+'ios-safari':'iPhone・iPad / Safari',
+'ios-other':'iPhone・iPad / Safari以外',
+'pc-edge':'PC / Edge',
+'pc-chrome':'PC / Chrome系',
+'pc-firefox':'PC / Firefox',
+'pc-opera':'PC / Opera',
+'mac-safari':'Mac / Safari'
+};
+function setDetected(){
+  browserId=env();
+  detected.textContent='現在: '+(names[browserId]||'その他')+'　→ 該当パネルを開いてください。';
+  document.querySelectorAll('.browser').forEach(x=>{x.classList.toggle('active',x.dataset.browser===browserId);x.open=x.dataset.browser===browserId});
+}
+function installed(){return String(localStorage.getItem(TOOL_KEY)||localStorage.getItem(RUNTIME_KEY)||'')}
+function check(){
+  const current=installed();
+  if(latest&&current===latest){result.className='result ok';result.textContent='✓ 最新版が起動しています。';return}
+  if(latest&&current){result.className='result warn';result.textContent='更新があります。「最新版をインストール / 更新」を押してください。';return}
+  if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。インストール / 更新後にnoteまたはINSIGHTを開いてください。';return}
+  result.className='result';result.textContent=current?'本人通知ツールを検出しました。最新版情報を確認中…':'最新版情報を確認中…'
+}
+async function loadLatest(){try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('release');const p=await r.json();latest=String(p.notificationVersion||'');check()}catch{latest='';check()}}
+function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
+document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
+install.addEventListener('click',()=>{paintInstall();result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。使用中のuserscript拡張でインストール / 更新してください。':'userscriptを開きます。Tampermonkeyでインストール / 更新してください。'});
+function refresh(){check();void loadLatest()}
+addEventListener('pageshow',()=>setTimeout(refresh,100));addEventListener('focus',()=>setTimeout(refresh,120));addEventListener('mumei-notification-version-changed',refresh);
+paintInstall();setDetected();refresh();
+</script>
+</body>
+</html>
