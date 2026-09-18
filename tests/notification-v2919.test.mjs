@@ -17,7 +17,7 @@ test("V3.2.43 loads bottom-up reader, persistent checkpoint and fixed five-panel
   has(runtime,["notification-filter.html","location.replace(u.href)","event?.composedPath","mumei-v325-dock","data-a=\"read\"","data-a=\"mode\"","data-a=\"filter\"","data-a=\"settings\"","data-a=\"ins\"","mumei_insight_notification_auto_v325:","async function initMode(","async function toggleMode(","function maybeAuto(","autoDoneForSession","async function safeScan("]);
   assert.doesNotMatch(runtime,/new MutationObserver/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
-  has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","bottom-up-from-saved-line","saved-line-bottom-up-v324","ここまで保存済み","boundarySignature","boundaryEventIdentity","完了ラインから上方向へ、追加分だけ読み込みます","findSavedRecoveryElement","persistRecoveredBoundary","完了ラインを再作成しています"]);
+  has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","bottom-up-from-saved-line","saved-line-bottom-up-v324","ここまで保存済み","boundarySignature","boundaryEventIdentity","完了ラインから上方向へ、追加分だけ読み込みます","findSavedRecoveryElement","persistRecoveredBoundary","preserveBoundary","全件読み直しなし"]);
   has(loader,["note-insight-dashboard-integrated-v318.js","mumei-dashboard-flow-v143"]);
 });
 
