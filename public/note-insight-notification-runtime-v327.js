@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.43';
+const VERSION='3.2.44';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:';
@@ -49,7 +49,40 @@ async function applyFilter(){if(!shell||!visible(shell))return;for(const el of s
 function scheduleFilter(){clearTimeout(filterTimer);filterTimer=setTimeout(()=>void applyFilter(),140)}
 async function toggleFilter(){await initFilter();filterOn=!filterOn;const id=await account();if(id)await set(FIL+id,filterOn);paintFilter();await applyFilter()}
 function parseId(v){const raw=clean(v);if(!raw)return'';try{const u=new URL(/^https?:\/\//i.test(raw)?raw:`https://note.com/${raw.replace(/^@/,'')}`),id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
-async function openSettings(){if(!dockVisible)return;const u=new URL('https://mumei-s.github.io/note-insight/notification-filter.html');u.searchParams.set('from','note');u.searchParams.set('ts',String(Date.now()));intentUntil=0;markSurface(null);showRoot(false);cleanupVisuals();location.replace(u.href)}
+async function openSettings(){
+  if(!dockVisible)return;
+  await initFilter();
+  let gs=await readGroups();
+  if(!gs.length)gs=[{name:'通知フィルター',enabled:true,ids:[]}];
+  let p=document.getElementById(SETTINGS);
+  if(p){p.remove();return}
+  p=document.createElement('div');p.id=SETTINGS;(document.body||document.documentElement).appendChild(p);
+  const render=()=>{
+    p.innerHTML='<h3>通知フィルター登録</h3><div class="list"></div><div class="footer"><button data-addg>＋ グループ追加</button><button data-close>× 閉じる</button></div>';
+    const list=p.querySelector('.list');
+    gs.forEach((g,i)=>{
+      const box=document.createElement('div');box.className='g';
+      box.innerHTML=`<div class="gh"><label><input type="checkbox" data-on ${g.enabled?'checked':''}> ON</label><input type="text" data-name value="${String(g.name||'').replace(/"/g,'&quot;')}"><button data-delg>削除</button></div><div class="members"></div><div class="add"><input type="text" data-new placeholder="note URL / @ID / ID"><button data-add>＋追加</button></div>`;
+      const mem=box.querySelector('.members');
+      g.ids.forEach((id,j)=>{
+        const r=document.createElement('div');r.className='m';
+        r.innerHTML=`<span>@${id}</span><button data-delm>削除</button>`;
+        r.querySelector('[data-delm]').onclick=async()=>{g.ids.splice(j,1);await saveGroups(gs);render()};
+        mem.appendChild(r)
+      });
+      box.querySelector('[data-on]').onchange=async e=>{g.enabled=e.target.checked;await saveGroups(gs)};
+      box.querySelector('[data-name]').onchange=async e=>{g.name=clean(e.target.value)||`グループ ${i+1}`;await saveGroups(gs);render()};
+      box.querySelector('[data-delg]').onclick=async()=>{gs.splice(i,1);if(!gs.length)gs=[{name:'通知フィルター',enabled:true,ids:[]}];await saveGroups(gs);render()};
+      const add=async()=>{const inp=box.querySelector('[data-new]'),id=parseId(inp.value);if(!id)return;if(!g.ids.includes(id))g.ids.push(id);inp.value='';await saveGroups(gs);render()};
+      box.querySelector('[data-add]').onclick=add;
+      box.querySelector('[data-new]').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();void add()}};
+      list.appendChild(box)
+    });
+    p.querySelector('[data-addg]').onclick=async()=>{gs.push({name:`グループ ${gs.length+1}`,enabled:true,ids:[]});await saveGroups(gs);render()};
+    p.querySelector('[data-close]').onclick=()=>p.remove()
+  };
+  render()
+}
 async function initMode(){if(modeLoaded)return;const id=await account();autoMode=id?Boolean(await get(AUTO+id,true)):true;modeLoaded=true;paintMode()}
 function paintMode(){const b=ensureRoot().querySelector('[data-a="mode"]');b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
 async function toggleMode(){await initMode();autoMode=!autoMode;const id=await account();if(id)await set(AUTO+id,autoMode);paintMode();if(autoMode)maybeAuto(true)}
@@ -79,7 +112,7 @@ function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTime
 function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!bellTrigger(target,e))return;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
 function boot(){ensureStyle();ensureRoot();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>scheduleInspect(20));for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));setInterval(()=>scheduleInspect(0),800);scheduleInspect(0)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
-window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},cleanup:cleanupVisuals,isVisible:()=>dockVisible};
+window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},cleanup:cleanupVisuals,isVisible:()=>dockVisible};
 window.__mumeiV3Runtime327=window.__mumeiV3Runtime328;
 window.__mumeiV3Runtime325=window.__mumeiV3Runtime328;
 })();
