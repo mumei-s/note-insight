@@ -30,11 +30,11 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.52 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
+test('active package uses V3.2.53 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/notification-browser-install.html'),runtime=read('public/note-insight-notification-runtime-v327.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.52');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.2\.52/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.equal(manifest.notificationVersion,'3.2.53');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.2\.53/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split('// ==/UserScript==')[0];
   for(const part of ['note-insight-notification-reader-v323.js?v=3245','note-insight-notification-checkpoint-v325.js?v=3250','note-insight-notification-runtime-v327.js?v=3252'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
