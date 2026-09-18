@@ -47,7 +47,7 @@ test('reader starts from the lower side, marks the completion line, and next run
   assert.match(reader,/boundarySignature/);
   assert.match(reader,/boundaryEventIdentity/);
   assert.match(reader,/function boundaryMatch/);
-  assert.match(reader,/reader-bottom-up-confirmed-v324/);
+  assert.match(reader,/reader-bottom-up-confirmed-v326/);
   assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
@@ -58,5 +58,5 @@ test('V3.2.43 wrapper activates bottom-up reader and fixed five-panel runtime',(
 });
 
 test('installer opens canonical userscript and keeps visible copy versionless',async()=>{
-  const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.43'})});w.eval(w.document.querySelector('script').textContent);await new Promise(resolve=>setTimeout(resolve,0));const install=w.document.getElementById('install'),u=new URL(install.href);assert.equal(u.origin,'https://raw.githubusercontent.com');assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');assert.match(install.textContent,/最新版をインストール \/ 更新/);assert.match(html,/insight-release\.json/);assert.doesNotMatch(html,/本人通知 V\d/);assert.match(html,/ブラウザ別インストール/);assert.match(html,/5パネル/);assert.match(html,/次回からはその保存位置を境界/);assert.match(html,/URLを貼り付ける操作はありません/);assert.match(html,/確認ボタンも不要/);assert.match(html,/from==='note'\|\|from==='notifications'/)}finally{dom.window.close()}
+  const html=read('tool-setup.html'),dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/tool-setup.html',runScripts:'outside-only'}),w=dom.window;try{w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.43'})});for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);await new Promise(resolve=>setTimeout(resolve,0));const install=w.document.getElementById('install'),u=new URL(install.href);assert.equal(u.origin,'https://raw.githubusercontent.com');assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');assert.match(install.textContent,/最新版をインストール \/ 更新/);assert.match(html,/insight-release\.json/);assert.doesNotMatch(html,/本人通知 V\d/);assert.match(html,/ブラウザ別インストール/);assert.match(html,/5パネル/);assert.match(html,/次回からはその保存位置を境界/);assert.match(html,/URLを貼り付ける操作はありません/);assert.match(html,/確認ボタンも不要/);assert.match(html,/from==='note'\|\|from==='notifications'/)}finally{dom.window.close()}
 });
