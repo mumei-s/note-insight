@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiV3Checkpoint325)return;
-const VERSION='3.2.26';
+const VERSION='3.2.27';
 const CHECK='mumei_insight_notification_checkpoint_v2922:';
 const LOCAL='mumei_insight_notification_checkpoint_local_v325:';
 const BOUNDARY_ID='mumei-v3-saved-boundary-v3223';
@@ -21,7 +21,22 @@ function identity(el){const id=el?.getAttribute?.('data-notification-id')||el?.g
 function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth}
 function candidateRows(){const root=document.querySelector(SHELL)||(/^\/notifications(?:\/|$)/i.test(location.pathname)?document.querySelector('main,[role="main"]'):null);if(!root)return[];const xs=[...root.querySelectorAll(ITEM)].filter(el=>clean(el.textContent).length>=3);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 function findBoundaryRow(cp){for(const el of candidateRows()){if(cp?.boundaryEventIdentity&&identity(el)===cp.boundaryEventIdentity)return el;if(cp?.boundaryDisplayText&&stripTime(el.textContent)===cp.boundaryDisplayText)return el}return null}
-function markBoundary(cp){const old=document.getElementById(BOUNDARY_ID),row=findBoundaryRow(cp);if(!row||!row.parentNode)return false;if(old&&old.nextElementSibling===row)return true;old?.remove();const line=document.createElement('div');line.id=BOUNDARY_ID;line.textContent='ここまで保存済み';line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';row.parentNode.insertBefore(line,row);return true}
+function lineNode(text,fallback=false){const line=document.createElement('div');line.id=BOUNDARY_ID;line.dataset.fallback=fallback?'1':'0';line.textContent=text;line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';return line}
+function markBoundary(cp){
+  const old=document.getElementById(BOUNDARY_ID),row=findBoundaryRow(cp);
+  if(row&&row.parentNode){
+    if(old&&old.nextElementSibling===row&&old.dataset.fallback!=='1')return true;
+    old?.remove();row.parentNode.insertBefore(lineNode('ここまで保存済み'),row);return true
+  }
+  const has=Boolean(cp?.boundaryEventIdentity||cp?.boundarySignature||cp?.boundaryLegacySignature);
+  const root=document.querySelector(SHELL);
+  if(!has||!root)return false;
+  if(old&&old.dataset.fallback==='1')return true;
+  old?.remove();
+  const line=lineNode('前回の保存位置を保持中｜全件再読込なし',true),first=candidateRows()[0];
+  if(first?.parentNode)first.parentNode.insertBefore(line,first);else root.prepend(line);
+  return true
+}
 let accountId='',cached=null;
 async function restore(){accountId=accountId||await account();if(!accountId)return null;const remote=await get(CHECK+accountId,{}),local=localRead(accountId);let chosen=remote&&typeof remote==='object'?remote:{};const remoteHas=Boolean(chosen?.boundaryEventIdentity||chosen?.boundarySignature||chosen?.boundaryLegacySignature),localHas=Boolean(local?.boundaryEventIdentity||local?.boundarySignature||local?.boundaryLegacySignature);if(local&&localHas&&(!remoteHas||boundaryAge(local)>boundaryAge(chosen))){chosen={...chosen,...local};await set(CHECK+accountId,chosen)}cached=chosen;if(chosen?.boundaryEventIdentity||chosen?.boundarySignature||chosen?.boundaryLegacySignature){localWrite(accountId,chosen);setTimeout(()=>markBoundary(chosen),80)}return chosen}
 async function persist(){accountId=accountId||await account();if(!accountId)return null;let cp=await get(CHECK+accountId,{});if(!cp||typeof cp!=='object')cp={};const row=findBoundaryRow(cp);if(row)cp={...cp,boundaryDisplayText:stripTime(row.textContent),persistentMirrorAt:Date.now(),persistentMirrorVersion:VERSION};cached=cp;if(cp?.boundaryEventIdentity||cp?.boundarySignature||cp?.boundaryLegacySignature)localWrite(accountId,cp);markBoundary(cp);return cp}
