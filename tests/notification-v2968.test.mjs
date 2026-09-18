@@ -43,7 +43,7 @@ test('active package uses V3.2.43 with bottom-up resume, persistent checkpoint a
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ['read','mode','filter','settings','ins'])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
   assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/event\?\.composedPath/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/notification-filter\.html/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/safeScan/);
-  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/完了ラインを再作成しています/);
+  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);assert.doesNotMatch(reader,/完了ラインを再作成しています/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
 
