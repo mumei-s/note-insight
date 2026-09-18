@@ -15,17 +15,17 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.43 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.44 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.43/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3243/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3243/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3243/);
+ assert.match(parent,/@version\s+3\.2\.44/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3244/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3244/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3244/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
- assert.match(parent,/bottom-up-saved-line-v3243/);
+ assert.match(parent,/bottom-up-saved-line-v3244/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
@@ -33,7 +33,7 @@ test("V3.2.43 loads bottom-up reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);
  assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
- assert.match(runtime,/notification-filter\.html/);assert.match(runtime,/location\.replace\(u\.href\)/);
+ assert.match(runtime,/通知フィルター登録/);assert.match(runtime,/data-addg/);assert.match(runtime,/note URL \/ @ID \/ ID/);assert.doesNotMatch(runtime,/notification-filter\.html|location\.replace\(u\.href\)/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);
@@ -59,11 +59,11 @@ test("reader saves a confirmed completion boundary and subsequent scans move upw
  assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
-test("settings button opens only the dedicated notification settings page without global DOM observer",async()=>{
+test("settings button opens the inline filter registration panel without page navigation or global DOM observer",async()=>{
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
- assert.match(runtime,/notification-filter\.html/);
+ assert.match(runtime,/通知フィルター登録/);assert.doesNotMatch(runtime,/notification-filter\.html/);
  assert.match(runtime,/data-a="settings">設定<\/button>/);
- assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/mumei_return/);
+ assert.match(runtime,/通知フィルター登録/);assert.match(runtime,/data-addg/);assert.doesNotMatch(runtime,/notification-filter\.html|location\.replace\(u\.href\)|mumei_return/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
 });
 
