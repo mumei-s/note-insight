@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.48 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.49 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.48/);
+ assert.match(parent,/@version\s+3\.2\.49/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3245/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3245/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3248/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3249/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -32,8 +32,8 @@ test("V3.2.48 loads bottom-up reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/autoMode=true/);
  assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);
- assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runPrimaryDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/overscroll-behavior:contain/);assert.match(runtime,/touch-action:pan-y/);assert.match(runtime,/'touchmove'/);assert.match(runtime,/'pointermove'/);assert.match(runtime,/'wheel'/);assert.match(runtime,/creatorProfile/);assert.match(runtime,/profileImageUrl/);assert.match(runtime,/nickname/);assert.match(runtime,/className='avatar'/);assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
- assert.match(runtime,/通知フィルター登録/);assert.match(runtime,/data-addg/);assert.match(runtime,/note URL \/ @ID \/ ID/);assert.doesNotMatch(runtime,/notification-filter\.html|location\.replace\(u\.href\)/);
+ assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runPrimaryDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
+ assert.match(runtime,/notification-filter-settings\.html/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);
@@ -59,11 +59,12 @@ test("reader saves a confirmed completion boundary and subsequent scans move upw
  assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
-test("settings button opens the inline filter registration panel without page navigation or global DOM observer",async()=>{
+test("settings button opens the dedicated filter settings page and never uses the inline panel",async()=>{
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
- assert.match(runtime,/通知フィルター登録/);assert.doesNotMatch(runtime,/notification-filter\.html/);
+ const page=await read("public/notification-filter-settings.html");
  assert.match(runtime,/data-a="settings">設定<\/button>/);
- assert.match(runtime,/通知フィルター登録/);assert.match(runtime,/data-addg/);assert.doesNotMatch(runtime,/notification-filter\.html|location\.replace\(u\.href\)|mumei_return/);
+ assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
+ assert.match(page,/noteの🔔通知へ戻る/);assert.match(page,/history\.pushState/);assert.match(page,/location\.replace\(NOTE\)/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
 });
 
