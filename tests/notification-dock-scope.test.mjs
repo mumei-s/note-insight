@@ -62,7 +62,7 @@ test("settings button opens only the dedicated notification settings page withou
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  assert.match(runtime,/notification-filter\.html/);
  assert.match(runtime,/data-a="settings">設定<\/button>/);
- assert.match(runtime,/mumei_return/);
+ assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/mumei_return/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
 });
 
