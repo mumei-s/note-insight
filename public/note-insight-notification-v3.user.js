@@ -120,7 +120,7 @@ const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')
       return
     }
     if(attempts++>=36)return;
-    if(api&&typeof api.openNotificationBell==='function'&&Date.now()-clickedAt>900){
+    if(api&&typeof api.openNotificationBell==='function'&&Date.now()-clickedAt>1500){
       if(api.openNotificationBell())clickedAt=Date.now()
     }
     setTimeout(()=>void tick(),350)
