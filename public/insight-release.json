@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.47",
+  "notificationVersion": "3.2.48",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T18:28:00+09:00",
+  "releasedAt": "2026-09-18T18:38:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知設定の登録クリエイター表示をアイコン＋表示名＋@IDに強化。保存形式は既存IDのまま維持し、noteのクリエイター情報を設定表示時だけ取得する。前段の通知面内パネル配置・先頭クリエイターフィルター強化も継続。"
+  "note": "通知内の設定パネルだけを対象に、スクロール連鎖とtouch/pointer/wheel伝播を遮断。設定内スクロールは維持し、note通知オーバーレイが閉じて本人クリエイターページへ戻る挙動を防止。他機能は変更なし。"
 }
