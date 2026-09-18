@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.52
+// @version      3.2.53
 // @description  本人通知V3。通知画面下部に5パネルを固定し、自動ON/OFF・手動読込・フィルター・設定・INSIGHTを操作します。通知は下側から上方向へ読み、完了ラインより上の追加分だけを次回保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -27,11 +27,18 @@
 
 (function(){
 'use strict';
-const VERSION='3.2.52';
+const VERSION='3.2.53';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 if(location.hostname==='mumei-s.github.io'){
   try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
+  const FEATURE='mumei_insight_notification_feature_enabled_v1',FEATURE_PAGE='mumei-notification-feature-ui-v1',FEATURE_BRIDGE='mumei-notification-feature-bridge-v1';
+  const featureModern=()=>Boolean(globalThis.GM);
+  const featureGet=async(d=true)=>{try{if(featureModern()&&typeof GM.getValue==='function')return await GM.getValue(FEATURE,d);if(typeof GM_getValue==='function')return GM_getValue(FEATURE,d)}catch{}return d};
+  const featureSet=async(v)=>{try{if(featureModern()&&typeof GM.setValue==='function')return await GM.setValue(FEATURE,Boolean(v));if(typeof GM_setValue==='function')return GM_setValue(FEATURE,Boolean(v))}catch{}};
+  const sendFeature=enabled=>window.postMessage({source:FEATURE_BRIDGE,type:'state',enabled:Boolean(enabled)},location.origin);
+  addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==FEATURE_PAGE)return;const d=e.data;(async()=>{if(d.type==='set')await featureSet(Boolean(d.enabled));sendFeature(await featureGet(true))})()});
+  void featureGet(true).then(sendFeature);
   if(location.pathname==='/note-insight/notification-filter-settings.html'){
     const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',RETURN='mumei_insight_return_bell_v1';
     const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
