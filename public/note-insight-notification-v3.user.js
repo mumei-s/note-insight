@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.49
+// @version      3.2.50
 // @description  本人通知V3。通知画面下部に5パネルを固定し、自動ON/OFF・手動読込・フィルター・設定・INSIGHTを操作します。通知は下側から上方向へ読み、完了ラインより上の追加分だけを次回保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -19,15 +19,15 @@
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3245
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3245
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3249
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3250
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3250
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.2.49';
+const VERSION='3.2.50';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 if(location.hostname==='mumei-s.github.io'){
@@ -75,7 +75,7 @@ if(location.hostname==='mumei-s.github.io'){
       }
       send('state',{groups,filterOn:Boolean(await gmGet(FIL+account,false))})
     };
-    addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window||e.data?.source!==PAGE)return;const d=e.data;if(d.account!==account)return;(async()=>{
+    addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==PAGE)return;const d=e.data;if(d.account!==account)return;(async()=>{
       try{
         if(d.type==='load')await loadState();
         else if(d.type==='save'){
@@ -85,7 +85,11 @@ if(location.hostname==='mumei-s.github.io'){
           send('saved')
         }else if(d.type==='profiles'){
           const ids=[...new Set((Array.isArray(d.ids)?d.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];
-          send('profiles',{profiles:await Promise.all(ids.map(profile))})
+          for(let i=0;i<ids.length;i+=6){
+            const part=ids.slice(i,i+6);
+            send('profiles',{profiles:await Promise.all(part.map(profile))});
+            if(i+6<ids.length)await new Promise(r=>setTimeout(r,50))
+          }
         }
       }catch(err){send('error',{message:clean(err?.message||'設定処理に失敗しました')})}
     })()});
@@ -95,6 +99,12 @@ if(location.hostname==='mumei-s.github.io'){
 }
 if(location.hostname!=='note.com')return;
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
+const returnQuery=new URLSearchParams(location.search);
+if(returnQuery.get('mumei_open_notifications')==='1'){
+  try{history.replaceState(history.state,'',location.origin+'/')}catch{}
+  const openBell=()=>{const api=window.__mumeiV3Runtime328;return Boolean(api&&typeof api.openNotificationBell==='function'&&api.openNotificationBell())};
+  for(const ms of[0,120,300,650,1100,1800,2800,4200,6000])setTimeout(()=>{if(!window.__mumeiNotificationReturnOpened&&openBell())window.__mumeiNotificationReturnOpened=true},ms)
+}
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
   if(!t)return;
