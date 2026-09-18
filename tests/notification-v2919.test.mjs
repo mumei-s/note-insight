@@ -23,7 +23,7 @@ test("V3.2.45 loads bottom-up reader, persistent checkpoint and fixed five-panel
 
 test("five-panel dock contains manual read, auto toggle, filter, registration and INSIGHT",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  has(runtime,["<button data-a=\"read\">読込</button>","data-a=\"mode\">自動</button>","data-a=\"filter\">フィルター</button>","data-a=\"settings\">設定</button>","data-a=\"ins\">INSIGHT</button>"]);
+  has(runtime,["type=\"button\" data-a=\"read\">読込</button>","type=\"button\" class=\"mode auto\" data-a=\"mode\">自動</button>","type=\"button\" data-a=\"filter\">フィルター</button>","data-a=\"settings\">設定</button>","data-a=\"ins\">INSIGHT</button>"]);
   assert.match(runtime,/position:fixed!important;left:8px!important;right:8px!important;bottom:/);
   assert.match(runtime,/autoMode\?'自動':'手動'/);
 });
