@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.46 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.47 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.46/);
+ assert.match(parent,/@version\s+3\.2\.47/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3245/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3245/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3246/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3247/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -32,7 +32,7 @@ test("V3.2.46 loads bottom-up reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/autoMode=true/);
  assert.match(runtime,/dockVisible=want;const r=ensureRoot\(\)/);
  assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);
- assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runPrimaryDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
+ assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runPrimaryDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/creatorProfile/);assert.match(runtime,/profileImageUrl/);assert.match(runtime,/nickname/);assert.match(runtime,/className='avatar'/);assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/通知フィルター登録/);assert.match(runtime,/data-addg/);assert.match(runtime,/note URL \/ @ID \/ ID/);assert.doesNotMatch(runtime,/notification-filter\.html|location\.replace\(u\.href\)/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
