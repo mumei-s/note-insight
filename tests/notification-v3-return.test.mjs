@@ -6,7 +6,7 @@ const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 test("installer keeps participant steps compact with automatic confirmation",async()=>{
   const page=await read("public/tool-setup.html");
   assert.match(page,/INSIGHT インストール \/ 更新/);assert.match(page,/最新版かどうか自動確認します/);assert.match(page,/insight-release\.json/);assert.match(page,/Tampermonkey/);
-  assert.match(page,/https:\/\/mumei-s\.github\.io\/note-insight\/note-insight-notification-v3\.user\.js/);
+  assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);assert.match(page,/script_installation\.php#url=/);
   assert.doesNotMatch(page,/本人通知 V\d|V3\.2\.41/);assert.match(page,/mumei-notification-v3-loader/);assert.match(page,/mumei-notification-tool-version/);assert.match(page,/確認ボタンも不要/);
 });
 
