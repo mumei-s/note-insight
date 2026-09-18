@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.48';
+const VERSION='3.2.49';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:';
@@ -80,45 +80,16 @@ async function creatorProfile(id){
 }
 async function openSettings(){
   if(!dockVisible)return;
-  await initFilter();
-  let gs=await readGroups();
-  if(!gs.length)gs=[{name:'通知フィルター',enabled:true,ids:[]}];
-  let p=document.getElementById(SETTINGS);
-  if(p){p.remove();return}
-  p=document.createElement('div');p.id=SETTINGS;(shell&&shell.isConnected?shell:(document.body||document.documentElement)).appendChild(p);for(const type of ['pointerdown','pointermove','pointerup','pointercancel','touchstart','touchmove','touchend','touchcancel','wheel','click'])p.addEventListener(type,e=>e.stopPropagation(),{passive:type==='touchstart'||type==='touchmove'||type==='wheel'});
-  const render=()=>{
-    p.innerHTML='<h3>通知フィルター登録</h3><div class="list"></div><div class="footer"><button data-addg>＋ グループ追加</button><button data-close>× 閉じる</button></div>';
-    const list=p.querySelector('.list');
-    gs.forEach((g,i)=>{
-      const box=document.createElement('div');box.className='g';
-      box.innerHTML=`<div class="gh"><label><input type="checkbox" data-on ${g.enabled?'checked':''}> ON</label><input type="text" data-name value="${String(g.name||'').replace(/"/g,'&quot;')}"><button data-delg>削除</button></div><div class="members"></div><div class="add"><input type="text" data-new placeholder="note URL / @ID / ID"><button data-add>＋追加</button></div>`;
-      const mem=box.querySelector('.members');
-      g.ids.forEach((id,j)=>{
-        const r=document.createElement('div');r.className='m';
-        const who=document.createElement('div');who.className='who';
-        const img=document.createElement('img');img.className='avatar';img.alt='';img.loading='lazy';
-        const txt=document.createElement('div');txt.className='who-txt';
-        const nick=document.createElement('div');nick.className='nick';nick.textContent='読み込み中…';
-        const uid=document.createElement('div');uid.className='uid';uid.textContent='@'+id;
-        txt.append(nick,uid);who.append(img,txt);
-        const del=document.createElement('button');del.type='button';del.dataset.delm='1';del.textContent='削除';
-        r.append(who,del);
-        del.onclick=async()=>{g.ids.splice(j,1);await saveGroups(gs);render()};
-        mem.appendChild(r);
-        void creatorProfile(id).then(info=>{if(!r.isConnected)return;nick.textContent=info.nickname||('@'+id);uid.textContent='@'+id;if(info.profileImageUrl){img.src=info.profileImageUrl;img.style.visibility='visible'}else{img.removeAttribute('src');img.style.visibility='hidden'}})
-      });
-      box.querySelector('[data-on]').onchange=async e=>{g.enabled=e.target.checked;await saveGroups(gs)};
-      box.querySelector('[data-name]').onchange=async e=>{g.name=clean(e.target.value)||`グループ ${i+1}`;await saveGroups(gs);render()};
-      box.querySelector('[data-delg]').onclick=async()=>{gs.splice(i,1);if(!gs.length)gs=[{name:'通知フィルター',enabled:true,ids:[]}];await saveGroups(gs);render()};
-      const add=async()=>{const inp=box.querySelector('[data-new]'),id=parseId(inp.value);if(!id)return;if(!g.ids.includes(id))g.ids.push(id);inp.value='';await saveGroups(gs);render()};
-      box.querySelector('[data-add]').onclick=add;
-      box.querySelector('[data-new]').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();void add()}};
-      list.appendChild(box)
-    });
-    p.querySelector('[data-addg]').onclick=async()=>{gs.push({name:`グループ ${gs.length+1}`,enabled:true,ids:[]});await saveGroups(gs);render()};
-    p.querySelector('[data-close]').onclick=()=>p.remove()
-  };
-  render()
+  const id=await account();
+  if(!id)return;
+  const u=new URL('https://mumei-s.github.io/note-insight/notification-filter-settings.html');
+  u.searchParams.set('notificationAccount',id);
+  u.searchParams.set('ts',String(Date.now()));
+  intentUntil=0;
+  markSurface(null);
+  showRoot(false);
+  cleanupVisuals();
+  location.replace(u.href)
 }
 async function initMode(){if(modeLoaded)return;const id=await account();autoMode=id?Boolean(await get(AUTO+id,true)):true;modeLoaded=true;paintMode()}
 function paintMode(){const b=ensureRoot().querySelector('[data-a="mode"]');b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
