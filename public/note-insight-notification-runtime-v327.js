@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.41';
+const VERSION='3.2.42';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:';
@@ -49,7 +49,7 @@ async function applyFilter(){if(!shell||!visible(shell))return;for(const el of s
 function scheduleFilter(){clearTimeout(filterTimer);filterTimer=setTimeout(()=>void applyFilter(),140)}
 async function toggleFilter(){await initFilter();filterOn=!filterOn;const id=await account();if(id)await set(FIL+id,filterOn);paintFilter();await applyFilter()}
 function parseId(v){const raw=clean(v);if(!raw)return'';try{const u=new URL(/^https?:\/\//i.test(raw)?raw:`https://note.com/${raw.replace(/^@/,'')}`),id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
-async function openSettings(){if(!dockVisible)return;const u=new URL('https://mumei-s.github.io/note-insight/notification-filter.html');u.searchParams.set('from','note');u.searchParams.set('mumei_return','https://note.com/notifications');u.searchParams.set('ts',String(Date.now()));intentUntil=0;markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
+async function openSettings(){if(!dockVisible)return;const u=new URL('https://mumei-s.github.io/note-insight/notification-filter.html');u.searchParams.set('from','note');u.searchParams.set('ts',String(Date.now()));intentUntil=0;markSurface(null);showRoot(false);cleanupVisuals();location.replace(u.href)}
 async function initMode(){if(modeLoaded)return;const id=await account();autoMode=id?Boolean(await get(AUTO+id,true)):true;modeLoaded=true;paintMode()}
 function paintMode(){const b=ensureRoot().querySelector('[data-a="mode"]');b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
 async function toggleMode(){await initMode();autoMode=!autoMode;const id=await account();if(id)await set(AUTO+id,autoMode);paintMode();if(autoMode)maybeAuto(true)}
