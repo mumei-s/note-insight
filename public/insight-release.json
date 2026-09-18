@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.55",
+  "notificationVersion": "3.2.56",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T05:40:00+09:00",
+  "releasedAt": "2026-09-19T08:12:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DM・記事等へ移動後に5パネルが再出現する競合を修正。reader status、confirmHide、activate/activateIntent、paintFilter/paintMode、起動時root生成の全再表示経路を抑止し、明示的に🔔を開くまでroot再生成を禁止。"
+  "note": "通知5パネルの『設定』だけをwindow最上流のpointerdown/pointerup/clickで捕捉し、note側の背面クリエイター遷移より先に遮断。設定はpointerupで専用設定ページを開き、他4ボタンやreader/checkpoint等は変更なし。"
 }
