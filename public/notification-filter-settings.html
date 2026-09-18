@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+<title>通知フィルター設定</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07111a;color:#eef8ff}
+*{box-sizing:border-box}body{margin:0;background:#07111a;color:#eef8ff}
+.wrap{max-width:760px;margin:0 auto;padding:16px 12px calc(28px + env(safe-area-inset-bottom))}
+.top{position:sticky;top:0;z-index:20;background:#07111af2;backdrop-filter:blur(10px);padding:8px 0 12px}
+.back{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;border:1px solid #4c6d82;border-radius:12px;background:#102838;color:#dff8ff;font-weight:900;font-size:15px}
+h1{font-size:25px;margin:18px 0 6px}.sub{color:#9eb4c3;font-size:13px;line-height:1.6;margin-bottom:12px}
+.status{border:1px solid #315266;border-radius:10px;background:#0c1b27;padding:10px 12px;margin-bottom:12px;font-size:12px}
+.status.ok{border-color:#3f7c5b;color:#d9ffe7}.status.err{border-color:#8d4853;color:#ffd8dd}
+.groups{display:grid;gap:12px}.group{border:1px solid #315166;border-radius:14px;background:#0b1924;padding:12px}
+.gh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.gh input[type=text],.add input{width:100%;height:40px;border:1px solid #3e6076;border-radius:9px;background:#07141e;color:#fff;padding:0 10px;font-size:14px}
+button{border:1px solid #466b82;border-radius:9px;background:#112b3b;color:#e7f8ff;font-weight:900}
+.del{height:40px;padding:0 12px;border-color:#7e4350;background:#301820;color:#ffd9df}
+.members{display:grid;gap:7px;margin-top:10px}.member{display:grid;grid-template-columns:minmax(0,1fr) 56px;gap:8px;align-items:center;border:1px solid #264558;border-radius:10px;padding:7px;background:#081721}
+.who{display:grid;grid-template-columns:42px minmax(0,1fr);gap:9px;align-items:center;min-width:0}.avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#142734;border:1px solid #35586f}
+.name{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.id{font-size:11px;color:#9eb3c1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.add{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:8px;margin-top:10px}.add button{height:40px}
+.footer{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}.footer button{height:44px}
+.empty{padding:10px;color:#93aab9;text-align:center;font-size:12px}.switch{display:flex;align-items:center;gap:5px;font-weight:900}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><button class="back" id="back">← noteの🔔通知へ戻る</button></div>
+  <h1>通知フィルター設定</h1>
+  <div class="sub">登録クリエイターをグループごとに管理します。保存は自動です。戻り先は必ずnoteの通知です。</div>
+  <div class="status" id="status">設定を読み込んでいます…</div>
+  <div class="groups" id="groups"></div>
+  <div class="footer"><button id="addGroup">＋ グループ追加</button></div>
+</div>
+<script>
+(function(){
+'use strict';
+const NOTE='https://note.com/notifications';
+const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
+const q=new URLSearchParams(location.search),account=(q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
+const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status');
+let groups=[],profiles={},loaded=false,saveTimer=0;
+
+history.replaceState({mumeiFilter:true},'',location.href);
+history.pushState({mumeiFilterGuard:true},'',location.href);
+addEventListener('popstate',()=>location.replace(NOTE));
+document.getElementById('back').onclick=()=>location.replace(NOTE);
+
+function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
+function norm(raw){return(Array.isArray(raw)?raw:[]).map((g,i)=>({name:clean(g&&g.name)||('グループ '+(i+1)),enabled:g?.enabled!==false,ids:[...new Set((Array.isArray(g?.ids)?g.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}))}
+function setStatus(s,kind=''){statusEl.textContent=s;statusEl.className='status'+(kind?' '+kind:'')}
+function post(type,payload={}){window.postMessage({source:PAGE,type,account,...payload},location.origin)}
+function esc(v){return String(v||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function parseId(v){const raw=clean(v);if(!raw)return'';try{const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://note.com/'+raw.replace(/^@/,''));const id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+function queueSave(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{post('save',{groups:norm(groups)});setStatus('保存中…')},120)}
+function requestProfiles(){const ids=[...new Set(groups.flatMap(g=>g.ids))];if(ids.length)post('profiles',{ids})}
+function memberNode(id,gi,mi){
+  const info=profiles[id]||{nickname:'',profileImageUrl:''};
+  const row=document.createElement('div');row.className='member';
+  const who=document.createElement('div');who.className='who';
+  const img=document.createElement('img');img.className='avatar';img.alt='';
+  if(info.profileImageUrl)img.src=info.profileImageUrl;else img.style.visibility='hidden';
+  const txt=document.createElement('div');
+  const name=document.createElement('div');name.className='name';name.textContent=info.nickname||'読み込み中…';
+  const uid=document.createElement('div');uid.className='id';uid.textContent='@'+id;
+  txt.append(name,uid);who.append(img,txt);
+  const del=document.createElement('button');del.className='del';del.textContent='削除';del.onclick=()=>{groups[gi].ids.splice(mi,1);render();queueSave()};
+  row.append(who,del);return row
+}
+function render(){
+  groupsEl.innerHTML='';
+  if(!groups.length){const e=document.createElement('div');e.className='empty';e.textContent='登録グループはありません';groupsEl.appendChild(e)}
+  groups.forEach((g,gi)=>{
+    const card=document.createElement('section');card.className='group';
+    const head=document.createElement('div');head.className='gh';
+    const on=document.createElement('label');on.className='switch';on.innerHTML='<input type="checkbox" '+(g.enabled?'checked':'')+'> ON';
+    on.querySelector('input').onchange=e=>{g.enabled=e.target.checked;queueSave()};
+    const name=document.createElement('input');name.type='text';name.value=g.name;name.onchange=e=>{g.name=clean(e.target.value)||('グループ '+(gi+1));queueSave()};
+    const del=document.createElement('button');del.className='del';del.textContent='削除';del.onclick=()=>{groups.splice(gi,1);render();queueSave()};
+    head.append(on,name,del);
+    const members=document.createElement('div');members.className='members';
+    g.ids.forEach((id,mi)=>members.appendChild(memberNode(id,gi,mi)));
+    const add=document.createElement('div');add.className='add';
+    const inp=document.createElement('input');inp.placeholder='note URL / @ID / ID';
+    const btn=document.createElement('button');btn.textContent='＋追加';
+    const run=()=>{const id=parseId(inp.value);if(!id){setStatus('URL / @ID / IDを確認してください','err');return}if(!g.ids.includes(id))g.ids.push(id);inp.value='';render();queueSave();post('profiles',{ids:[id]})};
+    btn.onclick=run;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();run()}};
+    add.append(inp,btn);card.append(head,members,add);groupsEl.appendChild(card)
+  })
+}
+document.getElementById('addGroup').onclick=()=>{groups.push({name:'グループ '+(groups.length+1),enabled:true,ids:[]});render();queueSave()};
+
+addEventListener('message',e=>{
+  if(e.origin!==location.origin||e.source!==window||e.data?.source!==BRIDGE)return;
+  const d=e.data;
+  if(d.type==='state'){
+    loaded=true;groups=norm(d.groups);if(!groups.length)groups=[{name:'通知フィルター',enabled:true,ids:[]}];
+    render();requestProfiles();setStatus('@'+account+' の設定を読み込みました','ok')
+  }else if(d.type==='saved'){
+    setStatus('保存しました','ok')
+  }else if(d.type==='profiles'){
+    for(const p of d.profiles||[])if(p&&p.id)profiles[p.id]=p;
+    if(loaded)render()
+  }else if(d.type==='error'){
+    setStatus(d.message||'読み込みに失敗しました','err')
+  }
+});
+if(!/^[a-z0-9_-]+$/.test(account)){setStatus('noteアカウントを確認できません。🔔通知から設定を開き直してください','err')}
+else{post('load');setTimeout(()=>{if(!loaded)setStatus('Tampermonkeyの本人通知ツールを有効にして開いてください','err')},3500)}
+})();
+</script>
+</body>
+</html>
