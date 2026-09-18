@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.43",
+  "notificationVersion": "3.2.44",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-18T14:02:00+09:00",
+  "releasedAt": "2026-09-18T15:58:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "設定は通知フィルター専用ページへ強制固定。旧設定ページは転送専用化。完了ラインはDOMではなく保存境界を正本にし、🔔を開くたび端末保存から復元。境界が見つからなくても全件読み直しへ戻さず保持する。checkpointの全DOM監視は廃止。"
+  "note": "設定はnote通知画面内のインライン『通知フィルター登録』へ復帰。外部の通知フィルター設定ページは廃止。グループ作成・URL/@ID/ID追加・個別削除をnote内で完結し、設定ではページ遷移しない。前回完了ライン保持と全件読み直し防止も継続。"
 }
