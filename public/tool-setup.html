@@ -21,6 +21,7 @@
 <p class="lead">ここが本人通知の設定・更新入口です。TOPには戻りません。ブラウザに合ったTampermonkey導線から、常に最新版を導入できます。</p>
 <div class="notice"><b>通知画面は下部固定の5パネルです。</b><br>「読込 / 自動ON・OFF / フィルター / 設定 / INSIGHT」。自動ONでは通知一覧を下まで自動で読み進め、確認済みの保存位置までを記録します。次回からはその保存位置を境界にして、新しく増えた通知だけを追加保存します。毎回の全履歴読み直しはしません。</div>
 <a id="install" class="btn" href="#">最新版をインストール / 更新</a>
+<p class="mini"><b>Edge / Firefox / Chrome / Opera：</b>Tampermonkeyの更新画面へ直接渡します。文字列ページは開きません。Safariはuserscript本体を開きます。</p>
 <div id="verifyResult" class="result">最新版かどうか自動確認します。</div>
 <div class="steps">
 <h2>ブラウザ別インストール</h2>
@@ -40,16 +41,20 @@
 </section>
 </main>
 <script>
-const RUNTIME_KEY='mumei-notification-v3-loader',TOOL_KEY='mumei-notification-tool-version',RELEASE='./insight-release.json';
+const RUNTIME_KEY='mumei-notification-v3-loader',TOOL_KEY='mumei-notification-tool-version',RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
 const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
-let latest='';
-install.href='https://mumei-s.github.io/note-insight/note-insight-notification-v3.user.js';
+let latest='',browserId='other';
+function rawScriptUrl(){return RAW_SCRIPT+'?ts='+Date.now()}
+function installUrl(){const raw=rawScriptUrl();return browserId==='safari'?raw:'https://www.tampermonkey.net/script_installation.php#url='+encodeURIComponent(raw)}
+function paintInstallLink(){install.href=installUrl();install.target='_blank';install.rel='noopener noreferrer'}
+paintInstallLink();
 function safeBack(v){try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
 const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;
-function browser(){const ua=navigator.userAgent||'',android=/Android/i.test(ua),ios=/(iPhone|iPad|iPod)/i.test(ua);let id='other',name='その他のブラウザ';if(/EdgA|EdgiOS|Edg\//i.test(ua)){id='edge';name='Microsoft Edge'}else if(/FxiOS|Firefox/i.test(ua)){id='firefox';name='Firefox'}else if(/OPR\//i.test(ua)){id='opera';name='Opera'}else if(/CriOS|Chrome/i.test(ua)){id='chrome';name='Google Chrome'}else if(/Safari/i.test(ua)&&!/(Chrome|CriOS|Edg|OPR|Firefox|FxiOS)/i.test(ua)){id='safari';name='Safari'}document.querySelector(`[data-browser="${id}"]`)?.classList.add('active');detected.textContent=`現在: ${name}${android?' / Android':ios?' / iPhone・iPad系':''}　→ 下の該当欄を使用`;}
+function browser(){const ua=navigator.userAgent||'',android=/Android/i.test(ua),ios=/(iPhone|iPad|iPod)/i.test(ua);let id='other',name='その他のブラウザ';if(/EdgA|EdgiOS|Edg\//i.test(ua)){id='edge';name='Microsoft Edge'}else if(/FxiOS|Firefox/i.test(ua)){id='firefox';name='Firefox'}else if(/OPR\//i.test(ua)){id='opera';name='Opera'}else if(/CriOS|Chrome/i.test(ua)){id='chrome';name='Google Chrome'}else if(/Safari/i.test(ua)&&!/(Chrome|CriOS|Edg|OPR|Firefox|FxiOS)/i.test(ua)){id='safari';name='Safari'}browserId=id;paintInstallLink();document.querySelector(`[data-browser="${id}"]`)?.classList.add('active');detected.textContent=`現在: ${name}${android?' / Android':ios?' / iPhone・iPad系':''}　→ 下の該当欄を使用`;}
 function installed(){return String(localStorage.getItem(TOOL_KEY)||localStorage.getItem(RUNTIME_KEY)||'')}
 function check(){const current=installed();if(latest&&current===latest){result.className='result ok';result.textContent='✓ 最新版が起動しています。';return}if(latest&&current){result.className='result warn';result.textContent='更新があります。「最新版をインストール / 更新」を押してください。';return}if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。インストール / 更新後にnoteまたはINSIGHTを開いてください。';return}result.className='result';result.textContent=current?'本人通知ツールを検出しました。最新版情報を確認中…':'最新版情報を確認中…'}
 async function loadLatest(){try{const r=await fetch(`${RELEASE}?ts=${Date.now()}`,{cache:'no-store'});if(!r.ok)throw new Error('release');const p=await r.json();latest=String(p.notificationVersion||'');check()}catch{latest='';check()}}
+install.addEventListener('click',()=>{paintInstallLink();result.className='result';result.textContent=browserId==='safari'?'userscriptを開きます。拡張機能で更新を確定してください。':'Tampermonkeyの更新画面を開きます。そこで「更新」を押してください。'});
 function refresh(){check();void loadLatest()}
 addEventListener('pageshow',()=>setTimeout(refresh,100));addEventListener('focus',()=>setTimeout(refresh,120));addEventListener('mumei-notification-version-changed',refresh);browser();refresh();
 </script>
