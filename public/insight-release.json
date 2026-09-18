@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.54",
+  "notificationVersion": "3.2.55",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T05:45:00+09:00",
+  "releasedAt": "2026-09-19T05:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知行をpointerdown時点で検知して5パネルを即時除去し、DM・記事等へ移動後に古い通知DOMが一瞬残っていてもパネルを再表示しない抑止を追加。次にユーザーが🔔を開いた時だけ再表示を許可する。"
+  "note": "DM・記事等へ移動後に5パネルが再出現する競合を修正。reader status、confirmHide、activate/activateIntent、paintFilter/paintMode、起動時root生成の全再表示経路を抑止し、明示的に🔔を開くまでroot再生成を禁止。"
 }
