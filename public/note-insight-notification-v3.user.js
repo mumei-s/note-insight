@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.50
+// @version      3.2.51
 // @description  本人通知V3。通知画面下部に5パネルを固定し、自動ON/OFF・手動読込・フィルター・設定・INSIGHTを操作します。通知は下側から上方向へ読み、完了ラインより上の追加分だけを次回保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -20,20 +20,20 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3245
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3250
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3250
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3251
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.2.50';
+const VERSION='3.2.51';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 if(location.hostname==='mumei-s.github.io'){
   try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
   if(location.pathname==='/note-insight/notification-filter-settings.html'){
-    const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:';
+    const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',RETURN='mumei_insight_return_bell_v1';
     const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
     const account=(new URLSearchParams(location.search).get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
     const modern=()=>Boolean(globalThis.GM);
@@ -83,6 +83,9 @@ if(location.hostname==='mumei-s.github.io'){
           await gmSet(GRP+account,groups);
           await gmSet(MUT+account,[...new Set(groups.filter(g=>g.enabled).flatMap(g=>g.ids))]);
           send('saved')
+        }else if(d.type==='return-bell'){
+          await gmSet(RETURN,{account,at:Date.now()});
+          send('return-ready')
         }else if(d.type==='profiles'){
           const ids=[...new Set((Array.isArray(d.ids)?d.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];
           for(let i=0;i<ids.length;i+=6){
@@ -99,12 +102,31 @@ if(location.hostname==='mumei-s.github.io'){
 }
 if(location.hostname!=='note.com')return;
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
-const returnQuery=new URLSearchParams(location.search);
-if(returnQuery.get('mumei_open_notifications')==='1'){
-  try{history.replaceState(history.state,'',location.origin+'/')}catch{}
-  const openBell=()=>{const api=window.__mumeiV3Runtime328;return Boolean(api&&typeof api.openNotificationBell==='function'&&api.openNotificationBell())};
-  for(const ms of[0,120,300,650,1100,1800,2800,4200,6000])setTimeout(()=>{if(!window.__mumeiNotificationReturnOpened&&openBell())window.__mumeiNotificationReturnOpened=true},ms)
-}
+const RETURN='mumei_insight_return_bell_v1';
+const modernNote=()=>Boolean(globalThis.GM);
+const noteGet=async(k,d)=>{try{if(modernNote()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
+const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
+(async()=>{
+  const q=new URLSearchParams(location.search),urlWants=q.get('mumei_filter_return')==='bell';
+  const flag=await noteGet(RETURN,null),fresh=flag&&Date.now()-Number(flag.at||0)<120000;
+  if(!urlWants&&!fresh)return;
+  let attempts=0,clickedAt=0;
+  const tick=async()=>{
+    const api=window.__mumeiV3Runtime328;
+    if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
+      await noteSet(RETURN,null);
+      try{history.replaceState(history.state,'',location.origin+'/')}catch{}
+      window.__mumeiNotificationReturnDone=true;
+      return
+    }
+    if(attempts++>=36)return;
+    if(api&&typeof api.openNotificationBell==='function'&&Date.now()-clickedAt>900){
+      if(api.openNotificationBell())clickedAt=Date.now()
+    }
+    setTimeout(()=>void tick(),350)
+  };
+  void tick()
+})()
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
   if(!t)return;
