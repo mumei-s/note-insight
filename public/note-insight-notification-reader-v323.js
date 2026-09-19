@@ -253,7 +253,7 @@ async function scanFull(){
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
   const savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
-  count+=await sendBatch(readOutbox(a.id),a,saved);
+  count+=await sendBatchFull(readOutbox(a.id),a,saved);
   const result=await collectFullHistory(p,scrollHost(p),a,saved);count+=result.confirmed;
   if(result.seenCount===0)await confirmServer(a);
   const cp=await get(key(CHECK,a.id),{}),now=Date.now(),remain=readOutbox(a.id).length;
