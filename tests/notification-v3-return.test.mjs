@@ -16,14 +16,14 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.2\.74/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.2\.75/);
 });
 
-test("V3.2.74 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
+test("V3.2.75 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.74/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.match(v3,/@version\s+3\.2\.75/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3247/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3274/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3248/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3275/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
@@ -37,7 +37,7 @@ test("five-panel dock appears on the notification surface and auto mode runs sca
   assert.match(runtime,/async function activate\(next\)/);
   assert.match(runtime,/showRoot\(true\)/);
   assert.match(runtime,/maybeAuto\(\)/);assert.match(runtime,/autoDoneForSession/);assert.match(runtime,/trustedBellSurface/);assert.match(runtime,/autoDoneForSession=false;const openNow=Boolean\(findSurface\(\)\)\|\|notificationRoute\(\)/);
-  assert.match(runtime,/async function safeScan\(\)/);
+  assert.match(runtime,/async function safeScan\(mode='continue'\)/);
   assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore\?\.\(\)/);
 });
 
@@ -123,7 +123,7 @@ test("recovery invariants keep dock scoped and persist visible rows first",async
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
   const reader=await read("public/note-insight-notification-reader-v323.js");
   const page=await read("public/notification-filter-settings.html");
-  assert.match(runtime,/function notificationVisibleNow\(\)\{return Boolean\(notificationRoute\(\)\|\|popupSurface\(\)\)\}/);
+  assert.match(runtime,/function notificationVisibleNow\(\)/);assert.match(runtime,/notificationSurfaceLeaseUntil/);
   assert.doesNotMatch(runtime,/bellIntent\(\)\|\|returnRestoring/);
   assert.doesNotMatch(runtime,/saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
   assert.match(runtime,/sessionStorage\.removeItem\('mumei-v3-notification-return-v3223'\)/);
