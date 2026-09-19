@@ -173,6 +173,13 @@ let latest='',browserId='other';
 function rawScriptUrl(){return RAW_SCRIPT}
 function safeBack(v){try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
 const q=new URLSearchParams(location.search),back=safeBack(q.get('return'));if(back)document.getElementById('back').href=back;
+const verifiedInstalled=String(q.get('notificationInstalled')||'').trim();
+if(/^\\d+(?:\\.\\d+){1,3}$/.test(verifiedInstalled)){
+  localStorage.setItem(TOOL_KEY,verifiedInstalled);
+  localStorage.setItem(RUNTIME_KEY,verifiedInstalled);
+  sessionStorage.removeItem(PENDING);
+  sessionStorage.removeItem(RELOADED);
+}
 function env(){
   const ua=navigator.userAgent||'',platform=navigator.platform||'',ios=/(iPhone|iPad|iPod)/i.test(ua)||(platform==='MacIntel'&&navigator.maxTouchPoints>1),android=/Android/i.test(ua),safari=/Safari/i.test(ua)&&!/(Chrome|CriOS|Edg|EdgiOS|FxiOS|OPR|Android)/i.test(ua),edge=/EdgA|EdgiOS|Edg\//i.test(ua),firefox=/FxiOS|Firefox/i.test(ua),opera=/OPR\//i.test(ua),yahoo=/YJApp|Yahoo/i.test(ua),mac=!ios&&/Macintosh/i.test(ua);
   if(ios)return safari?'ios-safari':'ios-other';
@@ -214,7 +221,24 @@ function paintInstall(){install.href=rawScriptUrl();install.target='_blank';inst
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
 install.addEventListener('click',()=>{sessionStorage.setItem(PENDING,'1');sessionStorage.removeItem(RELOADED);paintInstall();result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。使用中のuserscript拡張でインストール / 更新してください。':'userscriptを開きます。Tampermonkeyでインストール / 更新してください。'});
 function refresh(){check();void loadLatest()}
-function verifyAfterInstall(){if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}if(sessionStorage.getItem(RELOADED)!=='1'){sessionStorage.setItem(RELOADED,'1');setTimeout(()=>location.reload(),220);return}sessionStorage.removeItem(PENDING);sessionStorage.removeItem(RELOADED);refresh()}
+function versionCheckUrl(){
+  const ret=new URL(location.href);
+  for(const k of ['notificationInstalled','notificationCheckedAt','notificationUpdateResult'])ret.searchParams.delete(k);
+  const u=new URL('https://note.com/notifications');
+  u.searchParams.set('mumei_insight_version_check','1');
+  u.searchParams.set('mumei_return',ret.href);
+  return u.href
+}
+function verifyAfterInstall(){
+  if(verifiedInstalled){refresh();return}
+  if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}
+  if(sessionStorage.getItem(RELOADED)!=='1'){
+    sessionStorage.setItem(RELOADED,'1');
+    result.className='result';result.textContent='インストール済みバージョンを確認しています…';
+    setTimeout(()=>location.assign(versionCheckUrl()),220);return
+  }
+  refresh()
+}
 addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));addEventListener('mumei-notification-version-changed',refresh);
 paintInstall();setDetected();refresh();
 </script>
