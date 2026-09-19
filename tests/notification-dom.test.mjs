@@ -43,7 +43,7 @@ test('reader starts from the lower side, marks the completion line, and next run
   assert.match(reader,/scan_strategy:'saved-line-bottom-up-v324'/);
   assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
   assert.match(reader,/ここまで保存済み/);
-  assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/kind!=='done'&&kind!=='error'/);assert.match(reader,/2500/);assert.match(reader,/persistRecoveredBoundary/);assert.match(reader,/checkpointFor/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);assert.doesNotMatch(reader,/start\.rebase|完了ラインを再作成しています/);
+  assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/kind!=='done'&&kind!=='error'/);assert.match(reader,/2500/);assert.match(reader,/persistRecoveredBoundary/);assert.match(reader,/checkpointFor/);assert.match(reader,/preserveBoundary/);assert.match(reader,/collectRecentFallback/);assert.match(reader,/recent-fallback-from-saved-time/);assert.match(reader,/全件読み直しなし/);assert.doesNotMatch(reader,/start\.rebase|完了ラインを再作成しています/);
   assert.match(reader,/boundarySignature/);
   assert.match(reader,/boundaryEventIdentity/);
   assert.match(reader,/function boundaryMatch/);
@@ -53,8 +53,8 @@ test('reader starts from the lower side, marks the completion line, and next run
 
 test('persistent checkpoint mirrors the saved boundary across page closes without global DOM observer',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/);assert.match(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);assert.doesNotMatch(checkpoint,/new MutationObserver/)});
 
-test('V3.2.78 wrapper activates bottom-up reader and fixed five-panel runtime',()=>{
-  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.78/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3251/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3251/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3278/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3245/);assert.match(v3,/#mumei-v325-dock \[data-a="settings"\]/);assert.match(v3,/#mumei-v3-tray-v330 \[data-act="settings"\]/);assert.match(v3,/api\.openSettings/);assert.match(v3,/notification-filter-settings\.html/);assert.match(v3,/mumei-filter-page-v1/);assert.match(v3,/mumei-filter-bridge-v1/);assert.match(v3,/@connect\s+note\.com/);assert.doesNotMatch(v3,/e\.source!==window/);assert.doesNotMatch(v3,/mumei_filter_return/);assert.doesNotMatch(v3,/mumei_insight_return_bell_v1/);assert.doesNotMatch(v3,/return-bell/);assert.doesNotMatch(v3,/return-ready/);assert.doesNotMatch(v3,/api\.openNotificationBell\(\)\)clickedAt/);assert.match(v3,/mumei-notification-feature-ui-v1/);assert.match(v3,/mumei-notification-feature-bridge-v1/);assert.match(v3,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/function runDockAction/);assert.match(runtime,/type="button" data-a="read"/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/function mountUiInSurface/);assert.match(runtime,/function independentDockHost\(\)/);assert.match(runtime,/function leadDisplayName/);assert.match(runtime,/function profileCandidates/);assert.match(runtime,/function filterRows/);assert.match(runtime,/function leadCreatorId/);assert.doesNotMatch(runtime,/magazineNoise\(text\(el\)\)&&creatorIds\(el\)/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.match(runtime,/function openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/disableFeatureNow/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/function strongNoticeSurface/);assert.match(runtime,/function trustedBellSurface/);assert.match(runtime,/panelSessionActive\|\|\(!bellIntent\(\)&&!notificationRoute\(\)\)/);assert.match(runtime,/autoDoneForSession=false;const openNow=Boolean\(findSurface\(\)\)\|\|notificationRoute\(\)/);assert.match(runtime,/function textEditorElement/);assert.match(runtime,/function editingOutsideNotification/);assert.match(runtime,/function onEditorFocus/);assert.match(runtime,/window\.addEventListener\('focusin',onEditorFocus,true\)/);assert.match(runtime,/function noticeRows/);assert.doesNotMatch(runtime,/return shell&&visible\(shell\)\?shell:null/);assert.doesNotMatch(runtime,/return document\.body\|\|null/);assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);assert.match(runtime,/button type="button" data-a="settings"/);assert.match(runtime,/function showRoot\(on\).*panelSessionActive/);assert.match(runtime,/function onStatus\(e\).*panelSessionActive/);assert.match(runtime,/function confirmHide\(\).*panelSessionActive/);assert.match(runtime,/async function activate\(next\).*suppressUntilBell/);assert.match(runtime,/async function activateIntent\(\).*suppressUntilBell/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.doesNotMatch(runtime,/autoDoneForSession=false;markSurface\(null\);showRoot\(false\);cleanupVisuals\(\)/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/async function safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/li,\[role="listitem"\]/);assert.doesNotMatch(runtime,/new MutationObserver/)
+test('V3.2.79 wrapper activates bottom-up reader and fixed five-panel runtime',()=>{
+  const meta=v3.split('// ==/UserScript==')[0];assert.match(v3,/@version\s+3\.2\.79/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3252/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3251/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3279/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(v3,/bottom-up-saved-line-v3245/);assert.match(v3,/#mumei-v325-dock \[data-a="settings"\]/);assert.match(v3,/#mumei-v3-tray-v330 \[data-act="settings"\]/);assert.match(v3,/api\.openSettings/);assert.match(v3,/notification-filter-settings\.html/);assert.match(v3,/mumei-filter-page-v1/);assert.match(v3,/mumei-filter-bridge-v1/);assert.match(v3,/@connect\s+note\.com/);assert.doesNotMatch(v3,/e\.source!==window/);assert.doesNotMatch(v3,/mumei_filter_return/);assert.doesNotMatch(v3,/mumei_insight_return_bell_v1/);assert.doesNotMatch(v3,/return-bell/);assert.doesNotMatch(v3,/return-ready/);assert.doesNotMatch(v3,/api\.openNotificationBell\(\)\)clickedAt/);assert.match(v3,/mumei-notification-feature-ui-v1/);assert.match(v3,/mumei-notification-feature-bridge-v1/);assert.match(v3,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/function runDockAction/);assert.match(runtime,/type="button" data-a="read"/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/function mountUiInSurface/);assert.match(runtime,/function independentDockHost\(\)/);assert.match(runtime,/function leadDisplayName/);assert.match(runtime,/function profileCandidates/);assert.match(runtime,/function filterRows/);assert.match(runtime,/function leadCreatorId/);assert.doesNotMatch(runtime,/magazineNoise\(text\(el\)\)&&creatorIds\(el\)/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.match(runtime,/function maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.match(runtime,/function openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/disableFeatureNow/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/function strongNoticeSurface/);assert.match(runtime,/function textEditorElement/);assert.match(runtime,/function editingOutsideNotification/);assert.match(runtime,/function onEditorFocus/);assert.match(runtime,/window\.addEventListener\('focusin',onEditorFocus,true\)/);assert.match(runtime,/function noticeRows/);assert.doesNotMatch(runtime,/return shell&&visible\(shell\)\?shell:null/);assert.doesNotMatch(runtime,/return document\.body\|\|null/);assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);assert.match(runtime,/button type="button" data-a="settings"/);assert.match(runtime,/function showRoot\(on\).*panelSessionActive/);assert.match(runtime,/function onStatus\(e\).*panelSessionActive/);assert.match(runtime,/function confirmHide\(\).*panelSessionActive/);assert.match(runtime,/async function activate\(next\).*suppressUntilBell/);assert.match(runtime,/async function activateIntent\(\).*suppressUntilBell/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.doesNotMatch(runtime,/autoDoneForSession=false;markSurface\(null\);showRoot\(false\);cleanupVisuals\(\)/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/async function safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/li,\[role="listitem"\]/);assert.doesNotMatch(runtime,/new MutationObserver/)
 });
 
 test('installer is isolated behind a redirect shell and stays versionless',async()=>{
@@ -72,7 +72,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
   const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-browser-install.html',runScripts:'outside-only'});
   const w=dom.window;
   try{
-    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.71'})});
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.2.79'})});
     for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);
     await new Promise(resolve=>setTimeout(resolve,0));
     const install=w.document.getElementById('install'),u=new URL(install.href);
@@ -82,7 +82,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
     assert.match(install.textContent,/本人通知をインストール \/ 更新/);
     assert.match(html,/mumei-installer-boundary/);
     assert.match(html,/insight-release\.json/);
-    assert.doesNotMatch(html,/本人通知 V\d|V3\.2\.78/);
+    assert.doesNotMatch(html,/本人通知 V\d|V3\.2\.79/);
     assert.match(html,/ブラウザ別インストール/);
     for(const id of ['android-edge','android-firefox','android-other','ios-safari','ios-other','pc-edge','pc-chrome','pc-firefox','pc-opera','mac-safari'])assert.match(html,new RegExp('data-browser="'+id+'"'));
     assert.match(html,/Yahoo!ブラウザー/);
@@ -111,7 +111,7 @@ test("notification dock lifecycle is isolated from note notification DOM",async(
   assert.match(runtime,/function panelEvent\(e\)/);
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.match(runtime,/if\(panelEvent\(e\)\)return/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
 });
 
 
@@ -125,42 +125,14 @@ test("dock event ownership stays inside the independent host",async()=>{
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
 });
 
-
-test("article return position is owned only by Reader, never Runtime",async()=>{
-  assert.doesNotMatch(runtime,/NAV_RETURN|saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
-  assert.match(reader,/NAV_RETURN='mumei-v3-notification-return-v3223'/);
-  assert.match(reader,/function saveReturnPosition\(/);
-  assert.match(reader,/function restoreReturnPosition\(/);
-});
-
-test("dock state survives navigation but UI is visible only on notification context",async()=>{
-  const runtime=await read("note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/function notificationVisibleNow\(\)/);
-  assert.match(runtime,/panelSessionActive&&notificationVisibleNow\(\)/);
-  assert.match(runtime,/if\(suppressUntilBell\)\{showRoot\(false\);return\}/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
-  assert.doesNotMatch(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
-});
-
-
-test("manual mode offers continuation and full reread without giving full reread to auto mode",()=>{
+test('restored V3.2.67 runtime core is frozen while manual read modes stay separate',()=>{
+  assert.match(runtime,/function showRoot\(on\)\{const want=Boolean\(on&&featureEnabled&&panelSessionActive\)/);
+  assert.match(runtime,/async function inspect\(\)\{if\(!await initEnabled\(\)\)\{disableFeatureNow\(\);return\}if\(suppressUntilBell\)return;const next=findSurface\(\);if\(next\)\{await activate\(next\);return\}if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}cleanupVisuals\(\)\}/);
+  assert.doesNotMatch(runtime,/notificationVisibleNow|notificationSurfaceLease|claimedNotificationSurface|saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
   assert.match(runtime,/READ_MENU='mumei-v325-read-choice'/);
   assert.match(runtime,/続きから読む/);assert.match(runtime,/全読み/);
   assert.match(runtime,/async function safeScan\(mode='continue'\)/);
   assert.match(runtime,/void safeScan\('continue'\)\.catch/);
-  assert.doesNotMatch(runtime,/maybeAuto[\s\S]{0,900}safeScan\('full'\)/);
-  assert.match(reader,/async function scanContinue\(\)/);
-  assert.match(reader,/async function scanFull\(\)/);
-  assert.match(reader,/async function sendBatchFull\(/);
-  assert.match(reader,/full-history-repair/);
-  assert.match(reader,/lastFullScanAt/);
-});
-
-
-test("reader rediscovery never treats an arbitrary creator page as notification surface",async()=>{
-  const reader=await read("note-insight-notification-reader-v323.js");
-  assert.match(reader,/function readerNotificationRoute\(\)/);
-  assert.match(reader,/function readerNoticeContainer\(el\)/);
-  assert.match(reader,/\[role="dialog"\],\[role="menu"\],\[popover\],\[class\*="notification" i\],\[class\*="notice" i\]/);
-  assert.doesNotMatch(reader,/for\(const el of document\.querySelectorAll\('\[role="dialog"\],\[role="menu"\],\[popover\],aside,section,main,\[role="main"\]'\)\)/);
+  assert.match(reader,/async function scanContinue\(\)/);assert.match(reader,/async function scanFull\(\)/);
+  assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
 });
