@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.78",
+  "notificationVersion": "3.2.79",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T21:35:00+09:00",
+  "releasedAt": "2026-09-19T21:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.78。Reader/Checkpointが data-mumei-notice-shell-v3 で確定した通知面をRuntimeの正本にし、保存位置バーが出る通知面では5パネルも同じ面に必ず追従。"
+  "note": "本人通知V3.2.79。表示・設定・遷移Runtimeを正常稼働していたV3.2.67へ復元。読込UIのみ別レイヤーで「続きから読む / 全読み」を追加し、自動は続きのみ。"
 }
