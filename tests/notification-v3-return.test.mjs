@@ -20,7 +20,7 @@ test("installer entry redirects to isolated compact browser page",async()=>{
 });
 
 test("V3.2.75 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
+  const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),page=await read("public/notification-filter-settings.html");
   assert.match(v3,/@version\s+3\.2\.75/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split("// ==/UserScript==")[0];
   assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3248/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3275/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
