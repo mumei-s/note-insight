@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.81',PROTOCOL='3.2.81';
+const VERSION='3.2.26',PROTOCOL='3.2.26';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -18,8 +18,6 @@ const NAV_RETURN='mumei-v3-notification-return-v3223';
 const MAX_SEEK_STEPS=56;
 const MAX_READ_STEPS=56;
 const MAX_READ_ROWS=420;
-const FULL_MAX_STEPS=320;
-const FULL_MAX_ROWS=5000;
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -44,21 +42,7 @@ function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.te
 function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
 function loadedRows(root){if(!root?.querySelectorAll)return[];let xs=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"],[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="notification-item" i],[class*="notice-item" i]')].filter(el=>clean(el.textContent).length>=3);if(xs.length)return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)));xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(el=>clean(el.textContent).length>=3&&TIME_RE.test(clean(el.textContent)));return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 
-function readerNotificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
-function readerNoticeTabs(el){if(!el?.querySelectorAll)return false;let n=false,o=false;for(const x of el.querySelectorAll('button,a,[role="tab"],[role="button"]')){const t=clean(x.textContent||x.getAttribute?.('aria-label')||'');if(t==='通知')n=true;if(t==='お知らせ')o=true;if(n&&o)return true}return false}
-function readerNoticeContainer(el){if(!shown(el))return false;const rs=rows(el);if(!rs.length)return false;const meta=clean([el.getAttribute?.('aria-label'),el.getAttribute?.('data-testid'),typeof el.className==='string'?el.className:''].join(' '));return /(?:notification|notice|通知|お知らせ)/iu.test(meta)||readerNoticeTabs(el)}
-function rediscoverPanel(){
- if(readerNotificationRoute()){
-  const main=document.querySelector('main,[role="main"]');
-  if(main&&shown(main)){main.setAttribute('data-mumei-notice-shell-v3','1');return main}
-  for(const el of document.querySelectorAll('section,aside,[role="dialog"],[role="menu"],[popover]'))if(readerNoticeContainer(el)){el.setAttribute('data-mumei-notice-shell-v3','1');return el}
-  return null
- }
- for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]')){
-  if(readerNoticeContainer(el)){el.setAttribute('data-mumei-notice-shell-v3','1');return el}
- }
- return null
-}
+function rediscoverPanel(){for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],aside,section,main,[role="main"]')){if(!shown(el))continue;if(rows(el).length){el.setAttribute('data-mumei-notice-shell-v3','1');return el}}if(/^\/notifications(?:\/|$)/i.test(location.pathname)){const main=document.querySelector('main,[role="main"]');if(main&&shown(main)){main.setAttribute('data-mumei-notice-shell-v3','1');return main}}return null}
 function panel(){const p=document.querySelector(SHELL);return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:rediscoverPanel()}
 function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}return p.scrollHeight>p.clientHeight+20?p:null}
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
@@ -88,44 +72,9 @@ function markBoundary(el){clearBoundary();if(!(el instanceof Element)||!el.paren
 async function requestRetry(body,token){let last=null;for(let attempt=0;attempt<3;attempt++){try{return await request(INGEST,body,{'X-Ingest-Token':token})}catch(e){last=e;const m=String(e?.message||e);if(/401|403|TOKEN|ACCOUNT_CHANGED|連携/i.test(m))throw e;if(attempt<2)await sleep(650*(attempt+1))}}throw last||new Error('NETWORK_ERROR')}
 async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,input.filter(r=>!saved.has(sig(r))));const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');let total=0;for(let i=0;i<input.length;i+=20){const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));const p=await requestRetry({noteId:a.id,notifications:payload},token);const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];for(const s of confirmed)saved.add(s);await set(key(SAVED,a.id),[...saved]);if(confirmed.length){const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:legacySig(last),boundaryDisplayText:stripTime(last.raw_text),boundaryAt:now,boundarySource:'reader-bottom-up-confirmed-v326'});document.dispatchEvent(new Event('mumei-notification-checkpoint'))}writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));total+=confirmed.length;if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します')}return total}
 
-async function confirmServer(a){
- const token=String(await get(key(TOKEN,a.id),'')||'');
- if(!token)throw new Error('本人連携が必要です');
- const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
- return requestRetry({noteId:a.id,notifications:[]},token)
-}
-async function sendBatchFull(input,a,saved){
- if(!input.length)return 0;
- const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');
- let total=0;
- for(let i=0;i<input.length;i+=20){
-  const part=input.slice(i,i+20);if(!part.length)continue;
-  retain(a.id,part);
-  const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
-  const payload=part.map(r=>({...r,meta:{...(r.meta||{}),source:'note-notification-manual-sync-v2968',capture_source:'note-notification-reader-v323',userscript:VERSION,protocol:PROTOCOL,scan_mode:'full-history-repair',scan_strategy:'manual-full-history-v1',client_signature:sig(r)}}));
-  const p=await requestRetry({noteId:a.id,notifications:payload},token);
-  const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];
-  for(const s of confirmed)saved.add(s);
-  await set(key(SAVED,a.id),[...saved]);
-  writeOutbox(a.id,readOutbox(a.id).filter(r=>!confirmed.includes(sig(r))));
-  total+=confirmed.length;
-  if(confirmed.length!==payload.length)throw new Error('全読みの一部が未保存です。もう一度「全読み」で再試行してください')
- }
- return total
-}
-
 let scanning=false,active=null;
 function capturePending(){if(!active)return;const{a,p,saved}=active;try{const rs=rows(p).map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs.reverse())}catch{}}
 function pauseCapture(){capturePending()}
-function visiblePending(p,saved){
-  const out=[],seen=new Set();
-  for(const el of rows(p)){
-    const r=rowData(el);if(!r)continue;
-    const k=sig(r);if(seen.has(k)||saved?.has(k))continue;
-    seen.add(k);out.push(r)
-  }
-  return out.reverse().slice(0,80)
-}
 addEventListener('pagehide',pauseCapture,{capture:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
 
@@ -179,39 +128,6 @@ async function seekStart(p,host,cp,saved){
  const max=Math.max(0,host.scrollHeight-host.clientHeight);try{host.scrollTop=max}catch{}await sleep(80);
  return{ok:true,boundaryFound:false,recovered:false};
 }
-function checkpointCutoff(cp){
- const base=Math.max(Number(cp?.boundaryAt||0),Number(cp?.lastSaveAt||0));
- return base>0?base-15*60_000:0
-}
-function notificationTime(r){const ms=Date.parse(String(r?.occurred_at||''));return Number.isFinite(ms)?ms:0}
-async function collectRecentFallback(p,host,cp){
- const cutoff=checkpointCutoff(cp),collected=[],seen=new Set();
- if(!cutoff)return{p,host,collected,seenCount:0};
- try{if(host)host.scrollTop=0}catch{}
- await sleep(100);
- let stable=0,lastTop=-1,olderOnly=0;
- for(let step=0;step<18&&collected.length<180;step++){
-  const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため中断しました');if(nextPanel!==p){p=nextPanel;host=scrollHost(p);if(active)active.p=p}
-  let stepNew=0,stepOld=0;
-  for(const el of rows(p)){
-   const r=rowData(el);if(!r)continue;
-   const k=sig(r);if(seen.has(k))continue;seen.add(k);
-   if(active?.saved?.has(k))continue;
-   const ms=notificationTime(r);
-   if(ms&&ms>=cutoff){collected.push(r);stepNew++}
-   else if(ms&&ms<cutoff)stepOld++
-  }
-  if(stepOld>0&&stepNew===0)olderOnly++;else olderOnly=0;
-  if(olderOnly>=2||!host)break;
-  const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
-  if(before>=max-2){stable++;if(stable>=2)break}
-  else{host.scrollTop=Math.min(max,before+Math.max(220,Math.floor(host.clientHeight*.82)));await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
-  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break
- }
- collected.sort((a,b)=>notificationTime(a)-notificationTime(b));
- return{p,host,collected,seenCount:seen.size}
-}
-
 async function collectBottomUp(p,host,cp){
  const needBoundary=hasBoundary(cp);
  const collected=[],seen=new Set();
@@ -234,92 +150,32 @@ async function collectBottomUp(p,host,cp){
  return{p,host,collected,seenCount:seen.size,boundaryFound:found};
 }
 
-async function collectFullHistory(p,host,a,saved){
- const seen=new Set(),buffer=[];let confirmed=0,stable=0,lastTop=-1,lastMax=-1,noNew=0;
- try{if(host)host.scrollTop=0}catch{}
- await sleep(120);
- for(let step=0;step<FULL_MAX_STEPS&&seen.size<FULL_MAX_ROWS;step++){
-  const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため全読みを中断しました');
-  if(nextPanel!==p){p=nextPanel;host=scrollHost(p);if(active)active.p=p}
-  let added=0;
-  for(const el of rows(p)){
-   const r=rowData(el);if(!r)continue;const k=sig(r);if(seen.has(k))continue;
-   seen.add(k);buffer.push(r);added++
-  }
-  if(buffer.length>=80)confirmed+=await sendBatchFull(buffer.splice(0,buffer.length),a,saved);
-  if(step%5===0)status(`全読み中… ${seen.size}件確認 / ${confirmed}件サーバー確認済み`,'saving','全読み',{readCount:seen.size,savedCount:confirmed,mode:'full'});
-  if(!host)break;
-  const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
-  if(added===0)noNew++;else noNew=0;
-  if(before>=max-2){stable=max===lastMax?stable+1:0;if(stable>=4&&noNew>=3)break;await sleep(220)}
-  else{host.scrollTop=Math.min(max,before+Math.max(240,Math.floor(host.clientHeight*.82)));await sleep(180);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
-  if(host.scrollTop===lastTop&&max===lastMax)stable++;lastTop=host.scrollTop;lastMax=max
- }
- if(buffer.length)confirmed+=await sendBatchFull(buffer.splice(0,buffer.length),a,saved);
- return{confirmed,seenCount:seen.size,p,host}
-}
-async function scanFull(){
- if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return 0}
- scanning=true;let a=null,saved=null,p=null,count=0;
- status('全読みを開始します。保存済みも含めて履歴を再照合します…','saving','全読み',{mode:'full'});
- try{
-  p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
-  a=await account();if(!a)throw new Error('noteログインを確認してください');
-  if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
-  const savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
-  count+=await sendBatchFull(readOutbox(a.id),a,saved);
-  const result=await collectFullHistory(p,scrollHost(p),a,saved);count+=result.confirmed;
-  if(result.seenCount===0)await confirmServer(a);
-  const cp=await get(key(CHECK,a.id),{}),now=Date.now(),remain=readOutbox(a.id).length;
-  await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastFullScanAt:now,lastFullSeenCount:result.seenCount,lastFullConfirmedCount:count,lastError:'',lastScanMode:'full-history-repair',lastRunStopped:false,version:VERSION});
-  document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-  if(remain)status(`⚠ 全読み完了・${remain}件は次回保存待ち｜${result.seenCount}件照合`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain,mode:'full'});
-  else status(`✓ 全読み完了｜${result.seenCount}件照合・${count}件サーバー確認`,'done','✓ 全読み完了',{readCount:result.seenCount,savedCount:count,mode:'full'});
-  return count
- }catch(e){
-  capturePending();const pending=a?readOutbox(a.id).length:0,msg=String(e?.message||e);
-  if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:msg,lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'full-history-repair',lastRunStopped:true,version:VERSION})}catch{}}
-  status(`⚠ 全読み失敗：${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error','全読み再試行',{pendingCount:pending,mode:'full'});return 0
- }finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
-}
-
-async function scanContinue(){
+async function scan(){
  if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return}
  scanning=true;let a=null,saved=null,p=null,host=null,count=0,safetyStop=false;
- status('下側の開始位置を確認しています…（通常は全件読み直しなし）','saving','下から読込');
+ status('下側の開始位置を確認しています…','saving','下から読込');
  try{
   p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
   let cp=await checkpointFor(a.id),savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
   count+=await sendBatch(readOutbox(a.id),a,saved);
-  const immediate=visiblePending(p,saved);
-  if(immediate.length){
-    status(`現在表示中の未保存通知 ${immediate.length}件を先に保存しています…`,'saving','先行保存',{pendingCount:immediate.length});
-    count+=await sendBatch(immediate,a,saved)
-  }
   cp=await checkpointFor(a.id);host=scrollHost(p);
   const start=await seekStart(p,host,cp,saved);
   if(start.recoveryRow){
     cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v326');
     status('保存済み通知から完了ラインを復元しました。上方向の追加分だけ読み込みます…','saving','ライン復元');
   }else if(start.preserveBoundary){
-    status('完了ラインを保持したまま、直近の差分だけ安全確認しています…','saving','差分確認');
-    const fallback=await collectRecentFallback(p,host,cp);p=fallback.p;host=fallback.host;
-    if(fallback.collected.length)count+=await sendBatch(fallback.collected,a,saved);
-    if(count===0)await confirmServer(a);
-    const now=Date.now(),latest=await checkpointFor(a.id),remain=readOutbox(a.id).length;
-    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:fallback.seenCount,lastError:'',lastScanMode:'recent-fallback-from-saved-time',lastRunStopped:false,version:VERSION});
+    const now=Date.now(),latest=await checkpointFor(a.id);
+    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,version:VERSION});
     document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-    if(remain)status(`⚠ ${remain}件は次回保存待ち｜直近差分 ${fallback.seenCount}件確認`,'error','保存待ち',{readCount:fallback.seenCount,savedCount:count,pendingCount:remain});
-    else status(`✓ 完了ライン保持｜直近差分 ${count}件保存`,'done','✓ 保存完了',{readCount:fallback.seenCount,savedCount:count});
-    return count;
+    status('✓ 前回の完了ライン情報を保持｜全件読み直しなし','done','✓ 境界維持',{readCount:0,savedCount:0});
+    return 0;
   }else{
     status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
   }
   const result=await collectBottomUp(p,host,cp);p=result.p;host=result.host;
   if(result.collected.length)count+=await sendBatch(result.collected,a,saved);
-  if(count===0)await confirmServer(a);
   let latest=await get(key(CHECK,a.id),{}),now=Date.now();
   await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,historyComplete:false,version:VERSION});
   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
@@ -333,10 +189,9 @@ async function scanContinue(){
  finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
 }
 
-async function scan(mode='continue'){return mode==='full'?scanFull():scanContinue()}
-document.addEventListener('mumei-v3-read-request',e=>void scan(e?.detail?.mode==='full'?'full':'continue'));
+document.addEventListener('mumei-v3-read-request',()=>void scan());
 function readyToScan(){const p=panel();return Boolean(p&&rows(p).length)}
-window.__mumeiV3Reader323={scan,scanContinue,scanFull,isScanning:()=>scanning,readyToScan,version:VERSION};
+window.__mumeiV3Reader323={scan,isScanning:()=>scanning,readyToScan,version:VERSION};
 window.__mumeiV3Reader323Ready=true;
 document.dispatchEvent(new Event('mumei-v3-reader-ready'));
 setTimeout(()=>void restoreReturnPosition(),250);
