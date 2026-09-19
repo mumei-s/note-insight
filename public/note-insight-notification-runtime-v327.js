@@ -5,14 +5,14 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.79';
+const VERSION='3.2.80';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',READ_MENU='mumei-v325-read-choice',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="notification-item" i],[class*="notice-item" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const modern=()=>Boolean(globalThis.GM);
-let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,featureEnabled=true,enabledLoaded=false;
+let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,autoStarting=false,featureEnabled=true,enabledLoaded=false;
 const profileCache=new Map();
 let dockVisible=false,panelSessionActive=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false,settingsNavStarted=false;
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
@@ -86,7 +86,7 @@ function openNotificationBell(){
   suppressUntilBell=false;
   if(findSurface()){autoDoneForSession=false;return true}
   const el=notificationBellElement();if(!el)return false;
-  autoDoneForSession=false;intentUntil=Date.now()+7000;
+  autoDoneForSession=false;autoStarting=false;intentUntil=Date.now()+7000;
   try{el.click()}catch{return false}
   for(const ms of[0,80,180,360,700,1200,2200])setTimeout(()=>scheduleInspect(0),ms);
   return true
@@ -100,9 +100,10 @@ function ensureStyle(){if(document.getElementById(ROOT+'-style'))return;const s=
 function runPrimaryDockAction(b){const a=b?.dataset?.a;if(a==='read')openReadChoice();else if(a==='mode')void toggleMode();else if(a==='filter')void toggleFilter()}
 function runDockAction(b){const a=b?.dataset?.a;if(a==='read')openReadChoice();else if(a==='mode')void toggleMode();else if(a==='filter')void toggleFilter();else if(a==='settings')void openSettings();else if(a==='ins')void openInsight()}
 function ensureRoot(){let r=document.getElementById(ROOT),host=independentDockHost();if(r){if(r.parentElement!==host)host.appendChild(r);return r}r=document.createElement('div');r.id=ROOT;r.innerHTML='<button type="button" data-a="read">読込</button><button type="button" class="mode auto" data-a="mode">自動</button><button type="button" data-a="filter">フィルター</button><button type="button" data-a="settings">設定</button><button type="button" class="ins" data-a="ins">INSIGHT</button>';host.appendChild(r);
-const actionButton=e=>{const b=e.target instanceof Element?e.target.closest('button[data-a]'):null;if(!b)return null;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return b};
-for(const type of['pointerdown','mousedown','touchstart','click'])r.addEventListener(type,e=>{actionButton(e)},true);
-r.addEventListener('pointerup',e=>{const b=actionButton(e);if(b)runDockAction(b)},true);
+const actionButton=e=>e.target instanceof Element?e.target.closest('button[data-a]'):null;
+const blockDockEvent=e=>{if(!actionButton(e))return null;e.stopPropagation();e.stopImmediatePropagation();return actionButton(e)};
+for(const type of['pointerdown','mousedown','touchstart','pointerup','touchend'])r.addEventListener(type,e=>{blockDockEvent(e)},true);
+r.addEventListener('click',e=>{const b=blockDockEvent(e);if(!b)return;e.preventDefault();runDockAction(b)},true);
 return r}
 function closeReadChoice(){document.getElementById(READ_MENU)?.remove()}
 function openReadChoice(){
@@ -110,7 +111,10 @@ function openReadChoice(){
  closeReadChoice();
  const host=independentDockHost(),m=document.createElement('div');m.id=READ_MENU;
  m.innerHTML='<button type="button" data-mode="continue">続きから読む</button><button type="button" data-mode="full">全読み</button><small>全読み＝読み込み停止期間の取りこぼし回収</small>';
- m.addEventListener('pointerup',e=>{const b=e.target instanceof Element?e.target.closest('button[data-mode]'):null;if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const mode=b.dataset.mode==='full'?'full':'continue';closeReadChoice();const read=document.querySelector('#'+ROOT+' [data-a="read"]');if(read instanceof HTMLButtonElement)void manualRead(read,mode)},true);
+ const modeButton=e=>e.target instanceof Element?e.target.closest('button[data-mode]'):null;
+ const blockChoice=e=>{const b=modeButton(e);if(!b)return null;e.stopPropagation();e.stopImmediatePropagation();return b};
+ for(const type of['pointerdown','mousedown','touchstart','pointerup','touchend'])m.addEventListener(type,e=>{blockChoice(e)},true);
+ m.addEventListener('click',e=>{const b=blockChoice(e);if(!b)return;e.preventDefault();const mode=b.dataset.mode==='full'?'full':'continue';const read=document.querySelector('#'+ROOT+' [data-a="read"]');if(read instanceof HTMLButtonElement)void manualRead(read,mode);setTimeout(closeReadChoice,80)},true);
  host.appendChild(m)
 }
 function showRoot(on){const want=Boolean(on&&featureEnabled&&panelSessionActive);dockVisible=want;if(!featureEnabled){document.getElementById(HOST)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
@@ -218,19 +222,21 @@ function paintMode(){if(suppressUntilBell||!featureEnabled)return;const r=docume
 async function toggleMode(){await initMode();autoMode=!autoMode;const id=await account();if(id)await set(AUTO+id,autoMode);paintMode();if(autoMode)maybeAuto(true)}
 function reader(){return window.__mumeiV3Reader323||window.__mumeiV3Reader322||null}
 async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const current=findSurface();if(current&&rows(current).length)return current;if(!notificationRoute()&&!popupSurface()&&!bellIntent())return null;await sleep(120)}return null}
-async function safeScan(mode='continue'){const current=await waitForRows();if(!current)return 0;if(current!==shell)markSurface(current);showRoot(true);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1200);if(!again)return 0;const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan(mode==='full'?'full':'continue')}
+async function safeScan(mode='continue'){const current=await waitForRows();if(!current)throw new Error('通知一覧を取得できませんでした');if(current!==shell)markSurface(current);showRoot(true);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1800);if(!again)throw new Error('通知一覧が再描画中です。もう一度実行します');const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan(mode==='full'?'full':'continue')}
 async function manualRead(btn,mode='continue'){btn.classList.remove('err');btn.textContent=mode==='full'?'全読中':'読込中';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}await safeScan(mode)}catch(e){btn.classList.add('err');btn.textContent=mode==='full'?'全読再試行':'再読込';btn.title=String(e?.message||e)}}
 function hideProgress(){const p=document.getElementById(PROGRESS);if(p)p.style.setProperty('display','none','important')}
 function onStatus(e){if(!featureEnabled||!panelSessionActive)return;showRoot(true);const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
 async function openInsight(){const id=await account(),u=new URL('https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard');if(id)u.searchParams.set('notificationAccount',id);intentUntil=0;panelSessionActive=false;markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
 function maybeAuto(force=false){
-  if(!autoMode||autoDoneForSession||!shell||!visible(shell)||!rows(shell).length)return;
+  if(force)autoDoneForSession=false;
+  if(!autoMode||autoDoneForSession||autoStarting||!shell||!visible(shell)||!rows(shell).length)return;
   const api=reader();
   if(!api||typeof api.scan!=='function'||typeof api.isScanning==='function'&&api.isScanning())return;
-  autoDoneForSession=true;
+  autoStarting=true;
   setTimeout(()=>{
     const current=findSurface();
-    if(autoMode&&current&&rows(current).length&&!(typeof api.isScanning==='function'&&api.isScanning()))void safeScan('continue').catch(()=>{})
+    if(!autoMode||!current||!rows(current).length||typeof api.isScanning==='function'&&api.isScanning()){autoStarting=false;setTimeout(()=>maybeAuto(false),450);return}
+    Promise.resolve(safeScan('continue')).then(()=>{autoDoneForSession=true}).catch(()=>{autoDoneForSession=false;setTimeout(()=>maybeAuto(false),700)}).finally(()=>{autoStarting=false})
   },220)
 }
 async function activate(next){if(!await initEnabled()||suppressUntilBell)return;panelSessionActive=true;clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
@@ -268,7 +274,7 @@ function onEditorFocus(e){
   intentUntil=0;
   hideImmediately()
 }
-function boot(){ensureStyle();mountUiInSurface();ensureRoot();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('focusin',onEditorFocus,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(!notificationRoute())hideImmediately();scheduleInspect(20)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
+function boot(){ensureStyle();mountUiInSurface();ensureRoot();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-ready',()=>{autoDoneForSession=false;autoStarting=false;scheduleInspect(0);setTimeout(()=>maybeAuto(true),80)});window.addEventListener('focusin',onEditorFocus,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(!notificationRoute())hideImmediately();scheduleInspect(20)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible};
 window.__mumeiV3Runtime327=window.__mumeiV3Runtime328;
