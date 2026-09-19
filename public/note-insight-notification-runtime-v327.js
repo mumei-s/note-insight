@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.69';
+const VERSION='3.2.70';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1',NAV_RETURN='mumei-v3-notification-return-v3268';
@@ -66,7 +66,26 @@ function routeSurface(){
   for(const el of document.querySelectorAll('main,[role="main"],section,aside'))if(strongNoticeSurface(el))return el;
   return null
 }
-function findSurface(){return popupSurface()||routeSurface()}
+function trustedBellSurface(){
+  if(!panelSessionActive||(!bellIntent()&&!notificationRoute()))return null;
+  if(notificationRoute()){
+    for(const el of document.querySelectorAll('main,[role="main"],section,aside')){
+      if(!visible(el))continue;
+      if(hasNoticeTabs(el)||rows(el).length)return el
+    }
+    return null
+  }
+  const roots=[...document.querySelectorAll('[role="dialog"],[role="menu"],[popover],main,section,aside,nav')].filter(visible);
+  for(const root of roots){
+    const a=exact(root,'通知'),b=exact(root,'お知らせ');
+    if(!a||!b)continue;
+    const x=expand(common(a,b)||root);
+    if(x)return x;
+    if(rows(root).length)return root
+  }
+  return null
+}
+function findSurface(){return popupSurface()||routeSurface()||trustedBellSurface()}
 function bellIntent(){return !editingOutsideNotification()&&Date.now()<intentUntil}
 function bellMeta(el){if(!(el instanceof Element))return'';return clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' '))}
 function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const href=String(el.getAttribute('href')||''),meta=bellMeta(el);if(/\/notifications(?:[/?#]|$)/i.test(href))return true;if(/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta))return true;return false}
@@ -293,7 +312,7 @@ function confirmHide(){hideTimer=0;if(suppressUntilBell)return;const next=findSu
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
 async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){showRoot(false);return}const next=findSurface();if(next){await activate(next);return}if(notificationRoute()||bellIntent()){await activateIntent();return}if(panelSessionActive){if(shell&&!shell.isConnected)markSurface(null);showRoot(false);cleanupVisuals();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){if(panelEvent(e))return;const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!bellTrigger(target,e))return;if(returnRestoring)return;suppressUntilBell=false;panelSessionActive=true;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;showRoot(true);setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
+function onTopClick(e){if(panelEvent(e))return;const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!bellTrigger(target,e))return;if(returnRestoring)return;suppressUntilBell=false;panelSessionActive=true;autoDoneForSession=false;const openNow=Boolean(findSurface())||notificationRoute();if(openNow){intentUntil=0;showRoot(true);setTimeout(()=>scheduleInspect(0),60);setTimeout(()=>scheduleInspect(0),180);setTimeout(()=>scheduleInspect(0),500);return}intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
 
 function settingsButtonFromEvent(e){
   const path=e?.composedPath?.()||[];
