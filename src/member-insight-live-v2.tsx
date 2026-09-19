@@ -197,9 +197,11 @@ export function MemberInsightLiveV2(){
   const appLatest=release?.appVersion||"";
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
   const notificationLatest=release?.notificationVersion||"";
-  const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled!==notificationLatest);
+  const notificationMissing=Boolean(releaseChecked&&notificationLatest&&!notificationInstalled);
+  const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled&&notificationInstalled!==notificationLatest);
   const dashboardLatest=release?.dashboardVersion||"";
-  const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled!==dashboardLatest);
+  const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
+  const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&dashboardInstalled!==dashboardLatest);
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className="miv5-update" aria-label="INSIGHT主要機能">
@@ -208,11 +210,11 @@ export function MemberInsightLiveV2(){
           <button className="miv5-source-main" aria-busy={dataBusy} aria-label="連携データを更新" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"更新確認中・保存済みデータは利用可能":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
-        <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"未導入・必要な時だけ追加"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>更新あり</em>:null}</button>
+        <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}</button>
         </div>
-        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"本人通知なしで分析可"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>更新あり</em>:null}</button>
+        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:null}</button>
         </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
