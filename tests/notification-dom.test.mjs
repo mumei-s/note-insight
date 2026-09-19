@@ -79,7 +79,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
     assert.equal(u.origin,'https://raw.githubusercontent.com');
     assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');
     assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');
-    assert.match(install.textContent,/最新版をインストール \/ 更新/);
+    assert.match(install.textContent,/本人通知をインストール \/ 更新/);
     assert.match(html,/mumei-installer-boundary/);
     assert.match(html,/insight-release\.json/);
     assert.doesNotMatch(html,/本人通知 V\d|V3\.2\.65/);
