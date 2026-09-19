@@ -64,7 +64,7 @@ test("settings button opens the dedicated filter settings page and never uses th
  const page=await read("public/notification-filter-settings.html");
  assert.match(runtime,/data-a="settings">設定<\/button>/);
  assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.assign\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
- assert.match(page,/noteの🔔通知へ戻る/);assert.match(page,/history\.pushState/);assert.match(runtime,/mumei_open_filter_settings/);assert.match(runtime,/https:\/\/note\.com\/notifications/);assert.match(page,/className='summary'/);assert.match(page,/className='body'/);
+ assert.match(page,/noteの🔔通知へ戻る/);assert.match(page,/history\.pushState/);assert.match(page,/mumei_settings_return/);assert.doesNotMatch(page,/return-bell|return-ready/);assert.match(runtime,/mumei_open_filter_settings/);assert.match(runtime,/https:\/\/note\.com\/notifications/);assert.match(page,/className='summary'/);assert.match(page,/className='body'/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
 });
 
