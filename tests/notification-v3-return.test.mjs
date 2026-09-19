@@ -16,14 +16,14 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.2\.80/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.2\.81/);
 });
 
-test("V3.2.80 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
+test("V3.2.81 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(v3,/@version\s+3\.2\.80/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.match(v3,/@version\s+3\.2\.81/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3253/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3280/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
+  assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3254/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3250/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3281/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
@@ -110,4 +110,15 @@ test("restored V3.2.67 runtime core is frozen and manual full reread is isolated
   assert.match(runtime,/safeScan\(mode='continue'\)/);assert.match(runtime,/safeScan\('continue'\)/);
   assert.match(reader,/async function scanContinue\(\)/);assert.match(reader,/async function scanFull\(\)/);
   assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
+});
+
+
+test("settings return is permanently pinned to notifications",async()=>{
+  const v3src=await read("public/note-insight-notification-v3.user.js");
+  const runtimeSrc=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(v3src,/startupQuery\.get\('mumei_settings_return'\)==='1'/);
+  assert.match(v3src,/new URL\('https:\/\/note\.com\/notifications'\)/);
+  assert.match(v3src,/sessionStorage\.removeItem\('mumei-v3-notification-return-v3223'\)/);
+  assert.match(runtimeSrc,/sessionStorage\.removeItem\('mumei-v3-notification-return-v3223'\)/);
+  assert.doesNotMatch(runtimeSrc,/location\.(?:assign|replace)\([^\n]*note\.com\/[a-z0-9_-]+/i);
 });
