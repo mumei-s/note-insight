@@ -12,6 +12,8 @@ test('important actions beat words in the article title',()=>{
   assert.equal(classify('あなたの記事がメンバーシップ応援に追加されました スキしましたという題名3分前','https://note.com/a/m/m1'),'my_article_magazine_added');
   assert.equal(classify('Aさんがあなたのコメントに返信しました メンバーシップのスキ3分前','https://note.com/a/n/n1?c=c1'),'reply');
   assert.equal(classify('Aさんがあなたのメンバーシップに参加しました スキした人','https://note.com/ss_yr/membership'),'membership_join');
+  assert.equal(classify('naemotion |…さんが記事を購入しました！無名℃S Room参加者募集！13時間前','https://note.com/ss_yr/n/n1'),'purchase');
+  assert.equal(classify('みゆこ 菜園×ちゃれ…さん他1名があなたの記事を高評価しました彗星、縫ってます。11時間前','https://note.com/ss_yr/n/n2'),'rating');
   assert.equal(allowedExplicitSource('note-notification-manual-sync-v2968'),true);
   assert.equal(allowedExplicitSource('note-notification-passive-sync'),false);
 });
