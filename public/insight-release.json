@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.65",
+  "notificationVersion": "3.2.66",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T14:34:00+09:00",
+  "releasedAt": "2026-09-19T14:58:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知パネルは最後に正常Deploy済みだったV3.2.58実装へロールバックし、V3.2.65として再配布。3.2.59〜3.2.64のtop layer/popover/通知セッション保持/位置監視は撤回。更新・未導入表示はINSIGHT側で維持。"
+  "note": "通知パネル構造をV3.2.45系へ戻し、note通知DOM内への再配置を廃止。5パネルはbody直下の固定要素。フィルター等の操作は背面へ伝播させず、画面タップだけでは閉じない。既存のON/OFF・設定画面・読み込み機能は維持。"
 }
