@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.74",
+  "notificationVersion": "3.2.75",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T21:20:00+09:00",
+  "releasedAt": "2026-09-19T21:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知をV3.2.74へ復旧。Runtimeの記事復帰を撤去してReaderへ一本化、設定戻りを/notifications固定、通知外では5パネル非表示、scan開始時に表示中未保存通知を先行保存。"
+  "note": "本人通知V3.2.75。手動読込を「続きから読む / 全読み」に分離。自動は続きのみ。全読みは保存済みを含め全履歴を再送してサーバーで重複排除・再分類し、通常の完了ラインは変更しない。"
 }
