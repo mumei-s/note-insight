@@ -49,108 +49,34 @@ function eventIdentity(el,raw,tm){
 }
 const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
 function ui(){for(const id of[PRIMARY,FALLBACK]){try{const f=document.getElementById(id),d=f?.contentDocument;if(d)return{frame:f,doc:d,read:d.getElementById('read'),health:d.getElementById('health')}}catch{}}return{frame:null,doc:null,read:null,health:null}}
-let scanning=false,stop=false,active=null;
-const OUTBOX='mumei-notification-outbox-v318:';
-function readOutbox(id){try{const value=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(value)?value:[]}catch{throw new Error('未送信通知の保存データを確認できません')}}
-function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(rs))}
-function retain(id,rs){const pending=new Map(readOutbox(id).map(r=>[sig(r),r]));for(const r of rs)pending.set(sig(r),r);writeOutbox(id,[...pending.values()])}
-function capturePending(){if(!active)return;const {a,panel,saved}=active;try{const rs=rows(panel).slice().reverse().map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs)}catch(e){health(String(e?.message||e),'error')}}
-function pauseCapture(){capturePending();stop=true}
-window.addEventListener('pagehide',pauseCapture,{capture:true});
-window.addEventListener('popstate',pauseCapture,{capture:true});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
+let scanning=false,stop=false,autoPass=0;
 function health(msg,cls=''){const x=ui();if(x.health){x.health.dataset.readerStatus='1';x.health.textContent=msg;x.health.className='health '+cls}if(x.read)x.read.textContent=scanning?(stop?'停止→保存中…':'■ 停止して保存'):'下から読込'}
 function fallbackHtml(){return`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:system-ui}.dock{height:48px;padding:3px;display:grid;grid-template-columns:1.5fr .8fr .9fr;grid-template-rows:25px 15px;gap:2px;border:1px solid #355063;border-radius:10px;background:#0e1c26}button{height:25px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 8px/1 system-ui}.health{grid-column:1/-1;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid #355063;border-radius:5px;background:#091923;color:#c5d8e5;font:850 7px/1 system-ui}.saving{color:#fff0a7}.error{color:#ffd2d7}.done{color:#c8ffda}</style><div class="dock"><button id="read">下から読込</button><button id="settings">設定</button><button id="ins">INSIGHT【通知】</button><div id="health" class="health">通知一覧を認識しました</div></div>`}
 function ensureFallback(){}
-async function sendBatch(input,a,saved){
- if(!input.length)return 0;
- retain(a.id,input.filter(r=>!saved.has(sig(r))));
- const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('PAIR_REQUIRED');
- let total=0;
- for(let i=0;i<input.length;i+=20){
-  const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;
-  const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
-  const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));
-  const p=await request(INGEST,{noteId:a.id,notifications:payload},{'X-Ingest-Token':token});
-  const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];
-  for(const id of confirmed)saved.add(id);
-  // Commit confirmations and checkpoint before removing anything from the outbox.
-  await set(key(SAVED,a.id),[...saved]);
-  if(confirmed.length){
-   const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();
-   await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:[stripTime(last.raw_text),String(last.target_url||'').split('#')[0],String(last.actor_url||'').split('?')[0]].join('|'),boundaryAt:now,boundarySource:'reader-confirmed-v318'});
-   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-  }
-  writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));
-  total+=confirmed.length;
-  if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します');
- }
- return total;
-}
-async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
- if(!host){await capture();return true}
- let same=0,last=-1;
- for(let i=0;i<80&&!stop;i++){
-  if(findPanel()!==panel)throw new Error('通知一覧を閉じたため中断しました');
-  await capture();if(overlap())return false;
-  host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);
-  health('古い通知を確認中…','saving');await sleep(350);
-  await capture();if(overlap())return false;
-  const height=host.scrollHeight;if(height===last)same++;else same=0;last=height;
-  if(same>=3)return true;
- }
- if(!stop)throw new Error('古い通知の読み込みが続いています。次回も続きから読み込みます');
- return false;
-}
+async function sendBatch(input,a,saved){if(!input.length)return 0;const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('PAIR_REQUIRED');let total=0;for(let i=0;i<input.length;i+=25){const part=input.slice(i,i+25).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}})),p=await request(INGEST,{noteId:a.id,notifications:payload},{'X-Ingest-Token':token});const sent=new Set(payload.map(sig)),confirmed=Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[];for(const s of confirmed)saved.add(s);total+=confirmed.length;await set(key(SAVED,a.id),[...saved].slice(-12000));if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します');await sleep(30)}return total}
+async function seekOldest(host,panel){if(!host)return;let same=0,last=-1;for(let i=0;i<80&&!stop;i++){if(findPanel()!==panel)throw new Error('通知一覧を閉じたため中断しました');host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);health('古い通知を確認中…','saving');await sleep(350);const height=host.scrollHeight;if(height===last)same++;else same=0;last=height;if(same>=3)return}if(!stop)throw new Error('古い通知の読み込みが続いています。再読込で続けてください')}
 async function scan(){
- if(scanning){stop=true;capturePending();health('停止地点まで保存します…','saving');return}
- // Lock before asynchronous login and storage checks to prevent two readers.
- scanning=true;stop=false;let a=null,saved=null,count=0,readCount=0,complete=false;
+ if(scanning){stop=true;health('停止地点まで保存します…','saving');return}
+ const filter=ui().doc?.getElementById('filter');if(filter?.classList.contains('on')){filter.click();await sleep(150)}const panel=findPanel();if(!panel){health('本物の🔔通知一覧を開いてください','error');return}
+ const a=await account();if(!a){health('noteログインを確認してください','error');return}
+ if(!String(await get(key(TOKEN,a.id),'')||'')){health('本人連携が必要です｜読込ボタンで修復','error');const x=ui();if(x.read)x.read.dataset.repair='1';return}
+ scanning=true;stop=false;const cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]),seen=new Set(),host=scrollHost(panel);let count=0,readCount=0,steps=0,stalls=0,newest=null,queue=[];
  try{
-  const filter=ui().doc?.getElementById('filter');if(filter?.classList.contains('on')){filter.click();await sleep(150)}
-  const panel=findPanel();if(!panel)throw new Error('本物の🔔通知一覧を開いてください');
-  a=await account();if(!a)throw new Error('noteログインを確認してください');
-  if(!String(await get(key(TOKEN,a.id),'')||'')){const x=ui();if(x.read)x.read.dataset.repair='1';throw new Error('本人連携が必要です｜読込ボタンで修復')}
-  const cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]);
-  saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
-  const previous=new Set(saved),seen=new Set(),host=scrollHost(panel);
-  active={a,panel,saved};
-  count+=await sendBatch(readOutbox(a.id),a,saved);
-  const currentRows=()=>rows(panel).map(el=>{const r=rowData(el);if(r)el.dataset.mumeiReaderSignature=sig(r);return r}).filter(Boolean);
-  const overlap=()=>cp.historyComplete===true&&currentRows().some(r=>previous.has(sig(r)));
-  const capture=async()=>{
-   const rs=currentRows().slice().reverse();
-   for(const r of rs){const id=sig(r);if(!seen.has(id)){seen.add(id);readCount++}}
-   // Local write is synchronous: pagehide cannot discard a partially filled batch.
-   retain(a.id,rs.filter(r=>!saved.has(sig(r))));
-   if(readOutbox(a.id).length>=20)count+=await sendBatch(readOutbox(a.id),a,saved);
-   health(`追加読込 ${readCount}件｜保存 ${count}件`,'saving');
-  };
-  const reachedEnd=await seekOldest(host,panel,capture,overlap);
-  await capture();
-  // The initial DOM list is newest-first; preserve the oldest-to-newest send order.
-  let pending=readOutbox(a.id);
-  count+=await sendBatch(pending,a,saved);
-  complete=!stop&&(reachedEnd||overlap());
-  if(!stop&&host){
-   let steps=0;
-   while(host.scrollTop>1&&steps++<250&&!stop){
-    if(findPanel()!==panel)throw new Error('通知一覧を閉じたため中断しました');
-    const before=host.scrollTop;host.scrollTop=Math.max(0,before-Math.max(160,host.clientHeight*.75));
-    await sleep(350);await capture();count+=await sendBatch(readOutbox(a.id),a,saved);
-    if(Math.abs(host.scrollTop-before)<1){complete=false;break}
-   }
-   if(host.scrollTop>1)complete=false;
+  // Only this notification list can move. Never scroll the background document.
+  await seekOldest(host,panel);
+  await sleep(100);
+  while(!stop&&steps++<250){
+   if(findPanel()!==panel||!panel.isConnected)throw new Error('通知一覧を閉じたため中断しました。保存済み分は保持しています');
+   const entries=rows(panel).slice().reverse();
+   for(const el of entries){const r=rowData(el);if(!r)continue;const id=sig(r);el.dataset.mumeiReaderSignature=id;if(seen.has(id))continue;seen.add(id);readCount++;if(saved.has(id))continue;queue.push(r);newest=r;if(queue.length>=25){health(`下から読込 ${readCount}件｜保存 ${count}件`,'saving');count+=await sendBatch(queue,a,saved);queue=[];if(stop)break}}
+   if(!host)break;const before=host.scrollTop;if(before<=1)break;
+   host.scrollTop=Math.max(0,before-Math.max(160,host.clientHeight*.75));await sleep(350);
+   stalls=Math.abs(host.scrollTop-before)<1?stalls+1:0;if(stalls>=3)break;
   }
-  const latest=await get(key(CHECK,a.id),{});
-  if(complete){const top=currentRows().find(r=>saved.has(sig(r)));if(top){latest.boundarySignature=sig(top);latest.boundaryEventIdentity=top.meta?.event_identity;latest.boundaryLegacySignature=[stripTime(top.raw_text),String(top.target_url||'').split('#')[0],String(top.actor_url||'').split('?')[0]].join('|')}}
-  await set(key(CHECK,a.id),{...latest,lastCheckAt:Date.now(),manualNewCount:count,manualSeenCount:readCount,historyComplete:cp.historyComplete===true||complete,lastError:''});
-  health(`${stop?'停止・':''}${count}件保存確認｜${readCount}件読取${complete?'':'｜続きは次回'}`,'done');
- }catch(e){
-  capturePending();
-  if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now()})}catch{}}
-  health(`⚠ ${String(e?.message||e)}｜未送信分は次回に引継ぎ`,'error');
- }finally{active=null;scanning=false;stop=false;const x=ui();if(x.read)x.read.textContent='下から読込'}
+  count+=await sendBatch(queue,a,saved);
+  const now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:count?now:cp.lastSaveAt,lastCheckAt:now,savedCount:saved.size,lastError:'',manualNewCount:count,manualSeenCount:readCount,version:VERSION,boundarySignature:newest?sig(newest):cp.boundarySignature,boundaryLegacySignature:newest?[stripTime(newest.raw_text),String(newest.target_url||'').split('#')[0],String(newest.actor_url||'').split('?')[0]].join('|'):cp.boundaryLegacySignature,boundaryAt:now,boundarySource:'reader-v2968'});
+  health(`${stop?'停止・':''}${count}件保存確認｜${readCount}件読取${steps>=250?'｜残りは再読込':''}`,'done');
+ }catch(e){health(`⚠ ${String(e?.message||e)}`,'error')}finally{scanning=false;stop=false;const x=ui();if(x.read)x.read.textContent='下から読込'}
 }
 function bindFrame(f){try{const d=f.contentDocument;if(!d||d.documentElement.dataset.mumeiReader2963==='1')return false;const read=d.getElementById('read'),settings=d.getElementById('settings'),ins=d.getElementById('ins');if(!read)return false;d.documentElement.dataset.mumeiReader2963='1';read.textContent='下から読込';d.addEventListener('click',e=>{const t=e.target;if(!(t instanceof d.defaultView.HTMLElement))return;if(t.id==='read'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();if(t.dataset.repair==='1'){location.assign(SETUP);return}void scan(false);return}if(t.id==='settings'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();location.assign(FILTER);return}if(t.id==='ins'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void account().then(a=>{const u=new URL(INSIGHT);if(a?.id)u.searchParams.set('account',a.id);location.assign(u.href)})}},true);return true}catch{return false}}
 let tries=0;function bind(){const primary=document.getElementById(PRIMARY),fallback=document.getElementById(FALLBACK);if(primary&&bindFrame(primary))return true;if(fallback&&bindFrame(fallback))return true;ensureFallback();const f=document.getElementById(FALLBACK);return!!(f&&bindFrame(f))}
