@@ -14,7 +14,7 @@ test("V3.2.67 loads bottom-up reader, persistent checkpoint and fixed five-panel
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
   has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3245","#mumei-v325-dock [data-a=\"settings\"]","#mumei-v3-tray-v330 [data-act=\"settings\"]","mumei-notification-feature-ui-v1","mumei-notification-feature-bridge-v1","mumei_insight_notification_feature_enabled_v1"]);
   has(checkpoint,["mumei_insight_notification_checkpoint_local_v325:","localStorage.setItem","async function restore(","async function persist(","ここまで保存済み","前回の保存位置を保持中｜全件再読込なし"]);assert.doesNotMatch(checkpoint,/new MutationObserver/);has(reader,["checkpointFor(","preserveBoundary","全件読み直しなし"]);assert.doesNotMatch(reader,/start\.rebase/);
-  has(runtime,["notification-filter-settings.html","notificationAccount","location.replace(u.href)","openNotificationBell","isNotificationOpen","mumei_insight_notification_feature_enabled_v1","setFeatureEnabled","hideImmediately","suppressUntilBell","notificationLeaveAction","function showRoot(on){if(editingOutsideNotification()){hideImmediately();return}const want=Boolean(on&&featureEnabled&&!suppressUntilBell)","function onStatus(e){if(editingOutsideNotification()){hideImmediately();hideProgress();return}if(suppressUntilBell||!featureEnabled)","function confirmHide(){hideTimer=0;if(suppressUntilBell)","settingsButtonFromEvent","onSettingsPressStart","onSettingsPressEnd","onSettingsClick","strongNoticeSurface","noticeRows","textEditorElement","editingOutsideNotification","onEditorFocus","settingsNavStarted","event?.composedPath","mumei-v325-dock","data-a=\"read\"","data-a=\"mode\"","data-a=\"filter\"","data-a=\"settings\"","data-a=\"ins\"","mumei_insight_notification_auto_v325:","async function initMode(","async function toggleMode(","function maybeAuto(","autoDoneForSession","async function safeScan(","mountUiInSurface","leadDisplayName","profileCandidates","filterRows","runPrimaryDockAction","pointerdown","pointerup","leadCreatorId","ids.has(lead)","creatorProfile","profileImageUrl","nickname"]);
+  has(runtime,["notification-filter-settings.html","notificationAccount","location.replace(u.href)","openNotificationBell","isNotificationOpen","mumei_insight_notification_feature_enabled_v1","setFeatureEnabled","hideImmediately","suppressUntilBell","notificationLeaveAction","function showRoot(on)","panelSessionActive","function onStatus(e)","panelSessionActive","function confirmHide()","panelSessionActive","strongNoticeSurface","noticeRows","textEditorElement","editingOutsideNotification","onEditorFocus","event?.composedPath","mumei-v325-dock","data-a=\"read\"","data-a=\"mode\"","data-a=\"filter\"","data-a=\"settings\"","data-a=\"ins\"","mumei_insight_notification_auto_v325:","async function initMode(","async function toggleMode(","function maybeAuto(","autoDoneForSession","async function safeScan(","mountUiInSurface","leadDisplayName","profileCandidates","filterRows","runDockAction","pointerdown","pointerup","leadCreatorId","ids.has(lead)","creatorProfile","profileImageUrl","nickname"]);
   assert.doesNotMatch(runtime,/notification-filter\.html|new MutationObserver/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   has(reader,["__mumeiNotificationReader323","__mumeiV3Reader323","readyToScan","confirmedClientSignatures","bottom-up-from-saved-line","saved-line-bottom-up-v324","ここまで保存済み","boundarySignature","boundaryEventIdentity","完了ラインから上方向へ、追加分だけ読み込みます","findSavedRecoveryElement","persistRecoveredBoundary","preserveBoundary","全件読み直しなし"]);
@@ -62,7 +62,7 @@ test("notification dock stays body-fixed and does not use the notification shell
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.doesNotMatch(runtime,/window\.addEventListener\('pointerdown',onShellPointerDown,true\)/);
   assert.match(runtime,/if\(!featureEnabled\|\|!bellTrigger\(target,e\)\)return/);
-  assert.match(runtime,/if\(notificationRoute\(\)\)\{await activateIntent\(\);return\}/);
+  assert.match(runtime,/if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}/);
 });
 
 
@@ -75,4 +75,15 @@ test("notification dock lifecycle is isolated from note notification DOM",async(
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.match(runtime,/if\(panelEvent\(e\)\)return/);
   assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
+});
+
+
+test("installed newer than published latest is still current",async()=>{
+  const release=await read("src/insight-release.ts"),setup=await read("public/notification-browser-install.html"),ui=await read("src/member-insight-live-v2.tsx");
+  assert.match(release,/compareVersions\(current,latest\)<0/);
+  assert.match(setup,/compareVersion\(current,latest\)>=0/);
+  assert.match(setup,/本人通知ツールは最新版です/);
+  assert.match(setup,/mumei-notification-install-pending-v1/);
+  assert.match(ui,/versionDiffers\(notificationInstalled,notificationLatest\)/);
+  assert.match(ui,/✓ 最新版/);
 });

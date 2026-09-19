@@ -187,8 +187,8 @@ export function MemberInsightLiveV2(){
   useEffect(()=>{if(mode==="social")void relationSync(true)},[mode]);
   useEffect(()=>{
     void checkRelease();const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},60_000);const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
-    window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
-    return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current)}
+    window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);window.addEventListener("mumei-notification-version-changed",refresh);document.addEventListener("visibilitychange",refresh);
+    return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);window.removeEventListener("mumei-notification-version-changed",refresh);document.removeEventListener("visibilitychange",refresh);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current)}
   },[]);
   function capture(e:React.MouseEvent){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;const label=t.closest("button")?.textContent?.trim()||"";
@@ -198,10 +198,10 @@ export function MemberInsightLiveV2(){
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
   const notificationLatest=release?.notificationVersion||"";
   const notificationMissing=Boolean(releaseChecked&&notificationLatest&&!notificationInstalled);
-  const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled&&notificationInstalled!==notificationLatest);
+  const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled&&versionDiffers(notificationInstalled,notificationLatest));
   const dashboardLatest=release?.dashboardVersion||"";
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
-  const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&dashboardInstalled!==dashboardLatest);
+  const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
     <section className="miv5-update" aria-label="INSIGHT主要機能">
@@ -211,10 +211,10 @@ export function MemberInsightLiveV2(){
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}</button>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:notificationInstalled&&notificationLatest?<em>✓ 最新版</em>:null}</button>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:null}</button>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:dashboardInstalled&&dashboardLatest?<em>✓ 最新版</em>:null}</button>
         </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>

@@ -22,8 +22,16 @@ export type InsightRelease = {
   dashboardLabel?: string;
 };
 
+export function compareVersions(a: string, b: string) {
+  const pa=String(a||"").split(".").map(v=>Number((v.match(/\d+/)||["0"])[0]));
+  const pb=String(b||"").split(".").map(v=>Number((v.match(/\d+/)||["0"])[0]));
+  const n=Math.max(pa.length,pb.length);
+  for(let i=0;i<n;i++){const av=pa[i]||0,bv=pb[i]||0;if(av!==bv)return av>bv?1:-1}
+  return 0;
+}
+
 export function versionDiffers(current: string, latest: string) {
-  return Boolean(current && latest && current !== latest);
+  return Boolean(current && latest && compareVersions(current,latest)<0);
 }
 
 export async function fetchInsightRelease(): Promise<InsightRelease> {
