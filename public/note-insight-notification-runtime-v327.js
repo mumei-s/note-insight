@@ -5,16 +5,16 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.86';
+const VERSION='3.2.87';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="notification-item" i],[class*="notice-item" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const modern=()=>Boolean(globalThis.GM);
-let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,featureEnabled=true,enabledLoaded=false;
+let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,autoStarting=false,featureEnabled=true,enabledLoaded=false;
 const profileCache=new Map();
-let dockVisible=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false;
+let dockVisible=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false,panelSessionActive=false,sessionPath='';
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -30,6 +30,32 @@ function popupSurface(){if(document.visibilityState==='hidden')return null;if(no
 function routeSurface(){if(!notificationRoute())return null;for(const el of document.querySelectorAll('main,[role="main"]'))if(visible(el))return el;for(const el of document.querySelectorAll('section,aside'))if(visible(el)&&(exact(el,'通知')||rows(el).length))return el;return document.body||null}
 function findSurface(){return popupSurface()||routeSurface()}
 function bellIntent(){return Date.now()<intentUntil}
+
+function startPanelSession(){
+  panelSessionActive=true;
+  sessionPath=location.pathname;
+  suppressUntilBell=false;
+  autoDoneForSession=false;
+  autoStarting=false;
+  if(hideTimer){clearTimeout(hideTimer);hideTimer=0}
+}
+function endPanelSession(){
+  panelSessionActive=false;
+  sessionPath='';
+  autoDoneForSession=false;
+  autoStarting=false;
+  if(hideTimer){clearTimeout(hideTimer);hideTimer=0}
+}
+function sessionPathChanged(){return Boolean(panelSessionActive&&sessionPath&&location.pathname!==sessionPath&&!notificationRoute())}
+function targetSurface(target){
+  if(!(target instanceof Element))return null;
+  for(let p=target,d=0;p&&p!==document.body&&p!==document.documentElement&&d++<14;p=p.parentElement){
+    if(!visible(p))continue;
+    if(rows(p).length){const x=expand(p);return x||p}
+    if(p.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]')&&/(?:通知|お知らせ)/u.test(text(p))){const x=expand(p);return x||p}
+  }
+  return null
+}
 function bellMeta(el){if(!(el instanceof Element))return'';return clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' '))}
 function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const href=String(el.getAttribute('href')||''),meta=bellMeta(el);if(/\/notifications(?:[/?#]|$)/i.test(href))return true;if(/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta))return true;return false}
 function bellTrigger(target,event){const seen=new Set(),xs=[];const add=el=>{if(el instanceof Element&&!seen.has(el)){seen.add(el);xs.push(el)}};add(target);for(const x of event?.composedPath?.()||[])add(x);for(const raw of xs.slice(0,20)){add(raw.closest?.('button,a,[role="button"],[role="tab"],[aria-label],[data-testid]'));if(bellHit(raw))return true}return xs.some(bellHit)}
@@ -46,11 +72,11 @@ function notificationBellElement(){
 }
 function openNotificationBell(){
   suppressUntilBell=false;
-  if(findSurface()){autoDoneForSession=false;return true}
+  if(findSurface()){startPanelSession();return true}
   const el=notificationBellElement();if(!el)return false;
-  autoDoneForSession=false;intentUntil=Date.now()+7000;
-  try{el.click()}catch{return false}
-  for(const ms of[0,80,180,360,700,1200,2200])setTimeout(()=>scheduleInspect(0),ms);
+  startPanelSession();intentUntil=Date.now()+10000;
+  try{el.click()}catch{endPanelSession();return false}
+  for(const ms of[0,80,180,360,700,1200,2200,4000,7000])setTimeout(()=>scheduleInspect(0),ms);
   return true
 }
 function mountUiInSurface(){const host=shell&&shell.isConnected?shell:null;if(!host)return;const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
@@ -64,11 +90,12 @@ r.addEventListener('pointerdown',e=>{primary(e)},true);
 r.addEventListener('pointerup',e=>{const b=primary(e);if(b)runPrimaryDockAction(b)},true);
 r.addEventListener('click',e=>{const b=primary(e);if(b)return;const other=e.target instanceof Element?e.target.closest('button[data-a]'):null;if(!other)return;e.preventDefault();e.stopPropagation();const a=other.dataset.a;if(a==='settings')void openSettings();else if(a==='ins')void openInsight()},true);
 return r}
-function showRoot(on){const want=Boolean(on&&featureEnabled&&!suppressUntilBell);dockVisible=want;if(!featureEnabled||suppressUntilBell){document.getElementById(ROOT)?.remove();document.getElementById(SETTINGS)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
+function showRoot(on){const want=Boolean(on&&featureEnabled&&!suppressUntilBell&&panelSessionActive);dockVisible=want;if(!featureEnabled||suppressUntilBell){document.getElementById(ROOT)?.remove();document.getElementById(SETTINGS)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
 function cleanupVisuals(){document.getElementById(BOUNDARY)?.remove();const p=document.getElementById(PROGRESS);if(p){if(p.style.display!=='none')p.style.setProperty('display','none','important');if(p.textContent)p.textContent=''}document.getElementById(SETTINGS)?.remove()}
 function clearFeatureHides(){for(const el of document.querySelectorAll('.'+HIDE))el.classList.remove(HIDE)}
 async function initEnabled(){if(enabledLoaded)return featureEnabled;featureEnabled=Boolean(await get(ENABLED,true));enabledLoaded=true;return featureEnabled}
 function disableFeatureNow(){
+  endPanelSession();
   intentUntil=0;
   if(inspectTimer){clearTimeout(inspectTimer);inspectTimer=0}
   if(hideTimer){clearTimeout(hideTimer);hideTimer=0}
@@ -82,7 +109,7 @@ function disableFeatureNow(){
 async function setFeatureEnabled(v){
   featureEnabled=Boolean(v);enabledLoaded=true;await set(ENABLED,featureEnabled);
   if(!featureEnabled){disableFeatureNow();return false}
-  suppressUntilBell=true;document.getElementById(ROOT)?.remove();scheduleInspect(0);return true
+  endPanelSession();suppressUntilBell=true;document.getElementById(ROOT)?.remove();scheduleInspect(0);return true
 }
 function getFeatureEnabled(){return featureEnabled}
 function leavingNotificationHref(target){
@@ -104,6 +131,7 @@ function notificationLeaveAction(target){
   return Boolean(row&&shell.contains(row)&&rowish(row))
 }
 function hideImmediately(){
+  endPanelSession();
   suppressUntilBell=true;
   intentUntil=0;
   markSurface(null);
@@ -111,10 +139,24 @@ function hideImmediately(){
   document.getElementById(ROOT)?.remove();
   cleanupVisuals()
 }
-function onShellPointerDown(e){
-  if(!featureEnabled||!shell)return;
+function onGlobalPointerDown(e){
+  if(!featureEnabled||!panelSessionActive)return;
   const target=e.target instanceof Element?e.target:null;
-  if(notificationLeaveAction(target))hideImmediately()
+  if(!target)return;
+  if(target.closest('#'+ROOT)||target.closest('#'+SETTINGS))return;
+  if(bellTrigger(target,e))return;
+  let current=findSurface();
+  if(current&&current!==shell)markSurface(current);
+  let owned=Boolean(current&&current.contains(target))||Boolean(shell&&shell.contains(target));
+  if(!owned){
+    const fromTarget=targetSurface(target);
+    if(fromTarget){if(fromTarget!==shell)markSurface(fromTarget);current=fromTarget;owned=true}
+  }
+  if(owned){
+    if(notificationLeaveAction(target))hideImmediately();
+    return
+  }
+  hideImmediately()
 }
 function profileIdFromHref(href){try{const u=new URL(href,location.href),p=u.pathname.split('/').filter(Boolean),id=(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['notifications','settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorIds(el){const out=[];for(const a of el.querySelectorAll?.('a[href]')||[]){const id=profileIdFromHref(a.getAttribute('href'));if(id)out.push(id)}return[...new Set(out)]}
@@ -156,6 +198,7 @@ async function openSettings(){
   u.searchParams.set('notificationAccount',id);
   u.searchParams.set('ts',String(Date.now()));
   intentUntil=0;
+  endPanelSession();
   markSurface(null);
   showRoot(false);
   cleanupVisuals();
@@ -165,32 +208,40 @@ async function initMode(){if(modeLoaded)return;const id=await account();autoMode
 function paintMode(){if(suppressUntilBell||!featureEnabled)return;const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="mode"]');if(!b)return;b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
 async function toggleMode(){await initMode();autoMode=!autoMode;const id=await account();if(id)await set(AUTO+id,autoMode);paintMode();if(autoMode)maybeAuto(true)}
 function reader(){return window.__mumeiV3Reader323||window.__mumeiV3Reader322||null}
-async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const current=findSurface();if(current&&rows(current).length)return current;if(!notificationRoute()&&!popupSurface()&&!bellIntent())return null;await sleep(120)}return null}
+async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const live=shell&&shell.isConnected&&visible(shell)&&rows(shell).length?shell:null;const current=live||findSurface();if(current&&rows(current).length)return current;if(!panelSessionActive&&!notificationRoute()&&!popupSurface()&&!bellIntent())return null;await sleep(120)}return null}
 async function safeScan(){const current=await waitForRows();if(!current)return 0;if(current!==shell)markSurface(current);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1200);if(!again)return 0;const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan()}
 async function manualRead(btn){btn.classList.remove('err');btn.textContent='待機';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}btn.textContent='読込中';await safeScan()}catch(e){btn.classList.add('err');btn.textContent='再読込';btn.title=String(e?.message||e)}}
 function hideProgress(){const p=document.getElementById(PROGRESS);if(p)p.style.setProperty('display','none','important')}
-function onStatus(e){if(suppressUntilBell||!featureEnabled){document.getElementById(ROOT)?.remove();hideProgress();return}const actual=findSurface();if(!actual&&!bellIntent()){hideProgress();scheduleInspect(20);return}const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
-async function openInsight(){const id=await account(),u=new URL('https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard');if(id)u.searchParams.set('notificationAccount',id);intentUntil=0;markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
+function onStatus(e){if(suppressUntilBell||!featureEnabled){document.getElementById(ROOT)?.remove();hideProgress();return}const actual=findSurface();if(!actual&&!bellIntent()&&!panelSessionActive){hideProgress();scheduleInspect(20);return}const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
+async function openInsight(){const id=await account(),u=new URL('https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard');if(id)u.searchParams.set('notificationAccount',id);intentUntil=0;endPanelSession();markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
 function maybeAuto(force=false){
-  if(!autoMode||autoDoneForSession||!shell||!visible(shell)||!rows(shell).length)return;
+  if(force)autoDoneForSession=false;
+  if(!autoMode||autoDoneForSession||autoStarting||!panelSessionActive)return;
   const api=reader();
   if(!api||typeof api.scan!=='function'||typeof api.isScanning==='function'&&api.isScanning())return;
-  autoDoneForSession=true;
+  const live=shell&&shell.isConnected&&visible(shell)&&rows(shell).length?shell:findSurface();
+  if(!live||!rows(live).length){setTimeout(()=>{if(panelSessionActive)maybeAuto(false)},450);return}
+  autoStarting=true;
   setTimeout(()=>{
-    const current=findSurface();
-    if(autoMode&&current&&rows(current).length&&!(typeof api.isScanning==='function'&&api.isScanning()))void safeScan().catch(()=>{})
+    const current=shell&&shell.isConnected&&visible(shell)&&rows(shell).length?shell:findSurface();
+    if(!panelSessionActive||!autoMode||!current||!rows(current).length||typeof api.isScanning==='function'&&api.isScanning()){
+      autoStarting=false;
+      if(panelSessionActive&&autoMode)setTimeout(()=>maybeAuto(false),650);
+      return
+    }
+    Promise.resolve(safeScan()).then(()=>{if(panelSessionActive)autoDoneForSession=true}).catch(()=>{autoDoneForSession=false;if(panelSessionActive&&autoMode)setTimeout(()=>maybeAuto(false),800)}).finally(()=>{autoStarting=false})
   },220)
 }
-async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
-async function activateIntent(){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell)hideImmediately()}
-function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();return}const next=findSurface();if(next){void activate(next);return}if(bellIntent()){void activateIntent();return}markSurface(null);showRoot(false);cleanupVisuals()}
+async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}if(!panelSessionActive)startPanelSession();clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
+async function activateIntent(){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}if(!panelSessionActive)startPanelSession();clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell)hideImmediately()}
+function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();return}const next=findSurface();if(next){void activate(next);return}if(panelSessionActive){if(shell&&!shell.isConnected)markSurface(null);showRoot(true);return}if(bellIntent()){void activateIntent();return}markSurface(null);showRoot(false);cleanupVisuals()}
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
-async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(bellIntent()){await activateIntent();return}if(shell||dockVisible){scheduleHide();return}cleanupVisuals()}
+async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}if(sessionPathChanged()){hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(panelSessionActive){if(shell&&!shell.isConnected)markSurface(null);showRoot(true);return}if(bellIntent()){await activateIntent();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(shell&&notificationLeaveAction(target))hideImmediately();return}suppressUntilBell=false;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
-function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('pointerdown',onShellPointerDown,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
+function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(panelSessionActive&&shell&&notificationLeaveAction(target))hideImmediately();return}if(panelSessionActive&&dockVisible){hideImmediately();return}suppressUntilBell=false;startPanelSession();intentUntil=Date.now()+10000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500,9000])setTimeout(()=>scheduleInspect(0),ms)}
+function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('pointerdown',onGlobalPointerDown,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(sessionPathChanged()){hideImmediately();return r}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();if(notificationRoute())startPanelSession();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
-window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible,getShell:()=>shell};
+window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible,getShell:()=>shell,isSessionActive:()=>panelSessionActive};
 window.__mumeiV3Runtime327=window.__mumeiV3Runtime328;
 window.__mumeiV3Runtime325=window.__mumeiV3Runtime328;
 })();
