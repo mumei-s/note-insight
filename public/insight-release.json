@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.83",
+  "notificationVersion": "3.2.84",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T01:15:00+09:00",
+  "releasedAt": "2026-09-20T05:55:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.83。今日13:58のV3.2.61表示・通知開閉・自動ON/OFFを基準に復元し、手動読込だけ「続きから読む / 全読み」を独立追加。自動は従来どおり差分読込のみ。"
+  "note": "本人通知V3.2.84。9/19 05:48のV3.2.55通知クライアントを正本として復元。読み取りON/OFFは維持し、手動モード時の「続きから読む / 全読み」は独立manual-full拡張として追加。"
 }
