@@ -41,7 +41,7 @@ button{border:1px solid #466b82;border-radius:8px;background:#112b3b;color:#e7f8
 <script>
 (function(){
 'use strict';
-const NOTE='https://note.com/?mumei_filter_return=bell';
+const NOTE='https://note.com/notifications?mumei_filter_return=bell';
 const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const q=new URLSearchParams(location.search),account=(q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
 const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status');
