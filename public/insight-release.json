@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.85",
+  "notificationVersion": "3.2.86",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T06:10:00+09:00",
+  "releasedAt": "2026-09-20T02:05:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.85。通常通知ローダーを9/19 05:48のV3.2.55構成へ完全復元。manual-fullは通常ローダーから切り離して別ファイル保持。読み取りON/OFFは維持。"
+  "note": "本人通知V3.2.86。DM/記事など背面ルートに関係なく、実際の通知レイヤーDOMが存在する間は5パネルを維持。history更新でhideImmediatelyしない。自動ON/OFF維持。手動の全読みは専用/notifications画面へ切り離して履歴救済。"
 }
