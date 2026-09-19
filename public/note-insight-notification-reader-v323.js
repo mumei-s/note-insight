@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.26',PROTOCOL='3.2.26';
+const VERSION='3.2.83',PROTOCOL='3.2.83';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -18,6 +18,8 @@ const NAV_RETURN='mumei-v3-notification-return-v3223';
 const MAX_SEEK_STEPS=56;
 const MAX_READ_STEPS=56;
 const MAX_READ_ROWS=420;
+const FULL_MAX_STEPS=320;
+const FULL_MAX_ROWS=5000;
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -71,6 +73,27 @@ function clearBoundary(){document.getElementById(BOUNDARY_ID)?.remove()}
 function markBoundary(el){clearBoundary();if(!(el instanceof Element)||!el.parentNode)return;const line=document.createElement('div');line.id=BOUNDARY_ID;line.textContent='ここまで保存済み';line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';el.parentNode.insertBefore(line,el)}
 async function requestRetry(body,token){let last=null;for(let attempt=0;attempt<3;attempt++){try{return await request(INGEST,body,{'X-Ingest-Token':token})}catch(e){last=e;const m=String(e?.message||e);if(/401|403|TOKEN|ACCOUNT_CHANGED|連携/i.test(m))throw e;if(attempt<2)await sleep(650*(attempt+1))}}throw last||new Error('NETWORK_ERROR')}
 async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,input.filter(r=>!saved.has(sig(r))));const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');let total=0;for(let i=0;i<input.length;i+=20){const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));const p=await requestRetry({noteId:a.id,notifications:payload},token);const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];for(const s of confirmed)saved.add(s);await set(key(SAVED,a.id),[...saved]);if(confirmed.length){const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:legacySig(last),boundaryDisplayText:stripTime(last.raw_text),boundaryAt:now,boundarySource:'reader-bottom-up-confirmed-v326'});document.dispatchEvent(new Event('mumei-notification-checkpoint'))}writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));total+=confirmed.length;if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します')}return total}
+
+async function sendBatchFull(input,a,saved){
+ if(!input.length)return 0;
+ const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');
+ let total=0;
+ for(let i=0;i<input.length;i+=20){
+  const part=input.slice(i,i+20);if(!part.length)continue;
+  retain(a.id,part);
+  const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+  const payload=part.map(r=>({...r,meta:{...(r.meta||{}),source:'note-notification-manual-sync-v2968',capture_source:'note-notification-reader-v323',userscript:VERSION,protocol:PROTOCOL,scan_mode:'full-history-repair',scan_strategy:'manual-full-history-v1',client_signature:sig(r)}}));
+  const p=await requestRetry({noteId:a.id,notifications:payload},token);
+  const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];
+  for(const s of confirmed)saved.add(s);
+  await set(key(SAVED,a.id),[...saved]);
+  writeOutbox(a.id,readOutbox(a.id).filter(r=>!confirmed.includes(sig(r))));
+  total+=confirmed.length;
+  if(confirmed.length!==payload.length)throw new Error('全読みの一部が未保存です。もう一度「全読み」で再試行してください')
+ }
+ return total
+}
+
 
 let scanning=false,active=null;
 function capturePending(){if(!active)return;const{a,p,saved}=active;try{const rs=rows(p).map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs.reverse())}catch{}}
@@ -150,6 +173,57 @@ async function collectBottomUp(p,host,cp){
  return{p,host,collected,seenCount:seen.size,boundaryFound:found};
 }
 
+
+async function collectFullHistory(p,host,a,saved){
+ const seen=new Set(),buffer=[];let confirmed=0,stable=0,lastTop=-1,lastMax=-1,noNew=0;
+ try{if(host)host.scrollTop=0}catch{}
+ await sleep(120);
+ for(let step=0;step<FULL_MAX_STEPS&&seen.size<FULL_MAX_ROWS;step++){
+  const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため全読みを中断しました');
+  if(nextPanel!==p){p=nextPanel;host=scrollHost(p)}
+  let added=0;
+  for(const el of rows(p)){
+   const r=rowData(el);if(!r)continue;const k=sig(r);if(seen.has(k))continue;
+   seen.add(k);buffer.push(r);added++
+  }
+  if(buffer.length>=80)confirmed+=await sendBatchFull(buffer.splice(0,buffer.length),a,saved);
+  if(step%5===0)status(`全読み中… ${seen.size}件確認 / ${confirmed}件保存確認`,'saving','全読み',{readCount:seen.size,savedCount:confirmed,mode:'full'});
+  if(!host)break;
+  const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
+  if(added===0)noNew++;else noNew=0;
+  if(before>=max-2){stable=max===lastMax?stable+1:0;if(stable>=4&&noNew>=3)break;await sleep(220)}
+  else{host.scrollTop=Math.min(max,before+Math.max(240,Math.floor(host.clientHeight*.82)));await sleep(180);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
+  if(host.scrollTop===lastTop&&max===lastMax)stable++;
+  lastTop=host.scrollTop;lastMax=max
+ }
+ if(buffer.length)confirmed+=await sendBatchFull(buffer.splice(0,buffer.length),a,saved);
+ return{confirmed,seenCount:seen.size}
+}
+async function scanFull(){
+ if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return 0}
+ scanning=true;let a=null,saved=null,p=null,count=0;
+ status('全読みを開始します。保存済みも含めて履歴を再照合します…','saving','全読み',{mode:'full'});
+ try{
+  p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
+  a=await account();if(!a)throw new Error('noteログインを確認してください');
+  if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
+  const savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
+  count+=await sendBatchFull(readOutbox(a.id),a,saved);
+  const result=await collectFullHistory(p,scrollHost(p),a,saved);count+=result.confirmed;
+  const cp=await get(key(CHECK,a.id),{}),now=Date.now(),remain=readOutbox(a.id).length;
+  await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastFullScanAt:now,lastFullSeenCount:result.seenCount,lastFullConfirmedCount:count,lastError:'',lastScanMode:'full-history-repair',lastRunStopped:false,version:VERSION});
+  document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+  if(remain)status(`⚠ 全読み完了・${remain}件は次回保存待ち｜${result.seenCount}件照合`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain,mode:'full'});
+  else status(`✓ 全読み完了｜${result.seenCount}件照合・${count}件保存確認`,'done','✓ 全読み完了',{readCount:result.seenCount,savedCount:count,mode:'full'});
+  return count
+ }catch(e){
+  const pending=a?readOutbox(a.id).length:0,msg=String(e?.message||e);
+  if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:msg,lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'full-history-repair',lastRunStopped:true,version:VERSION})}catch{}}
+  status(`⚠ 全読み失敗：${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error','全読み再試行',{pendingCount:pending,mode:'full'});
+  return 0
+ }finally{scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
+}
+
 async function scan(){
  if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return}
  scanning=true;let a=null,saved=null,p=null,host=null,count=0,safetyStop=false;
@@ -191,7 +265,7 @@ async function scan(){
 
 document.addEventListener('mumei-v3-read-request',()=>void scan());
 function readyToScan(){const p=panel();return Boolean(p&&rows(p).length)}
-window.__mumeiV3Reader323={scan,isScanning:()=>scanning,readyToScan,version:VERSION};
+window.__mumeiV3Reader323={scan,scanFull,isScanning:()=>scanning,readyToScan,version:VERSION};
 window.__mumeiV3Reader323Ready=true;
 document.dispatchEvent(new Event('mumei-v3-reader-ready'));
 setTimeout(()=>void restoreReturnPosition(),250);
