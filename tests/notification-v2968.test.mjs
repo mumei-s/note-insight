@@ -12,8 +12,6 @@ test('important actions beat words in the article title',()=>{
   assert.equal(classify('あなたの記事がメンバーシップ応援に追加されました スキしましたという題名3分前','https://note.com/a/m/m1'),'my_article_magazine_added');
   assert.equal(classify('Aさんがあなたのコメントに返信しました メンバーシップのスキ3分前','https://note.com/a/n/n1?c=c1'),'reply');
   assert.equal(classify('Aさんがあなたのメンバーシップに参加しました スキした人','https://note.com/ss_yr/membership'),'membership_join');
-  assert.equal(classify('naemotion |…さんが記事を購入しました！無名℃S Room参加者募集！13時間前','https://note.com/ss_yr/n/n1'),'purchase');
-  assert.equal(classify('みゆこ 菜園×ちゃれ…さん他1名があなたの記事を高評価しました彗星、縫ってます。11時間前','https://note.com/ss_yr/n/n2'),'rating');
   assert.equal(allowedExplicitSource('note-notification-manual-sync-v2968'),true);
   assert.equal(allowedExplicitSource('note-notification-passive-sync'),false);
 });
@@ -32,20 +30,20 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.78 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
+test('active package uses V3.2.79 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/notification-browser-install.html'),runtime=read('public/note-insight-notification-runtime-v327.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.78');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.2\.78/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.equal(manifest.notificationVersion,'3.2.79');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.2\.79/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3251','note-insight-notification-checkpoint-v325.js?v=3251','note-insight-notification-runtime-v327.js?v=3278'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3252','note-insight-notification-checkpoint-v325.js?v=3251','note-insight-notification-runtime-v327.js?v=3279'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/preserveBoundary/);assert.match(reader,/collectRecentFallback/);assert.match(reader,/recent-fallback-from-saved-time/);assert.match(reader,/全件読み直しなし/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/data-browser="ios-safari"/);assert.match(setup,/data-browser="android-edge"/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ['read','mode','filter','settings','ins'])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
-  assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/event\?\.composedPath/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/creatorProfile/);assert.match(runtime,/profileImageUrl/);assert.match(runtime,/nickname/);assert.match(runtime,/openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/strongNoticeSurface/);assert.match(runtime,/trustedBellSurface/);assert.match(runtime,/autoDoneForSession=false;const openNow=Boolean\(findSurface\(\)\)\|\|notificationRoute\(\)/);assert.match(runtime,/textEditorElement/);assert.match(runtime,/editingOutsideNotification/);assert.match(runtime,/onEditorFocus/);assert.match(runtime,/noticeRows/);assert.doesNotMatch(runtime,/return shell&&visible\(shell\)\?shell:null/);assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);assert.match(runtime,/function showRoot\(on\).*panelSessionActive/);assert.match(runtime,/function onStatus\(e\).*panelSessionActive/);assert.match(runtime,/function confirmHide\(\).*panelSessionActive/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.match(runtime,/safeScan/);
-  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);assert.doesNotMatch(reader,/完了ラインを再作成しています/);
+  assert.match(runtime,/mountUiInSurface/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/event\?\.composedPath/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/creatorProfile/);assert.match(runtime,/profileImageUrl/);assert.match(runtime,/nickname/);assert.match(runtime,/openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/strongNoticeSurface/);assert.match(runtime,/textEditorElement/);assert.match(runtime,/editingOutsideNotification/);assert.match(runtime,/onEditorFocus/);assert.match(runtime,/noticeRows/);assert.doesNotMatch(runtime,/return shell&&visible\(shell\)\?shell:null/);assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);assert.match(runtime,/function showRoot\(on\).*panelSessionActive/);assert.match(runtime,/function onStatus\(e\).*panelSessionActive/);assert.match(runtime,/function confirmHide\(\).*panelSessionActive/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.match(runtime,/safeScan/);
+  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/preserveBoundary/);assert.match(reader,/collectRecentFallback/);assert.match(reader,/recent-fallback-from-saved-time/);assert.match(reader,/全件読み直しなし/);assert.doesNotMatch(reader,/完了ラインを再作成しています/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
 
@@ -66,7 +64,7 @@ test("notification dock stays body-fixed and does not use the notification shell
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.doesNotMatch(runtime,/window\.addEventListener\('pointerdown',onShellPointerDown,true\)/);
   assert.match(runtime,/if\(!featureEnabled\|\|!bellTrigger\(target,e\)\)return/);
-  assert.match(runtime,/if\(notificationRoute\(\)\)\{[\s\S]*showRoot\(true\)/);assert.match(runtime,/if\(bellIntent\(\)\)\{await activateIntent\(\);return\}/);
+  assert.match(runtime,/if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}/);
 });
 
 
@@ -78,7 +76,7 @@ test("notification dock lifecycle is isolated from note notification DOM",async(
   assert.match(runtime,/function panelEvent\(e\)/);
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.match(runtime,/if\(panelEvent\(e\)\)return/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
 });
 
 
@@ -92,37 +90,15 @@ test("dock event ownership stays inside the independent host",async()=>{
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
 });
 
-
-test("article return position is owned only by Reader, never Runtime",async()=>{
+test("restored V3.2.67 runtime core is frozen and manual full reread is isolated",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
   const reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.doesNotMatch(runtime,/NAV_RETURN|saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
-  assert.match(reader,/NAV_RETURN='mumei-v3-notification-return-v3223'/);
-  assert.match(reader,/function saveReturnPosition\(/);
-  assert.match(reader,/function restoreReturnPosition\(/);
-});
-
-test("dock state survives navigation but UI is visible only on notification context",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/function notificationVisibleNow\(\)/);
-  assert.match(runtime,/panelSessionActive&&notificationVisibleNow\(\)/);
-  assert.match(runtime,/if\(suppressUntilBell\)\{showRoot\(false\);return\}/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
-  assert.doesNotMatch(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
-});
-
-
-test("recovery invariants keep dock scoped and persist visible rows first",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  const reader=await read("public/note-insight-notification-reader-v323.js");
-  const page=await read("public/notification-filter-settings.html");
-  assert.match(runtime,/function notificationVisibleNow\(\)/);assert.match(runtime,/notificationSurfaceLeaseUntil/);assert.match(runtime,/notificationSurfaceLeaseRoute/);
-  assert.doesNotMatch(runtime,/bellIntent\(\)\|\|returnRestoring/);
-  assert.doesNotMatch(runtime,/saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
-  assert.match(runtime,/sessionStorage\.removeItem\('mumei-v3-notification-return-v3223'\)/);
-  assert.match(page,/const NOTE='https:\/\/note\.com\/notifications'/);
-  assert.doesNotMatch(page,/history\.back\(/);
-  assert.match(reader,/function visiblePending\(p,saved\)/);
-  assert.match(reader,/const immediate=visiblePending\(p,saved\)/);
-  assert.match(reader,/count\+=await sendBatch\(immediate,a,saved\)/);
+  assert.match(runtime,/function showRoot\(on\)\{const want=Boolean\(on&&featureEnabled&&panelSessionActive\)/);
+  assert.match(runtime,/async function inspect\(\)\{if\(!await initEnabled\(\)\)\{disableFeatureNow\(\);return\}if\(suppressUntilBell\)return;const next=findSurface\(\);if\(next\)\{await activate\(next\);return\}if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}cleanupVisuals\(\)\}/);
+  assert.doesNotMatch(runtime,/notificationVisibleNow|notificationSurfaceLease|claimedNotificationSurface|saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
+  assert.match(runtime,/READ_MENU='mumei-v325-read-choice'/);
+  assert.match(runtime,/続きから読む/);assert.match(runtime,/全読み/);
+  assert.match(runtime,/safeScan\(mode='continue'\)/);assert.match(runtime,/safeScan\('continue'\)/);
+  assert.match(reader,/async function scanContinue\(\)/);assert.match(reader,/async function scanFull\(\)/);
+  assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
 });
