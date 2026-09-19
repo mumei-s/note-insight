@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.72';
+const VERSION='3.2.73';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1',NAV_RETURN='mumei-v3-notification-return-v3268';
@@ -171,6 +171,16 @@ function onNotificationArticleClick(e){
 }
 function routeLifecycle(){
   intentUntil=0;
+  // A return from the dedicated settings page always terminates on /notifications.
+  // Clear stale article-return state before any route restoration logic can run.
+  const routeQuery=new URLSearchParams(location.search);
+  if(notificationRoute()&&routeQuery.get('mumei_settings_return')==='1'){
+    try{sessionStorage.removeItem(NAV_RETURN);sessionStorage.removeItem('mumei-v3-notification-return-v3223')}catch{}
+    suppressUntilBell=false;panelSessionActive=true;
+    const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('mumei_settings_return');cleanUrl.searchParams.delete('ts');
+    history.replaceState(history.state,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
+    scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return
+  }
   const st=pendingReturn();
   if(st&&returnSourceHere(st)){void resumeArticleReturn();return}
   if(st){panelSessionActive=true;suspendForArticleReturn();return}
@@ -275,6 +285,9 @@ async function creatorProfile(id){
 function settingsRouteRequest(){const q=new URLSearchParams(location.search);return notificationRoute()&&q.get('mumei_open_filter_settings')==='1'}
 async function openSettings(force=false){
   if(!force&&!dockVisible)return false;
+  // Settings navigation is isolated from article-return state. A stale notification
+  // article target must never participate in Settings -> Bell return.
+  try{sessionStorage.removeItem(NAV_RETURN);sessionStorage.removeItem('mumei-v3-notification-return-v3223')}catch{}
   const id=await account();
   if(!id){
     if(force){const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('mumei_open_filter_settings');cleanUrl.searchParams.delete('ts');location.replace(cleanUrl.pathname+cleanUrl.search+cleanUrl.hash)}
