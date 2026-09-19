@@ -79,7 +79,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
     assert.equal(u.origin,'https://raw.githubusercontent.com');
     assert.equal(u.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');
     assert.equal(w.document.querySelector('.toolname').textContent,'本人通知ツール');
-    assert.match(install.textContent,/最新版をインストール \/ 更新/);
+    assert.match(install.textContent,/本人通知をインストール \/ 更新/);
     assert.match(html,/mumei-installer-boundary/);
     assert.match(html,/insight-release\.json/);
     assert.doesNotMatch(html,/本人通知 V\d|V3\.2\.84/);
@@ -95,7 +95,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
 });
 
 test('manual full-read stays isolated from the 05:48 runtime core',async()=>{
-  const full=await read('public/note-insight-notification-manual-full-v3284.js');
+  const full=await read('note-insight-notification-manual-full-v3284.js');
   assert.match(v3,/note-insight-notification-manual-full-v3284\.js\?v=3284/);
   assert.match(full,/続きから読む/);assert.match(full,/全読み/);
   assert.match(full,/function isManual\(\)/);
