@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.70",
+  "notificationVersion": "3.2.71",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T20:02:00+09:00",
+  "releasedAt": "2026-09-19T20:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "明示的に🔔を開いたセッションだけ通知面判定を緩和し、noteの実通知DOMを再取得できるよう修正。🔔を押すたび自動読込済み状態を解除し、DM等の通常画面では緩和判定を使わない。"
+  "note": "通知DOMの汎用行フォールバックで未宣言変数により読込が停止する不具合を修正。読込シェルのみ変更し、他機能は分離。"
 }
