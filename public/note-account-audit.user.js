@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name note こあく まこ調査
 // @namespace https://github.com/mumei-s/note-insight
-// @version 2.3.0
+// @version 2.4.0
 // @description 公開コメント・返信・スキ・フォロー関係とフォロワー構成を確認。本人同定は公開明示だけを根拠にします。
 // @match https://note.com/*
 // @updateURL https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit.user.js
@@ -10,7 +10,7 @@
 // @run-at document-start
 // ==/UserScript==
 (function(){
-'use strict';window.__noteAccountAuditV1=1;window.__noteAccountAuditCanonical='2.3.0';
+'use strict';window.__noteAccountAuditV1=1;window.__noteAccountAuditCanonical='2.4.0';
 var P=['本垢','本アカ','メイン垢','メインアカ','サブ垢','サブアカ','別垢','別アカ','前垢','旧垢','前のアカウント','以前のアカウント','アカウント作り直','転生','複垢'];
 var SNAP='note-account-audit:snapshots',OLD_NET='note-account-audit:all-followers:v18:koakumako',DBN='note-account-audit-v19-koakumako',last=null;
 var PRESET_TARGET='koakumako',AUTO_KEY='note-account-audit:auto:koakumako:canonical:v221';
@@ -84,62 +84,80 @@ async function v2FollowPage(id,page,per){
 }
 async function followerNetwork(followers,targetFollowings,set){
  var db=await idbOpen();await migrateOldNet(db);
- var all=followers.slice(),tf=new Set(targetFollowings.map(function(x){return x.id})),stopped=false,stopReason='',next=0,lastUi=0;
+ var all=followers.slice(),tf=new Set(targetFollowings.map(function(x){return x.id})),stopped=false,stopReason='',lastUi=0,pageOps=0,profileOps=0,writeLock=Promise.resolve();
  var existing=await idbAll(db,'people'),pm=new Map(existing.map(function(x){return[x.id,x]})),hubRows=await idbAll(db,'hubs'),hm=new Map(hubRows.map(function(x){
   if(x.followers&&(!x.examples||!x.examples.length)){x.examples=x.followers.slice(0,5);x.count=Math.max(Number(x.count||0),x.followers.length);delete x.followers}
-  return[x.id,x]
+  if(!x.examples)x.examples=[];return[x.id,x]
  }));
- function savePage(ps,touched){return new Promise(function(resolve,reject){
-  var t=db.transaction(['people','hubs'],'readwrite'),po=t.objectStore('people'),ho=t.objectStore('hubs');po.put(ps);for(var i=0;i<touched.length;i++)ho.put(touched[i]);
-  t.oncomplete=function(){resolve()};t.onerror=function(){reject(t.error)}
- })}
- function doneCount(){var n=0;pm.forEach(function(x){if(x.done&&!x.error)n++});return n}
- function ui(fid,extra){var now=Date.now();if(now-lastUi<180)return;lastUi=now;set('⚡ SPEED '+doneCount()+'/'+all.length+'｜8並列｜@'+fid+(extra?'｜'+extra:''))}
- async function one(f){
-  if(stopped)return;
-  var ps=pm.get(f.id)||{id:f.id,nextPage:1,done:false,profile:null,read:0,per:0};
-  if(ps.done&&!ps.error)return;
+ function savePage(ps,touched){
+  writeLock=writeLock.then(function(){return new Promise(function(resolve,reject){
+   var t=db.transaction(['people','hubs'],'readwrite'),po=t.objectStore('people'),ho=t.objectStore('hubs');po.put(ps);for(var i=0;i<touched.length;i++)ho.put(touched[i]);
+   t.oncomplete=function(){resolve()};t.onerror=function(){reject(t.error)}
+  })});return writeLock
+ }
+ function counts(){var prof=0,done=0,started=0;pm.forEach(function(x){started++;if(x.profile)prof++;if(x.done&&!x.error)done++});return{prof:prof,done:done,started:started}}
+ function ui(extra){var now=Date.now();if(now-lastUi<140)return;lastUi=now;var c=counts();set('⚡ AUTO '+c.done+'/'+all.length+'完了｜概要 '+c.prof+'/'+all.length+'｜今 '+pageOps+'頁'+(extra?'｜'+extra:''))}
+ async function ensureProfile(f){
+  var ps=pm.get(f.id)||{id:f.id,nextPage:1,done:false,profile:null,read:0,per:0,error:''};pm.set(f.id,ps);
+  if(ps.profile)return;
   try{
-   if(!ps.profile){
-    var fp=await profile(f.id);
-    ps.profile={key:fp.key,notes:fp.notes,bioThin:(!fp.bio||fp.bio.length<4),mass:(fp.followings>=300&&fp.followings>=Math.max(500,fp.followers*10)),followings:fp.followings,followers:fp.followers};
-    ps.error='';await idbPut(db,'people',ps);pm.set(f.id,ps);
+   var fp=await profile(f.id);
+   ps.profile={key:fp.key,notes:fp.notes,bioThin:(!fp.bio||fp.bio.length<4),mass:(fp.followings>=300&&fp.followings>=Math.max(500,fp.followers*10)),followings:fp.followings,followers:fp.followers};
+   ps.error='';profileOps++;await idbPut(db,'people',ps);ui('概要取得中');
+  }catch(e){
+   var msg=String(e&&e.message||e);ps.error=msg;await idbPut(db,'people',ps);
+   if(/403|429/.test(msg)){stopped=true;stopReason=msg}
+  }
+ }
+ async function pool(items,limit,fn){
+  var ix=0;
+  async function w(){while(!stopped){var i=ix++;if(i>=items.length)return;await fn(items[i])}}
+  var ws=[];for(var k=0;k<limit;k++)ws.push(w());await Promise.all(ws)
+ }
+ // Phase 1: grab every follower profile first so overview reaches 1000 quickly.
+ var missing=all.filter(function(f){var p=pm.get(f.id);return !p||!p.profile});
+ if(missing.length){set('⚡ 全員概要を先に取得｜残り '+missing.length+'人｜20並列');await pool(missing,20,ensureProfile)}
+ if(stopped){await writeLock;var cc=counts();return finish(cc)}
+ // Phase 2: breadth-first. One page per follower per round, so one huge account cannot block progress.
+ async function onePage(f){
+  if(stopped)return;
+  var ps=pm.get(f.id);if(!ps||!ps.profile||ps.done&&!ps.error)return;
+  try{
+   var requested=ps.per||100,ls=await v2FollowPage(f.id,ps.nextPage,requested);
+   if(!ps.per){ps.per=(ls.length>20?100:20)}
+   var touchedMap=new Map;
+   for(var z=0;z<ls.length;z++){
+    var qx=ls[z];if(!qx||!qx.id||qx.id===PRESET_TARGET)continue;
+    var h=hm.get(qx.id)||{id:qx.id,name:qx.name||qx.id,image:qx.image||'',count:0,examples:[],targetFollows:false};
+    h.count=Number(h.count||0)+1;
+    if(h.examples.length<5&&h.examples.indexOf(f.id)<0)h.examples.push(f.id);
+    h.targetFollows=tf.has(qx.id);hm.set(qx.id,h);touchedMap.set(qx.id,h);
    }
-   while(!ps.done&&!stopped){
-    var requested=ps.per||100;
-    ui(f.id,'p'+ps.nextPage+' / '+ps.read+'件');
-    var ls=await v2FollowPage(f.id,ps.nextPage,requested);
-    if(!ps.per){
-      ps.per=(ls.length>20?100:20);
-      if(ps.per===20&&requested!==20&&ps.nextPage>1){ps.nextPage=1;ps.read=0;continue}
-    }
-    var touchedMap=new Map;
-    for(var z=0;z<ls.length;z++){
-     var qx=ls[z];if(!qx||!qx.id||qx.id===PRESET_TARGET)continue;
-     var h=hm.get(qx.id)||{id:qx.id,name:qx.name||qx.id,image:qx.image||'',count:0,examples:[],targetFollows:false};
-     h.count=Number(h.count||0)+1;
-     if(!h.examples)h.examples=[];
-     if(h.examples.length<5&&h.examples.indexOf(f.id)<0)h.examples.push(f.id);
-     h.targetFollows=tf.has(qx.id);hm.set(qx.id,h);touchedMap.set(qx.id,h);
-    }
-    ps.read+=ls.length;ps.nextPage++;if(!ls.length||ls.length<ps.per)ps.done=true;ps.error='';pm.set(f.id,ps);
-    await savePage(ps,Array.from(touchedMap.values()));
-    if(!ps.done)await wait(8);
-   }
+   ps.read=Number(ps.read||0)+ls.length;ps.nextPage=Number(ps.nextPage||1)+1;
+   if(!ls.length||ls.length<(ps.per||20))ps.done=true;
+   ps.error='';pm.set(f.id,ps);pageOps++;await savePage(ps,Array.from(touchedMap.values()));ui('@'+f.id+' '+ps.read+'件');
   }catch(e){
    var msg=String(e&&e.message||e);ps.error=msg;pm.set(f.id,ps);await idbPut(db,'people',ps);
    if(/403|429/.test(msg)){stopped=true;stopReason=msg}
   }
  }
- async function worker(){
-  while(!stopped){var i=next++;if(i>=all.length)return;var f=all[i],ps=pm.get(f.id);if(ps&&ps.done&&!ps.error)continue;await one(f);if(!stopped)await wait(12)}
+ var round=0;
+ while(!stopped){
+  var pending=all.filter(function(f){var p=pm.get(f.id);return p&&p.profile&&!p.done});
+  if(!pending.length)break;
+  round++;set('⚡ 深掘りROUND '+round+'｜残り '+pending.length+'人｜20並列');
+  await pool(pending,20,onePage);
+  await writeLock;
+  if(!stopped)await wait(40);
  }
- set('⚡ SPEED準備｜保存済み '+doneCount()+'/'+all.length+'｜8並列');
- await Promise.all([worker(),worker(),worker(),worker(),worker(),worker(),worker(),worker()]);
- var people=Array.from(pm.values()),ids=new Set(all.map(function(x){return x.id})),rows=people.filter(function(x){return ids.has(x.id)}),prof=rows.filter(function(x){return x.profile}).map(function(x){return x.profile}),doneRows=rows.filter(function(x){return x.done&&!x.error});
- var known=prof.filter(function(x){return x.notes>=0}),low=known.filter(function(x){return x.notes<=1}).length,empty=prof.filter(function(x){return x.bioThin}).length,mass=prof.filter(function(x){return x.mass}).length;
- var hubs=Array.from(hm.values()).filter(function(x){return Number(x.count||0)>=2}).sort(function(a,b){return Number(b.count||0)-Number(a.count||0)}).slice(0,200);
- return{sample:all.length,scanned:doneRows.length,started:rows.length,total:all.length,completed:doneRows.length>=all.length,stopped:stopped,stopReason:stopReason,hubs:hubs,quality:{sample:prof.length,low:pct(low,known.length),empty:pct(empty,prof.length),mass:pct(mass,prof.length)}}
+ await writeLock;
+ return finish(counts());
+ function finish(c){
+  var people=Array.from(pm.values()),ids=new Set(all.map(function(x){return x.id})),rows=people.filter(function(x){return ids.has(x.id)}),prof=rows.filter(function(x){return x.profile}).map(function(x){return x.profile}),doneRows=rows.filter(function(x){return x.done&&!x.error});
+  var known=prof.filter(function(x){return x.notes>=0}),low=known.filter(function(x){return x.notes<=1}).length,empty=prof.filter(function(x){return x.bioThin}).length,mass=prof.filter(function(x){return x.mass}).length;
+  var hubs=Array.from(hm.values()).filter(function(x){return Number(x.count||0)>=2}).sort(function(a,b){return Number(b.count||0)-Number(a.count||0)}).slice(0,200);
+  return{sample:all.length,scanned:doneRows.length,profiled:prof.length,started:rows.length,total:all.length,pagesThisRun:pageOps,completed:doneRows.length>=all.length,stopped:stopped,stopReason:stopReason,hubs:hubs,quality:{sample:prof.length,low:pct(low,known.length),empty:pct(empty,prof.length),mass:pct(mass,prof.length)}}
+ }
 }
 function add(m,p,k,ak,body){if(!p||!p.id)return;var q=m.get(p.id)||{id:p.id,name:p.name||p.id,image:p.image||'',comments:0,replies:0,likes:0,follower:false,following:false,arts:new Set,phrases:[]};if(k==='comment')q.comments++;if(k==='reply')q.replies++;if(k==='like')q.likes++;if(k==='follower')q.follower=true;if(k==='following')q.following=true;if(ak)q.arts.add(ak);P.forEach(function(x){if(body&&body.indexOf(x)>=0&&q.phrases.indexOf(x)<0)q.phrases.push(x)});m.set(p.id,q)}function score(q){return q.comments*4+q.replies*3+Math.min(q.likes,12)+(q.follower?1:0)+(q.following?3:0)+Math.min(q.arts.size*2,10)+q.phrases.length*3}
 async function quality(f,set){var s=f.slice(0,Math.min(80,f.length)),done=0,res=[];for(var i=0;i<s.length;i+=4){var chunk=s.slice(i,i+4),got=await Promise.all(chunk.map(async function(x){try{return await profile(x.id)}catch(e){return null}}));res=res.concat(got.filter(Boolean));done=res.length;set('フォロワー構成を確認中… '+done+'/'+s.length);await wait(40)}var known=res.filter(function(x){return x.notes>=0}),low=known.filter(function(x){return x.notes<=1}).length,empty=res.filter(function(x){return !x.bio||x.bio.length<4}).length,mass=res.filter(function(x){return x.followings>=300&&x.followings>=Math.max(500,x.followers*10)}).length;return{sample:res.length,low:pct(low,known.length),empty:pct(empty,res.length),mass:pct(mass,res.length)}}
@@ -222,7 +240,7 @@ function render(r){
  card('まこ→スキ',lg.articles+'件',lg.creators+'人へ')+
  card('フォロワーへスキ',lg.followerArticles+'件',lg.followerCreators+'人')+
  card('相互スキ',lg.mutualCreators+'人','双方の公開スキ')+
- card('全フォロワー走査',network.scanned+'/'+network.total,(network.completed?'完了':'保存しながら継続'))+
+ card('全員概要',String(network.profiled||network.scanned)+'/'+network.total,'深掘り '+network.scanned+'/'+network.total)+
  card('販売型一致',market.score+'/100',market.label)+
  '</div>'+
  '<div class="naa-tabs">'+
@@ -243,7 +261,7 @@ function render(r){
  '<details><summary>相互スキだけ表示（'+lg.mutualCreators+'人）</summary>'+rows(lg.mutual,function(x){return'<div class="naa-compact"><span><b>@'+esc(x.id)+'</b><small>まこ→ '+x.count+'件 ／ 相手→まこ '+x.incoming+'件'+(x.follower?' ／ フォロワー':'')+'</small></span></div>'},'相互スキなし')+'</details>'+
  '</section>'+
  '<section class="naa-pane" data-pane="net">'+
- '<h3>🕸 フォロワー全員の関係網</h3><div class="naa-mini"><b>'+network.scanned+'/'+network.total+'人</b> 完了'+(network.completed?'｜全員完了':'｜途中保存・自動再開')+'</div>'+
+ '<h3>🕸 フォロワー全員の関係網</h3><div class="naa-mini">概要 <b>'+(network.profiled||network.scanned)+'/'+network.total+'</b> ／ 深掘り完了 <b>'+network.scanned+'/'+network.total+'</b> ／ 今回 '+(network.pagesThisRun||0)+'頁'+(network.completed?'｜全員完了':'｜全自動継続')+'</div>'+
  '<h4>共通フォロー先 TOP</h4>'+
  rows((network.hubs||[]).slice(0,25),function(x){return'<div class="naa-compact"><span><b>'+esc(x.name||x.id)+' @'+esc(x.id)+'</b><small>共通 '+x.count+'/'+network.scanned+'人'+(x.targetFollows?'｜まこ本人もフォロー':'')+'</small></span><a target="_blank" href="https://note.com/'+encodeURIComponent(x.id)+'">開く</a></div>'},'共通フォロー先なし')+
  '<details><summary>フォロワー側の相互フォロー型プロフィール（'+pat.strong+'人）</summary>'+
@@ -273,7 +291,7 @@ function autoSchedule(ms,reason){
  status('⏳ 自動待機 '+sec+'秒'+(reason?'｜'+reason:''));
  NAA_AUTO.timer=setTimeout(function(){NAA_AUTO.timer=null;void run()},ms);
 }
-async function run(){if(NAA_AUTO.running)return;NAA_AUTO.running=true;NAA_AUTO.cycles++;try{var id=PRESET_TARGET;var extra=PRESET_ARTS.map(artUrl).filter(Boolean);status('プロフィール取得中…');var p=await profile(id);status('記事取得中…');var arts=await articles(id,extra),m=new Map,all=[],external=rawExternal(p.raw).map(function(x){return Object.assign({source:'プロフィール公開情報'},x)}).concat(urlsInText(p.bio).map(function(x){return Object.assign({source:'プロフィール本文'},x)}));for(var i=0;i<arts.length;i++){var art=arts[i];status('外部リンク '+(i+1)+'/'+arts.length+'｜'+art.title);try{external=external.concat(await articleExternal(art))}catch(e){}status('コメント '+(i+1)+'/'+arts.length+'｜'+art.title);try{var cs=await comments(art.key);cs.forEach(function(x){x.art=art.key;all.push(x);if(x.id&&x.id!==id)add(m,{id:x.id,name:x.name,image:x.image},x.parent?'reply':'comment',art.key,x.body)})}catch(e){}status('スキ '+(i+1)+'/'+arts.length+'｜'+art.title);try{var ls=await likers(art.key);ls.forEach(function(x){if(x.id!==id)add(m,x,'like',art.key,'')})}catch(e){}await wait(35)}status('フォロー関係取得中…');var rr=await Promise.all([rel(p,'followers'),rel(p,'followings')]),followers=rr[0],followings=rr[1];followers.forEach(function(x){if(x.id!==id)add(m,x,'follower','','')});followings.forEach(function(x){if(x.id!==id)add(m,x,'following','','')});status('まこの公開スキ履歴を確認中…');var liked=await targetLikedArticles(id,status);status('フォロワー関係網を確認中…');var network=await followerNetwork(followers,followings,status);status('フォロワー構成集計中…');var q=network.quality||{sample:0,low:0,empty:0,mass:0},g=snap(id,p.followers),an=anomaly(q,g),direct=[],third=[];all.forEach(function(x){urlsInText(x.body).forEach(function(u){external.push(Object.assign({source:'コメント:'+x.art},u))});var hits=P.filter(function(z){return x.body.indexOf(z)>=0});if(hits.length){var z={id:x.id,name:x.name,body:x.body,hits:hits,art:x.art};if(x.id===id)direct.push(z);else third.push(z)}});var candidates=Array.from(m.values()).map(function(x){return Object.assign({},x,{score:score(x),artCount:x.arts.size})}).sort(function(x,y){return y.score-x.score});var likeGraph=analyzeLikeGraph(liked.items,followers,candidates),pattern=await followerPatternSummary(),market=marketMatch(q,g,p,network);if(likeGraph.followerCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('まこ→フォロワーへの公開スキ '+likeGraph.followerCreators+'人')}if(likeGraph.mutualCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('相互スキ '+likeGraph.mutualCreators+'人')}market.label=market.score>=65?'販売型運用との一致が複数':market.score>=40?'販売型運用と一部一致':market.score>=20?'弱い一致':'一致材料は少ない';external=dedupExternal(external);var pc=publicCandidates(direct,third,external);render({p:p,q:q,g:g,an:an,direct:direct,third:third,candidates:candidates,external:external,searches:searchLinks(p.id,p.name),network:network,market:market,publicCandidates:pc,likeGraph:likeGraph,pattern:pattern});if(network.completed){status('✅ 全自動完了｜まこスキ '+likeGraph.articles+'件｜相互スキ '+likeGraph.mutualCreators+'人｜フォロワー '+network.scanned+'/'+network.total+'人')}else{var d=network.stopped?60000:2500;autoSchedule(d,network.stopped?'アクセス制限回避後に自動再開':'続きから自動再開')}}catch(e){var msg=String(e&&e.message||e);status('⚠ '+msg,1);autoSchedule(/403|429/.test(msg)?60000:15000,'エラー後に自動再開')}finally{NAA_AUTO.running=false}}
-function install(){var old=document.getElementById('note-account-audit-v1');if(old)old.remove();var st=document.createElement('style');st.textContent='#note-account-audit-v1{position:fixed;right:8px;bottom:10px;z-index:2147483640;font-family:system-ui;color:#eef7ff}#naa-open{height:42px;padding:0 13px;border:1px solid #5bd8ff;border-radius:999px;background:#07131d;color:#fff;font-weight:900}#naa-panel{display:none;width:min(520px,calc(100vw - 12px));height:min(74vh,680px);overflow:hidden;margin-bottom:6px;padding:9px;border:1px solid #355b70;border-radius:14px;background:#071019;box-shadow:0 18px 40px #000b}.naa-btn{display:none}.naa-auto{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;padding:7px 9px;border:1px solid #397b62;border-radius:8px;background:#0c2b21}.naa-auto b{font-size:11px}.naa-auto span{font-size:8px;color:#a9cdbd}#naa-status{margin:5px 0;padding:5px 7px;border:1px solid #345;border-radius:7px;background:#0b1821;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#naa-result{height:calc(100% - 86px);overflow:auto;padding-right:2px}.naa-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:5px 0}.naa-card{padding:7px;border:1px solid #29495c;border-radius:9px;background:#0b1720}.naa-card small,.naa-card span{display:block;color:#98afbc;font-size:8px}.naa-card b{display:block;font-size:15px;line-height:1.2;margin:2px 0}.naa-tabs{position:sticky;top:0;z-index:3;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:5px 0;background:#071019}.naa-tabs button{height:31px;border:1px solid #29495c;border-radius:7px;background:#0b1720;color:#a8bdc9;font-size:9px;font-weight:800}.naa-tabs button.on{background:#0b5178;color:#fff;border-color:#52d6ff}.naa-pane{display:none}.naa-pane.on{display:block}.naa-pane h3{font-size:12px;margin:9px 0 4px;border-top:1px solid #233b49;padding-top:7px}.naa-pane h4{font-size:10px;margin:8px 0 3px}.naa-note,.naa-mini,.naa-ev,.naa-empty{padding:6px;border:1px solid #29404e;border-radius:7px;background:#0a151d;font-size:9px;line-height:1.45}.naa-mini b{font-size:12px}.naa-compact{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 7px;border-bottom:1px solid #1f3440}.naa-compact b{font-size:10px}.naa-compact small{display:block;color:#93aab7;font-size:8px;line-height:1.35}.naa-compact a{color:#7ce2ff;font-size:9px;text-decoration:none}.naa-score{display:flex;align-items:end;gap:8px;padding:7px;border:1px solid #36566a;border-radius:8px;background:#0b1821}.naa-score b{font-size:22px}.naa-score span{font-size:10px;padding-bottom:3px}details{margin-top:6px;border:1px solid #243b49;border-radius:8px;padding:5px}summary{font-size:9px;font-weight:800;cursor:pointer}';document.head.appendChild(st);var r=document.createElement('div');r.id='note-account-audit-v1';var cur=(location.pathname.split('/').filter(Boolean)[0]||'');r.innerHTML='<div id="naa-panel"><b>🔎 こあく まこ 検証ダッシュボード v2.3</b><div class="naa-ev"><b>対象 @'+esc(PRESET_TARGET)+'</b><br>スキ・フォロワー網・購入型・外部リンクを横断検証。</div><div class="naa-auto"><b>⚡ 全自動</b><span>完了まで自動継続・制限時も自動再開</span></div><div id="naa-status">自動開始待ち</div><small>公開根拠と異常指標を分けて表示。</small><div id="naa-result"></div></div><button id="naa-open" >🔎 こあく まこ調査</button>';document.body.appendChild(r);document.getElementById('naa-open').onclick=function(){var p=document.getElementById('naa-panel');p.style.display=p.style.display==='block'?'none':'block'};var p=document.getElementById('naa-panel');p.style.display='block';setTimeout(function(){void run()},650)}
+async function run(){if(NAA_AUTO.running)return;NAA_AUTO.running=true;NAA_AUTO.cycles++;try{var id=PRESET_TARGET;var extra=PRESET_ARTS.map(artUrl).filter(Boolean);status('プロフィール取得中…');var p=await profile(id);status('記事取得中…');var arts=await articles(id,extra),m=new Map,all=[],external=rawExternal(p.raw).map(function(x){return Object.assign({source:'プロフィール公開情報'},x)}).concat(urlsInText(p.bio).map(function(x){return Object.assign({source:'プロフィール本文'},x)}));for(var i=0;i<arts.length;i++){var art=arts[i];status('外部リンク '+(i+1)+'/'+arts.length+'｜'+art.title);try{external=external.concat(await articleExternal(art))}catch(e){}status('コメント '+(i+1)+'/'+arts.length+'｜'+art.title);try{var cs=await comments(art.key);cs.forEach(function(x){x.art=art.key;all.push(x);if(x.id&&x.id!==id)add(m,{id:x.id,name:x.name,image:x.image},x.parent?'reply':'comment',art.key,x.body)})}catch(e){}status('スキ '+(i+1)+'/'+arts.length+'｜'+art.title);try{var ls=await likers(art.key);ls.forEach(function(x){if(x.id!==id)add(m,x,'like',art.key,'')})}catch(e){}await wait(35)}status('フォロー関係取得中…');var rr=await Promise.all([rel(p,'followers'),rel(p,'followings')]),followers=rr[0],followings=rr[1];followers.forEach(function(x){if(x.id!==id)add(m,x,'follower','','')});followings.forEach(function(x){if(x.id!==id)add(m,x,'following','','')});status('まこの公開スキ履歴を確認中…');var liked=await targetLikedArticles(id,status);status('フォロワー関係網を確認中…');var network=await followerNetwork(followers,followings,status);status('フォロワー構成集計中…');var q=network.quality||{sample:0,low:0,empty:0,mass:0},g=snap(id,p.followers),an=anomaly(q,g),direct=[],third=[];all.forEach(function(x){urlsInText(x.body).forEach(function(u){external.push(Object.assign({source:'コメント:'+x.art},u))});var hits=P.filter(function(z){return x.body.indexOf(z)>=0});if(hits.length){var z={id:x.id,name:x.name,body:x.body,hits:hits,art:x.art};if(x.id===id)direct.push(z);else third.push(z)}});var candidates=Array.from(m.values()).map(function(x){return Object.assign({},x,{score:score(x),artCount:x.arts.size})}).sort(function(x,y){return y.score-x.score});var likeGraph=analyzeLikeGraph(liked.items,followers,candidates),pattern=await followerPatternSummary(),market=marketMatch(q,g,p,network);if(likeGraph.followerCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('まこ→フォロワーへの公開スキ '+likeGraph.followerCreators+'人')}if(likeGraph.mutualCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('相互スキ '+likeGraph.mutualCreators+'人')}market.label=market.score>=65?'販売型運用との一致が複数':market.score>=40?'販売型運用と一部一致':market.score>=20?'弱い一致':'一致材料は少ない';external=dedupExternal(external);var pc=publicCandidates(direct,third,external);render({p:p,q:q,g:g,an:an,direct:direct,third:third,candidates:candidates,external:external,searches:searchLinks(p.id,p.name),network:network,market:market,publicCandidates:pc,likeGraph:likeGraph,pattern:pattern});if(network.completed){status('✅ 全自動完了｜まこスキ '+likeGraph.articles+'件｜相互スキ '+likeGraph.mutualCreators+'人｜フォロワー '+network.scanned+'/'+network.total+'人')}else{var d=network.stopped?60000:1200;autoSchedule(d,network.stopped?'アクセス制限回避後に自動再開':'続きから自動再開')}}catch(e){var msg=String(e&&e.message||e);status('⚠ '+msg,1);autoSchedule(/403|429/.test(msg)?60000:15000,'エラー後に自動再開')}finally{NAA_AUTO.running=false}}
+function install(){var old=document.getElementById('note-account-audit-v1');if(old)old.remove();var st=document.createElement('style');st.textContent='#note-account-audit-v1{position:fixed;right:8px;bottom:10px;z-index:2147483640;font-family:system-ui;color:#eef7ff}#naa-open{height:42px;padding:0 13px;border:1px solid #5bd8ff;border-radius:999px;background:#07131d;color:#fff;font-weight:900}#naa-panel{display:none;width:min(520px,calc(100vw - 12px));height:min(74vh,680px);overflow:hidden;margin-bottom:6px;padding:9px;border:1px solid #355b70;border-radius:14px;background:#071019;box-shadow:0 18px 40px #000b}.naa-btn{display:none}.naa-auto{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;padding:7px 9px;border:1px solid #397b62;border-radius:8px;background:#0c2b21}.naa-auto b{font-size:11px}.naa-auto span{font-size:8px;color:#a9cdbd}#naa-status{margin:5px 0;padding:5px 7px;border:1px solid #345;border-radius:7px;background:#0b1821;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#naa-result{height:calc(100% - 86px);overflow:auto;padding-right:2px}.naa-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:5px 0}.naa-card{padding:7px;border:1px solid #29495c;border-radius:9px;background:#0b1720}.naa-card small,.naa-card span{display:block;color:#98afbc;font-size:8px}.naa-card b{display:block;font-size:15px;line-height:1.2;margin:2px 0}.naa-tabs{position:sticky;top:0;z-index:3;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:5px 0;background:#071019}.naa-tabs button{height:31px;border:1px solid #29495c;border-radius:7px;background:#0b1720;color:#a8bdc9;font-size:9px;font-weight:800}.naa-tabs button.on{background:#0b5178;color:#fff;border-color:#52d6ff}.naa-pane{display:none}.naa-pane.on{display:block}.naa-pane h3{font-size:12px;margin:9px 0 4px;border-top:1px solid #233b49;padding-top:7px}.naa-pane h4{font-size:10px;margin:8px 0 3px}.naa-note,.naa-mini,.naa-ev,.naa-empty{padding:6px;border:1px solid #29404e;border-radius:7px;background:#0a151d;font-size:9px;line-height:1.45}.naa-mini b{font-size:12px}.naa-compact{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 7px;border-bottom:1px solid #1f3440}.naa-compact b{font-size:10px}.naa-compact small{display:block;color:#93aab7;font-size:8px;line-height:1.35}.naa-compact a{color:#7ce2ff;font-size:9px;text-decoration:none}.naa-score{display:flex;align-items:end;gap:8px;padding:7px;border:1px solid #36566a;border-radius:8px;background:#0b1821}.naa-score b{font-size:22px}.naa-score span{font-size:10px;padding-bottom:3px}details{margin-top:6px;border:1px solid #243b49;border-radius:8px;padding:5px}summary{font-size:9px;font-weight:800;cursor:pointer}';document.head.appendChild(st);var r=document.createElement('div');r.id='note-account-audit-v1';var cur=(location.pathname.split('/').filter(Boolean)[0]||'');r.innerHTML='<div id="naa-panel"><b>🔎 こあく まこ 検証ダッシュボード v2.4</b><div class="naa-ev"><b>対象 @'+esc(PRESET_TARGET)+'</b><br>スキ・フォロワー網・購入型・外部リンクを横断検証。</div><div class="naa-auto"><b>⚡ 全自動</b><span>完了まで自動継続・制限時も自動再開</span></div><div id="naa-status">自動開始待ち</div><small>公開根拠と異常指標を分けて表示。</small><div id="naa-result"></div></div><button id="naa-open" >🔎 こあく まこ調査</button>';document.body.appendChild(r);document.getElementById('naa-open').onclick=function(){var p=document.getElementById('naa-panel');p.style.display=p.style.display==='block'?'none':'block'};var p=document.getElementById('naa-panel');p.style.display='block';setTimeout(function(){void run()},650)}
 if(document.body)install();else addEventListener('DOMContentLoaded',install,{once:true});
 })();
