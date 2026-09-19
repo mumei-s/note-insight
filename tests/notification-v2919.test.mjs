@@ -94,15 +94,15 @@ test("dock event ownership stays inside the independent host",async()=>{
   assert.match(runtime,/HOST='mumei-v325-dock-host'/);
   assert.match(runtime,/function independentDockHost\(\)/);
   assert.match(runtime,/function panelEvent\(e\)/);
-  assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);
+  assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','pointerup','touchend'\]\)/);assert.match(runtime,/r\.addEventListener\('click'/);
   assert.doesNotMatch(runtime,/window\.addEventListener\('touchstart',onSettingsPressStart,true\)/);
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
 });
 
-test("restored V3.2.67 runtime core is frozen and manual full reread is isolated",async()=>{
+test("strict notification context owns dock visibility and manual full reread stays isolated",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
   const reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(runtime,/function showRoot\(on\)\{const want=Boolean\(on&&featureEnabled&&panelSessionActive\)/);
+  assert.match(runtime,/function showRoot\(on\)\{const want=Boolean\(on&&featureEnabled&&strictNotificationContext\(\)\)/);
   assert.match(runtime,/async function inspect\(\)\{if\(!await initEnabled\(\)\)\{disableFeatureNow\(\);return\}if\(suppressUntilBell\)return;const next=findSurface\(\);if\(next\)\{await activate\(next\);return\}if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}cleanupVisuals\(\)\}/);
   assert.doesNotMatch(runtime,/notificationVisibleNow|notificationSurfaceLease|claimedNotificationSurface|saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
   assert.match(runtime,/READ_MENU='mumei-v325-read-choice'/);
