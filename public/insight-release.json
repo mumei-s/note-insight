@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.79",
+  "notificationVersion": "3.2.80",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T21:45:00+09:00",
+  "releasedAt": "2026-09-19T22:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.79。表示・設定・遷移Runtimeを正常稼働していたV3.2.67へ復元。読込UIのみ別レイヤーで「続きから読む / 全読み」を追加し、自動は続きのみ。"
+  "note": "本人通知V3.2.80。復元Runtimeを維持したまま、操作実行をclickへ統一して背面タップ貫通を防止。自動読込は実スキャン完了前にdone扱いしないよう修正し、失敗時に再試行。"
 }
