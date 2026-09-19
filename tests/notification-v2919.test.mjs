@@ -87,3 +87,14 @@ test("installed newer than published latest is still current",async()=>{
   assert.match(ui,/versionDiffers\(notificationInstalled,notificationLatest\)/);
   assert.match(ui,/✓ 最新版/);
 });
+
+
+test("dock event ownership stays inside the independent host",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(runtime,/HOST='mumei-v325-dock-host'/);
+  assert.match(runtime,/function independentDockHost\(\)/);
+  assert.match(runtime,/function panelEvent\(e\)/);
+  assert.match(runtime,/for\(const type of\['pointerdown','mousedown','touchstart','click'\]\)/);
+  assert.doesNotMatch(runtime,/window\.addEventListener\('touchstart',onSettingsPressStart,true\)/);
+  assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
+});
