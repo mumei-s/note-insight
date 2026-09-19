@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.87",
+  "notificationVersion": "3.2.88",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T03:05:00+09:00",
+  "releasedAt": "2026-09-20T04:05:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.87。🔔クリックで明示的な通知セッションを開始し、noteのReact DOM差し替えや一時的なsurface未検出では5パネルを消さない。実クリックで通知外へ出る・別pathnameへ遷移・🔔再クリック時のみ終了。自動読込は実scan完了後だけdone化し、失敗時再試行。読み取りON/OFFと手動全読みは維持。"
+  "note": "本人通知V3.2.88。更新判定を端末に保存された見かけの版ではなく、note側で実際に起動したRuntime版で確認。INSIGHTを開いただけでは最新版扱いにしない。V3.2.87の通知セッション維持・自動再試行・手動全読みを継承。"
 }
