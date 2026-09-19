@@ -134,7 +134,6 @@ const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')
   }catch{}
   window.__mumeiNotificationReturnDone=true
 })()
-})()
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
   if(!t)return;
