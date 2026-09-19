@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.77';
+const VERSION='3.2.78';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',READ_MENU='mumei-v325-read-choice',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
@@ -114,11 +114,18 @@ function independentDockHost(){let host=document.getElementById(HOST);if(host)re
 function mountUiInSurface(){const host=independentDockHost();const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
 function markSurface(next){if(shell&&shell!==next)shell.removeAttribute('data-mumei-notice-shell-v3');shell=next;if(shell)shell.setAttribute('data-mumei-notice-shell-v3','1')}
 function panelEvent(e){const path=e?.composedPath?.()||[];return path.some(node=>node instanceof Element&&(node.id===HOST||node.id===ROOT||node.id===SETTINGS||node.id===READ_MENU))}
+function claimedNotificationSurface(){
+  const el=document.querySelector('[data-mumei-notice-shell-v3="1"]');
+  if(!(el instanceof Element)||!visible(el))return null;
+  const hasRows=rows(el).length>0;
+  const hasBoundary=Boolean(el.querySelector('#'+BOUNDARY));
+  return hasRows||hasBoundary?el:null
+}
 function notificationRouteKey(){return location.pathname+location.search}
-function notificationVisibleNow(){const api=reader();const scanning=Boolean(api&&typeof api.isScanning==='function'&&api.isScanning());const leased=scanning&&Date.now()<notificationSurfaceLeaseUntil&&notificationSurfaceLeaseRoute===notificationRouteKey();return Boolean(notificationRoute()||popupSurface()||leased)}
+function notificationVisibleNow(){const api=reader();const scanning=Boolean(api&&typeof api.isScanning==='function'&&api.isScanning());const leased=scanning&&Date.now()<notificationSurfaceLeaseUntil&&notificationSurfaceLeaseRoute===notificationRouteKey();return Boolean(notificationRoute()||claimedNotificationSurface()||popupSurface()||leased)}
 function routeLifecycle(){
   intentUntil=0;
-  const next=popupSurface();
+  const next=claimedNotificationSurface()||popupSurface();
   if(notificationRoute()){
     suppressUntilBell=false;panelSessionActive=true;
     showRoot(true);
@@ -290,6 +297,7 @@ async function inspect(){
   showRoot(true);await Promise.all([initFilter(),initMode()]);if(next){scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
   return
  }
+ const claimed=claimedNotificationSurface();if(claimed){suppressUntilBell=false;panelSessionActive=true;await activate(claimed);return}
  if(suppressUntilBell){showRoot(false);return}
  const next=findSurface();if(next){await activate(next);return}
  if(bellIntent()){await activateIntent();return}
@@ -297,7 +305,7 @@ async function inspect(){
  cleanupVisuals()
 }
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){if(panelEvent(e))return;const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!bellTrigger(target,e))return;suppressUntilBell=false;panelSessionActive=true;autoDoneForSession=false;const openNow=Boolean(findSurface())||notificationRoute();if(openNow){intentUntil=0;showRoot(true);setTimeout(()=>scheduleInspect(0),60);setTimeout(()=>scheduleInspect(0),180);setTimeout(()=>scheduleInspect(0),500);return}intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
+function onTopClick(e){if(panelEvent(e))return;const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!bellTrigger(target,e))return;suppressUntilBell=false;panelSessionActive=true;autoDoneForSession=false;const openNow=Boolean(claimedNotificationSurface()||findSurface())||notificationRoute();if(openNow){intentUntil=0;showRoot(true);setTimeout(()=>scheduleInspect(0),60);setTimeout(()=>scheduleInspect(0),180);setTimeout(()=>scheduleInspect(0),500);return}intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
 
 function settingsButtonFromEvent(e){
   const path=e?.composedPath?.()||[];
