@@ -5,8 +5,8 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.83';
-const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',READ_MENU='mumei-v325-read-choice',HIDE='mumei-v325-filter-hide';
+const VERSION='3.2.55';
+const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="notification-item" i],[class*="notice-item" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
@@ -14,63 +14,24 @@ const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const modern=()=>Boolean(globalThis.GM);
 let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,featureEnabled=true,enabledLoaded=false;
 const profileCache=new Map();
-let dockVisible=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false,settingsNavStarted=false,notificationSessionActive=notificationRoute();
+let dockVisible=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false;
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1||r.right<=0||r.bottom<=0||r.left>=innerWidth||r.top>=innerHeight)return false;for(let p=el,d=0;p&&d++<14;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.hasAttribute('inert')||s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)<=.01)return false}return true}
 function text(el){return clean(el?.textContent||el?.getAttribute?.('aria-label')||el?.getAttribute?.('title')||'')}
 function rowish(el){if(!visible(el))return false;const t=text(el);return t.length>=3&&t.length<=5000&&/(?:たった今|昨日|秒前|分前|時間前|日前|週間前|スキ|フォロー|コメント|返信|追加|メンバー|購入|通知)/u.test(t)}
-function noticeRows(root){if(!root?.querySelectorAll)return[];const xs=[...root.querySelectorAll(ITEM)].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
-function rows(root){if(!root?.querySelectorAll)return[];const specific=noticeRows(root);if(specific.length)return specific;const xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
+function rows(root){if(!root?.querySelectorAll)return[];let xs=[...root.querySelectorAll(ITEM)].filter(rowish);if(xs.length)return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)));xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 function exact(root,label){return[...(root?.querySelectorAll?.('button,a,[role="tab"],[role="button"]')||[])].find(el=>{if(!visible(el))return false;const t=text(el);return t===label||new RegExp('^'+label+'(?:\\s*\\d+\\s*(?:件)?)?$','u').test(t)})||null}
 function common(a,b){let p=a;for(let i=0;p&&p!==document.body&&i<14;i++,p=p.parentElement)if(p.contains(b))return p;return null}
 function expand(base){let p=base,best=null;for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<12;i++,p=p.parentElement){if(!visible(p))continue;if(rows(p).length)best=p;if(p.matches?.('[role="dialog"],[role="menu"],[popover],main,[role="main"],section,aside')&&(rows(p).length||/(?:通知|お知らせ)/u.test(text(p))))return p}return best}
 function notificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
-function textEditorElement(el){
-  if(!(el instanceof Element))return false;
-  if(el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;
-  if(el.matches('textarea,[contenteditable="true"],[role="textbox"]'))return true;
-  if(el.matches('input:not([type]),input[type="text"],input[type="search"],input[type="email"],input[type="url"],input[type="tel"],input[type="password"]'))return true;
-  return Boolean(el.closest('textarea,[contenteditable="true"],[role="textbox"],input:not([type]),input[type="text"],input[type="search"],input[type="email"],input[type="url"],input[type="tel"],input[type="password"]'))
-}
-function editingOutsideNotification(){
-  const el=document.activeElement;
-  if(!textEditorElement(el)||notificationRoute())return false;
-  const owner=el?.closest?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]');
-  return !Boolean(owner&&strongNoticeSurface(owner))
-}
-function hasNoticeTabs(root){return Boolean(exact(root,'通知')&&exact(root,'お知らせ'))}
-function strongNoticeSurface(root){
-  if(!root||!visible(root))return false;
-  const specific=noticeRows(root);
-  if(notificationRoute())return Boolean(hasNoticeTabs(root)||specific.length);
-  if(hasNoticeTabs(root))return true;
-  return Boolean(specific.length&&root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]'))
-}
-function popupSurface(){
-  if(document.visibilityState==='hidden'||notificationRoute())return null;
-  for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],main,section,aside,nav')){
-    if(strongNoticeSurface(root))return root
-  }
-  for(const row of [...document.querySelectorAll(ITEM)].filter(visible)){
-    let p=row.parentElement;
-    for(let depth=0;p&&p!==document.body&&p!==document.documentElement&&depth<10;depth++,p=p.parentElement){
-      if(strongNoticeSurface(p))return p
-    }
-  }
-  return null
-}
-function routeSurface(){
-  if(!notificationRoute())return null;
-  for(const el of document.querySelectorAll('main,[role="main"],section,aside'))if(strongNoticeSurface(el))return el;
-  return null
-}
-function rememberedSurface(){return notificationSessionActive&&shell&&shell.isConnected&&visible(shell)?shell:null}
-function findSurface(){return popupSurface()||routeSurface()||rememberedSurface()}
-function bellIntent(){return !editingOutsideNotification()&&Date.now()<intentUntil}
+function popupSurface(){if(document.visibilityState==='hidden')return null;if(notificationRoute()){for(const el of document.querySelectorAll('main,[role="main"],section,aside'))if(visible(el)&&(rows(el).length||/(?:通知|お知らせ)/u.test(text(el))))return el}for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],main,section,aside,nav,header')){if(!visible(root))continue;const a=exact(root,'通知'),b=exact(root,'お知らせ');if(a&&b){const x=expand(common(a,b)||root);if(x)return x}}for(const row of [...document.querySelectorAll(ITEM)].filter(visible)){const x=expand(row.closest('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],section,aside')||row.parentElement);if(x)return x}return shell&&visible(shell)?shell:null}
+function routeSurface(){if(!notificationRoute())return null;for(const el of document.querySelectorAll('main,[role="main"]'))if(visible(el))return el;for(const el of document.querySelectorAll('section,aside'))if(visible(el)&&(exact(el,'通知')||rows(el).length))return el;return document.body||null}
+function findSurface(){return popupSurface()||routeSurface()}
+function bellIntent(){return Date.now()<intentUntil}
 function bellMeta(el){if(!(el instanceof Element))return'';return clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' '))}
-function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const href=String(el.getAttribute('href')||''),meta=bellMeta(el);if(/\/notifications(?:[/?#]|$)/i.test(href))return true;const chrome=el.closest('header,nav,[role="navigation"]');if(!chrome)return false;return /(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta)}
+function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const href=String(el.getAttribute('href')||''),meta=bellMeta(el);if(/\/notifications(?:[/?#]|$)/i.test(href))return true;if(/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta))return true;return false}
 function bellTrigger(target,event){const seen=new Set(),xs=[];const add=el=>{if(el instanceof Element&&!seen.has(el)){seen.add(el);xs.push(el)}};add(target);for(const x of event?.composedPath?.()||[])add(x);for(const raw of xs.slice(0,20)){add(raw.closest?.('button,a,[role="button"],[role="tab"],[aria-label],[data-testid]'));if(bellHit(raw))return true}return xs.some(bellHit)}
 function notificationBellElement(){
   const direct='a[href*="/notifications"],[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
@@ -84,43 +45,30 @@ function notificationBellElement(){
   return null
 }
 function openNotificationBell(){
-  suppressUntilBell=false;notificationSessionActive=true;
+  suppressUntilBell=false;
   if(findSurface()){autoDoneForSession=false;return true}
-  const el=notificationBellElement();if(!el){notificationSessionActive=false;return false}
+  const el=notificationBellElement();if(!el)return false;
   autoDoneForSession=false;intentUntil=Date.now()+7000;
   try{el.click()}catch{return false}
   for(const ms of[0,80,180,360,700,1200,2200])setTimeout(()=>scheduleInspect(0),ms);
   return true
 }
-function detachedUiHost(){return document.body||document.documentElement}
-function mountUiInSurface(){const host=detachedUiHost();if(!host)return;const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
+function mountUiInSurface(){const host=shell&&shell.isConnected?shell:null;if(!host)return;const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
 function markSurface(next){if(shell&&shell!==next)shell.removeAttribute('data-mumei-notice-shell-v3');shell=next;if(shell){shell.setAttribute('data-mumei-notice-shell-v3','1');mountUiInSurface()}}
 async function account(){if(accountId)return accountId;try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=clean(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))accountId=id}catch{}return accountId}
-function ensureStyle(){if(document.getElementById(ROOT+'-style'))return;const s=document.createElement('style');s.id=ROOT+'-style';s.textContent=`.${HIDE}{display:none!important}#${ROOT}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 10px)!important;z-index:2147483647!important;height:38px!important;display:none;grid-template-columns:minmax(54px,.72fr) minmax(46px,.62fr) minmax(70px,1fr) minmax(48px,.66fr) minmax(68px,.9fr);gap:3px;padding:4px;border:1px solid #355063;border-radius:9px;background:#0e1c26;box-shadow:0 -3px 10px #0006;box-sizing:border-box!important;font-family:system-ui,-apple-system,sans-serif}#${ROOT} button{min-width:0;height:28px;padding:0 4px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 9.5px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${ROOT} button.mode.auto{background:#17422f;border-color:#56a77b;color:#d6ffe7}#${ROOT} button.mode.manual{background:#3c2c10;border-color:#92712f;color:#ffe8ad}#${ROOT} button.on{background:#17422f;border-color:#56a77b}#${ROOT} button.ins{border-color:#55d8f1;background:#11374a}#${ROOT} button.err{border-color:#c95b68;color:#ffd5da}#${SETTINGS}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 54px)!important;z-index:2147483647!important;max-height:68vh!important;overflow:auto!important;overscroll-behavior:contain!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important;padding:10px!important;border:1px solid #49687d!important;border-radius:11px!important;background:#07131d!important;color:#e8f6ff!important;box-shadow:0 12px 30px #000c!important;font:850 11px/1.4 system-ui!important}#${SETTINGS} h3{margin:0 0 8px;font-size:14px}#${SETTINGS} .g{border:1px solid #2d4b60;border-radius:9px;background:#0a1924;padding:8px;margin:7px 0}#${SETTINGS} .gh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}#${SETTINGS} input[type=text]{width:100%;height:34px;border:1px solid #3f5f74;border-radius:7px;background:#0b1b27;color:#fff;padding:0 8px}#${SETTINGS} button{min-height:32px;border:1px solid #4a6a80;border-radius:7px;background:#112a3a;color:#dff7ff;font-weight:900}#${SETTINGS} .members{display:grid;gap:5px;margin-top:7px}#${SETTINGS} .m{display:grid;grid-template-columns:minmax(0,1fr) 54px;gap:5px;align-items:center}#${SETTINGS} .who{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;align-items:center;min-width:0}#${SETTINGS} .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#142634;border:1px solid #35576d}#${SETTINGS} .who-txt{min-width:0}#${SETTINGS} .nick{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .uid{font-size:10px;color:#9db3c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .add{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;margin-top:7px}#${SETTINGS} .footer{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}#${READ_MENU}{position:absolute!important;left:0!important;right:0!important;bottom:42px!important;z-index:2147483647!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:5px!important;padding:6px!important;border:1px solid #49687d!important;border-radius:9px!important;background:#07131d!important;box-shadow:0 8px 20px #000b!important}#${READ_MENU} button{height:34px!important;border:1px solid #42667b!important;border-radius:7px!important;background:#102737!important;color:#e3f8ff!important;font:900 11px/1 system-ui!important}#${READ_MENU} button[data-read-mode="full"]{border-color:#96732e!important;background:#33260b!important;color:#ffe4a0!important}#${READ_MENU} small{grid-column:1/-1;color:#9db3c2;font:800 9px/1.25 system-ui;text-align:center}`;(document.head||document.documentElement).appendChild(s)}
-function runPrimaryDockAction(b){const a=b?.dataset?.a;if(a==='read')openReadChoice();else if(a==='mode')void toggleMode();else if(a==='filter')void toggleFilter()}
-function closeReadChoice(){document.getElementById(READ_MENU)?.remove()}
-function openReadChoice(){
- const r=document.getElementById(ROOT);if(!r||!dockVisible)return;
- closeReadChoice();
- const m=document.createElement('div');m.id=READ_MENU;
- m.innerHTML='<button type="button" data-read-mode="continue">続きから読む</button><button type="button" data-read-mode="full">全読み</button><small>全読み＝読み込み停止期間の取りこぼし回収</small>';
- const modeButton=e=>e.target instanceof Element?e.target.closest('button[data-read-mode]'):null;
- for(const type of['pointerdown','mousedown','touchstart','pointerup','touchend'])m.addEventListener(type,e=>{if(modeButton(e)){e.stopPropagation();e.stopImmediatePropagation()}},true);
- m.addEventListener('click',e=>{const b=modeButton(e);if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const read=r.querySelector('button[data-a="read"]');const mode=b.dataset.readMode==='full'?'full':'continue';if(read instanceof HTMLButtonElement)void manualRead(read,mode);setTimeout(closeReadChoice,100)},true);
- r.appendChild(m)
-}
-function ensureRoot(){let r=document.getElementById(ROOT);if(r){mountUiInSurface();return r}r=document.createElement('div');r.id=ROOT;r.innerHTML='<button type="button" data-a="read">読込</button><button type="button" class="mode auto" data-a="mode">自動</button><button type="button" data-a="filter">フィルター</button><button type="button" data-a="settings">設定</button><button type="button" class="ins" data-a="ins">INSIGHT</button>';(document.body||document.documentElement).appendChild(r);
+function ensureStyle(){if(document.getElementById(ROOT+'-style'))return;const s=document.createElement('style');s.id=ROOT+'-style';s.textContent=`.${HIDE}{display:none!important}#${ROOT}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 10px)!important;z-index:2147483647!important;height:38px!important;display:none;grid-template-columns:minmax(54px,.72fr) minmax(46px,.62fr) minmax(70px,1fr) minmax(48px,.66fr) minmax(68px,.9fr);gap:3px;padding:4px;border:1px solid #355063;border-radius:9px;background:#0e1c26;box-shadow:0 -3px 10px #0006;box-sizing:border-box!important;font-family:system-ui,-apple-system,sans-serif}#${ROOT} button{min-width:0;height:28px;padding:0 4px;border:1px solid #42667b;border-radius:6px;background:#102737;color:#e3f8ff;font:900 9.5px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${ROOT} button.mode.auto{background:#17422f;border-color:#56a77b;color:#d6ffe7}#${ROOT} button.mode.manual{background:#3c2c10;border-color:#92712f;color:#ffe8ad}#${ROOT} button.on{background:#17422f;border-color:#56a77b}#${ROOT} button.ins{border-color:#55d8f1;background:#11374a}#${ROOT} button.err{border-color:#c95b68;color:#ffd5da}#${SETTINGS}{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 54px)!important;z-index:2147483647!important;max-height:68vh!important;overflow:auto!important;overscroll-behavior:contain!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important;padding:10px!important;border:1px solid #49687d!important;border-radius:11px!important;background:#07131d!important;color:#e8f6ff!important;box-shadow:0 12px 30px #000c!important;font:850 11px/1.4 system-ui!important}#${SETTINGS} h3{margin:0 0 8px;font-size:14px}#${SETTINGS} .g{border:1px solid #2d4b60;border-radius:9px;background:#0a1924;padding:8px;margin:7px 0}#${SETTINGS} .gh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}#${SETTINGS} input[type=text]{width:100%;height:34px;border:1px solid #3f5f74;border-radius:7px;background:#0b1b27;color:#fff;padding:0 8px}#${SETTINGS} button{min-height:32px;border:1px solid #4a6a80;border-radius:7px;background:#112a3a;color:#dff7ff;font-weight:900}#${SETTINGS} .members{display:grid;gap:5px;margin-top:7px}#${SETTINGS} .m{display:grid;grid-template-columns:minmax(0,1fr) 54px;gap:5px;align-items:center}#${SETTINGS} .who{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;align-items:center;min-width:0}#${SETTINGS} .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#142634;border:1px solid #35576d}#${SETTINGS} .who-txt{min-width:0}#${SETTINGS} .nick{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .uid{font-size:10px;color:#9db3c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${SETTINGS} .add{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:5px;margin-top:7px}#${SETTINGS} .footer{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}`;(document.head||document.documentElement).appendChild(s)}
+function runPrimaryDockAction(b){const a=b?.dataset?.a;if(a==='read')void manualRead(b);else if(a==='mode')void toggleMode();else if(a==='filter')void toggleFilter()}
+function ensureRoot(){let r=document.getElementById(ROOT);if(r){if(shell&&shell.isConnected&&r.parentElement!==shell)shell.appendChild(r);return r}r=document.createElement('div');r.id=ROOT;r.innerHTML='<button type="button" data-a="read">読込</button><button type="button" class="mode auto" data-a="mode">自動</button><button type="button" data-a="filter">フィルター</button><button data-a="settings">設定</button><button class="ins" data-a="ins">INSIGHT</button>';(document.body||document.documentElement).appendChild(r);
 const primary=e=>{const b=e.target instanceof Element?e.target.closest('button[data-a="read"],button[data-a="mode"],button[data-a="filter"]'):null;if(!b)return null;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return b};
 r.addEventListener('pointerdown',e=>{primary(e)},true);
 r.addEventListener('pointerup',e=>{const b=primary(e);if(b)runPrimaryDockAction(b)},true);
 r.addEventListener('click',e=>{const b=primary(e);if(b)return;const other=e.target instanceof Element?e.target.closest('button[data-a]'):null;if(!other)return;e.preventDefault();e.stopPropagation();const a=other.dataset.a;if(a==='settings')void openSettings();else if(a==='ins')void openInsight()},true);
 return r}
-function showRoot(on){if(editingOutsideNotification()){hideImmediately();return}const want=Boolean(on&&featureEnabled&&!suppressUntilBell);dockVisible=want;if(!featureEnabled||suppressUntilBell){document.getElementById(ROOT)?.remove();document.getElementById(SETTINGS)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want){document.getElementById(SETTINGS)?.remove();closeReadChoice()}}
-function cleanupVisuals(){document.getElementById(BOUNDARY)?.remove();const p=document.getElementById(PROGRESS);if(p){if(p.style.display!=='none')p.style.setProperty('display','none','important');if(p.textContent)p.textContent=''}document.getElementById(SETTINGS)?.remove();closeReadChoice()}
+function showRoot(on){const want=Boolean(on&&featureEnabled&&!suppressUntilBell);dockVisible=want;if(!featureEnabled||suppressUntilBell){document.getElementById(ROOT)?.remove();document.getElementById(SETTINGS)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
+function cleanupVisuals(){document.getElementById(BOUNDARY)?.remove();const p=document.getElementById(PROGRESS);if(p){if(p.style.display!=='none')p.style.setProperty('display','none','important');if(p.textContent)p.textContent=''}document.getElementById(SETTINGS)?.remove()}
 function clearFeatureHides(){for(const el of document.querySelectorAll('.'+HIDE))el.classList.remove(HIDE)}
 async function initEnabled(){if(enabledLoaded)return featureEnabled;featureEnabled=Boolean(await get(ENABLED,true));enabledLoaded=true;return featureEnabled}
 function disableFeatureNow(){
-  notificationSessionActive=false;
   intentUntil=0;
   if(inspectTimer){clearTimeout(inspectTimer);inspectTimer=0}
   if(hideTimer){clearTimeout(hideTimer);hideTimer=0}
@@ -149,10 +97,13 @@ function leavingNotificationHref(target){
 function notificationLeaveAction(target){
   if(!(target instanceof Element)||!shell||!shell.contains(target))return false;
   if(target.closest('#'+ROOT)||target.closest('#'+SETTINGS))return false;
-  return leavingNotificationHref(target)
+  if(leavingNotificationHref(target))return true;
+  const ctl=target.closest('button,[role="button"],[role="tab"]'),label=clean(ctl?.textContent||'');
+  if(label==='通知'||label==='お知らせ')return false;
+  const row=target.closest(ITEM+',li,[role="listitem"]');
+  return Boolean(row&&shell.contains(row)&&rowish(row))
 }
 function hideImmediately(){
-  notificationSessionActive=false;
   suppressUntilBell=true;
   intentUntil=0;
   markSurface(null);
@@ -163,7 +114,7 @@ function hideImmediately(){
 function onShellPointerDown(e){
   if(!featureEnabled||!shell)return;
   const target=e.target instanceof Element?e.target:null;
-  if(leavingNotificationHref(target))hideImmediately()
+  if(notificationLeaveAction(target))hideImmediately()
 }
 function profileIdFromHref(href){try{const u=new URL(href,location.href),p=u.pathname.split('/').filter(Boolean),id=(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['notifications','settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorIds(el){const out=[];for(const a of el.querySelectorAll?.('a[href]')||[]){const id=profileIdFromHref(a.getAttribute('href'));if(id)out.push(id)}return[...new Set(out)]}
@@ -216,10 +167,9 @@ async function toggleMode(){await initMode();autoMode=!autoMode;const id=await a
 function reader(){return window.__mumeiV3Reader323||window.__mumeiV3Reader322||null}
 async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const current=findSurface();if(current&&rows(current).length)return current;if(!notificationRoute()&&!popupSurface()&&!bellIntent())return null;await sleep(120)}return null}
 async function safeScan(){const current=await waitForRows();if(!current)return 0;if(current!==shell)markSurface(current);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1200);if(!again)return 0;const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan()}
-async function safeFullScan(){const current=await waitForRows();if(!current)return 0;if(current!==shell)markSurface(current);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1200);if(!again)return 0;const api=reader();if(!api||typeof api.scanFull!=='function')throw new Error('全読みReaderを起動できませんでした');return api.scanFull()}
-async function manualRead(btn,mode='continue'){btn.classList.remove('err');btn.textContent=mode==='full'?'全読待機':'待機';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}btn.textContent=mode==='full'?'全読中':'読込中';if(mode==='full')await safeFullScan();else await safeScan()}catch(e){btn.classList.add('err');btn.textContent=mode==='full'?'全読再試行':'再読込';btn.title=String(e?.message||e)}}
+async function manualRead(btn){btn.classList.remove('err');btn.textContent='待機';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}btn.textContent='読込中';await safeScan()}catch(e){btn.classList.add('err');btn.textContent='再読込';btn.title=String(e?.message||e)}}
 function hideProgress(){const p=document.getElementById(PROGRESS);if(p)p.style.setProperty('display','none','important')}
-function onStatus(e){if(editingOutsideNotification()){hideImmediately();hideProgress();return}if(suppressUntilBell||!featureEnabled){document.getElementById(ROOT)?.remove();hideProgress();return}const actual=findSurface();if(!actual&&!bellIntent()){hideProgress();scheduleInspect(20);return}const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?(d.mode==='full'?'全読中':'読込中'):d.kind==='error'?(d.mode==='full'?'全読再試行':'再読込'):'読込';if(d.message)b.title=String(d.message)}
+function onStatus(e){if(suppressUntilBell||!featureEnabled){document.getElementById(ROOT)?.remove();hideProgress();return}const actual=findSurface();if(!actual&&!bellIntent()){hideProgress();scheduleInspect(20);return}const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
 async function openInsight(){const id=await account(),u=new URL('https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard');if(id)u.searchParams.set('notificationAccount',id);intentUntil=0;markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
 function maybeAuto(force=false){
   if(!autoMode||autoDoneForSession||!shell||!visible(shell)||!rows(shell).length)return;
@@ -231,42 +181,14 @@ function maybeAuto(force=false){
     if(autoMode&&current&&rows(current).length&&!(typeof api.isScanning==='function'&&api.isScanning()))void safeScan().catch(()=>{})
   },220)
 }
-async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}notificationSessionActive=true;clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
-async function activateIntent(){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}notificationSessionActive=true;clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell)hideImmediately()}
-function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();return}if(notificationRoute()){notificationSessionActive=true;suppressUntilBell=false;void activateIntent();return}const next=findSurface();if(next){void activate(next);return}if(notificationSessionActive){showRoot(true);return}if(bellIntent()){void activateIntent();return}markSurface(null);showRoot(false);cleanupVisuals()}
+async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
+async function activateIntent(){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell)hideImmediately()}
+function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();return}const next=findSurface();if(next){void activate(next);return}if(bellIntent()){void activateIntent();return}markSurface(null);showRoot(false);cleanupVisuals()}
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
-async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(notificationRoute()){notificationSessionActive=true;suppressUntilBell=false}if(editingOutsideNotification()){hideImmediately();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(notificationSessionActive){await activateIntent();return}if(bellIntent()){await activateIntent();return}if(shell||dockVisible){scheduleHide();return}cleanupVisuals()}
+async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(bellIntent()){await activateIntent();return}if(shell||dockVisible){scheduleHide();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(shell&&notificationLeaveAction(target))hideImmediately();else if(notificationSessionActive&&!notificationRoute()&&target&&!target.closest('#'+ROOT)&&shell&&!shell.contains(target))hideImmediately();return}if(notificationSessionActive&&dockVisible&&!notificationRoute()){hideImmediately();return}suppressUntilBell=false;notificationSessionActive=true;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
-
-function settingsButtonFromEvent(e){
-  const path=e?.composedPath?.()||[];
-  for(const node of path){
-    if(node instanceof Element&&node.matches?.('#'+ROOT+' [data-a="settings"]'))return node
-  }
-  const target=e?.target instanceof Element?e.target:null;
-  return target?.closest?.('#'+ROOT+' [data-a="settings"]')||null
-}
-function blockSettingsEvent(e){
-  const b=settingsButtonFromEvent(e);if(!b)return false;
-  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return true
-}
-function onSettingsPressStart(e){blockSettingsEvent(e)}
-function onSettingsPressEnd(e){
-  if(!blockSettingsEvent(e)||settingsNavStarted)return;
-  settingsNavStarted=true;
-  Promise.resolve(openSettings()).finally(()=>setTimeout(()=>{settingsNavStarted=false},1600))
-}
-function onSettingsClick(e){blockSettingsEvent(e)}
-function onEditorFocus(e){
-  const target=e.target instanceof Element?e.target:null;
-  if(!textEditorElement(target))return;
-  const owner=target?.closest?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]');
-  if(notificationRoute()||Boolean(owner&&strongNoticeSurface(owner)))return;
-  intentUntil=0;
-  hideImmediately()
-}
-function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('focusin',onEditorFocus,true);window.addEventListener('pointerdown',onSettingsPressStart,true);window.addEventListener('pointerup',onSettingsPressEnd,true);window.addEventListener('touchstart',onSettingsPressStart,true);window.addEventListener('touchend',onSettingsPressEnd,true);window.addEventListener('mousedown',onSettingsPressStart,true);window.addEventListener('mouseup',onSettingsPressEnd,true);window.addEventListener('click',onSettingsClick,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(notificationRoute()){notificationSessionActive=true;suppressUntilBell=false}else hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(notificationRoute()){notificationSessionActive=true;suppressUntilBell=false}else hideImmediately();scheduleInspect(20)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(notificationRoute()){notificationSessionActive=true;suppressUntilBell=false}else hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
+function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(shell&&notificationLeaveAction(target))hideImmediately();return}suppressUntilBell=false;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
+function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('pointerdown',onShellPointerDown,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(!notificationRoute())hideImmediately();scheduleInspect(20)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(!notificationRoute())hideImmediately();scheduleInspect(20);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible};
 window.__mumeiV3Runtime327=window.__mumeiV3Runtime328;
