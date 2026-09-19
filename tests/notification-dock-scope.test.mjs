@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.75 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.76 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.75/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3248/);
+ assert.match(parent,/@version\s+3\.2\.76/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3249/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3275/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3276/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -132,7 +132,7 @@ test("recovery invariants keep dock scoped and persist visible rows first",async
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
   const reader=await read("public/note-insight-notification-reader-v323.js");
   const page=await read("public/notification-filter-settings.html");
-  assert.match(runtime,/function notificationVisibleNow\(\)/);assert.match(runtime,/notificationSurfaceLeaseUntil/);
+  assert.match(runtime,/function notificationVisibleNow\(\)/);assert.match(runtime,/notificationSurfaceLeaseUntil/);assert.match(runtime,/notificationSurfaceLeaseRoute/);
   assert.doesNotMatch(runtime,/bellIntent\(\)\|\|returnRestoring/);
   assert.doesNotMatch(runtime,/saveArticleReturn|resumeArticleReturn|pendingReturn|returnSourceHere/);
   assert.match(runtime,/sessionStorage\.removeItem\('mumei-v3-notification-return-v3223'\)/);
@@ -157,4 +157,13 @@ test("manual read explicitly separates continuation from full-history recovery",
  assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
  assert.match(reader,/sendBatchFull\(readOutbox\(a\.id\),a,saved\)/);
  assert.match(reader,/lastFullScanAt/);
+});
+
+
+test("reader rediscovery never treats an arbitrary creator page as notification surface",async()=>{
+  const reader=await read("public/note-insight-notification-reader-v323.js");
+  assert.match(reader,/function readerNotificationRoute\(\)/);
+  assert.match(reader,/function readerNoticeContainer\(el\)/);
+  assert.match(reader,/\[role="dialog"\],\[role="menu"\],\[popover\],\[class\*="notification" i\],\[class\*="notice" i\]/);
+  assert.doesNotMatch(reader,/for\(const el of document\.querySelectorAll\('\[role="dialog"\],\[role="menu"\],\[popover\],aside,section,main,\[role="main"\]'\)\)/);
 });
