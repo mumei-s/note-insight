@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.75',PROTOCOL='3.2.75';
+const VERSION='3.2.76',PROTOCOL='3.2.76';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -44,7 +44,21 @@ function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.te
 function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
 function loadedRows(root){if(!root?.querySelectorAll)return[];let xs=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"],[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="notification-item" i],[class*="notice-item" i]')].filter(el=>clean(el.textContent).length>=3);if(xs.length)return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)));xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(el=>clean(el.textContent).length>=3&&TIME_RE.test(clean(el.textContent)));return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 
-function rediscoverPanel(){for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],aside,section,main,[role="main"]')){if(!shown(el))continue;if(rows(el).length){el.setAttribute('data-mumei-notice-shell-v3','1');return el}}if(/^\/notifications(?:\/|$)/i.test(location.pathname)){const main=document.querySelector('main,[role="main"]');if(main&&shown(main)){main.setAttribute('data-mumei-notice-shell-v3','1');return main}}return null}
+function readerNotificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
+function readerNoticeTabs(el){if(!el?.querySelectorAll)return false;let n=false,o=false;for(const x of el.querySelectorAll('button,a,[role="tab"],[role="button"]')){const t=clean(x.textContent||x.getAttribute?.('aria-label')||'');if(t==='通知')n=true;if(t==='お知らせ')o=true;if(n&&o)return true}return false}
+function readerNoticeContainer(el){if(!shown(el))return false;const rs=rows(el);if(!rs.length)return false;const meta=clean([el.getAttribute?.('aria-label'),el.getAttribute?.('data-testid'),typeof el.className==='string'?el.className:''].join(' '));return /(?:notification|notice|通知|お知らせ)/iu.test(meta)||readerNoticeTabs(el)}
+function rediscoverPanel(){
+ if(readerNotificationRoute()){
+  const main=document.querySelector('main,[role="main"]');
+  if(main&&shown(main)){main.setAttribute('data-mumei-notice-shell-v3','1');return main}
+  for(const el of document.querySelectorAll('section,aside,[role="dialog"],[role="menu"],[popover]'))if(readerNoticeContainer(el)){el.setAttribute('data-mumei-notice-shell-v3','1');return el}
+  return null
+ }
+ for(const el of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]')){
+  if(readerNoticeContainer(el)){el.setAttribute('data-mumei-notice-shell-v3','1');return el}
+ }
+ return null
+}
 function panel(){const p=document.querySelector(SHELL);return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:rediscoverPanel()}
 function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}return p.scrollHeight>p.clientHeight+20?p:null}
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
