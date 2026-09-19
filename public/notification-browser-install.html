@@ -61,8 +61,8 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <div class="toolname">本人通知ツール</div>
 <p class="lead">使っている端末とブラウザのパネルだけ開いて進めます。すでに導入済みなら、拡張機能の入れ直しは不要です。</p>
 <div class="notice"><b>通知画面は下部固定の5パネル。</b><br>「読込 / 自動ON・OFF / フィルター / 設定 / INSIGHT」。保存済み境界より新しい通知だけを追加保存します。</div>
-<a id="install" class="install" href="#">最新版をインストール / 更新</a>
-<div id="verifyResult" class="result">最新版かどうか自動確認します。</div>
+<a id="install" class="install" href="#">本人通知をインストール / 更新</a>
+<div id="verifyResult" class="result">更新状態を自動確認します。</div>
 
 <section class="section">
 <h2>ブラウザ別インストール</h2>
@@ -73,7 +73,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <details class="browser" data-browser="android-edge">
 <summary><span class="bname">Microsoft Edge</span><span class="badge good">推奨</span></summary>
 <div class="browser-body">
-<p>EdgeでTampermonkeyを有効にしてから、上の「最新版をインストール / 更新」を押します。</p>
+<p>EdgeでTampermonkeyを有効にしてから、上の「本人通知をインストール / 更新」を押します。</p>
 <div class="actions"><a class="action primary" href="https://www.tampermonkey.net/index.php?browser=edge&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkeyを準備</a></div>
 <div class="small">導入後：Edge → 拡張機能 → Tampermonkey → INSIGHTがONか確認。</div>
 </div>
@@ -106,7 +106,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <details class="browser" data-browser="ios-safari">
 <summary><span class="bname">Safari</span><span class="badge good">推奨</span></summary>
 <div class="browser-body">
-<p>SafariではUserscriptsを使う方法が簡単です。Userscriptsを有効化後、Safariでこのページに戻り、上の「最新版をインストール / 更新」を押します。</p>
+<p>SafariではUserscriptsを使う方法が簡単です。Userscriptsを有効化後、Safariでこのページに戻り、上の「本人通知をインストール / 更新」を押します。</p>
 <div class="actions">
 <a class="action primary" href="https://apps.apple.com/jp/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscriptsを開く</a>
 <a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkeyを使う場合はこちら</a>
@@ -203,10 +203,10 @@ function setDetected(){
 function installed(){return String(localStorage.getItem(TOOL_KEY)||localStorage.getItem(RUNTIME_KEY)||'')}
 function check(){
   const current=installed();
-  if(latest&&current===latest){result.className='result ok';result.textContent='✓ 最新版が起動しています。';return}
-  if(latest&&current){result.className='result warn';result.textContent='更新があります。「最新版をインストール / 更新」を押してください。';return}
+  if(latest&&current===latest){result.className='result ok';result.textContent='✓ 本人通知ツールは更新済みです。';return}
+  if(latest&&current){result.className='result warn';result.textContent='更新があります。上の「本人通知をインストール / 更新」を押してください。';return}
   if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。インストール / 更新後にnoteまたはINSIGHTを開いてください。';return}
-  result.className='result';result.textContent=current?'本人通知ツールを検出しました。最新版情報を確認中…':'最新版情報を確認中…'
+  result.className='result';result.textContent=current?'本人通知ツールを検出しました。更新状態を確認中…':'更新状態を確認中…'
 }
 async function loadLatest(){try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('release');const p=await r.json();latest=String(p.notificationVersion||'');check()}catch{latest='';check()}}
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
