@@ -85,7 +85,7 @@ test("installed newer than published latest is still current",async()=>{
   assert.match(setup,/本人通知ツールは最新版です/);
   assert.match(setup,/mumei-notification-install-pending-v1/);
   assert.match(ui,/versionDiffers\(notificationInstalled,notificationLatest\)/);
-  assert.match(ui,/✓ 最新版/);
+  assert.doesNotMatch(ui,/✓ 最新版/);assert.match(top,/\"設定\"/);
 });
 
 
