@@ -50,7 +50,7 @@ test("private notification categories stay dense while public duplicates are exc
 
 test("tool status distinguishes not-installed from update available",async()=>{
   const ui=await read("src/member-insight-live-v2.tsx"),top=await read("src/insight-top-install-v16.ts"),guide=await read("src/insight-update-guide-v18.ts");
-  has(ui,["notificationMissing","dashboardMissing","versionDiffers(notificationInstalled,notificationLatest)","needs-install","⬆ 更新あり","＋ 未導入"]);
+  has(ui,["notificationMissing","dashboardMissing","versionDiffers(notificationInstalled,notificationLatest)","needs-install","⬆ 更新あり","＋ 未導入"]);assert.doesNotMatch(ui,/notificationInstalled&&notificationLatest\?<em>✓ 最新版<\/em>/);assert.doesNotMatch(ui,/dashboardInstalled&&dashboardLatest\?<em>✓ 最新版<\/em>/);
   has(top,["needs-update","needs-install","⬆ 更新あり","＋ インストール"]);
   has(guide,["更新あり","未導入","更新と未導入を分けて表示"]);
 });

@@ -211,10 +211,10 @@ export function MemberInsightLiveV2(){
           {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:notificationInstalled&&notificationLatest?<em>✓ 最新版</em>:null}</button>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}</button>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:dashboardInstalled&&dashboardLatest?<em>✓ 最新版</em>:null}</button>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:null}</button>
         </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
