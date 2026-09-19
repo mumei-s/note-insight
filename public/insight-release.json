@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.77",
+  "notificationVersion": "3.2.78",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T21:30:00+09:00",
+  "releasedAt": "2026-09-19T21:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.77。/notifications を最優先の固定表示面に変更し、suppressUntilBell・panelSessionActive・DOM検出に関係なく5パネルを表示。通知外ページでは従来どおり非表示。"
+  "note": "本人通知V3.2.78。Reader/Checkpointが data-mumei-notice-shell-v3 で確定した通知面をRuntimeの正本にし、保存位置バーが出る通知面では5パネルも同じ面に必ず追従。"
 }
