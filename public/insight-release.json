@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.66",
+  "notificationVersion": "3.2.67",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T14:58:00+09:00",
+  "releasedAt": "2026-09-19T15:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知パネル構造をV3.2.45系へ戻し、note通知DOM内への再配置を廃止。5パネルはbody直下の固定要素。フィルター等の操作は背面へ伝播させず、画面タップだけでは閉じない。既存のON/OFF・設定画面・読み込み機能は維持。"
+  "note": "5パネルを通知DOM・Reader・フィルター処理から完全分離。独立hostで固定し、通知DOMは読み取り対象としてのみ参照。Reader/フィルター/一時的DOM消失ではパネルの親・表示状態を変更しない。パネル操作は独自イベントで背面へ伝播させない。"
 }
