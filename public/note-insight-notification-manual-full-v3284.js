@@ -4,14 +4,14 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.2.84';
+const VERSION='3.2.86';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const SAVED='mumei_insight_notification_saved_v2919:';
 const FULL_OUTBOX='mumei-notification-fullread-outbox-v3284:';
-const FULL_STATE='mumei-notification-fullread-state-v3284:';
+const FULL_STATE='mumei-notification-fullread-state-v3284:',FULL_REQUEST='mumei-notification-fullread-request-v3286';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem" i],[class*="notificationItem" i],[class*="noticeItem" i],[class*="NotificationItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const TIME_RE=/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)/u;
 const EXCLUDE=new Set(['settings','sitesettings','membership','memberships','notifications','messages','search','explore','login','signup']);
@@ -30,7 +30,7 @@ function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathn
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
 function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.textContent);return t.length>=3&&t.length<=4000&&(trusted||TIME_RE.test(t))}
 function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
-function panel(){const rt=window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325;const p=rt?.findSurface?.()||document.querySelector('[data-mumei-notice-shell-v3="1"]');return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:null}
+function panel(){const rt=window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325;const p=rt?.getShell?.()||rt?.findSurface?.()||document.querySelector('[data-mumei-notice-shell-v3="1"]');return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:null}
 function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}if(p.scrollHeight>p.clientHeight+20)return p;if(/^\/notifications(?:\/|$)/i.test(location.pathname)){const d=document.scrollingElement;if(d&&d.scrollHeight>innerHeight+20)return d}return null}
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
 function estimatedTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(!m)return null;const scale={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*scale[m[2]]).toISOString()}
@@ -66,13 +66,26 @@ async function sendBatchFull(input,a,saved){
 }
 
 let fullScanning=false;
+function requestDedicatedFullRead(){
+ try{
+  sessionStorage.setItem(FULL_REQUEST,JSON.stringify({at:Date.now(),from:location.href}));
+ }catch{}
+ if(!/^\/notifications(?:\/|$)/i.test(location.pathname)){
+  const u=new URL('/notifications',location.origin);
+  u.searchParams.set('mumei_fullread','1');
+  location.assign(u.href);
+  return true
+ }
+ return false
+}
 async function scanFull(){
  if(fullScanning||window.__mumeiV3Reader323?.isScanning?.())return 0;
+ if(requestDedicatedFullRead())return 0;
  fullScanning=true;let a=null,total=0,seenCount=0;
  paintRead('全読中');
  status('全読みを開始します…','saving');
  try{
-  let p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
+  let p=panel();if(!p&&/^\/notifications(?:\/|$)/i.test(location.pathname)){p=[...document.querySelectorAll('main,[role="main"],section')].find(el=>shown(el)&&rows(el).length)||null}if(!p)throw new Error('通知一覧を取得できませんでした');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');
   const savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
@@ -124,7 +137,7 @@ function openMenu(){
  closeMenu();
  const m=document.createElement('div');m.id=MENU;
  m.style.cssText='position:absolute;left:0;right:0;bottom:42px;z-index:2147483647;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px;border:1px solid #49687d;border-radius:9px;background:#07131d;box-shadow:0 8px 20px #000b';
- m.innerHTML='<button type="button" data-v3284-mode="continue" style="height:34px;border:1px solid #42667b;border-radius:7px;background:#102737;color:#e3f8ff;font:900 11px/1 system-ui">続きから読む</button><button type="button" data-v3284-mode="full" style="height:34px;border:1px solid #96732e;border-radius:7px;background:#33260b;color:#ffe4a0;font:900 11px/1 system-ui">全読み</button><small style="grid-column:1/-1;color:#9db3c2;font:800 9px/1.25 system-ui;text-align:center">全読み＝読込停止期間の取りこぼし回収</small>';
+ m.innerHTML='<button type="button" data-v3284-mode="continue" style="height:34px;border:1px solid #42667b;border-radius:7px;background:#102737;color:#e3f8ff;font:900 11px/1 system-ui">続きから読む</button><button type="button" data-v3284-mode="full" style="height:34px;border:1px solid #96732e;border-radius:7px;background:#33260b;color:#ffe4a0;font:900 11px/1 system-ui">全読み</button><small style="grid-column:1/-1;color:#9db3c2;font:800 9px/1.25 system-ui;text-align:center">全読み＝専用通知画面で履歴を再確認</small>';
  root.appendChild(m)
 }
 function readFromEvent(e){const path=e?.composedPath?.()||[];for(const n of path)if(n instanceof Element&&n.matches?.('#'+ROOT+' [data-a="read"]'))return n;const t=e.target instanceof Element?e.target:null;return t?.closest?.('#'+ROOT+' [data-a="read"]')||null}
@@ -151,5 +164,22 @@ function capture(e){
 for(const type of['pointerdown','mousedown','touchstart','pointerup','mouseup','touchend','click'])window.addEventListener(type,capture,true);
 addEventListener('popstate',closeMenu);addEventListener('hashchange',closeMenu);addEventListener('pagehide',closeMenu);
 
+async function resumeRequestedFullRead(){
+ if(!/^\/notifications(?:\/|$)/i.test(location.pathname))return;
+ let requested=new URLSearchParams(location.search).get('mumei_fullread')==='1';
+ try{
+  const st=JSON.parse(sessionStorage.getItem(FULL_REQUEST)||'null');
+  if(st&&Date.now()-Number(st.at||0)<15*60*1000)requested=true
+ }catch{}
+ if(!requested)return;
+ try{sessionStorage.removeItem(FULL_REQUEST)}catch{}
+ for(let i=0;i<50;i++){
+  const p=panel()||[...document.querySelectorAll('main,[role="main"],section')].find(el=>shown(el)&&rows(el).length);
+  if(p&&rows(p).length){await scanFull();return}
+  await sleep(180)
+ }
+ paintRead('全読再試行',true)
+}
 window.__mumeiV3ManualFull3284={version:VERSION,scanFull,closeMenu};
+setTimeout(()=>void resumeRequestedFullRead(),300);
 })();
