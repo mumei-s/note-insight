@@ -73,11 +73,11 @@ for(var i=0;i<all.length&&!stopped;i++){
  try{
   if(!ps.profile){
    var fp=await profile(f.id);
-   ps.profile={notes:fp.notes,bioThin:(!fp.bio||fp.bio.length<4),mass:(fp.followings>=300&&fp.followings>=Math.max(500,fp.followers*10)),followings:fp.followings,followers:fp.followers};
+   ps.profile={key:fp.key,notes:fp.notes,bioThin:(!fp.bio||fp.bio.length<4),mass:(fp.followings>=300&&fp.followings>=Math.max(500,fp.followers*10)),followings:fp.followings,followers:fp.followers};
    state.people[f.id]=ps;save();await wait(180);
   }
   while(!ps.done){
-   var j=await api('/api/v3/users/'+encodeURIComponent((await profile(f.id)).key)+'/followings?page='+ps.nextPage+'&per=20'),d=o(j.data||j),ls=a(d.follows||d.followers||d.followings||d.users||d.contents);
+   var j=await api('/api/v3/users/'+encodeURIComponent(ps.profile.key)+'/followings?page='+ps.nextPage+'&per=20'),d=o(j.data||j),ls=a(d.follows||d.followers||d.followings||d.users||d.contents);
    ls.forEach(function(x){
     var qx=rp(x,ps.read+1);if(!qx||!qx.id||qx.id===PRESET_TARGET)return;
     var q=state.hubs[qx.id]||{id:qx.id,name:qx.name||qx.id,image:qx.image||'',count:0,followers:[],targetFollows:false};
