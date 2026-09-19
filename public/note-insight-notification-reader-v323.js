@@ -272,7 +272,7 @@ async function scanFull(){
 async function scanContinue(){
  if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return}
  scanning=true;let a=null,saved=null,p=null,host=null,count=0,safetyStop=false;
- status('下側の開始位置を確認しています…','saving','下から読込');
+ status('下側の開始位置を確認しています…（通常は全件読み直しなし）','saving','下から読込');
  try{
   p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
