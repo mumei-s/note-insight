@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.80 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.81 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.80/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3253/);
+ assert.match(parent,/@version\s+3\.2\.81/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3254/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3280/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3281/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -132,4 +132,17 @@ test("dock click owns the tap and auto retry waits for a real scan",async()=>{
   assert.match(source,/Promise\.resolve\(safeScan\('continue'\)\)\.then\(\(\)=>\{autoDoneForSession=true\}\)/);
   assert.match(source,/catch\(\(\)=>\{autoDoneForSession=false;setTimeout\(\(\)=>maybeAuto\(false\),700\)\}\)/);
   assert.match(source,/mumei-v3-reader-ready/);
+});
+
+
+test("dock is born hidden and can never appear outside a verified notification context",async()=>{
+  const source=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(source,/r\.hidden=true/);
+  assert.match(source,/r\.style\.setProperty\('display','none','important'\)/);
+  assert.match(source,/function strictNotificationContext\(\)/);
+  assert.match(source,/const want=Boolean\(on&&featureEnabled&&strictNotificationContext\(\)\)/);
+  assert.match(source,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);return\}/);
+  assert.match(source,/function onGlobalNavStart\(e\)/);
+  assert.match(source,/window\.addEventListener\('pointerdown',onGlobalNavStart,true\)/);
+  assert.match(source,/window\.addEventListener\('touchstart',onGlobalNavStart,true\)/);
 });
