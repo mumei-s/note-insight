@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.68';
+const VERSION='3.2.69';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1',NAV_RETURN='mumei-v3-notification-return-v3268';
@@ -95,6 +95,7 @@ function independentDockHost(){let host=document.getElementById(HOST);if(host)re
 function mountUiInSurface(){const host=independentDockHost();const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
 function markSurface(next){if(shell&&shell!==next)shell.removeAttribute('data-mumei-notice-shell-v3');shell=next;if(shell)shell.setAttribute('data-mumei-notice-shell-v3','1')}
 function panelEvent(e){const path=e?.composedPath?.()||[];return path.some(node=>node instanceof Element&&(node.id===HOST||node.id===ROOT||node.id===SETTINGS))}
+function notificationVisibleNow(){return Boolean(notificationRoute()||findSurface()||bellIntent()||returnRestoring)}
 function returnUrlKey(v){try{const u=new URL(String(v||''),location.href);return u.origin+u.pathname+u.search}catch{return''}}
 function pendingReturn(){try{const st=JSON.parse(sessionStorage.getItem(NAV_RETURN)||'null');return st&&Date.now()-Number(st.at||0)<30*60*1000?st:null}catch{return null}}
 function returnSourceHere(st=pendingReturn()){return Boolean(st&&returnUrlKey(st.source)===returnUrlKey(location.href))}
@@ -166,7 +167,7 @@ const actionButton=e=>{const b=e.target instanceof Element?e.target.closest('but
 for(const type of['pointerdown','mousedown','touchstart','click'])r.addEventListener(type,e=>{actionButton(e)},true);
 r.addEventListener('pointerup',e=>{const b=actionButton(e);if(b)runDockAction(b)},true);
 return r}
-function showRoot(on){const want=Boolean(on&&featureEnabled&&panelSessionActive);dockVisible=want;if(!featureEnabled){document.getElementById(HOST)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
+function showRoot(on){const want=Boolean(on&&featureEnabled&&panelSessionActive&&notificationVisibleNow());dockVisible=want;if(!featureEnabled){document.getElementById(HOST)?.remove();return}const r=ensureRoot();r.style.setProperty('display',want?'grid':'none','important');if(!want)document.getElementById(SETTINGS)?.remove()}
 function cleanupVisuals(){document.getElementById(BOUNDARY)?.remove();const p=document.getElementById(PROGRESS);if(p){if(p.style.display!=='none')p.style.setProperty('display','none','important');if(p.textContent)p.textContent=''}document.getElementById(SETTINGS)?.remove()}
 function clearFeatureHides(){for(const el of document.querySelectorAll('.'+HIDE))el.classList.remove(HIDE)}
 async function initEnabled(){if(enabledLoaded)return featureEnabled;featureEnabled=Boolean(await get(ENABLED,true));enabledLoaded=true;return featureEnabled}
@@ -290,7 +291,7 @@ async function activate(next){if(!await initEnabled()||suppressUntilBell)return;
 async function activateIntent(){if(!await initEnabled()||suppressUntilBell)return;panelSessionActive=true;clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()])}
 function confirmHide(){hideTimer=0;if(suppressUntilBell)return;const next=findSurface();if(next){void activate(next);return}if(notificationRoute()||bellIntent()){void activateIntent();return}if(panelSessionActive){markSurface(null);showRoot(true);return}cleanupVisuals()}
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
-async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell)return;const next=findSurface();if(next){await activate(next);return}if(notificationRoute()||bellIntent()){await activateIntent();return}if(panelSessionActive){if(shell&&!shell.isConnected)markSurface(null);showRoot(true);return}cleanupVisuals()}
+async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){showRoot(false);return}const next=findSurface();if(next){await activate(next);return}if(notificationRoute()||bellIntent()){await activateIntent();return}if(panelSessionActive){if(shell&&!shell.isConnected)markSurface(null);showRoot(false);cleanupVisuals();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
 function onTopClick(e){if(panelEvent(e))return;const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!bellTrigger(target,e))return;if(returnRestoring)return;suppressUntilBell=false;panelSessionActive=true;const openNow=Boolean(findSurface())||notificationRoute()||dockVisible;if(openNow){intentUntil=0;showRoot(true);setTimeout(()=>scheduleInspect(0),100);setTimeout(()=>scheduleInspect(0),500);return}autoDoneForSession=false;intentUntil=Date.now()+7000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500])setTimeout(()=>scheduleInspect(0),ms)}
 

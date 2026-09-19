@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.68 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.69 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.68/);
+ assert.match(parent,/@version\s+3\.2\.69/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3245/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3268/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3269/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -111,7 +111,7 @@ test("dock event ownership stays inside the independent host",async()=>{
 
 test("article return preserves notification panel session",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3268'/);
+  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3269'/);
   assert.match(runtime,/function saveArticleReturn\(target\)/);
   assert.match(runtime,/function suspendForArticleReturn\(\)/);
   assert.match(runtime,/async function resumeArticleReturn\(\)/);
@@ -119,4 +119,14 @@ test("article return preserves notification panel session",async()=>{
   assert.match(runtime,/addEventListener\('popstate',routeLifecycle\)/);
   assert.match(runtime,/if\(st&&returnSourceHere\(st\)\)\{void resumeArticleReturn\(\);return\}/);
   assert.doesNotMatch(runtime,/popstate',\(\)=>\{intentUntil=0;if\(!notificationRoute\(\)\)hideImmediately\(\)/);
+});
+
+
+test("dock state survives navigation but UI is visible only on notification context",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(runtime,/function notificationVisibleNow\(\)/);
+  assert.match(runtime,/panelSessionActive&&notificationVisibleNow\(\)/);
+  assert.match(runtime,/if\(suppressUntilBell\)\{showRoot\(false\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
+  assert.doesNotMatch(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
 });

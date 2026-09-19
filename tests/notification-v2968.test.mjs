@@ -30,13 +30,13 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.2.68 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
+test('active package uses V3.2.69 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/notification-browser-install.html'),runtime=read('public/note-insight-notification-runtime-v327.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.2.68');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.2\.68/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.equal(manifest.notificationVersion,'3.2.69');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.2\.69/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3245','note-insight-notification-checkpoint-v325.js?v=3250','note-insight-notification-runtime-v327.js?v=3268'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3245','note-insight-notification-checkpoint-v325.js?v=3250','note-insight-notification-runtime-v327.js?v=3269'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/data-browser="ios-safari"/);assert.match(setup,/data-browser="android-edge"/);
@@ -93,7 +93,7 @@ test("dock event ownership stays inside the independent host",async()=>{
 
 test("article return preserves notification panel session",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3268'/);
+  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3269'/);
   assert.match(runtime,/function saveArticleReturn\(target\)/);
   assert.match(runtime,/function suspendForArticleReturn\(\)/);
   assert.match(runtime,/async function resumeArticleReturn\(\)/);
@@ -101,4 +101,14 @@ test("article return preserves notification panel session",async()=>{
   assert.match(runtime,/addEventListener\('popstate',routeLifecycle\)/);
   assert.match(runtime,/if\(st&&returnSourceHere\(st\)\)\{void resumeArticleReturn\(\);return\}/);
   assert.doesNotMatch(runtime,/popstate',\(\)=>\{intentUntil=0;if\(!notificationRoute\(\)\)hideImmediately\(\)/);
+});
+
+
+test("dock state survives navigation but UI is visible only on notification context",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(runtime,/function notificationVisibleNow\(\)/);
+  assert.match(runtime,/panelSessionActive&&notificationVisibleNow\(\)/);
+  assert.match(runtime,/if\(suppressUntilBell\)\{showRoot\(false\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
+  assert.doesNotMatch(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
 });
