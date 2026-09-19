@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.63",
+  "notificationVersion": "3.2.64",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T14:07:00+09:00",
+  "releasedAt": "2026-09-19T14:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "5パネルをdocument直下fixedからブラウザのpopover top layerへ移動。note側のtransform・スクロールコンテナ・DOM再生成の影響を受けず、常に画面下部へ固定。旧ランチャー／旧トレイも同時に非表示化。"
+  "note": "5パネルをtop layerで画面下固定し、既存の800ms監視で位置を再固定。DOM Observerは使わず公開回帰条件と両立。更新判定はV3.2.64を配信。"
 }
