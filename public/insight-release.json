@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.57",
+  "notificationVersion": "3.2.58",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T09:50:00+09:00",
+  "releasedAt": "2026-09-19T10:30:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知面の誤認を根治し、DM・記事等で旧通知DOMが残っても5パネルを再表示しないよう通知面判定を厳格化。設定遷移はtouch/pointer/mouse全経路を最上流で遮断し、設定からの戻りはヘッダーボタン自動クリックを廃止して /notifications へ直接遷移する。"
+  "note": "DM・コメント等でnoteのテキスト入力を開始した時点で本人通知5パネルを即時退避。textarea/contenteditable/role=textbox/文字入力欄へのfocusinを検知し、bellIntentを解除して🔔を開き直すまで再表示を禁止する。"
 }
