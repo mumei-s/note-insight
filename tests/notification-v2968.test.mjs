@@ -66,7 +66,7 @@ test("notification dock stays body-fixed and does not use the notification shell
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.doesNotMatch(runtime,/window\.addEventListener\('pointerdown',onShellPointerDown,true\)/);
   assert.match(runtime,/if\(!featureEnabled\|\|!bellTrigger\(target,e\)\)return/);
-  assert.match(runtime,/if\(notificationRoute\(\)\|\|bellIntent\(\)\)\{await activateIntent\(\);return\}/);
+  assert.match(runtime,/if\(notificationRoute\(\)\)\{[\s\S]*showRoot\(true\)/);assert.match(runtime,/if\(bellIntent\(\)\)\{await activateIntent\(\);return\}/);
 });
 
 
