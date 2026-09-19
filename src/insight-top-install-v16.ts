@@ -86,7 +86,7 @@ function ensureNoticeControls(){
 
   let link=controls.querySelector<HTMLAnchorElement>(`a.${CANONICAL}`);
   if(!link){link=document.createElement("a");controls.appendChild(link)}
-  link.className=`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`;link.href=hrefFor("notice");link.textContent=card.classList.contains("needs-update")?"⬆ 更新あり":card.classList.contains("needs-install")?"＋ インストール":"✓ 最新版 / 設定";link.title=card.classList.contains("needs-update")?"本人通知の更新があります":card.classList.contains("needs-install")?"本人通知をこの端末へインストール":"本人通知の設定・更新";link.onclick=e=>e.stopPropagation();
+  link.className=`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`;link.href=hrefFor("notice");link.textContent=card.classList.contains("needs-update")?"⬆ 更新あり":card.classList.contains("needs-install")?"＋ インストール":"設定";link.title=card.classList.contains("needs-update")?"本人通知の更新があります":card.classList.contains("needs-install")?"本人通知をこの端末へインストール":"本人通知の設定・更新";link.onclick=e=>e.stopPropagation();
 
   for(const el of [...card.querySelectorAll<HTMLElement>(":scope > a,:scope > button")]){if(el.classList.contains("miv5-source-main"))continue;el.remove()}
   card.classList.toggle("mumei-notification-feature-off",featureEnabled===false);
@@ -97,7 +97,7 @@ function ensureOne(kind:"dashboard"|"notice"){
   const all=[...card.querySelectorAll<HTMLElement>(":scope > a,:scope > button")];
   let keep=all.find(el=>el.classList.contains(CANONICAL)) as HTMLAnchorElement|undefined;
   if(!keep){const reusable=all.find(el=>el instanceof HTMLAnchorElement&&(el.classList.contains(TOOL_CLASS)||el.classList.contains("miv5-install-link"))) as HTMLAnchorElement|undefined;keep=reusable||document.createElement("a");if(!reusable)card.appendChild(keep)}
-  keep.className=`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`;keep.href=hrefFor(kind);keep.textContent=card.classList.contains("needs-update")?"⬆ 更新あり":card.classList.contains("needs-install")?"＋ インストール":"✓ 最新版 / 設定";keep.title=card.classList.contains("needs-update")?"Dashboard同期の更新があります":card.classList.contains("needs-install")?"Dashboard同期をこの端末へインストール":"Dashboard同期の設定・更新";keep.onclick=e=>e.stopPropagation();
+  keep.className=`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`;keep.href=hrefFor(kind);keep.textContent=card.classList.contains("needs-update")?"⬆ 更新あり":card.classList.contains("needs-install")?"＋ インストール":"設定";keep.title=card.classList.contains("needs-update")?"Dashboard同期の更新があります":card.classList.contains("needs-install")?"Dashboard同期をこの端末へインストール":"Dashboard同期の設定・更新";keep.onclick=e=>e.stopPropagation();
   for(const el of [...card.querySelectorAll<HTMLElement>(":scope > a,:scope > button")]){if(el===keep||el.classList.contains("miv5-source-main"))continue;if(el.classList.contains("miv5-install-link")||el.classList.contains(TOOL_CLASS)||clean(el.textContent)==="インストール / 更新")el.remove()}
 }
 function ensureDetailProxy(){const actions=document.querySelector<HTMLElement>(".miu-topactions"),source=document.querySelector<HTMLButtonElement>(".miv5-source-card.detail .miv5-source-main");if(!actions||!source)return;actions.querySelectorAll(".mumei-public-refresh-proxy").forEach(el=>el.remove());let proxy=actions.querySelector<HTMLButtonElement>(`.${DETAIL_CLASS}`);if(!proxy){proxy=document.createElement("button");proxy.type="button";proxy.className=DETAIL_CLASS;proxy.innerHTML="<span>🔎 詳細分析</span><small>インストール不要</small>";proxy.addEventListener("click",()=>source.click());actions.appendChild(proxy)}}
