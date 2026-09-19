@@ -21,13 +21,38 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1||r.right<=0||r.bottom<=0||r.left>=innerWidth||r.top>=innerHeight)return false;for(let p=el,d=0;p&&d++<14;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.hasAttribute('inert')||s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)<=.01)return false}return true}
 function text(el){return clean(el?.textContent||el?.getAttribute?.('aria-label')||el?.getAttribute?.('title')||'')}
 function rowish(el){if(!visible(el))return false;const t=text(el);return t.length>=3&&t.length<=5000&&/(?:たった今|昨日|秒前|分前|時間前|日前|週間前|スキ|フォロー|コメント|返信|追加|メンバー|購入|通知)/u.test(t)}
-function rows(root){if(!root?.querySelectorAll)return[];let xs=[...root.querySelectorAll(ITEM)].filter(rowish);if(xs.length)return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)));xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
+function noticeRows(root){if(!root?.querySelectorAll)return[];const xs=[...root.querySelectorAll(ITEM)].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
+function rows(root){if(!root?.querySelectorAll)return[];const specific=noticeRows(root);if(specific.length)return specific;xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 function exact(root,label){return[...(root?.querySelectorAll?.('button,a,[role="tab"],[role="button"]')||[])].find(el=>{if(!visible(el))return false;const t=text(el);return t===label||new RegExp('^'+label+'(?:\\s*\\d+\\s*(?:件)?)?$','u').test(t)})||null}
 function common(a,b){let p=a;for(let i=0;p&&p!==document.body&&i<14;i++,p=p.parentElement)if(p.contains(b))return p;return null}
 function expand(base){let p=base,best=null;for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<12;i++,p=p.parentElement){if(!visible(p))continue;if(rows(p).length)best=p;if(p.matches?.('[role="dialog"],[role="menu"],[popover],main,[role="main"],section,aside')&&(rows(p).length||/(?:通知|お知らせ)/u.test(text(p))))return p}return best}
 function notificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
-function popupSurface(){if(document.visibilityState==='hidden')return null;if(notificationRoute()){for(const el of document.querySelectorAll('main,[role="main"],section,aside'))if(visible(el)&&(rows(el).length||/(?:通知|お知らせ)/u.test(text(el))))return el}for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],main,section,aside,nav,header')){if(!visible(root))continue;const a=exact(root,'通知'),b=exact(root,'お知らせ');if(a&&b){const x=expand(common(a,b)||root);if(x)return x}}for(const row of [...document.querySelectorAll(ITEM)].filter(visible)){const x=expand(row.closest('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],section,aside')||row.parentElement);if(x)return x}return shell&&visible(shell)?shell:null}
-function routeSurface(){if(!notificationRoute())return null;for(const el of document.querySelectorAll('main,[role="main"]'))if(visible(el))return el;for(const el of document.querySelectorAll('section,aside'))if(visible(el)&&(exact(el,'通知')||rows(el).length))return el;return document.body||null}
+function hasNoticeTabs(root){return Boolean(exact(root,'通知')&&exact(root,'お知らせ'))}
+function strongNoticeSurface(root){
+  if(!root||!visible(root))return false;
+  const specific=noticeRows(root);
+  if(notificationRoute())return Boolean(hasNoticeTabs(root)||specific.length);
+  if(hasNoticeTabs(root))return true;
+  return Boolean(specific.length&&root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]'))
+}
+function popupSurface(){
+  if(document.visibilityState==='hidden'||notificationRoute())return null;
+  for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],main,section,aside,nav')){
+    if(strongNoticeSurface(root))return root
+  }
+  for(const row of [...document.querySelectorAll(ITEM)].filter(visible)){
+    let p=row.parentElement;
+    for(let depth=0;p&&p!==document.body&&p!==document.documentElement&&depth<10;depth++,p=p.parentElement){
+      if(strongNoticeSurface(p))return p
+    }
+  }
+  return null
+}
+function routeSurface(){
+  if(!notificationRoute())return null;
+  for(const el of document.querySelectorAll('main,[role="main"],section,aside'))if(strongNoticeSurface(el))return el;
+  return null
+}
 function findSurface(){return popupSurface()||routeSurface()}
 function bellIntent(){return Date.now()<intentUntil}
 function bellMeta(el){if(!(el instanceof Element))return'';return clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' '))}
