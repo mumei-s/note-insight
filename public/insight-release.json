@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.71",
+  "notificationVersion": "3.2.72",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T20:35:00+09:00",
+  "releasedAt": "2026-09-19T20:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知DOMの汎用行フォールバックで未宣言変数により読込が停止する不具合を修正。読込シェルのみ変更し、他機能は分離。"
+  "note": "設定を開く前に実際のnote通知ページを必ず経由し、設定画面の直前履歴を /notifications に固定。クリエイターページへ戻る経路を通知シェルから分離。"
 }

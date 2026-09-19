@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.71';
+const VERSION='3.2.72';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1',NAV_RETURN='mumei-v3-notification-return-v3268';
@@ -272,19 +272,35 @@ async function creatorProfile(id){
   profileCache.set(key,task);
   return task
 }
-async function openSettings(){
-  if(!dockVisible)return;
+function settingsRouteRequest(){const q=new URLSearchParams(location.search);return notificationRoute()&&q.get('mumei_open_filter_settings')==='1'}
+async function openSettings(force=false){
+  if(!force&&!dockVisible)return false;
   const id=await account();
-  if(!id)return;
-  const u=new URL('https://mumei-s.github.io/note-insight/notification-filter-settings.html');
-  u.searchParams.set('notificationAccount',id);
-  u.searchParams.set('ts',String(Date.now()));
+  if(!id){
+    if(force){const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('mumei_open_filter_settings');cleanUrl.searchParams.delete('ts');location.replace(cleanUrl.pathname+cleanUrl.search+cleanUrl.hash)}
+    return false
+  }
   intentUntil=0;
   panelSessionActive=false;
   markSurface(null);
   showRoot(false);
   cleanupVisuals();
-  location.replace(u.href)
+  if(!notificationRoute()){
+    const notice=new URL('https://note.com/notifications');
+    notice.searchParams.set('mumei_open_filter_settings','1');
+    notice.searchParams.set('ts',String(Date.now()));
+    location.assign(notice.href);
+    return true
+  }
+  const cleanUrl=new URL(location.href);
+  cleanUrl.searchParams.delete('mumei_open_filter_settings');
+  cleanUrl.searchParams.delete('ts');
+  history.replaceState({...history.state,mumeiFilterSettingsOrigin:true},'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
+  const u=new URL('https://mumei-s.github.io/note-insight/notification-filter-settings.html');
+  u.searchParams.set('notificationAccount',id);
+  u.searchParams.set('ts',String(Date.now()));
+  location.assign(u.href);
+  return true
 }
 async function initMode(){if(modeLoaded)return;const id=await account();autoMode=id?Boolean(await get(AUTO+id,true)):true;modeLoaded=true;paintMode()}
 function paintMode(){if(suppressUntilBell||!featureEnabled)return;const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="mode"]');if(!b)return;b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
@@ -341,7 +357,7 @@ function onEditorFocus(e){
   intentUntil=0;
   hideImmediately()
 }
-function boot(){ensureStyle();mountUiInSurface();ensureRoot();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('focusin',onEditorFocus,true);document.addEventListener('click',onNotificationArticleClick,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',routeLifecycle);addEventListener('hashchange',routeLifecycle);addEventListener('pageshow',()=>{if(pendingReturn())void resumeArticleReturn()});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);setTimeout(routeLifecycle,0);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));if(pendingReturn()&&returnSourceHere())void resumeArticleReturn();else scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
+function boot(){if(settingsRouteRequest()){void openSettings(true);return}ensureStyle();mountUiInSurface();ensureRoot();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('focusin',onEditorFocus,true);document.addEventListener('click',onNotificationArticleClick,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',routeLifecycle);addEventListener('hashchange',routeLifecycle);addEventListener('pageshow',()=>{if(pendingReturn())void resumeArticleReturn()});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);setTimeout(routeLifecycle,0);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));if(pendingReturn()&&returnSourceHere())void resumeArticleReturn();else scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible};
 window.__mumeiV3Runtime327=window.__mumeiV3Runtime328;
