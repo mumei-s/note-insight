@@ -14,7 +14,7 @@ const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const modern=()=>Boolean(globalThis.GM);
 let shell=null,accountId='',filterOn=false,filterLoaded=false,autoMode=true,modeLoaded=false,autoDoneForSession=false,featureEnabled=true,enabledLoaded=false;
 const profileCache=new Map();
-let dockVisible=false,panelSessionActive=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false,settingsNavStarted=false;
+let dockVisible=false,panelSessionActive=false,inspectTimer=0,hideTimer=0,filterTimer=0,intentUntil=0,suppressUntilBell=false,settingsNavStarted=false,notificationSurfaceLeaseUntil=0;
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -45,7 +45,7 @@ function strongNoticeSurface(root){
   if(!root||!visible(root))return false;
   const specific=noticeRows(root);
   if(notificationRoute())return Boolean(hasNoticeTabs(root)||specific.length);
-  if(hasNoticeTabs(root))return true;
+  if(hasNoticeTabs(root)&&specific.length)return true;
   return Boolean(specific.length&&root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]'))
 }
 function popupSurface(){
@@ -114,7 +114,7 @@ function independentDockHost(){let host=document.getElementById(HOST);if(host)re
 function mountUiInSurface(){const host=independentDockHost();const r=document.getElementById(ROOT);if(r&&r.parentElement!==host)host.appendChild(r);const p=document.getElementById(SETTINGS);if(p&&p.parentElement!==host)host.appendChild(p)}
 function markSurface(next){if(shell&&shell!==next)shell.removeAttribute('data-mumei-notice-shell-v3');shell=next;if(shell)shell.setAttribute('data-mumei-notice-shell-v3','1')}
 function panelEvent(e){const path=e?.composedPath?.()||[];return path.some(node=>node instanceof Element&&(node.id===HOST||node.id===ROOT||node.id===SETTINGS))}
-function notificationVisibleNow(){return Boolean(notificationRoute()||popupSurface())}
+function notificationVisibleNow(){const api=reader();const scanning=Boolean(api&&typeof api.isScanning==='function'&&api.isScanning());return Boolean(notificationRoute()||popupSurface()||(scanning&&Date.now()<notificationSurfaceLeaseUntil))}
 function routeLifecycle(){
   intentUntil=0;
   const next=popupSurface();
@@ -128,6 +128,7 @@ function routeLifecycle(){
     void activate(next);
     return
   }
+  notificationSurfaceLeaseUntil=0;
   hideImmediately()
 }
 async function account(){if(accountId)return accountId;try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=clean(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))accountId=id}catch{}return accountId}
@@ -180,6 +181,7 @@ function notificationLeaveAction(target){
   return Boolean(row&&shell.contains(row)&&rowish(row))
 }
 function hideImmediately(){
+  notificationSurfaceLeaseUntil=0;
   suppressUntilBell=true;
   panelSessionActive=false;
   intentUntil=0;
@@ -252,7 +254,7 @@ async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date
 async function safeScan(){const current=await waitForRows();if(!current)return 0;if(current!==shell)markSurface(current);showRoot(true);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1200);if(!again)return 0;const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan()}
 async function manualRead(btn){btn.classList.remove('err');btn.textContent='待機';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}btn.textContent='読込中';await safeScan()}catch(e){btn.classList.add('err');btn.textContent='再読込';btn.title=String(e?.message||e)}}
 function hideProgress(){const p=document.getElementById(PROGRESS);if(p)p.style.setProperty('display','none','important')}
-function onStatus(e){if(!featureEnabled||!panelSessionActive)return;showRoot(true);const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]'),d=e.detail||{};if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
+function onStatus(e){if(!featureEnabled||!panelSessionActive)return;const d=e.detail||{};if(d.scanning)notificationSurfaceLeaseUntil=Date.now()+3000;showRoot(true);const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="read"]');if(!b)return;b.classList.toggle('err',d.kind==='error');b.textContent=d.scanning?'読込中':d.kind==='error'?'再読込':'読込';if(d.message)b.title=String(d.message)}
 async function openInsight(){const id=await account(),u=new URL('https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard');if(id)u.searchParams.set('notificationAccount',id);intentUntil=0;panelSessionActive=false;markSurface(null);showRoot(false);cleanupVisuals();location.assign(u.href)}
 function maybeAuto(force=false){
   if(!autoMode||autoDoneForSession||!shell||!visible(shell)||!rows(shell).length)return;
@@ -264,7 +266,7 @@ function maybeAuto(force=false){
     if(autoMode&&current&&rows(current).length&&!(typeof api.isScanning==='function'&&api.isScanning()))void safeScan().catch(()=>{})
   },220)
 }
-async function activate(next){if(!await initEnabled()||suppressUntilBell)return;panelSessionActive=true;clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
+async function activate(next){if(!await initEnabled()||suppressUntilBell)return;panelSessionActive=true;notificationSurfaceLeaseUntil=Date.now()+3000;clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
 async function activateIntent(){if(!await initEnabled()||suppressUntilBell)return;panelSessionActive=true;clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()])}
 function confirmHide(){hideTimer=0;if(suppressUntilBell)return;const next=findSurface();if(next){void activate(next);return}if(notificationRoute()||bellIntent()){void activateIntent();return}if(panelSessionActive){markSurface(null);showRoot(true);return}cleanupVisuals()}
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
