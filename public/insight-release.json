@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.64",
+  "notificationVersion": "3.2.65",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T14:20:00+09:00",
+  "releasedAt": "2026-09-19T14:34:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "5パネルをtop layerで画面下固定し、既存の800ms監視で位置を再固定。DOM Observerは使わず公開回帰条件と両立。更新判定はV3.2.64を配信。"
+  "note": "本人通知パネルは最後に正常Deploy済みだったV3.2.58実装へロールバックし、V3.2.65として再配布。3.2.59〜3.2.64のtop layer/popover/通知セッション保持/位置監視は撤回。更新・未導入表示はINSIGHT側で維持。"
 }
