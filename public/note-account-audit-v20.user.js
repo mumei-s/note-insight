@@ -83,57 +83,50 @@ async function v2FollowPage(id,page){
 }
 async function followerNetwork(followers,targetFollowings,set){
  var db=await idbOpen();await migrateOldNet(db);
- var all=followers.slice(),tf=new Set(targetFollowings.map(function(x){return x.id})),stopped=false,stopReason='',next=0,lastUi=0,writeLock=Promise.resolve();
- var existing=await idbAll(db,'people'),pm=new Map(existing.map(function(x){return[x.id,x]}));
- async function mergePage(fid,items,ps){
-  writeLock=writeLock.then(async function(){
-   for(var z=0;z<items.length;z++){
-    var qx=items[z];if(!qx||!qx.id||qx.id===PRESET_TARGET)continue;
-    var h=await idbGet(db,'hubs',qx.id)||{id:qx.id,name:qx.name||qx.id,image:qx.image||'',followers:[],targetFollows:false};
-    if(h.followers.indexOf(fid)<0)h.followers.push(fid);
-    h.count=h.followers.length;h.targetFollows=tf.has(qx.id);await idbPut(db,'hubs',h);
-   }
-   await idbPut(db,'people',ps);pm.set(fid,ps);
-  });
-  return writeLock;
- }
- function doneCount(){var n=0;pm.forEach(function(x){if(x.done)n++});return n}
- function ui(fid,extra){var now=Date.now();if(now-lastUi<350)return;lastUi=now;set('⚡ 全フォロワー '+doneCount()+'/'+all.length+'｜並列4｜@'+fid+(extra?'｜'+extra:''))}
+ var all=followers.slice(),tf=new Set(targetFollowings.map(function(x){return x.id})),stopped=false,stopReason='',next=0,lastUi=0;
+ var existing=await idbAll(db,'people'),pm=new Map(existing.map(function(x){return[x.id,x]})),hubRows=await idbAll(db,'hubs'),hm=new Map(hubRows.map(function(x){return[x.id,x]}));
+ function savePage(ps,touched){return new Promise(function(resolve,reject){
+  var t=db.transaction(['people','hubs'],'readwrite'),po=t.objectStore('people'),ho=t.objectStore('hubs');po.put(ps);for(var i=0;i<touched.length;i++)ho.put(touched[i]);
+  t.oncomplete=function(){resolve()};t.onerror=function(){reject(t.error)}
+ })}
+ function doneCount(){var n=0;pm.forEach(function(x){if(x.done&&!x.error)n++});return n}
+ function ui(fid,extra){var now=Date.now();if(now-lastUi<250)return;lastUi=now;set('⚡ 全フォロワー '+doneCount()+'/'+all.length+'｜並列4｜@'+fid+(extra?'｜'+extra:''))}
  async function one(f){
   if(stopped)return;
   var ps=pm.get(f.id)||{id:f.id,nextPage:1,done:false,profile:null,read:0};
-  if(ps.done)return;
+  if(ps.done&&!ps.error)return;
   try{
    if(!ps.profile){
     var fp=await profile(f.id);
     ps.profile={key:fp.key,notes:fp.notes,bioThin:(!fp.bio||fp.bio.length<4),mass:(fp.followings>=300&&fp.followings>=Math.max(500,fp.followers*10)),followings:fp.followings,followers:fp.followers};
-    await idbPut(db,'people',ps);pm.set(f.id,ps);
+    ps.error='';await idbPut(db,'people',ps);pm.set(f.id,ps);
    }
    while(!ps.done&&!stopped){
     ui(f.id,'p'+ps.nextPage+' / '+ps.read+'件');
-    var ls=await v2FollowPage(f.id,ps.nextPage);
-    ps.read+=ls.length;ps.nextPage++;if(!ls.length||ls.length<20)ps.done=true;
-    await mergePage(f.id,ls,ps);
-    if(!ps.done)await wait(45);
+    var ls=await v2FollowPage(f.id,ps.nextPage),touchedMap=new Map;
+    for(var z=0;z<ls.length;z++){
+     var qx=ls[z];if(!qx||!qx.id||qx.id===PRESET_TARGET)continue;
+     var h=hm.get(qx.id)||{id:qx.id,name:qx.name||qx.id,image:qx.image||'',followers:[],targetFollows:false};
+     if(h.followers.indexOf(f.id)<0)h.followers.push(f.id);
+     h.count=h.followers.length;h.targetFollows=tf.has(qx.id);hm.set(qx.id,h);touchedMap.set(qx.id,h);
+    }
+    ps.read+=ls.length;ps.nextPage++;if(!ls.length||ls.length<20)ps.done=true;ps.error='';pm.set(f.id,ps);
+    await savePage(ps,Array.from(touchedMap.values()));
+    if(!ps.done)await wait(35);
    }
   }catch(e){
-   var msg=String(e&&e.message||e);ps.error=msg;await idbPut(db,'people',ps);pm.set(f.id,ps);
+   var msg=String(e&&e.message||e);ps.error=msg;pm.set(f.id,ps);await idbPut(db,'people',ps);
    if(/403|429/.test(msg)){stopped=true;stopReason=msg}
   }
  }
  async function worker(){
-  while(!stopped){
-   var i=next++;if(i>=all.length)return;
-   var f=all[i],ps=pm.get(f.id);if(ps&&ps.done)continue;
-   await one(f);if(!stopped)await wait(70);
-  }
+  while(!stopped){var i=next++;if(i>=all.length)return;var f=all[i],ps=pm.get(f.id);if(ps&&ps.done&&!ps.error)continue;await one(f);if(!stopped)await wait(45)}
  }
  set('⚡ TURBO準備｜保存済み '+doneCount()+'/'+all.length);
  await Promise.all([worker(),worker(),worker(),worker()]);
- await writeLock;
- var people=await idbAll(db,'people'),ids=new Set(all.map(function(x){return x.id})),rows=people.filter(function(x){return ids.has(x.id)}),prof=rows.filter(function(x){return x.profile}).map(function(x){return x.profile}),doneRows=rows.filter(function(x){return x.done&&!x.error});
+ var people=Array.from(pm.values()),ids=new Set(all.map(function(x){return x.id})),rows=people.filter(function(x){return ids.has(x.id)}),prof=rows.filter(function(x){return x.profile}).map(function(x){return x.profile}),doneRows=rows.filter(function(x){return x.done&&!x.error});
  var known=prof.filter(function(x){return x.notes>=0}),low=known.filter(function(x){return x.notes<=1}).length,empty=prof.filter(function(x){return x.bioThin}).length,mass=prof.filter(function(x){return x.mass}).length;
- var hubs=(await idbAll(db,'hubs')).filter(function(x){return x.count>=2}).sort(function(a,b){return b.count-a.count}).slice(0,200);
+ var hubs=Array.from(hm.values()).filter(function(x){return x.count>=2}).sort(function(a,b){return b.count-a.count}).slice(0,200);
  return{sample:all.length,scanned:doneRows.length,started:rows.length,total:all.length,completed:doneRows.length>=all.length,stopped:stopped,stopReason:stopReason,hubs:hubs,quality:{sample:prof.length,low:pct(low,known.length),empty:pct(empty,prof.length),mass:pct(mass,prof.length)}}
 }
 function add(m,p,k,ak,body){if(!p||!p.id)return;var q=m.get(p.id)||{id:p.id,name:p.name||p.id,image:p.image||'',comments:0,replies:0,likes:0,follower:false,following:false,arts:new Set,phrases:[]};if(k==='comment')q.comments++;if(k==='reply')q.replies++;if(k==='like')q.likes++;if(k==='follower')q.follower=true;if(k==='following')q.following=true;if(ak)q.arts.add(ak);P.forEach(function(x){if(body&&body.indexOf(x)>=0&&q.phrases.indexOf(x)<0)q.phrases.push(x)});m.set(p.id,q)}function score(q){return q.comments*4+q.replies*3+Math.min(q.likes,12)+(q.follower?1:0)+(q.following?3:0)+Math.min(q.arts.size*2,10)+q.phrases.length*3}
@@ -259,7 +252,7 @@ function render(r){
  '</section>';
  e.querySelectorAll('.naa-tabs button').forEach(function(b){b.onclick=function(){var t=b.dataset.tab;e.querySelectorAll('.naa-tabs button').forEach(function(x){x.classList.toggle('on',x===b)});e.querySelectorAll('.naa-pane').forEach(function(x){x.classList.toggle('on',x.dataset.pane===t)})}});
 }
-async function run(){try{var id=PRESET_TARGET;var extra=PRESET_ARTS.map(artUrl).filter(Boolean);status('プロフィール取得中…');var p=await profile(id);status('記事取得中…');var arts=await articles(id,extra),m=new Map,all=[],external=rawExternal(p.raw).map(function(x){return Object.assign({source:'プロフィール公開情報'},x)}).concat(urlsInText(p.bio).map(function(x){return Object.assign({source:'プロフィール本文'},x)}));for(var i=0;i<arts.length;i++){var art=arts[i];status('外部リンク '+(i+1)+'/'+arts.length+'｜'+art.title);try{external=external.concat(await articleExternal(art))}catch(e){}status('コメント '+(i+1)+'/'+arts.length+'｜'+art.title);try{var cs=await comments(art.key);cs.forEach(function(x){x.art=art.key;all.push(x);if(x.id&&x.id!==id)add(m,{id:x.id,name:x.name,image:x.image},x.parent?'reply':'comment',art.key,x.body)})}catch(e){}status('スキ '+(i+1)+'/'+arts.length+'｜'+art.title);try{var ls=await likers(art.key);ls.forEach(function(x){if(x.id!==id)add(m,x,'like',art.key,'')})}catch(e){}await wait(35)}status('フォロー関係取得中…');var rr=await Promise.all([rel(p,'followers'),rel(p,'followings')]),followers=rr[0],followings=rr[1];followers.forEach(function(x){if(x.id!==id)add(m,x,'follower','','')});followings.forEach(function(x){if(x.id!==id)add(m,x,'following','','')});status('フォロワー関係網を確認中…');var network=await followerNetwork(followers,followings,status);status('フォロワー構成集計中…');var q=network.quality||{sample:0,low:0,empty:0,mass:0},g=snap(id,p.followers),an=anomaly(q,g),direct=[],third=[];all.forEach(function(x){urlsInText(x.body).forEach(function(u){external.push(Object.assign({source:'コメント:'+x.art},u))});var hits=P.filter(function(z){return x.body.indexOf(z)>=0});if(hits.length){var z={id:x.id,name:x.name,body:x.body,hits:hits,art:x.art};if(x.id===id)direct.push(z);else third.push(z)}});var candidates=Array.from(m.values()).map(function(x){return Object.assign({},x,{score:score(x),artCount:x.arts.size})}).sort(function(x,y){return y.score-x.score});var likeGraph=analyzeLikeGraph(liked.items,followers,candidates),pattern=await followerPatternSummary(),market=marketMatch(q,g,p,network);if(likeGraph.followerCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('まこ→フォロワーへの公開スキ '+likeGraph.followerCreators+'人')}if(likeGraph.mutualCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('相互スキ '+likeGraph.mutualCreators+'人')}external=dedupExternal(external);var pc=publicCandidates(direct,third,external);render({p:p,q:q,g:g,an:an,direct:direct,third:third,candidates:candidates,external:external,searches:searchLinks(p.id,p.name),network:network,market:market,publicCandidates:pc,likeGraph:likeGraph,pattern:pattern});status('完了｜まこスキ '+likeGraph.articles+'件｜相互スキ '+likeGraph.mutualCreators+'人｜フォロワー走査 '+network.scanned+'/'+network.total+'人')}catch(e){status('⚠ '+(e.message||e),1)}}
+async function run(){try{var id=PRESET_TARGET;var extra=PRESET_ARTS.map(artUrl).filter(Boolean);status('プロフィール取得中…');var p=await profile(id);status('記事取得中…');var arts=await articles(id,extra),m=new Map,all=[],external=rawExternal(p.raw).map(function(x){return Object.assign({source:'プロフィール公開情報'},x)}).concat(urlsInText(p.bio).map(function(x){return Object.assign({source:'プロフィール本文'},x)}));for(var i=0;i<arts.length;i++){var art=arts[i];status('外部リンク '+(i+1)+'/'+arts.length+'｜'+art.title);try{external=external.concat(await articleExternal(art))}catch(e){}status('コメント '+(i+1)+'/'+arts.length+'｜'+art.title);try{var cs=await comments(art.key);cs.forEach(function(x){x.art=art.key;all.push(x);if(x.id&&x.id!==id)add(m,{id:x.id,name:x.name,image:x.image},x.parent?'reply':'comment',art.key,x.body)})}catch(e){}status('スキ '+(i+1)+'/'+arts.length+'｜'+art.title);try{var ls=await likers(art.key);ls.forEach(function(x){if(x.id!==id)add(m,x,'like',art.key,'')})}catch(e){}await wait(35)}status('フォロー関係取得中…');var rr=await Promise.all([rel(p,'followers'),rel(p,'followings')]),followers=rr[0],followings=rr[1];followers.forEach(function(x){if(x.id!==id)add(m,x,'follower','','')});followings.forEach(function(x){if(x.id!==id)add(m,x,'following','','')});status('フォロワー関係網を確認中…');var network=await followerNetwork(followers,followings,status);status('フォロワー構成集計中…');var q=network.quality||{sample:0,low:0,empty:0,mass:0},g=snap(id,p.followers),an=anomaly(q,g),direct=[],third=[];all.forEach(function(x){urlsInText(x.body).forEach(function(u){external.push(Object.assign({source:'コメント:'+x.art},u))});var hits=P.filter(function(z){return x.body.indexOf(z)>=0});if(hits.length){var z={id:x.id,name:x.name,body:x.body,hits:hits,art:x.art};if(x.id===id)direct.push(z);else third.push(z)}});var candidates=Array.from(m.values()).map(function(x){return Object.assign({},x,{score:score(x),artCount:x.arts.size})}).sort(function(x,y){return y.score-x.score});var likeGraph=analyzeLikeGraph(liked.items,followers,candidates),pattern=await followerPatternSummary(),market=marketMatch(q,g,p,network);if(likeGraph.followerCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('まこ→フォロワーへの公開スキ '+likeGraph.followerCreators+'人')}if(likeGraph.mutualCreators>=5){market.score=Math.min(100,market.score+8);market.reasons.push('相互スキ '+likeGraph.mutualCreators+'人')}market.label=market.score>=65?'販売型運用との一致が複数':market.score>=40?'販売型運用と一部一致':market.score>=20?'弱い一致':'一致材料は少ない';external=dedupExternal(external);var pc=publicCandidates(direct,third,external);render({p:p,q:q,g:g,an:an,direct:direct,third:third,candidates:candidates,external:external,searches:searchLinks(p.id,p.name),network:network,market:market,publicCandidates:pc,likeGraph:likeGraph,pattern:pattern});status('完了｜まこスキ '+likeGraph.articles+'件｜相互スキ '+likeGraph.mutualCreators+'人｜フォロワー走査 '+network.scanned+'/'+network.total+'人')}catch(e){status('⚠ '+(e.message||e),1)}}
 function install(){if(document.getElementById('note-account-audit-v1'))return;var st=document.createElement('style');st.textContent='#note-account-audit-v1{position:fixed;right:8px;bottom:10px;z-index:2147483640;font-family:system-ui;color:#eef7ff}#naa-open{height:42px;padding:0 13px;border:1px solid #5bd8ff;border-radius:999px;background:#07131d;color:#fff;font-weight:900}#naa-panel{display:none;width:min(520px,calc(100vw - 12px));height:min(74vh,680px);overflow:hidden;margin-bottom:6px;padding:9px;border:1px solid #355b70;border-radius:14px;background:#071019;box-shadow:0 18px 40px #000b}.naa-btn{width:100%;height:38px;margin-top:6px;border:1px solid #45c9ff;border-radius:8px;background:#0b5178;color:#fff;font-weight:900}#naa-status{margin:5px 0;padding:5px 7px;border:1px solid #345;border-radius:7px;background:#0b1821;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#naa-result{height:calc(100% - 100px);overflow:auto;padding-right:2px}.naa-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:5px 0}.naa-card{padding:7px;border:1px solid #29495c;border-radius:9px;background:#0b1720}.naa-card small,.naa-card span{display:block;color:#98afbc;font-size:8px}.naa-card b{display:block;font-size:15px;line-height:1.2;margin:2px 0}.naa-tabs{position:sticky;top:0;z-index:3;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:5px 0;background:#071019}.naa-tabs button{height:31px;border:1px solid #29495c;border-radius:7px;background:#0b1720;color:#a8bdc9;font-size:9px;font-weight:800}.naa-tabs button.on{background:#0b5178;color:#fff;border-color:#52d6ff}.naa-pane{display:none}.naa-pane.on{display:block}.naa-pane h3{font-size:12px;margin:9px 0 4px;border-top:1px solid #233b49;padding-top:7px}.naa-pane h4{font-size:10px;margin:8px 0 3px}.naa-note,.naa-mini,.naa-ev,.naa-empty{padding:6px;border:1px solid #29404e;border-radius:7px;background:#0a151d;font-size:9px;line-height:1.45}.naa-mini b{font-size:12px}.naa-compact{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:6px 7px;border-bottom:1px solid #1f3440}.naa-compact b{font-size:10px}.naa-compact small{display:block;color:#93aab7;font-size:8px;line-height:1.35}.naa-compact a{color:#7ce2ff;font-size:9px;text-decoration:none}.naa-score{display:flex;align-items:end;gap:8px;padding:7px;border:1px solid #36566a;border-radius:8px;background:#0b1821}.naa-score b{font-size:22px}.naa-score span{font-size:10px;padding-bottom:3px}details{margin-top:6px;border:1px solid #243b49;border-radius:8px;padding:5px}summary{font-size:9px;font-weight:800;cursor:pointer}';document.head.appendChild(st);var r=document.createElement('div');r.id='note-account-audit-v1';var cur=(location.pathname.split('/').filter(Boolean)[0]||'');r.innerHTML='<div id="naa-panel"><b>🔎 こあく まこ 検証ダッシュボード v2.0</b><div class="naa-ev"><b>対象 @'+esc(PRESET_TARGET)+'</b><br>公開情報を横断して、スキ・フォロワー網・購入型パターン・外部リンクをまとめて検証します。</div><button id="naa-run" class="naa-btn">🔄 続きから再検証</button><div id="naa-status">待機中</div><small>同一人物と扱うのは本人自身の公開明示がある場合だけ。異常指標は外部購入の証拠ではありません。</small><div id="naa-result"></div></div><button id="naa-open" >🔎 こあく まこ調査</button>';document.body.appendChild(r);document.getElementById('naa-open').onclick=function(){var p=document.getElementById('naa-panel');p.style.display=p.style.display==='block'?'none':'block'};document.getElementById('naa-run').onclick=run;if(sessionStorage.getItem(AUTO_KEY)!=='1'){sessionStorage.setItem(AUTO_KEY,'1');var p=document.getElementById('naa-panel');p.style.display='block';setTimeout(function(){void run()},650)}}
 if(document.body)install();else addEventListener('DOMContentLoaded',install,{once:true});
 })();
