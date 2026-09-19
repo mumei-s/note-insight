@@ -117,22 +117,23 @@ const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')
   const q=new URLSearchParams(location.search),urlWants=q.get('mumei_filter_return')==='bell';
   const flag=await noteGet(RETURN,null),fresh=flag&&Date.now()-Number(flag.at||0)<120000;
   if(!urlWants&&!fresh)return;
-  let attempts=0,clickedAt=0;
-  const tick=async()=>{
-    const api=window.__mumeiV3Runtime328;
-    if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
-      await noteSet(RETURN,null);
-      try{history.replaceState(history.state,'',location.origin+'/')}catch{}
-      window.__mumeiNotificationReturnDone=true;
-      return
-    }
-    if(attempts++>=36)return;
-    if(api&&typeof api.openNotificationBell==='function'&&Date.now()-clickedAt>1500){
-      if(api.openNotificationBell())clickedAt=Date.now()
-    }
-    setTimeout(()=>void tick(),350)
-  };
-  void tick()
+  const onNotifications=/^\/notifications(?:\/|$)/i.test(location.pathname);
+  if(!onNotifications){
+    const u=new URL('https://note.com/notifications');
+    u.searchParams.set('mumei_filter_return','1');
+    u.searchParams.set('ts',String(Date.now()));
+    location.replace(u.href);
+    return
+  }
+  await noteSet(RETURN,null);
+  try{
+    const cleanUrl=new URL(location.href);
+    cleanUrl.searchParams.delete('mumei_filter_return');
+    cleanUrl.searchParams.delete('ts');
+    history.replaceState(history.state,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash)
+  }catch{}
+  window.__mumeiNotificationReturnDone=true
+})()
 })()
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
