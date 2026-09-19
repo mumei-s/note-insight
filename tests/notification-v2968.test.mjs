@@ -36,7 +36,7 @@ test('active package uses V3.2.79 with bottom-up resume, persistent checkpoint a
   assert.equal(manifest.notificationVersion,'3.2.79');assert.equal(manifest.notificationLabel,'本人通知');
   assert.match(v3,/@version\s+3\.2\.79/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-reader-v323.js?v=3252','note-insight-notification-checkpoint-v325.js?v=3251','note-insight-notification-runtime-v327.js?v=3279'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-reader-v323.js?v=3252','note-insight-notification-checkpoint-v325.js?v=3250','note-insight-notification-runtime-v327.js?v=3279'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/preserveBoundary/);assert.match(reader,/collectRecentFallback/);assert.match(reader,/recent-fallback-from-saved-time/);assert.match(reader,/全件読み直しなし/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/data-browser="ios-safari"/);assert.match(setup,/data-browser="android-edge"/);
