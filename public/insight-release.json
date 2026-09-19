@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.56",
+  "notificationVersion": "3.2.57",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T08:12:00+09:00",
+  "releasedAt": "2026-09-19T09:50:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知5パネルの『設定』だけをwindow最上流のpointerdown/pointerup/clickで捕捉し、note側の背面クリエイター遷移より先に遮断。設定はpointerupで専用設定ページを開き、他4ボタンやreader/checkpoint等は変更なし。"
+  "note": "通知面の誤認を根治し、DM・記事等で旧通知DOMが残っても5パネルを再表示しないよう通知面判定を厳格化。設定遷移はtouch/pointer/mouse全経路を最上流で遮断し、設定からの戻りはヘッダーボタン自動クリックを廃止して /notifications へ直接遷移する。"
 }
