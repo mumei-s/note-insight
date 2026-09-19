@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.81",
+  "notificationVersion": "3.2.83",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T22:25:00+09:00",
+  "releasedAt": "2026-09-20T01:15:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.81。5パネルは生成時から非表示、実際の通知面以外では表示不可。通知外への遷移開始時に同期的に非表示。設定復帰はUserScript側でも/notifications固定、古い通知復帰状態を破棄。"
+  "note": "本人通知V3.2.83。今日13:58のV3.2.61表示・通知開閉・自動ON/OFFを基準に復元し、手動読込だけ「続きから読む / 全読み」を独立追加。自動は従来どおり差分読込のみ。"
 }
