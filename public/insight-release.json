@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.59",
+  "notificationVersion": "3.2.60",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T10:30:00+09:00",
+  "releasedAt": "2026-09-19T10:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知5パネルをnoteの通知DOMから完全に切り離し、document直下の固定UIとして維持。読込中のスクロールや通知DOM再生成で上へ移動・消失しない構造に変更し、通知以外の画面では本文中の「通知」等をベル操作と誤認しにくいよう判定範囲も限定。"
+  "note": "本人通知5パネルを通知セッション単位で保持し、読込中の通知DOM再生成・一時的な検出切れでは消さない。タッチスクロール開始時のpointerdownでは閉じず、通知外への実クリック・🔔再タップ・画面遷移時だけ閉じる。"
 }
