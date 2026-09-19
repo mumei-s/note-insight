@@ -132,7 +132,7 @@ test('verified notification context is the only dock display authority while man
   assert.match(runtime,/READ_MENU='mumei-v325-read-choice'/);
   assert.match(runtime,/続きから読む/);assert.match(runtime,/全読み/);
   assert.match(runtime,/async function safeScan\(mode='continue'\)/);
-  assert.match(runtime,/void safeScan\('continue'\)\.catch/);
+  assert.match(runtime,/Promise\.resolve\(safeScan\('continue'\)\)/);
   assert.match(reader,/async function scanContinue\(\)/);assert.match(reader,/async function scanFull\(\)/);
   assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
 });
