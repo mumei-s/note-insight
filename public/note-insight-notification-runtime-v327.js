@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.70';
+const VERSION='3.2.71';
 const HOST='mumei-v325-dock-host',ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1',NAV_RETURN='mumei-v3-notification-return-v3268';
@@ -22,7 +22,7 @@ function visible(el){if(!(el instanceof Element))return false;const r=el.getBoun
 function text(el){return clean(el?.textContent||el?.getAttribute?.('aria-label')||el?.getAttribute?.('title')||'')}
 function rowish(el){if(!visible(el))return false;const t=text(el);return t.length>=3&&t.length<=5000&&/(?:たった今|昨日|秒前|分前|時間前|日前|週間前|スキ|フォロー|コメント|返信|追加|メンバー|購入|通知)/u.test(t)}
 function noticeRows(root){if(!root?.querySelectorAll)return[];const xs=[...root.querySelectorAll(ITEM)].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
-function rows(root){if(!root?.querySelectorAll)return[];const specific=noticeRows(root);if(specific.length)return specific;xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
+function rows(root){if(!root?.querySelectorAll)return[];const specific=noticeRows(root);if(specific.length)return specific;let xs=[...root.querySelectorAll('li,[role="listitem"]')].filter(rowish);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 function exact(root,label){return[...(root?.querySelectorAll?.('button,a,[role="tab"],[role="button"]')||[])].find(el=>{if(!visible(el))return false;const t=text(el);return t===label||new RegExp('^'+label+'(?:\\s*\\d+\\s*(?:件)?)?$','u').test(t)})||null}
 function common(a,b){let p=a;for(let i=0;p&&p!==document.body&&i<14;i++,p=p.parentElement)if(p.contains(b))return p;return null}
 function expand(base){let p=base,best=null;for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<12;i++,p=p.parentElement){if(!visible(p))continue;if(rows(p).length)best=p;if(p.matches?.('[role="dialog"],[role="menu"],[popover],main,[role="main"],section,aside')&&(rows(p).length||/(?:通知|お知らせ)/u.test(text(p))))return p}return best}
