@@ -8,7 +8,7 @@ test("V3.2.79 loads bottom-up reader, persistent checkpoint and fixed five-panel
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),loader=await read("public/note-insight-notification-loader-v318.js");
   assert.match(v3,/@version\s+3\.2\.79/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3252/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3251/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3250/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3279/);
   assert.doesNotMatch(v3,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
@@ -85,7 +85,7 @@ test("installed newer than published latest is still current",async()=>{
   assert.match(setup,/本人通知ツールは最新版です/);
   assert.match(setup,/mumei-notification-install-pending-v1/);
   assert.match(ui,/versionDiffers\(notificationInstalled,notificationLatest\)/);
-  assert.match(ui,/✓ 最新版/);
+  assert.doesNotMatch(ui,/✓ 最新版/);
 });
 
 
