@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.76",
+  "notificationVersion": "3.2.77",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T21:55:00+09:00",
+  "releasedAt": "2026-09-19T21:30:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.76。設定戻りの旧ブリッジを撤去し設定HTMLへ一本化。Runtime表示リースを通知開始ルートに固定し、ReaderのDOM再発見を通知面だけへ限定。手動の続き/全読みは維持。"
+  "note": "本人通知V3.2.77。/notifications を最優先の固定表示面に変更し、suppressUntilBell・panelSessionActive・DOM検出に関係なく5パネルを表示。通知外ページでは従来どおり非表示。"
 }
