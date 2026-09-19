@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.26',PROTOCOL='3.2.26';
+const VERSION='3.2.73',PROTOCOL='3.2.73';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -128,6 +128,39 @@ async function seekStart(p,host,cp,saved){
  const max=Math.max(0,host.scrollHeight-host.clientHeight);try{host.scrollTop=max}catch{}await sleep(80);
  return{ok:true,boundaryFound:false,recovered:false};
 }
+function checkpointCutoff(cp){
+ const base=Math.max(Number(cp?.boundaryAt||0),Number(cp?.lastSaveAt||0));
+ return base>0?base-15*60_000:0
+}
+function notificationTime(r){const ms=Date.parse(String(r?.occurred_at||''));return Number.isFinite(ms)?ms:0}
+async function collectRecentFallback(p,host,cp){
+ const cutoff=checkpointCutoff(cp),collected=[],seen=new Set();
+ if(!cutoff)return{p,host,collected,seenCount:0};
+ try{if(host)host.scrollTop=0}catch{}
+ await sleep(100);
+ let stable=0,lastTop=-1,olderOnly=0;
+ for(let step=0;step<18&&collected.length<180;step++){
+  const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため中断しました');if(nextPanel!==p){p=nextPanel;host=scrollHost(p);if(active)active.p=p}
+  let stepNew=0,stepOld=0;
+  for(const el of rows(p)){
+   const r=rowData(el);if(!r)continue;
+   const k=sig(r);if(seen.has(k))continue;seen.add(k);
+   if(active?.saved?.has(k))continue;
+   const ms=notificationTime(r);
+   if(ms&&ms>=cutoff){collected.push(r);stepNew++}
+   else if(ms&&ms<cutoff)stepOld++
+  }
+  if(stepOld>0&&stepNew===0)olderOnly++;else olderOnly=0;
+  if(olderOnly>=2||!host)break;
+  const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
+  if(before>=max-2){stable++;if(stable>=2)break}
+  else{host.scrollTop=Math.min(max,before+Math.max(220,Math.floor(host.clientHeight*.82)));await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
+  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break
+ }
+ collected.sort((a,b)=>notificationTime(a)-notificationTime(b));
+ return{p,host,collected,seenCount:seen.size}
+}
+
 async function collectBottomUp(p,host,cp){
  const needBoundary=hasBoundary(cp);
  const collected=[],seen=new Set();
@@ -166,11 +199,15 @@ async function scan(){
     cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v326');
     status('保存済み通知から完了ラインを復元しました。上方向の追加分だけ読み込みます…','saving','ライン復元');
   }else if(start.preserveBoundary){
-    const now=Date.now(),latest=await checkpointFor(a.id);
-    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,version:VERSION});
+    status('完了ラインを保持したまま、直近の差分だけ安全確認しています…','saving','差分確認');
+    const fallback=await collectRecentFallback(p,host,cp);p=fallback.p;host=fallback.host;
+    if(fallback.collected.length)count+=await sendBatch(fallback.collected,a,saved);
+    const now=Date.now(),latest=await checkpointFor(a.id),remain=readOutbox(a.id).length;
+    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:fallback.seenCount,lastError:'',lastScanMode:'recent-fallback-from-saved-time',lastRunStopped:false,version:VERSION});
     document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-    status('✓ 前回の完了ライン情報を保持｜全件読み直しなし','done','✓ 境界維持',{readCount:0,savedCount:0});
-    return 0;
+    if(remain)status(`⚠ ${remain}件は次回保存待ち｜直近差分 ${fallback.seenCount}件確認`,'error','保存待ち',{readCount:fallback.seenCount,savedCount:count,pendingCount:remain});
+    else status(`✓ 完了ライン保持｜直近差分 ${count}件保存`,'done','✓ 保存完了',{readCount:fallback.seenCount,savedCount:count});
+    return count;
   }else{
     status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
   }
