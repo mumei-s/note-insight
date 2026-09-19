@@ -94,7 +94,7 @@ test("notification dock lifecycle is isolated from note notification DOM",async(
   assert.match(runtime,/function panelEvent\(e\)/);
   assert.doesNotMatch(runtime,/shell\.appendChild\(r\)/);
   assert.match(runtime,/if\(panelEvent\(e\)\)return/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(false\);cleanupVisuals\(\);return\}/);
 });
 
 
@@ -111,7 +111,7 @@ test("dock event ownership stays inside the independent host",async()=>{
 
 test("article return preserves notification panel session",async()=>{
   const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3269'/);
+  assert.match(runtime,/NAV_RETURN='mumei-v3-notification-return-v3268'/);
   assert.match(runtime,/function saveArticleReturn\(target\)/);
   assert.match(runtime,/function suspendForArticleReturn\(\)/);
   assert.match(runtime,/async function resumeArticleReturn\(\)/);
