@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.69",
+  "notificationVersion": "3.2.70",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T18:18:00+09:00",
+  "releasedAt": "2026-09-19T20:02:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "5パネルの状態保持と表示を分離。状態は記事遷移中も保持するが、表示は通知ルート・実際の通知面・復元中に限定。記事や他画面では必ず非表示、戻ると通知面と元位置を復元。"
+  "note": "明示的に🔔を開いたセッションだけ通知面判定を緩和し、noteの実通知DOMを再取得できるよう修正。🔔を押すたび自動読込済み状態を解除し、DM等の通常画面では緩和判定を使わない。"
 }
