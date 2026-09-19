@@ -230,7 +230,7 @@ function versionCheckUrl(){
   return u.href
 }
 function verifyAfterInstall(){
-  if(verifiedInstalled){refresh();return}
+  if(verifiedInstalled){refresh();if(back)setTimeout(()=>location.replace(back),450);return}
   if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}
   if(sessionStorage.getItem(RELOADED)!=='1'){
     sessionStorage.setItem(RELOADED,'1');
