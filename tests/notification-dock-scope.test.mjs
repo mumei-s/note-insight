@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.79 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.2.80 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.2\.79/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3252/);
+ assert.match(parent,/@version\s+3\.2\.80/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3253/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
- assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3279/);
+ assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3280/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -119,4 +119,17 @@ test("restored V3.2.67 runtime core is frozen and manual full reread is isolated
   assert.match(runtime,/safeScan\(mode='continue'\)/);assert.match(runtime,/safeScan\('continue'\)/);
   assert.match(reader,/async function scanContinue\(\)/);assert.match(reader,/async function scanFull\(\)/);
   assert.match(reader,/full-history-repair/);assert.match(reader,/manual-full-history-v1/);
+});
+
+
+test("dock click owns the tap and auto retry waits for a real scan",async()=>{
+  const source=await read("public/note-insight-notification-runtime-v327.js");
+  assert.match(source,/r\.addEventListener\('click',e=>\{const b=blockDockEvent\(e\);if\(!b\)return;e\.preventDefault\(\);runDockAction\(b\)\},true\)/);
+  assert.doesNotMatch(source,/r\.addEventListener\('pointerup',e=>\{const b=actionButton/);
+  assert.match(source,/m\.addEventListener\('click',e=>\{const b=blockChoice\(e\)/);
+  assert.match(source,/setTimeout\(closeReadChoice,80\)/);
+  assert.match(source,/autoStarting=true/);
+  assert.match(source,/Promise\.resolve\(safeScan\('continue'\)\)\.then\(\(\)=>\{autoDoneForSession=true\}\)/);
+  assert.match(source,/catch\(\(\)=>\{autoDoneForSession=false;setTimeout\(\(\)=>maybeAuto\(false\),700\)\}\)/);
+  assert.match(source,/mumei-v3-reader-ready/);
 });
