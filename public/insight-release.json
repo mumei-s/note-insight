@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.67",
+  "notificationVersion": "3.2.68",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-19T15:20:00+09:00",
+  "releasedAt": "2026-09-19T18:12:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "5パネルを通知DOM・Reader・フィルター処理から完全分離。独立hostで固定し、通知DOMは読み取り対象としてのみ参照。Reader/フィルター/一時的DOM消失ではパネルの親・表示状態を変更しない。パネル操作は独自イベントで背面へ伝播させない。"
+  "note": "通知から記事・クリエイターページへ移動した際は5パネルを終了せず休止。ブラウザで戻ると元の🔔を自動で開き直し、保存した通知位置と5パネルを復元。記事側ではパネル非表示を維持。"
 }
