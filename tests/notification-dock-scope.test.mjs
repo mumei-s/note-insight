@@ -22,7 +22,7 @@ test("V3.2.79 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const reader=await read("public/note-insight-notification-reader-v323.js");
  assert.match(parent,/@version\s+3\.2\.79/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3252/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3251/);
+ assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
  assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3279/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
