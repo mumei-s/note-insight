@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.2.87
+// @version      3.2.88
 // @description  本人通知V3。通知画面下部に5パネルを固定し、自動ON/OFF・手動読込・フィルター・設定・INSIGHTを操作します。通知は下側から上方向へ読み、完了ラインより上の追加分だけを次回保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -20,7 +20,7 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3258
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3250
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3287
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3288
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3286
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
@@ -28,11 +28,18 @@
 
 (function(){
 'use strict';
-const VERSION='3.2.87';
+const VERSION='3.2.88';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
+const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const gmModern=()=>Boolean(globalThis.GM);
+const gmVersionGet=async()=>{try{if(gmModern()&&typeof GM.getValue==='function')return String(await GM.getValue(ACTIVE_GM_KEY,'')||'');if(typeof GM_getValue==='function')return String(GM_getValue(ACTIVE_GM_KEY,'')||'')}catch{}return''};
+const gmVersionSet=async v=>{try{if(gmModern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}};
 if(location.hostname==='mumei-s.github.io'){
-  try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
+  void gmVersionGet().then(active=>{
+    if(!/^\d+(?:\.\d+){1,3}$/.test(active))return;
+    try{localStorage.setItem(TOOL_KEY,active);localStorage.setItem(RUNTIME_KEY,active);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
+  });
   const FEATURE='mumei_insight_notification_feature_enabled_v1',FEATURE_PAGE='mumei-notification-feature-ui-v1',FEATURE_BRIDGE='mumei-notification-feature-bridge-v1';
   const featureModern=()=>Boolean(globalThis.GM);
   const featureGet=async(d=true)=>{try{if(featureModern()&&typeof GM.getValue==='function')return await GM.getValue(FEATURE,d);if(typeof GM_getValue==='function')return GM_getValue(FEATURE,d)}catch{}return d};
@@ -109,6 +116,7 @@ if(location.hostname==='mumei-s.github.io'){
   return;
 }
 if(location.hostname!=='note.com')return;
+void gmVersionSet(VERSION);
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const RETURN='mumei_insight_return_bell_v1';
 const modernNote=()=>Boolean(globalThis.GM);
@@ -145,6 +153,7 @@ document.addEventListener('click',e=>{
 },true);
 const q=new URLSearchParams(location.search);
 if(q.get('mumei_insight_version_check')==='1'){
+  void gmVersionSet(VERSION);
   const raw=q.get('mumei_return')||'';
   try{const back=new URL(raw);if(back.origin==='https://mumei-s.github.io'&&back.pathname.startsWith('/note-insight/')){back.searchParams.set('notificationInstalled',VERSION);back.searchParams.set('notificationCheckedAt',String(Date.now()));back.searchParams.set('notificationUpdateResult','bottom-up-saved-line-v3245');location.replace(back.href)}}catch{}
 }
