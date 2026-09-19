@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.62",
+  "notificationVersion": "3.2.63",
   "dashboardVersion": "1.4.4",
   "releasedAt": "2026-09-19T14:07:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の読込開始から終了まで5パネルを強制固定。読込中は通知DOMの再生成・一時的な非表示・フォーカス変化・履歴更新が起きてもパネルを削除しない。Reader停止後に再判定する。"
+  "note": "5パネルをdocument直下fixedからブラウザのpopover top layerへ移動。note側のtransform・スクロールコンテナ・DOM再生成の影響を受けず、常に画面下部へ固定。旧ランチャー／旧トレイも同時に非表示化。"
 }
