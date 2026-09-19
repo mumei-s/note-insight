@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.60';
+const VERSION='3.2.61';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
@@ -138,11 +138,7 @@ function leavingNotificationHref(target){
 function notificationLeaveAction(target){
   if(!(target instanceof Element)||!shell||!shell.contains(target))return false;
   if(target.closest('#'+ROOT)||target.closest('#'+SETTINGS))return false;
-  if(leavingNotificationHref(target))return true;
-  const ctl=target.closest('button,[role="button"],[role="tab"]'),label=clean(ctl?.textContent||'');
-  if(label==='通知'||label==='お知らせ')return false;
-  const row=target.closest(ITEM+',li,[role="listitem"]');
-  return Boolean(row&&shell.contains(row)&&rowish(row))
+  return leavingNotificationHref(target)
 }
 function hideImmediately(){
   notificationSessionActive=false;
