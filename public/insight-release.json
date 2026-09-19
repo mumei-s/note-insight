@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.17.2",
-  "notificationVersion": "3.2.58",
+  "notificationVersion": "3.2.59",
   "dashboardVersion": "1.4.4",
   "releasedAt": "2026-09-19T10:30:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DM・コメント等でnoteのテキスト入力を開始した時点で本人通知5パネルを即時退避。textarea/contenteditable/role=textbox/文字入力欄へのfocusinを検知し、bellIntentを解除して🔔を開き直すまで再表示を禁止する。"
+  "note": "本人通知5パネルをnoteの通知DOMから完全に切り離し、document直下の固定UIとして維持。読込中のスクロールや通知DOM再生成で上へ移動・消失しない構造に変更し、通知以外の画面では本文中の「通知」等をベル操作と誤認しにくいよう判定範囲も限定。"
 }
