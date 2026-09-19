@@ -116,7 +116,8 @@ if(location.hostname==='mumei-s.github.io'){
   return;
 }
 if(location.hostname!=='note.com')return;
-void gmVersionSet(VERSION);
+const confirmActiveRuntime=()=>{try{if(String(window.__mumeiV3Runtime328?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
+confirmActiveRuntime();setTimeout(confirmActiveRuntime,250);setTimeout(confirmActiveRuntime,1200);
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const RETURN='mumei_insight_return_bell_v1';
 const modernNote=()=>Boolean(globalThis.GM);
@@ -153,7 +154,7 @@ document.addEventListener('click',e=>{
 },true);
 const q=new URLSearchParams(location.search);
 if(q.get('mumei_insight_version_check')==='1'){
-  void gmVersionSet(VERSION);
+  confirmActiveRuntime();
   const raw=q.get('mumei_return')||'';
   try{const back=new URL(raw);if(back.origin==='https://mumei-s.github.io'&&back.pathname.startsWith('/note-insight/')){back.searchParams.set('notificationInstalled',VERSION);back.searchParams.set('notificationCheckedAt',String(Date.now()));back.searchParams.set('notificationUpdateResult','bottom-up-saved-line-v3245');location.replace(back.href)}}catch{}
 }
