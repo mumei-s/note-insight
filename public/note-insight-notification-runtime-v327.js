@@ -221,7 +221,7 @@ async function initMode(){if(modeLoaded)return;const id=await account();autoMode
 function paintMode(){if(suppressUntilBell||!featureEnabled)return;const r=document.getElementById(ROOT);if(!r)return;const b=r.querySelector('[data-a="mode"]');if(!b)return;b.textContent=autoMode?'自動':'手動';b.classList.toggle('auto',autoMode);b.classList.toggle('manual',!autoMode);b.title=autoMode?'自動読み込みON。タップで手動へ':'自動読み込みOFF。タップで自動へ'}
 async function toggleMode(){await initMode();autoMode=!autoMode;const id=await account();if(id)await set(AUTO+id,autoMode);paintMode();if(autoMode)maybeAuto(true)}
 function reader(){return window.__mumeiV3Reader323||window.__mumeiV3Reader322||null}
-async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const current=findSurface();if(current&&rows(current).length)return current;if(!notificationRoute()&&!popupSurface()&&!bellIntent())return null;await sleep(120)}return null}
+async function waitForRows(timeout=5000){const end=Date.now()+timeout;while(Date.now()<end){const liveShell=shell&&shell.isConnected&&visible(shell)&&rows(shell).length?shell:null;const current=liveShell||findSurface();if(current&&rows(current).length)return current;if(!notificationRoute()&&!popupSurface()&&!bellIntent()&&!liveShell)return null;await sleep(120)}return null}
 async function safeScan(mode='continue'){const current=await waitForRows();if(!current)throw new Error('通知一覧を取得できませんでした');if(current!==shell)markSurface(current);showRoot(true);await window.__mumeiV3Checkpoint325?.restore?.();const again=await waitForRows(1800);if(!again)throw new Error('通知一覧が再描画中です。もう一度実行します');const api=reader();if(!api||typeof api.scan!=='function')throw new Error('通知Readerを起動できませんでした');return api.scan(mode==='full'?'full':'continue')}
 async function manualRead(btn,mode='continue'){btn.classList.remove('err');btn.textContent=mode==='full'?'全読中':'読込中';try{const current=await waitForRows();if(!current){btn.textContent='読込';return}await safeScan(mode)}catch(e){btn.classList.add('err');btn.textContent=mode==='full'?'全読再試行':'再読込';btn.title=String(e?.message||e)}}
 function hideProgress(){const p=document.getElementById(PROGRESS);if(p)p.style.setProperty('display','none','important')}
@@ -234,7 +234,7 @@ function maybeAuto(force=false){
   if(!api||typeof api.scan!=='function'||typeof api.isScanning==='function'&&api.isScanning())return;
   autoStarting=true;
   setTimeout(()=>{
-    const current=findSurface();
+    const current=shell&&shell.isConnected&&visible(shell)&&rows(shell).length?shell:findSurface();
     if(!autoMode||!current||!rows(current).length||typeof api.isScanning==='function'&&api.isScanning()){autoStarting=false;setTimeout(()=>maybeAuto(false),450);return}
     Promise.resolve(safeScan('continue')).then(()=>{autoDoneForSession=true}).catch(()=>{autoDoneForSession=false;setTimeout(()=>maybeAuto(false),700)}).finally(()=>{autoStarting=false})
   },220)
