@@ -5,7 +5,7 @@
 // @description 公開コメント・返信・スキ・フォロー関係とフォロワー構成を確認。本人同定は公開明示だけを根拠にします。
 // @match https://note.com/*
 // @updateURL https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-v13.user.js
-// @downloadURL https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-v1.user.js
+// @downloadURL https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-v13.user.js
 // @grant none
 // @run-at document-idle
 // ==/UserScript==
