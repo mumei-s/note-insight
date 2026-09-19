@@ -105,10 +105,11 @@ test('manual full-read stays isolated from the 05:48 runtime core',async()=>{
 });
 
 
-test('background route changes never hide an open notification surface',()=>{
+test('background history changes keep the notification session unless pathname really changes',()=>{
   assert.doesNotMatch(runtime,/if\(!notificationRoute\(\)\)hideImmediately\(\)/);
-  assert.match(runtime,/addEventListener\('popstate',\(\)=>\{intentUntil=0;scheduleInspect\(0\)/);
+  assert.match(runtime,/addEventListener\('popstate',\(\)=>\{intentUntil=0;if\(sessionPathChanged\(\)\)\{hideImmediately\(\);return\}scheduleInspect\(0\)/);
   assert.match(runtime,/for\(const name of\['pushState','replaceState'\]\)/);
+  assert.match(runtime,/if\(sessionPathChanged\(\)\)\{hideImmediately\(\);return r\}/);
   assert.match(runtime,/getShell:\(\)=>shell/);
 });
 
