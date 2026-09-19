@@ -55,3 +55,19 @@
 - RuntimeとReaderの二重復帰。
 - bell intentだけでパネルを表示すること。
 - 通知DOMをパネルの親にすること。
+
+## 手動読込モード
+- 「読込」を押した時だけ「続きから読む / 全読み」を選択表示する。
+- 自動読込は常に「続き」だけを使い、「全読み」を自動実行しない。
+- 「続き」は既存の完了ライン・保存済み署名を使って追加分だけ取得する。
+- 「全読み」は完了ラインを無視して取得可能な通知履歴を先頭から末尾まで再走査し、保存済みも含めサーバーへ再送する。
+- 全読みのサーバー側は既存 fingerprint / client_signature で重複排除し、既存行は最新分類で更新する。これにより読込停止期間の取りこぼしと過去の誤分類を回収する。
+- 全読み中は通常の boundarySignature / boundaryEventIdentity / boundaryLegacySignature を変更しない。
+- 全読み結果は lastFullScanAt / lastFullSeenCount / lastFullConfirmedCount / lastScanMode=full-history-repair の別項目へ保存する。
+- 全読み失敗時は outbox を残し、次回全読みまたは続きで再送できること。
+
+### 手動読込の回帰テスト
+- 読込ボタンが即scanを始めず、選択UIを開くこと。
+- 「続きから読む」は scanContinue、「全読み」は scanFull にだけ接続すること。
+- maybeAuto から scanFull へ到達する経路が存在しないこと。
+- scanFull が sendBatchFull を使用し、通常チェックポイントを更新しないこと。
