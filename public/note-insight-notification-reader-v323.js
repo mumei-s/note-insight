@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.73',PROTOCOL='3.2.73';
+const VERSION='3.2.74',PROTOCOL='3.2.74';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -75,6 +75,15 @@ async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,in
 let scanning=false,active=null;
 function capturePending(){if(!active)return;const{a,p,saved}=active;try{const rs=rows(p).map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs.reverse())}catch{}}
 function pauseCapture(){capturePending()}
+function visiblePending(p,saved){
+  const out=[],seen=new Set();
+  for(const el of rows(p)){
+    const r=rowData(el);if(!r)continue;
+    const k=sig(r);if(seen.has(k)||saved?.has(k))continue;
+    seen.add(k);out.push(r)
+  }
+  return out.reverse().slice(0,80)
+}
 addEventListener('pagehide',pauseCapture,{capture:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
 
@@ -193,6 +202,11 @@ async function scan(){
   if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
   let cp=await checkpointFor(a.id),savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
   count+=await sendBatch(readOutbox(a.id),a,saved);
+  const immediate=visiblePending(p,saved);
+  if(immediate.length){
+    status(`現在表示中の未保存通知 ${immediate.length}件を先に保存しています…`,'saving','先行保存',{pendingCount:immediate.length});
+    count+=await sendBatch(immediate,a,saved)
+  }
   cp=await checkpointFor(a.id);host=scrollHost(p);
   const start=await seekStart(p,host,cp,saved);
   if(start.recoveryRow){
