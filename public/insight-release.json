@@ -2,9 +2,9 @@
   "appVersion": "2026.09.19.1",
   "notificationVersion": "3.2.89",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T09:18:00+09:00",
+  "releasedAt": "2026-09-20T09:22:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.89。5パネルを通知DOMから切り離してbody直下の固定レイヤーへ配置。通常読込は先頭から最初の保存済み通知で停止する差分方式に変更し、過去へ潜るのは手動全読みのみ。"
+  "note": "本人通知V3.2.89。読込処理はV3.2.88のまま変更せず、5パネルだけを通知DOMから切り離してbody直下の固定レイヤーへ配置。通知一覧のスクロール・再描画・transform/overflowで位置がずれないよう修正。"
 }
