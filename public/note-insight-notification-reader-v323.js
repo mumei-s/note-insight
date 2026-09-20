@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.26',PROTOCOL='3.2.26';
+const VERSION='3.3.4',PROTOCOL='3.3.4';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -15,9 +15,9 @@ const OUTBOX='mumei-notification-outbox-v323:';
 const PROGRESS_ID='mumei-v3-reader-progress-v3223';
 const BOUNDARY_ID='mumei-v3-saved-boundary-v3223';
 const NAV_RETURN='mumei-v3-notification-return-v3223';
-const MAX_SEEK_STEPS=56;
-const MAX_READ_STEPS=56;
-const MAX_READ_ROWS=420;
+const MAX_SEEK_STEPS=600;
+const MAX_READ_STEPS=600;
+const MAX_READ_ROWS=8000;
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -109,29 +109,31 @@ async function seekStart(p,host,cp,saved){
  if(exactNow){markBoundary(exactNow);try{exactNow.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(60);return{ok:true,boundaryFound:true,recovered:false}}
  if(recovery){markBoundary(recovery.el);return{ok:true,boundaryFound:true,recovered:true,recoveryRow:recovery.row}}
  if(!host){
-  if(needAnchor)return{ok:true,boundaryFound:false,preserveBoundary:true};
-  return{ok:true,boundaryFound:false,recovered:false};
+  if(needAnchor)return{ok:false,incomplete:true,reason:'保存済み地点を通知一覧内で確認できませんでした'};
+  return{ok:true,boundaryFound:false,recovered:false,reachedBottom:true};
  }
  try{host.scrollTop=0}catch{}
  await sleep(100);
- let stable=0,lastTop=-1;
+ let stable=0,lastTop=-1,reachedBottom=false;
  for(let step=0;step<MAX_SEEK_STEPS;step++){
   const el=needBoundary?findBoundaryElement(p,cp):null;
   if(el){markBoundary(el);try{el.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(80);return{ok:true,boundaryFound:true,recovered:false}}
   recovery=findSavedRecoveryElement(p,saved);
   if(recovery){markBoundary(recovery.el);try{recovery.el.scrollIntoView({block:'center',behavior:'auto'})}catch{}await sleep(80);return{ok:true,boundaryFound:true,recovered:true,recoveryRow:recovery.row}}
   const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
-  if(before>=max-2){stable++;if(stable>=2)break}else{const amount=Math.max(220,Math.floor(host.clientHeight*.86));host.scrollTop=Math.min(max,before+amount);await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
-  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break;
+  if(before>=max-2){stable++;if(stable>=3){reachedBottom=true;break}}else{const amount=Math.max(220,Math.floor(host.clientHeight*.86));host.scrollTop=Math.min(max,before+amount);await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
+  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;
+  if(stable>=5&&host.scrollTop>=Math.max(0,host.scrollHeight-host.clientHeight)-2){reachedBottom=true;break}
  }
- if(needAnchor)return{ok:true,boundaryFound:false,preserveBoundary:true};
+ if(needAnchor)return{ok:false,incomplete:true,reason:'保存済み地点までスクロールできませんでした'};
+ if(!reachedBottom)return{ok:false,incomplete:true,reason:'通知履歴の最下部まで到達できませんでした'};
  const max=Math.max(0,host.scrollHeight-host.clientHeight);try{host.scrollTop=max}catch{}await sleep(80);
- return{ok:true,boundaryFound:false,recovered:false};
+ return{ok:true,boundaryFound:false,recovered:false,reachedBottom:true};
 }
 async function collectBottomUp(p,host,cp){
  const needBoundary=hasBoundary(cp);
  const collected=[],seen=new Set();
- let crossed=!needBoundary,found=!needBoundary,stable=0,lastTop=host?.scrollTop??0;
+ let crossed=!needBoundary,found=!needBoundary,stable=0,lastTop=host?.scrollTop??0,reachedTop=!host,truncated=false;
  for(let step=0;step<MAX_READ_STEPS&&collected.length<MAX_READ_ROWS;step++){
   const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため中断しました');if(nextPanel!==p){p=nextPanel;host=scrollHost(p);active.p=p}
   const els=rows(p);
@@ -140,20 +142,23 @@ async function collectBottomUp(p,host,cp){
    const k=sig(r);if(seen.has(k))continue;seen.add(k);
    if(!crossed){if(boundaryMatch(r,cp)){crossed=true;found=true;markBoundary(el)}continue}
    if(boundaryMatch(r,cp))continue;
-   if(!active.saved.has(k)){collected.push(r);if(collected.length>=MAX_READ_ROWS)break}
+   if(!active.saved.has(k)){collected.push(r);if(collected.length>=MAX_READ_ROWS){truncated=true;break}}
   }
-  if(collected.length>=MAX_READ_ROWS||!host)break;
+  if(truncated||!host){if(!host)reachedTop=true;break}
   const before=host.scrollTop;
-  if(before<=2){stable++;if(stable>=2)break}else{const amount=Math.max(220,Math.floor(host.clientHeight*.82));host.scrollTop=Math.max(0,before-amount);await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
-  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break;
+  if(before<=2){stable++;if(stable>=3){reachedTop=true;break}}else{const amount=Math.max(220,Math.floor(host.clientHeight*.82));host.scrollTop=Math.max(0,before-amount);await sleep(170);if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0}
+  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;
+  if(stable>=5&&host.scrollTop<=2){reachedTop=true;break}
  }
- return{p,host,collected,seenCount:seen.size,boundaryFound:found};
+ if(!found&&needBoundary)return{p,host,collected,seenCount:seen.size,boundaryFound:false,incomplete:true,reason:'保存済み地点を確認できませんでした'};
+ if(truncated)return{p,host,collected,seenCount:seen.size,boundaryFound:found,incomplete:true,reason:'通知件数が8000件を超えたため完了扱いにしません'};
+ if(!reachedTop)return{p,host,collected,seenCount:seen.size,boundaryFound:found,incomplete:true,reason:'通知一覧の先頭まで確認できませんでした'};
+ return{p,host,collected,seenCount:seen.size,boundaryFound:found,incomplete:false,reachedTop:true};
 }
-
 async function scan(){
- if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return}
+ if(scanning){status('読込中です。二重開始はしません。','saving','読込中');throw new Error('ALREADY_SCANNING')}
  scanning=true;let a=null,saved=null,p=null,host=null,count=0,safetyStop=false;
- status('下側の開始位置を確認しています…','saving','下から読込');
+ status('通知履歴の到達点を確認しています…','saving','履歴確認');
  try{
   p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
@@ -161,34 +166,37 @@ async function scan(){
   let cp=await checkpointFor(a.id),savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
   count+=await sendBatch(readOutbox(a.id),a,saved);
   cp=await checkpointFor(a.id);host=scrollHost(p);
+  const startedWithBoundary=hasBoundary(cp);
   const start=await seekStart(p,host,cp,saved);
+  if(start.incomplete)throw new Error(start.reason||'通知履歴の開始位置を確認できませんでした');
   if(start.recoveryRow){
-    cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v326');
-    status('保存済み通知から完了ラインを復元しました。上方向の追加分だけ読み込みます…','saving','ライン復元');
-  }else if(start.preserveBoundary){
-    const now=Date.now(),latest=await checkpointFor(a.id);
-    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,version:VERSION});
-    document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-    status('✓ 前回の完了ライン情報を保持｜全件読み直しなし','done','✓ 境界維持',{readCount:0,savedCount:0});
-    return 0;
+    cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v334');
+    status('保存済み通知から完了ラインを復元しました。追加分だけ確認します…','saving','ライン復元',{mode:'dom-delta'});
   }else{
-    status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
+    status(hasBoundary(cp)?'保存済みラインから先頭まで追加分を確認します…':'最下部から先頭まで全通知を確認します…','saving',hasBoundary(cp)?'追加確認':'全履歴',{mode:hasBoundary(cp)?'dom-delta':'dom-full'});
   }
+  const mode=(startedWithBoundary||hasBoundary(cp))?'dom-delta':'dom-full';
   const result=await collectBottomUp(p,host,cp);p=result.p;host=result.host;
+  if(result.incomplete)throw new Error(result.reason||'通知履歴の確認が途中で停止しました');
   if(result.collected.length)count+=await sendBatch(result.collected,a,saved);
   let latest=await get(key(CHECK,a.id),{}),now=Date.now();
-  await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,historyComplete:false,version:VERSION});
+  await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:mode,lastRunStopped:false,historyComplete:true,version:VERSION});
   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+  latest=await get(key(CHECK,a.id),latest);
   const boundaryEl=findBoundaryElement(p,latest);if(boundaryEl)markBoundary(boundaryEl);
   const remain=readOutbox(a.id).length;
-  if(remain)status(`⚠ ${remain}件は次回保存待ち｜下→上 ${result.seenCount}件確認`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain});
-  else if(start.recovered)status(`✓ 完了ラインを復元｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
-  else if(hasBoundary(cp))status(`✓ 完了ラインから上だけ確認｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
-  else status(`✓ 下側から上方向へ保存完了｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
- }catch(e){if(!safetyStop)capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'bottom-up-from-saved-line',lastRunStopped:safetyStop,version:VERSION})}catch{}}const pending=a?readOutbox(a.id).length:0;const raw=String(e?.message||e),msg=raw==='BOUNDARY_NOT_FOUND_SAFE_STOP'?'完了ラインを復元できなかったため再読込してください':raw;status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending})}
- finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
+  if(remain)throw new Error(`${remain}件が未保存のため完了扱いにしません`);
+  if(mode==='dom-delta')status(`✓ 追加分確認完了｜${result.seenCount}件照合・${count}件保存確認`,'done','✓ 追加',{readCount:result.seenCount,savedCount:count,pendingCount:0,mode});
+  else status(`✓ 全履歴スクロール確認完了｜${result.seenCount}件照合・${count}件保存確認`,'done','✓ 全読',{readCount:result.seenCount,savedCount:count,pendingCount:0,mode});
+  return{saved:count,readCount:result.seenCount,mode:mode==='dom-delta'?'delta':'full',historyComplete:true}
+ }catch(e){
+  if(!safetyStop)capturePending();
+  if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'incomplete',lastRunStopped:true,historyComplete:false,version:VERSION})}catch{}}
+  const pending=a?readOutbox(a.id).length:0,msg=String(e?.message||e);
+  status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending,mode:'dom-incomplete'});
+  throw e
+ }finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
 }
-
 document.addEventListener('mumei-v3-read-request',()=>void scan());
 function readyToScan(){const p=panel();return Boolean(p&&rows(p).length)}
 window.__mumeiV3Reader323={scan,isScanning:()=>scanning,readyToScan,version:VERSION};
