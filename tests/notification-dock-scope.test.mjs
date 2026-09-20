@@ -15,28 +15,20 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.6 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.3.7 loads restored iframe dock and automatic stable reader",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
- const runtime=await read("public/note-insight-notification-runtime-v327.js");
- const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
- const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.3\.6/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3360/);
- assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3293/);
- assert.match(parent,/note-insight-notification-network-v3300\.js\?v=3360/);assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3360/);
- assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
- assert.match(parent,/bottom-up-saved-line-v3245/);
- assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
- for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
- assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
- assert.match(runtime,/autoMode=true/);
- assert.match(runtime,/dockVisible=want/);assert.match(runtime,/if\(!featureEnabled\)/);
- assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);
- assert.match(runtime,/mountUiToViewport/);assert.match(runtime,/onDockEventFence/);assert.match(runtime,/\['pointerup','mousedown','mouseup','touchstart','touchend'\]/);assert.match(runtime,/target\.closest\('#'\+ROOT\)/);assert.match(runtime,/shell&&shell\.isConnected/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runDockAction/);assert.match(runtime,/data-v3284-mode/);assert.match(runtime,/✓追加/);assert.match(runtime,/✓全読/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/stopImmediatePropagation/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.match(runtime,/openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/onGlobalPointerDown/);assert.match(runtime,/function showRoot\(on\).*suppressUntilBell/);assert.match(runtime,/function onStatus\(e\).*suppressUntilBell/);assert.match(runtime,/function confirmHide\(\).*suppressUntilBell/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.doesNotMatch(runtime,/autoDoneForSession=false;markSurface\(null\);showRoot\(false\);cleanupVisuals\(\)/);assert.match(runtime,/safeScan/);assert.match(runtime,/event\?\.composedPath/);assert.match(runtime,/class\*="notification-item"/);assert.doesNotMatch(runtime,/new MutationObserver/);
- assert.match(runtime,/notification-filter-settings\.html/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
- assert.doesNotMatch(runtime,/new MutationObserver/);
- assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
- assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/通知履歴の最下部まで到達できませんでした/);assert.match(reader,/通知一覧の先頭まで確認できませんでした/);assert.match(reader,/historyComplete:true/);
+ const runtime=await read("public/note-insight-notification-runtime-v2958.js");
+ const reader=await read("public/note-insight-notification-autoscan-v2970.js");
+ assert.match(parent,/@version\s+3\.3\.7/);
+ for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.match(parent,new RegExp(part.replace(/[.?]/g,m=>"\\\\"+m)));
+ assert.doesNotMatch(parent,/note-insight-notification-runtime-v327\.js\?v=/);
+ assert.match(runtime,/FRAME='mumei-v2948-frame'/);
+ assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+ for(const label of ["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"])assert.match(runtime,new RegExp(label));
+ assert.match(runtime,/iframe/);assert.match(runtime,/srcdoc=frameHtml/);assert.match(runtime,/pointer-events:auto/);
+ assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
+ assert.match(reader,/historyComplete/);assert.match(reader,/REPAIR='mumei_insight_notification_avatar_repair_v337:'/);
+ assert.match(reader,/for\(let i=0;i<500&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<600/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -73,6 +65,10 @@ test("ingest token bridge is origin-locked",async()=>{
  assert.match(bridge,/TARGET='https:\/\/note\.com'/);assert.match(bridge,/action:'issue'/);assert.doesNotMatch(bridge,/postMessage\([^\n]+,\s*['"]\*['"]\)/);
 });
 
-test("legacy notification runtime remains only a compatibility shim",async()=>{
- const runtime=await read("public/note-insight-notification-runtime-v2958.js");assert.match(runtime,/Compatibility shim only/);assert.doesNotMatch(runtime,/grid-template-columns|showDock|frameHtml/);
+test("restored iframe runtime is the active tap-isolated dock",async()=>{
+ const runtime=await read("public/note-insight-notification-runtime-v2958.js");
+ assert.match(runtime,/const VERSION='3\.3\.7'/);
+ assert.match(runtime,/function frameHtml/);assert.match(runtime,/showDock/);
+ assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+ assert.doesNotMatch(runtime,/Compatibility shim only/);
 });
