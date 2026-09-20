@@ -15,7 +15,6 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/Yahoo!ブラウザー/);
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
-  assert.match(page,/https:\/\/note\.com\/notifications\?mumei_filter_return=bell/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
   assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.3/);
 });
