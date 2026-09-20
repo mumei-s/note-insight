@@ -26,7 +26,7 @@ function findPanel(){
  for(const a of ns)for(const b of os){let p=a.parentElement,d=0;while(p&&p!==document.body&&d++<12){if(p.contains(b)&&shown(p)){let q=p,k=0;while(q&&q!==document.body&&k++<6){if(hasRows(q))return q;q=q.parentElement}}p=p.parentElement}}
  return null
 }
-function installStyle(){let s=document.getElementById(STYLE);if(!s){s=document.createElement('style');s.id=STYLE;document.documentElement.append(s)}s.textContent=`#${TOOLBAR}{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:grid;grid-template-columns:.82fr 1fr .72fr 1.12fr;gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{min-height:29px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:900 9px/1 system-ui;padding:0 5px;white-space:nowrap}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button:active{transform:scale(.98)}`}
+function installStyle(){let s=document.getElementById(STYLE);if(!s){s=document.createElement('style');s.id=STYLE;document.documentElement.append(s)}s.textContent=`#${TOOLBAR}{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:grid;grid-template-columns:.82fr 1fr .72fr 1.12fr;gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{min-height:29px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:900 9px/1 system-ui;padding:0 5px;white-space:nowrap}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button[data-state="done"]{background:#123d26;border-color:#63cf85;color:#dfffea}#${TOOLBAR} button[data-state="error"]{background:#3a171d;border-color:#a95b68;color:#ffdbe0}#${TOOLBAR} button:active{transform:scale(.98)}`}
 async function sync(bar){const a=await account();if(!a||!bar?.isConnected)return;const enabled=Boolean(await get(key(FIL,a.id),false)),b=bar.querySelector('[data-action="filter"]');if(b){b.dataset.on=enabled?'1':'0';b.textContent=enabled?'フィルター ON':'フィルター OFF'}}
 async function act(action,bar){
  const a=await account();if(!a)return;
@@ -56,7 +56,7 @@ function dedupe(){
 }
 function mount(){
  if(isDmRoute()){for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
- const panel=findPanel();if(!panel)return;
+ const panel=findPanel();if(!panel){const old=dedupe();if(old)old.remove();return}
  installStyle();
  let bar=dedupe()||makeBar();
  if(document.body&&bar.parentElement!==document.body)document.body.appendChild(bar);
