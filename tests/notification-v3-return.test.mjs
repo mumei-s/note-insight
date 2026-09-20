@@ -58,7 +58,7 @@ test("completion line is the only resume boundary and next read moves upward fro
   assert.match(reader,/boundaryEventIdentity/);
   assert.match(reader,/function boundaryMatch/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/persistRecoveredBoundary/);
   assert.match(reader,/ここまで保存済み/);
-  assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
+  assert.match(reader,/保存済みラインから先頭まで追加分を確認します/);
   assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
