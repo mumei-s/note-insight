@@ -7,9 +7,9 @@ const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.rep
 test("V3.3.5 loads bottom-up reader, persistent checkpoint and fixed five-panel dock",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),loader=await read("public/note-insight-notification-loader-v318.js");
   assert.match(v3,/@version\s+3\.3\.5/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3340/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3350/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3293/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-network-v3300\.js\?v=3340/);assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3340/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-network-v3300\.js\?v=3350/);assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3350/);
   assert.doesNotMatch(v3,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
   has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3245","#mumei-v325-dock [data-a=\"settings\"]","#mumei-v3-tray-v330 [data-act=\"settings\"]","mumei-notification-feature-ui-v1","mumei-notification-feature-bridge-v1","mumei_insight_notification_feature_enabled_v1"]);
