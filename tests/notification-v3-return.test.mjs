@@ -16,41 +16,42 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.11/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.4\.0/);
 });
 
-test("V3.3.11 preloads panel-free automatic stable reader",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),filterSettings=await read("public/notification-filter-settings.html");
-  assert.match(v3,/@version\s+3\.3\.11/);
+test("V3.4.0 preloads split runtime modules",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js"),ret=await read("public/note-insight-notification-return-v1.js"),filterSettings=await read("public/notification-filter-settings.html");
+  assert.match(v3,/@version\s+3\.4\.0/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.ok(meta.includes("note-insight-notification-autoscan-v2970.js?v=33110"));
-  assert.ok(meta.includes("note-insight-notification-bootstrap-v2966.js?v=33110"));assert.ok(meta.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
-  assert.doesNotMatch(meta,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
+  for(const p of ["note-insight-notification-reader-v4.js?v=3400","note-insight-notification-controls-v1.js?v=100","note-insight-notification-filter-v4.js?v=400","note-insight-notification-return-v1.js?v=100","note-insight-notification-status-bridge-v1.js?v=100","note-insight-notification-settings-bridge-v1.js?v=100","note-insight-notification-account-pair-v1.js?v=100","note-insight-dm-reader-v1.js?v=101"])assert.ok(meta.includes(p),p);
+  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/actor_image_url:img/);assert.match(reader,/historyComplete/);
+  assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
   assert.match(filterSettings,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(filterSettings,/note\.com\/notifications/);
-  assert.match(v3,/@run-at\s+document-start/);assert.match(v3,/data-mumei-bell-return-cloak/);assert.match(v3,/clickRealBell/);assert.doesNotMatch(v3,/note\.com\/notifications/);
+  assert.match(ret,/data-mumei-bell-return-cloak/);assert.match(ret,/function clickBell/);assert.match(ret,/location\.pathname==='\/notifications'/);
+  assert.doesNotMatch(v3,/data-mumei-bell-return-cloak|function clickBell/);
 });
 
-test("notification reader stays automatic while controls live inside the notification surface",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+test("notification Reader stays automatic while Controls are a separate module",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
   assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
   assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
-  assert.match(reader,/mumei-inline-notification-tools-v339/);assert.match(reader,/panel\.prepend\(bar\)|panel\.insertBefore\(bar,first\)/);
-  assert.match(reader,/INSIGHT【通知】/);assert.match(reader,/フィルター ON|フィルター OFF/);
+  assert.doesNotMatch(reader,/mumei-inline-notification-controls-v1|INSIGHT【通知】|フィルター ON/);
+  assert.match(controls,/mumei-inline-notification-controls-v1/);assert.match(controls,/panel\.prepend\(bar\)|panel\.insertBefore\(bar,row\)/);
+  assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
 });
 
-test("automatic reading is always enabled when a real notification list appears",async()=>{
-  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
+test("automatic reading is owned only by Reader",async()=>{
+  const reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
   assert.match(reader,/setTimeout\(\(\)=>scheduleAuto\(600\),120\)/);
-  assert.match(reader,/scheduleAuto\(300\)/);
-  assert.match(reader,/if\(!p\)\{autoPanel=null;return\}/);
+  assert.match(reader,/scheduleAuto\(300\)/);assert.match(reader,/if\(!p\)\{autoPanel=null;return\}/);
+  assert.doesNotMatch(controls,/void scan\(\)|sendBatch|historyComplete/);
 });
 
-test("first scan reaches history end and later scans stop at saved overlap",async()=>{
-  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
+test("split Reader reaches history end and later stops at saved overlap",async()=>{
+  const reader=await read("public/note-insight-notification-reader-v4.js");
   assert.match(reader,/const overlap=\(\)=>cp\.historyComplete===true&&currentRows\(\)\.some/);
-  assert.match(reader,/const reachedEnd=await seekOldest/);
-  assert.match(reader,/complete=!stop&&\(reachedEnd\|\|overlap\(\)\)/);
+  assert.match(reader,/const reachedEnd=await seekOldest/);assert.match(reader,/complete=!stop&&\(reachedEnd\|\|overlap\(\)\)/);
   assert.match(reader,/historyComplete:cp\.historyComplete===true\|\|complete/);
   assert.match(reader,/✓全履歴確認/);assert.match(reader,/✓追加確認/);
 });
