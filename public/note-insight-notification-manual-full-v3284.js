@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.3.3';
+const VERSION='3.3.4';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -140,9 +140,9 @@ async function scanContinue(){
  if(net&&typeof net.syncCurrent==='function'){
   try{
    const r=await net.syncCurrent({waitMs:2600});
-   if(r?.handled)return{source:'network',saved:Number(r.saved||0),received:Number(r.received||0)}
+   if(r?.handled)return{source:r.full?'network-full':r.delta?'network-delta':'network',saved:Number(r.saved||0),received:Number(r.received||0),pages:Number(r.pages||0)}
   }catch(e){
-   status('⚠ 続き読みの通信保存に失敗：'+String(e?.message||e),'error');
+   status('⚠ 続き読みの履歴確認に失敗：'+String(e?.message||e),'error');
    throw e
   }
  }
@@ -171,7 +171,7 @@ async function choose(mode){
  paintRead('読込中');
  try{
   const r=await scanContinue();
-  paintRead(r?.source==='network'?'✓通信':'✓完了');
+  paintRead(r?.source==='network-full'?'✓全読':r?.source==='network-delta'?'✓追加':'✓全読');
   return r
  }catch(e){
   paintRead('再読込',true);
