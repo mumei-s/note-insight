@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiV3Checkpoint325)return;
-const VERSION='3.2.92';
+const VERSION='3.2.93';
 const CHECK='mumei_insight_notification_checkpoint_v2922:';
 const LOCAL='mumei_insight_notification_checkpoint_local_v325:';
 const BOUNDARY_ID='mumei-v3-saved-boundary-v3223';
@@ -19,8 +19,30 @@ function localWrite(id,v){try{localStorage.setItem(LOCAL+id,JSON.stringify(v))}c
 function boundaryAge(v){return Number(v?.boundaryAt||v?.lastSaveAt||v?.lastCheckAt||0)}
 function identity(el){const id=el?.getAttribute?.('data-notification-id')||el?.getAttribute?.('data-notice-id')||el?.querySelector?.('[data-notification-id]')?.getAttribute?.('data-notification-id');if(id)return'notice:'+id;for(const a of el?.querySelectorAll?.('a[href]')||[]){try{const u=new URL(a.href,location.href);for(const k of['notification_id','notice_id','c','comment_id'])if(u.searchParams.get(k))return'notice:'+u.searchParams.get(k)}catch{}}const label=stripTime(el?.textContent||'').slice(0,180);return label?'label:'+label:''}
 function visible(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth}
+function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean),id=(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership','memberships','notifications','messages','search','explore','login','signup'].includes(id)?id:''}catch{return''}}
+function rowLegacySignature(el){
+  const links=[];
+  for(const a of [...(el?.matches?.('a[href]')?[el]:[]),...(el?.querySelectorAll?.('a[href]')||[])]){
+    try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))links.push(u.href)}catch{}
+    if(links.length>=18)break
+  }
+  const actor=links.find(u=>creatorId(u))||'';
+  const target=links.find(u=>/[?&]kind=/.test(u))||links.find(u=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(u))||'';
+  return [stripTime(el?.textContent||''),String(target||'').split('#')[0],String(actor||'').split('?')[0]].join('|')
+}
 function candidateRows(){const root=document.querySelector(SHELL)||(/^\/notifications(?:\/|$)/i.test(location.pathname)?document.querySelector('main,[role="main"]'):null);if(!root)return[];const xs=[...root.querySelectorAll(ITEM)].filter(el=>clean(el.textContent).length>=3);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
-function findBoundaryRow(cp){for(const el of candidateRows()){if(cp?.boundaryEventIdentity&&identity(el)===cp.boundaryEventIdentity)return el;if(cp?.boundaryDisplayText&&stripTime(el.textContent)===cp.boundaryDisplayText)return el}return null}
+function findBoundaryRow(cp){
+  const xs=candidateRows(),eventId=String(cp?.boundaryEventIdentity||''),legacy=String(cp?.boundaryLegacySignature||''),display=String(cp?.boundaryDisplayText||'');
+  for(const el of xs){
+    const idOk=eventId?identity(el)===eventId:false;
+    const legacyOk=legacy?rowLegacySignature(el)===legacy:false;
+    if(eventId&&legacy){if(idOk&&legacyOk)return el;continue}
+    if(eventId){if(idOk)return el;continue}
+    if(legacy){if(legacyOk)return el;continue}
+    if(display&&stripTime(el.textContent)===display)return el
+  }
+  return null
+}
 function lineNode(text,fallback=false){const line=document.createElement('div');line.id=BOUNDARY_ID;line.dataset.fallback=fallback?'1':'0';line.textContent=text;line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';return line}
 function markBoundary(cp){
   const old=document.getElementById(BOUNDARY_ID),row=findBoundaryRow(cp);
