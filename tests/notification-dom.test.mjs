@@ -123,11 +123,11 @@ test('manual full-read uses dedicated notifications page',async()=>{
 });
 
 
-test('notification session survives temporary surface loss',()=>{
+test('notification session survives only while a real notification surface remains',()=>{
   assert.match(runtime,/panelSessionActive=false/);
   assert.match(runtime,/function startPanelSession\(\)/);
   assert.match(runtime,/function endPanelSession\(\)/);
-  assert.match(runtime,/if\(panelSessionActive\)\{if\(shell&&!shell\.isConnected\)markSurface\(null\);showRoot\(true\);return\}/);
+  assert.match(runtime,/if\(panelSessionActive\)\{if\(notificationRoute\(\)\)\{showRoot\(true\);return\}if\(shell&&strongNoticeSurface\(shell\)\)\{showRoot\(true\);return\}if\(bellIntent\(\)\)\{showRoot\(true\);return\}hideImmediately\(\);return\}/);
   assert.match(runtime,/function onGlobalPointerDown\(e\)/);
   assert.match(runtime,/window\.addEventListener\('pointerdown',onGlobalPointerDown,true\)/);
   assert.match(runtime,/Promise\.resolve\(safeScan\(\)\)\.then/);
