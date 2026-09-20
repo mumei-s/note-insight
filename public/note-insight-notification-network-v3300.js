@@ -4,12 +4,13 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.3.1';
+const VERSION='3.3.4';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const STATUS='mumei_notification_network_status_v3300:';
 const OUTBOX='mumei_notification_network_outbox_v331:';
+const HISTORY='mumei_notification_network_history_v334:';
 const SOURCE='note-notification-explicit-sync-v330';
 const ACTION_RE=/(?:スキ|フォロー|コメント|返信|購入|高評価|チップ|サポート|メンバーシップ|メンシプ|マガジン|記事を投稿|記事を更新|話題|ポイント|引用|追加しました|参加しました|加入しました)/u;
 const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities)/i;
@@ -155,7 +156,9 @@ function mergePending(existing,rows,cap,manual){
  return m
 }
 async function pendingCount(id){return (await readOutbox(id)).length}
-async function ingestRows(rows,cap,manual=false){
+async function historyState(id){const v=await get(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
+async function writeHistoryState(id,v){await set(key(HISTORY,id),v&&typeof v==='object'?v:{})}
+async function ingestRows(rows,cap,manual=false,emitStatus=true){
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
  const token=await tokenFor(a.id);if(!token)throw new Error('本人連携が必要です');
  const pending=mergePending(await readOutbox(a.id),rows,cap,manual);
@@ -176,16 +179,16 @@ async function ingestRows(rows,cap,manual=false){
   await writeOutbox(a.id,[...pending.values()]);
   lastResult={at:Date.now(),saved,received,pending:pending.size,url:cap?.url||'',mode:'network',error:String(e?.message||e)};
   await set(key(STATUS,a.id),lastResult);
-  status(`⚠ 通信保存未完了｜${pending.size}件を次回再送`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
+  if(emitStatus)status(`⚠ 通信保存未完了｜${pending.size}件を次回再送`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
   throw e
  }
  lastResult={at:Date.now(),saved,received,pending:pending.size,url:cap?.url||'',mode:'network'};
  await set(key(STATUS,a.id),lastResult);
  if(pending.size){
-  status(`⚠ ${received}件確認・${saved}件保存確認・${pending.size}件未保存（次回再送）`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
+  if(emitStatus)status(`⚠ ${received}件確認・${saved}件保存確認・${pending.size}件未保存（次回再送）`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
   throw new Error(`通信読込の${pending.size}件が未保存です。未保存分は保持して再試行します`)
  }
- status(`✓ 通信から${received}件確認・${saved}件保存確認`,'done',{readCount:received,savedCount:saved,pendingCount:0,mode:'network'});
+ if(emitStatus)status(`✓ 通信から${received}件確認・${saved}件保存確認`,'done',{readCount:received,savedCount:saved,pendingCount:0,mode:'network'});
  return{handled:true,saved,received,pending:0,response:lastResponse}
 }
 async function processCapture(cap,{manual=false,probe=true}={}){
@@ -234,68 +237,69 @@ async function waitCapture(ms=2500){
  while(Date.now()-start<ms){if(lastCapture&&lastCapture!==existing)return lastCapture;await sleep(100)}
  return lastCapture&&Date.now()-lastCapture.at<120000?lastCapture:null
 }
-async function syncCurrent(opts={}){
- arm(Math.max(5000,Number(opts.waitMs||2500)+2500));
- status('noteの通知通信を確認しています…','saving',{mode:'network'});
- const cap=await waitCapture(Number(opts.waitMs||2500));
+async function syncHistory(opts={}){
+ const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
+ arm(Math.max(forceFull?180000:120000,waitMs+5000));
+ const a=await account();if(!a)throw new Error('noteログインを確認してください');
+ const state=await historyState(a.id);
+ const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
+ status(frontier?'保存済み地点まで追加通知をたどっています…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':'network-full'});
+ let cap=await waitCapture(waitMs);
  if(!cap){
-  const a=await account();if(a&&await pendingCount(a.id)){try{return await ingestRows([],null,true)}catch(e){status('⚠ 通信再送失敗：'+String(e?.message||e),'error',{mode:'network'});throw e}}
+  if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
   return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'}
  }
- try{return await ingestRows(cap.rows||extract(cap.json,cap.url),cap,true)}catch(e){status('⚠ 通信読込失敗：'+String(e?.message||e),'error',{mode:'network'});throw e}
-}
-function mutateNextRequest(cap,hint){
- if(!cap||!hint)return null;
- let url=new URL(cap.url,location.href),method=cap.method||'GET',body=cap.body,init={...(cap.requestInit||{})};
- const next=hint.next;
- if(typeof next==='string'&&next){
-  if(/^https?:\/\//i.test(next)||next.startsWith('/'))url=new URL(next,location.href);
-  else if(/^\d+$/.test(next))url.searchParams.set('page',next)
- }else if(typeof next==='number')url.searchParams.set('page',String(next));
- const cursor=hint.cursor;
- if(cursor){
-  if(method==='GET'){if(url.searchParams.has('after'))url.searchParams.set('after',String(cursor));else if(url.searchParams.has('cursor'))url.searchParams.set('cursor',String(cursor));else url.searchParams.set('after',String(cursor))}
-  else{
-   try{const j=typeof body==='string'?JSON.parse(body):structuredClone(body||{});j.variables=j.variables||{};if('after'in j.variables||!('cursor'in j.variables))j.variables.after=cursor;else j.variables.cursor=cursor;body=JSON.stringify(j);init.body=body}catch{return null}
+ let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false;
+ for(let i=0;i<1000&&cap;i++){
+  const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
+  if(requestSeen.has(reqSig))throw new Error('通知履歴のページングが同じ位置で停止しました');
+  requestSeen.add(reqSig);
+  const pageRows=cap.rows||extract(cap.json,cap.url);
+  if(!newestSig&&pageRows.length)newestSig=clientSig(pageRows[0]);
+  received+=pageRows.length;
+  let saveRows=pageRows;
+  if(frontier){
+   const cut=pageRows.findIndex(r=>clientSig(r)===frontier);
+   if(cut>=0){saveRows=pageRows.slice(0,cut);reachedFrontier=true}
   }
- }
- if(method==='GET')delete init.body;
- init.method=method;init.credentials=init.credentials||'include';init.cache='no-store';
- return{url:url.href,method,body,requestInit:init}
-}
-async function replay(cap){
- const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
- const init={...(cap.requestInit||{}),method:cap.method||'GET',credentials:cap.requestInit?.credentials||'include',cache:'no-store'};
- if(cap.body!=null&&init.method!=='GET'&&init.method!=='HEAD')init.body=cap.body;
- const res=await original(cap.url,init),txt=await res.text();const json=JSON.parse(txt);
- return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
-}
-async function syncFull(){
- arm(120000);status('通知APIの履歴を直接たどっています…','saving',{mode:'network-full'});
- let cap=await waitCapture(3000);
- if(!cap){
-  const a=await account();if(a&&await pendingCount(a.id)){const retry=await ingestRows([],null,true);return{handled:true,saved:Number(retry.saved||0),pages:0,retried:true}}
-  return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'}
- }
- let total=0,received=0,pages=0,seen=new Set(),completed=false;
- for(let i=0;i<60&&cap;i++){
-  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig))throw new Error('通知履歴のページングが同じ位置で停止しました');seen.add(sig);
-  const rows=cap.rows||extract(cap.json,cap.url);received+=rows.length;
-  if(rows.length){const r=await ingestRows(rows,cap,true);total+=Number(r.saved||0)}
-  void saveProbe(cap,rows);pages++;
-  const hint=nextHint(cap.json);if(!hint){completed=true;break}
+  if(saveRows.length){const r=await ingestRows(saveRows,cap,true,false);total+=Number(r.saved||0)}
+  void saveProbe(cap,pageRows);pages++;
+  status(frontier?`追加確認中… ${pages}ページ / ${received}件照合`:`全履歴確認中… ${pages}ページ / ${received}件照合`,'saving',{mode:frontier?'network-delta':'network-full',readCount:received,savedCount:total,pages});
+  if(reachedFrontier){completed=true;break}
+  const hint=nextHint(cap.json);
+  if(!hint){reachedEnd=true;completed=true;break}
   const nextReq=mutateNextRequest(cap,hint);if(!nextReq)throw new Error('通知履歴の次ページ情報を解釈できませんでした');
   try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){throw new Error('通知履歴の次ページ取得に失敗しました: '+String(e?.message||e))}
+  if(i===999)capLimitHit=true
  }
- const a=await account(),pending=a?await pendingCount(a.id):0;
- if(!completed||pending)throw new Error(!completed?'通知履歴の全ページ確認が完了していません':`${pending}件が未保存のため全読みを完了扱いにしません`);
- status(`✓ 通信全読み完了｜${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full',readCount:received,savedCount:total,pages,pendingCount:0});
- return{handled:true,saved:total,received,pages,pending:0}
+ const pending=await pendingCount(a.id);
+ if(capLimitHit||!completed||pending)throw new Error(capLimitHit?'通知履歴が1000ページを超えたため完了扱いにしません':!completed?'通知履歴の確認が終端または保存済み地点まで到達していません':`${pending}件が未保存のため完了扱いにしません`);
+ const nextState={
+  ...state,
+  historyComplete:true,
+  frontierSig:newestSig||frontier||state?.frontierSig||'',
+  verifiedAt:Date.now(),
+  fullVerifiedAt:reachedEnd?Date.now():Number(state?.fullVerifiedAt||0),
+  lastPages:pages,
+  lastReceived:received,
+  lastSaved:total,
+  lastMode:reachedEnd?'full':'delta',
+  version:VERSION
+ };
+ await writeHistoryState(a.id,nextState);
+ if(reachedEnd){
+  status(`✓ 全履歴確認完了｜${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true});
+  return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,full:true,mode:'network-full'}
+ }
+ status(`✓ 追加分確認完了｜${pages}ページ・${received}件照合・${total}件保存確認`,'done',{mode:'network-delta',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true,boundaryReached:true});
+ return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,delta:true,mode:'network-delta'}
 }
+async function syncCurrent(opts={}){return syncHistory(opts)}
+async function syncFull(){return syncHistory({forceFull:true,waitMs:3000})}
 async function restoreStatus(){
  const a=await account();if(!a)return;const s=await get(key(STATUS,a.id),null);
  if(s&&Date.now()-Number(s.at||0)<24*60*60*1000)lastResult=s
 }
 installFetch();installXHR();void restoreStatus();
-window.__mumeiNotificationNetwork3300={version:VERSION,arm,syncCurrent,syncFull,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
+window.__mumeiNotificationNetwork3300={version:VERSION,arm,syncCurrent,syncFull,syncHistory,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
 })();
