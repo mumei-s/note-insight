@@ -20,7 +20,7 @@ test("V3.3.7 loads restored iframe dock and automatic stable reader",async()=>{
  const runtime=await read("public/note-insight-notification-runtime-v2958.js");
  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
  assert.match(parent,/@version\s+3\.3\.7/);
- for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.match(parent,new RegExp(part.replace(/[.?]/g,m=>"\\\\"+m)));
+ for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.ok(parent.includes(part));
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v327\.js\?v=/);
  assert.match(runtime,/FRAME='mumei-v2948-frame'/);
  assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
