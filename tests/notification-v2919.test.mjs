@@ -4,21 +4,22 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.3.11 loads panel-free automatic notification reader",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(v3,/@version\s+3\.3\.11/);
-  assert.ok(v3.includes("note-insight-notification-autoscan-v2970.js?v=33110"));
-  assert.ok(v3.includes("note-insight-notification-bootstrap-v2966.js?v=33110"));assert.ok(v3.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
-  assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
-  has(reader,["function directPanel","function findPanel(){return directPanel()}","actor_image_url:img","function scheduleAuto","historyComplete","mumei_insight_notification_avatar_repair_v338:","mumei-inline-notification-tools-v339","INSIGHT【通知】","✓全履歴確認","✓追加確認"]);
+test("V3.4.0 loads split notification architecture",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
+  assert.match(v3,/@version\s+3\.4\.0/);
+  for(const p of ["note-insight-notification-reader-v4.js?v=3400","note-insight-notification-controls-v1.js?v=100","note-insight-notification-filter-v4.js?v=400","note-insight-notification-return-v1.js?v=100","note-insight-notification-status-bridge-v1.js?v=100","note-insight-notification-settings-bridge-v1.js?v=100","note-insight-notification-account-pair-v1.js?v=100","note-insight-dm-reader-v1.js?v=101"])assert.ok(v3.includes(p),p);
+  assert.doesNotMatch(v3,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+  has(reader,["function directPanel","function findPanel(){return directPanel()}","actor_image_url:img","function scheduleAuto","historyComplete","✓全履歴確認","✓追加確認"]);
+  assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|TOOLBAR_ID|notification-filter-settings\.html/);
+  has(controls,["INSIGHT【通知】","フィルター ON","フィルター OFF","data-action=\"settings\""]);
 });
 
-test("automatic notification reading does not require a dock",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+test("automatic notification reading is Reader-only and does not require controls",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js");
   assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
   assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
-  assert.match(reader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<1200/);
-  assert.match(reader,/new MutationObserver/);
+  assert.match(reader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<1200/);assert.match(reader,/new MutationObserver/);
+  assert.doesNotMatch(reader,/data-action="filter"|data-action="settings"|data-action="insight"/);
 });
 
 test("installer is isolated, versionless and browser-specific",async()=>{
@@ -33,10 +34,10 @@ test("installer is isolated, versionless and browser-specific",async()=>{
   has(bridge,["互換停止版"]);
 });
 
-test("release tracks V3.3.11 without putting the version in the user-facing label",async()=>{
+test("release tracks V3.4.0 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.21.8");assert.equal(manifest.notificationVersion,"3.3.11");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.21\.8"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.3\.11"/);assert.match(v3,/@version\s+3\.3\.11/);
+  assert.equal(manifest.appVersion,"2026.09.21.9");assert.equal(manifest.notificationVersion,"3.4.0");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.21\.9"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.4\.0"/);assert.match(v3,/@version\s+3\.4\.0/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
