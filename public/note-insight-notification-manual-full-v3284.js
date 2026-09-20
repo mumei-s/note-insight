@@ -148,7 +148,8 @@ async function scanContinue(){
  }
  const reader=window.__mumeiV3Reader323;
  if(!reader||typeof reader.scan!=='function')throw new Error('通知Readerを起動できませんでした');
- return{source:'dom',saved:Number(await reader.scan()||0)}
+ const rr=await reader.scan();
+ return{source:rr?.mode==='delta'?'dom-delta':'dom-full',saved:Number(rr?.saved||0),received:Number(rr?.readCount||0)}
 }
 
 function isManual(){
@@ -171,7 +172,7 @@ async function choose(mode){
  paintRead('読込中');
  try{
   const r=await scanContinue();
-  paintRead(r?.source==='network-full'?'✓全読':r?.source==='network-delta'?'✓追加':'✓全読');
+  paintRead((r?.source==='network-full'||r?.source==='dom-full')?'✓全読':(r?.source==='network-delta'||r?.source==='dom-delta')?'✓追加':'読込');
   return r
  }catch(e){
   paintRead('再読込',true);
