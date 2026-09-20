@@ -5,9 +5,10 @@ import "./member-insight-notifications-final.css";
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
 const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const PAGE=100;
+const CLASSIFIER_VERSION="action-v22-unmatched-safe";
 type Row=Record<string,any>;
 
-const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他"]] as const;
+const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
 const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",other:"🔔"};
 
@@ -55,10 +56,42 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
-  async function reclassify(){if(reclassifying)return;setReclassifying(true);setRepairStatus("全保存履歴の分類を確認中…");const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";let cursor:string|null=null,checked=0,moved=0;
-    try{do{if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);let r:Response;try{r=await fetch(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor}),signal:c.signal})}finally{window.clearTimeout(timer)}const x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||"再分類失敗");checked+=x.checked||0;moved+=x.moved||0;cursor=x.nextCursor||null;setRepairStatus(`${checked}件確認・${moved}件分類修正`)}while(cursor);setRepairStatus(`再分類完了：${checked}件確認・${moved}件修正。表示は順次更新されます。`);void load(1,kind)}catch(e){setRepairStatus(`再分類を再試行できます：${e instanceof Error?e.message:String(e)}`)}finally{setReclassifying(false)}
+  async function reclassify(auto=false){
+    if(reclassifying)return false;
+    setReclassifying(true);setRepairStatus(auto?"新しい分類ルールで全履歴を自動再分類中…":"全保存履歴の分類を確認中…");
+    const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";let cursor:string|null=null,checked=0,moved=0,pending=0;
+    try{
+      do{
+        if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");
+        const ac=new AbortController(),timer=window.setTimeout(()=>ac.abort(),45000);let r:Response;
+        try{r=await fetch(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor}),signal:ac.signal})}
+        finally{window.clearTimeout(timer)}
+        const x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||"再分類失敗");
+        checked+=x.checked||0;moved+=x.moved||0;pending=Number(x.pending||0);cursor=x.nextCursor||null;
+        setRepairStatus(`${checked}件確認・${moved}件分類修正・未分類${pending}件`)
+      }while(cursor);
+      const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
+      if(noteId)try{localStorage.setItem(`mumei-notification-reclassify-version:${noteId}`,CLASSIFIER_VERSION)}catch{}
+      setRepairStatus(`再分類完了：${checked}件確認・${moved}件修正・未分類${pending}件。未分類は「その他・未分類」に残します。`);
+      void load(1,kind);
+      return true
+    }catch(e){
+      setRepairStatus(`再分類を再試行できます：${e instanceof Error?e.message:String(e)}`);
+      return false
+    }finally{setReclassifying(false)}
   }
   useEffect(()=>{setRows([]);setCategoryCounts({});void load(1,kind,false,selectedDay);return()=>{request.current.id++;request.current.controller?.abort();request.current.controller=null}},[kind,selectedDay,revision,memberNoteId]);
+  useEffect(()=>{
+    const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
+    if(!noteId||!localStorage.getItem(INSIGHT_TOKEN_KEY))return;
+    const key=`mumei-notification-reclassify-version:${noteId}`;
+    let done="";
+    try{done=localStorage.getItem(key)||""}catch{}
+    if(done===CLASSIFIER_VERSION)return;
+    const t=window.setTimeout(()=>{void reclassify(true)},700);
+    return()=>window.clearTimeout(t)
+  },[memberNoteId,revision]);
+
   useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,10000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
   useEffect(()=>{
     const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
@@ -88,6 +121,6 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     {error?<p className="minf-error">{error}</p>:null}
     {loading&&!rows.length?<p className="minf-empty">通知を読み込み中…</p>:rows.length?<div className="minf-list">{rows.map((r,i)=>{const h=href(r),actor=actorName(r),p=presentation(r),type=displayType(r),label=LABEL[type]||"その他",actorTop=creatorTop(r.actor_url,selfId);return <article key={r.id||`${rowKey(r)}-${i}`} className={`type-${type}`}><div className="minf-meta"><span>{label}</span>{r.context_label?<b>{r.context_label}</b>:null}<time>{date(r.occurred_at||r.captured_at)}</time></div><div className="minf-who"><Avatar row={r} selfId={selfId}/><div>{actorTop?<a className="minf-actor" href={actorTop} target="_blank" rel="noreferrer">{actor}</a>:<span className="minf-actor static">{actor}</span>}</div></div>{h?<a className="minf-main" href={h} target="_blank" rel="noreferrer"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</a>:<div className="minf-main static"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</div>}{type==="my_article_magazine_added"?<div className="minf-return-links">{r.meta?.article_url?<a href={r.meta.article_url} target="_blank" rel="noreferrer">追加された自分の記事 ↗</a>:null}{r.meta?.magazine_url?<a href={r.meta.magazine_url} target="_blank" rel="noreferrer">追加先マガジン ↗</a>:null}</div>:null}{targetLabel(r)&&h?<a className="minf-target" href={h} target="_blank" rel="noreferrer">{targetLabel(r)}</a>:null}</article>})}</div>:<p className="minf-empty">{selectedDay?`${dayLabel(selectedDay)} のこの分類には通知がありません。`:"この分類の通知はありません。"}</p>}
     {pages>1?<div className="minf-pager"><button disabled={page<=1||loading} onClick={()=>void load(page-1,kind,false,selectedDay)}>← 前</button><label><span>ページ</span><select value={page} onChange={e=>void load(Number(e.target.value),kind,false,selectedDay)}>{Array.from({length:pages},(_,i)=><option key={i+1} value={i+1}>{i+1} / {pages}</option>)}</select></label><button disabled={page>=pages||loading} onClick={()=>void load(page+1,kind,false,selectedDay)}>次 →</button></div>:null}
-    {kind==="other"?<p className="minf-other-note">「その他」は既知の通知型へ分類できなかったものだけです。フォロー・記事投稿・返信・マガジン参加・メンシプ参加/反応は専用欄へ仕分けます。</p>:null}
+    {kind==="other"?<p className="minf-other-note">「その他・未分類」は、現在の既知ルールに一致しなかった通知だけです。生の通知文を保持し、分類ルール更新時に全履歴を自動再分類します。推測だけで別カテゴリには入れません。</p>:null}
   </section>
 }
