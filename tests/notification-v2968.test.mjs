@@ -86,6 +86,33 @@ test('active package uses V3.3.11 panel-free automatic full/delta reader',()=>{
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
 
+test('notification and DM readers are hard separated with independent storage and APIs',()=>{
+  const v3=read('public/note-insight-notification-v3.user.js');
+  const notice=read('public/note-insight-notification-autoscan-v2970.js');
+  const dm=read('public/note-insight-dm-reader-v1.js');
+  const migration=read('supabase/migrations/20260921035000_insight_dm_history.sql');
+  const dmIngest=read('supabase/functions/insight-dm-ingest/index.ts');
+  const dmFeed=read('supabase/functions/insight-dm-feed/index.ts');
+  const live=read('src/member-insight-live-v2.tsx');
+  const dmUi=read('src/member-insight-dm.tsx');
+  assert.ok(v3.includes('note-insight-dm-reader-v1.js?v=100'));
+  assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
+  assert.match(notice,/function directPanel\(\)\{\s*if\(isDmRoute\(\)\)return null/);
+  assert.match(notice,/async function scan\(\)\{\s*if\(isDmRoute\(\)\)return/);
+  assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
+  assert.match(dm,/if\(!dmRoute\(\)\)return/);
+  assert.match(dm,/insight-dm-ingest/);
+  assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
+  for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
+  assert.match(dmIngest,/from\("insight_dm_messages"\)/);
+  assert.match(dmIngest,/from\("insight_dm_threads"\)/);
+  assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
+  assert.match(dmFeed,/from\("insight_dm_messages"\)/);
+  assert.match(dmFeed,/from\("insight_dm_threads"\)/);
+  assert.match(live,/MemberInsightDm/);assert.match(live,/\|"dm"\|/);assert.match(live,/💬 DM/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/noteのメッセージ履歴は本人通知とは完全に別保存/);
+});
+
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
   const store=read('src/insight-account-store.ts'),main=read('src/main.tsx'),home=read('src/hub-home-v2.tsx');
   assert.match(store,/EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:"/);assert.match(home,/localStorage\.setItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ activeAccount\.noteId, "1"\)/);assert.match(main,/function resumeCandidate\(\)/);
