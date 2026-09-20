@@ -76,7 +76,7 @@ test('active package uses V3.4.0 split full/delta Reader',()=>{
   assert.equal(manifest.notificationVersion,'3.4.0');assert.equal(manifest.notificationLabel,'本人通知');
   assert.match(v3,/@version\s+3\.4\.0/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const p of ['note-insight-notification-reader-v4.js?v=3400','note-insight-notification-controls-v1.js?v=100','note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=100','note-insight-notification-status-bridge-v1.js?v=100','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100','note-insight-dm-reader-v1.js?v=101'])assert.ok(meta.includes(p),p);
+  for(const p of ['note-insight-notification-reader-v4.js?v=3400','note-insight-notification-controls-v1.js?v=100','note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=100','note-insight-notification-status-bridge-v1.js?v=100','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
@@ -91,13 +91,15 @@ test('notification and DM readers are hard separated with independent storage an
   const v3=read('public/note-insight-notification-v3.user.js');
   const notice=read('public/note-insight-notification-reader-v4.js');
   const dm=read('public/note-insight-dm-reader-v1.js');
+  const dmUser=read('public/note-insight-dm.user.js');
+  const dmPair=read('public/note-insight-dm-account-pair-v1.js');
   const controls=read('public/note-insight-notification-controls-v1.js');
   const filter=read('public/note-insight-notification-filter-v4.js');
   const migration=read('supabase/migrations/20260921035000_insight_dm_history.sql');
   const dmIngest=read('supabase/functions/insight-dm-ingest/index.ts');
   const dmFeed=read('supabase/functions/insight-dm-feed/index.ts');
   const live=read('src/member-insight-live-v2.tsx'),unified=read('src/member-insight-unified-v4.tsx'),dmUi=read('src/member-insight-dm.tsx');
-  assert.ok(v3.includes('note-insight-dm-reader-v1.js?v=101'));
+  assert.doesNotMatch(v3,/note-insight-dm-reader-v1\.js\?v=/);
   assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(notice,/function directPanel\(\)\{\s*if\(isDmRoute\(\)\)return null/);
   assert.match(notice,/async function scan\(\)\{\s*if\(isDmRoute\(\)\)return/);
@@ -105,11 +107,15 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(filter,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)return/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
+  assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
+  assert.match(dmUser,/@version\s+1\.1\.0/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=110/);
+  assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
+  assert.match(dmFeed,/action==="people"/);assert.match(dmFeed,/action==="person_messages"/);assert.match(dmFeed,/person_key/);
   assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/\["dm","DM"\]/);assert.match(unified,/tab==="dm"\?<MemberInsightDm/);
-  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/noteのメッセージ履歴は本人通知とは完全に別保存/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/本人通知なしでも単独利用できます/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/DM同期ツールをインストール/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
