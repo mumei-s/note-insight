@@ -195,3 +195,14 @@ test('checkpoint exact identity prevents top-row false match',()=>{
   const activate=runtime.slice(runtime.indexOf('async function activate(next)'),runtime.indexOf('async function activateIntent()'));
   assert.doesNotMatch(activate,/__mumeiV3Checkpoint325\?\.mark\?\.\(\)/);
 });
+
+
+test('checkpoint identity never falls back to text when a stronger identity exists',()=>{
+  assert.match(checkpoint,/function rowLegacySignature\(el\)/);
+  assert.match(checkpoint,/if\(eventId&&legacy\)\{if\(idOk&&legacyOk\)return el;continue\}/);
+  assert.match(checkpoint,/if\(eventId\)\{if\(idOk\)return el;continue\}/);
+  assert.match(checkpoint,/if\(legacy\)\{if\(legacyOk\)return el;continue\}/);
+  assert.match(checkpoint,/if\(display&&stripTime\(el\.textContent\)===display\)return el/);
+  const activate=runtime.slice(runtime.indexOf('async function activate(next)'),runtime.indexOf('async function activateIntent()'));
+  assert.doesNotMatch(activate,/__mumeiV3Checkpoint325\?\.mark\?\.\(\)/);
+});
