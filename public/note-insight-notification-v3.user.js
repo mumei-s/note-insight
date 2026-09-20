@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.3
-// @description  本人通知V3.3.3。設定から通知へ戻る導線を固定し、通知画面とnoteトップの往復を解消。通常読込は通信保存、全読みは全履歴確認として表示を分離します。
+// @version      3.3.4
+// @description  本人通知V3.3.4。初回は履歴終端まで全件確認、以後は保存済み地点まで差分確認。途中停止は完了扱いにしません。設定戻りと更新確認で無関係なnoteプロフィールを表示しないようにします。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
-// @run-at       document-idle
+// @run-at       document-start
 // @grant        GM.xmlHttpRequest
 // @grant        GM.getValue
 // @grant        GM.setValue
@@ -19,18 +19,18 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3311
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3258
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3340
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3340
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3293
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3330
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3330
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3340
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3340
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.3';
+const VERSION='3.3.4';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -38,6 +38,8 @@ const gmModern=()=>Boolean(globalThis.GM);
 const gmVersionGet=async()=>{try{if(gmModern()&&typeof GM.getValue==='function')return String(await GM.getValue(ACTIVE_GM_KEY,'')||'');if(typeof GM_getValue==='function')return String(GM_getValue(ACTIVE_GM_KEY,'')||'')}catch{}return''};
 const gmVersionSet=async v=>{try{if(gmModern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}};
 if(location.hostname==='mumei-s.github.io'){
+  void gmVersionSet(VERSION);
+  try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
   void gmVersionGet().then(active=>{
     if(!/^\d+(?:\.\d+){1,3}$/.test(active))return;
     try{localStorage.setItem(TOOL_KEY,active);localStorage.setItem(RUNTIME_KEY,active);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
@@ -127,35 +129,19 @@ const noteGet=async(k,d)=>{try{if(modernNote()&&typeof GM.getValue==='function')
 const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
 (async()=>{
   const q=new URLSearchParams(location.search),urlWants=q.get('mumei_filter_return')==='bell';
-  const flag=await noteGet(RETURN,null),fresh=flag&&Date.now()-Number(flag.at||0)<120000;
-  if(!urlWants&&!fresh)return;
-  const clearReturnMarker=async()=>{
-    await noteSet(RETURN,null);
-    try{
-      const u=new URL(location.href);
-      u.searchParams.delete('mumei_filter_return');
-      history.replaceState(history.state,'',u.pathname+u.search+u.hash)
-    }catch{}
-    window.__mumeiNotificationReturnDone=true
-  };
-  if(/^\/notifications(?:\/|$)/i.test(location.pathname)){
-    await clearReturnMarker();
+  const stale=await noteGet(RETURN,null);
+  if(stale)await noteSet(RETURN,null);
+  if(!urlWants)return;
+  if(!/^\/notifications(?:\/|$)/i.test(location.pathname)){
+    location.replace(location.origin+'/notifications');
     return
   }
-  let attempts=0,clickedAt=0;
-  const tick=async()=>{
-    const api=window.__mumeiV3Runtime328;
-    if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
-      await clearReturnMarker();
-      return
-    }
-    if(attempts++>=36)return;
-    if(api&&typeof api.openNotificationBell==='function'&&Date.now()-clickedAt>1500){
-      if(api.openNotificationBell())clickedAt=Date.now()
-    }
-    setTimeout(()=>void tick(),350)
-  };
-  void tick()
+  try{
+    const u=new URL(location.href);
+    u.searchParams.delete('mumei_filter_return');
+    history.replaceState(history.state,'',u.pathname+u.search+u.hash)
+  }catch{}
+  window.__mumeiNotificationReturnDone=true
 })()
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
