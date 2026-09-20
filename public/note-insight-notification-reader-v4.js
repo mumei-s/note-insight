@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.4.0',PROTOCOL='3.4.0';
+const VERSION='3.4.2',PROTOCOL='3.4.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -132,6 +132,27 @@ async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
 }
 async function scan(){
  if(isDmRoute())return;
+ if(scanning){health('通信読取中です…','saving');return 0}
+ const net=window.__mumeiNotificationNetwork3300;
+ if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
+ scanning=true;stop=false;
+ try{
+  const r=await net.syncCurrent({waitMs:3200});
+  const saved=Number(r?.saved||0),read=Number(r?.received||0);
+  if(r?.handled){
+   const label=r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
+   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done');
+   return saved
+  }
+  health('通信読取待機｜🔔を開いたまま次回も続きから確認します','saving');
+  return 0
+ }catch(e){
+  health(`⚠ ${String(e?.message||e)}｜未保存分は次回に引継ぎ`,'error');
+  return 0
+ }finally{scanning=false;stop=false}
+}
+async function scanDomLegacy(){
+ if(isDmRoute())return;
  if(scanning){stop=true;capturePending();health('停止地点まで保存します…','saving');return}
  // Lock before asynchronous login and storage checks to prevent two readers.
  scanning=true;stop=false;let a=null,saved=null,count=0,readCount=0,complete=false;
@@ -201,5 +222,5 @@ new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>sched
 document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(500));
 window.addEventListener('focus',()=>scheduleAuto(500));
-window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,isDmRoute};
+window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,isDmRoute,scanDomLegacy};
 })();
