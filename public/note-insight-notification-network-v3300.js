@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.3.5';
+const VERSION='3.3.6';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -135,7 +135,7 @@ function requestMeta(input,init){
 function xBodySample(body){if(body==null)return null;if(typeof body==='string'){try{return compact(JSON.parse(body))}catch{return body.slice(0,5000)}}return typeof body==='object'?compact(body):String(body).slice(0,5000)}
 let armedUntil=0,lastCapture=null,lastResult=null,inflight=0;
 function runtime(){return window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325||null}
-function captureActive(){return Date.now()<armedUntil||/^\/notifications(?:\/|$)/i.test(location.pathname)||Boolean(runtime()?.isSessionActive?.())}
+function captureActive(){return Date.now()<armedUntil||Boolean(runtime()?.isSessionActive?.())}
 function arm(ms=20000){armedUntil=Math.max(armedUntil,Date.now()+ms)}
 function looksBell(target,e){
  try{if(runtime()?.bellTrigger?.(target,e))return true}catch{}
