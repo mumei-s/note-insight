@@ -40,6 +40,15 @@ test('DM installer and release metadata are separate',()=>{
   assert.match(release,/DM_VERSION_STORAGE_KEY = "mumei-dm-tool-version"/);
 });
 
+test('opening DM always starts a fresh sync but completion return cannot loop',()=>{
+  const reader=read('public/note-insight-dm-reader-v1.js');
+  assert.doesNotMatch(reader,/COOLDOWN/);
+  assert.match(reader,/if\(!q&&rooms\.length\)/);
+  assert.match(reader,/mumei_dm_just_completed_v1/);
+  assert.match(reader,/sessionStorage\.setItem\(DONE,'1'\)/);
+  assert.match(reader,/sessionStorage\.removeItem\(DONE\)/);
+});
+
 test('DM feed and UI group by person, not room',()=>{
   const feed=read('supabase/functions/insight-dm-feed/index.ts');
   const ui=read('src/member-insight-dm.tsx');
