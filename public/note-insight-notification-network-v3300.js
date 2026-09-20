@@ -4,11 +4,11 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.3.6';
+const VERSION='3.4.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
-const STATUS='mumei_notification_network_status_v3300:';
+const STATUS='mumei_notification_network_status_v3300:',CHECK='mumei_insight_notification_checkpoint_v2922:';
 const OUTBOX='mumei_notification_network_outbox_v331:';
 const HISTORY='mumei_notification_network_history_v334:';
 const SOURCE='note-notification-explicit-sync-v330';
@@ -170,6 +170,10 @@ function mergePending(existing,rows,cap,manual){
 async function pendingCount(id){return (await readOutbox(id)).length}
 async function historyState(id){const v=await get(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
 async function writeHistoryState(id,v){await set(key(HISTORY,id),v&&typeof v==='object'?v:{})}
+async function writeUnifiedStatus(id,patch){
+ const cp=await get(key(CHECK,id),{});
+ await set(key(CHECK,id),{...cp,...patch,version:VERSION});
+}
 async function ingestRows(rows,cap,manual=false,emitStatus=true){
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
  const token=await tokenFor(a.id);if(!token)throw new Error('本人連携が必要です');
@@ -296,14 +300,14 @@ async function syncHistory(opts={}){
  let cap=await waitCapture(waitMs);
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
-  return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'}
+  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
  }
  let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false;
  for(let i=0;i<1000&&cap;i++){
   const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
   if(requestSeen.has(reqSig)){
-   status('APIページングが同じ位置で停止したため、実スクロールへ自動切替します…','saving',{mode:'network-fallback'});
-   return{handled:false,saved:total,received,pages,pending:0,reason:'REPEATED_REQUEST',needsDom:true}
+   status('APIページングが同じ位置で停止したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback'});
+   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'APIページングが同じ位置で停止しました'});return{handled:false,saved:total,received,pages,pending:0,reason:'REPEATED_REQUEST',needsDom:false}
   }
   requestSeen.add(reqSig);
   const pageRows=cap.rows||extract(cap.json,cap.url);
@@ -321,25 +325,25 @@ async function syncHistory(opts={}){
   const hint=nextHint(cap.json);
   if(!hint){
    if(terminalHint(cap.json)){reachedEnd=true;completed=true;break}
-   status('APIで終端を確認できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   return{handled:false,saved:total,received,pages,pending:0,reason:'END_UNCONFIRMED',needsDom:true}
+   status('APIで終端を確認できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'API終端を確認できませんでした'});return{handled:false,saved:total,received,pages,pending:0,reason:'END_UNCONFIRMED',needsDom:false}
   }
   const nextReq=mutateNextRequest(cap,hint);
   if(!nextReq){
-   status('次ページを解釈できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_UNREADABLE',needsDom:true}
+   status('次ページを解釈できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'次ページを解釈できませんでした'});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_UNREADABLE',needsDom:false}
   }
   try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){
-   status('APIの次ページ取得に失敗したため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:true,error:String(e?.message||e)}
+   status('APIの次ページ取得に失敗したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e)});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}
   }
   if(i===999)capLimitHit=true
  }
  const pending=await pendingCount(a.id);
  if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
  if(capLimitHit||!completed){
-  status('APIで完了地点を確認できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-  return{handled:false,saved:total,received,pages,pending:0,reason:capLimitHit?'PAGE_LIMIT':'INCOMPLETE',needsDom:true}
+  status('APIで完了地点を確認できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:capLimitHit?'APIページ上限':'API読取未完了'});return{handled:false,saved:total,received,pages,pending:0,reason:capLimitHit?'PAGE_LIMIT':'INCOMPLETE',needsDom:false}
  }
  const nextState={
   ...state,
@@ -354,6 +358,7 @@ async function syncHistory(opts={}){
   version:VERSION
  };
  await writeHistoryState(a.id,nextState);
+ await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:reachedEnd?'full':'delta',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:''});
  if(reachedEnd){
   status(`✓ 全履歴確認完了｜${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true});
   return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,full:true,mode:'network-full'}
