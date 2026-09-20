@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.5 loads bottom-up reader and fixed five-panel runtime",async()=>{
+test("V3.3.6 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
- assert.match(parent,/@version\s+3\.3\.5/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3350/);
+ assert.match(parent,/@version\s+3\.3\.6/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3360/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3293/);
- assert.match(parent,/note-insight-notification-network-v3300\.js\?v=3350/);assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3350/);
+ assert.match(parent,/note-insight-notification-network-v3300\.js\?v=3360/);assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3360/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
@@ -64,7 +64,7 @@ test("settings button opens the dedicated filter settings page and never uses th
  const page=await read("public/notification-filter-settings.html");
  assert.match(runtime,/data-a="settings">設定<\/button>/);
  assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
- assert.match(page,/noteの🔔通知へ戻る/);assert.match(page,/history\.pushState/);assert.match(page,/https:\/\/note\.com\/notifications/);assert.doesNotMatch(page,/mumei_filter_return=bell/);assert.match(page,/className='summary'/);assert.match(page,/className='body'/);
+ assert.match(page,/noteの🔔通知へ戻る/);assert.match(page,/history\.pushState/);assert.match(page,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(page,/note\.com\/notifications/);assert.match(page,/className='summary'/);assert.match(page,/className='body'/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
 });
 
