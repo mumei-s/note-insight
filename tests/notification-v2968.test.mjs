@@ -96,7 +96,7 @@ test('notification and DM readers are hard separated with independent storage an
   const migration=read('supabase/migrations/20260921035000_insight_dm_history.sql');
   const dmIngest=read('supabase/functions/insight-dm-ingest/index.ts');
   const dmFeed=read('supabase/functions/insight-dm-feed/index.ts');
-  const live=read('src/member-insight-live-v2.tsx'),dmUi=read('src/member-insight-dm.tsx');
+  const live=read('src/member-insight-live-v2.tsx'),unified=read('src/member-insight-unified-v4.tsx'),dmUi=read('src/member-insight-dm.tsx');
   assert.ok(v3.includes('note-insight-dm-reader-v1.js?v=101'));
   assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(notice,/function directPanel\(\)\{\s*if\(isDmRoute\(\)\)return null/);
@@ -108,7 +108,7 @@ test('notification and DM readers are hard separated with independent storage an
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
-  assert.match(live,/MemberInsightDm/);assert.match(live,/\|"dm"\|/);assert.match(live,/💬 DM/);
+  assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/\["dm","DM"\]/);assert.match(unified,/tab==="dm"\?<MemberInsightDm/);
   assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/noteのメッセージ履歴は本人通知とは完全に別保存/);
 });
 
