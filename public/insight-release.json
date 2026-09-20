@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.21.7",
-  "notificationVersion": "3.3.10",
+  "appVersion": "2026.09.21.8",
+  "notificationVersion": "3.3.11",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T03:45:00+09:00",
+  "releasedAt": "2026-09-21T04:08:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.10。自動読取はUI非依存のまま、実際の🔔通知一覧の内側に「フィルターON/OFF・設定・INSIGHT【通知】」の小バーを埋め込む。小バーが消えても読取は継続し、note側の再描画後は再挿入する。未知文言は必ず「その他・未分類」に保存し、分類ルール更新時に全履歴を一度自動再分類する。"
+  "note": "本人通知V3.3.11。🔔本人通知とDMを完全分離。通知Readerは /messages/rooms では停止。DMは専用Readerで /messages/rooms のみ動作し、専用DMテーブル・専用チェックポイント・専用INSIGHT「DM」画面へ保存。ルーム一覧から各会話を順番に走査し、古いメッセージまで読み込み、途中失敗時はその位置から再開する。"
 }
