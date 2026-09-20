@@ -1,10 +1,12 @@
 {
-  "appVersion": "2026.09.21.9",
+  "appVersion": "2026.09.21.10",
   "notificationVersion": "3.4.0",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T04:35:00+09:00",
+  "releasedAt": "2026-09-21T05:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.4.0。Reader・Controls・Filter・Return・Status・Settings・Account Pair・DMを完全分離。Readerは通知の検出/走査/保存のみ、ControlsはフィルターON/OFF・設定・INSIGHT導線のみ、DMは/messages/rooms専用で通知系は同ルートで停止。旧autoscan/bootstrapはactive packageから外した。"
+  "note": "INSIGHT 2026.09.21.10。DMは本人通知から完全独立し、専用userscript・専用ペアリング・専用トークン・専用Reader/DBで動作。DMを開くだけで自動同期し、INSIGHTでは相手ごとに複数ルームを統合表示する。",
+  "dmVersion": "1.1.0",
+  "dmLabel": "DM同期"
 }
