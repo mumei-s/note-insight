@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.2
-// @description  本人通知V3.3.2。パネル操作をnote側の外側タップ判定から隔離し、触った瞬間に通知とパネルが閉じる不具合を修正。保存確認済みだけを完了扱いにします。
+// @version      3.3.3
+// @description  本人通知V3.3.3。設定から通知へ戻る導線を固定し、通知画面とnoteトップの往復を解消。通常読込は通信保存、全読みは全履歴確認として表示を分離します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-idle
@@ -22,15 +22,15 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3311
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3258
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3293
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3320
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3310
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3330
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3330
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.2';
+const VERSION='3.3.3';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -129,13 +129,24 @@ const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')
   const q=new URLSearchParams(location.search),urlWants=q.get('mumei_filter_return')==='bell';
   const flag=await noteGet(RETURN,null),fresh=flag&&Date.now()-Number(flag.at||0)<120000;
   if(!urlWants&&!fresh)return;
+  const clearReturnMarker=async()=>{
+    await noteSet(RETURN,null);
+    try{
+      const u=new URL(location.href);
+      u.searchParams.delete('mumei_filter_return');
+      history.replaceState(history.state,'',u.pathname+u.search+u.hash)
+    }catch{}
+    window.__mumeiNotificationReturnDone=true
+  };
+  if(/^\/notifications(?:\/|$)/i.test(location.pathname)){
+    await clearReturnMarker();
+    return
+  }
   let attempts=0,clickedAt=0;
   const tick=async()=>{
     const api=window.__mumeiV3Runtime328;
     if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
-      await noteSet(RETURN,null);
-      try{history.replaceState(history.state,'',location.origin+'/')}catch{}
-      window.__mumeiNotificationReturnDone=true;
+      await clearReturnMarker();
       return
     }
     if(attempts++>=36)return;
