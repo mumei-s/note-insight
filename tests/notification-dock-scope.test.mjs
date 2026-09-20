@@ -6,8 +6,8 @@ const read=(p)=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  const reader=await read("public/note-insight-notification-reader-v323.js");
  assert.doesNotMatch(reader,/fallbackHtml|ensureFallback|mumei-notice-reader-v2963|contentDocument/);
- assert.match(reader,/incremental-top-until-saved/);
- assert.match(reader,/top-until-first-saved-v329/);
+ assert.match(reader,/bottom-up-from-saved-line/);
+ assert.match(reader,/saved-line-bottom-up-v324/);
  assert.match(reader,/ここまで保存済み/);
  assert.match(reader,/boundarySignature/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/reader-recovered-saved-v326/);
  assert.match(reader,/MAX_SEEK_STEPS/);
@@ -15,13 +15,13 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.2.89 loads incremental reader and fixed five-panel runtime",async()=>{
+test("V3.2.89 loads bottom-up reader and fixed five-panel runtime",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
  const checkpoint=await read("public/note-insight-notification-checkpoint-v325.js");
  const reader=await read("public/note-insight-notification-reader-v323.js");
  assert.match(parent,/@version\s+3\.2\.89/);
- assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3259/);
+ assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3258/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3250/);
  assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3289/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
@@ -36,7 +36,7 @@ test("V3.2.89 loads incremental reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/notification-filter-settings\.html/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
- assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/通常読込では過去へ潜りません/);
+ assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -55,8 +55,8 @@ test("reader saves a confirmed completion boundary and subsequent scans move upw
  assert.match(reader,/boundaryEventIdentity:last\.meta\?\.event_identity/);
  assert.match(reader,/boundaryLegacySignature:legacySig\(last\)/);
  assert.match(reader,/function boundaryMatch/);
- assert.match(reader,/reader-incremental-confirmed-v329/);
- assert.match(reader,/新しい通知だけ確認しています/);
+ assert.match(reader,/reader-bottom-up-confirmed-v326/);
+ assert.match(reader,/完了ラインから上方向へ、追加分だけ読み込みます/);
 });
 
 test("settings button opens the dedicated filter settings page and never uses the inline panel",async()=>{
