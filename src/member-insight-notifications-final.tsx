@@ -41,6 +41,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const[rows,setRows]=useState<Row[]>([]),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
   const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>({}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
+  const[readerStatus,setReaderStatus]=useState<any>(null);
   async function load(p=1,k=kind,silent=false,day=selectedDay){
     if(silent&&request.current.controller)return;
     request.current.controller?.abort();const controller=new AbortController(),id=++request.current.id;request.current.controller=controller;
@@ -59,10 +60,27 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   }
   useEffect(()=>{setRows([]);setCategoryCounts({});void load(1,kind,false,selectedDay);return()=>{request.current.id++;request.current.controller?.abort();request.current.controller=null}},[kind,selectedDay,revision,memberNoteId]);
   useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,10000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
+  useEffect(()=>{
+    const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
+    if(!noteId)return;
+    const PAGE_SOURCE="mumei-notification-status-ui-v1",BRIDGE="mumei-notification-status-bridge-v1";
+    const receive=(e:MessageEvent)=>{if(e.origin!==location.origin||e.data?.source!==BRIDGE||e.data?.type!=="state"||String(e.data?.noteId||"").toLowerCase()!==noteId)return;setReaderStatus(e.data?.status||null)};
+    const ask=()=>window.postMessage({source:PAGE_SOURCE,type:"read",noteId},location.origin);
+    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,5000);
+    return()=>{window.removeEventListener("message",receive);window.clearInterval(timer)}
+  },[memberNoteId,revision]);
   useEffect(()=>{const nav=document.querySelector('.miu-nav');if(!nav)return;const buttons=[...nav.querySelectorAll('button')] as HTMLButtonElement[],prev=buttons.find(b=>b.classList.contains('active'))||null,next=buttons.find(b=>b.textContent?.trim()==='通知')||null;if(next){buttons.forEach(b=>b.classList.remove('active'));next.classList.add('active');requestAnimationFrame(()=>next.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}))}return()=>{if(next)next.classList.remove('active');if(prev)prev.classList.add('active')}} ,[]);
   const pages=Math.max(1,Math.ceil(total/PAGE)),selfId=String(memberNoteId||"").toLowerCase(),latest=syncAt||updatedAt;
+  const readerMode=String(readerStatus?.lastRunMode||"");
+  const readerLabel=readerMode==="full"?"全履歴完了":readerMode==="delta"?"差分完了":readerMode==="partial"?"途中保存":readerMode==="error"?"読取エラー":readerStatus?.historyComplete?"全履歴確認済み":"未確認";
+  const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   return <section id="minf-notifications" className="minf">
     <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteの通知を保存すると、この画面へ約10秒ごとに自動反映します。分類の数字は選択日の本人通知の全件数です。スキ・人物フォロー・通常コメント・記事投稿は各専用画面と公開データ分析で確認できます。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
+    <div className={`minf-reader-status ${readerClass}`} role="status">
+      <div><span>本人通知 読取状態</span><strong>{readerLabel}</strong></div>
+      <dl><div><dt>最終読取</dt><dd>{readerStatus?.lastRunAt?date(new Date(Number(readerStatus.lastRunAt)).toISOString()):"—"}</dd></div><div><dt>読取</dt><dd>{Number(readerStatus?.lastRunReadCount||0)}件</dd></div><div><dt>保存確認</dt><dd>{Number(readerStatus?.lastRunSavedCount||0)}件</dd></div><div><dt>累計保存</dt><dd>{Number(readerStatus?.savedTotal||0)}件</dd></div></dl>
+      {readerStatus?.lastError?<p>⚠ {String(readerStatus.lastError)}</p>:null}
+    </div>
     <details className="minf-state"><summary>更新状態・精度</summary><div><span>保存データ</span><strong>{updatedAt?date(updatedAt):"確認中…"}</strong><span>画面確認</span><strong>{checkedAt?date(checkedAt.toISOString()):"確認中…"}</strong></div><p>取得条件やnote側表示により欠落・重複・時刻ずれが起こる場合があります。重要な確認はnote本体を優先してください。</p></details>
     <div className="minf-date-filter" aria-label="通知の日付指定"><label><span>📅 表示日</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label><strong>{selectedDay?`${dayLabel(selectedDay)} の通知`:"全期間"}</strong><button type="button" disabled={!selectedDay} onClick={()=>{setPage(1);setSelectedDay("")}}>全期間に戻す</button><small>この日付は下の全カテゴリ共通です。</small></div>
     <div className="minf-tabs" role="tablist">{CATS.map(([id,label])=><button key={id} className={kind===id?"active":""} onClick={()=>{setPage(1);setKind(id)}}>{label}{categoryCounts[id]!==undefined?<small>{categoryCounts[id]}</small>:null}</button>)}</div>
