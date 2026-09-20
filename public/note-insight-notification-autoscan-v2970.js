@@ -13,6 +13,7 @@ const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificatio
 const TIME_RE=/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)/u;
 const NOTICE_RE=/(?:さん|通知|新しい記事|追加しました|フォロー|コメント|返信|スキ|いいね|リアクション|購入|チップ|サポート|支援|応援金|メンバー|メンバーシップ|メンシプ|プラン|加入|入会|マガジン|掲示板|話題|高評価|引用|紹介)/u;
 const EXCLUDE=new Set(['settings','sitesettings','membership','memberships','notifications','messages','search','explore','login','signup']);
+const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -32,6 +33,7 @@ function tabLabel(el){return clean(el?.textContent||el?.getAttribute?.('aria-lab
 function noticeTabs(root){if(!root?.querySelectorAll)return false;let notice=false,news=false,n=0;for(const el of root.querySelectorAll('button,a,[role="tab"],[role="button"]')){if(n++>160)break;if(!shown(el))continue;const t=tabLabel(el);if(/^通知(?:\s*\d+)?$/u.test(t))notice=true;else if(/^お知らせ(?:\s*\d+)?$/u.test(t))news=true;if(notice&&news)return true}return false}
 function noticeLikeRows(root){if(!root?.querySelectorAll)return 0;let n=0,seen=new Set();const candidates=[...root.querySelectorAll(ITEM),...root.querySelectorAll('li,[role="listitem"],a[href]')];for(const el of candidates){if(seen.has(el)||!shown(el))continue;seen.add(el);const t=clean(el.textContent);if(t.length<3||t.length>4000)continue;if(TIME_RE.test(t)&&/(?:さん|スキ|フォロー|コメント|返信|追加|購入|メンバー|マガジン|話題|チップ|サポート|記事)/u.test(t)){if(++n>=2)return n}}return n}
 function directPanel(){
+ if(isDmRoute())return null;
  const marked=document.querySelector(SHELL);if(marked&&shown(marked)&&marked!==document.body&&marked!==document.documentElement)return marked;
  const exact=[...document.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"],[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i]')].filter(shown);
  for(const item of exact){
@@ -179,6 +181,7 @@ async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  return false;
 }
 async function scan(){
+ if(isDmRoute())return;
  if(scanning){stop=true;capturePending();health('停止地点まで保存します…','saving');return}
  // Lock before asynchronous login and storage checks to prevent two readers.
  scanning=true;stop=false;let a=null,saved=null,count=0,readCount=0,complete=false;
@@ -235,6 +238,7 @@ async function scan(){
 function bindFrame(f){try{const d=f.contentDocument;if(!d||d.documentElement.dataset.mumeiReader2963==='1')return false;const read=d.getElementById('read'),settings=d.getElementById('settings'),ins=d.getElementById('ins');if(!read)return false;d.documentElement.dataset.mumeiReader2963='1';read.textContent='下から読込';d.addEventListener('click',e=>{const t=e.target;if(!(t instanceof d.defaultView.HTMLElement))return;if(t.id==='read'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();if(t.dataset.repair==='1'){location.assign(SETUP);return}void scan(false);return}if(t.id==='settings'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();location.assign(FILTER);return}if(t.id==='ins'){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void account().then(a=>{const u=new URL(INSIGHT);if(a?.id)u.searchParams.set('account',a.id);location.assign(u.href)})}},true);return true}catch{return false}}
 let scheduled=0,autoTimer=0,autoPanel=null,lastAutoAt=0;
 function scheduleAuto(delay=350){
+ if(isDmRoute())return;
  clearTimeout(autoTimer);
  autoTimer=setTimeout(()=>{
   const p=findPanel();
@@ -248,7 +252,7 @@ function scheduleAuto(delay=350){
 }
 setTimeout(()=>scheduleAuto(600),120);
 new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(300),120)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
-document.addEventListener('click',e=>{const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
+document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(500));
 window.addEventListener('focus',()=>scheduleAuto(500));
 window.__mumeiStableNotification3310={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,mountToolbar,syncToolbar};
