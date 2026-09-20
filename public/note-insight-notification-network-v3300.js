@@ -197,8 +197,7 @@ async function processCapture(cap,{manual=false,probe=true}={}){
  if(probe)void saveProbe(cap,rows);
  if(!rows.length)return{handled:false,saved:0,candidate:true};
  lastCapture={...cap,rows,at:Date.now()};
- const auto=runtime()?.getAuto?.();
- if(manual||auto===true)return ingestRows(rows,cap,manual);
+ if(manual)return ingestRows(rows,cap,true);
  return{handled:true,saved:0,received:rows.length,deferred:true}
 }
 async function inspectResponse(meta,res,transport){
