@@ -1,0 +1,249 @@
+(function(){
+'use strict';
+if(location.hostname!=='note.com')return;
+if(window.__mumeiNotificationNetwork3300)return;
+window.__mumeiNotificationNetwork3300=true;
+
+const VERSION='3.3.0';
+const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
+const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
+const TOKEN='mumei_insight_notification_sync_token_v2:';
+const STATUS='mumei_notification_network_status_v3300:';
+const SOURCE='note-notification-explicit-sync-v330';
+const ACTION_RE=/(?:スキ|フォロー|コメント|返信|購入|高評価|チップ|サポート|メンバーシップ|メンシプ|マガジン|記事を投稿|記事を更新|話題|ポイント|引用|追加しました|参加しました|加入しました)/u;
+const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities|graphql)/i;
+const KEY_HINT_RE=/(?:notice|notification|activity|event)/i;
+const TEXT_KEYS=['message','text','body','title','label','description','content','display_text','displayText','notice_text','noticeText','notification_text','notificationText','summary'];
+const TIME_KEYS=['created_at','createdAt','occurred_at','occurredAt','published_at','publishedAt','updated_at','updatedAt','timestamp','datetime','date'];
+const ID_KEYS=['notification_id','notificationId','notice_id','noticeId','id','key','uuid'];
+const URL_KEYS=['target_url','targetUrl','url','href','link','path','permalink'];
+const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const clean=v=>String(v??'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+
+async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
+async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
+function request(url,body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
+async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+function status(message,kind='info',extra={}){document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail:{message:String(message||''),kind,label:kind==='done'?'✓通信保存':kind==='error'?'通信再試行':'通信読込',scanning:kind==='saving',network:true,...extra}}))}
+function pageWindow(){try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}}
+function absUrl(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
+function sameNoteOrGraphql(v){try{const u=new URL(v,location.href);return u.hostname==='note.com'||u.hostname==='graphql.note.com'}catch{return false}}
+function compact(v,depth=0){if(depth>5)return'[depth]';if(v===null||typeof v==='number'||typeof v==='boolean')return v;if(typeof v==='string')return v.slice(0,1000);if(Array.isArray(v))return v.slice(0,25).map(x=>compact(x,depth+1));if(v&&typeof v==='object'){const o={};let n=0;for(const[k,x]of Object.entries(v)){if(n++>=50)break;o[String(k).slice(0,100)]=compact(x,depth+1)}return o}return String(v??'').slice(0,500)}
+function shape(v,depth=0){if(depth>5)return typeof v;if(Array.isArray(v))return{type:'array',length:v.length,item:v.length?shape(v[0],depth+1):null};if(v&&typeof v==='object'){const o={};let n=0;for(const[k,x]of Object.entries(v)){if(n++>=50)break;o[k]=shape(x,depth+1)}return o}return typeof v}
+function str(v){return typeof v==='string'?clean(v):''}
+function firstString(obj,keys){for(const k of keys){const v=obj?.[k];if(typeof v==='string'&&clean(v))return clean(v)}return''}
+function findNested(obj,names){if(!obj||typeof obj!=='object')return null;for(const k of names){const v=obj[k];if(v&&typeof v==='object'&&!Array.isArray(v))return v}return null}
+function actorInfo(obj){
+ const a=findNested(obj,['actor','user','creator','from_user','fromUser','sender','member','owner']);
+ const name=firstString(a||{},['name','display_name','displayName','nickname','urlname','username'])||firstString(obj,['actor_name','actorName','user_name','userName','creator_name','creatorName']);
+ const urlname=firstString(a||{},['urlname','username','screen_name'])||firstString(obj,['actor_urlname','actorUrlname']);
+ const image=firstString(a||{},['profile_image_url','profileImageUrl','image_url','imageUrl','avatar_url','avatarUrl','icon_url','iconUrl']);
+ return{name,urlname,image}
+}
+function targetInfo(obj){
+ const t=findNested(obj,['target','note','article','magazine','membership','resource','object']);
+ let url=firstString(obj,URL_KEYS)||firstString(t||{},URL_KEYS);
+ if(url&&url.startsWith('/'))url='https://note.com'+url;
+ const title=firstString(obj,['target_title','targetTitle'])||firstString(t||{},['name','title','label']);
+ return{url,title}
+}
+function occurred(obj){for(const k of TIME_KEYS){const v=obj?.[k];if(typeof v==='string'&&!Number.isNaN(Date.parse(v)))return new Date(v).toISOString();if(typeof v==='number'&&v>1e9){const ms=v<1e12?v*1000:v;return new Date(ms).toISOString()}}return null}
+function eventId(obj){for(const k of ID_KEYS){const v=obj?.[k];if(typeof v==='string'||typeof v==='number')return String(v)}return''}
+function bestText(obj){
+ for(const k of TEXT_KEYS){const v=obj?.[k];if(typeof v==='string'&&ACTION_RE.test(clean(v)))return clean(v)}
+ const strings=[];
+ for(const [k,v] of Object.entries(obj||{})){if(typeof v==='string'){const s=clean(v);if(s.length>=5&&s.length<=1200)strings.push([k,s])}}
+ const hit=strings.find(([,s])=>ACTION_RE.test(s));if(hit)return hit[1];
+ return''
+}
+function qualifies(obj,path){
+ if(!obj||typeof obj!=='object'||Array.isArray(obj))return false;
+ const text=bestText(obj);if(!text)return false;
+ const keys=Object.keys(obj).join(' ');
+ const hint=KEY_HINT_RE.test(keys)||KEY_HINT_RE.test(path);
+ const hasMeta=Boolean(eventId(obj)||occurred(obj)||findNested(obj,['actor','user','creator','sender']));
+ return hint||hasMeta
+}
+function extract(json,requestUrl){
+ const out=[],seen=new Set();
+ function walk(v,path='',depth=0){
+  if(depth>10||v==null)return;
+  if(Array.isArray(v)){for(let i=0;i<Math.min(v.length,1500);i++)walk(v[i],path+'[]',depth+1);return}
+  if(typeof v!=='object')return;
+  if(qualifies(v,path)){
+   const raw=bestText(v),actor=actorInfo(v),target=targetInfo(v),id=eventId(v),at=occurred(v);
+   const actorUrl=actor.urlname?`https://note.com/${actor.urlname.replace(/^@/,'')}`:null;
+   const ev=id?'notice:'+id:at?'time:'+at:'network:'+clean(raw).slice(0,160);
+   const sig=['network-v330',id||ev,at||'',raw,target.url||'',actorUrl||actor.name||''].join('|');
+   if(!seen.has(sig)){seen.add(sig);out.push({
+    raw_text:raw,actor_name:actor.name||null,actor_url:actorUrl,actor_image_url:actor.image||null,
+    target_title:target.title||null,target_url:target.url||null,source_url:target.url||requestUrl||'https://note.com/',
+    occurred_at:at,meta:{source:SOURCE,capture_source:'note-network-v3300',userscript:VERSION,protocol:VERSION,scan_mode:'network-response',scan_strategy:'page-fetch-intercept-v1',event_identity:ev,client_signature:sig,request_url:requestUrl}
+   })}
+  }
+  for(const[k,x]of Object.entries(v))walk(x,path?path+'.'+k:k,depth+1)
+ }
+ walk(json);
+ return out.slice(0,1000)
+}
+function operationName(body){try{const j=typeof body==='string'?JSON.parse(body):body;return clean(j?.operationName||j?.operation_name||'')}catch{return''}}
+function candidateHint(url,body,json){
+ const op=operationName(body),u=String(url||'');
+ if(URL_HINT_RE.test(u)||URL_HINT_RE.test(op))return true;
+ try{const s=JSON.stringify(compact(json));return ACTION_RE.test(s)&&/(?:notice|notification|activity|通知|お知らせ)/iu.test(s)}catch{return false}
+}
+function nextHint(json){
+ let found=null;
+ function walk(v,depth=0){if(found||depth>8||!v)return;if(Array.isArray(v)){for(const x of v.slice(0,30))walk(x,depth+1);return}if(typeof v!=='object')return;
+  const hasNext=v.hasNextPage??v.has_next_page??v.has_next;
+  const cursor=v.endCursor??v.end_cursor??v.nextCursor??v.next_cursor??null;
+  const next=v.next_page??v.nextPage??v.next??v.next_url??v.nextUrl??null;
+  const last=v.is_last_page??v.isLastPage??null;
+  if((hasNext===true&&cursor)||(next!==null&&next!==false)||(last===false&&cursor)){found={hasNext,cursor,next,last};return}
+  for(const x of Object.values(v))walk(x,depth+1)
+ }
+ walk(json);return found
+}
+function requestMeta(input,init){
+ let url='',method='GET',body=null,headers={};
+ try{
+  if(typeof input==='string'||input instanceof URL){url=String(input);method=String(init?.method||'GET').toUpperCase();body=init?.body??null;headers=init?.headers||{}}
+  else if(input){url=String(input.url||'');method=String(init?.method||input.method||'GET').toUpperCase();body=init?.body??null;try{for(const[k,v]of input.headers?.entries?.()||[])headers[k]=v}catch{}}
+ }catch{}
+ return{url:absUrl(url),method,body,headers}
+}
+function xBodySample(body){if(body==null)return null;if(typeof body==='string'){try{return compact(JSON.parse(body))}catch{return body.slice(0,5000)}}return typeof body==='object'?compact(body):String(body).slice(0,5000)}
+let armedUntil=0,lastCapture=null,lastResult=null,inflight=0;
+function runtime(){return window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325||null}
+function captureActive(){return Date.now()<armedUntil||/^\/notifications(?:\/|$)/i.test(location.pathname)||Boolean(runtime()?.isSessionActive?.())}
+function arm(ms=20000){armedUntil=Math.max(armedUntil,Date.now()+ms)}
+function looksBell(target,e){
+ try{if(runtime()?.bellTrigger?.(target,e))return true}catch{}
+ const el=target instanceof Element?target.closest('button,a,[role="button"],[aria-label],[data-testid]'):null;
+ const s=clean([el?.textContent,el?.getAttribute?.('aria-label'),el?.getAttribute?.('title'),el?.getAttribute?.('href'),el?.getAttribute?.('data-testid')].join(' '));
+ return/(?:通知|お知らせ|notification|notice|bell)/iu.test(s)&&!/設定|filter/i.test(s)
+}
+document.addEventListener('pointerdown',e=>{if(looksBell(e.target,e))arm()},true);
+document.addEventListener('click',e=>{if(looksBell(e.target,e))arm()},true);
+
+async function tokenFor(id){return String(await get(key(TOKEN,id),'')||'')}
+async function saveProbe(cap,candidates){
+ const a=await account();if(!a)return;
+ const token=await tokenFor(a.id);if(!token)return;
+ const record={page_url:location.href,request_url:cap.url,request_method:cap.method,transport:cap.transport,status:cap.status,content_type:cap.contentType,operation_name:operationName(cap.body),request_sample:xBodySample(cap.body),response_shape:shape(cap.json),response_sample:compact(cap.json),candidate_count:candidates.length};
+ try{await request(PROBE,{noteId:a.id,records:[record]},token)}catch{}
+}
+async function ingestRows(rows,cap,manual=false){
+ if(!rows.length)return{handled:true,saved:0,received:0};
+ const a=await account();if(!a)throw new Error('noteログインを確認してください');
+ const token=await tokenFor(a.id);if(!token)throw new Error('本人連携が必要です');
+ const payload=rows.map(r=>({...r,meta:{...(r.meta||{}),manual:Boolean(manual),network_endpoint:cap?.url||null}}));
+ const res=await request(INGEST,{noteId:a.id,notifications:payload},token);
+ const saved=Number(res?.confirmedClientSignatures?.length||0);
+ lastResult={at:Date.now(),saved,received:payload.length,url:cap?.url||'',mode:'network'};
+ await set(key(STATUS,a.id),lastResult);
+ status(`✓ 通信から${payload.length}件確認・${saved}件保存確認`,'done',{readCount:payload.length,savedCount:saved,mode:'network'});
+ return{handled:true,saved,received:payload.length,response:res}
+}
+async function processCapture(cap,{manual=false,probe=true}={}){
+ if(!cap?.json)return{handled:false,saved:0};
+ const rows=extract(cap.json,cap.url);
+ if(probe)void saveProbe(cap,rows);
+ if(!rows.length)return{handled:false,saved:0,candidate:true};
+ lastCapture={...cap,rows,at:Date.now()};
+ const auto=runtime()?.getAuto?.();
+ if(manual||auto===true)return ingestRows(rows,cap,manual);
+ return{handled:true,saved:0,received:rows.length,deferred:true}
+}
+async function inspectResponse(meta,res,transport){
+ if(!captureActive()||!res)return;
+ const url=meta.url;if(!sameNoteOrGraphql(url)||url.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;
+ let ct='';try{ct=String(res.headers?.get?.('content-type')||'')}catch{}
+ if(ct&&!/json|javascript|graphql|text/i.test(ct)&&!URL_HINT_RE.test(url))return;
+ let txt='';try{txt=await res.text()}catch{return}
+ if(!txt||txt.length>2500000)return;
+ let json;try{json=JSON.parse(txt)}catch{return}
+ if(!candidateHint(url,meta.body,json))return;
+ const cap={...meta,transport,status:Number(res.status||0),contentType:ct,json,requestInit:meta.requestInit||null};
+ void processCapture(cap,{manual:false,probe:true})
+}
+function installFetch(){
+ const p=pageWindow();if(!p?.fetch||p.fetch.__mumeiNetwork3300)return;
+ const original=p.fetch.bind(p);
+ const wrapped=function(input,init){
+  const meta=requestMeta(input,init);meta.requestInit=init||null;
+  const promise=original(input,init);
+  try{Promise.resolve(promise).then(res=>{if(captureActive())void inspectResponse(meta,res.clone(),'fetch')}).catch(()=>{})}catch{}
+  return promise
+ };
+ try{Object.defineProperty(wrapped,'__mumeiNetwork3300',{value:true});p.fetch=wrapped}catch{}
+ window.__mumeiNetworkOriginalFetch3300=original
+}
+function installXHR(){
+ const p=pageWindow(),X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiNetwork3300)return;
+ const proto=X.prototype,open=proto.open,send=proto.send;
+ proto.open=function(method,url,...rest){try{this.__mumei3300={method:String(method||'GET').toUpperCase(),url:absUrl(url),body:null}}catch{}return open.call(this,method,url,...rest)};
+ proto.send=function(body){try{if(this.__mumei3300)this.__mumei3300.body=body??null;this.addEventListener('load',()=>{if(!captureActive())return;const m=this.__mumei3300||{};if(!sameNoteOrGraphql(m.url)||m.url?.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>2500000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!candidateHint(m.url,m.body,json))return;const cap={url:m.url,method:m.method||'GET',body:m.body,transport:'xhr',status:Number(this.status||0),contentType:String(this.getResponseHeader?.('content-type')||''),json,requestInit:null};void processCapture(cap,{manual:false,probe:true})},{once:true})}catch{}return send.call(this,body)};
+ try{Object.defineProperty(proto,'__mumeiNetwork3300',{value:true})}catch{}
+}
+async function waitCapture(ms=2500){
+ const start=Date.now(),existing=lastCapture;if(existing&&Date.now()-existing.at<60000)return existing;
+ while(Date.now()-start<ms){if(lastCapture&&lastCapture!==existing)return lastCapture;await sleep(100)}
+ return lastCapture&&Date.now()-lastCapture.at<120000?lastCapture:null
+}
+async function syncCurrent(opts={}){
+ arm(Math.max(5000,Number(opts.waitMs||2500)+2500));
+ status('noteの通知通信を確認しています…','saving',{mode:'network'});
+ const cap=await waitCapture(Number(opts.waitMs||2500));
+ if(!cap)return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'};
+ try{return await ingestRows(cap.rows||extract(cap.json,cap.url),cap,true)}catch(e){status('⚠ 通信読込失敗：'+String(e?.message||e),'error',{mode:'network'});throw e}
+}
+function mutateNextRequest(cap,hint){
+ if(!cap||!hint)return null;
+ let url=new URL(cap.url,location.href),method=cap.method||'GET',body=cap.body,init={...(cap.requestInit||{})};
+ const next=hint.next;
+ if(typeof next==='string'&&next){
+  if(/^https?:\/\//i.test(next)||next.startsWith('/'))url=new URL(next,location.href);
+  else if(/^\d+$/.test(next))url.searchParams.set('page',next)
+ }else if(typeof next==='number')url.searchParams.set('page',String(next));
+ const cursor=hint.cursor;
+ if(cursor){
+  if(method==='GET'){if(url.searchParams.has('after'))url.searchParams.set('after',String(cursor));else if(url.searchParams.has('cursor'))url.searchParams.set('cursor',String(cursor));else url.searchParams.set('after',String(cursor))}
+  else{
+   try{const j=typeof body==='string'?JSON.parse(body):structuredClone(body||{});j.variables=j.variables||{};if('after'in j.variables||!('cursor'in j.variables))j.variables.after=cursor;else j.variables.cursor=cursor;body=JSON.stringify(j);init.body=body}catch{return null}
+  }
+ }
+ if(method==='GET')delete init.body;
+ init.method=method;init.credentials=init.credentials||'include';init.cache='no-store';
+ return{url:url.href,method,body,requestInit:init}
+}
+async function replay(cap){
+ const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
+ const init={...(cap.requestInit||{}),method:cap.method||'GET',credentials:cap.requestInit?.credentials||'include',cache:'no-store'};
+ if(cap.body!=null&&init.method!=='GET'&&init.method!=='HEAD')init.body=cap.body;
+ const res=await original(cap.url,init),txt=await res.text();const json=JSON.parse(txt);
+ return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
+}
+async function syncFull(){
+ arm(120000);status('通知APIの履歴を直接たどっています…','saving',{mode:'network-full'});
+ let cap=await waitCapture(3000);if(!cap)return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'};
+ let total=0,pages=0,seen=new Set();
+ for(let i=0;i<60&&cap;i++){
+  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig))break;seen.add(sig);
+  const rows=cap.rows||extract(cap.json,cap.url);if(rows.length){const r=await ingestRows(rows,cap,true);total+=Number(r.saved||0)}
+  void saveProbe(cap,rows);pages++;
+  const hint=nextHint(cap.json);if(!hint)break;
+  const nextReq=mutateNextRequest(cap,hint);if(!nextReq)break;
+  try{cap=await replay({...cap,...nextReq,rows:null})}catch{break}
+ }
+ status(`✓ 通信全読み完了｜${pages}ページ・${total}件保存確認`,'done',{mode:'network-full',savedCount:total,pages});
+ return{handled:true,saved:total,pages}
+}
+async function restoreStatus(){
+ const a=await account();if(!a)return;const s=await get(key(STATUS,a.id),null);
+ if(s&&Date.now()-Number(s.at||0)<24*60*60*1000)lastResult=s
+}
+installFetch();installXHR();void restoreStatus();
+window.__mumeiNotificationNetwork3300={version:VERSION,arm,syncCurrent,syncFull,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
+})();
