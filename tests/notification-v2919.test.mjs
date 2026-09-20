@@ -9,7 +9,7 @@ test("V3.3.1 loads bottom-up reader, persistent checkpoint and fixed five-panel 
   assert.match(v3,/@version\s+3\.3\.1/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-reader-v323\.js\?v=3258/);
   assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-checkpoint-v325\.js\?v=3293/);
-  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-network-v3300\.js\?v=3310/);assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3310/);
+  assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-network-v3300\.js\?v=3311/);assert.match(v3,/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-runtime-v327\.js\?v=3310/);
   assert.doesNotMatch(v3,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(v3,/note-insight-notification-dock-watch-v312\.js|surface-guard-v326/);
   has(v3,["mumei-notification-tool-version","mumei-notification-v3-loader","bottom-up-saved-line-v3245","#mumei-v325-dock [data-a=\"settings\"]","#mumei-v3-tray-v330 [data-act=\"settings\"]","mumei-notification-feature-ui-v1","mumei-notification-feature-bridge-v1","mumei_insight_notification_feature_enabled_v1"]);
