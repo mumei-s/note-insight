@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.4.2',PROTOCOL='3.4.2';
+const VERSION='3.4.3',PROTOCOL='3.4.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -137,7 +137,7 @@ async function scan(){
  if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
  scanning=true;stop=false;
  try{
-  const r=await net.syncCurrent({waitMs:3200});
+  const r=await net.syncCurrent({waitMs:1000});
   const saved=Number(r?.saved||0),read=Number(r?.received||0);
   if(r?.handled){
    const label=r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
