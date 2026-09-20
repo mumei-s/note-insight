@@ -53,7 +53,8 @@ function returnToBell(){
   returning=true;
   setStatus('🔔通知へ戻っています…');
   clearTimeout(returnTimer);
-  returnTimer=setTimeout(()=>location.replace(NOTE),80)
+  post('return-bell');
+  returnTimer=setTimeout(()=>location.replace(NOTE),900)
 }
 history.replaceState({mumeiFilter:true},'',location.href);
 history.pushState({mumeiFilterGuard:true},'',location.href);
