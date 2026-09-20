@@ -92,7 +92,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     if(done===CLASSIFIER_VERSION)return;
     const t=window.setTimeout(()=>{void reclassify(true)},700);
     return()=>window.clearTimeout(t)
-  },[memberNoteId,revision,kind,selectedDay]);
+  },[memberNoteId,revision]);
 
   useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,2000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
   useEffect(()=>{
@@ -103,7 +103,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     const ask=()=>window.postMessage({source:PAGE_SOURCE,type:"read",noteId},location.origin);
     window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
     return()=>{window.removeEventListener("message",receive);window.clearInterval(timer)}
-  },[memberNoteId,revision]);
+  },[memberNoteId,revision,kind,selectedDay]);
   useEffect(()=>{const nav=document.querySelector('.miu-nav');if(!nav)return;const buttons=[...nav.querySelectorAll('button')] as HTMLButtonElement[],prev=buttons.find(b=>b.classList.contains('active'))||null,next=buttons.find(b=>b.textContent?.trim()==='通知')||null;if(next){buttons.forEach(b=>b.classList.remove('active'));next.classList.add('active');requestAnimationFrame(()=>next.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}))}return()=>{if(next)next.classList.remove('active');if(prev)prev.classList.add('active')}} ,[]);
   const pages=Math.max(1,Math.ceil(total/PAGE)),selfId=String(memberNoteId||"").toLowerCase(),latest=syncAt||updatedAt;
   const readerMode=String(readerStatus?.lastRunMode||"");
