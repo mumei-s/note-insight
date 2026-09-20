@@ -15,12 +15,12 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.8 loads panel-free automatic notification reader",async()=>{
+test("V3.3.9 loads panel-free automatic notification reader",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
- assert.match(parent,/@version\s+3\.3\.8/);
- assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=3380"));
- assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=3380"));
+ assert.match(parent,/@version\s+3\.3\.9/);
+ assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=3390"));
+ assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=3390"));
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
  assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
  assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
