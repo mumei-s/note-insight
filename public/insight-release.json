@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.12",
-  "notificationVersion": "3.4.2",
+  "appVersion": "2026.09.21.13",
+  "notificationVersion": "3.4.3",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T07:06:00+09:00",
+  "releasedAt": "2026-09-21T07:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.4.2。通知操作バーは1段・画面下部固定、設定から🔔への復帰はベル1回だけ、INSIGHT【通知】は通知画面へ直行。読み取りは通信Readerを通常経路にし、保存済み地点以降を差分取得。DOM全件スクロールは通常経路から外し、通信取得未完了時も画面を動かさず次回へ引き継ぐ。DMは独立パッケージのまま。",
+  "note": "本人通知V3.4.3。note通知APIから人物URL・人物アイコン・通知日時・対象URLを直接保存。全読みは100件単位へ高速化し、保存確認後のINSIGHT反映を1〜2秒へ短縮。サーバー保存確認件数を表示し、設定→🔔復帰を強化。[object Object]表示は再試行＋正規エラー表示へ修正。",
   "dmVersion": "1.1.0",
   "dmLabel": "DM同期"
 }
