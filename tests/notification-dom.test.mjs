@@ -167,3 +167,12 @@ test('DM and generic list rows can never qualify as notification popup',()=>{
   assert.match(runtime,/function findSurface\(\)\{return notificationRoute\(\)\?routeSurface\(\):popupSurface\(\)\}/);
   assert.match(runtime,/if\(shell&&strongNoticeSurface\(shell\)\)\{showRoot\(true\);return\}/);
 });
+
+
+test('DM header is never accepted as a notification surface',()=>{
+  assert.match(runtime,/document\.querySelectorAll\('\[role="dialog"\],\[role="menu"\],\[popover\],main,section,aside'\)/);
+  assert.doesNotMatch(runtime,/main,section,aside,nav,header/);
+  assert.match(runtime,/const known=\[\.\.\.root\.querySelectorAll\(ITEM\)\]\.filter\(rowish\)/);
+  assert.match(runtime,/function dismissActiveEditor\(\)/);
+  assert.match(runtime,/dismissActiveEditor\(\);suppressUntilBell=false/);
+});
