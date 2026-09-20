@@ -15,20 +15,18 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.7 loads restored iframe dock and automatic stable reader",async()=>{
+test("V3.3.8 loads panel-free automatic notification reader",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
- const runtime=await read("public/note-insight-notification-runtime-v2958.js");
  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
- assert.match(parent,/@version\s+3\.3\.7/);
- for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.ok(parent.includes(part));
- assert.doesNotMatch(parent,/note-insight-notification-runtime-v327\.js\?v=/);
- assert.match(runtime,/FRAME='mumei-v2948-frame'/);
- assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
- for(const label of ["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"])assert.match(runtime,new RegExp(label));
- assert.match(runtime,/iframe/);assert.match(runtime,/srcdoc=frameHtml/);assert.match(runtime,/pointer-events:auto/);
- assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
- assert.match(reader,/historyComplete/);assert.match(reader,/REPAIR='mumei_insight_notification_avatar_repair_v337:'/);
- assert.match(reader,/for\(let i=0;i<500&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<600/);
+ assert.match(parent,/@version\s+3\.3\.8/);
+ assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=3380"));
+ assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=3380"));
+ assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
+ assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
+ assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
+ assert.match(reader,/actor_image_url:img/);assert.match(reader,/mumei_insight_notification_avatar_repair_v338:/);
+ assert.match(reader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<1200/);
+ assert.match(reader,/new MutationObserver/);assert.match(reader,/通知|お知らせ/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -65,10 +63,9 @@ test("ingest token bridge is origin-locked",async()=>{
  assert.match(bridge,/TARGET='https:\/\/note\.com'/);assert.match(bridge,/action:'issue'/);assert.doesNotMatch(bridge,/postMessage\([^\n]+,\s*['"]\*['"]\)/);
 });
 
-test("restored iframe runtime is the active tap-isolated dock",async()=>{
- const runtime=await read("public/note-insight-notification-runtime-v2958.js");
- assert.match(runtime,/const VERSION='3\.3\.7'/);
- assert.match(runtime,/function frameHtml/);assert.match(runtime,/showDock/);
- assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
- assert.doesNotMatch(runtime,/Compatibility shim only/);
+test("legacy iframe runtime is not preloaded by the active panel-free package",async()=>{
+ const parent=await read("public/note-insight-notification-v3.user.js");
+ assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=/);
+ assert.doesNotMatch(parent,/note-insight-notification-filter-restore-v2962\.js\?v=/);
+ assert.doesNotMatch(parent,/note-insight-notification-filter-safety-v2961\.js\?v=/);
 });
