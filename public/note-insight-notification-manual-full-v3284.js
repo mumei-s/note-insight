@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.3.4';
+const VERSION='3.3.5';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
