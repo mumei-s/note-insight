@@ -16,12 +16,12 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.4/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.5/);
 });
 
-test("V3.3.4 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
+test("V3.3.5 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),filterSettings=await read("public/notification-filter-settings.html");
-  assert.match(v3,/@version\s+3\.3\.4/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  assert.match(v3,/@version\s+3\.3\.5/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split("// ==/UserScript==")[0];
   assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3340/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3340/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3293/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3340/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(meta,/note-insight-notification-manual-full-v3284\.js\?v=3340/);
