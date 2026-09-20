@@ -220,7 +220,7 @@ test('network reader is primary and DOM reader is fallback',async()=>{
   const network=await read('note-insight-notification-network-v3300.js');
   const meta=v3.split('// ==/UserScript==')[0];
   assert.match(meta,/@grant\s+unsafeWindow/);
-  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3310/);
+  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3311/);
   assert.match(network,/const VERSION='3\.3\.1'/);
   assert.match(network,/function installFetch\(\)/);
   assert.match(network,/function installXHR\(\)/);
@@ -234,6 +234,7 @@ test('network reader is primary and DOM reader is fallback',async()=>{
   assert.match(network,/confirmedClientSignatures/);
   assert.match(network,/未保存分は保持して再試行/);
   assert.match(network,/pendingCount/);
+  assert.match(network,/ページングが同じ位置で停止しました/);
   const safe=runtime.slice(runtime.indexOf('async function safeScan()'),runtime.indexOf('async function manualRead'));
   assert.ok(safe.indexOf('__mumeiNotificationNetwork3300')>=0);
   assert.ok(safe.indexOf('__mumeiNotificationNetwork3300')<safe.indexOf('waitForRows()'));
