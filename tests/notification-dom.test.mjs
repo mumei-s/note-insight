@@ -55,20 +55,17 @@ test('reader starts from the lower side, marks the completion line, and next run
 
 test('persistent checkpoint mirrors the saved boundary across page closes without global DOM observer',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/);assert.doesNotMatch(checkpoint,/new MutationObserver/)});
 
-test('V3.3.9 wrapper activates panel-free automatic stable reader',()=>{
+test('V3.3.10 wrapper activates automatic reader and inline notification controls',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.3\.9/);
-  assert.ok(meta.includes('note-insight-notification-autoscan-v2970.js?v=3390'));
-  assert.ok(meta.includes('note-insight-notification-bootstrap-v2966.js?v=3390'));
+  assert.match(v3,/@version\s+3\.3\.10/);
+  assert.ok(meta.includes('note-insight-notification-autoscan-v2970.js?v=33100'));
+  assert.ok(meta.includes('note-insight-notification-runtime-v2939-filter.js?v=33100'));
+  assert.ok(meta.includes('note-insight-notification-bootstrap-v2966.js?v=33100'));
   assert.doesNotMatch(meta,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
-  assert.match(stableReader,/function directPanel/);
-  assert.match(stableReader,/function findPanel\(\)\{return directPanel\(\)\}/);
-  assert.match(stableReader,/actor_image_url:img/);
+  assert.match(stableReader,/mumei-inline-notification-tools-v339/);
+  assert.match(stableReader,/フィルター ON|フィルター OFF/);
+  assert.match(stableReader,/INSIGHT【通知】/);
   assert.match(stableReader,/function scheduleAuto/);
-  assert.match(stableReader,/historyComplete/);
-  assert.match(stableReader,/mumei_insight_notification_avatar_repair_v338:/);
-  assert.match(v3,/data-mumei-bell-return-cloak/);
-  assert.match(v3,/clickRealBell/);
 });
 
 test('installer is isolated behind a redirect shell and stays versionless',async()=>{
@@ -86,7 +83,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
   const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-browser-install.html',runScripts:'outside-only'});
   const w=dom.window;
   try{
-    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.3.9'})});
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.3.10'})});
     for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);
     await new Promise(resolve=>setTimeout(resolve,0));
     const install=w.document.getElementById('install'),u=new URL(install.href);
@@ -96,7 +93,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
     assert.match(install.textContent,/本人通知をインストール \/ 更新/);
     assert.match(html,/mumei-installer-boundary/);
     assert.match(html,/insight-release\.json/);
-    assert.doesNotMatch(html,/本人通知 V\d|V3\.3\.9/);
+    assert.doesNotMatch(html,/本人通知 V\d|V3\.3\.10/);
     assert.match(html,/ブラウザ別インストール/);
     for(const id of ['android-edge','android-firefox','android-other','ios-safari','ios-other','pc-edge','pc-chrome','pc-firefox','pc-opera','mac-safari'])assert.match(html,new RegExp('data-browser="'+id+'"'));
     assert.match(html,/Yahoo!ブラウザー/);
@@ -155,23 +152,23 @@ test('update detection verifies the stable userscript on INSIGHT without visitin
   assert.match(v3,/localStorage\.setItem\(TOOL_KEY,VERSION\)/);
   assert.match(v3,/Promise\.resolve\(gmVersionSet\(VERSION\)\)\.then\(\(\)=>gmVersionGet\(\)\)/);
   assert.doesNotMatch(v3,/window\.__mumeiNotificationRuntime2958/);
-  assert.match(v3,/window\.__mumeiStableNotification339/);
+  assert.match(v3,/window\.__mumeiStableNotification3310/);
   assert.doesNotMatch(v3,/note\.com\/notifications/);
 });
 
 
-test('V3.3.9 dock is viewport-owned, never notification-surface-owned',()=>{
-  assert.match(runtime,/function mountUiToViewport\(\)\{const host=document\.body\|\|document\.documentElement/);
-  assert.match(runtime,/function mountUiToViewport\(\)\{const host=document\.body\|\|document\.documentElement;if\(!host\)return;const r=/);
-  assert.match(runtime,/function ensureRoot\(\).*mountUiToViewport\(\);return r/s);
-  assert.match(runtime,/function showRoot\(on\).*mountUiToViewport\(\)/s);
+test('inline controls are notification-surface-owned instead of viewport-owned',()=>{
+  assert.match(stableReader,/panel\.prepend\(bar\)|panel\.insertBefore\(bar,first\)/);
+  assert.match(stableReader,/position:sticky/);
+  assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
 });
 
 
-test('auto and filter toggles explicitly keep the viewport dock visible',()=>{
-  assert.match(runtime,/function keepDockVisible\(\)/);
-  assert.match(runtime,/paintFilter\(\);await applyFilter\(\);keepDockVisible\(\)/);
-  assert.match(runtime,/paintMode\(\);keepDockVisible\(\);if\(autoMode\)maybeAuto\(true\)/);
+test('filter toggle updates GM state and refreshes filter engine without affecting automatic reading',()=>{
+  assert.match(stableReader,/mumei_insight_magazine_filter_enabled_v3:/);
+  assert.match(stableReader,/mumei-insight-filter-refresh-v2939/);
+  assert.match(stableReader,/function toolbarAction/);
+  assert.match(stableReader,/function scheduleAuto/);
 });
 
 
@@ -234,7 +231,7 @@ test('read completion stays visible on the dock until the notification panel clo
 
 test('restored DOM reader is primary and captures actor images',async()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.ok(meta.includes('note-insight-notification-autoscan-v2970.js?v=3390'));
+  assert.ok(meta.includes('note-insight-notification-autoscan-v2970.js?v=33100'));
   assert.doesNotMatch(meta,/note-insight-notification-network-v3300\.js\?v=/);
   assert.match(stableReader,/function rowData/);
   assert.match(stableReader,/actor_image_url:img/);
