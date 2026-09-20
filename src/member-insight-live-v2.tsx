@@ -15,6 +15,7 @@ import { MemberInsightAnalysisHub } from "./member-insight-analysis-hub";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
 import { MemberInsightCompleteness } from "./member-insight-completeness";
+import { MemberInsightDm } from "./member-insight-dm";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
 import "./insight-ux-v12";
@@ -28,8 +29,8 @@ const PUBLIC_SYNC_TIMEOUT=60_000;
 const MANUAL_UI_TIMEOUT=32_000;
 const ENTRY_MODE_KEY="mumei-insight-entry-mode";
 const APP_UPDATE_RESULT_KEY="mumei-insight-app-update-result";
-type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
-const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
+type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"dm"|"analysis";
+const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","dm","analysis"]);
 function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000,externalSignal?:AbortSignal){
@@ -59,7 +60,7 @@ export function MemberInsightLiveV2(){
   const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
-    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
+    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":next==="dm"?"#midm":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
     const y=window.scrollY;
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
     setMode(next);
@@ -175,7 +176,7 @@ export function MemberInsightLiveV2(){
     window.addEventListener("mumei-insight-open-mode",handler as EventListener);return()=>window.removeEventListener("mumei-insight-open-mode",handler as EventListener)
   },[mode]);
   useEffect(()=>{
-    if(mode!=="notifications")return;let stopped=false,tries=0;const jump=()=>{if(stopped)return;const el=document.getElementById("minf-notifications");if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}if(tries++<12)window.setTimeout(jump,70)};requestAnimationFrame(jump);return()=>{stopped=true}
+    if(mode!=="notifications"&&mode!=="dm")return;let stopped=false,tries=0;const jump=()=>{if(stopped)return;const el=document.getElementById(mode==="dm"?"midm":"minf-notifications");if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}if(tries++<12)window.setTimeout(jump,70)};requestAnimationFrame(jump);return()=>{stopped=true}
   },[mode]);
   useEffect(()=>{
     void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
@@ -216,6 +217,9 @@ export function MemberInsightLiveV2(){
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>⬆ 更新あり</em>:dashboardMissing?<em>＋ 未導入</em>:null}</button>
         </div>
+        <div className="miv5-source-card dm">
+          <button className="miv5-source-main" onClick={()=>openMode("dm")}><strong>💬 DM</strong><small>本人通知と完全分離</small><span>noteメッセージ履歴</span></button>
+        </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
         </div>
@@ -228,6 +232,7 @@ export function MemberInsightLiveV2(){
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
+    {mode==="dm"?<div className="miv5-final-slot"><MemberInsightDm revision={revision}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalysisHub revision={revision} onBack={backMode} noteId={noteId} dashboardInstalled={dashboardInstalled} notificationInstalled={notificationInstalled} dashboardLatest={dashboardLatest} notificationLatest={notificationLatest}/></div>:null}
   </div>;
 }
