@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.21.4",
-  "notificationVersion": "3.3.7",
+  "appVersion": "2026.09.21.5",
+  "notificationVersion": "3.3.8",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T02:20:00+09:00",
+  "releasedAt": "2026-09-21T03:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.7。ユーザー確認の正常画面を基準に、iframe固定4パネル（下から読込/フィルター/設定/INSIGHT）へ復元。タップがnote側へ漏れてパネルが消える構造をやめ、自動で初回全履歴・以後差分を読み取る。人物URLとactor_image_urlを再取得し、初回完全走査時に既存通知のアイコン情報も一度再送補修する。/notifications経路は使用しない。"
+  "note": "本人通知V3.3.8。パネルを通知読込の必須条件から完全に外し、🔔通知DOMをReader自身が直接検出して自動読取・保存する方式へ変更。初回は全履歴、以後は保存済み通知との重複地点まで差分読取。通知DOMのクラス名が変わった場合も通知/お知らせタブと時刻付き通知行から検出する。人物URL・actor_image_urlも再取得し、既存通知のアイコン情報を一度再補修する。"
 }
