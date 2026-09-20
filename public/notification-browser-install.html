@@ -221,21 +221,14 @@ function paintInstall(){install.href=rawScriptUrl();install.target='_blank';inst
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
 install.addEventListener('click',()=>{sessionStorage.setItem(PENDING,'1');sessionStorage.removeItem(RELOADED);paintInstall();result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。使用中のuserscript拡張でインストール / 更新してください。':'userscriptを開きます。Tampermonkeyでインストール / 更新してください。'});
 function refresh(){check();void loadLatest()}
-function versionCheckUrl(){
-  const ret=new URL(location.href);
-  for(const k of ['notificationInstalled','notificationCheckedAt','notificationUpdateResult'])ret.searchParams.delete(k);
-  const u=new URL('https://note.com/notifications');
-  u.searchParams.set('mumei_insight_version_check','1');
-  u.searchParams.set('mumei_return',ret.href);
-  return u.href
-}
 function verifyAfterInstall(){
-  if(verifiedInstalled){refresh();if(back)setTimeout(()=>location.replace(back),450);return}
+  if(verifiedInstalled){refresh();sessionStorage.removeItem(PENDING);sessionStorage.removeItem(RELOADED);if(back)setTimeout(()=>location.replace(back),180);return}
   if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}
   if(sessionStorage.getItem(RELOADED)!=='1'){
     sessionStorage.setItem(RELOADED,'1');
-    result.className='result';result.textContent='インストール済みバージョンを確認しています…';
-    setTimeout(()=>location.assign(versionCheckUrl()),220);return
+    result.className='result';result.textContent='インストール済みバージョンをこの画面で確認しています…';
+    const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));
+    setTimeout(()=>location.replace(u.href),180);return
   }
   refresh()
 }
