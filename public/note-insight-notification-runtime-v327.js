@@ -88,10 +88,10 @@ function targetSurface(target){
   return null
 }
 function bellMeta(el){if(!(el instanceof Element))return'';return clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' '))}
-function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const href=String(el.getAttribute('href')||''),meta=bellMeta(el);if(/\/notifications(?:[/?#]|$)/i.test(href))return true;if(/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta))return true;return false}
+function bellHit(el){if(!(el instanceof Element)||el.closest('#'+ROOT)||el.closest('#'+SETTINGS))return false;const meta=bellMeta(el);return/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta)}
 function bellTrigger(target,event){const seen=new Set(),xs=[];const add=el=>{if(el instanceof Element&&!seen.has(el)){seen.add(el);xs.push(el)}};add(target);for(const x of event?.composedPath?.()||[])add(x);for(const raw of xs.slice(0,20)){add(raw.closest?.('button,a,[role="button"],[role="tab"],[aria-label],[data-testid]'));if(bellHit(raw))return true}return xs.some(bellHit)}
 function notificationBellElement(){
-  const direct='a[href*="/notifications"],[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
+  const direct='[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
   for(const el of document.querySelectorAll(direct)){const hit=el.matches('button,a,[role="button"],[role="tab"]')?el:el.closest('button,a,[role="button"],[role="tab"]');if(hit&&visible(hit)&&!hit.closest('#'+ROOT))return hit}
   for(const el of document.querySelectorAll('header button,header a,nav button,nav a,button,[role="button"],[role="tab"]'))if(visible(el)&&bellHit(el))return el;
   for(const el of document.querySelectorAll('header button,header [role="button"],nav button,nav [role="button"]')){
