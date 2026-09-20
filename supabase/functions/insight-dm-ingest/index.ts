@@ -8,16 +8,16 @@ async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new Te
 const clean=(v:unknown,max=4000)=>typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null;
 const cleanUrl=(v:unknown)=>{const s=clean(v,1600);if(!s)return null;try{const u=new URL(s);if(!u.hostname.endsWith("note.com"))return s;u.hash="";return u.toString()}catch{return s}};
 async function identity(req:Request){
-  const raw=req.headers.get("X-Ingest-Token")||"";if(!raw)throw new Error("INGEST_TOKEN_REQUIRED");
+  const raw=req.headers.get("X-Ingest-Token")||"";if(!raw)throw new Error("DM_INGEST_TOKEN_REQUIRED");
   const now=new Date().toISOString();
-  const{data,error}=await db.from("insight_notification_ingest_tokens").select("member_id,expires_at").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();
-  if(error||!data?.member_id)throw new Error("INGEST_TOKEN_INVALID");
+  const{data,error}=await db.from("insight_dm_ingest_tokens").select("member_id,expires_at").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();
+  if(error||!data?.member_id)throw new Error("DM_INGEST_TOKEN_INVALID");
   const memberId=String(data.member_id);
   if(memberId==="owner")return{memberId,noteId:"ss_yr"};
   const{data:app}=await db.from("insight_access_applications").select("note_id,status,verified_at").eq("id",memberId).maybeSingle();
   if(app?.note_id&&app.status==="active"&&app.verified_at)return{memberId,noteId:String(app.note_id).toLowerCase()};
   const{data:profile}=await db.from("insight_notification_profiles").select("note_urlname").eq("member_id",memberId).maybeSingle();
-  const noteId=String(profile?.note_urlname||"").toLowerCase();if(!noteId)throw new Error("INGEST_ACCOUNT_UNKNOWN");return{memberId,noteId}
+  const noteId=String(profile?.note_urlname||"").toLowerCase();if(!noteId)throw new Error("DM_ACCOUNT_UNKNOWN");return{memberId,noteId}
 }
 Deno.serve(async req=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:H});
