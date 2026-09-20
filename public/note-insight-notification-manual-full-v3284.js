@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.3.5';
+const VERSION='3.3.6';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -31,7 +31,7 @@ async function account(){try{const r=await fetch('/api/v2/current_user',{credent
 function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.textContent);return t.length>=3&&t.length<=4000&&(trusted||TIME_RE.test(t))}
 function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
 function panel(){const rt=window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325;const p=rt?.getShell?.()||rt?.findSurface?.()||document.querySelector('[data-mumei-notice-shell-v3="1"]');return p&&shown(p)&&p!==document.body&&p!==document.documentElement?p:null}
-function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}if(p.scrollHeight>p.clientHeight+20)return p;if(/^\/notifications(?:\/|$)/i.test(location.pathname)){const d=document.scrollingElement;if(d&&d.scrollHeight>innerHeight+20)return d}return null}
+function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){if(x.scrollHeight>x.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(x).overflowY))return x;if(x===p)break;x=x.parentElement}if(p.scrollHeight>p.clientHeight+20)return p;return null}
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
 function estimatedTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(!m)return null;const scale={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*scale[m[2]]).toISOString()}
 function eventIdentity(el,raw,tm){const id=el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||el.querySelector('[data-notification-id]')?.getAttribute('data-notification-id');if(id)return'notice:'+id;for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.href);for(const k of['notification_id','notice_id','c','comment_id'])if(u.searchParams.get(k))return'notice:'+u.searchParams.get(k)}catch{}}if(tm&&!Number.isNaN(Date.parse(tm)))return'time:'+new Date(tm).toISOString();return'label:'+(stripTime(raw).slice(0,180)||'unknown')}
@@ -67,16 +67,13 @@ async function sendBatchFull(input,a,saved){
 
 let fullScanning=false;
 function requestDedicatedFullRead(){
- try{
-  sessionStorage.setItem(FULL_REQUEST,JSON.stringify({at:Date.now(),from:location.href}));
- }catch{}
- if(!/^\/notifications(?:\/|$)/i.test(location.pathname)){
-  const u=new URL('/notifications',location.origin);
-  u.searchParams.set('mumei_fullread','1');
-  location.assign(u.href);
-  return true
- }
- return false
+ const live=panel();
+ if(live&&rows(live).length)return false;
+ try{sessionStorage.setItem(FULL_REQUEST,JSON.stringify({at:Date.now(),from:location.href}))}catch{}
+ const u=new URL('/',location.origin);
+ u.searchParams.set('mumei_fullread','1');
+ location.replace(u.href);
+ return true
 }
 async function scanFull(){
  if(fullScanning||window.__mumeiV3Reader323?.isScanning?.())return 0;
@@ -94,7 +91,7 @@ async function scanFull(){
  paintRead('全読中');
  status('全読みを開始します…','saving');
  try{
-  let p=panel();if(!p&&/^\/notifications(?:\/|$)/i.test(location.pathname)){p=[...document.querySelectorAll('main,[role="main"],section')].find(el=>shown(el)&&rows(el).length)||null}if(!p)throw new Error('通知一覧を取得できませんでした');
+  let p=panel();if(!p)throw new Error('通知一覧を取得できませんでした');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');
   const savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
@@ -204,7 +201,6 @@ for(const type of['pointerdown','mousedown','touchstart','pointerup','mouseup','
 addEventListener('popstate',closeMenu);addEventListener('hashchange',closeMenu);addEventListener('pagehide',closeMenu);
 
 async function resumeRequestedFullRead(){
- if(!/^\/notifications(?:\/|$)/i.test(location.pathname))return;
  let requested=new URLSearchParams(location.search).get('mumei_fullread')==='1';
  try{
   const st=JSON.parse(sessionStorage.getItem(FULL_REQUEST)||'null');
