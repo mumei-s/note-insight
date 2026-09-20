@@ -6,20 +6,24 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.21.9";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.21.10";
 export const CURRENT_NOTIFICATION_VERSION = "3.4.0";
 export const CURRENT_DASHBOARD_VERSION = "1.4.4";
+export const CURRENT_DM_VERSION = "1.1.0";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
+export const DM_VERSION_STORAGE_KEY = "mumei-dm-tool-version";
 
 export type InsightRelease = {
   appVersion: string;
   notificationVersion: string;
   dashboardVersion: string;
+  dmVersion?: string;
   releasedAt?: string;
   appLabel?: string;
   notificationLabel?: string;
   dashboardLabel?: string;
+  dmLabel?: string;
 };
 
 export function compareVersions(a: string, b: string) {
@@ -46,9 +50,11 @@ export async function fetchInsightRelease(): Promise<InsightRelease> {
     appVersion: String(payload.appVersion),
     notificationVersion: String(payload.notificationVersion),
     dashboardVersion: String(payload.dashboardVersion),
+    dmVersion: payload.dmVersion ? String(payload.dmVersion) : undefined,
     releasedAt: payload.releasedAt ? String(payload.releasedAt) : undefined,
     appLabel: payload.appLabel ? String(payload.appLabel) : undefined,
     notificationLabel: payload.notificationLabel ? String(payload.notificationLabel) : undefined,
     dashboardLabel: payload.dashboardLabel ? String(payload.dashboardLabel) : undefined,
+    dmLabel: payload.dmLabel ? String(payload.dmLabel) : undefined,
   };
 }
