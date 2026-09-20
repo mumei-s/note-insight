@@ -36,12 +36,12 @@ test("V3.2.89 loads incremental reader and fixed five-panel runtime",async()=>{
  assert.match(runtime,/notification-filter-settings\.html/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);
  assert.doesNotMatch(runtime,/new MutationObserver/);
  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore/);
- assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/全件読み直しなし/);
+ assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/preserveBoundary/);assert.match(reader,/通常読込では過去へ潜りません/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
  const runtime=await read("public/note-insight-notification-runtime-v327.js");
- assert.match(runtime,/position:fixed!important;left:8px!important;right:8px!important;bottom:calc\(env\(safe-area-inset-bottom,0px\) \+ 10px\)!important/);
+ assert.match(runtime,/position:fixed!important;left:8px!important;right:8px!important;bottom:calc\(env\(safe-area-inset-bottom,0px\) \+ 14px\)!important/);
  assert.match(runtime,/paintMode/);
  assert.match(runtime,/toggleMode/);
  assert.match(runtime,/autoMode\?'自動':'手動'/);
@@ -55,7 +55,7 @@ test("reader saves a confirmed completion boundary and subsequent scans move upw
  assert.match(reader,/boundaryEventIdentity:last\.meta\?\.event_identity/);
  assert.match(reader,/boundaryLegacySignature:legacySig\(last\)/);
  assert.match(reader,/function boundaryMatch/);
- assert.match(reader,/reader-bottom-up-confirmed-v326/);
+ assert.match(reader,/reader-incremental-confirmed-v329/);
  assert.match(reader,/新しい通知だけ確認しています/);
 });
 
