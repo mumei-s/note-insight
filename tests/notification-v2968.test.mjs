@@ -33,20 +33,20 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.3.6 with bottom-up resume, persistent checkpoint and fixed five-panel auto dock',()=>{
+test('active package uses V3.3.7 restored iframe dock with automatic full/delta reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
-  const v3=read('public/note-insight-notification-v3.user.js'),checkpoint=read('public/note-insight-notification-checkpoint-v325.js'),setup=read('public/notification-browser-install.html'),runtime=read('public/note-insight-notification-runtime-v327.js'),reader=read('public/note-insight-notification-reader-v323.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.3.6');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.3\.6/);assert.match(v3,/bottom-up-saved-line-v3245/);
+  const v3=read('public/note-insight-notification-v3.user.js'),setup=read('public/notification-browser-install.html'),runtime=read('public/note-insight-notification-runtime-v2958.js'),reader=read('public/note-insight-notification-autoscan-v2970.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
+  assert.equal(manifest.notificationVersion,'3.3.7');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.3\.7/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-network-v3300.js?v=3360','note-insight-notification-reader-v323.js?v=3360','note-insight-notification-checkpoint-v325.js?v=3293','note-insight-notification-runtime-v327.js?v=3360','note-insight-notification-manual-full-v3284.js?v=3360'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
-  assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
-  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/通知履歴の最下部まで到達できませんでした/);assert.match(reader,/通知一覧の先頭まで確認できませんでした/);
-  assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/data-browser="ios-safari"/);assert.match(setup,/data-browser="android-edge"/);
-  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
-  for(const act of ['read','mode','filter','settings','ins'])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
-  assert.match(runtime,/mountUiToViewport/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/event\?\.composedPath/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/maybeAuto/);assert.match(runtime,/autoDoneForSession/);assert.doesNotMatch(runtime,/lastAutoAt/);assert.match(runtime,/creatorProfile/);assert.match(runtime,/profileImageUrl/);assert.match(runtime,/nickname/);assert.match(runtime,/openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/onGlobalPointerDown/);assert.match(runtime,/function showRoot\(on\).*suppressUntilBell/);assert.match(runtime,/function onStatus\(e\).*suppressUntilBell/);assert.match(runtime,/function confirmHide\(\).*suppressUntilBell/);assert.doesNotMatch(runtime,/if\(on\)\{ensureRoot\(\)/);assert.match(runtime,/safeScan/);
-  assert.match(reader,/scan_mode:'bottom-up-from-saved-line'/);assert.match(reader,/saved-line-bottom-up-v324/);assert.match(reader,/ここまで保存済み/);assert.match(reader,/boundarySignature/);assert.match(reader,/保存済みラインから先頭まで追加分を確認します/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/通知履歴の最下部まで到達できませんでした/);assert.match(reader,/通知一覧の先頭まで確認できませんでした/);assert.doesNotMatch(reader,/完了ラインを再作成しています/);
+  for(const part of ['note-insight-notification-runtime-v2958.js?v=3370','note-insight-notification-filter-restore-v2962.js?v=3370','note-insight-notification-autoscan-v2970.js?v=3370','note-insight-notification-filter-safety-v2961.js?v=3370','note-insight-notification-bootstrap-v2966.js?v=3370'])assert.ok(meta.includes(part));
+  assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js\?v=/);
+  assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);
+  assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  for(const label of ['下から読込','フィルターOFF','フィルター設定','INSIGHT【通知】'])assert.match(runtime,new RegExp(label));
+  assert.match(runtime,/frame\.srcdoc=frameHtml\(\)/);assert.match(runtime,/pointer-events:auto/);
+  assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/historyComplete/);assert.match(reader,/mumei_insight_notification_avatar_repair_v337:/);
+  assert.match(reader,/for\(let i=0;i<500&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<600/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
 });
 
