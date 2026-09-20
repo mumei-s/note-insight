@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.4.2';
+const VERSION='3.4.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -16,7 +16,7 @@ const ACTION_RE=/(?:スキ|フォロー|コメント|返信|購入|高評価|チ
 const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities)/i;
 const KEY_HINT_RE=/(?:notice|notification|activity|event)/i;
 const TEXT_KEYS=['message','text','body','title','label','description','content','display_text','displayText','notice_text','noticeText','notification_text','notificationText','summary'];
-const TIME_KEYS=['created_at','createdAt','occurred_at','occurredAt','published_at','publishedAt','updated_at','updatedAt','timestamp','datetime','date'];
+const TIME_KEYS=['noticed_at','noticedAt','created_at','createdAt','occurred_at','occurredAt','published_at','publishedAt','updated_at','updatedAt','timestamp','datetime','date'];
 const ID_KEYS=['notification_id','notificationId','notice_id','noticeId','id','key','uuid'];
 const URL_KEYS=['target_url','targetUrl','url','href','link','path','permalink'];
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -37,17 +37,20 @@ function str(v){return typeof v==='string'?clean(v):''}
 function firstString(obj,keys){for(const k of keys){const v=obj?.[k];if(typeof v==='string'&&clean(v))return clean(v)}return''}
 function findNested(obj,names){if(!obj||typeof obj!=='object')return null;for(const k of names){const v=obj[k];if(v&&typeof v==='object'&&!Array.isArray(v))return v}return null}
 function actorInfo(obj){
- const a=findNested(obj,['actor','user','creator','from_user','fromUser','sender','member','owner']);
+ const actionUsers=Array.isArray(obj?.action_users)?obj.action_users:Array.isArray(obj?.actionUsers)?obj.actionUsers:[];
+ const primary=actionUsers.find(x=>x&&typeof x==='object')||null;
+ const a=primary||findNested(obj,['actor','user','creator','from_user','fromUser','sender','member','owner']);
  const name=firstString(a||{},['name','display_name','displayName','nickname','urlname','username'])||firstString(obj,['actor_name','actorName','user_name','userName','creator_name','creatorName']);
  const urlname=firstString(a||{},['urlname','username','screen_name'])||firstString(obj,['actor_urlname','actorUrlname']);
- const image=firstString(a||{},['profile_image_url','profileImageUrl','image_url','imageUrl','avatar_url','avatarUrl','icon_url','iconUrl']);
- return{name,urlname,image}
+ const url=firstString(a||{},['url','profile_url','profileUrl','href','link']);
+ const image=firstString(a||{},['user_profile_image_path','userProfileImagePath','profile_image_url','profileImageUrl','image_url','imageUrl','avatar_url','avatarUrl','icon_url','iconUrl']);
+ return{name,urlname,url,image}
 }
 function targetInfo(obj){
  const t=findNested(obj,['target','note','article','magazine','membership','resource','object']);
- let url=firstString(obj,URL_KEYS)||firstString(t||{},URL_KEYS);
+ let url=firstString(obj,['all_area_url','allAreaUrl','featured_area_url','featuredAreaUrl',...URL_KEYS])||firstString(t||{},URL_KEYS);
  if(url&&url.startsWith('/'))url='https://note.com'+url;
- const title=firstString(obj,['target_title','targetTitle'])||firstString(t||{},['name','title','label']);
+ const title=firstString(obj,['target_title','targetTitle','note_name','noteName','featured_content_name','featuredContentName'])||firstString(t||{},['name','title','label']);
  return{url,title}
 }
 function occurred(obj){for(const k of TIME_KEYS){const v=obj?.[k];if(typeof v==='string'&&!Number.isNaN(Date.parse(v)))return new Date(v).toISOString();if(typeof v==='number'&&v>1e9){const ms=v<1e12?v*1000:v;return new Date(ms).toISOString()}}return null}
@@ -75,7 +78,7 @@ function extract(json,requestUrl){
   if(typeof v!=='object')return;
   if(qualifies(v,path)){
    const raw=bestText(v),actor=actorInfo(v),target=targetInfo(v),id=eventId(v),at=occurred(v);
-   const actorUrl=actor.urlname?`https://note.com/${actor.urlname.replace(/^@/,'')}`:null;
+   const actorUrl=actor.url?absUrl(actor.url):actor.urlname?`https://note.com/${actor.urlname.replace(/^@/,'')}`:null;
    const ev=id?'notice:'+id:at?'time:'+at:'network:'+clean(raw).slice(0,160);
    const sig=['network-v330',id||ev,at||'',raw,target.url||'',actorUrl||actor.name||''].join('|');
    if(!seen.has(sig)){seen.add(sig);out.push({
@@ -184,7 +187,7 @@ async function ingestRows(rows,cap,manual=false,emitStatus=true){
  try{
   while(pending.size){
    const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
-   const part=[...pending.values()].slice(0,20);
+   const part=[...pending.values()].slice(0,50);
    const res=await request(INGEST,{noteId:a.id,notifications:part},token);lastResponse=res;
    const sent=new Set(part.map(clientSig)),confirmed=new Set((Array.isArray(res?.confirmedClientSignatures)?res.confirmedClientSignatures:[]).map(String).filter(s=>sent.has(s)));
    for(const s of confirmed){pending.delete(s);saved++}
@@ -290,6 +293,17 @@ async function replay(cap){
  let json;try{json=JSON.parse(txt)}catch{throw new Error('通知履歴APIの応答をJSONとして読めませんでした')}
  return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
 }
+async function widenNoticeCapture(cap){
+ try{
+  const u=new URL(cap?.url||'',location.href);
+  if((cap?.method||'GET')==='GET'&&u.hostname==='note.com'&&/\/api\/v3\/notices$/i.test(u.pathname)){
+   u.searchParams.set('page','1');u.searchParams.set('per','100');u.searchParams.set('body_ast','1');
+   const widened=await replay({...cap,url:u.href,method:'GET',body:null,rows:null,requestInit:{...(cap?.requestInit||{}),method:'GET',credentials:'include',cache:'no-store'}});
+   widened.url=u.href;return widened
+  }
+ }catch{}
+ return cap
+}
 async function syncHistory(opts={}){
  const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
  arm(Math.max(forceFull?180000:120000,waitMs+5000));
@@ -298,6 +312,7 @@ async function syncHistory(opts={}){
  const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
  status(frontier?'保存済み地点まで追加通知をたどっています…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':'network-full'});
  let cap=await waitCapture(waitMs);
+ if(cap)cap=await widenNoticeCapture(cap);
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
