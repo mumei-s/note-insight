@@ -236,6 +236,44 @@ async function waitCapture(ms=2500){
  while(Date.now()-start<ms){if(lastCapture&&lastCapture!==existing)return lastCapture;await sleep(100)}
  return lastCapture&&Date.now()-lastCapture.at<120000?lastCapture:null
 }
+function mutateNextRequest(cap,hint){
+ if(!cap||!hint)return null;
+ let url=new URL(cap.url,location.href),method=cap.method||'GET',body=cap.body,init={...(cap.requestInit||{})};
+ const next=hint.next;
+ if(typeof next==='string'&&next){
+  if(/^https?:\/\//i.test(next)||next.startsWith('/'))url=new URL(next,location.href);
+  else if(/^\d+$/.test(next))url.searchParams.set('page',next)
+ }else if(typeof next==='number')url.searchParams.set('page',String(next));
+ const cursor=hint.cursor;
+ if(cursor){
+  if(method==='GET'){
+   if(url.searchParams.has('after'))url.searchParams.set('after',String(cursor));
+   else if(url.searchParams.has('cursor'))url.searchParams.set('cursor',String(cursor));
+   else url.searchParams.set('after',String(cursor))
+  }else{
+   try{
+    const j=typeof body==='string'?JSON.parse(body):structuredClone(body||{});
+    j.variables=j.variables||{};
+    if('after' in j.variables||!('cursor' in j.variables))j.variables.after=cursor;
+    else j.variables.cursor=cursor;
+    body=JSON.stringify(j);init.body=body
+   }catch{return null}
+  }
+ }
+ if(method==='GET')delete init.body;
+ init.method=method;init.credentials=init.credentials||'include';init.cache='no-store';
+ return{url:url.href,method,body,requestInit:init}
+}
+async function replay(cap){
+ const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
+ const init={...(cap.requestInit||{}),method:cap.method||'GET',credentials:cap.requestInit?.credentials||'include',cache:'no-store'};
+ if(cap.body!=null&&init.method!=='GET'&&init.method!=='HEAD')init.body=cap.body;
+ const res=await original(cap.url,init);
+ if(!res.ok)throw new Error('HTTP_'+res.status);
+ const txt=await res.text();
+ let json;try{json=JSON.parse(txt)}catch{throw new Error('通知履歴APIの応答をJSONとして読めませんでした')}
+ return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
+}
 async function syncHistory(opts={}){
  const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
  arm(Math.max(forceFull?180000:120000,waitMs+5000));
