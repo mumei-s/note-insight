@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.3.4';
+const VERSION='3.3.5';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -111,6 +111,18 @@ function nextHint(json){
   for(const x of Object.values(v))walk(x,depth+1)
  }
  walk(json);return found
+}
+function terminalHint(json){
+ let end=false;
+ function walk(v,depth=0){if(end||depth>8||!v)return;if(Array.isArray(v)){for(const x of v.slice(0,30))walk(x,depth+1);return}if(typeof v!=='object')return;
+  const hasNext=v.hasNextPage??v.has_next_page??v.has_next;
+  const last=v.is_last_page??v.isLastPage;
+  const ownsNext=Object.prototype.hasOwnProperty.call(v,'next_page')||Object.prototype.hasOwnProperty.call(v,'nextPage')||Object.prototype.hasOwnProperty.call(v,'next')||Object.prototype.hasOwnProperty.call(v,'next_url')||Object.prototype.hasOwnProperty.call(v,'nextUrl');
+  const next=v.next_page??v.nextPage??v.next??v.next_url??v.nextUrl??null;
+  if(hasNext===false||last===true||(ownsNext&&(next===null||next===false||next===''))){end=true;return}
+  for(const x of Object.values(v))walk(x,depth+1)
+ }
+ walk(json);return end
 }
 function requestMeta(input,init){
  let url='',method='GET',body=null,headers={};
@@ -289,7 +301,10 @@ async function syncHistory(opts={}){
  let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false;
  for(let i=0;i<1000&&cap;i++){
   const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
-  if(requestSeen.has(reqSig))throw new Error('通知履歴のページングが同じ位置で停止しました');
+  if(requestSeen.has(reqSig)){
+   status('APIページングが同じ位置で停止したため、実スクロールへ自動切替します…','saving',{mode:'network-fallback'});
+   return{handled:false,saved:total,received,pages,pending:0,reason:'REPEATED_REQUEST',needsDom:true}
+  }
   requestSeen.add(reqSig);
   const pageRows=cap.rows||extract(cap.json,cap.url);
   if(!newestSig&&pageRows.length)newestSig=clientSig(pageRows[0]);
@@ -304,13 +319,28 @@ async function syncHistory(opts={}){
   status(frontier?`追加確認中… ${pages}ページ / ${received}件照合`:`全履歴確認中… ${pages}ページ / ${received}件照合`,'saving',{mode:frontier?'network-delta':'network-full',readCount:received,savedCount:total,pages});
   if(reachedFrontier){completed=true;break}
   const hint=nextHint(cap.json);
-  if(!hint){reachedEnd=true;completed=true;break}
-  const nextReq=mutateNextRequest(cap,hint);if(!nextReq)throw new Error('通知履歴の次ページ情報を解釈できませんでした');
-  try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){throw new Error('通知履歴の次ページ取得に失敗しました: '+String(e?.message||e))}
+  if(!hint){
+   if(terminalHint(cap.json)){reachedEnd=true;completed=true;break}
+   status('APIで終端を確認できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   return{handled:false,saved:total,received,pages,pending:0,reason:'END_UNCONFIRMED',needsDom:true}
+  }
+  const nextReq=mutateNextRequest(cap,hint);
+  if(!nextReq){
+   status('次ページを解釈できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_UNREADABLE',needsDom:true}
+  }
+  try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){
+   status('APIの次ページ取得に失敗したため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+   return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:true,error:String(e?.message||e)}
+  }
   if(i===999)capLimitHit=true
  }
  const pending=await pendingCount(a.id);
- if(capLimitHit||!completed||pending)throw new Error(capLimitHit?'通知履歴が1000ページを超えたため完了扱いにしません':!completed?'通知履歴の確認が終端または保存済み地点まで到達していません':`${pending}件が未保存のため完了扱いにしません`);
+ if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
+ if(capLimitHit||!completed){
+  status('APIで完了地点を確認できないため、実スクロールへ自動切替します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
+  return{handled:false,saved:total,received,pages,pending:0,reason:capLimitHit?'PAGE_LIMIT':'INCOMPLETE',needsDom:true}
+ }
  const nextState={
   ...state,
   historyComplete:true,
