@@ -28,12 +28,14 @@ function expand(base){let p=base,best=null;for(let i=0;p&&p!==document.body&&p!=
 function notificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
 function strongNoticeSurface(root){
   if(!(root instanceof Element)||!visible(root))return false;
-  const a=exact(root,'通知'),b=exact(root,'お知らせ');
-  return Boolean(a&&b)
+  const a=exact(root,'通知'),b=exact(root,'お知らせ');if(!a||!b)return false;
+  const known=[...root.querySelectorAll(ITEM)].filter(rowish);
+  const popupLike=root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],section,aside');
+  return Boolean(known.length||popupLike)
 }
 function popupSurface(){
   if(document.visibilityState==='hidden'||notificationRoute())return null;
-  for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],main,section,aside,nav,header')){
+  for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],main,section,aside')){
     if(!visible(root))continue;
     const a=exact(root,'通知'),b=exact(root,'お知らせ');
     if(!a||!b)continue;
@@ -50,6 +52,13 @@ function routeSurface(){
 }
 function findSurface(){return notificationRoute()?routeSurface():popupSurface()}
 function bellIntent(){return Date.now()<intentUntil}
+
+function dismissActiveEditor(){
+  const el=document.activeElement;
+  if(!(el instanceof HTMLElement))return;
+  const editable=el.matches?.('input,textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"]');
+  if(editable&&!el.closest('#'+ROOT)&&!el.closest('#'+SETTINGS)){try{el.blur()}catch{}}
+}
 
 function startPanelSession(){
   panelSessionActive=true;
@@ -95,6 +104,7 @@ function openNotificationBell(){
   suppressUntilBell=false;
   if(findSurface()){startPanelSession();return true}
   const el=notificationBellElement();if(!el)return false;
+  dismissActiveEditor();
   startPanelSession();intentUntil=Date.now()+10000;
   try{el.click()}catch{endPanelSession();return false}
   for(const ms of[0,80,180,360,700,1200,2200,4000,7000])setTimeout(()=>scheduleInspect(0),ms);
@@ -260,7 +270,7 @@ function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();retur
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
 async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}if(sessionPathChanged()){hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(panelSessionActive){if(notificationRoute()){showRoot(true);return}if(shell&&strongNoticeSurface(shell)){showRoot(true);return}if(bellIntent()){showRoot(true);return}hideImmediately();return}if(bellIntent()){void activateIntent();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(panelSessionActive&&shell&&notificationLeaveAction(target))hideImmediately();return}if(panelSessionActive&&dockVisible){hideImmediately();return}suppressUntilBell=false;startPanelSession();intentUntil=Date.now()+10000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500,9000])setTimeout(()=>scheduleInspect(0),ms)}
+function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(panelSessionActive&&shell&&notificationLeaveAction(target))hideImmediately();return}if(panelSessionActive&&dockVisible){hideImmediately();return}dismissActiveEditor();suppressUntilBell=false;startPanelSession();intentUntil=Date.now()+10000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500,9000])setTimeout(()=>scheduleInspect(0),ms)}
 function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('pointerdown',onGlobalPointerDown,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(sessionPathChanged()){hideImmediately();return r}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();if(notificationRoute())startPanelSession();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible,getShell:()=>shell,isSessionActive:()=>panelSessionActive};
