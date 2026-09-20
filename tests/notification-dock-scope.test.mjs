@@ -23,7 +23,7 @@ test("V3.3.1 loads bottom-up reader and fixed five-panel runtime",async()=>{
  assert.match(parent,/@version\s+3\.3\.1/);
  assert.match(parent,/note-insight-notification-reader-v323\.js\?v=3258/);
  assert.match(parent,/note-insight-notification-checkpoint-v325\.js\?v=3293/);
- assert.match(parent,/note-insight-notification-network-v3300\.js\?v=3310/);assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3310/);
+ assert.match(parent,/note-insight-notification-network-v3300\.js\?v=3311/);assert.match(parent,/note-insight-notification-runtime-v327\.js\?v=3310/);
  assert.doesNotMatch(parent,/note-insight-notification-dock-watch-v312\.js/);
  assert.match(parent,/bottom-up-saved-line-v3245/);
  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
