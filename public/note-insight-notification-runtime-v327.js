@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.2.91';
+const VERSION='3.2.92';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
@@ -264,7 +264,7 @@ function maybeAuto(force=false){
     Promise.resolve(safeScan()).then(()=>{if(panelSessionActive)autoDoneForSession=true}).catch(()=>{autoDoneForSession=false;if(panelSessionActive&&autoMode)setTimeout(()=>maybeAuto(false),800)}).finally(()=>{autoStarting=false})
   },220)
 }
-async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}if(!panelSessionActive)startPanelSession();clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}window.__mumeiV3Checkpoint325?.mark?.();maybeAuto()}}
+async function activate(next){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}if(!panelSessionActive)startPanelSession();clearTimeout(hideTimer);hideTimer=0;markSurface(next);showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell){hideImmediately();return}scheduleFilter();if(rows(next).length){await window.__mumeiV3Checkpoint325?.restore?.();if(suppressUntilBell){hideImmediately();return}maybeAuto()}}
 async function activateIntent(){if(!await initEnabled()||suppressUntilBell){hideImmediately();return}if(!panelSessionActive)startPanelSession();clearTimeout(hideTimer);hideTimer=0;showRoot(true);await Promise.all([initFilter(),initMode()]);if(suppressUntilBell)hideImmediately()}
 function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();return}const next=findSurface();if(next){void activate(next);return}if(panelSessionActive){if(notificationRoute()){showRoot(true);return}if(shell&&strongNoticeSurface(shell)){showRoot(true);return}if(bellIntent()){showRoot(true);return}hideImmediately();return}if(bellIntent()){void activateIntent();return}markSurface(null);showRoot(false);cleanupVisuals()}
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
