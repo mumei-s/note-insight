@@ -15,19 +15,27 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.11 loads automatic reader plus inline notification controls",async()=>{
+test("V3.4.0 loads fully split notification modules",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
- const reader=await read("public/note-insight-notification-autoscan-v2970.js");
- assert.match(parent,/@version\s+3\.3\.11/);
- assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=33110"));
- assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
- assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=33110"));
- assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
- assert.match(reader,/const TOOLBAR_ID='mumei-inline-notification-tools-v339'/);
- assert.match(reader,/フィルター ON|フィルター OFF/);
- assert.match(reader,/INSIGHT【通知】/);assert.match(reader,/data-action="settings"/);
- assert.match(reader,/panel\.prepend\(bar\)|panel\.insertBefore\(bar,first\)/);
- assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
+ const reader=await read("public/note-insight-notification-reader-v4.js");
+ const controls=await read("public/note-insight-notification-controls-v1.js");
+ assert.match(parent,/@version\s+3\.4\.0/);
+ for(const p of [
+  "note-insight-notification-reader-v4.js?v=3400",
+  "note-insight-notification-controls-v1.js?v=100",
+  "note-insight-notification-filter-v4.js?v=400",
+  "note-insight-notification-return-v1.js?v=100",
+  "note-insight-notification-status-bridge-v1.js?v=100",
+  "note-insight-notification-feature-bridge-v1.js?v=100",
+  "note-insight-notification-settings-bridge-v1.js?v=100",
+  "note-insight-notification-account-pair-v1.js?v=100",
+  "note-insight-dm-reader-v1.js?v=101"
+ ])assert.ok(parent.includes(p),p);
+ assert.doesNotMatch(parent,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+ assert.match(reader,/function scheduleAuto/);assert.match(reader,/async function scan/);
+ assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID|mountToolbar/);
+ assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);assert.match(controls,/data-action="settings"/);
+ assert.doesNotMatch(controls,/insight-notification-ingest-v2|sendBatch|historyComplete/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -64,8 +72,8 @@ test("ingest token bridge is origin-locked",async()=>{
  assert.match(bridge,/TARGET='https:\/\/note\.com'/);assert.match(bridge,/action:'issue'/);assert.doesNotMatch(bridge,/postMessage\([^\n]+,\s*['"]\*['"]\)/);
 });
 
-test("legacy floating runtimes stay inactive while filter engine is loaded",async()=>{
+test("legacy combined runtimes and bootstrap are inactive",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
- assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
- assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
+ assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=|note-insight-notification-autoscan-v2970\.js\?v=|note-insight-notification-bootstrap-v2966\.js\?v=/);
+ assert.ok(parent.includes("note-insight-notification-filter-v4.js?v=400"));
 });
