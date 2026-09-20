@@ -4,11 +4,12 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.3.0';
+const VERSION='3.3.1';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
 const STATUS='mumei_notification_network_status_v3300:';
+const OUTBOX='mumei_notification_network_outbox_v331:';
 const SOURCE='note-notification-explicit-sync-v330';
 const ACTION_RE=/(?:スキ|フォロー|コメント|返信|購入|高評価|チップ|サポート|メンバーシップ|メンシプ|マガジン|記事を投稿|記事を更新|話題|ポイント|引用|追加しました|参加しました|加入しました)/u;
 const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities)/i;
@@ -139,17 +140,53 @@ async function saveProbe(cap,candidates){
  const record={page_url:location.href,request_url:cap.url,request_method:cap.method,transport:cap.transport,status:cap.status,content_type:cap.contentType,operation_name:operationName(cap.body),request_sample:xBodySample(cap.body),response_shape:shape(cap.json),response_sample:compact(cap.json),candidate_count:candidates.length};
  try{await request(PROBE,{noteId:a.id,records:[record]},token)}catch{}
 }
+function clientSig(r){
+ const known=clean(r?.meta?.client_signature||'');if(known)return known;
+ return ['network-v331',clean(r?.meta?.event_identity||''),clean(r?.occurred_at||''),clean(r?.raw_text||''),clean(r?.target_url||''),clean(r?.actor_url||r?.actor_name||'')].join('|')
+}
+async function readOutbox(id){const v=await get(key(OUTBOX,id),[]);return Array.isArray(v)?v:[]}
+async function writeOutbox(id,rows){await set(key(OUTBOX,id),Array.isArray(rows)?rows:[])}
+function mergePending(existing,rows,cap,manual){
+ const m=new Map();
+ for(const r of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(rows)?rows:[])]){
+  if(!r)continue;const s=clientSig(r);if(!s)continue;
+  m.set(s,{...r,meta:{...(r.meta||{}),client_signature:s,manual:Boolean(manual||r?.meta?.manual),network_endpoint:r?.meta?.network_endpoint||cap?.url||null}})
+ }
+ return m
+}
+async function pendingCount(id){return (await readOutbox(id)).length}
 async function ingestRows(rows,cap,manual=false){
- if(!rows.length)return{handled:true,saved:0,received:0};
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
  const token=await tokenFor(a.id);if(!token)throw new Error('本人連携が必要です');
- const payload=rows.map(r=>({...r,meta:{...(r.meta||{}),manual:Boolean(manual),network_endpoint:cap?.url||null}}));
- const res=await request(INGEST,{noteId:a.id,notifications:payload},token);
- const saved=Number(res?.confirmedClientSignatures?.length||0);
- lastResult={at:Date.now(),saved,received:payload.length,url:cap?.url||'',mode:'network'};
+ const pending=mergePending(await readOutbox(a.id),rows,cap,manual);
+ if(!pending.size)return{handled:true,saved:0,received:Array.isArray(rows)?rows.length:0,pending:0};
+ await writeOutbox(a.id,[...pending.values()]);
+ const received=Array.isArray(rows)?rows.length:0;let saved=0,lastResponse=null;
+ try{
+  while(pending.size){
+   const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+   const part=[...pending.values()].slice(0,20);
+   const res=await request(INGEST,{noteId:a.id,notifications:part},token);lastResponse=res;
+   const sent=new Set(part.map(clientSig)),confirmed=new Set((Array.isArray(res?.confirmedClientSignatures)?res.confirmedClientSignatures:[]).map(String).filter(s=>sent.has(s)));
+   for(const s of confirmed){pending.delete(s);saved++}
+   await writeOutbox(a.id,[...pending.values()]);
+   if(confirmed.size!==part.length)break
+  }
+ }catch(e){
+  await writeOutbox(a.id,[...pending.values()]);
+  lastResult={at:Date.now(),saved,received,pending:pending.size,url:cap?.url||'',mode:'network',error:String(e?.message||e)};
+  await set(key(STATUS,a.id),lastResult);
+  status(`⚠ 通信保存未完了｜${pending.size}件を次回再送`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
+  throw e
+ }
+ lastResult={at:Date.now(),saved,received,pending:pending.size,url:cap?.url||'',mode:'network'};
  await set(key(STATUS,a.id),lastResult);
- status(`✓ 通信から${payload.length}件確認・${saved}件保存確認`,'done',{readCount:payload.length,savedCount:saved,mode:'network'});
- return{handled:true,saved,received:payload.length,response:res}
+ if(pending.size){
+  status(`⚠ ${received}件確認・${saved}件保存確認・${pending.size}件未保存（次回再送）`,'error',{readCount:received,savedCount:saved,pendingCount:pending.size,mode:'network'});
+  throw new Error(`通信読込の${pending.size}件が未保存です。未保存分は保持して再試行します`)
+ }
+ status(`✓ 通信から${received}件確認・${saved}件保存確認`,'done',{readCount:received,savedCount:saved,pendingCount:0,mode:'network'});
+ return{handled:true,saved,received,pending:0,response:lastResponse}
 }
 async function processCapture(cap,{manual=false,probe=true}={}){
  if(!cap?.json)return{handled:false,saved:0};
@@ -201,7 +238,10 @@ async function syncCurrent(opts={}){
  arm(Math.max(5000,Number(opts.waitMs||2500)+2500));
  status('noteの通知通信を確認しています…','saving',{mode:'network'});
  const cap=await waitCapture(Number(opts.waitMs||2500));
- if(!cap)return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'};
+ if(!cap){
+  const a=await account();if(a&&await pendingCount(a.id)){try{return await ingestRows([],null,true)}catch(e){status('⚠ 通信再送失敗：'+String(e?.message||e),'error',{mode:'network'});throw e}}
+  return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'}
+ }
  try{return await ingestRows(cap.rows||extract(cap.json,cap.url),cap,true)}catch(e){status('⚠ 通信読込失敗：'+String(e?.message||e),'error',{mode:'network'});throw e}
 }
 function mutateNextRequest(cap,hint){
@@ -232,18 +272,25 @@ async function replay(cap){
 }
 async function syncFull(){
  arm(120000);status('通知APIの履歴を直接たどっています…','saving',{mode:'network-full'});
- let cap=await waitCapture(3000);if(!cap)return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'};
- let total=0,pages=0,seen=new Set();
- for(let i=0;i<60&&cap;i++){
-  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig))break;seen.add(sig);
-  const rows=cap.rows||extract(cap.json,cap.url);if(rows.length){const r=await ingestRows(rows,cap,true);total+=Number(r.saved||0)}
-  void saveProbe(cap,rows);pages++;
-  const hint=nextHint(cap.json);if(!hint)break;
-  const nextReq=mutateNextRequest(cap,hint);if(!nextReq)break;
-  try{cap=await replay({...cap,...nextReq,rows:null})}catch{break}
+ let cap=await waitCapture(3000);
+ if(!cap){
+  const a=await account();if(a&&await pendingCount(a.id)){const retry=await ingestRows([],null,true);return{handled:true,saved:Number(retry.saved||0),pages:0,retried:true}}
+  return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE'}
  }
- status(`✓ 通信全読み完了｜${pages}ページ・${total}件保存確認`,'done',{mode:'network-full',savedCount:total,pages});
- return{handled:true,saved:total,pages}
+ let total=0,received=0,pages=0,seen=new Set(),completed=false;
+ for(let i=0;i<60&&cap;i++){
+  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig)){completed=true;break}seen.add(sig);
+  const rows=cap.rows||extract(cap.json,cap.url);received+=rows.length;
+  if(rows.length){const r=await ingestRows(rows,cap,true);total+=Number(r.saved||0)}
+  void saveProbe(cap,rows);pages++;
+  const hint=nextHint(cap.json);if(!hint){completed=true;break}
+  const nextReq=mutateNextRequest(cap,hint);if(!nextReq)throw new Error('通知履歴の次ページ情報を解釈できませんでした');
+  try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){throw new Error('通知履歴の次ページ取得に失敗しました: '+String(e?.message||e))}
+ }
+ const a=await account(),pending=a?await pendingCount(a.id):0;
+ if(!completed||pending)throw new Error(!completed?'通知履歴の全ページ確認が完了していません':`${pending}件が未保存のため全読みを完了扱いにしません`);
+ status(`✓ 通信全読み完了｜${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full',readCount:received,savedCount:total,pages,pendingCount:0});
+ return{handled:true,saved:total,received,pages,pending:0}
 }
 async function restoreStatus(){
  const a=await account();if(!a)return;const s=await get(key(STATUS,a.id),null);
