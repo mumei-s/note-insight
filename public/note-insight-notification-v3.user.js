@@ -146,7 +146,7 @@ cloakBellReturn();
       try{
         const u=new URL(location.href);
         u.searchParams.delete('mumei_filter_return');
-        if(u.searchParams.get('mumei_fullread')!=='1')u.searchParams.delete('mumei_fullread');
+        u.searchParams.delete('mumei_fullread');
         history.replaceState(history.state,'',u.pathname+u.search+u.hash)
       }catch{}
       window.__mumeiNotificationReturnDone=true;
