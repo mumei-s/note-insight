@@ -28,10 +28,9 @@ test("V3.4.0 loads fully split notification modules",async()=>{
   "note-insight-notification-status-bridge-v1.js?v=100",
   "note-insight-notification-feature-bridge-v1.js?v=100",
   "note-insight-notification-settings-bridge-v1.js?v=100",
-  "note-insight-notification-account-pair-v1.js?v=100",
-  "note-insight-dm-reader-v1.js?v=101"
+  "note-insight-notification-account-pair-v1.js?v=100"
  ])assert.ok(parent.includes(p),p);
- assert.doesNotMatch(parent,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+ assert.doesNotMatch(parent,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
  assert.match(reader,/function scheduleAuto/);assert.match(reader,/async function scan/);
  assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID|mountToolbar/);
  assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);assert.match(controls,/data-action="settings"/);
