@@ -137,8 +137,9 @@ Deno.serve(async(req)=>{
       }
       if(clientSignature)confirmedClientSignatures.push(clientSignature);
     }
-    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:inserted,received_count:incoming.length,source:"browser-notification-stable-v2"});
-    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmedClientSignatures:[...new Set(confirmedClientSignatures)]};
+    const confirmed=[...new Set(confirmedClientSignatures)];
+    await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:confirmed.length,received_count:incoming.length,source:"browser-notification-stable-v3-confirmed"});
+    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
