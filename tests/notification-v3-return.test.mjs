@@ -23,8 +23,8 @@ test("V3.4.0 preloads split runtime modules",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js"),ret=await read("public/note-insight-notification-return-v1.js"),filterSettings=await read("public/notification-filter-settings.html");
   assert.match(v3,/@version\s+3\.4\.0/);
   const meta=v3.split("// ==/UserScript==")[0];
-  for(const p of ["note-insight-notification-reader-v4.js?v=3400","note-insight-notification-controls-v1.js?v=100","note-insight-notification-filter-v4.js?v=400","note-insight-notification-return-v1.js?v=100","note-insight-notification-status-bridge-v1.js?v=100","note-insight-notification-settings-bridge-v1.js?v=100","note-insight-notification-account-pair-v1.js?v=100","note-insight-dm-reader-v1.js?v=101"])assert.ok(meta.includes(p),p);
-  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+  for(const p of ["note-insight-notification-reader-v4.js?v=3400","note-insight-notification-controls-v1.js?v=100","note-insight-notification-filter-v4.js?v=400","note-insight-notification-return-v1.js?v=100","note-insight-notification-status-bridge-v1.js?v=100","note-insight-notification-settings-bridge-v1.js?v=100","note-insight-notification-account-pair-v1.js?v=100"])assert.ok(meta.includes(p),p);
+  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/actor_image_url:img/);assert.match(reader,/historyComplete/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
   assert.match(filterSettings,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(filterSettings,/note\.com\/notifications/);
