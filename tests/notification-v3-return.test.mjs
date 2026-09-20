@@ -16,50 +16,43 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.6/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.7/);
 });
 
-test("V3.3.6 preloads bottom-up reader, checkpoint and fixed five-panel runtime",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js"),filterSettings=await read("public/notification-filter-settings.html");
-  assert.match(v3,/@version\s+3\.3\.6/);assert.match(v3,/bottom-up-saved-line-v3245/);
+test("V3.3.7 preloads restored iframe dock and automatic stable reader",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),runtime=await read("public/note-insight-notification-runtime-v2958.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),filterSettings=await read("public/notification-filter-settings.html");
+  assert.match(v3,/@version\s+3\.3\.7/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3360/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3360/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3293/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3360/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
-  assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(meta,/note-insight-notification-manual-full-v3284\.js\?v=3360/);
-  assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
-  for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
-  assert.match(runtime,/mountUiToViewport/);assert.match(runtime,/data-v3284-mode/);assert.match(runtime,/✓追加/);assert.match(runtime,/✓全読/);assert.match(runtime,/leadDisplayName/);assert.match(runtime,/profileCandidates/);assert.match(runtime,/filterRows/);assert.match(runtime,/runDockAction/);assert.match(runtime,/pointerdown/);assert.match(runtime,/pointerup/);assert.match(runtime,/leadCreatorId/);assert.match(runtime,/ids\.has\(lead\)/);assert.match(runtime,/mumei_insight_notification_auto_v325:/);assert.match(runtime,/event\?\.composedPath/);assert.doesNotMatch(runtime,/new MutationObserver/);assert.match(runtime,/openNotificationBell/);assert.match(runtime,/isNotificationOpen/);assert.match(runtime,/mumei_insight_notification_feature_enabled_v1/);assert.match(runtime,/setFeatureEnabled/);assert.match(runtime,/hideImmediately/);assert.match(runtime,/suppressUntilBell/);assert.match(runtime,/notificationLeaveAction/);assert.match(runtime,/onGlobalPointerDown/);assert.match(runtime,/function showRoot\(on\).*suppressUntilBell/);assert.match(runtime,/function onStatus\(e\).*suppressUntilBell/);assert.match(runtime,/function confirmHide\(\).*suppressUntilBell/);assert.match(v3,/mumei_insight_return_bell_v1/);assert.match(filterSettings,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(filterSettings,/note\.com\/notifications/);assert.match(v3,/@run-at\s+document-start/);assert.match(v3,/data-mumei-bell-return-cloak/);assert.match(v3,/location\.replace\(location\.origin\+'\/\?mumei_filter_return=bell'\)/);assert.doesNotMatch(v3,/history\.replaceState\(history\.state,'',location\.origin\+'\/'\)/);assert.doesNotMatch(runtime,/a\[href\*="\/notifications"\]/);assert.match(v3,/mumei-notification-feature-ui-v1/);assert.match(v3,/mumei-notification-feature-bridge-v1/);assert.match(runtime,/notification-filter-settings\.html/);assert.match(runtime,/notificationAccount/);assert.match(runtime,/location\.replace\(u\.href\)/);assert.doesNotMatch(runtime,/通知フィルター登録|data-addg/);assert.doesNotMatch(runtime,/new MutationObserver/);
-  assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/通知履歴の最下部まで到達できませんでした/);assert.match(reader,/通知一覧の先頭まで確認できませんでした/);assert.match(reader,/bottom-up-from-saved-line/);assert.match(reader,/saved-line-bottom-up-v324/);
+  for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.ok(meta.includes(part));
+  assert.doesNotMatch(meta,/note-insight-notification-runtime-v327\.js\?v=/);
+  assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  for(const label of ["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】"])assert.match(runtime,new RegExp(label));
+  assert.match(runtime,/frame\.srcdoc=frameHtml\(\)/);assert.match(runtime,/pointer-events:auto/);
+  assert.match(reader,/function scheduleAuto/);assert.match(reader,/actor_image_url:img/);assert.match(reader,/historyComplete/);
+  assert.match(filterSettings,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(filterSettings,/note\.com\/notifications/);
+  assert.match(v3,/@run-at\s+document-start/);assert.match(v3,/data-mumei-bell-return-cloak/);assert.match(v3,/clickRealBell/);assert.doesNotMatch(v3,/note\.com\/notifications/);
 });
 
-test("five-panel dock appears on the notification surface and auto mode runs scans",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/bottom:calc\(env\(safe-area-inset-bottom,0px\) \+ 14px\)!important/);
-  assert.match(runtime,/async function activate\(next\)/);
-  assert.match(runtime,/showRoot\(true\)/);
-  assert.match(runtime,/maybeAuto\(\)/);assert.match(runtime,/autoDoneForSession/);
-  assert.match(runtime,/async function safeScan\(\)/);
-  assert.match(runtime,/__mumeiV3Checkpoint325\?\.restore\?\.\(\)/);
+test("four-panel iframe dock appears independently and automatic reader runs scans",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v2958.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.match(runtime,/position:fixed!important/);assert.match(runtime,/bottom:max\(8px,env\(safe-area-inset-bottom,0px\)\)!important/);
+  assert.match(runtime,/frame\.srcdoc=frameHtml\(\)/);assert.match(runtime,/showDock\(true\)/);
+  assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);assert.match(reader,/自動読込を開始します/);
 });
 
-test("auto mode is saved per note account and can be switched off",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v327.js");
-  assert.match(runtime,/AUTO='mumei_insight_notification_auto_v325:'/);
-  assert.match(runtime,/autoMode=id\?Boolean\(await get\(AUTO\+id,true\)\):true/);
-  assert.match(runtime,/autoMode=!autoMode/);
-  assert.match(runtime,/await set\(AUTO\+id,autoMode\)/);
-  assert.match(runtime,/自動読み込みON。タップで手動へ/);
-  assert.match(runtime,/自動読み込みOFF。タップで自動へ/);
+test("automatic reading is default and no tap-sensitive auto toggle is required",async()=>{
+  const runtime=await read("public/note-insight-notification-runtime-v2958.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.doesNotMatch(runtime,/data-a="mode"|自動読み込みOFF/);
+  assert.match(reader,/function scheduleAuto/);assert.match(reader,/setTimeout\(\(\)=>\{later\(\);scheduleAuto\(900\)\},150\)/);
 });
 
-test("completion line is the only resume boundary and next read moves upward from it",async()=>{
-  const reader=await read("public/note-insight-notification-reader-v323.js");
-  assert.match(reader,/saved-line-bottom-up-v324/);
-  assert.match(reader,/boundarySignature/);
-  assert.match(reader,/boundaryEventIdentity/);
-  assert.match(reader,/function boundaryMatch/);assert.match(reader,/findSavedRecoveryElement/);assert.match(reader,/persistRecoveredBoundary/);
-  assert.match(reader,/ここまで保存済み/);
-  assert.match(reader,/保存済みラインから先頭まで追加分を確認します/);
-  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
+test("first scan reaches history end and later scans stop at saved overlap",async()=>{
+  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.match(reader,/const overlap=\(\)=>cp\.historyComplete===true&&currentRows\(\)\.some/);
+  assert.match(reader,/const reachedEnd=await seekOldest/);
+  assert.match(reader,/complete=!stop&&\(reachedEnd\|\|overlap\(\)\)/);
+  assert.match(reader,/historyComplete:cp\.historyComplete===true\|\|complete/);
+  assert.match(reader,/✓全履歴確認/);assert.match(reader,/✓追加確認/);
 });
 
 test("INSIGHT notifications keep one category selector",async()=>{
