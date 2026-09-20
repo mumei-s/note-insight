@@ -38,11 +38,10 @@ const gmModern=()=>Boolean(globalThis.GM);
 const gmVersionGet=async()=>{try{if(gmModern()&&typeof GM.getValue==='function')return String(await GM.getValue(ACTIVE_GM_KEY,'')||'');if(typeof GM_getValue==='function')return String(GM_getValue(ACTIVE_GM_KEY,'')||'')}catch{}return''};
 const gmVersionSet=async v=>{try{if(gmModern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}};
 if(location.hostname==='mumei-s.github.io'){
-  void gmVersionSet(VERSION);
   try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
-  void gmVersionGet().then(active=>{
-    if(!/^\d+(?:\.\d+){1,3}$/.test(active))return;
-    try{localStorage.setItem(TOOL_KEY,active);localStorage.setItem(RUNTIME_KEY,active);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
+  void Promise.resolve(gmVersionSet(VERSION)).then(()=>gmVersionGet()).then(active=>{
+    const confirmed=/^\d+(?:\.\d+){1,3}$/.test(active)?active:VERSION;
+    try{localStorage.setItem(TOOL_KEY,confirmed);localStorage.setItem(RUNTIME_KEY,confirmed);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}
   });
   const FEATURE='mumei_insight_notification_feature_enabled_v1',FEATURE_PAGE='mumei-notification-feature-ui-v1',FEATURE_BRIDGE='mumei-notification-feature-bridge-v1';
   const featureModern=()=>Boolean(globalThis.GM);
