@@ -4,20 +4,21 @@ import test from "node:test";
 const read=p=>readFile(new URL(`../${p}`,import.meta.url),"utf8");
 const has=(text,items)=>{for(const x of items)assert.match(text,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")))};
 
-test("V3.3.7 loads restored iframe dock and automatic stable reader",async()=>{
-  const v3=await read("public/note-insight-notification-v3.user.js"),runtime=await read("public/note-insight-notification-runtime-v2958.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(v3,/@version\s+3\.3\.7/);
-  for(const part of ["note-insight-notification-runtime-v2958.js?v=3370","note-insight-notification-filter-restore-v2962.js?v=3370","note-insight-notification-autoscan-v2970.js?v=3370","note-insight-notification-filter-safety-v2961.js?v=3370","note-insight-notification-bootstrap-v2966.js?v=3370"])assert.ok(v3.includes(part));
-  assert.doesNotMatch(v3,/note-insight-notification-runtime-v327\.js\?v=/);
-  has(runtime,["mumei-v2948-frame","下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","frameHtml","srcdoc"]);
-  has(reader,["actor_image_url:img","function scheduleAuto","historyComplete","mumei_insight_notification_avatar_repair_v337:","✓全履歴確認","✓追加確認"]);
+test("V3.3.8 loads panel-free automatic notification reader",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.match(v3,/@version\s+3\.3\.8/);
+  assert.ok(v3.includes("note-insight-notification-autoscan-v2970.js?v=3380"));
+  assert.ok(v3.includes("note-insight-notification-bootstrap-v2966.js?v=3380"));
+  assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
+  has(reader,["function directPanel","function findPanel(){return directPanel()}","actor_image_url:img","function scheduleAuto","historyComplete","mumei_insight_notification_avatar_repair_v338:","✓全履歴確認","✓追加確認"]);
 });
 
-test("restored four-panel dock isolates taps and keeps automatic reading in the reader",async()=>{
-  const runtime=await read("public/note-insight-notification-runtime-v2958.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
-  assert.match(runtime,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  has(runtime,["下から読込","フィルターOFF","フィルター設定","INSIGHT【通知】","pointer-events:auto"]);
-  assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);assert.match(reader,/for\(let i=0;i<500&&!stop;i\+\+\)/);
+test("automatic notification reading does not require a dock",async()=>{
+  const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js");
+  assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
+  assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
+  assert.match(reader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);assert.match(reader,/steps\+\+<1200/);
+  assert.match(reader,/new MutationObserver/);
 });
 
 test("installer is isolated, versionless and browser-specific",async()=>{
@@ -32,10 +33,10 @@ test("installer is isolated, versionless and browser-specific",async()=>{
   has(bridge,["互換停止版"]);
 });
 
-test("release tracks V3.3.7 without putting the version in the user-facing label",async()=>{
+test("release tracks V3.3.8 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.21.4");assert.equal(manifest.notificationVersion,"3.3.7");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.21\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.3\.7"/);assert.match(v3,/@version\s+3\.3\.7/);
+  assert.equal(manifest.appVersion,"2026.09.21.5");assert.equal(manifest.notificationVersion,"3.3.8");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.21\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.3\.8"/);assert.match(v3,/@version\s+3\.3\.8/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
