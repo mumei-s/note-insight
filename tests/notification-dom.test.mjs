@@ -220,7 +220,7 @@ test('network reader is primary and DOM reader is fallback',async()=>{
   const network=await read('note-insight-notification-network-v3300.js');
   const meta=v3.split('// ==/UserScript==')[0];
   assert.match(meta,/@grant\s+unsafeWindow/);
-  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3300/);
+  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3301/);
   assert.match(network,/const VERSION='3\.3\.0'/);
   assert.match(network,/function installFetch\(\)/);
   assert.match(network,/function installXHR\(\)/);
