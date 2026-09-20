@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.2.86';
+const VERSION='3.3.0';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -80,6 +80,15 @@ function requestDedicatedFullRead(){
 }
 async function scanFull(){
  if(fullScanning||window.__mumeiV3Reader323?.isScanning?.())return 0;
+ const net=window.__mumeiNotificationNetwork3300;
+ if(net&&typeof net.syncFull==='function'){
+  fullScanning=true;paintRead('全読中');
+  try{
+   const r=await net.syncFull();
+   if(r?.handled){paintRead('✓完了');return Number(r.saved||0)}
+  }catch{}
+  finally{fullScanning=false}
+ }
  if(requestDedicatedFullRead())return 0;
  fullScanning=true;let a=null,total=0,seenCount=0;
  paintRead('全読中');
