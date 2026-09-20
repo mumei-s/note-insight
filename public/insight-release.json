@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.3.0",
+  "appVersion": "2026.09.20.1",
+  "notificationVersion": "3.3.1",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T11:20:00+09:00",
+  "releasedAt": "2026-09-20T21:00:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.0。note自身の通知fetch/XHRを捕捉してJSONを直接保存する通信Readerを主経路へ変更。通信取得不能時のみ従来DOM Readerへフォールバック。全読みもnext_page/cursorを通信で追跡し、不可時のみDOM全読みに戻る。"
+  "note": "本人通知V3.3.1。通信Readerはサーバー保存確認済みだけを完了扱いにし、未保存分は端末側に保持して次回再送。手動の「続きから読む」も通信Readerを優先し、DM/通常画面の誤検出とパネル自己クリックを抑止。通知分類は相対時刻ノイズを除去して動作文で判定。分析はPV/売上切替・実数目盛・前回差・スマホ日別明細を追加。"
 }
