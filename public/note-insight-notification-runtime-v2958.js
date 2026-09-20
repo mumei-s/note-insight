@@ -15,7 +15,7 @@ let accountId='',panel=null,frame=null,ui=null,filterOn=false,scheduled=0,panelO
 async function account(){if(accountId)return{id:accountId};try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id))return null;accountId=id;return{id}}catch{return null}}
 function viewportSize(){return{w:Math.max(document.documentElement?.clientWidth||0,window.innerWidth||0),h:Math.max(document.documentElement?.clientHeight||0,window.innerHeight||0)}}
 function shown(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect(),vp=viewportSize();if(r.width<1||r.height<1||r.right<=0||r.bottom<=0||r.left>=vp.w||r.top>=vp.h)return false;let p=el,d=0;while(p&&d++<12){if(p.hasAttribute('hidden')||p.getAttribute('aria-hidden')==='true'||p.hasAttribute('inert'))return false;const s=getComputedStyle(p);if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)<=0.01)return false;p=p.parentElement}return true}
-function notificationRoute(){return /^\/notifications(?:\/|$)/.test(location.pathname.toLowerCase())}
+function notificationRoute(){return false}
 function messagingContext(){const p=location.pathname.toLowerCase();return /\/(?:messages?|dm|chat|talk|inbox)(?:\/|$)/.test(p)}
 function tabText(el){return clean(el?.textContent||el?.getAttribute?.('aria-label')||el?.getAttribute?.('title')||'')}
 function isNoticeTabText(t){return /^通知(?:\s*\d+)?$/u.test(t)}
