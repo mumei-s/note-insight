@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.5
-// @description  本人通知V3.3.5。自動モードで初回は全履歴、以後は保存済み地点まで差分確認。API終端を確認できなければ実スクロールへ自動切替し、途中停止は完了扱いにしません。
+// @version      3.3.6
+// @description  本人通知V3.3.6。/notifications誤経路を抹消。設定戻り・全読フォールバックはnoteトップを非表示で開き、🔔通知を自動展開してから表示。更新確認はINSIGHT内だけで完結します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,18 +19,18 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3350
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3350
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3360
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3360
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3293
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3350
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3350
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3360
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3360
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.5';
+const VERSION='3.3.6';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -126,21 +126,38 @@ const RETURN='mumei_insight_return_bell_v1';
 const modernNote=()=>Boolean(globalThis.GM);
 const noteGet=async(k,d)=>{try{if(modernNote()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
 const noteSet=async(k,v)=>{try{if(modernNote()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
+const returnQuery=()=>new URLSearchParams(location.search);
+const wantsBellReturn=()=>returnQuery().get('mumei_filter_return')==='bell'||returnQuery().get('mumei_fullread')==='1';
+const cloakBellReturn=()=>{if(!wantsBellReturn()&&location.pathname!=='/notifications')return;try{document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-bell-return-cloak','1')}catch{}};
+const revealBellReturn=()=>{try{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-bell-return-cloak')}catch{}};
+cloakBellReturn();
 (async()=>{
-  const q=new URLSearchParams(location.search),urlWants=q.get('mumei_filter_return')==='bell';
   const stale=await noteGet(RETURN,null);
   if(stale)await noteSet(RETURN,null);
-  if(!urlWants)return;
-  if(!/^\/notifications(?:\/|$)/i.test(location.pathname)){
-    location.replace(location.origin+'/notifications');
+  if(location.pathname==='/notifications'){
+    location.replace(location.origin+'/?mumei_filter_return=bell');
     return
   }
-  try{
-    const u=new URL(location.href);
-    u.searchParams.delete('mumei_filter_return');
-    history.replaceState(history.state,'',u.pathname+u.search+u.hash)
-  }catch{}
-  window.__mumeiNotificationReturnDone=true
+  if(!wantsBellReturn())return;
+  let attempts=0;
+  const open=()=>{
+    const api=window.__mumeiV3Runtime328;
+    if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
+      try{
+        const u=new URL(location.href);
+        u.searchParams.delete('mumei_filter_return');
+        if(u.searchParams.get('mumei_fullread')!=='1')u.searchParams.delete('mumei_fullread');
+        history.replaceState(history.state,'',u.pathname+u.search+u.hash)
+      }catch{}
+      window.__mumeiNotificationReturnDone=true;
+      revealBellReturn();
+      return
+    }
+    if(attempts++>80){revealBellReturn();return}
+    if(api&&typeof api.openNotificationBell==='function')api.openNotificationBell();
+    setTimeout(open,120)
+  };
+  open()
 })()
 document.addEventListener('click',e=>{
   const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
