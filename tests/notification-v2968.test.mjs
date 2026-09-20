@@ -7,6 +7,43 @@ import ts from 'typescript';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function helpers(p,names){let source=read(p).replace(/^import .*;\n/gm,'');const ctx={createClient:()=>({}),Deno:{env:{get:()=>''},serve:()=>{}},console,URL,Date,Intl,Map,Set,Number,JSON};vm.createContext(ctx);source+='\nglobalThis.result={'+names.join(',')+'};';vm.runInContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,ctx);return ctx.result}
 
+test('all known notification actions classify into explicit buckets',()=>{
+  const {classify}=helpers('supabase/functions/insight-notification-ingest-v2/index.ts',['classify']);
+  const cases=[
+    ['あなたの記事が共同マガジンに追加されました 3分前','https://note.com/a/m/m1','my_article_magazine_added'],
+    ['Aさんがあなたのコメントに返信しました 3分前','https://note.com/a/n/n1?c=c1','reply'],
+    ['Aさんがあなたのメンバーシップに参加しました 3分前','https://note.com/ss_yr/membership','membership_join'],
+    ['Aさんがあなたのメンバーシップの投稿にスキしました 3分前','https://note.com/ss_yr/membership','membership_reaction'],
+    ['Aさんがあなたのコメントにスキしました 3分前','https://note.com/ss_yr/n/n1?c=c1','comment_like'],
+    ['Aさんがあなたの記事にスキしました 3分前','https://note.com/ss_yr/n/n1','like'],
+    ['Aさんがあなたの記事にコメントしました 3分前','https://note.com/ss_yr/n/n1','comment'],
+    ['Aさんがメンバーシップ掲示板に投稿しました 3分前','https://note.com/a/membership/boards/1','membership_board'],
+    ['Aさんがメンバーシップを始めました 3分前','https://note.com/a/membership','membership_started'],
+    ['Aさんがメンバーシップに新しいプランを追加しました 3分前','https://note.com/a/membership','membership_plan'],
+    ['Aさんが共同マガジンの運営メンバーに仲間入りしました 3分前','https://note.com/a/m/m1','magazine_join'],
+    ['Aさんが「共同マガジン」をフォローしました 3分前','https://note.com/a/m/m1','magazine_follow'],
+    ['Aさんがマガジンに新しい記事を1本追加しました 3分前','https://note.com/a/m/m1','magazine_article_added'],
+    ['Aさんが新しい記事を投稿しました 3分前','https://note.com/a/n/n1','creator_article_posted'],
+    ['あなたの記事が話題です 3分前','https://note.com/ss_yr/n/n1','buzz'],
+    ['Aさんがあなたの有料記事を購入しました！ 3分前','https://note.com/ss_yr/n/n1','purchase'],
+    ['Aさんからチップが届きました 3分前','https://note.com/ss_yr/n/n1','tip'],
+    ['あなたの記事が引用されました 3分前','https://note.com/ss_yr/n/n1','quote'],
+    ['Aさんがあなたの記事を高評価しました 3分前','https://note.com/ss_yr/n/n1','rating'],
+    ['あなたにポイントが付与されました 3分前',null,'points'],
+    ['Aさんが質問箱を始めました 3分前','https://note.com/a','question_box_started'],
+    ['フォロー外したの…だ〜れだ 3分前',null,'other']
+  ];
+  for(const [text,target,expected] of cases)assert.equal(classify(text,target),expected,text);
+});
+
+test('ambiguous ownership stays in confirmation buckets instead of being guessed',()=>{
+  const {decorate}=helpers('supabase/functions/insight-notification-feed-final/index.ts',['decorate']);
+  assert.equal(decorate({notification_type:'reply',target_url:null},'ss_yr').display_category,'reply_unknown');
+  assert.equal(decorate({notification_type:'membership_reaction',target_url:null},'ss_yr').display_category,'membership_reaction_unknown');
+  assert.equal(decorate({notification_type:'reply',target_url:'https://note.com/ss_yr/n/n1'},'ss_yr').display_category,'reply_self');
+  assert.equal(decorate({notification_type:'reply',target_url:'https://note.com/other/n/n1'},'ss_yr').display_category,'reply_other');
+});
+
 test('important actions beat words in the article title',()=>{
   const {classify,allowedExplicitSource}=helpers('supabase/functions/insight-notification-ingest-v2/index.ts',['classify','allowedExplicitSource']);
   assert.equal(classify('あなたの記事がメンバーシップ応援に追加されました スキしましたという題名3分前','https://note.com/a/m/m1'),'my_article_magazine_added');
