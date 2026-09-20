@@ -9,7 +9,8 @@ test('V3.4.2 package is only a module loader and version reporter',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
   assert.match(v3,/@version\s+3\.4\.2/);
   for(const p of [
-    'note-insight-notification-network-v3300.js?v=3420',\n    'note-insight-notification-reader-v4.js?v=3420',
+    'note-insight-notification-network-v3300.js?v=3420',
+    'note-insight-notification-reader-v4.js?v=3420',
     'note-insight-notification-controls-v1.js?v=110',
     'note-insight-notification-filter-v4.js?v=400',
     'note-insight-notification-return-v1.js?v=110',
