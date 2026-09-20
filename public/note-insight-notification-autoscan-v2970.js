@@ -175,12 +175,13 @@ async function scan(){
   if(!repairDone&&repairRows.length){health(`アイコン情報を補修中… ${repairRows.length}件`,'saving');await sendBatch(repairRows,a,saved,true)}
   const latest=await get(key(CHECK,a.id),{});
   if(complete){const top=currentRows().find(r=>saved.has(sig(r)));if(top){latest.boundarySignature=sig(top);latest.boundaryEventIdentity=top.meta?.event_identity;latest.boundaryLegacySignature=[stripTime(top.raw_text),String(top.target_url||'').split('#')[0],String(top.actor_url||'').split('?')[0]].join('|')}}
-  await set(key(CHECK,a.id),{...latest,lastCheckAt:Date.now(),manualNewCount:count,manualSeenCount:readCount,historyComplete:cp.historyComplete===true||complete,lastError:''});
+  const runMode=complete?(cp.historyComplete===true?'delta':'full'):'partial',runAt=Date.now();
+  await set(key(CHECK,a.id),{...latest,lastCheckAt:runAt,manualNewCount:count,manualSeenCount:readCount,historyComplete:cp.historyComplete===true||complete,lastError:'',lastRunComplete:complete,lastRunMode:runMode,lastRunAt:runAt,lastRunSavedCount:count,lastRunReadCount:readCount,version:VERSION});
   if(complete&&!repairDone)await set(key(REPAIR,a.id),true);
   health(`${stop?'停止・':''}${complete?(cp.historyComplete===true?'✓追加確認':'✓全履歴確認'):'途中保存'}｜${count}件保存確認｜${readCount}件読取${complete?'':'｜続きは次回'}`,'done');
  }catch(e){
   capturePending();
-  if(a){try{const cp=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now()})}catch{}}
+  if(a){try{const cp=await get(key(CHECK,a.id),{}),runAt=Date.now();await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:runAt,lastRunComplete:false,lastRunMode:'error',lastRunAt:runAt,lastRunSavedCount:count,lastRunReadCount:readCount,version:VERSION})}catch{}}
   health(`⚠ ${String(e?.message||e)}｜未送信分は次回に引継ぎ`,'error');
  }finally{active=null;scanning=false;stop=false;const x=ui();if(x.read)x.read.textContent='下から読込'}
 }
