@@ -68,11 +68,11 @@ test('reader starts from the lower side, marks the completion line, and next run
 
 test('persistent checkpoint mirrors the saved boundary across page closes without global DOM observer',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/);assert.doesNotMatch(checkpoint,/new MutationObserver/)});
 
-test('V3.4.3 wrapper activates only split modules',()=>{
+test('V3.4.4 wrapper activates only split modules',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.4\.3/);
+  assert.match(v3,/@version\s+3\.4\.4/);
   for(const part of [
-    'note-insight-notification-network-v3300.js?v=3430','note-insight-notification-reader-v4.js?v=3430','note-insight-notification-controls-v1.js?v=110',
+    'note-insight-notification-network-v3300.js?v=3430','note-insight-notification-reader-v4.js?v=3430','note-insight-notification-controls-v1.js?v=120',
     'note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=120',
     'note-insight-notification-status-bridge-v1.js?v=100','note-insight-notification-feature-bridge-v1.js?v=100',
     'note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'
@@ -98,7 +98,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
   const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-browser-install.html',runScripts:'outside-only'});
   const w=dom.window;
   try{
-    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.4.3'})});
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.4.4'})});
     for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);
     await new Promise(resolve=>setTimeout(resolve,0));
     const install=w.document.getElementById('install'),u=new URL(install.href);
@@ -170,7 +170,7 @@ test('update detection is version-wrapper-only and does not own runtime features
 
 
 test('inline controls are independently notification-surface-owned',()=>{
-  assert.match(controls,/panel\.appendChild\(bar\)/);
+  assert.match(controls,/document\.body\.appendChild\(bar\)/);assert.match(controls,/data-action="read"/);
   assert.match(controls,/position:fixed/);
   assert.doesNotMatch(splitReader,/TOOLBAR|INSIGHT【通知】/);
 });
