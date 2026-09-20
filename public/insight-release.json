@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.11",
-  "notificationVersion": "3.4.1",
+  "appVersion": "2026.09.21.12",
+  "notificationVersion": "3.4.2",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T06:22:00+09:00",
+  "releasedAt": "2026-09-21T07:06:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.4.1。通知操作バーの重複生成を全DOMで除去し、1段・コンパクト・画面下部へ移動。設定から🔔へ戻る際はベルを最大1回だけクリックし、通知/お知らせタブが見えた時点で開いたと判定して点滅を防止。INSIGHT【通知】は中継ページを通さず insightMode=notifications へ直行。",
+  "note": "本人通知V3.4.2。通知操作バーは1段・画面下部固定、設定から🔔への復帰はベル1回だけ、INSIGHT【通知】は通知画面へ直行。読み取りは通信Readerを通常経路にし、保存済み地点以降を差分取得。DOM全件スクロールは通常経路から外し、通信取得未完了時も画面を動かさず次回へ引き継ぐ。DMは独立パッケージのまま。",
   "dmVersion": "1.1.0",
   "dmLabel": "DM同期"
 }
