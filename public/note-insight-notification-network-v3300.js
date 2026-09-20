@@ -11,7 +11,7 @@ const TOKEN='mumei_insight_notification_sync_token_v2:';
 const STATUS='mumei_notification_network_status_v3300:';
 const SOURCE='note-notification-explicit-sync-v330';
 const ACTION_RE=/(?:スキ|フォロー|コメント|返信|購入|高評価|チップ|サポート|メンバーシップ|メンシプ|マガジン|記事を投稿|記事を更新|話題|ポイント|引用|追加しました|参加しました|加入しました)/u;
-const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities|graphql)/i;
+const URL_HINT_RE=/(?:notice|notification|navbar|activity|activities)/i;
 const KEY_HINT_RE=/(?:notice|notification|activity|event)/i;
 const TEXT_KEYS=['message','text','body','title','label','description','content','display_text','displayText','notice_text','noticeText','notification_text','notificationText','summary'];
 const TIME_KEYS=['created_at','createdAt','occurred_at','occurredAt','published_at','publishedAt','updated_at','updatedAt','timestamp','datetime','date'];
@@ -91,7 +91,12 @@ function operationName(body){try{const j=typeof body==='string'?JSON.parse(body)
 function candidateHint(url,body,json){
  const op=operationName(body),u=String(url||'');
  if(URL_HINT_RE.test(u)||URL_HINT_RE.test(op))return true;
- try{const s=JSON.stringify(compact(json));return ACTION_RE.test(s)&&/(?:notice|notification|activity|通知|お知らせ)/iu.test(s)}catch{return false}
+ try{
+  const s=JSON.stringify(compact(json));
+  if(ACTION_RE.test(s)&&/(?:notice|notification|activity|通知|お知らせ)/iu.test(s))return true;
+  const host=new URL(u,location.href).hostname;
+  return host==='graphql.note.com'&&ACTION_RE.test(s)&&/(?:createdAt|created_at|actor|user|edges|nodes)/i.test(s)
+ }catch{return false}
 }
 function nextHint(json){
  let found=null;
