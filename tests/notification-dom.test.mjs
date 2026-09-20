@@ -75,10 +75,9 @@ test('V3.4.0 wrapper activates only split modules',()=>{
     'note-insight-notification-reader-v4.js?v=3400','note-insight-notification-controls-v1.js?v=100',
     'note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=100',
     'note-insight-notification-status-bridge-v1.js?v=100','note-insight-notification-feature-bridge-v1.js?v=100',
-    'note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100',
-    'note-insight-dm-reader-v1.js?v=101'
+    'note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'
   ])assert.ok(meta.includes(part),part);
-  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
   assert.match(splitReader,/function scheduleAuto/);assert.match(splitReader,/async function scan/);
   assert.doesNotMatch(splitReader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
