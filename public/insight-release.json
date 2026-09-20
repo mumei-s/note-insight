@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.94",
+  "notificationVersion": "3.3.0",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T11:10:00+09:00",
+  "releasedAt": "2026-09-20T11:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.94。読込完了時は左端ボタンを緑の「✓完了」にして通知画面を閉じるまで保持。件数など詳細メッセージは従来どおり一時表示。読込ロジック自体は変更なし。"
+  "note": "本人通知V3.3.0。note自身の通知fetch/XHRを捕捉してJSONを直接保存する通信Readerを主経路へ変更。通信取得不能時のみ従来DOM Readerへフォールバック。全読みもnext_page/cursorを通信で追跡し、不可時のみDOM全読みに戻る。"
 }
