@@ -40,8 +40,9 @@ function Avatar({row,selfId}:{row:Row;selfId:string}){const name=actorName(row),
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
   const[rows,setRows]=useState<Row[]>([]),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
-  const[serverSync,setServerSync]=useState({received:0,inserted:0,source:""});
+  const[serverSync,setServerSync]=useState({received:0,confirmed:0,source:""});
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
+  const lastReaderRun=useRef(0);
   const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>({}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
   const[readerStatus,setReaderStatus]=useState<any>(null);
   async function load(p=1,k=kind,silent=false,day=selectedDay){
@@ -53,7 +54,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const feedId=String(x.noteId||"").toLowerCase(),expected=requestedNotificationAccount()||String(memberNoteId||"").toLowerCase();
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
       const list=await enrich(mergeMagazineJoinRows(repairActorRows(x.rows||[])));if(!valid())return;
-      setRows(list);setTotal(Number(x.total||0));setCategoryCounts(x.categoryCounts||{});setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync({received:Number(x.lastSyncReceived||0),inserted:Number(x.lastSyncInserted||0),source:String(x.lastSyncSource||"")});
+      setRows(list);setTotal(Number(x.total||0));setCategoryCounts(x.categoryCounts||{});setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync({received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")});
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
@@ -91,16 +92,16 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     if(done===CLASSIFIER_VERSION)return;
     const t=window.setTimeout(()=>{void reclassify(true)},700);
     return()=>window.clearTimeout(t)
-  },[memberNoteId,revision]);
+  },[memberNoteId,revision,kind,selectedDay]);
 
-  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,10000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
+  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,2000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
   useEffect(()=>{
     const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
     if(!noteId)return;
     const PAGE_SOURCE="mumei-notification-status-ui-v1",BRIDGE="mumei-notification-status-bridge-v1";
-    const receive=(e:MessageEvent)=>{if(e.origin!==location.origin||e.data?.source!==BRIDGE||e.data?.type!=="state"||String(e.data?.noteId||"").toLowerCase()!==noteId)return;setReaderStatus(e.data?.status||null)};
+    const receive=(e:MessageEvent)=>{if(e.origin!==location.origin||e.data?.source!==BRIDGE||e.data?.type!=="state"||String(e.data?.noteId||"").toLowerCase()!==noteId)return;const next=e.data?.status||null;setReaderStatus(next);const run=Number(next?.lastRunAt||0);if(run&&run!==lastReaderRun.current){lastReaderRun.current=run;void load(1,kind,true,selectedDay)}};
     const ask=()=>window.postMessage({source:PAGE_SOURCE,type:"read",noteId},location.origin);
-    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,5000);
+    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
     return()=>{window.removeEventListener("message",receive);window.clearInterval(timer)}
   },[memberNoteId,revision]);
   useEffect(()=>{const nav=document.querySelector('.miu-nav');if(!nav)return;const buttons=[...nav.querySelectorAll('button')] as HTMLButtonElement[],prev=buttons.find(b=>b.classList.contains('active'))||null,next=buttons.find(b=>b.textContent?.trim()==='通知')||null;if(next){buttons.forEach(b=>b.classList.remove('active'));next.classList.add('active');requestAnimationFrame(()=>next.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}))}return()=>{if(next)next.classList.remove('active');if(prev)prev.classList.add('active')}} ,[]);
@@ -110,17 +111,16 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   const serverLabel=syncAt?"サーバー反映済み":"サーバー反映 未確認";
   return <section id="minf-notifications" className="minf">
-    <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteの通知を保存すると、この画面へ約10秒ごとに自動反映します。分類の数字は選択日の本人通知の全件数です。スキ・人物フォロー・通常コメント・記事投稿は各専用画面と公開データ分析で確認できます。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
+    <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteの通知を保存すると、この画面へ自動反映します。通常は1〜2秒で更新します。分類の数字は選択日の本人通知の全件数です。スキ・人物フォロー・通常コメント・記事投稿は各専用画面と公開データ分析で確認できます。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
     <div className={`minf-reader-status ${readerClass}`} role="status">
       <div className="minf-reader-title"><span>🔔 読取・保存・反映状況</span><strong>{readerLabel}</strong></div>
       <div className="minf-reader-server"><b>{serverLabel}</b><span>{syncAt?date(syncAt):"—"}</span></div>
       <dl>
         <div><dt>端末 最終読取</dt><dd>{readerStatus?.lastRunAt?date(new Date(Number(readerStatus.lastRunAt)).toISOString()):"—"}</dd></div>
-        <div><dt>端末 読取</dt><dd>{readerStatus?Number(readerStatus.lastRunReadCount||0)+"件":"—"}</dd></div>
-        <div><dt>端末 保存確認</dt><dd>{readerStatus?Number(readerStatus.lastRunSavedCount||0)+"件":"—"}</dd></div>
-        <div><dt>端末 累計保存</dt><dd>{readerStatus?Number(readerStatus.savedTotal||0)+"件":"—"}</dd></div>
+        <div><dt>今回 読取</dt><dd>{readerStatus?Number(readerStatus.lastRunReadCount||0)+"件":"—"}</dd></div>
+        <div><dt>今回 保存確認</dt><dd>{readerStatus?Number(readerStatus.lastRunSavedCount||0)+"件":"—"}</dd></div>
         <div><dt>サーバー 受信</dt><dd>{syncAt?serverSync.received+"件":"—"}</dd></div>
-        <div><dt>サーバー 新規保存</dt><dd>{syncAt?serverSync.inserted+"件":"—"}</dd></div>
+        <div><dt>サーバー 保存確認</dt><dd>{syncAt?serverSync.confirmed+"件":"—"}</dd></div>
       </dl>
       <p className="minf-reader-help">{syncAt?"INSIGHTへの保存反映をサーバー側でも確認済みです。":"まだサーバー側の保存反映を確認できていません。"}</p>
       {readerStatus?.lastError?<p className="minf-reader-error">⚠ {String(readerStatus.lastError)}</p>:null}
