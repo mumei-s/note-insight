@@ -135,12 +135,13 @@ test('notification session survives only while a real notification surface remai
 });
 
 
-test('update detection only trusts runtime that actually started on note',()=>{
+test('update detection verifies the userscript on INSIGHT without visiting note',()=>{
   assert.match(v3,/ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1'/);
+  assert.match(v3,/if\(location\.hostname==='mumei-s\.github\.io'\)\{/);
+  assert.match(v3,/localStorage\.setItem\(TOOL_KEY,VERSION\)/);
   assert.match(v3,/Promise\.resolve\(gmVersionSet\(VERSION\)\)\.then\(\(\)=>gmVersionGet\(\)\)/);
   assert.match(v3,/const confirmActiveRuntime=\(\)=>/);
   assert.match(v3,/window\.__mumeiV3Runtime328\?\.version/);
-  assert.doesNotMatch(v3,/if\(location\.hostname==='mumei-s\.github\.io'\)\{\s*try\{localStorage\.setItem\(TOOL_KEY,VERSION\)/);
 });
 
 
