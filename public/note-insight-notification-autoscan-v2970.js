@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationAutoscan2970)return;window.__mumeiNotificationAutoscan2970=true;
 const VERSION='3.3.9',PROTOCOL='3.3.9';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
-const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
+const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:',FIL='mumei_insight_magazine_filter_enabled_v3:';
 const PRIMARY='mumei-v2948-frame',FALLBACK='mumei-notice-reader-v2963',SHELL='[data-mumei-notice-shell-v2958="1"]';
 const INSIGHT='https://mumei-s.github.io/note-insight/notification-entry.html?from=note&insightMode=notifications#dashboard';
 const SETUP='https://mumei-s.github.io/note-insight/notification-setup.html?from=note';
@@ -63,6 +63,52 @@ function directPanel(){
  return null
 }
 function findPanel(){return directPanel()}
+const TOOLBAR_ID='mumei-inline-notification-tools-v339';
+function toolbarCss(){
+ if(document.getElementById(TOOLBAR_ID+'-style'))return;
+ const s=document.createElement('style');s.id=TOOLBAR_ID+'-style';
+ s.textContent=`#${TOOLBAR_ID}{position:sticky;top:0;z-index:2147483000;display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:4px;padding:5px;margin:4px;background:rgba(10,21,31,.96);border:1px solid #35576d;border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.22);backdrop-filter:blur(6px)}#${TOOLBAR_ID} button{min-height:32px;border:1px solid #496a80;border-radius:7px;background:#102534;color:#e9f8ff;font:900 10px/1.1 system-ui;padding:0 6px}#${TOOLBAR_ID} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR_ID} button:active{transform:scale(.98)}`;
+ document.documentElement.append(s)
+}
+async function toolbarState(){
+ const a=await account();if(!a)return null;
+ return{a,enabled:Boolean(await get(key(FIL,a.id),false))}
+}
+async function syncToolbar(){
+ const bar=document.getElementById(TOOLBAR_ID);if(!bar)return;
+ const st=await toolbarState();if(!st)return;
+ const b=bar.querySelector('[data-action="filter"]');if(b){b.dataset.on=st.enabled?'1':'0';b.textContent=st.enabled?'フィルター ON':'フィルター OFF'}
+}
+async function toolbarAction(action){
+ const st=await toolbarState();if(!st)return;
+ if(action==='filter'){
+  await set(key(FIL,st.a.id),!st.enabled);
+  window.dispatchEvent(new Event('mumei-insight-filter-refresh-v2939'));
+  await syncToolbar();return
+ }
+ if(action==='settings'){
+  const u=new URL(FILTER);u.searchParams.set('from','note');u.searchParams.set('notificationAccount',st.a.id);location.assign(u.href);return
+ }
+ if(action==='insight'){
+  const u=new URL(INSIGHT);u.searchParams.set('notificationAccount',st.a.id);location.assign(u.href);return
+ }
+}
+function mountToolbar(panel){
+ if(!panel||!panel.isConnected)return;
+ toolbarCss();
+ let bar=panel.querySelector('#'+TOOLBAR_ID);
+ if(!bar){
+  bar=document.createElement('div');bar.id=TOOLBAR_ID;bar.setAttribute('data-mumei-inline-tools','1');
+  bar.innerHTML='<button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT【通知】</button>';
+  const first=rows(panel)[0]||null;
+  if(first&&first.parentElement===panel)panel.insertBefore(bar,first);else panel.prepend(bar);
+  bar.addEventListener('pointerdown',e=>{e.stopPropagation()},true);
+  bar.addEventListener('mousedown',e=>{e.stopPropagation()},true);
+  bar.addEventListener('touchstart',e=>{e.stopPropagation()},true);
+  bar.addEventListener('click',e=>{const b=e.target instanceof Element?e.target.closest('button[data-action]'):null;if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void toolbarAction(String(b.getAttribute('data-action')||''))},true)
+ }
+ void syncToolbar()
+}
 function scrollHost(panel){const xs=rows(panel);let p=xs[0]||panel;while(p&&panel.contains(p)){if(p.scrollHeight>p.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(p).overflowY))return p;if(p===panel)break;p=p.parentElement}return panel.scrollHeight>panel.clientHeight+20?panel:null}
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({a,u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
 function estimatedTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(m){const unit={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*unit[m[2]]).toISOString()}return null}
@@ -139,6 +185,7 @@ async function scan(){
  try{
   const filter=ui().doc?.getElementById('filter');if(filter?.classList.contains('on')){filter.click();await sleep(150)}
   const panel=findPanel();if(!panel)throw new Error('本物の🔔通知一覧を開いてください');
+  mountToolbar(panel);
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   if(!String(await get(key(TOKEN,a.id),'')||'')){const x=ui();if(x.read)x.read.dataset.repair='1';throw new Error('本人連携が必要です｜読込ボタンで修復')}
   const cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]),repairDone=Boolean(await get(key(REPAIR,a.id),false));
@@ -192,6 +239,7 @@ function scheduleAuto(delay=350){
  autoTimer=setTimeout(()=>{
   const p=findPanel();
   if(!p){autoPanel=null;return}
+  mountToolbar(p);
   if(scanning)return;
   if(p===autoPanel&&Date.now()-lastAutoAt<15000)return;
   autoPanel=p;lastAutoAt=Date.now();
@@ -203,5 +251,5 @@ new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>sched
 document.addEventListener('click',e=>{const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(500));
 window.addEventListener('focus',()=>scheduleAuto(500));
-window.__mumeiStableNotification339={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel};
+window.__mumeiStableNotification339={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,mountToolbar,syncToolbar};
 })();
