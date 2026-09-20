@@ -29,7 +29,27 @@ async function loadAll(){const[dash,notifications]=await Promise.all([api(DASH,{
 function dashboardHref(noteId:string){const role=String(noteId||"").toLowerCase()==="ss_yr"?"owner":"member",u=new URL(`${import.meta.env.BASE_URL}dashboard-setup.html`,window.location.origin);u.searchParams.set("role",role);u.searchParams.set("auto","1");if(noteId)u.searchParams.set("account",noteId.toLowerCase());u.searchParams.set("return",window.location.href);return u.href}
 function normalizeArticles(rows:Row[]):Article[]{const raw=(rows||[]).map(r=>{const pageViews=num(r.pageViews??r.views),impressions=num(r.impressions),likes=num(r.likes),comments=num(r.comments),salesYen=num(r.salesYen??r.sales_yen),comparable=impressions>0&&pageViews>=0&&pageViews<=impressions,conversion=comparable?pageViews/impressions*100:null,reactionsPer1k=pageViews>0?(likes+comments)/pageViews*1000:null,revenuePer1k=pageViews>0?salesYen/pageViews*1000:null;return{...r,pageViews,impressions,likes,comments,salesYen,conversion,reactionsPer1k,revenuePer1k,score:0} as Article});const pv=raw.map(r=>r.pageViews),react=raw.map(r=>r.reactionsPer1k??0),rev=raw.map(r=>r.revenuePer1k??0),sales=raw.map(r=>r.salesYen),conv=raw.filter(r=>r.conversion!=null).map(r=>r.conversion as number);return raw.map(r=>{const c=r.conversion==null?50:percentile(conv,r.conversion);const score=Math.round(percentile(pv,r.pageViews)*.35+percentile(react,r.reactionsPer1k??0)*.25+percentile(rev,r.revenuePer1k??0)*.20+percentile(sales,r.salesYen)*.10+c*.10);return{...r,score}})}
 function metricRows(data:any){const src:Row[]=data?.latestDashboard?.metricSeries?.length?data.latestDashboard.metricSeries:(data?.dashboard||[]);return src.map(r=>({date:String(r.date||r.day||r.at||"").slice(0,10),pageViews:num(r.pageViews??r.pv??r.views),impressions:num(r.impressions),likes:num(r.likes),comments:num(r.comments),salesYen:num(r.salesYen??r.sales_yen??r.sales)})).filter(r=>r.date&&(r.pageViews||r.impressions||r.likes||r.comments||r.salesYen)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-120)}
-function Line({rows,field,label}:{rows:Row[];field:string;label:string}){const vals=rows.map(r=>num(r[field])),max=Math.max(1,...vals),min=Math.min(...vals,0),span=Math.max(1,max-min),pts=rows.map((r,i)=>`${24+(672*Math.max(0,i))/Math.max(1,rows.length-1)},${176-(140*(num(r[field])-min)/span)}`).join(" ");return <div className="mipro-chart"><svg viewBox="0 0 720 200" role="img" aria-label={label}><line x1="24" x2="696" y1="176" y2="176" className="axis"/>{rows.length>1?<polyline points={pts} className="line"/>:null}</svg><small>{label}</small></div>}
+function TrendChart({rows}:{rows:Row[]}){
+  const[metric,setMetric]=useState<"pageViews"|"salesYen">("pageViews");
+  const view=rows.slice(-30),isSales=metric==="salesYen",label=isSales?"売上":"PV",vals=view.map(r=>num(r[metric])),rawMax=Math.max(0,...vals);
+  const magnitude=Math.pow(10,Math.max(0,Math.floor(Math.log10(Math.max(1,rawMax))))),niceMax=rawMax<=magnitude?magnitude:rawMax<=magnitude*2?magnitude*2:rawMax<=magnitude*5?magnitude*5:magnitude*10;
+  const left=78,right=736,top=24,bottom=210,w=right-left,h=bottom-top,x=(i:number)=>left+w*Math.max(0,i)/Math.max(1,view.length-1),y=(v:number)=>bottom-h*Math.max(0,Math.min(1,v/Math.max(1,niceMax)));
+  const pts=view.map((r,i)=>`${x(i)},${y(num(r[metric]))}`).join(" "),ticks=[0,.25,.5,.75,1].map(p=>({p,v:niceMax*p})),last=view.at(-1),prev=view.at(-2),period=sum(vals),delta=last&&prev?num(last[metric])-num(prev[metric]):0;
+  const fmt=(v:any)=>isSales?money(v):n(v),date=(v:any)=>{const s=String(v||"");const m=s.match(/\d{4}-(\d{2})-(\d{2})/);return m?`${Number(m[1])}/${Number(m[2])}`:s||"—"};
+  const xmarks=view.length?[0,Math.floor((view.length-1)/2),view.length-1].filter((v,i,a)=>a.indexOf(v)===i):[];
+  return <div className="mipro-trend">
+    <div className="mipro-trend-head"><div><b>公式日別推移</b><small>直近{view.length}日・実数スケール</small></div><div className="mipro-trend-toggle"><button className={metric==="pageViews"?"active":""} onClick={()=>setMetric("pageViews")}>PV</button><button className={metric==="salesYen"?"active":""} onClick={()=>setMetric("salesYen")}>売上</button></div></div>
+    <div className="mipro-trend-kpis"><span><small>最新</small><b>{fmt(last?.[metric]||0)}</b></span><span><small>期間合計</small><b>{fmt(period)}</b></span><span><small>前回差</small><b className={delta>0?"up":delta<0?"down":""}>{delta>0?"+":""}{fmt(delta)}</b></span></div>
+    <div className="mipro-chart mipro-chart-pro"><svg viewBox="0 0 760 250" role="img" aria-label={`公式日別${label}推移`}>
+      {ticks.map(t=><g key={t.p}><line x1={left} x2={right} y1={y(t.v)} y2={y(t.v)} className="grid"/><text x={left-10} y={y(t.v)+4} className="ylabel">{fmt(t.v)}</text></g>)}
+      <line x1={left} x2={right} y1={bottom} y2={bottom} className="axis"/>
+      {view.length>1?<polyline points={pts} className="line"/>:null}
+      {view.map((r,i)=><circle key={`${r.date}-${i}`} cx={x(i)} cy={y(num(r[metric]))} r={i===view.length-1?5:2.2} className={i===view.length-1?"point latest":"point"}><title>{date(r.date)} {label} {fmt(r[metric])}</title></circle>)}
+      {xmarks.map(i=><text key={i} x={x(i)} y={236} className="xlabel" textAnchor={i===0?"start":i===view.length-1?"end":"middle"}>{date(view[i]?.date)}</text>)}
+    </svg><small>縦軸={label}実数 ／ 横軸=日付。点を長押しすると日付と値を確認できます。</small></div>
+    <div className="mipro-trend-mobile">{view.slice(-5).reverse().map((r,idx)=>{const original=view.length-1-idx,p=original>0?num(view[original-1]?.[metric]):null,v=num(r[metric]),d=p==null?null:v-p;return <div key={`${r.date}-mobile`}><span>{date(r.date)}</span><b>{fmt(v)}</b><em className={d!=null&&d>0?"up":d!=null&&d<0?"down":""}>{d==null?"—":`${d>0?"+":""}${fmt(d)}`}</em></div>})}</div>
+  </div>
+}
 function Bars({items}:{items:{label:string;value:number;sub?:string}[]}){const mx=Math.max(1,...items.map(x=>x.value));return <div className="mipro-bars">{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i><b style={{width:`${Math.max(2,x.value/mx*100)}%`}}/></i><strong>{n(x.value)}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</div>}
 function Fold({title,sub,children}:{title:string;sub:string;children:ReactNode}){return <details className="mipro-fold"><summary><span><b>{title}</b><small>{sub}</small></span><em>開く</em></summary><div className="mipro-fold-body">{children}</div></details>}
 function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <div className="mipro-kpis">{items.map(x=><article key={x.label}><small>{x.label}</small><b>{x.value}</b><span>{x.sub}</span></article>)}</div>}
@@ -71,7 +91,7 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
 
     <Fold title="③ 成長推移" sub={`直近7日PV ${n(pv7)} / 前7日比 ${pct(deltaPct(pv7,pvPrev),0)}`}>
       <Kpis items={[{label:"直近7日PV",value:n(pv7),sub:`前7日比 ${pct(deltaPct(pv7,pvPrev),0)}`},{label:"直近7日売上",value:money(sales7),sub:`前7日比 ${pct(deltaPct(sales7,salesPrev),0)}`},{label:"記事PV中央値",value:n(pvMed),sub:"外れ値に強い本人内基準"},{label:"上位5記事PV集中",value:pct(pvConcentration),sub:pvConcentration>=65?"上位依存が強い":"分散できている"}]}/>
-      <Line rows={metrics} field="pageViews" label="公式日別PV推移"/><Line rows={metrics} field="salesYen" label="公式日別売上推移"/>
+      <TrendChart rows={metrics}/>
     </Fold>
 
     <Fold title="④ 記事ベンチマーク" sub="中央値・上位25%・反応効率を本人内で比較">
