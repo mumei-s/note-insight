@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.10",
-  "notificationVersion": "3.4.0",
+  "appVersion": "2026.09.21.11",
+  "notificationVersion": "3.4.1",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T05:10:00+09:00",
+  "releasedAt": "2026-09-21T06:22:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHT 2026.09.21.10。DMは本人通知から完全独立し、専用userscript・専用ペアリング・専用トークン・専用Reader/DBで動作。DMを開くだけで自動同期し、INSIGHTでは相手ごとに複数ルームを統合表示する。",
+  "note": "本人通知V3.4.1。通知操作バーの重複生成を全DOMで除去し、1段・コンパクト・画面下部へ移動。設定から🔔へ戻る際はベルを最大1回だけクリックし、通知/お知らせタブが見えた時点で開いたと判定して点滅を防止。INSIGHT【通知】は中継ページを通さず insightMode=notifications へ直行。",
   "dmVersion": "1.1.0",
   "dmLabel": "DM同期"
 }
