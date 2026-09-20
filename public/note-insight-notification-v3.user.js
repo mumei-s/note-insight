@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.7
-// @description  本人通知V3.3.7。正常時のiframe固定4パネルへ復元。タップ消失を構造的に防ぎ、通知を自動で全履歴/差分読込し、人物URL・アイコン情報も再取得します。
+// @version      3.3.8
+// @description  本人通知V3.3.8。パネル非依存。🔔通知DOMをReader自身が直接検出し、初回は全履歴・以後は差分を自動読取・保存。人物URLとアイコン情報も再取得します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,18 +19,15 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2958.js?v=3370
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-restore-v2962.js?v=3370
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=3370
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-safety-v2961.js?v=3370
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=3370
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=3380
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=3380
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.7';
+const VERSION='3.3.8';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -119,7 +116,7 @@ if(location.hostname==='mumei-s.github.io'){
   return;
 }
 if(location.hostname!=='note.com')return;
-const confirmActiveRuntime=()=>{try{if(window.__mumeiNotificationRuntime2958||String(window.__mumeiStableNotification337?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
+const confirmActiveRuntime=()=>{try{if(String(window.__mumeiStableNotification338?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
 confirmActiveRuntime();setTimeout(confirmActiveRuntime,250);setTimeout(confirmActiveRuntime,1200);
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const RETURN='mumei_insight_return_bell_v1';
@@ -158,7 +155,7 @@ cloakBellReturn();
     if(bellOpen()){
       try{const u=new URL(location.href);u.searchParams.delete('mumei_filter_return');u.searchParams.delete('mumei_fullread');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}catch{}
       window.__mumeiNotificationReturnDone=true;revealBellReturn();
-      setTimeout(()=>window.__mumeiStableNotification337?.scheduleAuto?.(120),120);
+      setTimeout(()=>window.__mumeiStableNotification338?.scheduleAuto?.(120),120);
       return
     }
     if(attempts++>100){revealBellReturn();return}
