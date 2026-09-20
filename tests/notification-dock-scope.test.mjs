@@ -15,13 +15,13 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.3.10 loads automatic reader plus inline notification controls",async()=>{
+test("V3.3.11 loads automatic reader plus inline notification controls",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-autoscan-v2970.js");
- assert.match(parent,/@version\s+3\.3\.10/);
- assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=33100"));
- assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33100"));
- assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=33100"));
+ assert.match(parent,/@version\s+3\.3\.11/);
+ assert.ok(parent.includes("note-insight-notification-autoscan-v2970.js?v=33110"));
+ assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
+ assert.ok(parent.includes("note-insight-notification-bootstrap-v2966.js?v=33110"));
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
  assert.match(reader,/const TOOLBAR_ID='mumei-inline-notification-tools-v339'/);
  assert.match(reader,/フィルター ON|フィルター OFF/);
@@ -67,5 +67,5 @@ test("ingest token bridge is origin-locked",async()=>{
 test("legacy floating runtimes stay inactive while filter engine is loaded",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
- assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33100"));
+ assert.ok(parent.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
 });
