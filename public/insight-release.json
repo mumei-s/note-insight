@@ -1,10 +1,10 @@
 {
   "appVersion": "2026.09.19.1",
-  "notificationVersion": "3.2.88",
+  "notificationVersion": "3.2.89",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-20T04:05:00+09:00",
+  "releasedAt": "2026-09-20T09:18:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.2.88。更新判定を端末に保存された見かけの版ではなく、note側で実際に起動したRuntime版で確認。INSIGHTを開いただけでは最新版扱いにしない。V3.2.87の通知セッション維持・自動再試行・手動全読みを継承。"
+  "note": "本人通知V3.2.89。5パネルを通知DOMから切り離してbody直下の固定レイヤーへ配置。通常読込は先頭から最初の保存済み通知で停止する差分方式に変更し、過去へ潜るのは手動全読みのみ。"
 }
