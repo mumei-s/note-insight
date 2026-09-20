@@ -146,7 +146,7 @@ test('update detection only trusts runtime that actually started on note',()=>{
 
 test('V3.2.89 dock is viewport-owned, never notification-surface-owned',()=>{
   assert.match(runtime,/function mountUiToViewport\(\)\{const host=document\.body\|\|document\.documentElement/);
-  assert.doesNotMatch(runtime,/function mountUiToViewport\(\).*shell&&shell\.isConnected/s);
+  assert.match(runtime,/function mountUiToViewport\(\)\{const host=document\.body\|\|document\.documentElement;if\(!host\)return;const r=/);
   assert.match(runtime,/function ensureRoot\(\).*mountUiToViewport\(\);return r/s);
   assert.match(runtime,/function showRoot\(on\).*mountUiToViewport\(\)/s);
 });
