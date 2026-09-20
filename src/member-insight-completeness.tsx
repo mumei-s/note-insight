@@ -10,14 +10,15 @@ type Row=Record<string,any>;
 type Shortcut={id:string;label:string;value:string;tab?:string;mode?:string};
 const n=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 const date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));if(Number.isNaN(d.getTime()))return"—";return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
-async function load(){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),30000);try{const r=await fetch(ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:"{}",cache:"no-store",signal:c.signal});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"取得状態を確認できませんでした");return p}finally{window.clearTimeout(timer)}}
+function errorText(v:any){if(typeof v==="string")return v;if(v&&typeof v==="object"){if(typeof v.message==="string")return v.message;if(typeof v.error==="string")return v.error;try{return JSON.stringify(v)}catch{}}return String(v||"取得状態を確認できませんでした")}
+async function load(){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),30000);try{const r=await fetch(ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:"{}",cache:"no-store",signal:c.signal});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(errorText(p?.error));return p}finally{window.clearTimeout(timer)}}
 function pick(items:Row[],pattern:RegExp){return items.find(x=>pattern.test(String(x.label||"")))||null}
 function savedSlots(){try{const raw=JSON.parse(localStorage.getItem(GRID_KEY)||"[]");const valid=[...new Set((Array.isArray(raw)?raw:[]).map(String).filter(x=>CANDIDATE_IDS.includes(x)))];for(const id of DEFAULT_SLOTS)if(valid.length<6&&!valid.includes(id))valid.push(id);for(const id of CANDIDATE_IDS)if(valid.length<6&&!valid.includes(id))valid.push(id);return valid.slice(0,6)}catch{return DEFAULT_SLOTS}}
 function openShortcut(x:Shortcut){if(x.mode){window.dispatchEvent(new CustomEvent("mumei-insight-open-mode",{detail:x.mode}));return}if(!x.tab)return;const buttons=[...document.querySelectorAll<HTMLButtonElement>(".miu-nav button")],b=buttons.find(v=>v.textContent?.trim()===x.tab);if(b)b.click();window.setTimeout(()=>document.querySelector<HTMLElement>(".miu")?.scrollIntoView({block:"start",behavior:"auto"}),60)}
 
 export function MemberInsightCompleteness({revision=0}:{revision?:number}){
   const[data,setData]=useState<Row|null>(null),[error,setError]=useState(""),[slots,setSlots]=useState<string[]>(savedSlots),[pickerOpen,setPickerOpen]=useState(false),[noticeOpen,setNoticeOpen]=useState(false);
-  useEffect(()=>{let dead=false;setError("");void load().then(x=>{if(!dead)setData(x)}).catch(e=>{if(!dead)setError(e instanceof Error?e.message:"取得状態の確認に失敗しました")});return()=>{dead=true}},[revision]);
+  useEffect(()=>{let dead=false,timer=0;const run=()=>{if(dead)return;void load().then(x=>{if(dead)return;setData(x);setError("")}).catch(e=>{if(dead)return;setError(e instanceof Error?e.message:errorText(e));timer=window.setTimeout(run,3500)})};run();return()=>{dead=true;if(timer)window.clearTimeout(timer)}},[revision]);
   useEffect(()=>{try{localStorage.setItem(GRID_KEY,JSON.stringify(slots))}catch{}},[slots]);
   const shortcuts=useMemo<Shortcut[]>(()=>{if(!data)return[];const items:Row[]=data.items||[],article=pick(items,/記事/),likes=pick(items,/スキ/),comments=pick(items,/コメント/),followers=pick(items,/フォロワー/),followings=pick(items,/フォロー中|フォロー(?!ワー)/);return[
     {id:"articles",label:"記事",value:n(article?.stored),tab:"記事"},
@@ -30,7 +31,7 @@ export function MemberInsightCompleteness({revision=0}:{revision?:number}){
     {id:"magazines",label:"マガジン",value:"履歴",tab:"マガジン"},
     {id:"supporters",label:"スキ順位",value:"順位",tab:"スキ順位"},
   ]},[data]);
-  if(error)return <aside className="micmp error">取得状態：{error}</aside>;
+  if(error&&!data)return <aside className="micmp loading">取得状態を再確認中… {error}</aside>;
   if(!data)return <aside className="micmp loading">公開データを照合中…</aside>;
   const byId=new Map(shortcuts.map(x=>[x.id,x]));
   function replaceSlot(index:number,id:string){if(slots.includes(id)&&slots[index]!==id)return;setSlots(v=>v.map((x,i)=>i===index?id:x))}
