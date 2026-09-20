@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.21.8",
-  "notificationVersion": "3.3.11",
+  "appVersion": "2026.09.21.9",
+  "notificationVersion": "3.4.0",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T04:08:00+09:00",
+  "releasedAt": "2026-09-21T04:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.11。🔔本人通知とDMを完全分離。通知Readerは /messages/rooms では停止。DMは専用Readerで /messages/rooms のみ動作し、専用DMテーブル・専用チェックポイント・専用INSIGHT「DM」画面へ保存。ルーム一覧から各会話を順番に走査し、古いメッセージまで読み込み、途中失敗時はその位置から再開する。"
+  "note": "本人通知V3.4.0。Reader・Controls・Filter・Return・Status・Settings・Account Pair・DMを完全分離。Readerは通知の検出/走査/保存のみ、ControlsはフィルターON/OFF・設定・INSIGHT導線のみ、DMは/messages/rooms専用で通知系は同ルートで停止。旧autoscan/bootstrapはactive packageから外した。"
 }
