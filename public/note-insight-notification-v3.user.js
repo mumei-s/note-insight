@@ -132,8 +132,13 @@ const cloakBellReturn=()=>{if(!wantsBellReturn()&&location.pathname!=='/notifica
 const revealBellReturn=()=>{try{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-bell-return-cloak')}catch{}};
 const bellOpen=()=>{
   const shell=document.querySelector('[data-mumei-notice-shell-v2958="1"]');
-  const frame=document.getElementById('mumei-v2948-frame');
-  return Boolean(shell||(frame&&getComputedStyle(frame).display!=='none'))
+  if(shell&&shell.getBoundingClientRect().width>0&&shell.getBoundingClientRect().height>0)return true;
+  for(const root of document.querySelectorAll('[role="dialog"],[role="menu"],[popover],section,aside')){
+    const r=root.getBoundingClientRect();if(r.width<1||r.height<1)continue;
+    const t=String(root.textContent||'').replace(/\s+/g,' ');
+    if(/通知/.test(t)&&/お知らせ/.test(t)&&/(?:分前|時間前|日前|スキ|フォロー|コメント|返信|追加|メンバー|購入)/.test(t))return true
+  }
+  return false
 };
 const clickRealBell=()=>{
   const selectors='[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
