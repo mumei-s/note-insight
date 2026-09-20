@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.3.0';
+const VERSION='3.3.1';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -135,6 +135,22 @@ async function scanFull(){
  }finally{fullScanning=false}
 }
 
+async function scanContinue(){
+ const net=window.__mumeiNotificationNetwork3300;
+ if(net&&typeof net.syncCurrent==='function'){
+  try{
+   const r=await net.syncCurrent({waitMs:2600});
+   if(r?.handled)return Number(r.saved||0)
+  }catch(e){
+   status('⚠ 続き読みの通信保存に失敗：'+String(e?.message||e),'error');
+   throw e
+  }
+ }
+ const reader=window.__mumeiV3Reader323;
+ if(!reader||typeof reader.scan!=='function')throw new Error('通知Readerを起動できませんでした');
+ return Number(await reader.scan()||0)
+}
+
 function isManual(){
  const mode=document.querySelector('#'+ROOT+' [data-a="mode"]');
  if(mode?.classList.contains('manual')||clean(mode?.textContent)==='手動')return true;
@@ -160,7 +176,7 @@ function capture(e){
   if((e.type==='pointerup'||e.type==='touchend'||e.type==='mouseup')&&Date.now()-lastChoice>350){
    lastChoice=Date.now();
    const mode=c.getAttribute('data-v3284-mode');
-   if(mode==='full')void scanFull();else{paintRead('読込中');void Promise.resolve(window.__mumeiV3Reader323?.scan?.()).finally(()=>paintRead('読込'))}
+   if(mode==='full')void scanFull();else{paintRead('読込中');void Promise.resolve(scanContinue()).then(()=>paintRead('✓完了')).catch(()=>paintRead('再読込',true))}
    setTimeout(closeMenu,180)
   }
   return
@@ -189,6 +205,6 @@ async function resumeRequestedFullRead(){
  }
  paintRead('全読再試行',true)
 }
-window.__mumeiV3ManualFull3284={version:VERSION,scanFull,closeMenu};
+window.__mumeiV3ManualFull3284={version:VERSION,scanFull,scanContinue,closeMenu};
 setTimeout(()=>void resumeRequestedFullRead(),300);
 })();
