@@ -16,10 +16,9 @@ test('V3.4.0 package is only a module loader and version reporter',()=>{
     'note-insight-notification-status-bridge-v1.js?v=100',
     'note-insight-notification-feature-bridge-v1.js?v=100',
     'note-insight-notification-settings-bridge-v1.js?v=100',
-    'note-insight-notification-account-pair-v1.js?v=100',
-    'note-insight-dm-reader-v1.js?v=101'
+    'note-insight-notification-account-pair-v1.js?v=100'
   ])assert.ok(meta.includes(p),p);
-  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
+  assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
   assert.match(v3,/architecture:'split-v1'/);
   assert.doesNotMatch(v3,/function directPanel|function sendBatch|function mount|function refresh|data-mumei-bell-return-cloak|mumei-filter-page-v1|pair-exchange/);
 });
