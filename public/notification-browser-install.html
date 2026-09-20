@@ -2,7 +2,6 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<script>(function(){const q=new URLSearchParams(location.search),from=q.get('from');if(from==='note'||from==='notifications')location.replace('https://note.com/notifications')})();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
@@ -220,10 +219,22 @@ async function loadLatest(){try{const r=await fetch(RELEASE+'?ts='+Date.now(),{c
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
 install.addEventListener('click',()=>{sessionStorage.setItem(PENDING,'1');sessionStorage.removeItem(RELOADED);paintInstall();result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。使用中のuserscript拡張でインストール / 更新してください。':'userscriptを開きます。Tampermonkeyでインストール / 更新してください。'});
-function refresh(){check();void loadLatest()}
+let returning=false;
+function returnToInsight(){
+  if(returning||!back)return;
+  returning=true;
+  sessionStorage.removeItem(PENDING);
+  sessionStorage.removeItem(RELOADED);
+  result.className='result ok';
+  result.textContent='✓ 更新確認済み。INSIGHTへ戻ります…';
+  setTimeout(()=>location.replace(back),120)
+}
+function refresh(){check();void loadLatest().then(()=>{if(sessionStorage.getItem(PENDING)==='1'){const current=installed();if(latest&&current&&compareVersion(current,latest)>=0)returnToInsight()}})}
 function verifyAfterInstall(){
-  if(verifiedInstalled){refresh();sessionStorage.removeItem(PENDING);sessionStorage.removeItem(RELOADED);if(back)setTimeout(()=>location.replace(back),180);return}
+  if(verifiedInstalled){refresh();returnToInsight();return}
   if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}
+  const current=installed();
+  if(latest&&current&&compareVersion(current,latest)>=0){returnToInsight();return}
   if(sessionStorage.getItem(RELOADED)!=='1'){
     sessionStorage.setItem(RELOADED,'1');
     result.className='result';result.textContent='インストール済みバージョンをこの画面で確認しています…';
@@ -232,7 +243,8 @@ function verifyAfterInstall(){
   }
   refresh()
 }
-addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));addEventListener('mumei-notification-version-changed',refresh);
+addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));
+addEventListener('mumei-notification-version-changed',()=>{refresh();setTimeout(verifyAfterInstall,40)});
 paintInstall();setDetected();refresh();
 </script>
 </body>
