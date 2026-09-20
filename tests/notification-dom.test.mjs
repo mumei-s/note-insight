@@ -235,7 +235,7 @@ test('network reader is primary and DOM reader is fallback',async()=>{
   assert.match(network,/confirmedClientSignatures/);
   assert.match(network,/未保存分は保持して再試行/);
   assert.match(network,/pendingCount/);
-  assert.match(network,/ページングが同じ位置で停止しました/);
+  assert.match(network,/APIページングが同じ位置で停止したため、実スクロールへ自動切替します/);
   const safe=runtime.slice(runtime.indexOf('async function safeScan()'),runtime.indexOf('async function manualRead'));
   assert.ok(safe.indexOf('__mumeiNotificationNetwork3300')>=0);
   assert.ok(safe.indexOf('__mumeiNotificationNetwork3300')<safe.indexOf('waitForRows()'));
