@@ -23,7 +23,7 @@ test("V3.3.1 preloads bottom-up reader, checkpoint and fixed five-panel runtime"
   const v3=await read("public/note-insight-notification-v3.user.js"),checkpoint=await read("public/note-insight-notification-checkpoint-v325.js"),runtime=await read("public/note-insight-notification-runtime-v327.js"),reader=await read("public/note-insight-notification-reader-v323.js");
   assert.match(v3,/@version\s+3\.3\.1/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3310/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3258/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3293/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3310/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
+  assert.match(meta,/note-insight-notification-network-v3300\.js\?v=3311/);assert.match(meta,/note-insight-notification-reader-v323\.js\?v=3258/);assert.match(meta,/note-insight-notification-checkpoint-v325\.js\?v=3293/);assert.match(meta,/note-insight-notification-runtime-v327\.js\?v=3310/);assert.doesNotMatch(meta,/note-insight-notification-settings-route-v332\.js/);
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);assert.match(meta,/note-insight-notification-manual-full-v3284\.js\?v=3310/);
   assert.match(runtime,/grid-template-columns:minmax\(54px,.72fr\) minmax\(46px,.62fr\) minmax\(70px,1fr\) minmax\(48px,.66fr\) minmax\(68px,.9fr\)/);
   for(const act of ["read","mode","filter","settings","ins"])assert.match(runtime,new RegExp(`data-a=\\"${act}\\"`));
