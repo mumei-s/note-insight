@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.8
-// @description  本人通知V3.3.8。パネル非依存。🔔通知DOMをReader自身が直接検出し、初回は全履歴・以後は差分を自動読取・保存。人物URLとアイコン情報も再取得します。
+// @version      3.3.9
+// @description  本人通知V3.3.9。パネル非依存の自動読取に加え、INSIGHT【通知】へ全履歴/差分/途中/エラー、読取件数・保存件数・時刻を共有します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,15 +19,15 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=3380
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=3380
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=3390
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=3390
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.8';
+const VERSION='3.3.9';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -47,6 +47,22 @@ if(location.hostname==='mumei-s.github.io'){
   const sendFeature=enabled=>window.postMessage({source:FEATURE_BRIDGE,type:'state',enabled:Boolean(enabled)},location.origin);
   addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==FEATURE_PAGE)return;const d=e.data;(async()=>{if(d.type==='set')await featureSet(Boolean(d.enabled));sendFeature(await featureGet(true))})()});
   void featureGet(true).then(sendFeature);
+  const STATUS_PAGE='mumei-notification-status-ui-v1',STATUS_BRIDGE='mumei-notification-status-bridge-v1';
+  const CHECK='mumei_insight_notification_checkpoint_v2922:',SAVED='mumei_insight_notification_saved_v2919:';
+  const statusGet=async(k,d)=>{try{if(gmModern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
+  const sendStatus=async noteId=>{
+    const id=String(noteId||'').trim().replace(/^@/,'').toLowerCase();
+    if(!/^[a-z0-9_-]+$/.test(id))return;
+    const cp=await statusGet(CHECK+id,{}),saved=await statusGet(SAVED+id,[]);
+    window.postMessage({source:STATUS_BRIDGE,type:'state',noteId:id,status:{
+      lastCheckAt:Number(cp?.lastCheckAt||0),lastSaveAt:Number(cp?.lastSaveAt||0),
+      lastRunAt:Number(cp?.lastRunAt||cp?.lastCheckAt||0),lastRunComplete:Boolean(cp?.lastRunComplete),
+      lastRunMode:String(cp?.lastRunMode||''),lastRunReadCount:Number(cp?.lastRunReadCount??cp?.manualSeenCount??0),
+      lastRunSavedCount:Number(cp?.lastRunSavedCount??cp?.manualNewCount??0),savedTotal:Array.isArray(saved)?saved.length:Number(cp?.savedCount||0),
+      historyComplete:Boolean(cp?.historyComplete),lastError:String(cp?.lastError||''),version:String(cp?.version||'')
+    }},location.origin)
+  };
+  addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==STATUS_PAGE||e.data?.type!=='read')return;void sendStatus(e.data?.noteId)});
   if(location.pathname==='/note-insight/notification-filter-settings.html'){
     const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',RETURN='mumei_insight_return_bell_v1';
     const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
