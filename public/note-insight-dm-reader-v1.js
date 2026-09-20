@@ -5,8 +5,8 @@ if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
 const VERSION='1.1.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
-const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:';
-const COOLDOWN=5*60*1000,MAX_ROOMS=500,MAX_SCROLL=1200,MAX_MESSAGES=5000;
+const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
+const MAX_ROOMS=500,MAX_SCROLL=1200,MAX_MESSAGES=5000;
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
@@ -38,19 +38,19 @@ async function run(){
  let q=await get(key(QUEUE,a.id),null),now=Date.now();
  if(rootRoute()){
   const rooms=roomAnchors(),threads=rooms.map(roomData);if(threads.length)await save(a,threads,[]);
-  const cp=await get(key(CHECK,a.id),{});
+  if(sessionStorage.getItem(DONE)==='1'){sessionStorage.removeItem(DONE);cloak(false);return}
   if(q&&Array.isArray(q.rooms)&&q.rooms.length){
    const index=Math.max(0,Math.min(Number(q.index||0),q.rooms.length-1));
    q.returnUrl=location.href;q.index=index;await set(key(QUEUE,a.id),q);cloak(true);location.replace(q.rooms[index]);return
   }
-  if(!q&&now-Number(cp.lastFullScanAt||0)>=COOLDOWN&&rooms.length){q={rooms:rooms.map(x=>x.url),index:0,returnUrl:location.href,startedAt:now,read:0,saved:0,threadCount:rooms.length};await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:now,lastRunMode:'full',lastRunComplete:false,lastError:'',threadCount:rooms.length});cloak(true);location.replace(q.rooms[0]);return}
+  if(!q&&rooms.length){q={rooms:rooms.map(x=>x.url),index:0,returnUrl:location.href,startedAt:now,read:0,saved:0,threadCount:rooms.length};await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:now,lastRunMode:'full',lastRunComplete:false,lastError:'',threadCount:rooms.length});cloak(true);location.replace(q.rooms[0]);return}
   cloak(false);return
  }
  const threadKey=roomKeyFromUrl(location.href);if(!threadKey)return;
  if(q&&q.rooms&&q.rooms.length)cloak(true);
  try{
   const r=await scanRoom(a,threadKey);await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
-  if(q&&q.rooms&&q.rooms.length){q.read=Number(q.read||0)+r.read;q.saved=Number(q.saved||0)+r.saved;q.index=Number(q.index||0)+1;await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:false,lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.index});if(q.index<q.rooms.length){location.replace(q.rooms[q.index]);return}await set(key(QUEUE,a.id),null);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.threadCount,lastError:''});location.replace(q.returnUrl||'https://note.com/messages/rooms');return}
+  if(q&&q.rooms&&q.rooms.length){q.read=Number(q.read||0)+r.read;q.saved=Number(q.saved||0)+r.saved;q.index=Number(q.index||0)+1;await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:false,lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.index});if(q.index<q.rooms.length){location.replace(q.rooms[q.index]);return}await set(key(QUEUE,a.id),null);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.threadCount,lastError:''});sessionStorage.setItem(DONE,'1');location.replace(q.returnUrl||'https://note.com/messages/rooms');return}
   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'single',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:''});cloak(false)
  }catch(e){await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:q&&q.rooms&&q.rooms.length?'full':'single',lastError:String(e&&e.message||e)});cloak(false)}
 }
