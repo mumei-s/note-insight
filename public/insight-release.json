@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.21.3",
-  "notificationVersion": "3.3.6",
+  "appVersion": "2026.09.21.4",
+  "notificationVersion": "3.3.7",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T01:42:00+09:00",
+  "releasedAt": "2026-09-21T02:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.6。note.com/notifications を通知画面扱いする実装を完全削除し、/notificationsリンクを🔔候補にも使わない。設定戻り・全読フォールバックはnoteトップを非表示で開いて実際の🔔を自動展開後に表示。更新確認はINSIGHT内だけで完結し、更新完了後は必ずINSIGHTへ自動復帰する。"
+  "note": "本人通知V3.3.7。ユーザー確認の正常画面を基準に、iframe固定4パネル（下から読込/フィルター/設定/INSIGHT）へ復元。タップがnote側へ漏れてパネルが消える構造をやめ、自動で初回全履歴・以後差分を読み取る。人物URLとactor_image_urlを再取得し、初回完全走査時に既存通知のアイコン情報も一度再送補修する。/notifications経路は使用しない。"
 }
