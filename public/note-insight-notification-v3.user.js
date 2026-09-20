@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.10
-// @description  本人通知V3.3.10。自動読取はパネル非依存のまま、🔔通知一覧の内側にフィルターON/OFF・設定・INSIGHT【通知】の小バーだけを埋め込みます。未知文言はその他・未分類へ保存し後から再分類します。
+// @version      3.3.11
+// @description  本人通知V3.3.11。🔔通知とDMを完全分離。通知Readerは/messages/roomsで停止し、DMは専用Reader・専用保存先・専用INSIGHT画面で全ルームを走査します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,16 +19,17 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=33100
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2939-filter.js?v=33100
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=33100
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=33110
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2939-filter.js?v=33110
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=100
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=33110
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.10';
+const VERSION='3.3.11';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -133,7 +134,7 @@ if(location.hostname==='mumei-s.github.io'){
   return;
 }
 if(location.hostname!=='note.com')return;
-const confirmActiveRuntime=()=>{try{if(String(window.__mumeiStableNotification3310?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
+const confirmActiveRuntime=()=>{try{if(String(window.__mumeiStableNotification3311?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
 confirmActiveRuntime();setTimeout(confirmActiveRuntime,250);setTimeout(confirmActiveRuntime,1200);
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const RETURN='mumei_insight_return_bell_v1';
@@ -172,7 +173,7 @@ cloakBellReturn();
     if(bellOpen()){
       try{const u=new URL(location.href);u.searchParams.delete('mumei_filter_return');u.searchParams.delete('mumei_fullread');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}catch{}
       window.__mumeiNotificationReturnDone=true;revealBellReturn();
-      setTimeout(()=>window.__mumeiStableNotification3310?.scheduleAuto?.(120),120);
+      setTimeout(()=>window.__mumeiStableNotification3311?.scheduleAuto?.(120),120);
       return
     }
     if(attempts++>100){revealBellReturn();return}
