@@ -9,6 +9,10 @@ const clean=(v:unknown)=>String(v||"").replace(/\s+/g," ").trim();
 const actionText=(v:unknown)=>clean(v).replace(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/gu," ").replace(/\s+/g," ").trim();
 function classify(text:string,targetUrl:string|null){
   const t=actionText(text),target=targetUrl||"";
+  if(/^あなたの記事[がを].{0,500}(?:追加されました|追加しました)/u.test(t))return "my_article_magazine_added";
+  if(/[?&]kind=board_reply_(?:comment|post)(?:&|$)/i.test(target))return "membership_board_reply";
+  if(/さん(?:他\d+名)?があなたのコメントに返信しました/u.test(t))return /kind=board_|\/membership\//.test(target)?"membership_board_reply":"reply";
+  if(/^(?:.{0,160}さんが)?あなたのメンバーシップ.{0,100}(?:参加|加入|入会|メンバーになりました)/u.test(t))return "membership_join";
   if(/[?&]kind=board_reply_comment(?:&|$)/i.test(target))return"membership_board_reply";
   if(/[?&]kind=(?:board_like_comment|board_like_post)(?:&|$)/i.test(target))return"membership_reaction";
   if(/[?&]kind=circle_plan_join(?:&|$)/i.test(target))return"membership_join";
@@ -40,6 +44,7 @@ function classify(text:string,targetUrl:string|null){
   if(/(?:あなたにポイント|ポイントが付与|ポイントを獲得)/.test(t))return"points";
   return"other";
 }
+
 function noise(text:string,targetUrl:string|null,actorName:string|null,source:string){const t=clean(text);if(targetUrl)return false;if(/(?:スキ|いいね|コメント|返信|フォロー|フォロワー|追加しました|追加されました|参加しました|加入しました|購入|チップ|サポート|メンバーシップ|メンシプ|掲示板|投稿しました|質問箱|話題|高評価|ポイント)/u.test(t))return false;if(actorName&&actorName!=="note")return false;if(/note質問箱FacebookYouTubeストア|フォロワーフォロー質問する/u.test(t))return true;if(/^note-notification-(?:manual-sync-v29(?:4[5-8]|5[0-9])|continuous-sync-v291[5-9])$/.test(source)&&t.length>=6)return true;return false}
 function jstDay(v:unknown){const ms=Date.parse(String(v||""));if(!Number.isFinite(ms))return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(ms))}
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
@@ -47,7 +52,8 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),now=new Date().toISOString();
  let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(cursor)q=q.gt("id",cursor);
  const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;
- for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}const type=String(r.notification_type||"other"),meta=r.meta&&typeof r.meta==="object"?r.meta:{},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v3"};
- const{data:saved,error:up}=await db.from("insight_notifications").update({notification_type:classify(String(r.raw_text||""),r.target_url),meta:nextMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
+ for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}const type=String(r.notification_type||"other"),meta=r.meta&&typeof r.meta==="object"?r.meta:{},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v22-unmatched-safe"};
+ const nextType=classify(String(r.raw_text||""),r.target_url),finalMeta={...nextMeta,reclassify_pending:nextType==="other",classification_status:nextType==="other"?"unmatched":"matched"};
+ const{data:saved,error:up}=await db.from("insight_notifications").update({notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
  return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
