@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationManualFull3284)return;
 window.__mumeiNotificationManualFull3284=true;
 
-const VERSION='3.3.1';
+const VERSION='3.3.3';
 const ROOT='mumei-v325-dock';
 const MENU='mumei-v3284-manual-read-choice';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -85,7 +85,7 @@ async function scanFull(){
   fullScanning=true;paintRead('全読中');
   try{
    const r=await net.syncFull();
-   if(r?.handled){paintRead('✓完了');return Number(r.saved||0)}
+   if(r?.handled){paintRead('✓全読');return Number(r.saved||0)}
   }catch{}
   finally{fullScanning=false}
  }
@@ -125,7 +125,7 @@ async function scanFull(){
   if(buffer.length)total+=await sendBatchFull(buffer.splice(0,buffer.length),a,saved);
   await set(key(FULL_STATE,a.id),{at:Date.now(),seenCount,total,version:VERSION});
   status(`✓ 全読み完了｜${seenCount}件照合・${total}件保存確認`,'done',{readCount:seenCount,savedCount:total});
-  paintRead('読込');
+  paintRead('✓全読');
   return total
  }catch(e){
   const msg=String(e?.message||e);
@@ -140,7 +140,7 @@ async function scanContinue(){
  if(net&&typeof net.syncCurrent==='function'){
   try{
    const r=await net.syncCurrent({waitMs:2600});
-   if(r?.handled)return Number(r.saved||0)
+   if(r?.handled)return{source:'network',saved:Number(r.saved||0),received:Number(r.received||0)}
   }catch(e){
    status('⚠ 続き読みの通信保存に失敗：'+String(e?.message||e),'error');
    throw e
@@ -148,7 +148,7 @@ async function scanContinue(){
  }
  const reader=window.__mumeiV3Reader323;
  if(!reader||typeof reader.scan!=='function')throw new Error('通知Readerを起動できませんでした');
- return Number(await reader.scan()||0)
+ return{source:'dom',saved:Number(await reader.scan()||0)}
 }
 
 function isManual(){
@@ -165,6 +165,19 @@ function openMenu(){
  m.innerHTML='<button type="button" data-v3284-mode="continue" style="height:34px;border:1px solid #42667b;border-radius:7px;background:#102737;color:#e3f8ff;font:900 11px/1 system-ui">続きから読む</button><button type="button" data-v3284-mode="full" style="height:34px;border:1px solid #96732e;border-radius:7px;background:#33260b;color:#ffe4a0;font:900 11px/1 system-ui">全読み</button><small style="grid-column:1/-1;color:#9db3c2;font:800 9px/1.25 system-ui;text-align:center">全読み＝専用通知画面で履歴を再確認</small>';
  root.appendChild(m)
 }
+async function choose(mode){
+ closeMenu();
+ if(mode==='full')return scanFull();
+ paintRead('読込中');
+ try{
+  const r=await scanContinue();
+  paintRead(r?.source==='network'?'✓通信':'✓完了');
+  return r
+ }catch(e){
+  paintRead('再読込',true);
+  throw e
+ }
+}
 function readFromEvent(e){const path=e?.composedPath?.()||[];for(const n of path)if(n instanceof Element&&n.matches?.('#'+ROOT+' [data-a="read"]'))return n;const t=e.target instanceof Element?e.target:null;return t?.closest?.('#'+ROOT+' [data-a="read"]')||null}
 function choiceFromEvent(e){const path=e?.composedPath?.()||[];for(const n of path)if(n instanceof Element&&n.matches?.('#'+MENU+' [data-v3284-mode]'))return n;const t=e.target instanceof Element?e.target:null;return t?.closest?.('#'+MENU+' [data-v3284-mode]')||null}
 function block(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}
@@ -176,7 +189,7 @@ function capture(e){
   if((e.type==='pointerup'||e.type==='touchend'||e.type==='mouseup')&&Date.now()-lastChoice>350){
    lastChoice=Date.now();
    const mode=c.getAttribute('data-v3284-mode');
-   if(mode==='full')void scanFull();else{paintRead('読込中');void Promise.resolve(scanContinue()).then(()=>paintRead('✓完了')).catch(()=>paintRead('再読込',true))}
+   void choose(mode);
    setTimeout(closeMenu,180)
   }
   return
@@ -205,6 +218,6 @@ async function resumeRequestedFullRead(){
  }
  paintRead('全読再試行',true)
 }
-window.__mumeiV3ManualFull3284={version:VERSION,scanFull,scanContinue,closeMenu};
+window.__mumeiV3ManualFull3284={version:VERSION,scanFull,scanContinue,openMenu,choose,closeMenu};
 setTimeout(()=>void resumeRequestedFullRead(),300);
 })();
