@@ -279,7 +279,7 @@ async function syncFull(){
  }
  let total=0,received=0,pages=0,seen=new Set(),completed=false;
  for(let i=0;i<60&&cap;i++){
-  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig)){completed=true;break}seen.add(sig);
+  const sig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');if(seen.has(sig))throw new Error('通知履歴のページングが同じ位置で停止しました');seen.add(sig);
   const rows=cap.rows||extract(cap.json,cap.url);received+=rows.length;
   if(rows.length){const r=await ingestRows(rows,cap,true);total+=Number(r.saved||0)}
   void saveProbe(cap,rows);pages++;
