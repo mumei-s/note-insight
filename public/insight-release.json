@@ -1,10 +1,10 @@
 {
-  "appVersion": "2026.09.21.2",
-  "notificationVersion": "3.3.5",
+  "appVersion": "2026.09.21.3",
+  "notificationVersion": "3.3.6",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T00:35:00+09:00",
+  "releasedAt": "2026-09-21T01:42:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.3.5。自動モードで初回は通知履歴の終端まで全件確認、以後は前回保存済み地点まで差分確認。API側で終端・次ページを確実に確認できない場合は通知画面の実スクロールへ自動切替し、途中停止・未保存・上限到達は完了扱いにしない。設定戻りと更新確認では無関係なnoteプロフィールを表示しない。"
+  "note": "本人通知V3.3.6。note.com/notifications を通知画面扱いする実装を完全削除し、/notificationsリンクを🔔候補にも使わない。設定戻り・全読フォールバックはnoteトップを非表示で開いて実際の🔔を自動展開後に表示。更新確認はINSIGHT内だけで完結し、更新完了後は必ずINSIGHTへ自動復帰する。"
 }
