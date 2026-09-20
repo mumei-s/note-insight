@@ -39,7 +39,7 @@ test('active package uses V3.3.5 with bottom-up resume, persistent checkpoint an
   assert.equal(manifest.notificationVersion,'3.3.5');assert.equal(manifest.notificationLabel,'本人通知');
   assert.match(v3,/@version\s+3\.3\.5/);assert.match(v3,/bottom-up-saved-line-v3245/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const part of ['note-insight-notification-network-v3300.js?v=3350','note-insight-notification-reader-v323.js?v=3340','note-insight-notification-checkpoint-v325.js?v=3293','note-insight-notification-runtime-v327.js?v=3350','note-insight-notification-manual-full-v3284.js?v=3350'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
+  for(const part of ['note-insight-notification-network-v3300.js?v=3350','note-insight-notification-reader-v323.js?v=3350','note-insight-notification-checkpoint-v325.js?v=3293','note-insight-notification-runtime-v327.js?v=3350','note-insight-notification-manual-full-v3284.js?v=3350'])assert.match(meta,new RegExp(part.replace(/[.?]/g,m=>'\\'+m)));
   assert.doesNotMatch(meta,/note-insight-notification-dock-watch-v312\.js/);
   assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.doesNotMatch(checkpoint,/new MutationObserver/);assert.match(reader,/checkpointFor/);assert.match(reader,/通知履歴の最下部まで到達できませんでした/);assert.match(reader,/通知一覧の先頭まで確認できませんでした/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);assert.match(setup,/ブラウザ別インストール/);assert.match(setup,/data-browser="ios-safari"/);assert.match(setup,/data-browser="android-edge"/);
