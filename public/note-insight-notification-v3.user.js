@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.3.6
-// @description  本人通知V3.3.6。/notifications誤経路を抹消。設定戻り・全読フォールバックはnoteトップを非表示で開き、🔔通知を自動展開してから表示。更新確認はINSIGHT内だけで完結します。
+// @version      3.3.7
+// @description  本人通知V3.3.7。正常時のiframe固定4パネルへ復元。タップ消失を構造的に防ぎ、通知を自動で全履歴/差分読込し、人物URL・アイコン情報も再取得します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,18 +19,18 @@
 // @connect      note.com
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3360
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v323.js?v=3360
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=3293
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v327.js?v=3360
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-manual-full-v3284.js?v=3360
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-runtime-v2958.js?v=3370
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-restore-v2962.js?v=3370
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-autoscan-v2970.js?v=3370
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-safety-v2961.js?v=3370
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-bootstrap-v2966.js?v=3370
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.3.6';
+const VERSION='3.3.7';
 const TOOL_KEY='mumei-notification-tool-version';
 const RUNTIME_KEY='mumei-notification-v3-loader';
 const ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
@@ -119,7 +119,7 @@ if(location.hostname==='mumei-s.github.io'){
   return;
 }
 if(location.hostname!=='note.com')return;
-const confirmActiveRuntime=()=>{try{if(String(window.__mumeiV3Runtime328?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
+const confirmActiveRuntime=()=>{try{if(window.__mumeiNotificationRuntime2958||String(window.__mumeiStableNotification337?.version||'')===VERSION)void gmVersionSet(VERSION)}catch{}};
 confirmActiveRuntime();setTimeout(confirmActiveRuntime,250);setTimeout(confirmActiveRuntime,1200);
 try{localStorage.setItem(RUNTIME_KEY,VERSION)}catch{}
 const RETURN='mumei_insight_return_bell_v1';
@@ -130,43 +130,38 @@ const returnQuery=()=>new URLSearchParams(location.search);
 const wantsBellReturn=()=>returnQuery().get('mumei_filter_return')==='bell'||returnQuery().get('mumei_fullread')==='1';
 const cloakBellReturn=()=>{if(!wantsBellReturn()&&location.pathname!=='/notifications')return;try{document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-bell-return-cloak','1')}catch{}};
 const revealBellReturn=()=>{try{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-bell-return-cloak')}catch{}};
+const bellOpen=()=>{
+  const shell=document.querySelector('[data-mumei-notice-shell-v2958="1"]');
+  const frame=document.getElementById('mumei-v2948-frame');
+  return Boolean(shell||(frame&&getComputedStyle(frame).display!=='none'))
+};
+const clickRealBell=()=>{
+  const selectors='[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
+  for(const el of document.querySelectorAll(selectors)){
+    const hit=el.matches('button,[role="button"]')?el:el.closest('button,[role="button"]');
+    if(hit&&hit.getBoundingClientRect().width>0&&hit.getBoundingClientRect().height>0){hit.click();return true}
+  }
+  return false
+};
 cloakBellReturn();
 (async()=>{
-  const stale=await noteGet(RETURN,null);
-  if(stale)await noteSet(RETURN,null);
-  if(location.pathname==='/notifications'){
-    location.replace(location.origin+'/?mumei_filter_return=bell');
-    return
-  }
+  const stale=await noteGet(RETURN,null);if(stale)await noteSet(RETURN,null);
+  if(location.pathname==='/notifications'){location.replace(location.origin+'/?mumei_filter_return=bell');return}
   if(!wantsBellReturn())return;
   let attempts=0;
   const open=()=>{
-    const api=window.__mumeiV3Runtime328;
-    if(api&&typeof api.isNotificationOpen==='function'&&api.isNotificationOpen()){
-      try{
-        const u=new URL(location.href);
-        u.searchParams.delete('mumei_filter_return');
-        u.searchParams.delete('mumei_fullread');
-        history.replaceState(history.state,'',u.pathname+u.search+u.hash)
-      }catch{}
-      window.__mumeiNotificationReturnDone=true;
-      revealBellReturn();
+    if(bellOpen()){
+      try{const u=new URL(location.href);u.searchParams.delete('mumei_filter_return');u.searchParams.delete('mumei_fullread');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}catch{}
+      window.__mumeiNotificationReturnDone=true;revealBellReturn();
+      setTimeout(()=>window.__mumeiStableNotification337?.scheduleAuto?.(120),120);
       return
     }
-    if(attempts++>80){revealBellReturn();return}
-    if(api&&typeof api.openNotificationBell==='function')api.openNotificationBell();
+    if(attempts++>100){revealBellReturn();return}
+    clickRealBell();
     setTimeout(open,120)
   };
   open()
 })()
-document.addEventListener('click',e=>{
-  const t=e.target instanceof Element?e.target.closest('#mumei-v325-dock [data-a="settings"],#mumei-v324-dock [data-a="settings"],#mumei-v3-tray-v330 [data-act="settings"]'):null;
-  if(!t)return;
-  const api=window.__mumeiV3Runtime328;
-  if(!api||typeof api.openSettings!=='function')return;
-  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-  void api.openSettings();
-},true);
 const q=new URLSearchParams(location.search);
 if(q.get('mumei_insight_version_check')==='1'){
   confirmActiveRuntime();
