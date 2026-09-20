@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='3.2.26',PROTOCOL='3.2.26';
+const VERSION='3.2.89',PROTOCOL='3.2.89';
 if(window.__mumeiV3Reader323?.version===VERSION&&window.__mumeiV3Reader323?.scan)return;
 window.__mumeiNotificationReader323=true;
 
@@ -18,6 +18,8 @@ const NAV_RETURN='mumei-v3-notification-return-v3223';
 const MAX_SEEK_STEPS=56;
 const MAX_READ_STEPS=56;
 const MAX_READ_ROWS=420;
+const MAX_INCREMENT_STEPS=20;
+const MAX_INCREMENT_ROWS=240;
 const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const stripTime=v=>clean(v).replace(/\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日|\d{4}[\/.年]\d{1,2}[\/.月]\d{1,2}日?)$/u,'').trim();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -48,7 +50,7 @@ function scrollHost(p){const xs=rows(p);let x=xs[0]||p;while(x&&p.contains(x)){i
 function links(el){const out=[];for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.getAttribute('href'),location.href);if(u.hostname.endsWith('note.com'))out.push({u:u.href,t:clean(a.textContent)})}catch{}if(out.length>=18)break}return out}
 function estimatedTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前$/u);if(!m)return null;const scale={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*scale[m[2]]).toISOString()}
 function eventIdentity(el,raw,tm){const id=el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||el.querySelector('[data-notification-id]')?.getAttribute('data-notification-id');if(id)return'notice:'+id;for(const a of [...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')]){try{const u=new URL(a.href);for(const k of['notification_id','notice_id','c','comment_id'])if(u.searchParams.get(k))return'notice:'+u.searchParams.get(k)}catch{}}if(tm&&!Number.isNaN(Date.parse(tm)))return'time:'+new Date(tm).toISOString();return'label:'+(stripTime(raw).slice(0,180)||'unknown')}
-function rowData(el){const raw=clean(el.textContent);if(!raw||raw.length>4000)return null;const ls=links(el),actor=ls.find(x=>creatorId(x.u))||null,target=ls.find(x=>/[?&]kind=/.test(x.u))||ls.find(x=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(x.u))||null,tm=el.querySelector('time[datetime]')?.getAttribute('datetime')||el.querySelector('[datetime]')?.getAttribute('datetime')||null,m=stripTime(raw).match(/^(.{1,180}?)\s*さん/u);let img=null;for(const x of el.querySelectorAll('img[src]')){const src=String(x.currentSrc||x.src||'');if(src&&!/cover|ogp|magazine/i.test(src)){img=src;break}}return{raw_text:raw,actor_name:actor?.t||m?.[1]||null,actor_url:actor?.u||null,actor_image_url:img,target_title:target?.t||null,target_url:target?.u||null,source_url:target?.u||actor?.u||'https://note.com/',occurred_at:tm||estimatedTime(raw),meta:{source:'note-notification-manual-sync-v2968',capture_source:'note-notification-reader-v323',userscript:VERSION,protocol:PROTOCOL,scan_mode:'bottom-up-from-saved-line',scan_strategy:'saved-line-bottom-up-v324',event_identity:eventIdentity(el,raw,tm),verified_shell:true,time_estimated:!tm,article_url:ls.find(x=>/\/n\//.test(x.u))?.u||null,magazine_url:ls.find(x=>/\/m\//.test(x.u))?.u||null,links:ls.map(x=>({url:x.u,title:x.t}))}}}
+function rowData(el){const raw=clean(el.textContent);if(!raw||raw.length>4000)return null;const ls=links(el),actor=ls.find(x=>creatorId(x.u))||null,target=ls.find(x=>/[?&]kind=/.test(x.u))||ls.find(x=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(x.u))||null,tm=el.querySelector('time[datetime]')?.getAttribute('datetime')||el.querySelector('[datetime]')?.getAttribute('datetime')||null,m=stripTime(raw).match(/^(.{1,180}?)\s*さん/u);let img=null;for(const x of el.querySelectorAll('img[src]')){const src=String(x.currentSrc||x.src||'');if(src&&!/cover|ogp|magazine/i.test(src)){img=src;break}}return{raw_text:raw,actor_name:actor?.t||m?.[1]||null,actor_url:actor?.u||null,actor_image_url:img,target_title:target?.t||null,target_url:target?.u||null,source_url:target?.u||actor?.u||'https://note.com/',occurred_at:tm||estimatedTime(raw),meta:{source:'note-notification-manual-sync-v2968',capture_source:'note-notification-reader-v323',userscript:VERSION,protocol:PROTOCOL,scan_mode:'incremental-top-until-saved',scan_strategy:'top-until-first-saved-v329',event_identity:eventIdentity(el,raw,tm),verified_shell:true,time_estimated:!tm,article_url:ls.find(x=>/\/n\//.test(x.u))?.u||null,magazine_url:ls.find(x=>/\/m\//.test(x.u))?.u||null,links:ls.map(x=>({url:x.u,title:x.t}))}}}
 const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
 const legacySig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0]].join('|');
 function readOutbox(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
@@ -70,7 +72,7 @@ function status(message,kind='info',label='',extra={}){paintProgress(message,kin
 function clearBoundary(){document.getElementById(BOUNDARY_ID)?.remove()}
 function markBoundary(el){clearBoundary();if(!(el instanceof Element)||!el.parentNode)return;const line=document.createElement('div');line.id=BOUNDARY_ID;line.textContent='ここまで保存済み';line.style.cssText='margin:7px 4px;padding:5px 8px;border-top:2px solid #69d7f2;border-bottom:1px solid #2f7183;background:rgba(18,64,78,.82);color:#bff5ff;font:900 11px/1.25 system-ui;text-align:center;border-radius:5px;pointer-events:none';el.parentNode.insertBefore(line,el)}
 async function requestRetry(body,token){let last=null;for(let attempt=0;attempt<3;attempt++){try{return await request(INGEST,body,{'X-Ingest-Token':token})}catch(e){last=e;const m=String(e?.message||e);if(/401|403|TOKEN|ACCOUNT_CHANGED|連携/i.test(m))throw e;if(attempt<2)await sleep(650*(attempt+1))}}throw last||new Error('NETWORK_ERROR')}
-async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,input.filter(r=>!saved.has(sig(r))));const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');let total=0;for(let i=0;i<input.length;i+=20){const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));const p=await requestRetry({noteId:a.id,notifications:payload},token);const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];for(const s of confirmed)saved.add(s);await set(key(SAVED,a.id),[...saved]);if(confirmed.length){const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:legacySig(last),boundaryDisplayText:stripTime(last.raw_text),boundaryAt:now,boundarySource:'reader-bottom-up-confirmed-v326'});document.dispatchEvent(new Event('mumei-notification-checkpoint'))}writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));total+=confirmed.length;if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します')}return total}
+async function sendBatch(input,a,saved){if(!input.length)return 0;retain(a.id,input.filter(r=>!saved.has(sig(r))));const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('本人連携が必要です');let total=0;for(let i=0;i<input.length;i+=20){const part=input.slice(i,i+20).filter(r=>!saved.has(sig(r)));if(!part.length)continue;const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');const payload=part.map(r=>({...r,meta:{...(r.meta||{}),client_signature:sig(r)}}));const p=await requestRetry({noteId:a.id,notifications:payload},token);const sent=new Set(payload.map(sig)),confirmed=[...new Set(Array.isArray(p.confirmedClientSignatures)?p.confirmedClientSignatures.map(String).filter(s=>sent.has(s)):[])];for(const s of confirmed)saved.add(s);await set(key(SAVED,a.id),[...saved]);if(confirmed.length){const last=part.filter(r=>confirmed.includes(sig(r))).at(-1),cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastSaveAt:now,lastCheckAt:now,savedCount:saved.size,lastError:'',version:VERSION,boundarySignature:sig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryLegacySignature:legacySig(last),boundaryDisplayText:stripTime(last.raw_text),boundaryAt:now,boundarySource:'reader-incremental-confirmed-v329'});document.dispatchEvent(new Event('mumei-notification-checkpoint'))}writeOutbox(a.id,readOutbox(a.id).filter(r=>!saved.has(sig(r))));total+=confirmed.length;if(confirmed.length!==payload.length)throw new Error('一部の通知が未保存です。再読込で再試行します')}return total}
 
 let scanning=false,active=null;
 function capturePending(){if(!active)return;const{a,p,saved}=active;try{const rs=rows(p).map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs.reverse())}catch{}}
@@ -150,43 +152,78 @@ async function collectBottomUp(p,host,cp){
  return{p,host,collected,seenCount:seen.size,boundaryFound:found};
 }
 
+async function collectIncrementalFromTop(p,host,cp,saved){
+ const needAnchor=hasBoundary(cp)||Boolean(saved?.size);
+ const collected=[],seen=new Set();
+ let anchorFound=false,anchorRow=null,stable=0,lastTop=-1;
+ if(host){try{host.scrollTop=0}catch{}await sleep(100)}
+ for(let step=0;step<MAX_INCREMENT_STEPS&&collected.length<MAX_INCREMENT_ROWS;step++){
+  const nextPanel=panel();if(!nextPanel)throw new Error('通知一覧を閉じたため中断しました');
+  if(nextPanel!==p){p=nextPanel;host=scrollHost(p);active.p=p;if(host&&step===0){try{host.scrollTop=0}catch{}}}
+  const els=rows(p);
+  for(let i=0;i<els.length;i++){
+   const el=els[i],r=rowData(el);if(!r)continue;
+   const k=sig(r);if(seen.has(k))continue;seen.add(k);
+   if(saved.has(k)||boundaryMatch(r,cp)){anchorFound=true;anchorRow=r;markBoundary(el);break}
+   collected.push(r);
+   if(collected.length>=MAX_INCREMENT_ROWS)break
+  }
+  if(anchorFound||collected.length>=MAX_INCREMENT_ROWS)break;
+  if(!needAnchor)break;
+  if(!host)break;
+  const max=Math.max(0,host.scrollHeight-host.clientHeight),before=host.scrollTop;
+  if(before>=max-2){stable++;if(stable>=2)break}
+  else{
+   const amount=Math.max(220,Math.floor(host.clientHeight*.82));
+   host.scrollTop=Math.min(max,before+amount);
+   await sleep(170);
+   if(Math.abs(host.scrollTop-before)<2)stable++;else stable=0
+  }
+  if(host.scrollTop===lastTop)stable++;lastTop=host.scrollTop;if(stable>=3)break
+ }
+ return{p,host,collected,seenCount:seen.size,anchorFound,anchorRow,needAnchor}
+}
+
 async function scan(){
- if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return}
+ if(scanning){status('読込中です。二重開始はしません。','saving','読込中');return 0}
  scanning=true;let a=null,saved=null,p=null,host=null,count=0,safetyStop=false;
- status('下側の開始位置を確認しています…','saving','下から読込');
+ status('新しい通知だけ確認しています…','saving','差分読込');
  try{
   p=panel();if(!p)throw new Error('本物の🔔通知一覧を開いてください');
   a=await account();if(!a)throw new Error('noteログインを確認してください');
   if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です');
-  let cp=await checkpointFor(a.id),savedRaw=await get(key(SAVED,a.id),[]);saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);active={a,p,saved};
+  let cp=await checkpointFor(a.id),savedRaw=await get(key(SAVED,a.id),[]);
+  saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
+  active={a,p,saved};
   count+=await sendBatch(readOutbox(a.id),a,saved);
   cp=await checkpointFor(a.id);host=scrollHost(p);
-  const start=await seekStart(p,host,cp,saved);
-  if(start.recoveryRow){
-    cp=await persistRecoveredBoundary(a,cp,start.recoveryRow,'reader-recovered-saved-v326');
-    status('保存済み通知から完了ラインを復元しました。上方向の追加分だけ読み込みます…','saving','ライン復元');
-  }else if(start.preserveBoundary){
-    const now=Date.now(),latest=await checkpointFor(a.id);
-    await set(key(CHECK,a.id),{...latest,lastCheckAt:now,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,version:VERSION});
-    document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-    status('✓ 前回の完了ライン情報を保持｜全件読み直しなし','done','✓ 境界維持',{readCount:0,savedCount:0});
-    return 0;
-  }else{
-    status(hasBoundary(cp)?'完了ラインから上方向へ、追加分だけ読み込みます…':'通知の下側から上方向へ読み込みます…','saving','下→上');
+  const result=await collectIncrementalFromTop(p,host,cp,saved);p=result.p;host=result.host;
+
+  if(result.needAnchor&&!result.anchorFound){
+   safetyStop=true;
+   const latest=await checkpointFor(a.id),now=Date.now();
+   await set(key(CHECK,a.id),{...latest,lastCheckAt:now,lastError:'INCREMENTAL_ANCHOR_NOT_FOUND',lastScanMode:'incremental-top-until-saved',lastRunStopped:true,version:VERSION});
+   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+   status('⚠ 保存済み位置まで届きませんでした。通常読込では過去へ潜りません。「全読み」で履歴を回収してください。','error','全読みを使用',{readCount:result.seenCount,savedCount:count});
+   return count
   }
-  const result=await collectBottomUp(p,host,cp);p=result.p;host=result.host;
+
   if(result.collected.length)count+=await sendBatch(result.collected,a,saved);
-  let latest=await get(key(CHECK,a.id),{}),now=Date.now();
-  await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:'bottom-up-from-saved-line',lastRunStopped:false,historyComplete:false,version:VERSION});
+  const latest=await get(key(CHECK,a.id),{}),now=Date.now();
+  await set(key(CHECK,a.id),{...latest,lastCheckAt:now,manualNewCount:count,manualSeenCount:result.seenCount,lastError:'',lastScanMode:'incremental-top-until-saved',lastRunStopped:false,historyComplete:false,version:VERSION});
   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-  const boundaryEl=findBoundaryElement(p,latest);if(boundaryEl)markBoundary(boundaryEl);
   const remain=readOutbox(a.id).length;
-  if(remain)status(`⚠ ${remain}件は次回保存待ち｜下→上 ${result.seenCount}件確認`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain});
-  else if(start.recovered)status(`✓ 完了ラインを復元｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
-  else if(hasBoundary(cp))status(`✓ 完了ラインから上だけ確認｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
-  else status(`✓ 下側から上方向へ保存完了｜新規 ${count}件`,'done','✓ 保存完了',{readCount:result.seenCount,savedCount:count});
- }catch(e){if(!safetyStop)capturePending();if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'bottom-up-from-saved-line',lastRunStopped:safetyStop,version:VERSION})}catch{}}const pending=a?readOutbox(a.id).length:0;const raw=String(e?.message||e),msg=raw==='BOUNDARY_NOT_FOUND_SAFE_STOP'?'完了ラインを復元できなかったため再読込してください':raw;status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending})}
- finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
+  if(remain)status(`⚠ ${remain}件は次回保存待ち｜差分 ${result.seenCount}件確認`,'error','保存待ち',{readCount:result.seenCount,savedCount:count,pendingCount:remain});
+  else if(result.anchorFound)status(`✓ 保存済み通知で停止｜新規 ${count}件`,'done','✓ 差分保存',{readCount:result.seenCount,savedCount:count});
+  else status(`✓ 現在表示分を保存｜新規 ${count}件`,'done','✓ 初回差分保存',{readCount:result.seenCount,savedCount:count});
+  return count
+ }catch(e){
+  if(!safetyStop)capturePending();
+  if(a){try{const cp=await get(key(CHECK,a.id),{}),pending=readOutbox(a.id).length;await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:Date.now(),pendingCount:pending,lastScanMode:'incremental-top-until-saved',lastRunStopped:safetyStop,version:VERSION})}catch{}}
+  const pending=a?readOutbox(a.id).length:0,msg=String(e?.message||e);
+  status(`⚠ ${msg}${pending?`｜${pending}件は次回保存待ち`:''}`,'error',/連携/.test(msg)?'連携必要':'再読込',{pendingCount:pending});
+  return count
+ }finally{active=null;scanning=false;document.dispatchEvent(new CustomEvent('mumei-v3-reader-stopped'))}
 }
 
 document.addEventListener('mumei-v3-read-request',()=>void scan());
