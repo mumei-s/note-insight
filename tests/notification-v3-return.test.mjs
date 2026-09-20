@@ -16,15 +16,15 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.10/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.3\.11/);
 });
 
-test("V3.3.10 preloads panel-free automatic stable reader",async()=>{
+test("V3.3.11 preloads panel-free automatic stable reader",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-autoscan-v2970.js"),filterSettings=await read("public/notification-filter-settings.html");
-  assert.match(v3,/@version\s+3\.3\.10/);
+  assert.match(v3,/@version\s+3\.3\.11/);
   const meta=v3.split("// ==/UserScript==")[0];
-  assert.ok(meta.includes("note-insight-notification-autoscan-v2970.js?v=33100"));
-  assert.ok(meta.includes("note-insight-notification-bootstrap-v2966.js?v=33100"));assert.ok(meta.includes("note-insight-notification-runtime-v2939-filter.js?v=33100"));
+  assert.ok(meta.includes("note-insight-notification-autoscan-v2970.js?v=33110"));
+  assert.ok(meta.includes("note-insight-notification-bootstrap-v2966.js?v=33110"));assert.ok(meta.includes("note-insight-notification-runtime-v2939-filter.js?v=33110"));
   assert.doesNotMatch(meta,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/actor_image_url:img/);assert.match(reader,/historyComplete/);
   assert.match(filterSettings,/https:\/\/note\.com\/\?mumei_filter_return=bell/);assert.doesNotMatch(filterSettings,/note\.com\/notifications/);
