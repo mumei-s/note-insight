@@ -154,7 +154,7 @@ test('update detection verifies the stable userscript on INSIGHT without visitin
   assert.match(v3,/if\(location\.hostname==='mumei-s\.github\.io'\)\{/);
   assert.match(v3,/localStorage\.setItem\(TOOL_KEY,VERSION\)/);
   assert.match(v3,/Promise\.resolve\(gmVersionSet\(VERSION\)\)\.then\(\(\)=>gmVersionGet\(\)\)/);
-  assert.match(v3,/window\.__mumeiNotificationRuntime2958/);
+  assert.doesNotMatch(v3,/window\.__mumeiNotificationRuntime2958/);
   assert.match(v3,/window\.__mumeiStableNotification338/);
   assert.doesNotMatch(v3,/note\.com\/notifications/);
 });
@@ -239,6 +239,6 @@ test('restored DOM reader is primary and captures actor images',async()=>{
   assert.match(stableReader,/function rowData/);
   assert.match(stableReader,/actor_image_url:img/);
   assert.match(stableReader,/function scheduleAuto/);
-  assert.match(stableReader,/for\(let i=0;i<500&&!stop;i\+\+\)/);
-  assert.match(stableReader,/steps\+\+<600/);
+  assert.match(stableReader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);
+  assert.match(stableReader,/steps\+\+<1200/);
 });
