@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReturnV1Loaded)return;window.__mumeiNotificationReturnV1Loaded=true;
-const VERSION='1.1.0',RETURN='mumei_insight_return_bell_v1';
+const VERSION='1.2.0',RETURN='mumei_insight_return_bell_v1';
 const modern=()=>Boolean(globalThis.GM);
 const get=async(k,d)=>{try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
 const set=async(k,v)=>{try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
@@ -33,11 +33,16 @@ function openNotice(){
  }
  return false
 }
-function clickBell(){
- const sel='[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
- for(const el of document.querySelectorAll(sel)){const hit=el.matches('button,[role="button"]')?el:el.closest('button,[role="button"]');if(hit&&shown(hit)){hit.click();return true}}
- return false
+function bellMeta(el){return el instanceof Element?clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.id,typeof el.className==='string'?el.className:''].join(' ')):''}
+function bellHit(el){const meta=bellMeta(el);return/(?:notification|notice|通知|お知らせ|bell)/iu.test(meta)&&!/setting|filter/i.test(meta)}
+function notificationBellElement(){
+ const direct='[aria-label*="通知"],[aria-label*="お知らせ"],[title*="通知"],[title*="お知らせ"],[data-testid*="notification" i],[data-testid*="notice" i]';
+ for(const el of document.querySelectorAll(direct)){const hit=el.matches('button,a,[role="button"],[role="tab"]')?el:el.closest('button,a,[role="button"],[role="tab"]');if(hit&&shown(hit))return hit}
+ for(const el of document.querySelectorAll('header button,header a,nav button,nav a,button,[role="button"],[role="tab"]'))if(shown(el)&&bellHit(el))return el;
+ for(const el of document.querySelectorAll('header button,header [role="button"],nav button,nav [role="button"]')){if(!shown(el))continue;const r=el.getBoundingClientRect(),t=clean(el.textContent);if(r.top<180&&el.querySelector('svg')&&/^\d{1,3}$/.test(t))return el}
+ return null
 }
+function clickBell(){const hit=notificationBellElement();if(!hit)return false;try{hit.click();return true}catch{return false}}
 cloak();
 (async()=>{
  if(dm()){reveal();return}
