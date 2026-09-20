@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationAutoscan2970)return;window.__mumeiNotificationAutoscan2970=true;
-const VERSION='3.3.9',PROTOCOL='3.3.9';
+const VERSION='3.3.10',PROTOCOL='3.3.10';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:',FIL='mumei_insight_magazine_filter_enabled_v3:';
 const PRIMARY='mumei-v2948-frame',FALLBACK='mumei-notice-reader-v2963',SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -251,5 +251,5 @@ new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>sched
 document.addEventListener('click',e=>{const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(500));
 window.addEventListener('focus',()=>scheduleAuto(500));
-window.__mumeiStableNotification339={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,mountToolbar,syncToolbar};
+window.__mumeiStableNotification3310={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,mountToolbar,syncToolbar};
 })();
