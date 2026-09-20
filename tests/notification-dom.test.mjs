@@ -242,10 +242,11 @@ test('read completion stays visible on the dock until the notification panel clo
 });
 
 
-test('split DOM Reader is primary and captures actor images',async()=>{
-  const meta=v3.split('// ==/UserScript==')[0];
-  assert.ok(meta.includes('note-insight-notification-reader-v4.js?v=3420'));
-  assert.doesNotMatch(meta,/note-insight-notification-network-v3300\.js\?v=|note-insight-notification-autoscan-v2970\.js\?v=/);
+test('network Reader is primary while legacy DOM parser remains isolated',async()=>{
+  const meta=v3.split('// ==/UserScript==')[0],network=await read('note-insight-notification-network-v3300.js');
+  assert.ok(meta.includes('note-insight-notification-network-v3300.js?v=3420'));assert.ok(meta.includes('note-insight-notification-reader-v4.js?v=3420'));
+  assert.doesNotMatch(meta,/note-insight-notification-autoscan-v2970\.js\?v=/);
+  assert.match(network,/async function syncHistory/);assert.match(network,/needsDom:false/);
   assert.match(splitReader,/function rowData/);assert.match(splitReader,/actor_image_url:img/);
-  assert.match(splitReader,/function scheduleAuto/);assert.match(splitReader,/for\(let i=0;i<1200&&!stop;i\+\+\)/);assert.match(splitReader,/steps\+\+<1200/);
+  assert.match(splitReader,/function scheduleAuto/);assert.match(splitReader,/net\.syncCurrent/);assert.match(splitReader,/async function scanDomLegacy/);
 });
