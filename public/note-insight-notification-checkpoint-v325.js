@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiV3Checkpoint325)return;
-const VERSION='3.2.27';
+const VERSION='3.2.92';
 const CHECK='mumei_insight_notification_checkpoint_v2922:';
 const LOCAL='mumei_insight_notification_checkpoint_local_v325:';
 const BOUNDARY_ID='mumei-v3-saved-boundary-v3223';
@@ -28,14 +28,8 @@ function markBoundary(cp){
     if(old&&old.nextElementSibling===row&&old.dataset.fallback!=='1')return true;
     old?.remove();row.parentNode.insertBefore(lineNode('ここまで保存済み'),row);return true
   }
-  const has=Boolean(cp?.boundaryEventIdentity||cp?.boundarySignature||cp?.boundaryLegacySignature);
-  const root=document.querySelector(SHELL);
-  if(!has||!root)return false;
-  if(old&&old.dataset.fallback==='1')return true;
   old?.remove();
-  const line=lineNode('前回の保存位置を保持中｜全件再読込なし',true),first=candidateRows()[0];
-  if(first?.parentNode)first.parentNode.insertBefore(line,first);else root.prepend(line);
-  return true
+  return false
 }
 let accountId='',cached=null;
 async function restore(){accountId=accountId||await account();if(!accountId)return null;const remote=await get(CHECK+accountId,{}),local=localRead(accountId);let chosen=remote&&typeof remote==='object'?remote:{};const remoteHas=Boolean(chosen?.boundaryEventIdentity||chosen?.boundarySignature||chosen?.boundaryLegacySignature),localHas=Boolean(local?.boundaryEventIdentity||local?.boundarySignature||local?.boundaryLegacySignature);if(local&&localHas&&(!remoteHas||boundaryAge(local)>boundaryAge(chosen))){chosen={...chosen,...local};await set(CHECK+accountId,chosen)}cached=chosen;if(chosen?.boundaryEventIdentity||chosen?.boundarySignature||chosen?.boundaryLegacySignature){localWrite(accountId,chosen);setTimeout(()=>markBoundary(chosen),80)}return chosen}
