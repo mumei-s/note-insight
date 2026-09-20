@@ -211,7 +211,7 @@ test('checkpoint identity never falls back to text when a stronger identity exis
 test('read completion stays visible on the dock until the notification panel closes',()=>{
   assert.match(runtime,/#\$\{ROOT\} button\.done/);
   assert.match(runtime,/b\.classList\.toggle\('done',d\.kind==='done'\)/);
-  assert.match(runtime,/d\.kind==='done'\?'✓完了':'読込'/);
+  assert.match(runtime,/const doneLabel=d\.mode==='network-full'\?'✓全読':d\.network\?'✓通信':'✓完了'/);
   assert.match(runtime,/btn\.classList\.remove\('err','done'\)/);
 });
 
