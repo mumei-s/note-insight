@@ -5,7 +5,7 @@ window.__mumeiNotificationDock322=true;
 window.__mumeiNotificationRuntime325=true;
 window.__mumeiNotificationRuntime327=true;
 if(window.__mumeiNotificationRuntime328)return;window.__mumeiNotificationRuntime328=true;
-const VERSION='3.3.0';
+const VERSION='3.3.1';
 const ROOT='mumei-v325-dock',SETTINGS='mumei-v325-filter-settings',HIDE='mumei-v325-filter-hide';
 const BOUNDARY='mumei-v3-saved-boundary-v3223',PROGRESS='mumei-v3-reader-progress-v3223';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',AUTO='mumei_insight_notification_auto_v325:',ENABLED='mumei_insight_notification_feature_enabled_v1';
@@ -27,10 +27,11 @@ function common(a,b){let p=a;for(let i=0;p&&p!==document.body&&i<14;i++,p=p.pare
 function expand(base){let p=base,best=null;for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<12;i++,p=p.parentElement){if(!visible(p))continue;if(rows(p).length)best=p;if(p.matches?.('[role="dialog"],[role="menu"],[popover],main,[role="main"],section,aside')&&(rows(p).length||/(?:通知|お知らせ)/u.test(text(p))))return p}return best}
 function notificationRoute(){return /^\/notifications(?:\/|$)/i.test(location.pathname)}
 function strongNoticeSurface(root){
-  if(!(root instanceof Element)||!visible(root))return false;
+  if(!(root instanceof Element)||!visible(root)||root.closest?.('#'+ROOT)||root.closest?.('#'+SETTINGS))return false;
   const a=exact(root,'通知'),b=exact(root,'お知らせ');if(!a||!b)return false;
   const known=[...root.querySelectorAll(ITEM)].filter(rowish);
-  const popupLike=root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i],section,aside');
+  const popupLike=root.matches?.('[role="dialog"],[role="menu"],[popover],[class*="notification" i],[class*="notice" i]');
+  if(/\/messages?(?:\/|$)/i.test(location.pathname)&&!known.length&&!popupLike)return false;
   return Boolean(known.length||popupLike)
 }
 function popupSurface(){
@@ -270,7 +271,7 @@ function confirmHide(){hideTimer=0;if(suppressUntilBell){hideImmediately();retur
 function scheduleHide(delay=750){if(hideTimer)return;hideTimer=setTimeout(confirmHide,delay)}
 async function inspect(){if(!await initEnabled()){disableFeatureNow();return}if(suppressUntilBell){if(shell||dockVisible||document.getElementById(ROOT))hideImmediately();return}if(sessionPathChanged()){hideImmediately();return}const next=findSurface();if(next){await activate(next);return}if(panelSessionActive){if(notificationRoute()){showRoot(true);return}if(shell&&strongNoticeSurface(shell)){showRoot(true);return}if(bellIntent()){showRoot(true);return}hideImmediately();return}if(bellIntent()){void activateIntent();return}cleanupVisuals()}
 function scheduleInspect(ms=100){clearTimeout(inspectTimer);inspectTimer=setTimeout(()=>void inspect(),ms)}
-function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled)return;if(!bellTrigger(target,e)){if(panelSessionActive&&shell&&notificationLeaveAction(target))hideImmediately();return}if(panelSessionActive&&dockVisible){hideImmediately();return}dismissActiveEditor();suppressUntilBell=false;startPanelSession();intentUntil=Date.now()+10000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500,9000])setTimeout(()=>scheduleInspect(0),ms)}
+function onTopClick(e){const target=e.target instanceof Element?e.target:null;if(!featureEnabled||!target)return;if(target.closest('#'+ROOT)||target.closest('#'+SETTINGS))return;if(!bellTrigger(target,e)){if(panelSessionActive&&shell&&notificationLeaveAction(target))hideImmediately();return}if(panelSessionActive&&dockVisible){hideImmediately();return}dismissActiveEditor();suppressUntilBell=false;startPanelSession();intentUntil=Date.now()+10000;void activateIntent();for(const ms of[0,40,100,180,350,700,1200,2200,4000,6500,9000])setTimeout(()=>scheduleInspect(0),ms)}
 function boot(){ensureStyle();window.addEventListener('mumei-v3-reader-status',onStatus);document.addEventListener('mumei-v3-reader-status',onStatus);window.addEventListener('pointerdown',onGlobalPointerDown,true);window.addEventListener('click',onTopClick,true);addEventListener('popstate',()=>{intentUntil=0;if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});addEventListener('hashchange',()=>{if(sessionPathChanged()){hideImmediately();return}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320)});for(const name of['pushState','replaceState']){const original=history[name];if(!original.__mumei328){const wrapped=function(...a){const r=original.apply(this,a);if(sessionPathChanged()){hideImmediately();return r}scheduleInspect(0);setTimeout(()=>scheduleInspect(0),320);return r};wrapped.__mumei328=true;history[name]=wrapped}}void initEnabled().then(on=>{if(on){document.getElementById(ROOT)?.remove();if(notificationRoute())startPanelSession();void window.__mumeiV3Checkpoint325?.ready?.finally?.(()=>scheduleInspect(0));scheduleInspect(0)}else disableFeatureNow()});setInterval(()=>{if(featureEnabled)scheduleInspect(0)},800)}
 if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot,{once:true});
 window.__mumeiV3Runtime328={version:VERSION,findSurface,popupSurface,routeSurface,inspect,bellTrigger,openNotificationBell,isNotificationOpen:()=>Boolean(findSurface()),openSettings,getAuto:()=>autoMode,setAuto:async v=>{await initMode();autoMode=Boolean(v);const id=await account();if(id)await set(AUTO+id,autoMode);paintMode()},getEnabled:async()=>{await initEnabled();return featureEnabled},setEnabled:setFeatureEnabled,cleanup:cleanupVisuals,isVisible:()=>dockVisible,getShell:()=>shell,isSessionActive:()=>panelSessionActive};
