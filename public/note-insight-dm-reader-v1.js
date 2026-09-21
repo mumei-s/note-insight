@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.2.0';
+const VERSION='1.2.1';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -32,27 +32,26 @@ async function save(a,threads,messages){const token=String(await get(key(TOKEN,a
 function cloak(on){try{if(on){document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-dm-scan-cloak','1')}else{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-dm-scan-cloak')}}catch{}}
 async function scanRoom(a,threadKey){const net=window.__mumeiDmNetworkV2;for(let i=0;i<20;i++){const n=net?.getRoomCount?.(threadKey);if(Number(n?.captured||0)>0){for(let j=0;j<20&&Number(net?.getRoomCount?.(threadKey)?.saved||0)<Number(n.captured||0);j++)await sleep(150);const done=net?.getRoomCount?.(threadKey)||n;return{read:Number(done.captured||0),saved:Number(done.saved||0)}}if(conversationRoot())break;await sleep(180)}const root=conversationRoot();if(!root)throw new Error('DM_CONVERSATION_NOT_FOUND');const host=scrollHost(root),map=new Map();const capture=()=>{for(const el of candidateNodes(root)){const m=messageData(el,threadKey,root,a.id);if(m.body||m.attachment_url)map.set(m.message_key,m)}};capture();let stable=!host?6:0;if(host){let last=-1;for(let i=0;i<MAX_SCROLL&&map.size<MAX_MESSAGES;i++){host.scrollTop=0;await sleep(380);capture();const h=host.scrollHeight;if(h===last)stable++;else stable=0;last=h;if(stable>=6)break}if(stable<6&&map.size>=MAX_MESSAGES)throw new Error('DM_MESSAGE_LIMIT')}const current=roomAnchors().find(x=>x.key===threadKey),thread=current?roomData(current):{thread_key:threadKey,room_url:location.href,peer_note_id:null,peer_name:null,peer_url:null,peer_image_url:null,last_message_at:null,meta:{source:'note-dm-room-v1'}};const messages=[...map.values()];const p=await save(a,[thread],messages);return{read:messages.length,saved:Number(p&&p.messageCount||0)}}
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...prev,...patch,version:VERSION})}
+async function clearLegacyQueue(a){try{await set(key(QUEUE,a.id),null);sessionStorage.removeItem(DONE);cloak(false)}catch{}}
 async function run(){
  if(!dmRoute())return;
  const a=await account();if(!a)return;
- let q=await get(key(QUEUE,a.id),null),now=Date.now();
+ await clearLegacyQueue(a);
  if(rootRoute()){
-  const rooms=roomAnchors(),threads=rooms.map(roomData);if(threads.length)await save(a,threads,[]);
-  if(sessionStorage.getItem(DONE)==='1'){sessionStorage.removeItem(DONE);cloak(false);return}
-  if(q&&Array.isArray(q.rooms)&&q.rooms.length){
-   const index=Math.max(0,Math.min(Number(q.index||0),q.rooms.length-1));
-   q.returnUrl=location.href;q.index=index;await set(key(QUEUE,a.id),q);cloak(true);location.replace(q.rooms[index]);return
-  }
-  if(!q&&rooms.length){q={rooms:rooms.map(x=>x.url),index:0,returnUrl:location.href,startedAt:now,read:0,saved:0,threadCount:rooms.length};await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:now,lastRunMode:'full',lastRunComplete:false,lastError:'',threadCount:rooms.length});cloak(true);location.replace(q.rooms[0]);return}
-  cloak(false);return
+  const rooms=roomAnchors().filter(x=>x.key&&x.key!=='new'),threads=rooms.map(roomData);
+  if(threads.length)await save(a,threads,[]);
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:0,lastSavedCount:0,threadCount:threads.length,lastError:'',navigationMode:'passive'});
+  return
  }
- const threadKey=roomKeyFromUrl(location.href);if(!threadKey)return;
- if(q&&q.rooms&&q.rooms.length)cloak(true);
+ const threadKey=roomKeyFromUrl(location.href);if(!threadKey||threadKey==='new')return;
  try{
-  const r=await scanRoom(a,threadKey);await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
-  if(q&&q.rooms&&q.rooms.length){q.read=Number(q.read||0)+r.read;q.saved=Number(q.saved||0)+r.saved;q.index=Number(q.index||0)+1;await set(key(QUEUE,a.id),q);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:false,lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.index});if(q.index<q.rooms.length){location.replace(q.rooms[q.index]);return}await set(key(QUEUE,a.id),null);await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'full',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:q.read,lastSavedCount:q.saved,threadCount:q.threadCount,currentThread:q.threadCount,lastError:''});sessionStorage.setItem(DONE,'1');location.replace(q.returnUrl||'https://note.com/messages/rooms');return}
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'single',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:''});cloak(false)
- }catch(e){await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:q&&q.rooms&&q.rooms.length?'full':'single',lastError:String(e&&e.message||e)});cloak(false)}
+  const r=await scanRoom(a,threadKey);
+  await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'single-passive',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:'',navigationMode:'passive'})
+ }catch(e){
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'single-passive',lastError:String(e&&e.message||e),navigationMode:'passive'});
+  cloak(false)
+ }
 }
 if(dmRoute()){let timer=0,running=false;const schedule=(ms=500)=>{clearTimeout(timer);timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).finally(()=>{running=false})},ms)};schedule(800);new MutationObserver(()=>schedule(500)).observe(document.documentElement,{subtree:true,childList:true});addEventListener('pageshow',()=>schedule(400));addEventListener('focus',()=>schedule(500));window.__mumeiInsightDmReaderV1Api={version:VERSION,run:()=>{if(running)return false;running=true;Promise.resolve(run()).finally(()=>{running=false});return true}}}
 })();
