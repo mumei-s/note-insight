@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com'||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.2.0';
+const VERSION='1.2.1';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -12,7 +12,8 @@ async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return 
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 function request(body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('DM_REQUEST_UNAVAILABLE'));fn({method:'POST',url:INGEST,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||('HTTP_'+r.status)))},onerror:()=>reject(new Error('DM_NETWORK_ERROR')),ontimeout:()=>reject(new Error('DM_TIMEOUT'))})})}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
-function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i);return m?.[1]||''}catch{return''}}
+const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m?.[1]||'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function abs(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const x=v.charCodeAt(i);a=Math.imul(a^x,16777619);b=Math.imul(b^x,3266489917)}return(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0')}
 const BODY=['body','message','text','content','message_body','messageBody','plain_text','plainText'];
@@ -33,7 +34,7 @@ function sender(obj){
  return{name,id,url:url?abs(url):id?('https://note.com/'+id):null,image:image?abs(image):null}
 }
 function bodyText(obj){for(const k of BODY){const v=obj?.[k];if(typeof v==='string'){const s=clean(v);if(s&&s.length<=12000)return s}}return''}
-function roomKey(obj,inherited=''){return first(obj,ROOMS)||inherited||roomFromUrl(location.href)}
+function roomKey(obj,inherited=''){const raw=first(obj,ROOMS)||inherited||roomFromUrl(location.href);return ROOM_ID_RE.test(String(raw||''))?String(raw):''}
 function attachment(obj){
  const a=nested(obj,['attachment','file','image','media']);
  const url=first(a||{},URLS)||first(obj,['attachment_url','attachmentUrl','file_url','fileUrl']);
