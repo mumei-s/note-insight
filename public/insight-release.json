@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.25",
+  "appVersion": "2026.09.21.26",
   "notificationVersion": "3.5.8",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T17:04:00+09:00",
+  "releasedAt": "2026-09-21T19:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.5.8・DM V1.3.4。通知4列パネルをbody直下の画面下部固定へ戻し、window最上流で操作を受けてフィルター操作時もnote通知を閉じない。DMは子iframe内userscript依存を廃止し、親Readerが同一originの画面外iframe DOMを直接走査して本文を保存。",
-  "dmVersion": "1.3.4",
+  "note": "本人通知V3.5.8・DM V1.3.5。通知は保存済み行を先に即表示してアイコン補完を非同期化。自動再分類は未分類だけを処理し進捗停止ガードを追加。DMは2件並列の全ルーム走査で3件目飛ばしを修正し、別項目へ移動した際のDM残留も解消。お気に入り個別解除と設定/詳細パネルの圧縮・タップ明確化を追加。",
+  "dmVersion": "1.3.5",
   "dmLabel": "DM同期"
 }
