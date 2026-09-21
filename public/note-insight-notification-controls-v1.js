@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.3.0';
+const VERSION='1.3.1';
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter-settings.html?from=note';
@@ -35,7 +35,7 @@ function leave(url,label){
 async function act(action,bar){
  const a=await account();if(!a)return;
  if(action==='read'){
-  const b=bar?.querySelector('[data-action="read"]');if(b){b.textContent='読込中';b.dataset.state='busy'}
+  const b=bar?.querySelector('[data-action="read"]');if(b){const running=b.dataset.state==='busy';b.textContent=running?'停止中…':'読込中';b.dataset.state='busy'}
   const reader=window.__mumeiNotificationReaderV4;
   if(!reader||typeof reader.scan!=='function'){if(b){b.textContent='再読込';b.dataset.state='error'}return}
   try{await reader.scan()}catch{if(b){b.textContent='再読込';b.dataset.state='error'}}return
@@ -71,6 +71,6 @@ setTimeout(()=>schedule(450),100);
 new MutationObserver(()=>schedule(180)).observe(document.documentElement,{subtree:true,childList:true});
 document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const t=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(t))schedule(220)},true);
 window.addEventListener('pageshow',()=>schedule(300));window.addEventListener('focus',()=>schedule(300));
-window.addEventListener('mumei-notification-reader-status',e=>{const bar=dedupe();if(!bar?.isConnected)return;const b=bar.querySelector('[data-action="read"]'),d=e.detail||{};if(!b)return;const state=String(d.state||''),read=Number(d.readCount||0),saved=Number(d.savedCount||0),total=Number(d.totalCount||0);b.title=String(d.message||'')+(read||saved?`\n読込 ${read}${total?` / ${total}`:''}｜保存 ${saved}`:'');if(state==='done'){b.textContent='✓保存';b.dataset.state='done'}else if(state==='error'){b.textContent='再読込';b.dataset.state='error'}else if(d.scanning||state==='saving'){b.textContent=read?`読 ${read}${total?`/${total}`:''}`:'読込中';b.dataset.state='busy'}});
+window.addEventListener('mumei-notification-reader-status',e=>{const bar=dedupe();if(!bar?.isConnected)return;const b=bar.querySelector('[data-action="read"]'),d=e.detail||{};if(!b)return;const state=String(d.state||''),read=Number(d.readCount||0),saved=Number(d.savedCount||0),total=Number(d.totalCount||0);b.title=String(d.message||'')+(read||saved?`\n読込 ${read}${total?` / ${total}`:''}｜保存 ${saved}`:'');if(state==='done'){b.textContent='✓保存';b.dataset.state='done'}else if(state==='error'){b.textContent='再読込';b.dataset.state='error'}else if(d.scanning||state==='saving'){b.textContent=d.stopping?'停止中':read?`停止 ${read}${total?`/${total}`:''}`:'停止';b.dataset.state='busy'}});
 window.__mumeiNotificationControlsV1={version:VERSION,mount,findPanel,sync};
 })();
