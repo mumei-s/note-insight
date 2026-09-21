@@ -6,7 +6,7 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.21.18";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.21.19";
 export const CURRENT_NOTIFICATION_VERSION = "3.5.2";
 export const CURRENT_DASHBOARD_VERSION = "1.4.4";
 export const CURRENT_DM_VERSION = "1.2.1";
