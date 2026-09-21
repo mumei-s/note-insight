@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.1';
+const VERSION='3.5.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -144,7 +144,7 @@ function requestMeta(input,init){
  return{url:absUrl(url),method,body,headers}
 }
 function xBodySample(body){if(body==null)return null;if(typeof body==='string'){try{return compact(JSON.parse(body))}catch{return body.slice(0,5000)}}return typeof body==='object'?compact(body):String(body).slice(0,5000)}
-let armedUntil=0,lastCapture=null,lastResult=null,inflight=0;
+let armedUntil=0,lastCapture=null,lastResult=null,inflight=0,stopRequested=false;
 function runtime(){return window.__mumeiV3Runtime328||window.__mumeiV3Runtime327||window.__mumeiV3Runtime325||null}
 function captureActive(){return Date.now()<armedUntil||Boolean(runtime()?.isSessionActive?.())}
 function arm(ms=20000){armedUntil=Math.max(armedUntil,Date.now()+ms)}
@@ -355,6 +355,7 @@ async function syncDirectFullAscending(a,state,cap,resume){
   const nextPage=page-1,nextReq=nextPage>=1?directPageRequest(cap,nextPage):null;
   await writeHistoryState(a.id,{...state,historyComplete:false,resume:nextReq?{url:nextReq.url,method:'GET',body:null,requestInit:nextReq.requestInit,transport:'direct'}:null,partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now(),direction:'bottom-up'});
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,historyComplete:false,lastError:'',direction:'bottom-up'});
+  if(stopRequested){status(`停止・途中保存｜読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'done',{mode:'network-partial',readCount:received,savedCount:total,totalCount,pages,historyComplete:false,direction:'bottom-up'});return{handled:true,partial:true,saved:total,received,totalCount,pages,pending:await pendingCount(a.id),historyComplete:false,mode:'network-partial',direction:'bottom-up'}}
   if(!nextReq)break;
   try{cap=await replay(nextReq)}catch(e){await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e),direction:'bottom-up'});return{handled:false,saved:total,received,pages,pending:await pendingCount(a.id),reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}}
   page=nextPage
@@ -364,9 +365,10 @@ async function syncDirectFullAscending(a,state,cap,resume){
  await writeHistoryState(a.id,done);
  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:'full',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:'',direction:'bottom-up'});
  status(`✓ 全履歴確認完了｜下→上 ${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,pendingCount:0,historyComplete:true,direction:'bottom-up'});
- return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,full:true,mode:'network-full-bottom-up',direction:'bottom-up'}
+ return{handled:true,saved:total,received,totalCount,pages,pending:0,historyComplete:true,full:true,mode:'network-full-bottom-up',direction:'bottom-up'}
 }
 async function syncHistory(opts={}){
+ stopRequested=false;
  const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
  arm(Math.max(forceFull?180000:120000,waitMs+5000));
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
@@ -420,6 +422,7 @@ async function syncHistory(opts={}){
   if(!frontier){
    await writeHistoryState(a.id,{...state,historyComplete:false,resume:{url:nextReq.url,method:nextReq.method,body:nextReq.body??null,requestInit:nextReq.requestInit||null},partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now()});
   }
+  if(stopRequested){await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'',historyComplete:Boolean(frontier),direction:'bottom-up'});status(`停止・途中保存｜読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'done',{mode:'network-partial',readCount:received,savedCount:total,totalCount,pages,historyComplete:Boolean(frontier),direction:'bottom-up'});return{handled:true,partial:true,saved:total,received,totalCount,pages,pending:await pendingCount(a.id),historyComplete:Boolean(frontier),mode:'network-partial'}}
   try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){
    status('APIの次ページ取得に失敗したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
    await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e)});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}
@@ -454,6 +457,7 @@ async function syncHistory(opts={}){
  status(`✓ 追加分確認完了｜${pages}ページ・${received}件照合・${total}件保存確認`,'done',{mode:'network-delta',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true,boundaryReached:true});
  return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,delta:true,mode:'network-delta'}
 }
+function stop(){stopRequested=true;return true}
 async function syncCurrent(opts={}){return syncHistory(opts)}
 async function syncFull(){return syncHistory({forceFull:true,waitMs:3000})}
 async function restoreStatus(){
@@ -461,5 +465,5 @@ async function restoreStatus(){
  if(s&&Date.now()-Number(s.at||0)<24*60*60*1000)lastResult=s
 }
 installFetch();installXHR();void restoreStatus();
-window.__mumeiNotificationNetwork3300={version:VERSION,arm,syncCurrent,syncFull,syncHistory,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
+window.__mumeiNotificationNetwork3300={version:VERSION,arm,stop,syncCurrent,syncFull,syncHistory,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
 })();
