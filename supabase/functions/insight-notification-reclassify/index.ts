@@ -7,7 +7,19 @@ async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new Te
 async function auth(req:Request){const raw=req.headers.get("X-Insight-Token")||"";if(!raw)throw new Error("INSIGHT_LOGIN_REQUIRED");const{data:s}=await db.from("insight_member_sessions").select("id,application_id,expires_at,revoked_at").eq("token_hash",await sha(raw)).maybeSingle();if(!s||s.revoked_at||Date.parse(s.expires_at)<=Date.now())throw new Error("INSIGHT_SESSION_INVALID");const{data:a}=await db.from("insight_access_applications").select("id,note_id,status").eq("id",s.application_id).maybeSingle();if(!a||a.status!=="active")throw new Error("INSIGHT_MEMBER_INACTIVE");const noteId=String(a.note_id||"").toLowerCase();return{id:String(a.id),scope:noteId==="ss_yr"?"owner":String(a.id),noteId}}
 const clean=(v:unknown)=>String(v||"").replace(/\s+/g," ").trim();
 const actionText=(v:unknown)=>clean(v).replace(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/gu," ").replace(/\s+/g," ").trim();
-function classify(text:string,targetUrl:string|null){
+const KIND_TYPES:Record<string,string>={
+ like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
+ board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
+ circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
+ magazine_follow:"magazine_follow",magazine_note_add:"my_article_magazine_added",magazine_note_add_follow:"magazine_article_added",jm_magazine_add:"magazine_article_added",jm_magazine_joined:"magazine_join",
+ embed_note:"quote",purchase_note_update:"purchased_article_updated",qa_answer:"question_answer",note_publish:"creator_article_posted",purchase:"purchase",purchase_note:"purchase",note_purchase:"purchase",note_rating:"rating",note_recommend:"rating",support:"tip",tip:"tip"
+};
+function astText(v:any):string{if(typeof v==="string")return v;if(Array.isArray(v))return v.map(astText).join("");if(!v||typeof v!=="object")return "";return typeof v.value==="string"?v.value:typeof v.text==="string"?v.text:astText(v.children||v.content||[])}
+function structuredType(meta:any,target:string|null){const candidates=[meta?.kind];for(const raw of [meta?.all_area_url,meta?.featured_area_url,target]){try{candidates.push(new URL(String(raw)).searchParams.get("kind"))}catch{}}for(const kind of candidates)if(kind&&KIND_TYPES[String(kind)])return KIND_TYPES[String(kind)];return null}
+
+function classify(text:string,targetUrl:string|null,meta:any={}){
+  const known=structuredType(meta,targetUrl);if(known)return known;
+  text=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
   const t=actionText(text),target=targetUrl||"";
   if(/^あなたの記事[がを].{0,500}(?:追加されました|追加しました)/u.test(t))return "my_article_magazine_added";
   if(/[?&]kind=board_reply_(?:comment|post)(?:&|$)/i.test(target))return "membership_board_reply";
@@ -52,8 +64,16 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),now=new Date().toISOString();
  let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(cursor)q=q.gt("id",cursor);
  const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;
- for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}const type=String(r.notification_type||"other"),meta=r.meta&&typeof r.meta==="object"?r.meta:{},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v22-unmatched-safe"};
- const nextType=classify(String(r.raw_text||""),r.target_url),finalMeta={...nextMeta,reclassify_pending:nextType==="other",classification_status:nextType==="other"?"unmatched":"matched"};
- const{data:saved,error:up}=await db.from("insight_notifications").update({notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
+ const evidence=new Map<string,any>();
+ if((data||[]).some(r=>!r.meta?.kind&&String(r.meta?.event_identity||"").startsWith("notice:"))){
+  const {data:probes}=await db.from("insight_notification_network_probes").select("response_sample").in("member_id",ids).order("captured_at",{ascending:false}).limit(200);
+  for(const p of probes||[])for(const n of Array.isArray(p.response_sample?.data)?p.response_sample.data:[])if(n?.id&&n?.kind&&!evidence.has("notice:"+n.id))evidence.set("notice:"+n.id,n);
+ }
+ for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}if(r.meta?.classifier==="action-v23-structured"){checked++;continue}const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v23-structured"};
+ const classified=classify(String(r.raw_text||""),r.target_url,meta),nextType=classified==="other"&&type!=="capture_noise"?type:classified,finalMeta={...nextMeta,reclassify_pending:nextType==="other",classification_status:nextType==="other"?"unmatched":"matched"};
+ const actor=meta.action_users?.[0],repair:Record<string,unknown>={};
+ if(actor&&/^https:\/\/note\.com\/[^/?#]+\/?$/.test(String(actor.url||""))){repair.actor_url=actor.url;if(typeof actor.name==="string")repair.actor_name=actor.name;if(/^https:\/\//.test(String(actor.user_profile_image_path||"")))repair.actor_image_url=actor.user_profile_image_path}
+ if(meta.body)repair.raw_text=String(meta.body).replace(/<[^>]*>/g," ").slice(0,4000);
+ const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
  return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
