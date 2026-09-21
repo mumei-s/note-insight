@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT DM同期
 // @namespace    https://github.com/mumei-s/note-insight/dm
-// @version      1.3.2
+// @version      1.3.3
 // @description  INSIGHT DM同期。note画面を移動させず、実DMルームだけを画面外で全件同期します。
 // @match        https://note.com/messages/rooms*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -20,17 +20,17 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-account-pair-v1.js?v=100
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-network-v2.js?v=121
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=132
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=133
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='1.3.2',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
+const VERSION='1.3.3',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(GMKEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(GMKEY,String(v||''))}catch{}}
 function publish(){try{localStorage.setItem(KEY,VERSION);window.dispatchEvent(new Event('mumei-dm-version-changed'))}catch{}}
 void Promise.resolve(setActive(VERSION)).then(publish);publish();
-window.__mumeiDmPackage={version:VERSION,architecture:'full-room-background-v132'};
+window.__mumeiDmPackage={version:VERSION,architecture:'full-room-background-v133'};
 })();
