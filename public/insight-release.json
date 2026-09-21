@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.14",
-  "notificationVersion": "3.4.4",
+  "appVersion": "2026.09.21.15",
+  "notificationVersion": "3.5.0",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T07:39:00+09:00",
+  "releasedAt": "2026-09-21T09:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.4.4。読込・フィルター・設定・INSIGHTの4列を画面下部に独立固定し、読込完了は✓保存で表示。通信Readerは100件単位で高速化し、人物URL・アイコン・通知日時・対象URLを直接保存。INSIGHT反映は1〜2秒、設定→🔔復帰と取得状態エラー表示も修正。",
-  "dmVersion": "1.1.0",
+  "note": "本人通知V3.5.0。/api/v3/notices直接読取、構造化通知保存、途中地点再開、読込/保存リアルタイム表示、分類V23自動再判別、通知UI圧縮。Dashboard分析は保存済みを即表示し最新取得をバックグラウンド化。Android/iOS/Windows/macOSの主要ブラウザを同一コードで扱う。",
+  "dmVersion": "1.2.0",
   "dmLabel": "DM同期"
 }
