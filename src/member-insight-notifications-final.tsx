@@ -5,15 +5,16 @@ import "./member-insight-notifications-final.css";
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
 const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const PAGE=100;
-const CLASSIFIER_VERSION="action-v23-structured";
+const CLASSIFIER_VERSION="action-v24-structured";
 type Row=Record<string,any>;
 type CachedView={rows:Row[];total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number};
 const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
 const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
+const NOTIFICATION_MASTER_CACHE=new Map<string,Row[]>();
 
-const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
+const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["question_answer","質問箱回答"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
-const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",other:"🔔"};
+const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",question_answer:"💬",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",other:"🔔"};
 
 async function post(body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);const abort=()=>c.abort();signal?.addEventListener("abort",abort,{once:true});try{const r=await fetch(FEED,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");return p}finally{window.clearTimeout(timer);signal?.removeEventListener("abort",abort)}}
 const date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
@@ -41,6 +42,8 @@ function presentation(r:Row){const raw=canonical(r.raw_text),type=displayType(r)
 function href(r:Row){return String(r.target_url||r.source_url||r.actor_url||"")}
 function targetLabel(r:Row){const u=String(r.target_url||"");if(/\/membership/.test(u))return"メンシプを開く ↗";if(/\/m\//.test(u))return"対象マガジン ↗";if(/\/n\//.test(u))return"対象記事 ↗";return u?"対象ページ ↗":r.actor_url?"相手ページ ↗":""}
 function rowKey(r:Row){return`${displayType(r)}|${canonical(r.raw_text)}|${String(r.actor_url||"").split("?")[0]}|${String(r.occurred_at||"")}`}
+function eventDay(r:Row){const v=String(r.meta?.event_day_jst||"");if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;const d=new Date(String(r.occurred_at||r.captured_at||""));if(Number.isNaN(d.getTime()))return"";return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
+function rememberRows(account:string,list:Row[]){const current=NOTIFICATION_MASTER_CACHE.get(account)||[],m=new Map<string,Row>();for(const r of [...current,...list])m.set(String(r.id||rowKey(r)),r);const merged=[...m.values()].sort((a,b)=>eventMs(b)-eventMs(a)).slice(0,2500);NOTIFICATION_MASTER_CACHE.set(account,merged);return merged}
 function Avatar({row,selfId}:{row:Row;selfId:string}){const name=actorName(row),img=String(row.actor_image_url||""),type=displayType(row),top=creatorTop(row.actor_url,selfId),visual=img?<img className="minf-avatar" src={img} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"/>:<span className="minf-avatar fallback">{ICON_FALLBACK[type]||([...(name||"")][0]||"🔔")}</span>;return top?<a href={top} target="_blank" rel="noreferrer" aria-label={`${name}のクリエイターページ`}>{visual}</a>:visual}
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
@@ -60,7 +63,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
       const baseList=mergeMagazineJoinRows(repairActorRows(x.rows||[]));if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
-      const commitList=(list:Row[])=>{if(!valid())return;setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});if(k==="all"&&!day&&p===1)NOTIFICATION_RECENT_ALL.set(cacheAccount,list)};
+      const commitList=(list:Row[])=>{if(!valid())return;setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);rememberRows(cacheAccount,list);NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});if(k==="all"&&!day&&p===1)NOTIFICATION_RECENT_ALL.set(cacheAccount,list)};
       commitList(baseList);
       void enrich(baseList).then(list=>commitList(list)).catch(()=>{});
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
@@ -68,7 +71,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   }
   async function reclassify(auto=false){
     if(reclassifying)return false;
-    setReclassifying(true);setRepairStatus(auto?"新しい分類ルールで全履歴を自動再分類中…":"全保存履歴の分類を確認中…");
+    setReclassifying(true);setRepairStatus(auto?"その他・未分類を新しいルールで再判定中…":"全保存履歴の分類を確認中…");
     const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";let cursor:string|null=null,checked=0,moved=0,pending=0,chunks=0;const seen=new Set<string>();
     try{
       do{
@@ -95,8 +98,8 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     const account=(requestedNotificationAccount()||String(memberNoteId||"").toLowerCase()||"current"),cacheKey=`${account}|${kind}|${selectedDay||""}|1`,cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);
     if(cached){setRows(cached.rows);setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync);setCheckedAt(new Date(cached.cachedAt));setPage(1);setLoading(false);void load(1,kind,true,selectedDay)}
     else{
-      const recent=NOTIFICATION_RECENT_ALL.get(account)||[],instant=kind==="all"?recent:recent.filter(r=>displayType(r)===kind);
-      if(instant.length){setRows(instant);setTotal(kind==="all"?instant.length:(categoryCounts[kind]??instant.length));setPage(1);setLoading(false);void load(1,kind,true,selectedDay)}
+      const master=NOTIFICATION_MASTER_CACHE.get(account)||NOTIFICATION_RECENT_ALL.get(account)||[],dayRows=selectedDay?master.filter(r=>eventDay(r)===selectedDay):master,instant=kind==="all"?dayRows:dayRows.filter(r=>displayType(r)===kind),hasKnownSnapshot=master.length>0||Object.keys(categoryCounts).length>0;
+      if(hasKnownSnapshot){setRows(instant);setTotal(selectedDay?instant.length:(kind==="all"?(categoryCounts.all??instant.length):(categoryCounts[kind]??instant.length)));setPage(1);setLoading(false);void load(1,kind,true,selectedDay)}
       else{setRows([]);void load(1,kind,false,selectedDay)}
     }
     return()=>{request.current.id++;request.current.controller?.abort();request.current.controller=null}
@@ -140,7 +143,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       {selectedDay?<button type="button" onClick={()=>{setPage(1);setSelectedDay("")}}>全期間</button>:<span className="minf-filter-total">全期間</span>}
     </div>
     <details className="minf-detail">
-      <summary>詳細・精度・再分類</summary>
+      <summary>詳細・精度・再分類 ▼</summary>
       <div className="minf-detail-body">
         <div className="minf-reader-server"><b>{serverLabel}</b><span>{syncAt?date(syncAt):"—"}</span></div>
         <dl>
