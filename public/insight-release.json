@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.16",
-  "notificationVersion": "3.5.1",
+  "appVersion": "2026.09.21.17",
+  "notificationVersion": "3.5.2",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T09:48:00+09:00",
+  "releasedAt": "2026-09-21T09:58:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.5.1。初回全履歴は最古ページから新しい側へ（下→上）保存し、途中地点から同じ向きで再開。API直読・構造化通知・リアルタイム件数・分類V23・即時反映を維持。Dashboard分析は保存済み即表示＋裏更新。主要OS/ブラウザ共通実装。",
+  "note": "本人通知V3.5.2。初回全履歴を下→上で読み、読込中は同じボタンから停止可能。現在ページ保存後に途中地点を保持して再開。API直読・構造化通知・分類V23・即時反映・1パネルUIを維持。Dashboardは保存済み即表示＋バックグラウンド更新。Android/iOS/Windows/macOSの主要ブラウザ共通実装。",
   "dmVersion": "1.2.0",
   "dmLabel": "DM同期"
 }
