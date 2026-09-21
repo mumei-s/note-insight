@@ -1,2 +1,2 @@
-2026-09-21T10:42+09:00
-INSIGHT v2026.09.21.20: notification V3.5.3 instant visible sync/icon repair/filter stay-open; DM V1.3.0 hidden background room sync.
+2026-09-21T13:08+09:00
+INSIGHT v2026.09.21.21: notification V3.5.6 max-300 scroll stream + instant cached tabs; DM V1.3.2 real-room full sync; official Dashboard canonical metrics.
