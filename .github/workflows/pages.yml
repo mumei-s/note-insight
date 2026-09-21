@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-v3-20260921
+  group: pages-v4-final-20260921
   cancel-in-progress: true
 
 jobs:
