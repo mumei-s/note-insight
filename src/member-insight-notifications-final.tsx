@@ -5,7 +5,7 @@ import "./member-insight-notifications-final.css";
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
 const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const PAGE=100;
-const CLASSIFIER_VERSION="action-v22-unmatched-safe";
+const CLASSIFIER_VERSION="action-v23-structured";
 type Row=Record<string,any>;
 
 const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
@@ -111,24 +111,34 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   const serverLabel=syncAt?"サーバー反映済み":"サーバー反映 未確認";
   return <section id="minf-notifications" className="minf">
-    <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><div className="minf-compact-status"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>自動反映 ON</i></div><p>noteの通知を保存すると、この画面へ自動反映します。通常は1〜2秒で更新します。分類の数字は選択日の本人通知の全件数です。スキ・人物フォロー・通常コメント・記事投稿は各専用画面と公開データ分析で確認できます。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
-    <div className={`minf-reader-status ${readerClass}`} role="status">
-      <div className="minf-reader-title"><span>🔔 読取・保存・反映状況</span><strong>{readerLabel}</strong></div>
-      <div className="minf-reader-server"><b>{serverLabel}</b><span>{syncAt?date(syncAt):"—"}</span></div>
-      <dl>
-        <div><dt>端末 最終読取</dt><dd>{readerStatus?.lastRunAt?date(new Date(Number(readerStatus.lastRunAt)).toISOString()):"—"}</dd></div>
-        <div><dt>今回 読取</dt><dd>{readerStatus?Number(readerStatus.lastRunReadCount||0)+"件":"—"}</dd></div>
-        <div><dt>今回 保存確認</dt><dd>{readerStatus?Number(readerStatus.lastRunSavedCount||0)+"件":"—"}</dd></div>
-        <div><dt>サーバー 受信</dt><dd>{syncAt?serverSync.received+"件":"—"}</dd></div>
-        <div><dt>サーバー 保存確認</dt><dd>{syncAt?serverSync.confirmed+"件":"—"}</dd></div>
-      </dl>
-      <p className="minf-reader-help">{syncAt?"INSIGHTへの保存反映をサーバー側でも確認済みです。":"まだサーバー側の保存反映を確認できていません。"}</p>
-      {readerStatus?.lastError?<p className="minf-reader-error">⚠ {String(readerStatus.lastError)}</p>:null}
+    <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><p>保存済み通知を即表示。分類・日付・精度確認は1パネルにまとめています。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
+    <div className={`minf-quick ${readerClass}`} role="status">
+      <div className="minf-quick-save"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>{readerLabel}</i></div>
+      <div className="minf-quick-progress"><b>読込 {readerStatus?Number(readerStatus.lastRunReadCount||0):0}</b><b>保存 {readerStatus?Number(readerStatus.lastRunSavedCount||0):0}</b></div>
     </div>
-    <details className="minf-state"><summary>更新状態・精度</summary><div><span>保存データ</span><strong>{updatedAt?date(updatedAt):"確認中…"}</strong><span>画面確認</span><strong>{checkedAt?date(checkedAt.toISOString()):"確認中…"}</strong></div><p>取得条件やnote側表示により欠落・重複・時刻ずれが起こる場合があります。重要な確認はnote本体を優先してください。</p></details>
-    <div className="minf-date-filter" aria-label="通知の日付指定"><label><span>📅 表示日</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label><strong>{selectedDay?`${dayLabel(selectedDay)} の通知`:"全期間"}</strong><button type="button" disabled={!selectedDay} onClick={()=>{setPage(1);setSelectedDay("")}}>全期間に戻す</button><small>この日付は下の全カテゴリ共通です。</small></div>
-    <div className="minf-tabs" role="tablist">{CATS.map(([id,label])=><button key={id} className={kind===id?"active":""} onClick={()=>{setPage(1);setKind(id)}}>{label}{categoryCounts[id]!==undefined?<small>{categoryCounts[id]}</small>:null}</button>)}</div>
-    <details className="minf-state"><summary>通知の分類を確認・修復</summary><p>「その他」だけでなく、分類済みの通知も全履歴を再確認します。所有者が分からない返信・メンシプ反応は確認待ちに表示します。</p><button disabled={reclassifying} onClick={()=>void reclassify()}>{reclassifying?"再分類中…":"全履歴を再分類"}</button><p role="status">{repairStatus}</p></details>
+    <div className="minf-filter-panel" aria-label="本人通知の表示条件">
+      <label><span>分類</span><select value={kind} onChange={e=>{setPage(1);setKind(e.target.value)}}>{CATS.map(([id,label])=><option key={id} value={id}>{label}{categoryCounts[id]!==undefined?` (${categoryCounts[id]})`:""}</option>)}</select></label>
+      <label><span>日付</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label>
+      {selectedDay?<button type="button" onClick={()=>{setPage(1);setSelectedDay("")}}>全期間</button>:<span className="minf-filter-total">全期間</span>}
+    </div>
+    <details className="minf-detail">
+      <summary>詳細・精度・再分類</summary>
+      <div className="minf-detail-body">
+        <div className="minf-reader-server"><b>{serverLabel}</b><span>{syncAt?date(syncAt):"—"}</span></div>
+        <dl>
+          <div><dt>端末 最終読取</dt><dd>{readerStatus?.lastRunAt?date(new Date(Number(readerStatus.lastRunAt)).toISOString()):"—"}</dd></div>
+          <div><dt>今回 読取</dt><dd>{readerStatus?Number(readerStatus.lastRunReadCount||0)+"件":"—"}</dd></div>
+          <div><dt>今回 保存確認</dt><dd>{readerStatus?Number(readerStatus.lastRunSavedCount||0)+"件":"—"}</dd></div>
+          <div><dt>サーバー 受信</dt><dd>{syncAt?serverSync.received+"件":"—"}</dd></div>
+          <div><dt>サーバー 保存確認</dt><dd>{syncAt?serverSync.confirmed+"件":"—"}</dd></div>
+          <div><dt>画面確認</dt><dd>{checkedAt?date(checkedAt.toISOString()):"—"}</dd></div>
+        </dl>
+        <p>取得条件やnote側表示により欠落・重複・時刻ずれが起こる場合があります。重要な確認はnote本体を優先してください。</p>
+        <button disabled={reclassifying} onClick={()=>void reclassify()}>{reclassifying?"再分類中…":"全履歴を再分類"}</button>
+        {repairStatus?<p role="status">{repairStatus}</p>:null}
+        {readerStatus?.lastError?<p className="minf-reader-error">⚠ {String(readerStatus.lastError)}</p>:null}
+      </div>
+    </details>
     {error?<p className="minf-error">{error}</p>:null}
     {loading&&!rows.length?<p className="minf-empty">通知を読み込み中…</p>:rows.length?<div className="minf-list">{rows.map((r,i)=>{const h=href(r),actor=actorName(r),p=presentation(r),type=displayType(r),label=LABEL[type]||"その他",actorTop=creatorTop(r.actor_url,selfId);return <article key={r.id||`${rowKey(r)}-${i}`} className={`type-${type}`}><div className="minf-meta"><span>{label}</span>{r.context_label?<b>{r.context_label}</b>:null}<time>{date(r.occurred_at||r.captured_at)}</time></div><div className="minf-who"><Avatar row={r} selfId={selfId}/><div>{actorTop?<a className="minf-actor" href={actorTop} target="_blank" rel="noreferrer">{actor}</a>:<span className="minf-actor static">{actor}</span>}</div></div>{h?<a className="minf-main" href={h} target="_blank" rel="noreferrer"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</a>:<div className="minf-main static"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</div>}{type==="my_article_magazine_added"?<div className="minf-return-links">{r.meta?.article_url?<a href={r.meta.article_url} target="_blank" rel="noreferrer">追加された自分の記事 ↗</a>:null}{r.meta?.magazine_url?<a href={r.meta.magazine_url} target="_blank" rel="noreferrer">追加先マガジン ↗</a>:null}</div>:null}{targetLabel(r)&&h?<a className="minf-target" href={h} target="_blank" rel="noreferrer">{targetLabel(r)}</a>:null}</article>})}</div>:<p className="minf-empty">{selectedDay?`${dayLabel(selectedDay)} のこの分類には通知がありません。`:"この分類の通知はありません。"}</p>}
     {pages>1?<div className="minf-pager"><button disabled={page<=1||loading} onClick={()=>void load(page-1,kind,false,selectedDay)}>← 前</button><label><span>ページ</span><select value={page} onChange={e=>void load(Number(e.target.value),kind,false,selectedDay)}>{Array.from({length:pages},(_,i)=><option key={i+1} value={i+1}>{i+1} / {pages}</option>)}</select></label><button disabled={page>=pages||loading} onClick={()=>void load(page+1,kind,false,selectedDay)}>次 →</button></div>:null}
