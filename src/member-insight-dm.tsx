@@ -46,15 +46,28 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
   useEffect(()=>{const on=()=>setToolVersion(String(localStorage.getItem(DM_TOOL_KEY)||""));window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);return()=>{window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on)}},[]);
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   return <section id="midm" className="midm">
-    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>本人通知なしでも単独利用できます。DMを開くだけで自動同期し、INSIGHTでは相手ごとにまとめます。</p></div></header>
-    <div className="midm-setup">
-      <a className={toolVersion?"installed":""} href={installHref}>{toolVersion?"DM同期ツール "+toolVersion+"（更新）":"DM同期ツールをインストール"}</a>
-      <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
-      <a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">note DMを開いて同期 ↗</a>
+    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>DMを開くだけで会話本文まで同期し、相手ごとにまとめます。</p></div></header>
+    <div className="midm-control">
+      <div className="midm-control-state">
+        <strong className={pairState?.paired?"ok":""}>{pairState?.paired?"✓ DM連携済み":"DM連携 未設定"}</strong>
+        <span><b>{Number(people.length||0).toLocaleString()}</b>人</span>
+        <span><b>{Number(summary?.messages||0).toLocaleString()}</b>件</span>
+        <span className="last">最終 {summary?.lastSync?.created_at?fmt(summary.lastSync.created_at):"—"}</span>
+      </div>
+      <div className="midm-control-main">
+        <a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">DMを開いて同期 ↗</a>
+        {!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
+      </div>
+      <details>
+        <summary>設定・状態</summary>
+        <div className="midm-control-detail">
+          <a className={toolVersion?"installed":""} href={installHref}>{toolVersion?"同期ツール "+toolVersion+"（更新）":"DM同期ツールをインストール"}</a>
+          <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
+          <small>本人通知とは完全に別系統です。通信Readerを優先し、DOM Readerを補助に使います。</small>
+        </div>
+      </details>
     </div>
-    <div className="midm-linkstate"><span className={pairState?.paired?"ok":""}>{pairState?.paired?"✓ DM専用連携済み":"DM専用連携 未設定"}</span><small>本人通知ツールとは別です。</small></div>
     {notice?<p className="midm-notice">{notice}</p>:null}
-    <div className="midm-stats"><span><b>{Number(people.length||0).toLocaleString()}</b><small>相手</small></span><span><b>{Number(summary?.messages||0).toLocaleString()}</b><small>保存DM</small></span><span><b>{summary?.lastSync?.created_at?fmt(summary.lastSync.created_at):"—"}</b><small>最終同期</small></span></div>
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<div className="midm-layout">
       <aside className="midm-threads">{people.map(r=><button key={r.person_key} className={selected?.person_key===r.person_key?"active":""} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>
