@@ -1,2 +1,2 @@
-2026-09-21T16:32+09:00
-INSIGHT v2026.09.21.24: DM one-person-at-a-time view; other people hidden after selection; DM sync V1.3.3 maintained.
+2026-09-21T17:04+09:00
+INSIGHT v2026.09.21.25: notification V3.5.8 viewport-bottom toolbar; DM V1.3.4 parent-frame DOM full sync.
