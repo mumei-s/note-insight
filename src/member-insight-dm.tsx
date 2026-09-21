@@ -17,21 +17,26 @@ const feed=(action:string,extra:Record<string,unknown>={})=>post(API,{action,...
 const pair=(action:string,extra:Record<string,unknown>={})=>post(PAIR,{action,...extra});
 const fmt=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
 function Avatar({row}:{row:Row}){const src=String(row.peer_image_url||row.sender_image_url||"");const name=String(row.peer_name||row.sender_name||row.peer_note_id||"DM");return src?<img className="midm-avatar" src={src} alt="" referrerPolicy="no-referrer"/>:<span className="midm-avatar fallback">{name.slice(0,1)}</span>}
+function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boolean(r.peer_note_id||r.peer_url||r.peer_image_url||(name&&name!=="DM相手"))}
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
   async function load(silent=false){
     if(!silent)setLoading(true);setError("");
     try{
-      const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]);
-      setSummary(s);setPeople(p.rows||[]);setPairState(st);
-      setSelected(prev=>prev&&p.rows?.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
+      const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]),filtered=(p.rows||[]).filter(validPerson);
+      setSummary(s);setPeople(filtered);setPairState(st);
+      setSelected(prev=>prev&&filtered.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
     }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(!silent)setLoading(false)}
   }
   async function loadMessages(person:Row|null){
     if(!person){setMessages([]);return}
-    try{const x=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500});setMessages((x.rows||[]).slice().reverse())}
-    catch(e){setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
+    try{
+      const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500}),total=Math.max(0,Number(first.total||0));let rows=[...(first.rows||[])],pages=Math.ceil(total/500);
+      for(let page=2;page<=pages;page++){const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500});rows.push(...(x.rows||[]))}
+      const seen=new Set<string>();rows=rows.filter((r:Row)=>{const k=String(r.message_key||r.id||"");if(!k||seen.has(k))return false;seen.add(k);return true});
+      setMessages(rows.slice().reverse())
+    }catch(e){setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
   }
   async function startPair(){
     if(busy)return;setBusy(true);setError("");setNotice("");
@@ -72,8 +77,8 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         {dmUpdateAvailable?<a className="midm-update-now" href={installHref}>⬆ DM同期 v{latestDmVersion}へ更新</a>:dmMissing?<a className="midm-update-now" href={installHref}>＋ DM同期ツールを入れる</a>:<a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>}
         {dmUpdateAvailable?<span className="midm-update-required">現在 v{toolVersion} → v{latestDmVersion}</span>:!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
       </div>
-      <details>
-        <summary>設定・状態</summary>
+      <details className={dmUpdateAvailable?"needs-update":""}>
+        <summary>{dmUpdateAvailable?`⬆ DM同期を更新 v${latestDmVersion}`:"設定・状態"}{dmUpdateAvailable?<small>タップして更新</small>:null}</summary>
         <div className="midm-control-detail">
           <a className={toolVersion&&!dmUpdateAvailable?"installed":dmUpdateAvailable?"needs-update":""} href={installHref}>{dmUpdateAvailable?`⬆ 更新 v${toolVersion} → v${latestDmVersion}`:toolVersion?`✓ DM同期 v${toolVersion} 最新`:"DM同期ツールをインストール"}</a>
           <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
@@ -84,7 +89,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     {notice?<p className="midm-notice">{notice}</p>:null}
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<details className="midm-history-panel">
-      <summary><span>DM相手</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
+      <summary><span>DM履歴</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
       <div className="midm-layout">
         <aside className="midm-threads">{people.map(r=><button key={r.person_key} className={selected?.person_key===r.person_key?"active":""} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>
         <div className="midm-messages">{selected?<><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</>:<p className="midm-empty">左のDM相手を選択してください。</p>}</div>
