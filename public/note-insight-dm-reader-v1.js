@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.3.5';
+const VERSION='1.3.6';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -81,7 +81,7 @@ async function syncRoomsInBackground(a,rooms){
  try{
   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:0,lastSavedCount:0,threadCount:rooms.length,currentThread:0,lastError:'',navigationMode:'background-hidden'});
   const list=rooms.slice(0,MAX_ROOMS);
-  for(let i=0;i<list.length;i+=3){
+  for(let i=0;i<list.length;i+=2){
    const batch=list.slice(i,i+2),results=await Promise.all(batch.map(x=>syncFrame(a,x.url,x.key)));
    for(const r of results){read+=Number(r?.read||0);saved+=Number(r?.saved||0);done++}
    await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:done,lastError:'',navigationMode:'background-hidden'})
