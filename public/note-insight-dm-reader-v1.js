@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.0';
+const VERSION='1.3.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -64,21 +64,28 @@ async function scanRoom(a,threadKey){
 }
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...prev,...patch,version:VERSION})}
 let bgRunning=false,bgLastAt=0,bgWorkerDone=false;
+function bgUrl(v){try{const u=new URL(v,location.href);u.searchParams.set('mumei_dm_bg','1');return u.href}catch{return String(v||'')}}
+function syncFrame(url,threadKey){
+ return new Promise(resolve=>{
+  const frame=document.createElement('iframe');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:390px!important;height:800px!important;opacity:0!important;pointer-events:none!important;left:-12000px!important;top:0!important;border:0!important;contain:strict!important';
+  let done=false;const finish=(x)=>{if(done)return;done=true;clearTimeout(timer);removeEventListener('message',on);try{frame.remove()}catch{}resolve(x)};
+  const on=e=>{if(e.origin!==location.origin||e.data?.source!=='mumei-dm-bg-v130'||String(e.data?.threadKey||'')!==String(threadKey||''))return;finish(e.data)};
+  addEventListener('message',on);const timer=setTimeout(()=>finish({threadKey,timeout:true}),22000);frame.src=bgUrl(url);document.body.appendChild(frame)
+ })
+}
 async function syncRoomsInBackground(a,rooms){
- if(bgRunning||Date.now()-bgLastAt<20000||!Array.isArray(rooms)||!rooms.length)return;
- const net=window.__mumeiDmNetworkV2;
- if(!net||typeof net.syncRoom!=='function'){await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'direct-api',lastRunComplete:false,lastReadCount:0,lastSavedCount:0,threadCount:rooms.length,currentThread:0,lastError:'DM_API_READER_UNAVAILABLE',navigationMode:'direct-api'});return}
- bgRunning=true;bgLastAt=Date.now();let read=0,saved=0,done=0,empty=0,lastError='';
+ if(bgRunning||Date.now()-bgLastAt<45000||!Array.isArray(rooms)||!rooms.length)return;
+ bgRunning=true;bgLastAt=Date.now();let read=0,saved=0,done=0;
  try{
-  const list=rooms.filter(x=>ROOM_ID_RE.test(String(x?.key||''))).slice(0,MAX_ROOMS);
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'direct-api',lastRunComplete:false,lastReadCount:0,lastSavedCount:0,threadCount:list.length,currentThread:0,lastError:'',navigationMode:'direct-api'});
-  for(let i=0;i<list.length;i+=2){
-   const batch=list.slice(i,i+2),results=await Promise.all(batch.map(x=>net.syncRoom(x.key)));
-   for(const r of results){read+=Number(r?.read||0);saved+=Number(r?.saved||0);done++;if(!Number(r?.read||0))empty++;if(r?.error)lastError=String(r.error)}
-   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'direct-api',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:done,lastError:lastError,navigationMode:'direct-api'})
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:0,lastSavedCount:0,threadCount:rooms.length,currentThread:0,lastError:'',navigationMode:'background-hidden'});
+  const list=rooms.slice(0,MAX_ROOMS);
+  for(let i=0;i<list.length;i+=3){
+   const batch=list.slice(i,i+3),results=await Promise.all(batch.map(x=>syncFrame(x.url,x.key)));
+   for(const r of results){read+=Number(r?.read||0);saved+=Number(r?.saved||0);done++}
+   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:done,lastError:'',navigationMode:'background-hidden'})
   }
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'direct-api',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:done,emptyThreadCount:empty,lastError:read?'':lastError||'DM_API_EMPTY',navigationMode:'direct-api'})
- }catch(e){await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'direct-api',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,lastError:String(e?.message||e),navigationMode:'direct-api'})}
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:read,lastSavedCount:saved,threadCount:rooms.length,currentThread:done,lastError:'',navigationMode:'background-hidden'})
+ }catch(e){await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,lastError:String(e?.message||e),navigationMode:'background-hidden'})}
  finally{bgRunning=false}
 }
 async function clearLegacyQueue(a){try{await set(key(QUEUE,a.id),null);sessionStorage.removeItem(DONE);cloak(false)}catch{}}
@@ -86,7 +93,8 @@ async function run(){
  if(!dmRoute())return;
  const a=await account();if(!a)return;
  await clearLegacyQueue(a);
- if(rootRoute()){
+ const isBg=window.top!==window.self&&new URLSearchParams(location.search).get('mumei_dm_bg')==='1';
+ if(rootRoute()&&!isBg){
   const rooms=roomAnchors(),threads=rooms.map(roomData);
   if(threads.length)await save(a,threads,[]);
   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:0,lastSavedCount:0,threadCount:threads.length,lastError:'',navigationMode:'passive'});
@@ -94,13 +102,15 @@ async function run(){
   return
  }
  const threadKey=roomKeyFromUrl(location.href);if(!threadKey)return;
+ if(isBg&&bgWorkerDone)return; if(isBg)bgWorkerDone=true;
  try{
-  const net=window.__mumeiDmNetworkV2,r=net&&typeof net.syncRoom==='function'?await net.syncRoom(threadKey):await scanRoom(a,threadKey);
+  const r=await scanRoom(a,threadKey);
   await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:r?.mode||'single-passive',lastRunComplete:true,lastReadCount:Number(r?.read||0),lastSavedCount:Number(r?.saved||0),lastThreadKey:threadKey,lastError:r?.error||'',navigationMode:'direct-api'})
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:isBg?'background-room':'single-passive',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:'',navigationMode:isBg?'background-hidden':'passive'});
+  if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:r.read,saved:r.saved},location.origin)
  }catch(e){
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'direct-api',lastError:String(e&&e.message||e),navigationMode:'direct-api'});
-  cloak(false)
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:isBg?'background-room':'single-passive',lastError:String(e&&e.message||e),navigationMode:isBg?'background-hidden':'passive'});
+  if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:0,saved:0,error:String(e&&e.message||e)},location.origin);else cloak(false)
  }
 }
 if(dmRoute()){let timer=0,running=false;const schedule=(ms=180)=>{clearTimeout(timer);timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).finally(()=>{running=false})},ms)};schedule(220);new MutationObserver(()=>schedule(180)).observe(document.documentElement,{subtree:true,childList:true});addEventListener('pageshow',()=>schedule(180));addEventListener('focus',()=>schedule(180));window.__mumeiInsightDmReaderV1Api={version:VERSION,run:()=>{if(running)return false;running=true;Promise.resolve(run()).finally(()=>{running=false});return true}}}
