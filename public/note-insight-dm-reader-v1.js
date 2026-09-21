@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.2.1';
+const VERSION='1.3.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -21,7 +21,8 @@ async function account(){try{const r=await fetch('/api/v2/current_user',{credent
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const c=v.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,3266489917)}return((a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0'))}
 function relativeTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前/u);if(!m)return null;const u={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*u[m[2]]).toISOString()}
 function roomAnchors(){const map=new Map();for(const a of document.querySelectorAll('a[href]')){if(!shown(a))continue;const href=a.getAttribute('href')||'',k=roomKeyFromUrl(href);if(!k)continue;const u=new URL(href,location.href);u.hash='';map.set(k,{a,url:u.href,key:k})}return[...map.values()].slice(0,MAX_ROOMS)}
-function roomData(x){const a=x.a,box=a.closest('li,[role="listitem"],article')||a.parentElement||a;const text=clean((box&&box.textContent)||a.textContent),img=box&&box.querySelector?box.querySelector('img[src]'):null;let peerUrl=null,peerId=null;for(const l of (box&&box.querySelectorAll?box.querySelectorAll('a[href]'):[])){const id=creatorId(l.getAttribute('href'));if(id){peerId=id;peerUrl=new URL(l.getAttribute('href'),location.href).href;break}}const dt=box&&box.querySelector?box.querySelector('time[datetime],[datetime]'):null,tm=dt&&dt.getAttribute('datetime')||relativeTime(text);const name=clean((img&&img.getAttribute('alt'))||a.getAttribute('aria-label')||a.textContent).replace(/\s+(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前).*$/u,'').slice(0,300)||null;return{thread_key:x.key,room_url:x.url,peer_note_id:peerId,peer_name:name,peer_url:peerUrl,peer_image_url:img?String(img.currentSrc||img.src||''):null,last_message_at:tm,meta:{preview:text.slice(0,1000),source:'note-dm-room-list-v1'}}}
+function roomData(x){const a=x.a,box=a.closest('li,[role="listitem"],article')||a.parentElement||a;const text=clean((box&&box.textContent)||a.textContent),img=box&&box.querySelector?box.querySelector('img[src]'):null;let peerUrl=null,peerId=null;for(const l of (box&&box.querySelectorAll?box.querySelectorAll('a[href]'):[])){const id=creatorId(l.getAttribute('href'));if(id){peerId=id;peerUrl=new URL(l.getAttribute('href'),location.href).href;break}}const dt=box&&box.querySelector?box.querySelector('time[datetime],[datetime]'):null,tm=dt&&dt.getAttribute('datetime')||relativeTime(text);let name=clean((img&&img.getAttribute('alt'))||a.getAttribute('aria-label')||a.textContent).replace(/\s+(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前).*$/u,'').replace(/とのメッセージ(?:（未読のメッセージがあります）)?$/u,'').trim().slice(0,300)||null;return{thread_key:x.key,room_url:x.url,peer_note_id:peerId,peer_name:name,peer_url:peerUrl,peer_image_url:img?String(img.currentSrc||img.src||''):null,last_message_at:tm,meta:{preview:text.slice(0,4000),source:'note-dm-room-list-v1'}}}
+function previewMessage(t){let raw=clean(t?.meta?.preview||'');if(!raw)return null;const name=clean(t?.peer_name||'');let body=raw;if(name&&body.startsWith(name))body=body.slice(name.length).trim();body=body.replace(/とのメッセージ(?:（未読のメッセージがあります）)?/u,'').replace(/(?:たった今|昨日|約?\d+\s*(?:秒|分|時間|日|週)前)$/u,'').trim();if(!body)return null;return{thread_key:t.thread_key,message_key:'preview:'+t.thread_key+':'+hash(body),direction:'unknown',sender_name:t.peer_name||null,sender_url:t.peer_url||null,sender_image_url:t.peer_image_url||null,body,sent_at:t.last_message_at||null,raw_text:raw,attachment_name:null,attachment_url:null,attachment_type:null,meta:{source:'note-dm-room-preview-v130',preview:true}}}
 function textbox(){return[...document.querySelectorAll('textarea,[contenteditable="true"],[role="textbox"]')].find(shown)||null}
 function candidateNodes(root){if(!root)return[];const sel='[data-message-id],[data-testid*="message" i],[class*="messageItem" i],[class*="MessageItem" i],[class*="chatItem" i],[class*="bubble" i],li,[role="listitem"],article';const all=[...root.querySelectorAll(sel)].filter(el=>{if(!shown(el)||el.querySelector('textarea,[contenteditable="true"],[role="textbox"]')||el.querySelector('a[href*="/messages/rooms/"]'))return false;const t=clean(el.textContent),hasAttachment=Boolean(el.querySelector('a[href],img[src]'));return(t.length>0&&t.length<=12000)||hasAttachment});const out=[];for(const el of all){if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out}
 function conversationRoot(){const input=textbox();if(input){let p=input.parentElement,best=null,d=0;while(p&&p!==document.body&&p!==document.documentElement&&d++<12){if(shown(p)){const xs=candidateNodes(p),roomLinks=p.querySelectorAll('a[href*="/messages/rooms/"]').length;if(xs.length&&roomLinks<3)best=p;const r=p.getBoundingClientRect();if(best&&r.height>innerHeight*.85)break}p=p.parentElement}if(best)return best}for(const root of document.querySelectorAll('main,[role="main"],section,[class*="message" i],[class*="chat" i]')){if(!shown(root))continue;const xs=candidateNodes(root),roomLinks=root.querySelectorAll('a[href*="/messages/rooms/"]').length;if(xs.length&&roomLinks<3)return root}return null}
@@ -32,26 +33,53 @@ async function save(a,threads,messages){const token=String(await get(key(TOKEN,a
 function cloak(on){try{if(on){document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-dm-scan-cloak','1')}else{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-dm-scan-cloak')}}catch{}}
 async function scanRoom(a,threadKey){const net=window.__mumeiDmNetworkV2;for(let i=0;i<20;i++){const n=net?.getRoomCount?.(threadKey);if(Number(n?.captured||0)>0){for(let j=0;j<20&&Number(net?.getRoomCount?.(threadKey)?.saved||0)<Number(n.captured||0);j++)await sleep(150);const done=net?.getRoomCount?.(threadKey)||n;return{read:Number(done.captured||0),saved:Number(done.saved||0)}}if(conversationRoot())break;await sleep(180)}const root=conversationRoot();if(!root)throw new Error('DM_CONVERSATION_NOT_FOUND');const host=scrollHost(root),map=new Map();const capture=()=>{for(const el of candidateNodes(root)){const m=messageData(el,threadKey,root,a.id);if(m.body||m.attachment_url)map.set(m.message_key,m)}};capture();let stable=!host?6:0;if(host){let last=-1;for(let i=0;i<MAX_SCROLL&&map.size<MAX_MESSAGES;i++){host.scrollTop=0;await sleep(380);capture();const h=host.scrollHeight;if(h===last)stable++;else stable=0;last=h;if(stable>=6)break}if(stable<6&&map.size>=MAX_MESSAGES)throw new Error('DM_MESSAGE_LIMIT')}const current=roomAnchors().find(x=>x.key===threadKey),thread=current?roomData(current):{thread_key:threadKey,room_url:location.href,peer_note_id:null,peer_name:null,peer_url:null,peer_image_url:null,last_message_at:null,meta:{source:'note-dm-room-v1'}};const messages=[...map.values()];const p=await save(a,[thread],messages);return{read:messages.length,saved:Number(p&&p.messageCount||0)}}
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{});await set(key(CHECK,a.id),{...prev,...patch,version:VERSION})}
+let bgRunning=false,bgLastAt=0,bgWorkerDone=false;
+function bgUrl(v){try{const u=new URL(v,location.href);u.searchParams.set('mumei_dm_bg','1');return u.href}catch{return String(v||'')}}
+function syncFrame(url,threadKey){
+ return new Promise(resolve=>{
+  const frame=document.createElement('iframe');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;left:-9999px!important;top:-9999px!important;border:0!important';
+  let done=false;const finish=(x)=>{if(done)return;done=true;clearTimeout(timer);removeEventListener('message',on);try{frame.remove()}catch{}resolve(x)};
+  const on=e=>{if(e.origin!==location.origin||e.data?.source!=='mumei-dm-bg-v130'||String(e.data?.threadKey||'')!==String(threadKey||''))return;finish(e.data)};
+  addEventListener('message',on);const timer=setTimeout(()=>finish({threadKey,timeout:true}),12000);frame.src=bgUrl(url);document.body.appendChild(frame)
+ })
+}
+async function syncRoomsInBackground(a,rooms){
+ if(bgRunning||Date.now()-bgLastAt<45000||!Array.isArray(rooms)||!rooms.length)return;
+ bgRunning=true;bgLastAt=Date.now();let read=0,saved=0,done=0;
+ try{
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:0,lastSavedCount:0,threadCount:rooms.length,currentThread:0,lastError:'',navigationMode:'background-hidden'});
+  for(const x of rooms.slice(0,80)){
+   const r=await syncFrame(x.url,x.key);read+=Number(r?.read||0);saved+=Number(r?.saved||0);done++;
+   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,threadCount:rooms.length,currentThread:done,lastError:'',navigationMode:'background-hidden'})
+  }
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:true,lastFullScanAt:Date.now(),lastReadCount:read,lastSavedCount:saved,threadCount:rooms.length,currentThread:done,lastError:'',navigationMode:'background-hidden'})
+ }catch(e){await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,lastError:String(e?.message||e),navigationMode:'background-hidden'})}
+ finally{bgRunning=false}
+}
 async function clearLegacyQueue(a){try{await set(key(QUEUE,a.id),null);sessionStorage.removeItem(DONE);cloak(false)}catch{}}
 async function run(){
  if(!dmRoute())return;
  const a=await account();if(!a)return;
  await clearLegacyQueue(a);
- if(rootRoute()){
-  const rooms=roomAnchors().filter(x=>x.key&&x.key!=='new'),threads=rooms.map(roomData);
-  if(threads.length)await save(a,threads,[]);
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:0,lastSavedCount:0,threadCount:threads.length,lastError:'',navigationMode:'passive'});
+ const isBg=window.top!==window.self&&new URLSearchParams(location.search).get('mumei_dm_bg')==='1';
+ if(rootRoute()&&!isBg){
+  const rooms=roomAnchors().filter(x=>x.key&&x.key!=='new'),threads=rooms.map(roomData),previews=threads.map(previewMessage).filter(Boolean);
+  if(threads.length)await save(a,threads,previews);
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:previews.length,lastSavedCount:previews.length,threadCount:threads.length,lastError:'',navigationMode:'passive'});
+  void syncRoomsInBackground(a,rooms);
   return
  }
  const threadKey=roomKeyFromUrl(location.href);if(!threadKey||threadKey==='new')return;
+ if(isBg&&bgWorkerDone)return; if(isBg)bgWorkerDone=true;
  try{
   const r=await scanRoom(a,threadKey);
   await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'single-passive',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:'',navigationMode:'passive'})
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:isBg?'background-room':'single-passive',lastRunComplete:true,lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:'',navigationMode:isBg?'background-hidden':'passive'});
+  if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:r.read,saved:r.saved},location.origin)
  }catch(e){
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'single-passive',lastError:String(e&&e.message||e),navigationMode:'passive'});
-  cloak(false)
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:isBg?'background-room':'single-passive',lastError:String(e&&e.message||e),navigationMode:isBg?'background-hidden':'passive'});
+  if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:0,saved:0,error:String(e&&e.message||e)},location.origin);else cloak(false)
  }
 }
-if(dmRoute()){let timer=0,running=false;const schedule=(ms=500)=>{clearTimeout(timer);timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).finally(()=>{running=false})},ms)};schedule(800);new MutationObserver(()=>schedule(500)).observe(document.documentElement,{subtree:true,childList:true});addEventListener('pageshow',()=>schedule(400));addEventListener('focus',()=>schedule(500));window.__mumeiInsightDmReaderV1Api={version:VERSION,run:()=>{if(running)return false;running=true;Promise.resolve(run()).finally(()=>{running=false});return true}}}
+if(dmRoute()){let timer=0,running=false;const schedule=(ms=180)=>{clearTimeout(timer);timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).finally(()=>{running=false})},ms)};schedule(220);new MutationObserver(()=>schedule(180)).observe(document.documentElement,{subtree:true,childList:true});addEventListener('pageshow',()=>schedule(180));addEventListener('focus',()=>schedule(180));window.__mumeiInsightDmReaderV1Api={version:VERSION,run:()=>{if(running)return false;running=true;Promise.resolve(run()).finally(()=>{running=false});return true}}}
 })();
