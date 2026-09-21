@@ -129,3 +129,20 @@ test('seven-day selection still compares against the preceding seven days',()=>{
   const row=days=>({notification_type:'my_article_magazine_added',occurred_at:new Date(Date.now()-days*86400000).toISOString(),actor_name:'A'});
   const recent=row(1),previous=row(9);const r=summarize([recent],'ss_yr',false,1,7,[recent,previous]);assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);
 });
+
+test('notification-only network capture rejects unrelated note APIs and V24 rechecks pending rows',()=>{
+  const network=read('public/note-insight-notification-network-v3300.js');
+  const reclass=read('supabase/functions/insight-notification-reclassify/index.ts');
+  const ingest=read('supabase/functions/insight-notification-ingest-v2/index.ts');
+  const ui=read('src/member-insight-notifications-final.tsx');
+  assert.match(network,/function extractDirectNotices/);
+  assert.match(network,/direct-api-root-only-v357/);
+  assert.match(network,/if\(cap&&!directNoticesCap\(cap\)\)cap=null/);
+  assert.match(network,/reason:'NO_NOTIFICATION_API_CAPTURE',needsDom:true/);
+  assert.match(reclass,/CLASSIFIER_VERSION="action-v24-structured"/);
+  assert.doesNotMatch(reclass,/meta\?\.classifier==="action-v23-structured"[^\n]*continue/);
+  assert.match(ingest,/action-v24-structured/);
+  assert.match(ui,/CLASSIFIER_VERSION="action-v24-structured"/);
+  assert.match(ui,/NOTIFICATION_MASTER_CACHE/);
+  assert.match(ui,/question_answer/);
+});
