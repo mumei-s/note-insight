@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.1',PROTOCOL='3.5.1';
+const VERSION='3.5.2',PROTOCOL='3.5.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -132,7 +132,7 @@ async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
 }
 async function scan(){
  if(isDmRoute())return;
- if(scanning){health('通信読取中です…','saving');return 0}
+ if(scanning){try{window.__mumeiNotificationNetwork3300?.stop?.()}catch{}stop=true;health('停止要求｜現在ページを保存してから停止します…','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
  if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
  scanning=true;stop=false;
@@ -140,8 +140,8 @@ async function scan(){
   const r=await net.syncCurrent({waitMs:1000});
   const saved=Number(r?.saved||0),read=Number(r?.received||0);
   if(r?.handled){
-   const label=r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
-   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read)});
+   const label=r?.partial?'途中保存':r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
+   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read),partial:Boolean(r?.partial),historyComplete:Boolean(r?.historyComplete)});
    return saved
   }
   health('通信読取待機｜🔔を開いたまま次回も続きから確認します','saving');
