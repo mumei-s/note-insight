@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.23",
+  "appVersion": "2026.09.21.24",
   "notificationVersion": "3.5.7",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T16:20:00+09:00",
+  "releasedAt": "2026-09-21T16:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DM更新導線を1個に統一。DMタブ上部の更新ボタンだけを更新操作とし、設定・状態内は現在版/最新版の表示だけに変更。本人通知V3.5.7・DM V1.3.3は維持。",
+  "note": "DM UI修正。未選択時は相手一覧だけ、相手選択後は選んだ人のDMだけを表示して他の相手を完全非表示。横2列表示を廃止し、← DM履歴一覧で戻る1画面1内容方式。DM同期V1.3.3は維持。",
   "dmVersion": "1.3.3",
   "dmLabel": "DM同期"
 }
