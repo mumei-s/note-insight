@@ -25,7 +25,19 @@ function actionText(v:string){return canonicalText(v).replace(/(?:たった今|�
 function actorFromText(v:string){const m=actionText(v).match(/^(.{1,160}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||null}
 function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(ms)?new Date(ms):new Date();return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 
-function classify(text:string,targetUrl:string|null){
+const KIND_TYPES:Record<string,string>={
+ like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
+ board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
+ circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
+ magazine_follow:"magazine_follow",magazine_note_add:"my_article_magazine_added",magazine_note_add_follow:"magazine_article_added",jm_magazine_add:"magazine_article_added",jm_magazine_joined:"magazine_join",
+ embed_note:"quote",purchase_note_update:"purchased_article_updated",qa_answer:"question_answer",note_publish:"creator_article_posted",purchase:"purchase",purchase_note:"purchase",note_purchase:"purchase",note_rating:"rating",note_recommend:"rating",support:"tip",tip:"tip"
+};
+function astText(v:any):string{if(typeof v==="string")return v;if(Array.isArray(v))return v.map(astText).join("");if(!v||typeof v!=="object")return "";return typeof v.value==="string"?v.value:typeof v.text==="string"?v.text:astText(v.children||v.content||[])}
+function structuredType(meta:any,target:string|null){const candidates=[meta?.kind];for(const raw of [meta?.all_area_url,meta?.featured_area_url,target]){try{candidates.push(new URL(String(raw)).searchParams.get("kind"))}catch{}}for(const kind of candidates)if(kind&&KIND_TYPES[String(kind)])return KIND_TYPES[String(kind)];return null}
+
+function classify(text:string,targetUrl:string|null,meta:any={}){
+  const known=structuredType(meta,targetUrl);if(known)return known;
+  text=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
   const t=actionText(text),target=targetUrl||"";
   if(/^あなたの記事[がを].{0,500}(?:追加されました|追加しました)/u.test(t))return "my_article_magazine_added";
   if(/[?&]kind=board_reply_(?:comment|post)(?:&|$)/i.test(target))return "membership_board_reply";
@@ -110,7 +122,7 @@ Deno.serve(async(req)=>{
       if(!allowedExplicitSource(source)){blocked++;continue}
       const raw=cleanRaw(item?.raw_text??item?.text);
       if(!raw||raw.length<5||raw.length>4000){skipped++;continue}
-      const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl);
+      const sourceUrl=cleanTarget(item?.source_url),targetUrl=cleanTarget(item?.target_url),actorUrl=cleanTarget(item?.actor_url),actorImage=cleanTarget(item?.actor_image_url),occurred=clean(item?.occurred_at,80),type=classify(raw,targetUrl,meta);
       const actorName=clean(item?.actor_name,200)||actorFromText(raw);
       const at=occurred&&!Number.isNaN(Date.parse(occurred))?new Date(occurred).toISOString():null;
       const eventDay=jstDay(at||new Date().toISOString());
@@ -121,13 +133,14 @@ Deno.serve(async(req)=>{
       const{data:byFingerprint,error:findError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints);
       if(findError)throw findError;
       let candidates=(byFingerprint||[]) as ExistingRow[];
+      if(String(meta.event_identity||"").startsWith("notice:")){const{data:byEvent,error:eventError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).contains("meta",{event_identity:meta.event_identity}).limit(8);if(eventError)throw eventError;const seen=new Set(candidates.map(x=>x.id));for(const x of (byEvent||[]) as ExistingRow[])if(!seen.has(x.id)){seen.add(x.id);candidates.push(x)}}
       if(clientSignature){
         const{data:bySignature,error:signatureError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8);
         if(signatureError)throw signatureError;
         const seen=new Set(candidates.map(x=>x.id));for(const x of (bySignature||[]) as ExistingRow[])if(!seen.has(x.id)){seen.add(x.id);candidates.push(x)}
       }
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v22-unmatched-safe",classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v23-structured",classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
@@ -139,7 +152,7 @@ Deno.serve(async(req)=>{
     }
     const confirmed=[...new Set(confirmedClientSignatures)];
     await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:confirmed.length,received_count:incoming.length,source:"browser-notification-stable-v3-confirmed"});
-    const result={ok:true,noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
+    const result={ok:true,ingestedAt:new Date().toISOString(),classifierVersion:"action-v23-structured",noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
