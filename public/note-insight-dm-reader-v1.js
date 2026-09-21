@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.3.1';
+const VERSION='1.3.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -15,7 +15,8 @@ const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const dmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
 const rootRoute=()=>/^\/messages\/rooms\/?$/i.test(location.pathname);
 const shown=el=>{if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1)return false;for(let p=el;p&&p!==document.body;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden')return false}return true};
-function roomKeyFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i);return m&&m[1]?m[1]:''}catch{return''}}
+const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function roomKeyFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m&&m[1]?m[1]:'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean),id=String(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['messages','settings','notifications'].includes(id)?id:''}catch{return''}}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(r.ok){const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))return{id}}}catch{}return null}
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const c=v.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,3266489917)}return((a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0'))}
@@ -100,7 +101,7 @@ async function run(){
   void syncRoomsInBackground(a,rooms);
   return
  }
- const threadKey=roomKeyFromUrl(location.href);if(!threadKey||threadKey==='new')return;
+ const threadKey=roomKeyFromUrl(location.href);if(!threadKey)return;
  if(isBg&&bgWorkerDone)return; if(isBg)bgWorkerDone=true;
  try{
   const r=await scanRoom(a,threadKey);
