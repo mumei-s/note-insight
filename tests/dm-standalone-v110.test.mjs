@@ -83,3 +83,15 @@ test('DM tab remains compact and top card stays removed',()=>{
   assert.match(unified,/\["dm","DM"\]/);
   assert.match(unified,/tab==="dm"\?<MemberInsightDm/);
 });
+
+
+test('one selected DM person hides the rest',()=>{
+  const ui=read('src/member-insight-dm.tsx');
+  const css=read('src/member-insight-dm.css');
+  assert.match(ui,/!selected\?<aside className="midm-threads"/);
+  assert.match(ui,/selected\?<div className="midm-person-view"/);
+  assert.match(ui,/← DM履歴一覧/);
+  assert.match(ui,/setSelected\(null\);setMessages\(\[\]\)/);
+  assert.match(css,/\.midm-layout\{display:block!important\}/);
+  assert.match(css,/\.midm-layout\.is-person \.midm-threads\{display:none!important\}/);
+});
