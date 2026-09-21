@@ -37,14 +37,14 @@ test("notification Reader stays automatic while Controls are a separate module",
   assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
   assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
   assert.doesNotMatch(reader,/mumei-inline-notification-controls-v1|INSIGHT【通知】|フィルター ON/);
-  assert.match(controls,/mumei-inline-notification-controls-v1/);assert.match(controls,/document\.body\.appendChild\(bar\)/);assert.match(controls,/data-action="read"/);assert.match(controls,/position:fixed/);
+  assert.match(controls,/mumei-inline-notification-controls-v1/);assert.match(controls,/panel\.appendChild\(bar\)/);assert.match(controls,/data-action="read"/);assert.match(controls,/position:fixed/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
 });
 
 test("automatic reading is owned only by Reader",async()=>{
   const reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
-  assert.match(reader,/setTimeout\(\(\)=>scheduleAuto\(600\),120\)/);
-  assert.match(reader,/scheduleAuto\(300\)/);assert.match(reader,/if\(!p\)\{autoPanel=null;return\}/);
+  assert.match(reader,/setTimeout\(\(\)=>scheduleAuto\(180\),80\)/);
+  assert.match(reader,/scheduleAuto\(90\)/);assert.match(reader,/if\(!p\)\{autoPanel=null;return\}/);
   assert.doesNotMatch(controls,/void scan\(\)|sendBatch|historyComplete/);
 });
 
@@ -65,5 +65,5 @@ test("V3.5.3 supports checkpoint stop without losing partial progress",async()=>
   const network=await read("public/note-insight-notification-network-v3300.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
   assert.match(network,/stopRequested/);assert.match(network,/function stop\(\)/);assert.match(network,/停止・途中保存/);assert.match(network,/resume:/);
   assert.match(reader,/__mumeiNotificationNetwork3300\?\.stop\?\.\(\)/);assert.match(reader,/現在ページを保存してから停止/);assert.match(reader,/r\?\.partial\?'途中保存'/);
-  assert.match(controls,/停止 \$\{read\}/);assert.match(controls,/VERSION='1\.3\.1'/);
+  assert.match(controls,/停止 \$\{read\}/);assert.match(controls,/VERSION='1\.3\.2'/);
 });
