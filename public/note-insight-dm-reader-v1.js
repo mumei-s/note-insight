@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.3.4';
+const VERSION='1.3.5';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
