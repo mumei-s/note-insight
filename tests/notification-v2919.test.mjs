@@ -9,7 +9,7 @@ test("V3.5.6 loads split notification architecture",async()=>{
   assert.match(v3,/@version\s+3\.5\.6/);
   for(const p of ["note-insight-notification-network-v3300.js?v=3560","note-insight-notification-reader-v4.js?v=3560","note-insight-notification-controls-v1.js?v=133","note-insight-notification-filter-v4.js?v=400","note-insight-notification-return-v1.js?v=120","note-insight-notification-status-bridge-v1.js?v=110","note-insight-notification-settings-bridge-v1.js?v=100","note-insight-notification-account-pair-v1.js?v=100"])assert.ok(v3.includes(p),p);
   assert.doesNotMatch(v3,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
-  has(reader,["function directPanel","function findPanel(){return directPanel()}","actor_image_url:img","function scheduleAuto","historyComplete","✓全履歴確認","✓追加確認"]);
+  has(reader,["function directPanel","function findPanel(){return directPanel()}","actor_image_url:img","function scheduleAuto","historyComplete","MAX_NOTICES=300","document.addEventListener('scroll'","✓追加確認"]);
   assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|TOOLBAR_ID|notification-filter-settings\.html/);
   has(controls,["INSIGHT【通知】","フィルター ON","フィルター OFF","data-action=\"settings\""]);
 });
@@ -17,7 +17,7 @@ test("V3.5.6 loads split notification architecture",async()=>{
 test("automatic notification reading is Reader-only and does not require controls",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),reader=await read("public/note-insight-notification-reader-v4.js");
   assert.doesNotMatch(v3,/note-insight-notification-runtime-v2958\.js\?v=/);
-  assert.match(reader,/function scheduleAuto/);assert.match(reader,/void scan\(\)/);
+  assert.match(reader,/function scheduleAuto/);assert.match(reader,/scan\(\{fastOnly:true\}\)/);
   const network=await read("public/note-insight-notification-network-v3300.js");assert.match(network,/async function syncHistory/);assert.match(network,/needsDom:false/);assert.match(reader,/net\.syncCurrent/);assert.match(reader,/new MutationObserver/);
   assert.doesNotMatch(reader,/data-action="filter"|data-action="settings"|data-action="insight"/);
 });
