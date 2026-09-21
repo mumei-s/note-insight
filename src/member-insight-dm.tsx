@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { CURRENT_DM_VERSION, fetchInsightRelease, versionDiffers } from "./insight-release";
 import "./member-insight-dm.css";
 
 const API="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-feed";
@@ -18,7 +19,7 @@ const fmt=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.
 function Avatar({row}:{row:Row}){const src=String(row.peer_image_url||row.sender_image_url||"");const name=String(row.peer_name||row.sender_name||row.peer_note_id||"DM");return src?<img className="midm-avatar" src={src} alt="" referrerPolicy="no-referrer"/>:<span className="midm-avatar fallback">{name.slice(0,1)}</span>}
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
-  const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||""));
+  const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
   async function load(){
     setLoading(true);setError("");
     try{
@@ -43,8 +44,15 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
   }
   useEffect(()=>{void load()},[revision]);
   useEffect(()=>{void loadMessages(selected)},[selected?.person_key,revision]);
-  useEffect(()=>{const on=()=>setToolVersion(String(localStorage.getItem(DM_TOOL_KEY)||""));window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);return()=>{window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on)}},[]);
+  useEffect(()=>{
+    let dead=false;
+    const on=()=>{const installed=String(localStorage.getItem(DM_TOOL_KEY)||"");setToolVersion(installed);void fetchInsightRelease().then(x=>{if(dead)return;setLatestDmVersion(String(x.dmVersion||CURRENT_DM_VERSION));setReleaseChecked(true)}).catch(()=>{if(!dead){setLatestDmVersion(CURRENT_DM_VERSION);setReleaseChecked(true)}})};
+    on();
+    window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);window.addEventListener("pageshow",on);document.addEventListener("visibilitychange",on);
+    return()=>{dead=true;window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on);window.removeEventListener("pageshow",on);document.removeEventListener("visibilitychange",on)}
+  },[]);
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
+  const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
   return <section id="midm" className="midm">
     <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>通常のnote DM導線はそのまま。開いた会話だけを安全に保存し、相手ごとにまとめます。</p></div></header>
     <div className="midm-control">
@@ -55,13 +63,13 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         <span className="last">最終 {summary?.lastSync?.created_at?fmt(summary.lastSync.created_at):"—"}</span>
       </div>
       <div className="midm-control-main">
-        <a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>
-        {!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
+        {dmUpdateAvailable?<a className="midm-update-now" href={installHref}>⬆ DM同期 v{latestDmVersion}へ更新</a>:dmMissing?<a className="midm-update-now" href={installHref}>＋ DM同期ツールを入れる</a>:<a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>}
+        {dmUpdateAvailable?<span className="midm-update-required">現在 v{toolVersion} → v{latestDmVersion}</span>:!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
       </div>
       <details>
         <summary>設定・状態</summary>
         <div className="midm-control-detail">
-          <a className={toolVersion?"installed":""} href={installHref}>{toolVersion?"同期ツール "+toolVersion+"（更新）":"DM同期ツールをインストール"}</a>
+          <a className={toolVersion&&!dmUpdateAvailable?"installed":dmUpdateAvailable?"needs-update":""} href={installHref}>{dmUpdateAvailable?`⬆ 更新 v${toolVersion} → v${latestDmVersion}`:toolVersion?`✓ DM同期 v${toolVersion} 最新`:"DM同期ツールをインストール"}</a>
           <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
           <small>本人通知とは完全に別系統です。通信Readerを優先し、DOM Readerを補助に使います。</small>
         </div>
