@@ -39,3 +39,17 @@
 
 /* single DM update action */
 .midm-version-state{display:flex;align-items:center;min-height:29px;border:1px solid #304c5f;border-radius:7px;background:#08151e;color:#a7bdca;padding:4px 7px;font:900 8px/1.2 system-ui}
+
+/* one-person-at-a-time DM view */
+.midm-layout{display:block!important}
+.midm-person-view{display:block;min-width:0}
+.midm-back-list{width:100%;min-height:34px;margin:0 0 6px;border:1px solid #3d647b;border-radius:8px;background:#0c1d29;color:#dff6ff;font:950 9px/1.2 system-ui;text-align:left;padding:7px 9px}
+.midm-layout.is-list .midm-threads{display:flex!important;width:100%;max-height:none}
+.midm-layout.is-person .midm-threads{display:none!important}
+.midm-layout.is-person .midm-messages{display:block;width:100%;max-height:none;min-height:220px}
+@media(max-width:720px){
+ .midm-layout{display:block!important}
+ .midm-layout.is-list .midm-threads{max-height:none!important}
+ .midm-layout.is-person .midm-messages{max-height:none!important}
+ .midm-back-list{position:sticky;top:0;z-index:2;background:#0d2230}
+}
