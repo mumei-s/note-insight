@@ -7,6 +7,9 @@ const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons"
 const PAGE=100;
 const CLASSIFIER_VERSION="action-v23-structured";
 type Row=Record<string,any>;
+type CachedView={rows:Row[];total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number};
+const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
+const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
 
 const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
@@ -56,7 +59,10 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const feedId=String(x.noteId||"").toLowerCase(),expected=requestedNotificationAccount()||String(memberNoteId||"").toLowerCase();
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
       const list=await enrich(mergeMagazineJoinRows(repairActorRows(x.rows||[])));if(!valid())return;
-      setRows(list);setTotal(Number(x.total||0));setCategoryCounts(x.categoryCounts||{});setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync({received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")});
+      const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
+      setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
+      NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
+      if(k==="all"&&!day&&p===1)NOTIFICATION_RECENT_ALL.set(cacheAccount,list);
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
@@ -84,7 +90,16 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       return false
     }finally{setReclassifying(false)}
   }
-  useEffect(()=>{setRows([]);setCategoryCounts({});void load(1,kind,false,selectedDay);return()=>{request.current.id++;request.current.controller?.abort();request.current.controller=null}},[kind,selectedDay,revision,memberNoteId]);
+  useEffect(()=>{
+    const account=(requestedNotificationAccount()||String(memberNoteId||"").toLowerCase()||"current"),cacheKey=`${account}|${kind}|${selectedDay||""}|1`,cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);
+    if(cached){setRows(cached.rows);setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync);setCheckedAt(new Date(cached.cachedAt));setPage(1);setLoading(false);void load(1,kind,true,selectedDay)}
+    else{
+      const recent=NOTIFICATION_RECENT_ALL.get(account)||[],instant=kind==="all"?recent:recent.filter(r=>displayType(r)===kind);
+      if(instant.length){setRows(instant);setTotal(kind==="all"?instant.length:(categoryCounts[kind]??instant.length));setPage(1);setLoading(false);void load(1,kind,true,selectedDay)}
+      else{setRows([]);void load(1,kind,false,selectedDay)}
+    }
+    return()=>{request.current.id++;request.current.controller?.abort();request.current.controller=null}
+  },[kind,selectedDay,revision,memberNoteId]);
   useEffect(()=>{
     const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
     if(!noteId||!localStorage.getItem(INSIGHT_TOKEN_KEY))return;
@@ -96,7 +111,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     return()=>window.clearTimeout(t)
   },[memberNoteId,revision]);
 
-  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,2000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
+  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},timer=window.setInterval(refresh,10000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
   useEffect(()=>{
     const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
     if(!noteId)return;
