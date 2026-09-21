@@ -82,7 +82,8 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
   const ranked=[...articles].sort((a,b)=>b.score-a.score);
   const syncHref=dashboardHref(noteId);
   const openAll=(open:boolean)=>root.current?.querySelectorAll<HTMLDetailsElement>("details.mipro-fold").forEach(x=>x.open=open);
-  const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);\n  return <section className="mipro" ref={root}>
+  const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);
+  return <section className="mipro" ref={root}>
     <header className="mipro-head"><div><small>INSIGHT PRO ANALYTICS V3</small><h2>公式Dashboardを超えて「意味のある判断」まで</h2><p><strong>@{noteId||"—"}</strong> の公式値＋本人通知を統合。保存済み分析は即表示し、最新取得は画面を止めずに更新します。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ 最新データをバックグラウンド更新中":cacheStale?"保存済み表示・更新待ち":`保存済み即表示 ${jtime(new Date(cachedAt).toISOString())}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>Dashboard更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"更新中…":"再分析"}</button></div></header>
     <div className="mipro-release"><span>本体 {CURRENT_INSIGHT_APP_VERSION}</span><span>Dashboard {CURRENT_DASHBOARD_VERSION}</span><span>本人通知 {CURRENT_NOTIFICATION_VERSION}</span><span>照合 @{noteId||"—"}</span></div>
     <div className="mipro-fold-controls"><button onClick={()=>openAll(true)}>分析をすべて開く</button><button onClick={()=>openAll(false)}>すべて収納</button></div>
