@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.17",
+  "appVersion": "2026.09.21.18",
   "notificationVersion": "3.5.2",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T09:58:00+09:00",
+  "releasedAt": "2026-09-21T10:18:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.5.2。初回全履歴を下→上で読み、読込中は同じボタンから停止可能。現在ページ保存後に途中地点を保持して再開。API直読・構造化通知・分類V23・即時反映・1パネルUIを維持。Dashboardは保存済み即表示＋バックグラウンド更新。Android/iOS/Windows/macOSの主要ブラウザ共通実装。",
-  "dmVersion": "1.2.0",
+  "note": "DM V1.2.1緊急修正。noteの通常DM導線を一切自動遷移させず、旧全ルーム巡回キューを即消去。開いているDM一覧・会話だけを受動保存。INSIGHTのDM相手は初期状態で1パネルに収納。本人通知V3.5.2とDashboard即表示は維持。",
+  "dmVersion": "1.2.1",
   "dmLabel": "DM同期"
 }
