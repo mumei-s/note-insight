@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.3',PROTOCOL='3.5.3';
+const VERSION='3.5.4',PROTOCOL='3.5.4';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -133,7 +133,7 @@ async function fastVisibleSync(){
  const cp=await get(key(CHECK,a.id),{}),now=Date.now();
  await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:true,lastRunMode:'delta',lastRunReadCount:visible.length,lastRunSavedCount:savedNow,lastError:'',version:VERSION});
  try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}
- return{read:visible.length,saved:savedNow,handled:true}
+ return{read:visible.length,saved:savedNow,fresh:fresh.length,handled:true}
 }
 async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  if(!host){await capture();return true}
@@ -150,18 +150,20 @@ async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  if(!stop)throw new Error('古い通知の読み込みが続いています。次回も続きから読み込みます');
  return false;
 }
-async function scan(){
+async function scan(opts={}){
  if(isDmRoute())return;
- if(scanning){try{window.__mumeiNotificationNetwork3300?.stop?.()}catch{}stop=true;health('停止要求｜現在ページを保存してから停止します…','saving',{stopping:true});return 0}
+ const fastOnly=Boolean(opts.fastOnly),forceNetwork=Boolean(opts.forceNetwork);
+ if(scanning){if(fastOnly)return 0;try{window.__mumeiNotificationNetwork3300?.stop?.()}catch{}stop=true;health('停止要求｜現在ページを保存してから停止します…','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
  if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
  scanning=true;stop=false;let fast={read:0,saved:0,handled:false};
  try{
   try{
    fast=await fastVisibleSync();
-   if(fast.handled)health(`表示中 ${fast.read}件を即確認｜保存 ${fast.saved}件`,'saving',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,instant:true})
+   if(Number(fast.fresh||0)>0)health(`✓ 即時反映｜読込 ${fast.read}｜保存 ${fast.saved}`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,instant:true,fastOnly});
   }catch{}
-  const r=await net.syncCurrent({waitMs:220});
+  if(fastOnly)return Number(fast.saved||0);
+  const r=await net.syncCurrent({waitMs:forceNetwork?220:120});
   const netSaved=Number(r?.saved||0),netRead=Number(r?.received||0),saved=Math.max(Number(fast.saved||0),netSaved),read=Math.max(Number(fast.read||0),netRead);
   if(r?.handled){
    const label=r?.partial?'途中保存':r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
@@ -241,9 +243,9 @@ function scheduleAuto(delay=350){
   const p=findPanel();
   if(!p){autoPanel=null;return}
   if(scanning)return;
-  if(p===autoPanel&&Date.now()-lastAutoAt<3000)return;
+  if(p===autoPanel&&Date.now()-lastAutoAt<30000)return;
   autoPanel=p;lastAutoAt=Date.now();
-  void scan()
+  void scan({fastOnly:true})
  },delay)
 }
 setTimeout(()=>scheduleAuto(180),80);
