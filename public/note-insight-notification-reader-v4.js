@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.4',PROTOCOL='3.5.4';
+const VERSION='3.5.5',PROTOCOL='3.5.5';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -115,25 +115,28 @@ async function sendBatch(input,a,saved,force=false){
  }
  return total;
 }
-let lastFastRepairAt=0;
+let lastFastRepairAt=0,livePanel=null,liveAccount='',liveReadSeen=new Set(),liveSavedTotal=0;
 async function fastVisibleSync(){
  const panel=findPanel();if(!panel)return{read:0,saved:0,handled:false};
  const a=await account();if(!a)return{read:0,saved:0,handled:false};
  if(!String(await get(key(TOKEN,a.id),'')||''))return{read:0,saved:0,handled:false};
  const savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
+ if(panel!==livePanel||a.id!==liveAccount){livePanel=panel;liveAccount=a.id;liveReadSeen=new Set();liveSavedTotal=0}
  const visible=rows(panel).map(rowData).filter(Boolean).slice().reverse();
- if(!visible.length)return{read:0,saved:0,handled:false};
+ if(!visible.length)return{read:0,saved:0,sessionRead:liveReadSeen.size,sessionSaved:liveSavedTotal,handled:false};
+ for(const r of visible)liveReadSeen.add(sig(r));
  const fresh=visible.filter(r=>!saved.has(sig(r)));
  let savedNow=0;
  if(fresh.length)savedNow=await sendBatch(fresh,a,saved,false);
+ liveSavedTotal+=savedNow;
  if(Date.now()-lastFastRepairAt>60000){
   const repair=visible.filter(r=>r.actor_url&&r.actor_image_url).slice(-40);
   if(repair.length){lastFastRepairAt=Date.now();try{await sendBatch(repair,a,saved,true)}catch{}}
  }
  const cp=await get(key(CHECK,a.id),{}),now=Date.now();
- await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:true,lastRunMode:'delta',lastRunReadCount:visible.length,lastRunSavedCount:savedNow,lastError:'',version:VERSION});
+ await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:liveReadSeen.size,lastRunSavedCount:liveSavedTotal,lastError:'',version:VERSION});
  try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}
- return{read:visible.length,saved:savedNow,fresh:fresh.length,handled:true}
+ return{read:visible.length,saved:savedNow,fresh:fresh.length,sessionRead:liveReadSeen.size,sessionSaved:liveSavedTotal,handled:true}
 }
 async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  if(!host){await capture();return true}
@@ -160,7 +163,7 @@ async function scan(opts={}){
  try{
   try{
    fast=await fastVisibleSync();
-   if(Number(fast.fresh||0)>0)health(`✓ 即時反映｜読込 ${fast.read}｜保存 ${fast.saved}`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,instant:true,fastOnly});
+   if(Number(fast.fresh||0)>0)health(`✓ 追加反映｜読込 ${fast.sessionRead||fast.read}｜保存 ${fast.sessionSaved||fast.saved}`,'done',{readCount:Number(fast.sessionRead||fast.read),savedCount:Number(fast.sessionSaved||fast.saved),totalCount:Number(fast.sessionRead||fast.read),instant:true,fastOnly,streaming:true});
   }catch{}
   if(fastOnly)return Number(fast.saved||0);
   const r=await net.syncCurrent({waitMs:forceNetwork?220:120});
@@ -236,20 +239,20 @@ async function scanDomLegacy(){
  }finally{active=null;scanning=false;stop=false}
 }
 let scheduled=0,autoTimer=0,autoPanel=null,lastAutoAt=0;
-function scheduleAuto(delay=350){
+function scheduleAuto(delay=250){
  if(isDmRoute())return;
  clearTimeout(autoTimer);
  autoTimer=setTimeout(()=>{
   const p=findPanel();
-  if(!p){autoPanel=null;return}
-  if(scanning)return;
-  if(p===autoPanel&&Date.now()-lastAutoAt<30000)return;
+  if(!p){autoPanel=null;livePanel=null;liveAccount='';liveReadSeen=new Set();liveSavedTotal=0;return}
+  if(scanning){autoTimer=setTimeout(()=>scheduleAuto(120),160);return}
   autoPanel=p;lastAutoAt=Date.now();
   void scan({fastOnly:true})
  },delay)
 }
 setTimeout(()=>scheduleAuto(180),80);
-new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(90),60)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
+new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(80),50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
+document.addEventListener('scroll',()=>{if(findPanel())scheduleAuto(140)},true);
 document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(80)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(180));
 window.addEventListener('focus',()=>scheduleAuto(180));
