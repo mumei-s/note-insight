@@ -306,3 +306,56 @@ Android専用実装は禁止。共通Reader/保存ロジックはUA分岐させ�
 - 通知即表示、未分類のみ自動再分類、DM残留防止、お気に入り個別解除、詳細/設定UI圧縮は main に存在することを再確認。
 - Supabase `insight-notification-reclassify` 本番 version 10 は `onlyPending` 対応済みソースと一致。
 - 残る確認はGitHub Pages上の配信版とAndroid実機挙動。コード上だけで完成扱いしない。
+
+
+## 19. 2026-09-21 DM以外の全指示再点検
+ユーザー実機で「何も更新されていない」と確認されたため、DMだけでなく最新通常チャットの本人通知・UI・再分類・お気に入り・配信要件を再点検した。過去の完了報告ではなく main 実ファイルとSupabase実データを正とした。
+
+### 本人通知の実データから見つかった原因
+- `notification_type=other` は確認時562件。そのうち370件は `note-notification-explicit-sync-v330` が通知ではないAPIを誤取得した履歴だった。
+- 誤取得元は magazine layout / related notes / magazines / extra_items / creator contents / circle plans 等。記事本文・マガジン説明・おすすめ記事タイトル等が通知として混入していた。
+- 370件は削除せず `meta.noise_reason=non-notification-api-capture` を付けて隔離。既存DB triggerがtypeをotherへ戻すため、feed / analysis / reclassifyでnoise_reasonを正として除外する。
+- 隔離後の画面対象otherは 562 → 192件相当。
+- `meta.kind=qa_answer` が1件otherに残っていた。DB互換triggerを壊さず、feed/analysis側で `question_answer` として表示・集計する。
+
+### Reader / 取得元
+- 本人通知userscriptを V3.5.10へ更新。
+- Network Readerは `/api/v3/notices` のルート通知レコードだけを抽出する `extractDirectNotices` を追加。
+- 通知同期では非通知API captureを採用しない。direct noticesへ変換できないcaptureは破棄し、DOM Reader fallbackへ渡す。
+- Network Reader cache-bustは `v=3581`。
+- これにより related_notes / magazines / layout等が今後「その他」に入る経路を遮断。
+
+### 再分類 / Backend
+- classifierを `action-v24-structured` へ更新。
+- v23済みという理由だけでotherをスキップしていた処理を削除。既存otherも新ルールで再判定可能。
+- 隔離済みnetwork noiseは再分類対象から除外。
+- Supabase本番:
+  - insight-notification-ingest-v2 v33
+  - insight-notification-reclassify v12
+  - insight-notification-feed-final v25
+  - insight-notification-analysis-summary v5
+- live sourceにV24 / noise除外 / structured question answer対応が存在することを確認。
+
+### INSIGHT通知UI
+- 本人通知画面は `NOTIFICATION_MASTER_CACHE` を追加。一度取得した保存済み行をカテゴリ切替で即利用し、切替のたびに一覧を空にして「読込中」に戻さない。
+- API更新は裏でsilent refresh。人物アイコン補完も一覧表示後に行う。
+- 「その他・未分類を新しいルールで再判定中」と処理内容を明確化。
+- `question_answer` カテゴリを追加。
+- 分類バッジを大きくし、詳細・精度・再分類は3列を維持したまま縦余白をさらに圧縮。
+- summaryに▼を付け、展開可能であることを明確化。
+- INSIGHTトップの本人通知カードに独立した `設定・更新状態` / `本人通知を更新` / `本人通知を設定` ボタンを追加し、小さな状態表示だけに依存しない。
+
+### 既存指示の維持確認
+- お気に入りはクリエイター単位の `★ 解除` を維持。
+- 通知カテゴリは1パネル方式を維持。
+- 通知Readerの下→上、読込/保存件数、停止/途中保存、300件上限を維持。
+- DMは今回の非DM修正から分離し、既存V1.3.6を変更しない。
+
+### リリース
+- INSIGHT本体 `2026.09.21.28`
+- 本人通知 `3.5.10`
+- DM `1.3.6`
+- Dashboard `1.4.4`
+- Service Worker cache `mumei-note-insight-v44`
+- Pages回帰テストの通知版・network cache-bust・release版を現行値へ更新。
+- 最終Pages配信確認とAndroid実機確認が完了するまでは「完成」と断定しない。
