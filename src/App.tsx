@@ -23,7 +23,7 @@ const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const REACTIVATE_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
-const NOTIFICATION_TOOL_VERSION = "2.9.27";
+const NOTIFICATION_TOOL_VERSION = "3.5.0";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
 const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
@@ -167,7 +167,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    // v2.9.27 safe mode: never move participants between INSIGHT and note automatically.
+    // v3.5.0 safe mode: never move participants between INSIGHT and note automatically.
     sessionStorage.setItem(NOTIFICATION_AUTO_ONCE_KEY, "1");
   }, []);
 
