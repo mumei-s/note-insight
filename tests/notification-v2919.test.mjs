@@ -36,7 +36,7 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.5.7 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.21.22");assert.equal(manifest.notificationVersion,"3.5.7");assert.equal(manifest.dmVersion,"1.3.2");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
+  assert.equal(manifest.appVersion,"2026.09.21.22");assert.equal(manifest.notificationVersion,"3.5.7");assert.equal(manifest.dmVersion,"1.3.3");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.4");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.21\.22"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.5\.7"/);assert.match(v3,/@version\s+3\.5\.7/);
 });
 
