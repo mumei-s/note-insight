@@ -295,3 +295,14 @@ Android専用実装は禁止。共通Reader/保存ロジックはUA分岐させ�
 - DMの「設定・状態」は縦幅を増やしすぎず、枠・背景・▼/▲を付けて押せるUIであることを明確化。
 - リリース目標：INSIGHT本体 `2026.09.21.26` / 本人通知 `3.5.8` / DM `1.3.5` / Dashboard `1.4.4`。
 - この時点ではPR #11上。main merge、GitHub Pages配信、Supabase `insight-notification-reclassify` 本番反映、Android実機確認が済むまでは「完成」としない。
+
+
+## 18. 2026-09-21 20:28 JST main実ファイル再確認と緊急補正
+- PR #11 merge後に main の実ファイルを再取得して確認したところ、DM Readerのループが依然 `i+=3` のまま残っていた。
+- 報告や差分説明ではなく main の実ファイルを正として再修正。
+- `public/note-insight-dm-reader-v1.js` を `i+=2` に修正し、DM Readerを V1.3.6 へ更新。
+- `public/note-insight-dm.user.js` は `@version 1.3.6`、Reader cache-bust `v=136` に変更し、旧V1.3.5 Readerキャッシュを強制回避。
+- INSIGHT本体を `2026.09.21.27`、DMを `1.3.6` として release manifest / release constants / regression testを同期。
+- 通知即表示、未分類のみ自動再分類、DM残留防止、お気に入り個別解除、詳細/設定UI圧縮は main に存在することを再確認。
+- Supabase `insight-notification-reclassify` 本番 version 10 は `onlyPending` 対応済みソースと一致。
+- 残る確認はGitHub Pages上の配信版とAndroid実機挙動。コード上だけで完成扱いしない。
