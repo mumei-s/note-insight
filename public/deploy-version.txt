@@ -1,2 +1,2 @@
-2026-09-21T10:18+09:00
-INSIGHT v2026.09.21.18: emergency DM V1.2.1 passive-only navigation fix; DM people collapsed; notification V3.5.2 maintained.
+2026-09-21T10:31+09:00
+INSIGHT v2026.09.21.19: DM V1.2.1 update visibility fix; passive-only DM navigation; DM people collapsed.
