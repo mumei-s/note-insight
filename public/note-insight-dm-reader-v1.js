@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.3.2';
+const VERSION='1.3.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -95,9 +95,9 @@ async function run(){
  await clearLegacyQueue(a);
  const isBg=window.top!==window.self&&new URLSearchParams(location.search).get('mumei_dm_bg')==='1';
  if(rootRoute()&&!isBg){
-  const rooms=roomAnchors().filter(x=>x.key&&x.key!=='new'),threads=rooms.map(roomData),previews=threads.map(previewMessage).filter(Boolean);
-  if(threads.length)await save(a,threads,previews);
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:previews.length,lastSavedCount:previews.length,threadCount:threads.length,lastError:'',navigationMode:'passive'});
+  const rooms=roomAnchors(),threads=rooms.map(roomData);
+  if(threads.length)await save(a,threads,[]);
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'list-passive',lastRunComplete:true,lastReadCount:0,lastSavedCount:0,threadCount:threads.length,lastError:'',navigationMode:'passive'});
   void syncRoomsInBackground(a,rooms);
   return
  }
