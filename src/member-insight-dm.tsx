@@ -77,12 +77,12 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         {dmUpdateAvailable?<a className="midm-update-now" href={installHref}>⬆ DM同期 v{latestDmVersion}へ更新</a>:dmMissing?<a className="midm-update-now" href={installHref}>＋ DM同期ツールを入れる</a>:<a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>}
         {dmUpdateAvailable?<span className="midm-update-required">現在 v{toolVersion} → v{latestDmVersion}</span>:!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
       </div>
-      <details className={dmUpdateAvailable?"needs-update":""}>
-        <summary>{dmUpdateAvailable?`⬆ DM同期を更新 v${latestDmVersion}`:"設定・状態"}{dmUpdateAvailable?<small>タップして更新</small>:null}</summary>
+      <details>
+        <summary>設定・状態</summary>
         <div className="midm-control-detail">
-          <a className={toolVersion&&!dmUpdateAvailable?"installed":dmUpdateAvailable?"needs-update":""} href={installHref}>{dmUpdateAvailable?`⬆ 更新 v${toolVersion} → v${latestDmVersion}`:toolVersion?`✓ DM同期 v${toolVersion} 最新`:"DM同期ツールをインストール"}</a>
+          <span className="midm-version-state">{toolVersion?`DM同期 v${toolVersion}`:"DM同期ツール未導入"}{dmUpdateAvailable?` / 最新 v${latestDmVersion}`:""}</span>
           <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
-          <small>本人通知とは完全に別系統です。通信Readerを優先し、DOM Readerを補助に使います。</small>
+          <small>更新操作は上の更新ボタン1つに統一しています。本人通知とは完全に別系統です。</small>
         </div>
       </details>
     </div>
