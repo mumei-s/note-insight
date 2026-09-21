@@ -53,10 +53,10 @@ async function scanRoom(a,threadKey,doc=document,roomUrl=location.href){
   }
  }
  for(let i=0;i<8;i++){await sleep(150);capture();const n=net?.getRoomCount?.(threadKey);if((!net||Number(n?.captured||0)===Number(n?.saved||0))&&i>=3)break}
- const current=roomAnchors(doc).find(x=>x.key===threadKey),thread=current?roomData(current):{thread_key:threadKey,room_url:roomUrl,peer_note_id:null,peer_name:null,peer_url:null,peer_image_url:null,last_message_at:null,meta:{source:'note-dm-room-v134'}};
+ const current=roomAnchors(doc).find(x=>x.key===threadKey),thread=current?roomData(current):null;
  const messages=[...map.values()];
  let domSaved=0;
- if(messages.length||current){const p=await save(a,[thread],messages);domSaved=Number(p&&p.messageCount||0)}
+ if(messages.length||current){const p=await save(a,thread?[thread]:[],messages);domSaved=Number(p&&p.messageCount||0)}
  const nc=net?.getRoomCount?.(threadKey)||{captured:0,saved:0};
  const read=Math.max(messages.length,Number(nc.captured||0)),saved=Math.max(domSaved,Number(nc.saved||0));
  if(!read&&!root)throw new Error('DM_CONVERSATION_NOT_FOUND');
