@@ -336,16 +336,18 @@ async function syncHistory(opts={}){
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
  const state=await historyState(a.id);
  const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
- status(frontier?'保存済み地点まで追加通知をたどっています…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':'network-full'});
+ const resume=!forceFull&&!state?.historyComplete&&state?.resume?.url?state.resume:null;
+ status(frontier?'保存済み地点まで追加通知をたどっています…':resume?'前回の途中地点から通知履歴を再開します…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':resume?'network-resume':'network-full'});
  let cap=null;
- try{cap=await directNoticeCapture()}catch{}
+ if(resume){try{cap=await replay({...resume,rows:null})}catch{}}
+ if(!cap){try{cap=await directNoticeCapture()}catch{}}
  if(!cap)cap=await waitCapture(waitMs);
  if(cap&&cap.transport!=='direct')cap=await widenNoticeCapture(cap);
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
  }
- let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false,totalCount=totalHint(cap?.json);
+ let total=resume?Number(state?.partialSaved||0):0,received=resume?Number(state?.partialReceived||0):0,pages=resume?Number(state?.partialPages||0):0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig=clean(state?.partialNewestSig||''),capLimitHit=false,totalCount=Math.max(Number(state?.partialTotalCount||0),totalHint(cap?.json));
  for(let i=0;i<1000&&cap;i++){
   const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
   if(requestSeen.has(reqSig)){
@@ -376,6 +378,9 @@ async function syncHistory(opts={}){
    status('次ページを解釈できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
    await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'次ページを解釈できませんでした'});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_UNREADABLE',needsDom:false}
   }
+  if(!frontier){
+   await writeHistoryState(a.id,{...state,historyComplete:false,resume:{url:nextReq.url,method:nextReq.method,body:nextReq.body??null,requestInit:nextReq.requestInit||null},partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now()});
+  }
   try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){
    status('APIの次ページ取得に失敗したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
    await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e)});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}
@@ -398,7 +403,8 @@ async function syncHistory(opts={}){
   lastReceived:received,
   lastSaved:total,
   lastMode:reachedEnd?'full':'delta',
-  version:VERSION
+  version:VERSION,
+  resume:null,partialReceived:0,partialSaved:0,partialPages:0,partialNewestSig:'',partialTotalCount:0
  };
  await writeHistoryState(a.id,nextState);
  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:reachedEnd?'full':'delta',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:''});
