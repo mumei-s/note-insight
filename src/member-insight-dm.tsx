@@ -90,9 +90,12 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<details className="midm-history-panel">
       <summary><span>DM履歴</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
-      <div className="midm-layout">
-        <aside className="midm-threads">{people.map(r=><button key={r.person_key} className={selected?.person_key===r.person_key?"active":""} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>
-        <div className="midm-messages">{selected?<><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</>:<p className="midm-empty">左のDM相手を選択してください。</p>}</div>
+      <div className={"midm-layout "+(selected?"is-person":"is-list")}>
+        {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
+        {selected?<div className="midm-person-view">
+          <button className="midm-back-list" onClick={()=>{setSelected(null);setMessages([])}}>← DM履歴一覧</button>
+          <div className="midm-messages"><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</div>
+        </div>:null}
       </div>
     </details>}
   </section>
