@@ -37,7 +37,7 @@ let bgRunning=false,bgLastAt=0,bgWorkerDone=false;
 function bgUrl(v){try{const u=new URL(v,location.href);u.searchParams.set('mumei_dm_bg','1');return u.href}catch{return String(v||'')}}
 function syncFrame(url,threadKey){
  return new Promise(resolve=>{
-  const frame=document.createElement('iframe');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;left:-9999px!important;top:-9999px!important;border:0!important';
+  const frame=document.createElement('iframe');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:390px!important;height:800px!important;opacity:0!important;pointer-events:none!important;left:-12000px!important;top:0!important;border:0!important;contain:strict!important';
   let done=false;const finish=(x)=>{if(done)return;done=true;clearTimeout(timer);removeEventListener('message',on);try{frame.remove()}catch{}resolve(x)};
   const on=e=>{if(e.origin!==location.origin||e.data?.source!=='mumei-dm-bg-v130'||String(e.data?.threadKey||'')!==String(threadKey||''))return;finish(e.data)};
   addEventListener('message',on);const timer=setTimeout(()=>finish({threadKey,timeout:true}),12000);frame.src=bgUrl(url);document.body.appendChild(frame)
