@@ -4,7 +4,8 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.2';
+const VERSION='3.5.6';
+const MAX_NOTICES=300,MAX_PAGES=3;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -342,17 +343,17 @@ async function syncDirectFullAscending(a,state,cap,resume){
  if(!directNoticesCap(cap))return null;
  const firstRows=cap.rows||extract(cap.json,cap.url),apiTotal=totalHint(cap.json),u=new URL(cap.url,location.href),per=Math.max(1,Number(u.searchParams.get('per')||100));
  if(!apiTotal&&!terminalHint(cap.json))return null;
- const lastPage=Math.max(1,apiTotal?Math.ceil(apiTotal/per):1),resumePage=resume?Math.max(1,Number(new URL(resume.url,location.href).searchParams.get('page')||0)):0;
- let page=resumePage||lastPage,total=resume?Number(state?.partialSaved||0):0,received=resume?Number(state?.partialReceived||0):0,pages=resume?Number(state?.partialPages||0):0,totalCount=Math.max(apiTotal,Number(state?.partialTotalCount||0),firstRows.length),newestSig=clean(state?.partialNewestSig||'')||(firstRows.length?clientSig(firstRows[0]):'');
+ const totalCount=Math.min(MAX_NOTICES,Math.max(apiTotal,Number(state?.partialTotalCount||0),firstRows.length)),lastPage=Math.max(1,Math.min(MAX_PAGES,Math.ceil(Math.max(1,totalCount)/per))),resumeRaw=resume?Math.max(1,Number(new URL(resume.url,location.href).searchParams.get('page')||0)):0,resumePage=resumeRaw?Math.min(lastPage,resumeRaw):0;
+ let page=resumePage||lastPage,total=resume?Number(state?.partialSaved||0):0,received=resume?Math.min(MAX_NOTICES,Number(state?.partialReceived||0)):0,pages=resume?Number(state?.partialPages||0):0,newestSig=clean(state?.partialNewestSig||'')||(firstRows.length?clientSig(firstRows[0]):'');
  if(!resume&&page!==1){const req=directPageRequest(cap,page);if(!req)return null;cap=await replay(req)}
  status(`通知一覧の下から上へ読込中… 読込 ${received} / ${totalCount||'?'}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,direction:'bottom-up'});
  while(page>=1){
-  const raw=cap.rows||extract(cap.json,cap.url),rows=[...raw].reverse();
+  const raw=cap.rows||extract(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(-remaining);
   received+=rows.length;
   if(rows.length){const r=await ingestRows(rows,cap,true,false);total+=Number(r.saved||0)}
   void saveProbe(cap,raw);pages++;
   status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,direction:'bottom-up'});
-  const nextPage=page-1,nextReq=nextPage>=1?directPageRequest(cap,nextPage):null;
+  const nextPage=page-1,nextReq=received<MAX_NOTICES&&nextPage>=1?directPageRequest(cap,nextPage):null;
   await writeHistoryState(a.id,{...state,historyComplete:false,resume:nextReq?{url:nextReq.url,method:'GET',body:null,requestInit:nextReq.requestInit,transport:'direct'}:null,partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now(),direction:'bottom-up'});
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,historyComplete:false,lastError:'',direction:'bottom-up'});
   if(stopRequested){status(`停止・途中保存｜読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'done',{mode:'network-partial',readCount:received,savedCount:total,totalCount,pages,historyComplete:false,direction:'bottom-up'});return{handled:true,partial:true,saved:total,received,totalCount,pages,pending:await pendingCount(a.id),historyComplete:false,mode:'network-partial',direction:'bottom-up'}}
@@ -364,8 +365,8 @@ async function syncDirectFullAscending(a,state,cap,resume){
  const done={...state,historyComplete:true,frontierSig:newestSig||state?.frontierSig||'',verifiedAt:Date.now(),fullVerifiedAt:Date.now(),lastPages:pages,lastReceived:received,lastSaved:total,lastMode:'full',version:VERSION,resume:null,partialReceived:0,partialSaved:0,partialPages:0,partialNewestSig:'',partialTotalCount:0,direction:'bottom-up'};
  await writeHistoryState(a.id,done);
  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:'full',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:'',direction:'bottom-up'});
- status(`✓ 全履歴確認完了｜下→上 ${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,pendingCount:0,historyComplete:true,direction:'bottom-up'});
- return{handled:true,saved:total,received,totalCount,pages,pending:0,historyComplete:true,full:true,mode:'network-full-bottom-up',direction:'bottom-up'}
+ status(`✓ note取得上限${MAX_NOTICES}件まで確認｜下→上 ${pages}ページ・${received}件確認・${total}件保存`,'done',{mode:'network-window-bottom-up',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,direction:'bottom-up',windowLimit:MAX_NOTICES});
+ return{handled:true,saved:total,received,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pending:0,historyComplete:true,full:true,mode:'network-window-bottom-up',direction:'bottom-up',windowLimit:MAX_NOTICES}
 }
 async function syncHistory(opts={}){
  stopRequested=false;
@@ -388,15 +389,15 @@ async function syncHistory(opts={}){
  if(!frontier&&directNoticesCap(cap)){
   const direct=await syncDirectFullAscending(a,state,cap,resume);if(direct)return direct
  }
- let total=resume?Number(state?.partialSaved||0):0,received=resume?Number(state?.partialReceived||0):0,pages=resume?Number(state?.partialPages||0):0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig=clean(state?.partialNewestSig||''),capLimitHit=false,totalCount=Math.max(Number(state?.partialTotalCount||0),totalHint(cap?.json));
- for(let i=0;i<1000&&cap;i++){
+ let total=resume?Number(state?.partialSaved||0):0,received=resume?Math.min(MAX_NOTICES,Number(state?.partialReceived||0)):0,pages=resume?Number(state?.partialPages||0):0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,reachedWindowLimit=false,newestSig=clean(state?.partialNewestSig||''),capLimitHit=false,totalCount=Math.min(MAX_NOTICES,Math.max(Number(state?.partialTotalCount||0),totalHint(cap?.json)));
+ for(let i=0;i<MAX_PAGES&&cap&&received<MAX_NOTICES;i++){
   const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
   if(requestSeen.has(reqSig)){
    status('APIページングが同じ位置で停止したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback'});
    await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'APIページングが同じ位置で停止しました'});return{handled:false,saved:total,received,pages,pending:0,reason:'REPEATED_REQUEST',needsDom:false}
   }
   requestSeen.add(reqSig);
-  const pageRows=cap.rows||extract(cap.json,cap.url);
+  const pageRows=(cap.rows||extract(cap.json,cap.url)).slice(0,Math.max(0,MAX_NOTICES-received));
   if(!newestSig&&pageRows.length)newestSig=clientSig(pageRows[0]);
   received+=pageRows.length;
   let saveRows=pageRows;
@@ -406,7 +407,8 @@ async function syncHistory(opts={}){
   }
   if(saveRows.length){const r=await ingestRows(saveRows,cap,true,false);total+=Number(r.saved||0)}
   void saveProbe(cap,pageRows);pages++;
-  totalCount=Math.max(totalCount,totalHint(cap.json),received);status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:frontier?'network-delta':'network-full',readCount:received,savedCount:total,totalCount,pages});
+  totalCount=Math.min(MAX_NOTICES,Math.max(totalCount,totalHint(cap.json),received));status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:frontier?'network-delta':'network-window',readCount:received,savedCount:total,totalCount,pages,windowLimit:MAX_NOTICES});
+  if(received>=MAX_NOTICES||pages>=MAX_PAGES){reachedWindowLimit=true;completed=true;break}
   if(reachedFrontier){completed=true;break}
   const hint=nextHint(cap.json);
   if(!hint){
@@ -427,7 +429,7 @@ async function syncHistory(opts={}){
    status('APIの次ページ取得に失敗したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
    await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e)});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}
   }
-  if(i===999)capLimitHit=true
+  if(i===MAX_PAGES-1&&!completed)capLimitHit=true
  }
  const pending=await pendingCount(a.id);
  if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
@@ -450,11 +452,11 @@ async function syncHistory(opts={}){
  };
  await writeHistoryState(a.id,nextState);
  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:reachedEnd?'full':'delta',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:''});
- if(reachedEnd){
-  status(`✓ 全履歴確認完了｜${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true});
-  return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,full:true,mode:'network-full'}
+ if(reachedEnd||reachedWindowLimit){
+  status(`✓ note取得上限${MAX_NOTICES}件まで確認｜${pages}ページ・${received}件確認・${total}件保存`,'done',{mode:'network-window',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,windowLimit:MAX_NOTICES});
+  return{handled:true,saved:total,received,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pending:0,historyComplete:true,full:true,mode:'network-window',windowLimit:MAX_NOTICES}
  }
- status(`✓ 追加分確認完了｜${pages}ページ・${received}件照合・${total}件保存確認`,'done',{mode:'network-delta',readCount:received,savedCount:total,pages,pendingCount:0,historyComplete:true,boundaryReached:true});
+ status(`✓ 追加分確認完了｜${pages}ページ・${received}件照合・${total}件保存確認`,'done',{mode:'network-delta',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,boundaryReached:true,windowLimit:MAX_NOTICES});
  return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,delta:true,mode:'network-delta'}
 }
 function stop(){stopRequested=true;return true}
