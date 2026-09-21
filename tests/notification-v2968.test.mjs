@@ -108,7 +108,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)return/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
-  assert.match(dmUser,/@version\s+1\.3\.4/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=121/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=134/);
+  assert.match(dmUser,/@version\s+1\.3\.6/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=121/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=136/);
   assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
