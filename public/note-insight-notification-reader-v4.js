@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.4.3',PROTOCOL='3.4.3';
+const VERSION='3.5.0',PROTOCOL='3.5.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -87,8 +87,8 @@ function pauseCapture(){capturePending();stop=true}
 window.addEventListener('pagehide',pauseCapture,{capture:true});
 window.addEventListener('popstate',pauseCapture,{capture:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
-function health(msg,cls=''){
- try{window.dispatchEvent(new CustomEvent('mumei-notification-reader-status',{detail:{message:String(msg||''),state:String(cls||''),scanning,stopping:stop,version:VERSION}}))}catch{}
+function health(msg,cls='',extra={}){
+ try{window.dispatchEvent(new CustomEvent('mumei-notification-reader-status',{detail:{message:String(msg||''),state:String(cls||''),scanning:scanning||cls==='saving',stopping:stop,version:VERSION,...extra}}))}catch{}
 }
 async function sendBatch(input,a,saved,force=false){
  if(!input.length)return 0;
@@ -141,7 +141,7 @@ async function scan(){
   const saved=Number(r?.saved||0),read=Number(r?.received||0);
   if(r?.handled){
    const label=r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
-   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done');
+   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read)});
    return saved
   }
   health('通信読取待機｜🔔を開いたまま次回も続きから確認します','saving');
