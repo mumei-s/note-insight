@@ -9,3 +9,7 @@
 
 /* 2026-09-21: inner DM must never remain visible behind a dedicated outer mode */
 .miv5.mode-comments .midm,.miv5.mode-favorites .midm,.miv5.mode-social .midm,.miv5.mode-notifications .midm,.miv5.mode-analysis .midm{display:none!important}
+
+/* 2026-09-21: notification setup/update state must look tappable */
+.miv5-source-card.notice .miv5-install-link{min-height:31px!important;border-width:2px!important;font-size:9px!important;font-weight:950!important;letter-spacing:.01em!important;box-shadow:0 0 0 1px rgba(255,232,173,.08)!important;cursor:pointer!important}
+@media(max-width:760px){.miv5-source-card.notice .miv5-install-link{min-height:30px!important;font-size:8.6px!important}}
