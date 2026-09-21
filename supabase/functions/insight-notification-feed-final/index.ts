@@ -28,8 +28,8 @@ async function notificationRows(ids:string[],type:string|null){
  return all.filter((r:any)=>{const t=String(r.notification_type||"");return t!=="comment"&&t!=="reply"||explicitManual(String(r?.meta?.source||""))})
 }
 const snapshots=new Map<string,{at:number;rows:any[]}>(),pending=new Map<string,Promise<any[]>>();
-async function allRows(scope:string,ids:string[]){
- const key=ids.join("|");const cached=snapshots.get(key);if(cached&&Date.now()-cached.at<1200)return cached.rows;
+async function allRows(scope:string,ids:string[],revision=""){
+ const key=ids.join("|")+"|"+revision;const cached=snapshots.get(key);if(cached&&Date.now()-cached.at<1200)return cached.rows;
  if(pending.has(key))return pending.get(key)!;
  const job=(async()=>{const n=await notificationRows(ids,null);const rows=dedupe(n);snapshots.set(key,{at:Date.now(),rows});if(snapshots.size>20)snapshots.delete(snapshots.keys().next().value!);return rows})();pending.set(key,job);try{return await job}finally{pending.delete(key)}
 }
@@ -38,8 +38,8 @@ function filterDisplay(rows:any[],kind:string,noteId:string){const decorated=row
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
  const m=await auth(req),b=await req.json().catch(()=>({})),kind=txt(b.kind,"all"),page=Math.max(1,Math.floor(Number(b.page)||1)),size=Math.min(100,Math.max(20,Math.floor(Number(b.pageSize)||100))),offset=(page-1)*size,ids=m.scope===m.id?[m.id]:[m.scope,m.id],meta=await status(m.scope,ids),day=/^\d{4}-\d{2}-\d{2}$/.test(txt(b.day,""))?txt(b.day,""):"";
- const rows=(await allRows(m.scope,ids)).filter(r=>!["like","follow","comment","creator_article_posted"].includes(String(r.notification_type))).map(r=>decorate(r,m.noteId)),dated=day?rows.filter(r=>jstDay(r.occurred_at||r.captured_at)===day):rows;
+ const rows=(await allRows(m.scope,ids,String(meta.lastSyncAt||""))).filter(r=>!["like","follow","comment","creator_article_posted"].includes(String(r.notification_type))).map(r=>decorate(r,m.noteId)),dated=day?rows.filter(r=>jstDay(r.occurred_at||r.captured_at)===day):rows;
  const categoryCounts:Record<string,number>={all:dated.length};for(const r of dated)categoryCounts[r.display_category]=(categoryCounts[r.display_category]||0)+1;
  const selected=kind==="all"?dated:dated.filter(r=>r.display_category===kind);
- return out({ok:true,page,pageSize:size,total:selected.length,rows:selected.slice(offset,offset+size),categoryCounts,noteId:m.noteId,selectedDay:day||null,...meta});
+ return out({ok:true,feedAt:new Date().toISOString(),classifierVersion:"action-v23-structured",page,pageSize:size,total:selected.length,rows:selected.slice(offset,offset+size),categoryCounts,noteId:m.noteId,selectedDay:day||null,...meta});
  }catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
