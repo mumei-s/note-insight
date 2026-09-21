@@ -43,3 +43,11 @@ test("release tracks V3.5.10 without putting the version in the user-facing labe
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
 
 test("private notification categories stay dense while public duplicates are excluded",async()=>{const ui=await read("src/member-insight-notifications-final.tsx"),picker=await read("src/insight-notification-ui-v18.ts"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");has(ui,["reply_self","membership_join","purchase","tip","other"]);has(feed,["[\"like\",\"follow\",\"comment\",\"creator_article_posted\"]"]);has(picker,["スキ","人物フォロー","通常コメント","記事投稿"])});
+
+test("notification setup state is an explicit tappable control and details stay compact",async()=>{
+  const live=await read("src/member-insight-live-v2.tsx"),liveCss=await read("src/member-insight-live-v2.css"),noticeCss=await read("src/member-insight-notifications-final.css");
+  has(live,["⬆ 本人通知を更新","＋ 本人通知を設定","⚙ 設定・更新状態","./tool-setup.html?from=insight"]);
+  assert.match(liveCss,/miv5-source-card\.notice \.miv5-install-link/);
+  assert.match(noticeCss,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(noticeCss,/minf-meta span\{font-size:11\.5px/);
+});
