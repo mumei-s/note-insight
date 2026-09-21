@@ -24,7 +24,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     try{
       const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]);
       setSummary(s);setPeople(p.rows||[]);setPairState(st);
-      setSelected(prev=>prev&&p.rows?.some((x:Row)=>x.person_key===prev.person_key)?prev:p.rows?.[0]||null)
+      setSelected(prev=>prev&&p.rows?.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
     }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{setLoading(false)}
   }
   async function loadMessages(person:Row|null){
@@ -37,7 +37,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     try{
       const x=await pair("pair-start");
       const url=String(x.noteUrl||"");if(!url)throw new Error("DM_PAIR_URL_MISSING");
-      setNotice("noteのDMを開きます。開いた時点でDM専用連携→自動同期を開始します。");
+      setNotice("DM連携を設定します。noteのDM画面を勝手に切り替えたり、相手を自動で開いたりしません。");
       window.open(url,"_blank","noopener,noreferrer")
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
@@ -46,7 +46,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
   useEffect(()=>{const on=()=>setToolVersion(String(localStorage.getItem(DM_TOOL_KEY)||""));window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);return()=>{window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on)}},[]);
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   return <section id="midm" className="midm">
-    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>DMを開くだけで会話本文まで同期し、相手ごとにまとめます。</p></div></header>
+    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>通常のnote DM導線はそのまま。開いた会話だけを安全に保存し、相手ごとにまとめます。</p></div></header>
     <div className="midm-control">
       <div className="midm-control-state">
         <strong className={pairState?.paired?"ok":""}>{pairState?.paired?"✓ DM連携済み":"DM連携 未設定"}</strong>
@@ -55,7 +55,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         <span className="last">最終 {summary?.lastSync?.created_at?fmt(summary.lastSync.created_at):"—"}</span>
       </div>
       <div className="midm-control-main">
-        <a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">DMを開いて同期 ↗</a>
+        <a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>
         {!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
       </div>
       <details>
@@ -69,9 +69,12 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     </div>
     {notice?<p className="midm-notice">{notice}</p>:null}
     {error?<p className="midm-error">⚠ {error}</p>:null}
-    {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<div className="midm-layout">
-      <aside className="midm-threads">{people.map(r=><button key={r.person_key} className={selected?.person_key===r.person_key?"active":""} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>
-      <div className="midm-messages">{selected?<><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</>:<p className="midm-empty">相手を選択してください。</p>}</div>
-    </div>}
+    {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<details className="midm-history-panel">
+      <summary><span>DM相手</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
+      <div className="midm-layout">
+        <aside className="midm-threads">{people.map(r=><button key={r.person_key} className={selected?.person_key===r.person_key?"active":""} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>
+        <div className="midm-messages">{selected?<><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</>:<p className="midm-empty">左のDM相手を選択してください。</p>}</div>
+      </div>
+    </details>}
   </section>
 }
