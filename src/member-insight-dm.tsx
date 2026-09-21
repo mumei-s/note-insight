@@ -20,13 +20,13 @@ function Avatar({row}:{row:Row}){const src=String(row.peer_image_url||row.sender
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
-  async function load(){
-    setLoading(true);setError("");
+  async function load(silent=false){
+    if(!silent)setLoading(true);setError("");
     try{
       const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]);
       setSummary(s);setPeople(p.rows||[]);setPairState(st);
       setSelected(prev=>prev&&p.rows?.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
-    }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{setLoading(false)}
+    }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(!silent)setLoading(false)}
   }
   async function loadMessages(person:Row|null){
     if(!person){setMessages([]);return}
@@ -42,8 +42,14 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
       window.open(url,"_blank","noopener,noreferrer")
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
-  useEffect(()=>{void load()},[revision]);
+  useEffect(()=>{void load(false)},[revision]);
   useEffect(()=>{void loadMessages(selected)},[selected?.person_key,revision]);
+  useEffect(()=>{
+    const refresh=()=>{if(document.visibilityState!=="visible")return;void load(true);if(selected)void loadMessages(selected)};
+    const timer=window.setInterval(refresh,2500);
+    window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
+    return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh)}
+  },[selected?.person_key]);
   useEffect(()=>{
     let dead=false;
     const on=()=>{const installed=String(localStorage.getItem(DM_TOOL_KEY)||"");setToolVersion(installed);void fetchInsightRelease().then(x=>{if(dead)return;setLatestDmVersion(String(x.dmVersion||CURRENT_DM_VERSION));setReleaseChecked(true)}).catch(()=>{if(!dead){setLatestDmVersion(CURRENT_DM_VERSION);setReleaseChecked(true)}})};
@@ -54,7 +60,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
   return <section id="midm" className="midm">
-    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>通常のnote DM導線はそのまま。開いた会話だけを安全に保存し、相手ごとにまとめます。</p></div></header>
+    <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>通常のnote DM画面はそのまま。裏で各ルームを同期し、相手ごとにまとめます。</p></div></header>
     <div className="midm-control">
       <div className="midm-control-state">
         <strong className={pairState?.paired?"ok":""}>{pairState?.paired?"✓ DM連携済み":"DM連携 未設定"}</strong>
