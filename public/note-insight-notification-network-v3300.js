@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.6';
+const VERSION='3.5.7';
 const MAX_NOTICES=300,MAX_PAGES=3;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -100,6 +100,26 @@ function extract(json,requestUrl){
  }
  walk(json);
  return out.slice(0,1000)
+}
+function extractDirectNotices(json,requestUrl){
+ const data=Array.isArray(json?.data)?json.data:[];
+ const out=[],seen=new Set();
+ for(const v of data.slice(0,MAX_NOTICES)){
+  if(!v||typeof v!=='object'||Array.isArray(v)||!qualifies(v,'data[]'))continue;
+  const raw=bestText(v),actor=actorInfo(v),target=targetInfo(v),id=eventId(v),at=occurred(v);
+  const actorUrl=actor.url?absUrl(actor.url):actor.urlname?`https://note.com/${actor.urlname.replace(/^@/,'')}`:null;
+  const ev=id?'notice:'+id:at?'time:'+at:'network:'+clean(raw).slice(0,160);
+  const sig=['network-v330-direct',id||ev,at||'',raw,target.url||'',actorUrl||actor.name||''].join('|');
+  if(seen.has(sig))continue;seen.add(sig);
+  out.push({
+   raw_text:raw,actor_name:actor.name||null,actor_url:actorUrl,actor_image_url:actor.image||null,
+   target_title:target.title||null,target_url:target.url||null,source_url:target.url||requestUrl||'https://note.com/',
+   occurred_at:at,meta:{source:SOURCE,capture_source:'note-network-v3300',userscript:VERSION,protocol:VERSION,scan_mode:'network-response',scan_strategy:'direct-api-root-only-v357',event_identity:ev,client_signature:sig,request_url:requestUrl,
+    kind:str(v.kind)||null,body:str(v.body)||null,body_ast:compact(v.body_ast??v.bodyAst??null),all_area_url:str(v.all_area_url??v.allAreaUrl)||null,featured_area_url:str(v.featured_area_url??v.featuredAreaUrl)||null,featured_content_name:str(v.featured_content_name??v.featuredContentName)||null,action_users:compact(Array.isArray(v.action_users)?v.action_users:Array.isArray(v.actionUsers)?v.actionUsers:[])
+   }
+  })
+ }
+ return out
 }
 function operationName(body){try{const j=typeof body==='string'?JSON.parse(body):body;return clean(j?.operationName||j?.operation_name||'')}catch{return''}}
 function candidateHint(url,body,json){
@@ -222,7 +242,7 @@ async function ingestRows(rows,cap,manual=false,emitStatus=true){
 }
 async function processCapture(cap,{manual=false,probe=true}={}){
  if(!cap?.json)return{handled:false,saved:0};
- const rows=extract(cap.json,cap.url);
+ const rows=directNoticesCap(cap)?extractDirectNotices(cap.json,cap.url):extract(cap.json,cap.url);
  if(probe)void saveProbe(cap,rows);
  if(!rows.length)return{handled:false,saved:0,candidate:true};
  lastCapture={...cap,rows,at:Date.now()};
@@ -318,7 +338,7 @@ async function directNoticeCapture(){
  const res=await original(u.href,init);if(!res.ok)throw new Error('NOTICE_API_HTTP_'+res.status);
  const json=await res.json();if(!candidateHint(u.href,null,json)&&!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
  const cap={url:u.href,method:'GET',body:null,transport:'direct',status:res.status,contentType:String(res.headers.get('content-type')||''),json,requestInit:init,at:Date.now()};
- cap.rows=extract(json,u.href);lastCapture=cap;return cap
+ cap.rows=extractDirectNotices(json,u.href);lastCapture=cap;return cap
 }
 async function widenNoticeCapture(cap){
  try{
@@ -341,14 +361,14 @@ function directPageRequest(cap,page){
 }
 async function syncDirectFullAscending(a,state,cap,resume){
  if(!directNoticesCap(cap))return null;
- const firstRows=cap.rows||extract(cap.json,cap.url),apiTotal=totalHint(cap.json),u=new URL(cap.url,location.href),per=Math.max(1,Number(u.searchParams.get('per')||100));
+ const firstRows=cap.rows||extractDirectNotices(cap.json,cap.url),apiTotal=totalHint(cap.json),u=new URL(cap.url,location.href),per=Math.max(1,Number(u.searchParams.get('per')||100));
  if(!apiTotal&&!terminalHint(cap.json))return null;
  const totalCount=Math.min(MAX_NOTICES,Math.max(apiTotal,Number(state?.partialTotalCount||0),firstRows.length)),lastPage=Math.max(1,Math.min(MAX_PAGES,Math.ceil(Math.max(1,totalCount)/per))),resumeRaw=resume?Math.max(1,Number(new URL(resume.url,location.href).searchParams.get('page')||0)):0,resumePage=resumeRaw?Math.min(lastPage,resumeRaw):0;
  let page=resumePage||lastPage,total=resume?Number(state?.partialSaved||0):0,received=resume?Math.min(MAX_NOTICES,Number(state?.partialReceived||0)):0,pages=resume?Number(state?.partialPages||0):0,newestSig=clean(state?.partialNewestSig||'')||(firstRows.length?clientSig(firstRows[0]):'');
  if(!resume&&page!==1){const req=directPageRequest(cap,page);if(!req)return null;cap=await replay(req)}
  status(`通知一覧の下から上へ読込中… 読込 ${received} / ${totalCount||'?'}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,direction:'bottom-up'});
  while(page>=1){
-  const raw=cap.rows||extract(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(0,remaining);
+  const raw=cap.rows||extractDirectNotices(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(0,remaining);
   received+=rows.length;
   if(rows.length){const r=await ingestRows(rows,cap,true,false);total+=Number(r.saved||0)}
   void saveProbe(cap,raw);pages++;
