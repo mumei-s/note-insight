@@ -26,3 +26,7 @@
  .midm-history-panel .midm-threads{max-height:180px}
  .midm-history-panel .midm-messages{min-height:210px}
 }
+
+.midm-update-now{border-color:#d39b35!important;background:#3a2607!important;color:#fff0b8!important;box-shadow:0 0 0 1px rgba(255,198,74,.2) inset}
+.midm-update-required{display:grid;place-items:center;min-height:29px;border:1px solid #a56c2d;border-radius:7px;background:#271805;color:#ffd993;font:900 8px/1.2 system-ui;padding:4px 7px;white-space:nowrap}
+.midm-control-detail a.needs-update{border-color:#d39b35!important;background:#3a2607!important;color:#fff0b8!important}
