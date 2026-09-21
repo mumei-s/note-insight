@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.18",
+  "appVersion": "2026.09.21.19",
   "notificationVersion": "3.5.2",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T10:18:00+09:00",
+  "releasedAt": "2026-09-21T10:31:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DM V1.2.1緊急修正。noteの通常DM導線を一切自動遷移させず、旧全ルーム巡回キューを即消去。開いているDM一覧・会話だけを受動保存。INSIGHTのDM相手は初期状態で1パネルに収納。本人通知V3.5.2とDashboard即表示は維持。",
+  "note": "DM更新表示修正。本体を2026.09.21.19へ更新し、DM端末版と最新dmVersionを直接比較。V1.2.0端末にはDMタブ上部へV1.2.1更新を明示。DM自動遷移禁止・相手一覧収納を維持。",
   "dmVersion": "1.2.1",
   "dmLabel": "DM同期"
 }
