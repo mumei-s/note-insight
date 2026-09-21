@@ -36,3 +36,6 @@
 .midm-control details.needs-update>summary{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;min-height:34px!important;color:#fff0b8!important;font-size:9px!important}
 .midm-control details.needs-update>summary small{color:#ffd36b!important;font-size:7.5px!important;font-weight:950!important}
 
+
+/* single DM update action */
+.midm-version-state{display:flex;align-items:center;min-height:29px;border:1px solid #304c5f;border-radius:7px;background:#08151e;color:#a7bdca;padding:4px 7px;font:900 8px/1.2 system-ui}
