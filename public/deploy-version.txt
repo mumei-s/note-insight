@@ -1,2 +1,2 @@
-2026-09-21T09:48+09:00
-INSIGHT v2026.09.21.16: notification V3.5.1 bottom-up full history, DM V1.2.0, cache-first Dashboard analysis, cross-browser release.
+2026-09-21T09:58+09:00
+INSIGHT v2026.09.21.17: notification V3.5.2 bottom-up + checkpoint stop/resume, DM V1.2.0, cache-first Dashboard, cross-browser release.
