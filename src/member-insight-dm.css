@@ -30,3 +30,9 @@
 .midm-update-now{border-color:#d39b35!important;background:#3a2607!important;color:#fff0b8!important;box-shadow:0 0 0 1px rgba(255,198,74,.2) inset}
 .midm-update-required{display:grid;place-items:center;min-height:29px;border:1px solid #a56c2d;border-radius:7px;background:#271805;color:#ffd993;font:900 8px/1.2 system-ui;padding:4px 7px;white-space:nowrap}
 .midm-control-detail a.needs-update{border-color:#d39b35!important;background:#3a2607!important;color:#fff0b8!important}
+
+/* DM update summary emphasis */
+.midm-control details.needs-update{border:1px solid #d39b35!important;border-radius:8px!important;background:#2a1a06!important;padding:0 6px 5px!important}
+.midm-control details.needs-update>summary{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;min-height:34px!important;color:#fff0b8!important;font-size:9px!important}
+.midm-control details.needs-update>summary small{color:#ffd36b!important;font-size:7.5px!important;font-weight:950!important}
+
