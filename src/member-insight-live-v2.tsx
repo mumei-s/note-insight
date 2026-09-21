@@ -192,7 +192,9 @@ export function MemberInsightLiveV2(){
   },[]);
   function capture(e:React.MouseEvent){
     const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;const label=t.closest("button")?.textContent?.trim()||"";
-    if(label==="コメント")openMode("comments");else if(label==="お気に入り")openMode("favorites");else if(label==="フォロー")openMode("social");else if(label==="通知")openMode("notifications");else if(mode!=="normal")openMode("normal")
+    const finalMode=label==="コメント"?"comments":label==="お気に入り"?"favorites":label==="フォロー"?"social":label==="通知"?"notifications":null;
+    if(finalMode){e.preventDefault();e.stopPropagation();openMode(finalMode);return}
+    if(mode!=="normal")openMode("normal")
   }
   const appLatest=release?.appVersion||"";
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
