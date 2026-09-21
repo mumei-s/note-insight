@@ -54,3 +54,21 @@
 .minf-detail-body dd{margin-top:1px!important;font-size:7.6px!important;line-height:1.05!important}
 .minf-detail-body p{margin:3px 0!important;line-height:1.25!important}
 .minf-detail-body button{min-height:26px!important;padding:3px 7px!important}
+
+
+/* 2026-09-21 v22: keep classification obvious while making detail/precision denser */
+.minf-meta span{font-size:11.5px!important;padding:3px 8px!important;letter-spacing:.01em}
+.minf-detail>summary{font-size:9px!important;color:#bfeaff!important;background:#0b1b26!important;border-radius:7px}
+.minf-detail-body{display:block!important}
+.minf-detail-body .minf-reader-server{margin:0 0 3px!important}
+.minf-detail-body dl{grid-template-columns:repeat(3,minmax(0,1fr))!important;margin:2px 0!important}
+.minf-detail-body dl>div{padding:3px!important}
+.minf-detail-body>p:not([role="status"]):not(.minf-reader-error){margin:2px 0!important;font-size:6.8px!important;line-height:1.15!important}
+.minf-detail-body>button{width:100%!important;min-height:24px!important}
+@media(max-width:620px){
+ .minf-meta span{font-size:11px!important}
+ .minf-detail-body dl{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ .minf-detail-body dl>div{padding:2px 3px!important}
+ .minf-detail-body dt{font-size:5.9px!important}
+ .minf-detail-body dd{font-size:7px!important}
+}
