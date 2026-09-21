@@ -6,10 +6,10 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('standalone DM userscript has no本人通知 dependency',()=>{
   const dm=read('public/note-insight-dm.user.js');
   const notice=read('public/note-insight-notification-v3.user.js');
-  assert.match(dm,/@version\s+1\.3\.2/);
+  assert.match(dm,/@version\s+1\.3\.3/);
   assert.match(dm,/note-insight-dm-account-pair-v1\.js\?v=100/);
   assert.match(dm,/note-insight-dm-network-v2\.js\?v=121/);
-  assert.match(dm,/note-insight-dm-reader-v1\.js\?v=132/);
+  assert.match(dm,/note-insight-dm-reader-v1\.js\?v=133/);
   assert.doesNotMatch(dm,/note-insight-notification-reader|notification-controls|notification-filter|notification-account-pair/);
   assert.doesNotMatch(notice,/note-insight-dm-reader-v1\.js\?v=/);
 });
@@ -35,9 +35,9 @@ test('DM installer and release metadata are separate',()=>{
   assert.match(install,/note-insight-dm\.user\.js/);
   assert.match(install,/mumei-dm-tool-version/);
   assert.match(install,/dmVersion/);
-  assert.equal(manifest.dmVersion,'1.3.2');
+  assert.equal(manifest.dmVersion,'1.3.3');
   assert.equal(manifest.dmLabel,'DM同期');
-  assert.match(release,/CURRENT_DM_VERSION = "1\.3\.2"/);
+  assert.match(release,/CURRENT_DM_VERSION = "1\.3\.3"/);
   assert.match(release,/DM_VERSION_STORAGE_KEY = "mumei-dm-tool-version"/);
 });
 
