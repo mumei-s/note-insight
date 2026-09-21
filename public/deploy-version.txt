@@ -1,2 +1,2 @@
-2026-09-21T16:20+09:00
-INSIGHT v2026.09.21.23: single DM update action only; notification V3.5.7 and DM V1.3.3 maintained.
+2026-09-21T16:32+09:00
+INSIGHT v2026.09.21.24: DM one-person-at-a-time view; other people hidden after selection; DM sync V1.3.3 maintained.
