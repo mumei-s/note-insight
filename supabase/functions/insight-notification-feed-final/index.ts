@@ -41,5 +41,5 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  const rows=(await allRows(m.scope,ids,String(meta.lastSyncAt||""))).filter(r=>!["like","follow","comment","creator_article_posted"].includes(String(r.notification_type))).map(r=>decorate(r,m.noteId)),dated=day?rows.filter(r=>jstDay(r.occurred_at||r.captured_at)===day):rows;
  const categoryCounts:Record<string,number>={all:dated.length};for(const r of dated)categoryCounts[r.display_category]=(categoryCounts[r.display_category]||0)+1;
  const selected=kind==="all"?dated:dated.filter(r=>r.display_category===kind);
- return out({ok:true,feedAt:new Date().toISOString(),classifierVersion:"action-v23-structured",page,pageSize:size,total:selected.length,rows:selected.slice(offset,offset+size),categoryCounts,noteId:m.noteId,selectedDay:day||null,...meta});
+ return out({ok:true,feedAt:new Date().toISOString(),classifierVersion:"action-v24-structured",page,pageSize:size,total:selected.length,rows:selected.slice(offset,offset+size),categoryCounts,noteId:m.noteId,selectedDay:day||null,...meta});
  }catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
