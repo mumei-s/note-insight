@@ -65,14 +65,15 @@ function extract(json,requestUrl,me){
  }
  walk(json);return out
 }
-let saving=Promise.resolve(),captured=0,saved=0;
+let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map();
+function addRoom(rows,field){for(const r of rows){const k=String(r.thread_key||'');if(!k)continue;const v=roomCounts.get(k)||{captured:0,saved:0};v[field]=Number(v[field]||0)+1;roomCounts.set(k,v)}}
 async function persist(rows){
  if(!rows.length)return;
  const a=await account();if(!a)return;const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)return;
- captured+=rows.length;
+ captured+=rows.length;addRoom(rows,'captured');
  for(let i=0;i<rows.length;i+=100){
   const part=rows.slice(i,i+100),p=await request({noteId:a.id,threads:[],messages:part},token);
-  saved+=Number(p?.messageCount||0);
+  const confirmed=Number(p?.messageCount||0);saved+=confirmed;if(confirmed)addRoom(part.slice(0,confirmed),'saved');
   const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastRunMode:'network',lastRunComplete:false,lastReadCount:captured,lastSavedCount:saved,lastError:'',version:VERSION})
  }
 }
@@ -97,5 +98,5 @@ function installXHR(){
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
 installFetch();installXHR();
-window.__mumeiDmNetworkV2={version:VERSION,extract,getCounts:()=>({captured,saved})};
+window.__mumeiDmNetworkV2={version:VERSION,extract,getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
