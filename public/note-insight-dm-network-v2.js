@@ -2,9 +2,9 @@
 'use strict';
 if(location.hostname!=='note.com'||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.2.1';
+const VERSION='1.4.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
-const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
+const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:',API_TEMPLATE='mumei_insight_dm_api_template_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
 const clean=v=>String(v??'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
@@ -16,7 +16,7 @@ const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m?.[1]||'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function abs(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const x=v.charCodeAt(i);a=Math.imul(a^x,16777619);b=Math.imul(b^x,3266489917)}return(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0')}
-const BODY=['body','message','text','content','message_body','messageBody','plain_text','plainText'];
+const BODY=['body','message','text','content','message_body','messageBody','plain_text','plainText','content_text','contentText','message_content','messageContent'];
 const TIME=['sent_at','sentAt','created_at','createdAt','posted_at','postedAt','timestamp','datetime'];
 const IDS=['message_id','messageId','id','uuid'];
 const ROOMS=['room_id','roomId','thread_id','threadId','conversation_id','conversationId'];
@@ -48,8 +48,8 @@ function responseHint(url,body,json){
  if(/message|messages|room|rooms|conversation|chat|direct.?message|dm/.test(hay))return true;
  try{const s=JSON.stringify(json).slice(0,250000).toLowerCase();return/(message_id|room_id|conversation_id|sender_id|messages)/.test(s)&&/(body|content|text)/.test(s)}catch{return false}
 }
-function extract(json,requestUrl,me){
- const out=[],seen=new Set(),currentRoom=roomFromUrl(location.href);
+function extract(json,requestUrl,me,forcedRoom=''){
+ const out=[],seen=new Set(),currentRoom=ROOM_ID_RE.test(String(forcedRoom||''))?String(forcedRoom):roomFromUrl(requestUrl)||roomFromUrl(location.href);
  function walk(v,path='',depth=0,inheritedRoom=currentRoom){
   if(depth>10||v==null)return;
   if(Array.isArray(v)){for(const x of v.slice(0,3000))walk(x,path+'[]',depth+1,inheritedRoom);return}
@@ -69,24 +69,95 @@ function extract(json,requestUrl,me){
 let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map();
 function addRoom(rows,field){for(const r of rows){const k=String(r.thread_key||'');if(!k)continue;const v=roomCounts.get(k)||{captured:0,saved:0};v[field]=Number(v[field]||0)+1;roomCounts.set(k,v)}}
 async function persist(rows){
- if(!rows.length)return;
- const a=await account();if(!a)return;const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)return;
+ if(!rows.length)return 0;
+ const a=await account();if(!a)return 0;const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)return 0;
  captured+=rows.length;addRoom(rows,'captured');
  for(let i=0;i<rows.length;i+=100){
   const part=rows.slice(i,i+100),p=await request({noteId:a.id,threads:[],messages:part},token);
   const confirmed=Number(p?.messageCount||0);saved+=confirmed;if(confirmed)addRoom(part.slice(0,confirmed),'saved');
   const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastRunMode:'network',lastRunComplete:false,lastReadCount:captured,lastSavedCount:saved,lastError:'',version:VERSION})
  }
+ return rows.length
 }
 async function inspect(meta,res,transport){
  if(!res||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
  let txt='';try{txt=await res.text()}catch{return}if(!txt||txt.length>5000000)return;
  let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(meta.url,meta.body,json))return;
- const a=await account();if(!a)return;const rows=extract(json,meta.url,a.id);if(!rows.length)return;
+ const a=await account();if(!a)return;const forced=roomFromUrl(location.href)||roomFromUrl(meta.url),rows=extract(json,meta.url,a.id,forced);if(!rows.length)return;
+ if(forced){try{const u=new URL(meta.url,location.href),pattern=u.href.replace(forced,'{room}');await set(key(API_TEMPLATE,a.id),{pattern,method:String(meta.method||'GET').toUpperCase(),body:meta.body??null,foundAt:Date.now(),version:VERSION})}catch{}}
  saving=saving.then(()=>persist(rows)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
  await saving
 }
 function reqMeta(input,init){let url='',body=null,method='GET';try{if(typeof input==='string'||input instanceof URL){url=String(input);body=init?.body??null;method=String(init?.method||'GET').toUpperCase()}else if(input){url=String(input.url||'');body=init?.body??null;method=String(init?.method||input.method||'GET').toUpperCase()}}catch{}return{url:abs(url),body,method}}
+
+function apiCandidates(room){
+ const r=encodeURIComponent(room),xs=[
+  `/api/v1/messages/rooms/${r}/messages`,`/api/v2/messages/rooms/${r}/messages`,`/api/v3/messages/rooms/${r}/messages`,
+  `/api/v1/message_rooms/${r}/messages`,`/api/v2/message_rooms/${r}/messages`,`/api/v3/message_rooms/${r}/messages`,
+  `/api/v1/messages/rooms/${r}`,`/api/v2/messages/rooms/${r}`,`/api/v3/messages/rooms/${r}`,
+  `/api/v1/message_rooms/${r}`,`/api/v2/message_rooms/${r}`,`/api/v3/message_rooms/${r}`,
+  `/api/v1/messages/${r}`,`/api/v2/messages/${r}`,`/api/v3/messages/${r}`
+ ];
+ return xs.map(x=>new URL(x,location.origin).href)
+}
+async function jsonFetch(url,init={}){
+ try{const r=await fetch(url,{method:init.method||'GET',body:init.body??undefined,headers:{Accept:'application/json',...(init.headers||{})},credentials:'include',cache:'no-store'});if(!r.ok)return null;const txt=await r.text();if(!txt||txt.length>8000000)return null;try{return{json:JSON.parse(txt),url:r.url||url,status:r.status}}catch{return null}}catch{return null}
+}
+function templateUrl(pattern,room){return String(pattern||'').replace('{room}',encodeURIComponent(room))}
+async function discoverTemplate(a,room){
+ const savedTpl=await get(key(API_TEMPLATE,a.id),null);
+ if(savedTpl?.pattern){
+  const hit=await jsonFetch(templateUrl(savedTpl.pattern,room),{method:savedTpl.method||'GET',body:savedTpl.body??undefined});
+  if(hit&&extract(hit.json,hit.url,a.id,room).length)return{...savedTpl,verified:true}
+ }
+ for(const url of apiCandidates(room)){
+  const hit=await jsonFetch(url);
+  if(!hit)continue;
+  const rows=extract(hit.json,hit.url,a.id,room);
+  if(!rows.length)continue;
+  const pattern=hit.url.replace(room,'{room}').replace(encodeURIComponent(room),'{room}'),tpl={pattern,method:'GET',body:null,foundAt:Date.now(),version:VERSION};
+  await set(key(API_TEMPLATE,a.id),tpl);return tpl
+ }
+ return null
+}
+function paginationHint(json){
+ let found={nextUrl:'',nextPage:null,nextCursor:'',done:null};
+ function walk(v,depth=0){if(depth>8||v==null||found.nextUrl)return;if(Array.isArray(v)){for(const x of v.slice(0,50))walk(x,depth+1);return}if(typeof v!=='object')return;
+  for(const[k,x]of Object.entries(v)){const n=k.toLowerCase().replace(/_/g,'');
+   if(typeof x==='string'&&/next(url|link|href)/.test(n)&&/^https?:|^\//.test(x))found.nextUrl=x;
+   else if((n==='nextpage'||n==='nextpagenumber')&&(typeof x==='number'||/^\d+$/.test(String(x))))found.nextPage=Number(x);
+   else if(/next(cursor|token)/.test(n)&&typeof x==='string'&&x)found.nextCursor=x;
+   else if(/^(islastpage|islast|hasnext|hasnextpage)$/.test(n)&&typeof x==='boolean')found.done=/islast/.test(n)?x:!x;
+   if(x&&typeof x==='object')walk(x,depth+1)
+  }}
+ walk(json);return found
+}
+function nextPageUrl(current,hint,page){
+ try{
+  if(hint.nextUrl)return new URL(hint.nextUrl,location.origin).href;
+  const u=new URL(current,location.href);
+  if(hint.nextPage!=null){u.searchParams.set('page',String(hint.nextPage));return u.href}
+  if(hint.nextCursor){const keyName=[...u.searchParams.keys()].find(k=>/cursor|after|token/i.test(k))||'cursor';u.searchParams.set(keyName,hint.nextCursor);return u.href}
+  if(hint.done===false&&u.searchParams.has('page')){u.searchParams.set('page',String(page+1));return u.href}
+ }catch{}
+ return''
+}
+async function syncRoom(room){
+ if(!ROOM_ID_RE.test(String(room||'')))return{read:0,saved:0,error:'INVALID_ROOM'};
+ const a=await account();if(!a)return{read:0,saved:0,error:'ACCOUNT_NOT_FOUND'};
+ const tpl=await discoverTemplate(a,room);if(!tpl)return{read:0,saved:0,error:'DM_API_NOT_FOUND'};
+ let url=templateUrl(tpl.pattern,room),page=1,totalRead=0,totalSaved=0,seen=new Set(),loops=0;
+ while(url&&loops++<100&&totalRead<5000){
+  const hit=await jsonFetch(url,{method:tpl.method||'GET',body:tpl.body??undefined});if(!hit)break;
+  const rows=extract(hit.json,hit.url,a.id,room).filter(x=>{if(seen.has(x.message_key))return false;seen.add(x.message_key);return true});
+  if(rows.length){totalRead+=rows.length;totalSaved+=await persist(rows)}
+  const hint=paginationHint(hit.json);if(hint.done===true)break;
+  const next=nextPageUrl(hit.url,hint,page);if(!next||next===url||(!rows.length&&!hint.nextUrl&&!hint.nextCursor&&hint.nextPage==null))break;
+  url=next;page++
+ }
+ const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastRunMode:'direct-api',lastRunComplete:true,lastReadCount:totalRead,lastSavedCount:totalSaved,lastThreadKey:room,lastError:totalRead?'':'DM_API_EMPTY',version:VERSION});
+ return{read:totalRead,saved:totalSaved,room,mode:'direct-api',template:tpl.pattern}
+}
 function installFetch(){
  const p=pageWindow();if(!p?.fetch||p.fetch.__mumeiDmNetworkV2)return;const original=p.fetch.bind(p);
  const wrapped=function(input,init){const meta=reqMeta(input,init),promise=original(input,init);try{Promise.resolve(promise).then(r=>void inspect(meta,r.clone(),'fetch')).catch(()=>{})}catch{}return promise};
@@ -99,5 +170,5 @@ function installXHR(){
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
 installFetch();installXHR();
-window.__mumeiDmNetworkV2={version:VERSION,extract,getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
+window.__mumeiDmNetworkV2={version:VERSION,extract,syncRoom,discoverTemplate,getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
