@@ -1,2 +1,2 @@
-2026-09-21T13:18+09:00
-INSIGHT v2026.09.21.22: notification V3.5.7 auto-scrolls the bell panel, saves incremental rows up to 300, then restores position; DM V1.3.2 real-room full sync.
+2026-09-21T13:20+09:00
+INSIGHT v2026.09.21.22: notification V3.5.7 auto-scrolls bell panel and saves up to 300; DM V1.3.3 real-message-only full room sync; official Dashboard canonical metrics.
