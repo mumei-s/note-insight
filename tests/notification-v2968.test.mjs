@@ -115,7 +115,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
   assert.match(dmFeed,/action==="people"/);assert.match(dmFeed,/action==="person_messages"/);assert.match(dmFeed,/person_key/);
   assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/\["dm","DM"\]/);assert.match(unified,/tab==="dm"\?<MemberInsightDm/);
-  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/通常のnote DM導線はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/DM同期ツールをインストール/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/threadKey===\'new\'/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM導線はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/DM同期ツールをインストール/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/threadKey===\'new\'/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
