@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.20",
-  "notificationVersion": "3.5.3",
+  "appVersion": "2026.09.21.21",
+  "notificationVersion": "3.5.6",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T10:42:00+09:00",
+  "releasedAt": "2026-09-21T13:08:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.5.3・DM V1.3.0。通知は表示中DOMを即保存してから通信確認し、アイコン補修と反映速度を改善。フィルター操作バーは通知パネル内に置きnoteトップへ戻らないよう修正。分類を強調し詳細は3列化。DMは画面遷移せず各ルームを画面外で順次同期し、一覧プレビューも即保存。",
-  "dmVersion": "1.3.0",
+  "note": "本人通知V3.5.6・DM V1.3.2。🔔は表示中＋スクロール追加分を即時保存し、note取得窓は最大300件。項目切替は保存済みキャッシュを即表示。スキ・コメント等の集計は公式Dashboardを正本として優先。公開データ欄は精度注意のみ。コメントUIのはみ出し修正。DMはsearch/new等を除外し実UUIDルームだけを画面外で全件同期、自分の送信分も保存。",
+  "dmVersion": "1.3.2",
   "dmLabel": "DM同期"
 }
