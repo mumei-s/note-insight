@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.21.27",
-  "notificationVersion": "3.5.8",
+  "appVersion": "2026.09.21.28",
+  "notificationVersion": "3.5.9",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-21T20:28:00+09:00",
+  "releasedAt": "2026-09-21T20:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.5.8・DM V1.3.6。DM全ルーム走査の実ファイルに残っていた2件処理/3件進行を2件進行へ修正し、Reader cache-bustをv136へ更新。通知即表示・未分類のみ自動再分類・DM残留解消・お気に入り個別解除・詳細/設定UI圧縮を維持。",
+  "note": "本人通知V3.5.9。通知APIはルート通知だけを抽出し、記事・マガジン説明などのネスト誤取得を停止。未分類はV24で再判定し、カテゴリ切替は保存済みキャッシュを即表示。設定・更新状態を明確なボタン化し、分類表示と詳細・精度欄を圧縮。お気に入り個別解除等の既存修正を維持。",
   "dmVersion": "1.3.6",
   "dmLabel": "DM同期"
 }
