@@ -15,18 +15,18 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.4.4 loads fully split notification modules",async()=>{
+test("V3.5.0 loads fully split notification modules",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-reader-v4.js");
  const controls=await read("public/note-insight-notification-controls-v1.js");
- assert.match(parent,/@version\s+3\.4\.4/);
+ assert.match(parent,/@version\s+3\.5\.0/);
  for(const p of [
-  "note-insight-notification-network-v3300.js?v=3430",
-    "note-insight-notification-reader-v4.js?v=3430",
-  "note-insight-notification-controls-v1.js?v=120",
+  "note-insight-notification-network-v3300.js?v=3500",
+    "note-insight-notification-reader-v4.js?v=3500",
+  "note-insight-notification-controls-v1.js?v=130",
   "note-insight-notification-filter-v4.js?v=400",
   "note-insight-notification-return-v1.js?v=120",
-  "note-insight-notification-status-bridge-v1.js?v=100",
+  "note-insight-notification-status-bridge-v1.js?v=110",
   "note-insight-notification-feature-bridge-v1.js?v=100",
   "note-insight-notification-settings-bridge-v1.js?v=100",
   "note-insight-notification-account-pair-v1.js?v=100"
