@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.6',PROTOCOL='3.5.6';
+const VERSION='3.5.7',PROTOCOL='3.5.7';
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
@@ -139,6 +139,50 @@ async function fastVisibleSync(){
  try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}
  return{read:visible.length,saved:savedNow,fresh:fresh.length,sessionRead:liveReadSeen.size,sessionSaved:liveSavedTotal,handled:true,windowComplete:liveReadSeen.size>=MAX_NOTICES,windowLimit:MAX_NOTICES}
 }
+let autoWindowRunning=false,autoWindowDonePanel=null;
+async function autoReadVisibleWindow(){
+ if(autoWindowRunning||isDmRoute())return 0;
+ const panel=findPanel();if(!panel)return 0;
+ autoWindowRunning=true;stop=false;
+ const host=scrollHost(panel),startTop=host?host.scrollTop:0;
+ let stable=0,lastHeight=host?host.scrollHeight:0,lastCount=liveReadSeen.size,totalSaved=0,ended=false;
+ try{
+  let r=await fastVisibleSync();totalSaved+=Number(r.saved||0);
+  health(`自動読込 ${Number(r.sessionRead||r.read||0)} / ${MAX_NOTICES}｜保存 ${Number(r.sessionSaved||r.saved||0)}`,'saving',{readCount:Number(r.sessionRead||r.read||0),savedCount:Number(r.sessionSaved||r.saved||0),totalCount:MAX_NOTICES,autoScroll:true,streaming:true});
+  if(!host||Number(r.sessionRead||0)>=MAX_NOTICES){ended=true;return totalSaved}
+  for(let i=0;i<180&&!stop&&liveReadSeen.size<MAX_NOTICES;i++){
+   if(findPanel()!==panel)break;
+   const maxTop=Math.max(0,host.scrollHeight-host.clientHeight),step=Math.max(220,Math.floor(host.clientHeight*.82));
+   host.scrollTop=Math.min(maxTop,host.scrollTop+step);
+   try{host.dispatchEvent(new Event('scroll',{bubbles:true}))}catch{}
+   await sleep(180);
+   r=await fastVisibleSync();totalSaved+=Number(r.saved||0);
+   const count=Number(r.sessionRead||liveReadSeen.size),saved=Number(r.sessionSaved||liveSavedTotal);
+   health(`自動読込 ${count} / ${MAX_NOTICES}｜保存 ${saved}`,'saving',{readCount:count,savedCount:saved,totalCount:MAX_NOTICES,autoScroll:true,streaming:true});
+   const height=host.scrollHeight,atBottom=host.scrollTop>=Math.max(0,height-host.clientHeight-2);
+   if(height===lastHeight&&count===lastCount&&atBottom)stable++;else stable=0;
+   lastHeight=height;lastCount=count;
+   if(stable>=5){ended=true;break}
+   if(atBottom&&stable===2){host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);try{host.dispatchEvent(new Event('scroll',{bubbles:true}))}catch{};await sleep(320)}
+  }
+  if(liveReadSeen.size>=MAX_NOTICES)ended=true;
+  return totalSaved
+ }catch(e){
+  health(`⚠ 自動読込：${String(e?.message||e)}｜途中まで保存済み`,'error',{readCount:liveReadSeen.size,savedCount:liveSavedTotal,totalCount:MAX_NOTICES,autoScroll:true});
+  return totalSaved
+ }finally{
+  if(host&&findPanel()===panel){try{host.scrollTop=Math.min(startTop,Math.max(0,host.scrollHeight-host.clientHeight))}catch{}}
+  if(ended&&findPanel()===panel){
+   autoWindowDonePanel=panel;
+   try{
+    const a=await account();if(a){const cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:true,lastRunMode:'window',lastRunReadCount:liveReadSeen.size,lastRunSavedCount:liveSavedTotal,lastError:'',version:VERSION,windowLimit:MAX_NOTICES,windowEndReached:liveReadSeen.size<MAX_NOTICES})}
+   }catch{}
+   health(`✓ 自動読込完了｜読込 ${liveReadSeen.size} / ${MAX_NOTICES}｜保存 ${liveSavedTotal}`,'done',{readCount:liveReadSeen.size,savedCount:liveSavedTotal,totalCount:MAX_NOTICES,autoScroll:true,windowComplete:true,windowLimit:MAX_NOTICES});
+  }
+  autoWindowRunning=false
+ }
+}
+
 async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  if(!host){await capture();return true}
  let same=0,last=-1;
@@ -245,10 +289,10 @@ function scheduleAuto(delay=250){
  clearTimeout(autoTimer);
  autoTimer=setTimeout(()=>{
   const p=findPanel();
-  if(!p){autoPanel=null;livePanel=null;liveAccount='';liveReadSeen=new Set();liveSavedTotal=0;return}
-  if(scanning){autoTimer=setTimeout(()=>scheduleAuto(120),160);return}
+  if(!p){autoPanel=null;autoWindowDonePanel=null;livePanel=null;liveAccount='';liveReadSeen=new Set();liveSavedTotal=0;return}
+  if(scanning||autoWindowRunning){autoTimer=setTimeout(()=>scheduleAuto(120),160);return}
   autoPanel=p;lastAutoAt=Date.now();
-  void scan({fastOnly:true})
+  if(autoWindowDonePanel===p)void scan({fastOnly:true});else void autoReadVisibleWindow()
  },delay)
 }
 setTimeout(()=>scheduleAuto(180),80);
@@ -257,5 +301,5 @@ document.addEventListener('scroll',()=>{if(findPanel())scheduleAuto(140)},true);
 document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(80)},true);
 window.addEventListener('pageshow',()=>scheduleAuto(180));
 window.addEventListener('focus',()=>scheduleAuto(180));
-window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,isDmRoute,scanDomLegacy};
+window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,autoReadVisibleWindow,rowData,findPanel,directPanel,isDmRoute,scanDomLegacy};
 })();
