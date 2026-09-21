@@ -1,2 +1,2 @@
-2026-09-21T10:31+09:00
-INSIGHT v2026.09.21.19: DM V1.2.1 update visibility fix; passive-only DM navigation; DM people collapsed.
+2026-09-21T10:42+09:00
+INSIGHT v2026.09.21.20: notification V3.5.3 instant visible sync/icon repair/filter stay-open; DM V1.3.0 hidden background room sync.
