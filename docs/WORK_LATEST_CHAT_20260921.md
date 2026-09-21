@@ -231,3 +231,54 @@ Workで優先して実装する重作業。
 - Dashboard保存済みデータは即表示、グラフ精度・操作性が向上。
 - Android実機で下部固定ナビや操作バーが重ならない。
 
+
+
+## 16. 2026-09-21 通常チャット実装更新
+- 本人通知を V3.5.2 へ更新。
+- `/api/v3/notices` を直接読む通信Readerを主経路とし、DOM Readerは補助として分離維持。
+- 初回全履歴はAPI最古ページから開始し、各ページ内も古い通知→新しい通知の順で保存する「下→上」方式へ変更。
+- 読込中は `読込 N / 総数｜保存 N` を通知し、4列パネルの「読込」は実行中「停止 N/総数」へ変化。
+- 停止時は現在ページの保存・チェックポイント確定後に終了。未完了初回読込は保存済みAPIページから再開。
+- `kind / body / body_ast / all_area_url / featured_area_url / featured_content_name / action_users` をReader→ingestへ構造化保存。
+- classifierは `action-v23-structured`。classifier version更新時はINSIGHT側からチャンク自動再分類し、`action_users[0]` で人物URL・名前・アイコンも補修。
+- INSIGHT本人通知UIは横カテゴリタブを廃止し、カテゴリ＋日付を1つのコンパクトパネルへ統合。精度・サーバー状態・再分類は折りたたみへ収納。
+- 保存チェックポイントはGM value change listener対応時にINSIGHTへ即通知し、非対応環境は短いpollingでフォールバック。
+- 設定/INSIGHT遷移は独立固定4列パネルから実行し、遷移直前veilでnoteトップのちらつきを隠す。
+
+### DM
+- DM同期を V1.2.0 へ更新。
+- DB実測で「相手21 / 本文0」を確認し、一覧取得と本文取得を切り分け。
+- 新規 `note-insight-dm-network-v2.js` がDMのfetch/XHRレスポンスを直接解析し、本文・相手・日時・方向・添付・取得可能な既読状態を保存。
+- 既存DM Readerの全ルーム自動巡回キュー・途中index保存を維持し、Network Reader優先＋DOM Reader補助へ変更。
+- INSIGHTのDM上部を連携状態・相手数・保存件数・最終同期・主操作を1パネルへ圧縮。
+
+### Dashboard分析
+- INSIGHT本体を v2026.09.21.17 へ更新。
+- 参加アカウント単位の保存済み分析キャッシュを先に同期表示し、最新Dashboard/通知取得はバックグラウンド更新。
+- キャッシュは通知本文等を丸ごと保持せず、クロス分析に必要な日時だけへ縮小。
+- 日別チャートはPV / 売上 / スキ / コメント、7/30/90日切替、点タップ詳細を追加。
+- 日別データ欠損時は0グラフを描かず、「スナップショットなし」と明示。
+
+### 配信・正本
+- Supabase本番とGitHub mainの以下Edge Functionソースが一致することを確認：
+  - insight-notification-ingest-v2
+  - insight-notification-feed-final
+  - insight-notification-reclassify
+  - insight-dm-ingest
+  - insight-dm-feed
+  - insight-dashboard-data
+- release manifest / App定数 / userscript / cache-bust / deploy-version / Service Worker cacheを同一リリースへ揃えた。
+- Service Worker cacheは `mumei-note-insight-v35`。
+- GitHub Pages workflowに現行通知Network/Reader/Controls/Status bridgeとDM Network/Readerのsyntax checkを追加。
+- 旧版番号を固定していた回帰テストを現行V3.5.2 / DM V1.2.0仕様へ更新し、停止・途中保存の回帰条件を追加。
+
+### 対応環境の方針
+Android専用実装は禁止。共通Reader/保存ロジックはUA分岐させず、標準fetch/XHR・DOM・Storageとuserscript APIのmodern/legacy fallbackで構成する。
+配布導線は少なくとも以下を維持：
+- Android: Edge / Firefox、Chrome・Yahoo!ブラウザー等は対応ブラウザへ案内
+- iPhone/iPad: Safari（Userscripts/Tampermonkey）
+- Windows/Linux/Chromebook: Edge / Chrome系 / Firefox / Opera
+- macOS: Safari（Userscripts/Tampermonkey）および一般的な対応ブラウザ
+
+### 最終確認
+コード上の完了だけで「完成」としない。最終mainのGitHub Actions build・regression・Pages deploy成功、およびPages公開manifest/userscriptの実配信版一致を確認すること。
