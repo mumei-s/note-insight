@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.2',PROTOCOL='3.5.2';
+const VERSION='3.5.3',PROTOCOL='3.5.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
 const SHELL='[data-mumei-notice-shell-v2958="1"]';
@@ -115,6 +115,26 @@ async function sendBatch(input,a,saved,force=false){
  }
  return total;
 }
+let lastFastRepairAt=0;
+async function fastVisibleSync(){
+ const panel=findPanel();if(!panel)return{read:0,saved:0,handled:false};
+ const a=await account();if(!a)return{read:0,saved:0,handled:false};
+ if(!String(await get(key(TOKEN,a.id),'')||''))return{read:0,saved:0,handled:false};
+ const savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
+ const visible=rows(panel).map(rowData).filter(Boolean).slice().reverse();
+ if(!visible.length)return{read:0,saved:0,handled:false};
+ const fresh=visible.filter(r=>!saved.has(sig(r)));
+ let savedNow=0;
+ if(fresh.length)savedNow=await sendBatch(fresh,a,saved,false);
+ if(Date.now()-lastFastRepairAt>60000){
+  const repair=visible.filter(r=>r.actor_url&&r.actor_image_url).slice(-40);
+  if(repair.length){lastFastRepairAt=Date.now();try{await sendBatch(repair,a,saved,true)}catch{}}
+ }
+ const cp=await get(key(CHECK,a.id),{}),now=Date.now();
+ await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:true,lastRunMode:'delta',lastRunReadCount:visible.length,lastRunSavedCount:savedNow,lastError:'',version:VERSION});
+ try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}
+ return{read:visible.length,saved:savedNow,handled:true}
+}
 async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
  if(!host){await capture();return true}
  let same=0,last=-1;
@@ -135,18 +155,27 @@ async function scan(){
  if(scanning){try{window.__mumeiNotificationNetwork3300?.stop?.()}catch{}stop=true;health('停止要求｜現在ページを保存してから停止します…','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
  if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
- scanning=true;stop=false;
+ scanning=true;stop=false;let fast={read:0,saved:0,handled:false};
  try{
-  const r=await net.syncCurrent({waitMs:1000});
-  const saved=Number(r?.saved||0),read=Number(r?.received||0);
+  try{
+   fast=await fastVisibleSync();
+   if(fast.handled)health(`表示中 ${fast.read}件を即確認｜保存 ${fast.saved}件`,'saving',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,instant:true})
+  }catch{}
+  const r=await net.syncCurrent({waitMs:220});
+  const netSaved=Number(r?.saved||0),netRead=Number(r?.received||0),saved=Math.max(Number(fast.saved||0),netSaved),read=Math.max(Number(fast.read||0),netRead);
   if(r?.handled){
    const label=r?.partial?'途中保存':r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
-   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read),partial:Boolean(r?.partial),historyComplete:Boolean(r?.historyComplete)});
+   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read),partial:Boolean(r?.partial),historyComplete:Boolean(r?.historyComplete),instant:Boolean(fast.handled)});
    return saved
+  }
+  if(fast.handled){
+   health(`✓ 表示中 ${fast.read}件確認｜${fast.saved}件保存`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,historyComplete:true,instant:true});
+   return fast.saved
   }
   health('通信読取待機｜🔔を開いたまま次回も続きから確認します','saving');
   return 0
  }catch(e){
+  if(fast.handled){health(`✓ 表示中 ${fast.read}件確認｜${fast.saved}件保存（通信確認は次回継続）`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,historyComplete:true,instant:true});return fast.saved}
   health(`⚠ ${String(e?.message||e)}｜未保存分は次回に引継ぎ`,'error');
   return 0
  }finally{scanning=false;stop=false}
@@ -212,15 +241,15 @@ function scheduleAuto(delay=350){
   const p=findPanel();
   if(!p){autoPanel=null;return}
   if(scanning)return;
-  if(p===autoPanel&&Date.now()-lastAutoAt<15000)return;
+  if(p===autoPanel&&Date.now()-lastAutoAt<3000)return;
   autoPanel=p;lastAutoAt=Date.now();
   void scan()
  },delay)
 }
-setTimeout(()=>scheduleAuto(600),120);
-new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(300),120)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
-document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(280)},true);
-window.addEventListener('pageshow',()=>scheduleAuto(500));
-window.addEventListener('focus',()=>scheduleAuto(500));
+setTimeout(()=>scheduleAuto(180),80);
+new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(90),60)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
+document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(80)},true);
+window.addEventListener('pageshow',()=>scheduleAuto(180));
+window.addEventListener('focus',()=>scheduleAuto(180));
 window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,isDmRoute,scanDomLegacy};
 })();
