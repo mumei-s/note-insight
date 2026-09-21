@@ -146,3 +146,16 @@ test('notification-only network capture rejects unrelated note APIs and V24 rech
   assert.match(ui,/NOTIFICATION_MASTER_CACHE/);
   assert.match(ui,/question_answer/);
 });
+
+
+test('quarantined network noise stays out of feed and analysis while structured answers leave Other',()=>{
+  const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
+  const analysis=read('supabase/functions/insight-notification-analysis-summary/index.ts');
+  const ui=read('src/member-insight-notifications-final.tsx');
+  assert.match(feed,/noise_reason==="non-notification-api-capture"/);
+  assert.match(feed,/qa_answer"\?"question_answer"/);
+  assert.match(analysis,/noise_reason==="non-notification-api-capture"/);
+  assert.match(analysis,/qa_answer"\?"question_answer"/);
+  assert.match(ui,/NOTIFICATION_MASTER_CACHE/);
+  assert.match(ui,/詳細・精度・再分類 ▼/);
+});
