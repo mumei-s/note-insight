@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.0';
+const VERSION='3.5.1';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -330,13 +330,49 @@ async function widenNoticeCapture(cap){
  }catch{}
  return cap
 }
+
+function directNoticesCap(cap){try{const u=new URL(cap?.url||'',location.href);return (cap?.method||'GET')==='GET'&&u.hostname==='note.com'&&/\/api\/v3\/notices$/i.test(u.pathname)}catch{return false}}
+function directPageRequest(cap,page){
+ try{
+  const u=new URL(cap?.url||'',location.href);u.searchParams.set('page',String(Math.max(1,Number(page)||1)));u.searchParams.set('per',u.searchParams.get('per')||'100');u.searchParams.set('body_ast','1');
+  return{...cap,url:u.href,method:'GET',body:null,rows:null,transport:'direct',requestInit:{...(cap?.requestInit||{}),method:'GET',credentials:'include',cache:'no-store'}}
+ }catch{return null}
+}
+async function syncDirectFullAscending(a,state,cap,resume){
+ if(!directNoticesCap(cap))return null;
+ const firstRows=cap.rows||extract(cap.json,cap.url),apiTotal=totalHint(cap.json),u=new URL(cap.url,location.href),per=Math.max(1,Number(u.searchParams.get('per')||100));
+ if(!apiTotal&&!terminalHint(cap.json))return null;
+ const lastPage=Math.max(1,apiTotal?Math.ceil(apiTotal/per):1),resumePage=resume?Math.max(1,Number(new URL(resume.url,location.href).searchParams.get('page')||0)):0;
+ let page=resumePage||lastPage,total=resume?Number(state?.partialSaved||0):0,received=resume?Number(state?.partialReceived||0):0,pages=resume?Number(state?.partialPages||0):0,totalCount=Math.max(apiTotal,Number(state?.partialTotalCount||0),firstRows.length),newestSig=clean(state?.partialNewestSig||'')||(firstRows.length?clientSig(firstRows[0]):'');
+ if(!resume&&page!==1){const req=directPageRequest(cap,page);if(!req)return null;cap=await replay(req)}
+ status(`通知一覧の下から上へ読込中… 読込 ${received} / ${totalCount||'?'}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,direction:'bottom-up'});
+ while(page>=1){
+  const raw=cap.rows||extract(cap.json,cap.url),rows=[...raw].reverse();
+  received+=rows.length;
+  if(rows.length){const r=await ingestRows(rows,cap,true,false);total+=Number(r.saved||0)}
+  void saveProbe(cap,raw);pages++;
+  status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,direction:'bottom-up'});
+  const nextPage=page-1,nextReq=nextPage>=1?directPageRequest(cap,nextPage):null;
+  await writeHistoryState(a.id,{...state,historyComplete:false,resume:nextReq?{url:nextReq.url,method:'GET',body:null,requestInit:nextReq.requestInit,transport:'direct'}:null,partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now(),direction:'bottom-up'});
+  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,historyComplete:false,lastError:'',direction:'bottom-up'});
+  if(!nextReq)break;
+  try{cap=await replay(nextReq)}catch(e){await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e),direction:'bottom-up'});return{handled:false,saved:total,received,pages,pending:await pendingCount(a.id),reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}}
+  page=nextPage
+ }
+ const pending=await pendingCount(a.id);if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
+ const done={...state,historyComplete:true,frontierSig:newestSig||state?.frontierSig||'',verifiedAt:Date.now(),fullVerifiedAt:Date.now(),lastPages:pages,lastReceived:received,lastSaved:total,lastMode:'full',version:VERSION,resume:null,partialReceived:0,partialSaved:0,partialPages:0,partialNewestSig:'',partialTotalCount:0,direction:'bottom-up'};
+ await writeHistoryState(a.id,done);
+ await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:'full',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:'',direction:'bottom-up'});
+ status(`✓ 全履歴確認完了｜下→上 ${pages}ページ・${received}件確認・${total}件保存確認`,'done',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,pendingCount:0,historyComplete:true,direction:'bottom-up'});
+ return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,full:true,mode:'network-full-bottom-up',direction:'bottom-up'}
+}
 async function syncHistory(opts={}){
  const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
  arm(Math.max(forceFull?180000:120000,waitMs+5000));
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
  const state=await historyState(a.id);
  const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
- const resume=!forceFull&&!state?.historyComplete&&state?.resume?.url?state.resume:null;
+ const resume=!forceFull&&!state?.historyComplete&&state?.version===VERSION&&state?.resume?.url?state.resume:null;
  status(frontier?'保存済み地点まで追加通知をたどっています…':resume?'前回の途中地点から通知履歴を再開します…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':resume?'network-resume':'network-full'});
  let cap=null;
  if(resume){try{cap=await replay({...resume,rows:null})}catch{}}
@@ -346,6 +382,9 @@ async function syncHistory(opts={}){
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
+ }
+ if(!frontier&&directNoticesCap(cap)){
+  const direct=await syncDirectFullAscending(a,state,cap,resume);if(direct)return direct
  }
  let total=resume?Number(state?.partialSaved||0):0,received=resume?Number(state?.partialReceived||0):0,pages=resume?Number(state?.partialPages||0):0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig=clean(state?.partialNewestSig||''),capLimitHit=false,totalCount=Math.max(Number(state?.partialTotalCount||0),totalHint(cap?.json));
  for(let i=0;i<1000&&cap;i++){
