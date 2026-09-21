@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.4.3';
+const VERSION='3.5.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -27,7 +27,11 @@ async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return 
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 function request(url,body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
-function status(message,kind='info',extra={}){document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail:{message:String(message||''),kind,label:kind==='done'?'✓通信保存':kind==='error'?'通信再試行':'通信読込',scanning:kind==='saving',network:true,...extra}}))}
+function status(message,kind='info',extra={}){
+ const detail={message:String(message||''),kind,label:kind==='done'?'✓通信保存':kind==='error'?'通信再試行':'通信読込',state:kind==='done'?'done':kind==='error'?'error':kind==='saving'?'saving':'info',scanning:kind==='saving',network:true,version:VERSION,...extra};
+ document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail}));
+ try{window.dispatchEvent(new CustomEvent('mumei-notification-reader-status',{detail}))}catch{}
+}
 function pageWindow(){try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}}
 function absUrl(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
 function sameNoteOrGraphql(v){try{const u=new URL(v,location.href);return u.hostname==='note.com'||u.hostname==='graphql.note.com'}catch{return false}}
@@ -55,8 +59,10 @@ function targetInfo(obj){
 }
 function occurred(obj){for(const k of TIME_KEYS){const v=obj?.[k];if(typeof v==='string'&&!Number.isNaN(Date.parse(v)))return new Date(v).toISOString();if(typeof v==='number'&&v>1e9){const ms=v<1e12?v*1000:v;return new Date(ms).toISOString()}}return null}
 function eventId(obj){for(const k of ID_KEYS){const v=obj?.[k];if(typeof v==='string'||typeof v==='number')return String(v)}return''}
+function astText(v,depth=0){if(depth>8||v==null)return'';if(typeof v==='string')return clean(v);if(Array.isArray(v))return clean(v.slice(0,120).map(x=>astText(x,depth+1)).join(' '));if(typeof v!=='object')return'';if(typeof v.value==='string')return clean(v.value);if(typeof v.text==='string')return clean(v.text);return astText(v.children||v.content||v.body||[],depth+1)}
 function bestText(obj){
- for(const k of TEXT_KEYS){const v=obj?.[k];if(typeof v==='string'&&ACTION_RE.test(clean(v)))return clean(v)}
+ for(const k of TEXT_KEYS){const v=obj?.[k];if(typeof v==='string'){const s=clean(v);if(s&&(ACTION_RE.test(s)||obj?.kind||obj?.notification_id||obj?.notice_id))return s}}
+ const ast=astText(obj?.body_ast??obj?.bodyAst);if(ast)return ast;
  const strings=[];
  for(const [k,v] of Object.entries(obj||{})){if(typeof v==='string'){const s=clean(v);if(s.length>=5&&s.length<=1200)strings.push([k,s])}}
  const hit=strings.find(([,s])=>ACTION_RE.test(s));if(hit)return hit[1];
@@ -66,8 +72,8 @@ function qualifies(obj,path){
  if(!obj||typeof obj!=='object'||Array.isArray(obj))return false;
  const text=bestText(obj);if(!text)return false;
  const keys=Object.keys(obj).join(' ');
- const hint=KEY_HINT_RE.test(keys)||KEY_HINT_RE.test(path);
- const hasMeta=Boolean(eventId(obj)||occurred(obj)||findNested(obj,['actor','user','creator','sender']));
+ const hint=KEY_HINT_RE.test(keys)||KEY_HINT_RE.test(path)||Boolean(obj?.kind);
+ const hasMeta=Boolean(eventId(obj)||occurred(obj)||findNested(obj,['actor','user','creator','sender'])||Array.isArray(obj?.action_users)||Array.isArray(obj?.actionUsers));
  return hint||hasMeta
 }
 function extract(json,requestUrl){
@@ -84,7 +90,9 @@ function extract(json,requestUrl){
    if(!seen.has(sig)){seen.add(sig);out.push({
     raw_text:raw,actor_name:actor.name||null,actor_url:actorUrl,actor_image_url:actor.image||null,
     target_title:target.title||null,target_url:target.url||null,source_url:target.url||requestUrl||'https://note.com/',
-    occurred_at:at,meta:{source:SOURCE,capture_source:'note-network-v3300',userscript:VERSION,protocol:VERSION,scan_mode:'network-response',scan_strategy:'page-fetch-intercept-v1',event_identity:ev,client_signature:sig,request_url:requestUrl}
+    occurred_at:at,meta:{source:SOURCE,capture_source:'note-network-v3300',userscript:VERSION,protocol:VERSION,scan_mode:'network-response',scan_strategy:'direct-api-v350',event_identity:ev,client_signature:sig,request_url:requestUrl,
+      kind:str(v.kind)||null,body:str(v.body)||null,body_ast:compact(v.body_ast??v.bodyAst??null),all_area_url:str(v.all_area_url??v.allAreaUrl)||null,featured_area_url:str(v.featured_area_url??v.featuredAreaUrl)||null,featured_content_name:str(v.featured_content_name??v.featuredContentName)||null,action_users:compact(Array.isArray(v.action_users)?v.action_users:Array.isArray(v.actionUsers)?v.actionUsers:[])
+    }
    })}
   }
   for(const[k,x]of Object.entries(v))walk(x,path?path+'.'+k:k,depth+1)
@@ -192,6 +200,7 @@ async function ingestRows(rows,cap,manual=false,emitStatus=true){
    const sent=new Set(part.map(clientSig)),confirmed=new Set((Array.isArray(res?.confirmedClientSignatures)?res.confirmedClientSignatures:[]).map(String).filter(s=>sent.has(s)));
    for(const s of confirmed){pending.delete(s);saved++}
    await writeOutbox(a.id,[...pending.values()]);
+   if(confirmed.size){const now=Date.now();await writeUnifiedStatus(a.id,{lastSaveAt:now,lastCheckAt:now,lastRunAt:now,lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:saved,lastError:''});try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}}
    if(confirmed.size!==part.length)break
   }
  }catch(e){
@@ -293,6 +302,23 @@ async function replay(cap){
  let json;try{json=JSON.parse(txt)}catch{throw new Error('通知履歴APIの応答をJSONとして読めませんでした')}
  return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
 }
+function totalHint(json){
+ let best=0;
+ function walk(v,depth=0){if(depth>6||v==null)return;if(Array.isArray(v)){for(const x of v.slice(0,20))walk(x,depth+1);return}if(typeof v!=='object')return;
+  for(const k of ['total_count','totalCount','total','count']){const n=Number(v?.[k]);if(Number.isFinite(n)&&n>best&&n<1000000)best=n}
+  for(const x of Object.values(v))if(x&&typeof x==='object')walk(x,depth+1)
+ }
+ walk(json);return best
+}
+async function directNoticeCapture(){
+ const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
+ const u=new URL('/api/v3/notices',location.origin);u.searchParams.set('page','1');u.searchParams.set('per','100');u.searchParams.set('body_ast','1');
+ const init={method:'GET',credentials:'include',cache:'no-store',headers:{'Accept':'application/json'}};
+ const res=await original(u.href,init);if(!res.ok)throw new Error('NOTICE_API_HTTP_'+res.status);
+ const json=await res.json();if(!candidateHint(u.href,null,json)&&!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
+ const cap={url:u.href,method:'GET',body:null,transport:'direct',status:res.status,contentType:String(res.headers.get('content-type')||''),json,requestInit:init,at:Date.now()};
+ cap.rows=extract(json,u.href);lastCapture=cap;return cap
+}
 async function widenNoticeCapture(cap){
  try{
   const u=new URL(cap?.url||'',location.href);
@@ -311,13 +337,15 @@ async function syncHistory(opts={}){
  const state=await historyState(a.id);
  const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
  status(frontier?'保存済み地点まで追加通知をたどっています…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':'network-full'});
- let cap=await waitCapture(waitMs);
- if(cap)cap=await widenNoticeCapture(cap);
+ let cap=null;
+ try{cap=await directNoticeCapture()}catch{}
+ if(!cap)cap=await waitCapture(waitMs);
+ if(cap&&cap.transport!=='direct')cap=await widenNoticeCapture(cap);
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
  }
- let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false;
+ let total=0,received=0,pages=0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,newestSig='',capLimitHit=false,totalCount=totalHint(cap?.json);
  for(let i=0;i<1000&&cap;i++){
   const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
   if(requestSeen.has(reqSig)){
@@ -335,7 +363,7 @@ async function syncHistory(opts={}){
   }
   if(saveRows.length){const r=await ingestRows(saveRows,cap,true,false);total+=Number(r.saved||0)}
   void saveProbe(cap,pageRows);pages++;
-  status(frontier?`追加確認中… ${pages}ページ / ${received}件照合`:`全履歴確認中… ${pages}ページ / ${received}件照合`,'saving',{mode:frontier?'network-delta':'network-full',readCount:received,savedCount:total,pages});
+  totalCount=Math.max(totalCount,totalHint(cap.json),received);status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:frontier?'network-delta':'network-full',readCount:received,savedCount:total,totalCount,pages});
   if(reachedFrontier){completed=true;break}
   const hint=nextHint(cap.json);
   if(!hint){
