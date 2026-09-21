@@ -81,7 +81,7 @@ test('active package uses V3.5.6 split full/delta Reader',()=>{
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
   assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/historyComplete/);assert.match(reader,/mumei_insight_notification_avatar_repair_v338:/);
-  assert.match(network,/async function syncHistory/);assert.match(network,/needsDom:false/);assert.match(reader,/net\.syncCurrent/);
+  assert.match(network,/async function syncHistory/);assert.match(network,/MAX_NOTICES=300,MAX_PAGES=3/);assert.match(network,/needsDom:false/);assert.match(reader,/MAX_NOTICES=300/);assert.match(reader,/net\.syncCurrent/);
   assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
@@ -102,7 +102,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.doesNotMatch(v3,/note-insight-dm-reader-v1\.js\?v=/);
   assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(notice,/function directPanel\(\)\{\s*if\(isDmRoute\(\)\)return null/);
-  assert.match(notice,/async function scan\(\)\{\s*if\(isDmRoute\(\)\)return/);
+  assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(isDmRoute\(\)\)return/);
   assert.match(controls,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(filter,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)return/);
