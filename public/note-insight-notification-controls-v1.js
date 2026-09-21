@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.3.1';
+const VERSION='1.3.2';
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter-settings.html?from=note';
@@ -47,7 +47,7 @@ async function act(action,bar){
 function makeBar(){
  const bar=document.createElement('div');bar.id=TOOLBAR;bar.setAttribute('data-mumei-notification-controls','1');
  bar.innerHTML='<button type="button" data-action="read">読込</button><button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT【通知】</button>';
- for(const ev of ['pointerdown','mousedown','touchstart'])bar.addEventListener(ev,e=>e.stopPropagation(),true);
+ for(const ev of ['pointerdown','pointerup','mousedown','mouseup','touchstart','touchend'])bar.addEventListener(ev,e=>{e.stopPropagation();e.stopImmediatePropagation()},true);
  bar.addEventListener('click',e=>{const b=e.target instanceof Element?e.target.closest('button[data-action]'):null;if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();void act(String(b.getAttribute('data-action')||''),bar)},true);
  return bar
 }
@@ -63,7 +63,7 @@ function mount(){
  const panel=findPanel();if(!panel){const old=dedupe();if(old)old.remove();return}
  installStyle();
  let bar=dedupe()||makeBar();
- if(document.body&&bar.parentElement!==document.body)document.body.appendChild(bar);
+ if(panel&&bar.parentElement!==panel)panel.appendChild(bar);
  void sync(bar)
 }
 let timer=0;const schedule=(ms=180)=>{clearTimeout(timer);timer=setTimeout(mount,ms)};
