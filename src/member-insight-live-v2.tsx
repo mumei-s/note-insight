@@ -66,6 +66,12 @@ export function MemberInsightLiveV2(){
     if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
+  function handleUnifiedTab(tab:string){
+    const next:Mode=tab==="comments"?"comments":tab==="favorites"?"favorites":tab==="social"?"social":tab==="notifications"?"notifications":"normal";
+    if(mode===next)return;
+    window.history.replaceState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:window.scrollY},"",window.location.href);
+    setMode(next);
+  }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function checkRelease(){
     try{
@@ -225,7 +231,7 @@ export function MemberInsightLiveV2(){
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <MemberInsightCompleteness revision={revision}/>
-    <MemberInsightUnifiedV4 revision={revision}/>
+    <MemberInsightUnifiedV4 revision={revision} onTabChange={handleUnifiedTab}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}

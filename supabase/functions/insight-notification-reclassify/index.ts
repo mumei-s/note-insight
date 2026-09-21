@@ -61,19 +61,19 @@ function noise(text:string,targetUrl:string|null,actorName:string|null,source:st
 function jstDay(v:unknown){const ms=Date.parse(String(v||""));if(!Number.isFinite(ms))return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(ms))}
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
- const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),now=new Date().toISOString();
- let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(cursor)q=q.gt("id",cursor);
+ const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),onlyPending=b.onlyPending===true,now=new Date().toISOString();
+ let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(onlyPending)q=q.eq("notification_type","other");if(cursor)q=q.gt("id",cursor);
  const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;
  const evidence=new Map<string,any>();
  if((data||[]).some(r=>!r.meta?.kind&&String(r.meta?.event_identity||"").startsWith("notice:"))){
   const {data:probes}=await db.from("insight_notification_network_probes").select("response_sample").in("member_id",ids).order("captured_at",{ascending:false}).limit(200);
   for(const p of probes||[])for(const n of Array.isArray(p.response_sample?.data)?p.response_sample.data:[])if(n?.id&&n?.kind&&!evidence.has("notice:"+n.id))evidence.set("notice:"+n.id,n);
  }
- for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}if(r.meta?.classifier==="action-v23-structured"){checked++;continue}const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v23-structured"};
+ for(const r of data||[]){if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}if(r.meta?.classifier==="action-v23-structured"){checked++;if(r.notification_type==="other")pending++;continue}const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v23-structured"};
  const classified=classify(String(r.raw_text||""),r.target_url,meta),nextType=classified==="other"&&type!=="capture_noise"?type:classified,finalMeta={...nextMeta,reclassify_pending:nextType==="other",classification_status:nextType==="other"?"unmatched":"matched"};
  const actor=meta.action_users?.[0],repair:Record<string,unknown>={};
  if(actor&&/^https:\/\/note\.com\/[^/?#]+\/?$/.test(String(actor.url||""))){repair.actor_url=actor.url;if(typeof actor.name==="string")repair.actor_name=actor.name;if(/^https:\/\//.test(String(actor.user_profile_image_path||"")))repair.actor_image_url=actor.user_profile_image_path}
  if(meta.body)repair.raw_text=String(meta.body).replace(/<[^>]*>/g," ").slice(0,4000);
  const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
- return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
+ return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,onlyPending,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});

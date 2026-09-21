@@ -42,3 +42,15 @@
  .minf-detail-body dt{font-size:6.2px!important}
  .minf-detail-body dd{font-size:7.4px!important}
 }
+
+/* 2026-09-21 v21: compress detail/precision panel without reducing tap clarity */
+.minf-detail{margin-top:3px!important}
+.minf-detail>summary{padding:4px 7px!important;min-height:0!important;line-height:1.15!important}
+.minf-detail-body{padding:3px 5px 5px!important}
+.minf-reader-server{margin-top:2px!important;padding:3px 5px!important;min-height:0!important}
+.minf-detail-body dl{margin:3px 0!important;gap:3px!important}
+.minf-detail-body dl>div{padding:3px 4px!important;min-height:0!important}
+.minf-detail-body dt{font-size:6.4px!important;line-height:1!important}
+.minf-detail-body dd{margin-top:1px!important;font-size:7.6px!important;line-height:1.05!important}
+.minf-detail-body p{margin:3px 0!important;line-height:1.25!important}
+.minf-detail-body button{min-height:26px!important;padding:3px 7px!important}

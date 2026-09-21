@@ -58,27 +58,28 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     try{const x=await post({kind:k,page:p,pageSize:PAGE,day:day||null},controller.signal);if(!valid())return;
       const feedId=String(x.noteId||"").toLowerCase(),expected=requestedNotificationAccount()||String(memberNoteId||"").toLowerCase();
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
-      const list=await enrich(mergeMagazineJoinRows(repairActorRows(x.rows||[])));if(!valid())return;
+      const baseList=mergeMagazineJoinRows(repairActorRows(x.rows||[]));if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
-      setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
-      NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
-      if(k==="all"&&!day&&p===1)NOTIFICATION_RECENT_ALL.set(cacheAccount,list);
+      const commitList=(list:Row[])=>{if(!valid())return;setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});if(k==="all"&&!day&&p===1)NOTIFICATION_RECENT_ALL.set(cacheAccount,list)};
+      commitList(baseList);
+      void enrich(baseList).then(list=>commitList(list)).catch(()=>{});
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
   async function reclassify(auto=false){
     if(reclassifying)return false;
     setReclassifying(true);setRepairStatus(auto?"新しい分類ルールで全履歴を自動再分類中…":"全保存履歴の分類を確認中…");
-    const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";let cursor:string|null=null,checked=0,moved=0,pending=0;
+    const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";let cursor:string|null=null,checked=0,moved=0,pending=0,chunks=0;const seen=new Set<string>();
     try{
       do{
+        const cursorKey=cursor||"";if(seen.has(cursorKey))throw new Error("再分類位置が進まないため停止しました");seen.add(cursorKey);if(++chunks>500)throw new Error("再分類件数が多いため一度停止しました。続きは再実行できます");
         if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");
         const ac=new AbortController(),timer=window.setTimeout(()=>ac.abort(),45000);let r:Response;
-        try{r=await fetch(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor}),signal:ac.signal})}
+        try{r=await fetch(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor,onlyPending:auto}),signal:ac.signal})}
         finally{window.clearTimeout(timer)}
         const x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||"再分類失敗");
-        checked+=x.checked||0;moved+=x.moved||0;pending=Number(x.pending||0);cursor=x.nextCursor||null;
-        setRepairStatus(`${checked}件確認・${moved}件分類修正・未分類${pending}件`)
+        checked+=x.checked||0;moved+=x.moved||0;pending+=Number(x.pending||0);const nextCursor=x.nextCursor||null;if(nextCursor&&nextCursor===cursor)throw new Error("再分類位置が更新されないため停止しました");cursor=nextCursor;
+        setRepairStatus(`${checked}件確認・${moved}件分類修正・未分類${pending}件`);await new Promise<void>(resolve=>window.setTimeout(resolve,20))
       }while(cursor);
       const noteId=(requestedNotificationAccount()||String(memberNoteId||"")).toLowerCase();
       if(noteId)try{localStorage.setItem(`mumei-notification-reclassify-version:${noteId}`,CLASSIFIER_VERSION)}catch{}

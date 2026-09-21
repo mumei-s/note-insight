@@ -53,3 +53,11 @@
  .midm-layout.is-person .midm-messages{max-height:none!important}
  .midm-back-list{position:sticky;top:0;z-index:2;background:#0d2230}
 }
+
+/* 2026-09-21: settings/status remains compact but unmistakably tappable */
+.midm-control details{margin-top:4px!important;border-top:0!important}
+.midm-control summary{min-height:29px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:5px 8px!important;border:1px solid #35576b!important;border-radius:7px!important;background:#0d2230!important;color:#c7eaf8!important;font-size:9px!important;line-height:1.1!important}
+.midm-control summary::after{content:"▼";font-size:8px;color:#79cde8}
+.midm-control details[open] summary::after{content:"▲"}
+.midm-control-detail{padding-top:3px!important;gap:3px!important}
+.midm-control-detail small{font-size:7px!important;line-height:1.2!important}
