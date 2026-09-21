@@ -9,3 +9,20 @@
 .midm-control details{margin-top:3px;border-top:1px solid #213948}.midm-control summary{cursor:pointer;list-style:none;padding:4px 2px 1px;color:#7f9eaf;font-size:7.5px;font-weight:900}.midm-control summary::-webkit-details-marker{display:none}.midm-control-detail{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding-top:4px}.midm-control-detail small{grid-column:1/-1;color:#7891a1;font-size:7.5px;line-height:1.3}.midm-control-detail a.installed{border-color:#4b966c;background:#0f281b;color:#d9ffe6}
 .midm-stats,.midm-setup,.midm-linkstate{display:none!important}
 @media(max-width:720px){.midm{padding:6px}.midm-head p{display:none}.midm-control-state .last{margin-left:0}.midm-control-main{grid-template-columns:1fr auto}.midm-control-detail{grid-template-columns:1fr 1fr}.midm-threads{max-height:190px}.midm-messages{min-height:220px}.midm-room-head{padding-bottom:5px;margin-bottom:5px}}
+
+/* v2026.09.21 DM people collapsed by default */
+.midm-history-panel{margin-top:7px;border:1px solid #2a5269;border-radius:10px;background:#081620;overflow:hidden}
+.midm-history-panel>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:10px 11px;color:#dff7ff;font-weight:900}
+.midm-history-panel>summary::-webkit-details-marker{display:none}
+.midm-history-panel>summary span{font-size:12px}
+.midm-history-panel>summary b{font-size:12px;color:#8fe6ff}
+.midm-history-panel>summary small{margin-left:auto;color:#7f9bae;font-size:8px;font-weight:900}
+.midm-history-panel[open]>summary{border-bottom:1px solid #203c4d;background:#0b1d29}
+.midm-history-panel[open]>summary small::after{content:""}
+.midm-history-panel>.midm-layout{padding:7px}
+@media(max-width:720px){
+ .midm-history-panel>summary{padding:9px}
+ .midm-history-panel>.midm-layout{padding:5px}
+ .midm-history-panel .midm-threads{max-height:180px}
+ .midm-history-panel .midm-messages{min-height:210px}
+}
