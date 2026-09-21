@@ -348,7 +348,7 @@ async function syncDirectFullAscending(a,state,cap,resume){
  if(!resume&&page!==1){const req=directPageRequest(cap,page);if(!req)return null;cap=await replay(req)}
  status(`通知一覧の下から上へ読込中… 読込 ${received} / ${totalCount||'?'}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,direction:'bottom-up'});
  while(page>=1){
-  const raw=cap.rows||extract(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(-remaining);
+  const raw=cap.rows||extract(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(0,remaining);
   received+=rows.length;
   if(rows.length){const r=await ingestRows(rows,cap,true,false);total+=Number(r.saved||0)}
   void saveProbe(cap,raw);pages++;
