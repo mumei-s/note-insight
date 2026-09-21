@@ -170,7 +170,7 @@ test('update detection is version-wrapper-only and does not own runtime features
 
 
 test('inline controls are independently notification-surface-owned',()=>{
-  assert.match(controls,/panel\.appendChild\(bar\)/);assert.match(controls,/data-action="read"/);
+  assert.match(controls,/document\.body\.appendChild\(bar\)/);assert.match(controls,/window\.addEventListener\(ev,interceptToolbar,true\)/);assert.match(controls,/data-action="read"/);
   assert.match(controls,/position:fixed/);
   assert.doesNotMatch(splitReader,/TOOLBAR|INSIGHT【通知】/);
 });
