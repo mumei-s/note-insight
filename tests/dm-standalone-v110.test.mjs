@@ -6,9 +6,10 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('standalone DM userscript has no本人通知 dependency',()=>{
   const dm=read('public/note-insight-dm.user.js');
   const notice=read('public/note-insight-notification-v3.user.js');
-  assert.match(dm,/@version\s+1\.3\.0/);
+  assert.match(dm,/@version\s+1\.3\.2/);
   assert.match(dm,/note-insight-dm-account-pair-v1\.js\?v=100/);
-  assert.match(dm,/note-insight-dm-network-v2\.js\?v=120/);\n  assert.match(dm,/note-insight-dm-reader-v1\.js\?v=130/);
+  assert.match(dm,/note-insight-dm-network-v2\.js\?v=121/);
+  assert.match(dm,/note-insight-dm-reader-v1\.js\?v=132/);
   assert.doesNotMatch(dm,/note-insight-notification-reader|notification-controls|notification-filter|notification-account-pair/);
   assert.doesNotMatch(notice,/note-insight-dm-reader-v1\.js\?v=/);
 });
@@ -34,19 +35,36 @@ test('DM installer and release metadata are separate',()=>{
   assert.match(install,/note-insight-dm\.user\.js/);
   assert.match(install,/mumei-dm-tool-version/);
   assert.match(install,/dmVersion/);
-  assert.equal(manifest.dmVersion,'1.3.0');
+  assert.equal(manifest.dmVersion,'1.3.2');
   assert.equal(manifest.dmLabel,'DM同期');
-  assert.match(release,/CURRENT_DM_VERSION = "1\.3\.0"/);
+  assert.match(release,/CURRENT_DM_VERSION = "1\.3\.2"/);
   assert.match(release,/DM_VERSION_STORAGE_KEY = "mumei-dm-tool-version"/);
 });
 
-test('opening DM always starts a fresh sync but completion return cannot loop',()=>{
+test('DM background sync never navigates the visible note screen and only accepts real rooms',()=>{
   const reader=read('public/note-insight-dm-reader-v1.js');
-  assert.doesNotMatch(reader,/COOLDOWN/);
-  assert.match(reader,/if\(!q&&rooms\.length\)/);
-  assert.match(reader,/mumei_dm_just_completed_v1/);
-  assert.match(reader,/sessionStorage\.setItem\(DONE,'1'\)/);
-  assert.match(reader,/sessionStorage\.removeItem\(DONE\)/);
+  const network=read('public/note-insight-dm-network-v2.js');
+  assert.doesNotMatch(reader,/location\.replace|cloak\(true\)/);
+  assert.match(reader,/clearLegacyQueue/);
+  assert.match(reader,/syncRoomsInBackground/);
+  assert.match(reader,/mumei_dm_bg/);
+  assert.match(reader,/background-hidden/);
+  assert.match(reader,/previewMessage/);
+  assert.match(reader,/ROOM_ID_RE/);
+  assert.match(network,/ROOM_ID_RE/);
+  assert.doesNotMatch(reader,/threadKey===['"](?:new|search)['"]/);
+});
+
+test('DM reader loads whole conversations including outbound messages',()=>{
+  const reader=read('public/note-insight-dm-reader-v1.js');
+  const network=read('public/note-insight-dm-network-v2.js');
+  const ui=read('src/member-insight-dm.tsx');
+  assert.match(reader,/MAX_MESSAGES=5000/);
+  assert.match(reader,/MAX_SCROLL=1200/);
+  assert.match(reader,/host\.scrollTop=0/);
+  assert.match(reader,/Promise\.all\(batch\.map\(x=>syncFrame/);
+  assert.match(network,/direction=s\.id\?\(\(s\.id\|\|''\)\.toLowerCase\(\)===me\?'outbound':'inbound'\):'unknown'/);
+  assert.match(ui,/for\(let page=2;page<=pages;page\+\+\)/);
 });
 
 test('DM feed and UI group by person, not room',()=>{
@@ -55,6 +73,7 @@ test('DM feed and UI group by person, not room',()=>{
   assert.match(feed,/function personKey/);assert.match(feed,/action==="people"/);assert.match(feed,/action==="person_messages"/);
   assert.match(ui,/feed\("people"\)/);assert.match(ui,/person_messages/);assert.match(ui,/person_key/);
   assert.match(ui,/相手ごとにまとめます/);assert.match(ui,/ルームを1人分として統合/);
+  assert.match(ui,/DM履歴/);assert.match(ui,/validPerson/);
 });
 
 test('DM tab remains compact and top card stays removed',()=>{
