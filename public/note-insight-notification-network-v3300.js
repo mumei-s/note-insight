@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.7';
+const VERSION='3.5.8';
 const MAX_NOTICES=300,MAX_PAGES=3;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -400,11 +400,11 @@ async function syncHistory(opts={}){
  let cap=null;
  if(resume){try{cap=await replay({...resume,rows:null})}catch{}}
  if(!cap){try{cap=await directNoticeCapture()}catch{}}
- if(!cap)cap=await waitCapture(waitMs);
- if(cap&&cap.transport!=='direct')cap=await widenNoticeCapture(cap);
+ if(!cap){const observed=await waitCapture(waitMs);if(observed)cap=await widenNoticeCapture(observed)}
+ if(cap&&!directNoticesCap(cap))cap=null;
  if(!cap){
   if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
-  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NETWORK_CAPTURE',needsDom:false}
+  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NOTIFICATION_API_CAPTURE',needsDom:true}
  }
  if(!frontier&&directNoticesCap(cap)){
   const direct=await syncDirectFullAscending(a,state,cap,resume);if(direct)return direct
