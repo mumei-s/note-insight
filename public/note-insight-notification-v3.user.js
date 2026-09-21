@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.5.2
-// @description  本人通知V3.5.2。通信Reader高速化・人物アイコン取得・保存確認即時反映に加え、読込/フィルター/設定/INSIGHTの4列操作バーを通知DOMから独立固定します。
+// @version      3.5.3
+// @description  本人通知V3.5.3。表示中通知を即保存してから通信確認し、人物アイコン補修・高速反映・通知内4列操作を行います。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -22,8 +22,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3520
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3520
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=131
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3530
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=132
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=400
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=120
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-status-bridge-v1.js?v=110
@@ -36,7 +36,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.5.2',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.5.3',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function publish(){try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}}
@@ -51,7 +51,7 @@ if(location.hostname==='note.com'){
    if(back.origin==='https://mumei-s.github.io'&&back.pathname.startsWith('/note-insight/')){
     back.searchParams.set('notificationInstalled',VERSION);
     back.searchParams.set('notificationCheckedAt',String(Date.now()));
-    back.searchParams.set('notificationUpdateResult','direct-api-v352-bottom-up-stop');
+    back.searchParams.set('notificationUpdateResult','instant-visible-v353');
     location.replace(back.href)
    }
   }catch{}
