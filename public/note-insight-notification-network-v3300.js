@@ -4,8 +4,8 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.5.8';
-const MAX_NOTICES=300,MAX_PAGES=3;
+const VERSION='3.6.0';
+const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
 const TOKEN='mumei_insight_notification_sync_token_v2:';
@@ -200,8 +200,8 @@ function mergePending(existing,rows,cap,manual){
  return m
 }
 async function pendingCount(id){return (await readOutbox(id)).length}
-async function historyState(id){const v=await get(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
-async function writeHistoryState(id,v){await set(key(HISTORY,id),v&&typeof v==='object'?v:{})}
+async function historyState(id){let local=null;try{local=JSON.parse(localStorage.getItem(key(HISTORY,id))||'null')}catch{}const v=local||await get(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
+async function writeHistoryState(id,v){const value=v&&typeof v==='object'?v:{};localStorage.setItem(key(HISTORY,id),JSON.stringify(value));await set(key(HISTORY,id),value)}
 async function writeUnifiedStatus(id,patch){
  const cp=await get(key(CHECK,id),{});
  await set(key(CHECK,id),{...cp,...patch,version:VERSION});
@@ -241,8 +241,8 @@ async function ingestRows(rows,cap,manual=false,emitStatus=true){
  return{handled:true,saved,received,pending:0,response:lastResponse}
 }
 async function processCapture(cap,{manual=false,probe=true}={}){
- if(!cap?.json)return{handled:false,saved:0};
- const rows=directNoticesCap(cap)?extractDirectNotices(cap.json,cap.url):extract(cap.json,cap.url);
+ if(!cap?.json||!directNoticesCap(cap))return{handled:false,saved:0};
+ const rows=extractDirectNotices(cap.json,cap.url);
  if(probe)void saveProbe(cap,rows);
  if(!rows.length)return{handled:false,saved:0,candidate:true};
  lastCapture={...cap,rows,at:Date.now()};
@@ -359,129 +359,101 @@ function directPageRequest(cap,page){
   return{...cap,url:u.href,method:'GET',body:null,rows:null,transport:'direct',requestInit:{...(cap?.requestInit||{}),method:'GET',credentials:'include',cache:'no-store'}}
  }catch{return null}
 }
-async function syncDirectFullAscending(a,state,cap,resume){
- if(!directNoticesCap(cap))return null;
- const firstRows=cap.rows||extractDirectNotices(cap.json,cap.url),apiTotal=totalHint(cap.json),u=new URL(cap.url,location.href),per=Math.max(1,Number(u.searchParams.get('per')||100));
- if(!apiTotal&&!terminalHint(cap.json))return null;
- const totalCount=Math.min(MAX_NOTICES,Math.max(apiTotal,Number(state?.partialTotalCount||0),firstRows.length)),lastPage=Math.max(1,Math.min(MAX_PAGES,Math.ceil(Math.max(1,totalCount)/per))),resumeRaw=resume?Math.max(1,Number(new URL(resume.url,location.href).searchParams.get('page')||0)):0,resumePage=resumeRaw?Math.min(lastPage,resumeRaw):0;
- let page=resumePage||lastPage,total=resume?Number(state?.partialSaved||0):0,received=resume?Math.min(MAX_NOTICES,Number(state?.partialReceived||0)):0,pages=resume?Number(state?.partialPages||0):0,newestSig=clean(state?.partialNewestSig||'')||(firstRows.length?clientSig(firstRows[0]):'');
- if(!resume&&page!==1){const req=directPageRequest(cap,page);if(!req)return null;cap=await replay(req)}
- status(`通知一覧の下から上へ読込中… 読込 ${received} / ${totalCount||'?'}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,direction:'bottom-up'});
- while(page>=1){
-  const raw=cap.rows||extractDirectNotices(cap.json,cap.url),remaining=Math.max(0,MAX_NOTICES-received),rows=[...raw].reverse().slice(0,remaining);
-  received+=rows.length;
-  if(rows.length){const r=await ingestRows(rows,cap,true,false);total+=Number(r.saved||0)}
-  void saveProbe(cap,raw);pages++;
-  status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:'network-full-bottom-up',readCount:received,savedCount:total,totalCount,pages,direction:'bottom-up'});
-  const nextPage=page-1,nextReq=received<MAX_NOTICES&&nextPage>=1?directPageRequest(cap,nextPage):null;
-  await writeHistoryState(a.id,{...state,historyComplete:false,resume:nextReq?{url:nextReq.url,method:'GET',body:null,requestInit:nextReq.requestInit,transport:'direct'}:null,partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now(),direction:'bottom-up'});
-  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,historyComplete:false,lastError:'',direction:'bottom-up'});
-  if(stopRequested){status(`停止・途中保存｜読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'done',{mode:'network-partial',readCount:received,savedCount:total,totalCount,pages,historyComplete:false,direction:'bottom-up'});return{handled:true,partial:true,saved:total,received,totalCount,pages,pending:await pendingCount(a.id),historyComplete:false,mode:'network-partial',direction:'bottom-up'}}
-  if(!nextReq)break;
-  try{cap=await replay(nextReq)}catch(e){await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e),direction:'bottom-up'});return{handled:false,saved:total,received,pages,pending:await pendingCount(a.id),reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}}
-  page=nextPage
- }
- const pending=await pendingCount(a.id);if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
- const done={...state,historyComplete:true,frontierSig:newestSig||state?.frontierSig||'',verifiedAt:Date.now(),fullVerifiedAt:Date.now(),lastPages:pages,lastReceived:received,lastSaved:total,lastMode:'full',version:VERSION,resume:null,partialReceived:0,partialSaved:0,partialPages:0,partialNewestSig:'',partialTotalCount:0,direction:'bottom-up'};
- await writeHistoryState(a.id,done);
- await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:'full',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:'',direction:'bottom-up'});
- status(`✓ note取得上限${MAX_NOTICES}件まで確認｜下→上 ${pages}ページ・${received}件確認・${total}件保存`,'done',{mode:'network-window-bottom-up',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,direction:'bottom-up',windowLimit:MAX_NOTICES});
- return{handled:true,saved:total,received,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pending:0,historyComplete:true,full:true,mode:'network-window-bottom-up',direction:'bottom-up',windowLimit:MAX_NOTICES}
+// A durable window journal owns collection and confirmation separately. Page numbers
+// are only transport cursors; confirmed notification identities are the boundary.
+const JOURNAL='mumei_notification_window_v360:';
+function localJournal(id){try{return JSON.parse(localStorage.getItem(key(JOURNAL,id))||'null')}catch{return null}}
+async function readJournal(id){return localJournal(id)||await get(key(JOURNAL,id),null)}
+async function writeJournal(id,value){
+ localStorage.setItem(key(JOURNAL,id),JSON.stringify(value));
+ await set(key(JOURNAL,id),value);
 }
+function ascending(rows){return rows.map((r,i)=>({r,i})).sort((a,b)=>{
+ const x=Date.parse(a.r.occurred_at||''),y=Date.parse(b.r.occurred_at||'');
+ return Number.isFinite(x)&&Number.isFinite(y)&&x!==y?x-y:b.i-a.i;
+}).map(x=>x.r)}
+let activeSync=null;
 async function syncHistory(opts={}){
  stopRequested=false;
- const forceFull=Boolean(opts.forceFull),waitMs=Number(opts.waitMs||3000);
- arm(Math.max(forceFull?180000:120000,waitMs+5000));
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
- const state=await historyState(a.id);
- const frontier=!forceFull&&state?.historyComplete?clean(state.frontierSig||''):'';
- const resume=!forceFull&&!state?.historyComplete&&state?.version===VERSION&&state?.resume?.url?state.resume:null;
- status(frontier?'保存済み地点まで追加通知をたどっています…':resume?'前回の途中地点から通知履歴を再開します…':'通知履歴を終端まで全件確認しています…','saving',{mode:frontier?'network-delta':resume?'network-resume':'network-full'});
- let cap=null;
- if(resume){try{cap=await replay({...resume,rows:null})}catch{}}
- if(!cap){try{cap=await directNoticeCapture()}catch{}}
- if(!cap){const observed=await waitCapture(waitMs);if(observed)cap=await widenNoticeCapture(observed)}
- if(cap&&!directNoticesCap(cap))cap=null;
- if(!cap){
-  if(await pendingCount(a.id)){const retry=await ingestRows([],null,true,false);return{handled:true,saved:Number(retry.saved||0),received:0,pages:0,pending:0,historyComplete:Boolean(state?.historyComplete),mode:'retry'}}
-  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:0,lastRunSavedCount:0,lastError:'通知通信をまだ捕捉できていません'});return{handled:false,saved:0,reason:'NO_NOTIFICATION_API_CAPTURE',needsDom:true}
+ if(!await tokenFor(a.id))throw new Error('本人連携が必要です');
+ let state=await historyState(a.id),journal=await readJournal(a.id);
+ // Do not discard a partially saved window when the user asks for a full read.
+ if(!journal||journal.schema!==1){
+  journal={schema:1,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull?'':clean(state.frontierSig||''),seen:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,startedAt:Date.now()};
+  await writeJournal(a.id,journal);
  }
- if(!frontier&&directNoticesCap(cap)){
-  const direct=await syncDirectFullAscending(a,state,cap,resume);if(direct)return direct
- }
- let total=resume?Number(state?.partialSaved||0):0,received=resume?Math.min(MAX_NOTICES,Number(state?.partialReceived||0)):0,pages=resume?Number(state?.partialPages||0):0,requestSeen=new Set(),completed=false,reachedFrontier=false,reachedEnd=false,reachedWindowLimit=false,newestSig=clean(state?.partialNewestSig||''),capLimitHit=false,totalCount=Math.min(MAX_NOTICES,Math.max(Number(state?.partialTotalCount||0),totalHint(cap?.json)));
- for(let i=0;i<MAX_PAGES&&cap&&received<MAX_NOTICES;i++){
-  const reqSig=[cap.url,cap.method,typeof cap.body==='string'?cap.body:JSON.stringify(cap.body||null)].join('|');
-  if(requestSeen.has(reqSig)){
-   status('APIページングが同じ位置で停止したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback'});
-   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'APIページングが同じ位置で停止しました'});return{handled:false,saved:total,received,pages,pending:0,reason:'REPEATED_REQUEST',needsDom:false}
-  }
-  requestSeen.add(reqSig);
-  const pageRows=(cap.rows||extract(cap.json,cap.url)).slice(0,Math.max(0,MAX_NOTICES-received));
-  if(!newestSig&&pageRows.length)newestSig=clientSig(pageRows[0]);
-  received+=pageRows.length;
-  let saveRows=pageRows;
-  if(frontier){
-   const cut=pageRows.findIndex(r=>clientSig(r)===frontier);
-   if(cut>=0){saveRows=pageRows.slice(0,cut);reachedFrontier=true}
-  }
-  if(saveRows.length){const r=await ingestRows(saveRows,cap,true,false);total+=Number(r.saved||0)}
-  void saveProbe(cap,pageRows);pages++;
-  totalCount=Math.min(MAX_NOTICES,Math.max(totalCount,totalHint(cap.json),received));status(`読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'saving',{mode:frontier?'network-delta':'network-window',readCount:received,savedCount:total,totalCount,pages,windowLimit:MAX_NOTICES});
-  if(received>=MAX_NOTICES||pages>=MAX_PAGES){reachedWindowLimit=true;completed=true;break}
-  if(reachedFrontier){completed=true;break}
-  const hint=nextHint(cap.json);
-  if(!hint){
-   if(terminalHint(cap.json)){reachedEnd=true;completed=true;break}
-   status('APIで終端を確認できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'API終端を確認できませんでした'});return{handled:false,saved:total,received,pages,pending:0,reason:'END_UNCONFIRMED',needsDom:false}
-  }
-  const nextReq=mutateNextRequest(cap,hint);
-  if(!nextReq){
-   status('次ページを解釈できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'次ページを解釈できませんでした'});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_UNREADABLE',needsDom:false}
-  }
-  if(!frontier){
-   await writeHistoryState(a.id,{...state,historyComplete:false,resume:{url:nextReq.url,method:nextReq.method,body:nextReq.body??null,requestInit:nextReq.requestInit||null},partialReceived:received,partialSaved:total,partialPages:pages,partialNewestSig:newestSig,partialTotalCount:totalCount,version:VERSION,partialAt:Date.now()});
-  }
-  if(stopRequested){await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:'',historyComplete:Boolean(frontier),direction:'bottom-up'});status(`停止・途中保存｜読込 ${received}${totalCount?` / ${totalCount}`:''}｜保存 ${total}`,'done',{mode:'network-partial',readCount:received,savedCount:total,totalCount,pages,historyComplete:Boolean(frontier),direction:'bottom-up'});return{handled:true,partial:true,saved:total,received,totalCount,pages,pending:await pendingCount(a.id),historyComplete:Boolean(frontier),mode:'network-partial'}}
-  try{cap=await replay({...cap,...nextReq,rows:null})}catch(e){
-   status('APIの次ページ取得に失敗したため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:String(e?.message||e)});return{handled:false,saved:total,received,pages,pending:0,reason:'NEXT_FETCH_FAILED',needsDom:false,error:String(e?.message||e)}
-  }
-  if(i===MAX_PAGES-1&&!completed)capLimitHit=true
- }
- const pending=await pendingCount(a.id);
- if(pending)throw new Error(`${pending}件が未保存のため完了扱いにしません`);
- if(capLimitHit||!completed){
-  status('APIで完了地点を確認できないため、画面は動かさず、次回の通信読取で続行します…','saving',{mode:'network-fallback',readCount:received,savedCount:total,pages});
-  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'partial',lastRunReadCount:received,lastRunSavedCount:total,lastError:capLimitHit?'APIページ上限':'API読取未完了'});return{handled:false,saved:total,received,pages,pending:0,reason:capLimitHit?'PAGE_LIMIT':'INCOMPLETE',needsDom:false}
- }
- const nextState={
-  ...state,
-  historyComplete:true,
-  frontierSig:newestSig||frontier||state?.frontierSig||'',
-  verifiedAt:Date.now(),
-  fullVerifiedAt:reachedEnd?Date.now():Number(state?.fullVerifiedAt||0),
-  lastPages:pages,
-  lastReceived:received,
-  lastSaved:total,
-  lastMode:reachedEnd?'full':'delta',
-  version:VERSION,
-  resume:null,partialReceived:0,partialSaved:0,partialPages:0,partialNewestSig:'',partialTotalCount:0
+ const publish=async(complete=false)=>{
+  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete};
+  await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:complete,lastRunMode:complete?(journal.frontier?'delta':'window'):'partial',lastRunReadCount:journal.read,lastRunSavedCount:journal.saved,lastRunTotalCount:journal.total,lastError:'',direction:'bottom-up',historyComplete:complete});
+  status(`${complete?'✓ 保存完了':stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
  };
- await writeHistoryState(a.id,nextState);
- await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:true,lastRunMode:reachedEnd?'full':'delta',lastRunReadCount:received,lastRunSavedCount:total,manualSeenCount:received,manualNewCount:total,historyComplete:true,lastError:''});
- if(reachedEnd||reachedWindowLimit){
-  status(`✓ note取得上限${MAX_NOTICES}件まで確認｜${pages}ページ・${received}件確認・${total}件保存`,'done',{mode:'network-window',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,windowLimit:MAX_NOTICES});
-  return{handled:true,saved:total,received,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pending:0,historyComplete:true,full:true,mode:'network-window',windowLimit:MAX_NOTICES}
+ await publish();
+ try{
+  while(journal.phase==='collect'&&!stopRequested){
+   const cap=journal.nextRequest?await replay(journal.nextRequest):await directNoticeCapture();
+   if(!directNoticesCap(cap))throw new Error('NO_NOTIFICATION_API_CAPTURE');
+   const pageRows=extractDirectNotices(cap.json,cap.url);
+   if(!journal.newestSig&&pageRows.length)journal.newestSig=clientSig(pageRows[0]);
+   const known=new Set(journal.seen),unique=new Map(journal.rows.map(r=>[clientSig(r),r]));
+   let boundary=false;
+   for(const row of pageRows){
+    const signature=clientSig(row);
+    if(signature===journal.frontier||known.has(signature)){boundary=true;break}
+    if(!known.has(signature)&&unique.size<MAX_NOTICES)unique.set(signature,row);
+   }
+   journal.rows=[...unique.values()];journal.pages++;
+   const limitReached=journal.rows.length>=MAX_NOTICES;
+   const end=boundary||limitReached||terminalHint(cap.json)||!pageRows.length;
+   let next=end?null:mutateNextRequest(cap,nextHint(cap.json));
+   if(!end&&!next&&directNoticesCap(cap)&&pageRows.length){
+    const page=Number(new URL(cap.url).searchParams.get('page')||1);
+    next=directPageRequest(cap,page+1);
+   }
+   if(next&&next.url===cap.url&&next.body===cap.body)throw new Error('通知の次ページが同じ位置です');
+   if(!end&&(!next||journal.pages>=MAX_PAGES))throw new Error('通知APIの終端を確認できません。途中情報を保持しています');
+   journal.nextRequest=next?{url:next.url,method:next.method||'GET',body:next.body??null,requestInit:next.requestInit||cap.requestInit,transport:'direct'}:null;
+   journal.total=journal.rows.length;
+   if(end){journal.rows=ascending(journal.rows);journal.phase='save'}
+   await writeJournal(a.id,journal);
+   status(`取得 ${journal.rows.length}件｜古い通知から保存準備`,'saving',{readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up'});
+  }
+  while(journal.phase==='save'&&journal.rows.length&&!stopRequested){
+   const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+   const part=journal.rows.slice(0,20);
+   // Journal already contains the entire unsaved window before transmission.
+   const result=await ingestRows(part,null,true,false);
+   journal.read+=part.length;journal.saved+=Number(result.saved||0);
+   journal.seen=[...new Set([...journal.seen,...part.map(clientSig)])].slice(-1200);
+   journal.rows.splice(0,part.length);
+   const last=part.at(-1);
+   await writeJournal(a.id,journal);
+   await writeUnifiedStatus(a.id,{boundarySignature:clientSig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryAt:Date.now(),boundarySource:'network-confirmed-v360'});
+   await publish();
+  }
+  const complete=journal.phase==='save'&&!journal.rows.length;
+  if(complete){
+   if(await pendingCount(a.id))throw new Error('未保存通知を保持しています');
+   await writeHistoryState(a.id,{...state,historyComplete:true,frontierSig:journal.newestSig||journal.frontier,confirmedSignatures:journal.seen,verifiedAt:Date.now(),version:VERSION,resume:null,direction:'bottom-up'});
+   await writeJournal(a.id,null);
+  }
+  await publish(complete);
+  return{handled:true,saved:journal.saved,received:journal.read,totalCount:journal.total,partial:!complete,historyComplete:complete,delta:complete&&Boolean(journal.frontier),full:complete&&!journal.frontier,direction:'bottom-up'};
+ }catch(e){
+  await writeJournal(a.id,journal);
+  await writeUnifiedStatus(a.id,{lastError:String(e?.message||e),lastRunComplete:false,lastRunMode:'error',lastRunAt:Date.now(),lastRunReadCount:journal.read,lastRunSavedCount:journal.saved});
+  throw e;
  }
- status(`✓ 追加分確認完了｜${pages}ページ・${received}件照合・${total}件保存確認`,'done',{mode:'network-delta',readCount:received,savedCount:total,totalCount:Math.min(MAX_NOTICES,totalCount||received),pages,pendingCount:0,historyComplete:true,boundaryReached:true,windowLimit:MAX_NOTICES});
- return{handled:true,saved:total,received,pages,pending:0,historyComplete:true,delta:true,mode:'network-delta'}
 }
 function stop(){stopRequested=true;return true}
-async function syncCurrent(opts={}){return syncHistory(opts)}
-async function syncFull(){return syncHistory({forceFull:true,waitMs:3000})}
+function syncCurrent(opts={}){
+ if(activeSync)return activeSync;
+ activeSync=syncHistory(opts).finally(()=>{activeSync=null});return activeSync;
+}
+function syncFull(){return syncCurrent({forceFull:true})}
+window.addEventListener('pagehide',stop,{capture:true});
+window.addEventListener('popstate',stop,{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')stop()});
 async function restoreStatus(){
  const a=await account();if(!a)return;const s=await get(key(STATUS,a.id),null);
  if(s&&Date.now()-Number(s.at||0)<24*60*60*1000)lastResult=s
