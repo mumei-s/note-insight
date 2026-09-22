@@ -492,6 +492,21 @@
       return !(hit && remoteImage(hit.node) && normalizeUrl(hit.node.attrs?.link) === normalizeUrl(row.url));
     });
   }
+  function confirmationRow(dataset) {
+    const rows = Array.isArray(dataset?.rows) ? dataset.rows : [];
+    const row = rows[rows.length - 1];
+    if (!row || !row.finalMarker) throw new FatalError('確認用サブ垢記事が最後にありません');
+    return row;
+  }
+  function verifyConfirmationImage(view, dataset, run) {
+    const row = confirmationRow(dataset);
+    const hit = findImageByState(view, run.images?.[row.url], row.url);
+    if (!hit || !remoteImage(hit.node) || normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) {
+      throw new FatalError('確認用「実績の算数」の極薄サムネイル🔗がありません');
+    }
+    return row;
+  }
+
   async function linkCreatedImages(view, workRows, created, run) {
     if (created.length !== workRows.length) throw new FatalError(`新規画像数不一致 ${created.length}/${workRows.length}`);
     const chunkSize = created.length > 40 ? 24 : created.length;
@@ -713,7 +728,8 @@
       if (run.pending) await recoverPending(view, dataset, run);
       const missing = missingRows(view, dataset, run);
       if (!missing.length) {
-        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 次は「送」`); return;
+        verifyConfirmationImage(view, dataset, run);
+        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
       }
       const workRows = missing.slice(0, IMAGE_CHUNK);
       setStatus(`極薄画像 ${workRows.length}枚を生成中…`);
@@ -737,7 +753,7 @@
       await completion;
       const left = missingRows(view, dataset, run).length;
       if (left) setStatus(`極薄画像🔗 ${dataset.count - left}/${dataset.count} ✅ 残り${left}件 → もう一度「画」`);
-      else setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成 ✅ 次は「送」`);
+      else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
     } catch (error) {
       setStatus(`画像停止：${error?.message || String(error)}（「画」で再開）`, true);
     } finally {
@@ -757,6 +773,7 @@
       selectionApi(); noteUrlCommandFactory();
       const imageCount = verifiedImageCount(view, dataset, run);
       if (imageCount !== dataset.count) throw new FatalError(`極薄画像🔗不足 ${imageCount}/${dataset.count}。先に「画」`);
+      const confirmRow = verifyConfirmationImage(view, dataset, run);
       const existingTracked = (run.cardKeys || []).filter((entry) => embedNodes(view).some((hit) => cardKey(hit) === entry.key));
       if (existingTracked.length) throw new FatalError(`今回の通知カードが${existingTracked.length}件残っています。先に「削」`);
       run.cardKeys = [];
@@ -784,6 +801,8 @@
         if (i < dataset.rows.length - 1) await sleep(900);
       }
       if (new Set(run.cardKeys.map((x) => x.key)).size !== dataset.count) throw new FatalError(`embキー数不一致 ${run.cardKeys.length}/${dataset.count}`);
+      const confirmCard = run.cardKeys.find((x) => normalizeUrl(x.url) === normalizeUrl(confirmRow.url));
+      if (!confirmCard) throw new FatalError('確認用「実績の算数」の通知カードがありません');
       for (const entry of run.cardKeys) {
         if (!embedNodes(view).some((hit) => cardKey(hit) === entry.key && genuineCard(hit, entry.url))) {
           throw new FatalError(`通知カード再確認NG: ${entry.url}`);
@@ -791,8 +810,8 @@
       }
       run.stage = 'cards_ready'; setRun(run);
       await saveOnce(`通知カード ${dataset.count}件を1回保存中…`);
-      setStatus(`通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
-      page.alert(`準備完了\n\n極薄画像🔗: ${dataset.count}件\n本物通知カード: ${dataset.count}件\n\nそのまま「公開に進む」→公開/更新。\n通知後、編集へ戻って「削」を1回。`);
+      setStatus(`通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ 最後の実績の算数も極薄🔗＋カード確認済み`);
+      page.alert(`準備完了\n\n極薄画像🔗: ${dataset.count}件\n本物通知カード: ${dataset.count}件\n確認用「実績の算数」: 最後の1件で極薄🔗＋カード確認済み\n\nそのまま「公開に進む」→公開/更新。\n通知後、編集へ戻って「削」を1回。`);
     } catch (error) {
       setStatus(`送信停止：${error?.message || String(error)}（公開しない。必要なら「削」）`, true);
     } finally { setBusy(false); }
