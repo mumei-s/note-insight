@@ -26,13 +26,20 @@ Deno.serve(async req=>{
     const who=await identity(req),body=await req.json().catch(()=>({}));
     const noteId=String(body?.noteId||"").trim().replace(/^@/,"").toLowerCase();
     if(noteId&&noteId!==who.noteId)throw new Error("NOTE_ACCOUNT_MISMATCH");
+    if(body.readerStatus){
+      const x=body.readerStatus,threadKey=clean(x.threadKey,400);if(!threadKey)throw new Error("THREAD_REQUIRED");
+      const {data:thread,error}=await db.from("insight_dm_threads").select("meta").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(error)throw error;
+      if(thread){const {error:e}=await db.from("insight_dm_threads").update({meta:{...(thread.meta||{}),reader_status:{checked_at:new Date().toISOString(),version:clean(x.version,30),read:Math.max(0,Math.min(5000,Number(x.read)||0)),saved:Math.max(0,Math.min(5000,Number(x.saved)||0)),complete:x.complete===true,error:clean(x.error,200)}}}).eq("member_id",who.memberId).eq("thread_key",threadKey);if(e)throw e}
+      return out({ok:true,statusRecorded:Boolean(thread)});
+    }
     const threads=Array.isArray(body?.threads)?body.threads.slice(0,800):[];
     const messages=Array.isArray(body?.messages)?body.messages.slice(0,5000):[];
     let upsertedThreads=0,upsertedMessages=0;const confirmed:string[]=[];
     for(const x of threads){
       const roomUrl=cleanUrl(x?.room_url),threadKey=clean(x?.thread_key,400)||roomUrl;
       if(!threadKey)continue;
-      const row={member_id:who.memberId,thread_key:threadKey,room_url:roomUrl,peer_note_id:clean(x?.peer_note_id,120),peer_name:clean(x?.peer_name,300),peer_url:cleanUrl(x?.peer_url),peer_image_url:cleanUrl(x?.peer_image_url),last_message_at:x?.last_message_at||null,last_synced_at:new Date().toISOString(),meta:x?.meta&&typeof x.meta==="object"?x.meta:{}};
+      const {data:existing,error:lookupError}=await db.from("insight_dm_threads").select("meta").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(lookupError)throw lookupError;
+      const row={member_id:who.memberId,thread_key:threadKey,room_url:roomUrl,peer_note_id:clean(x?.peer_note_id,120),peer_name:clean(x?.peer_name,300),peer_url:cleanUrl(x?.peer_url),peer_image_url:cleanUrl(x?.peer_image_url),last_message_at:x?.last_message_at||null,last_synced_at:new Date().toISOString(),meta:{...(existing?.meta||{}),...(x?.meta&&typeof x.meta==="object"?x.meta:{})}};
       const{error}=await db.from("insight_dm_threads").upsert(row,{onConflict:"member_id,thread_key"});if(error)throw error;upsertedThreads++
     }
     for(const x of messages){
