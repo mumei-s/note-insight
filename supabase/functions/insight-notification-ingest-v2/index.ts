@@ -30,14 +30,19 @@ const KIND_TYPES:Record<string,string>={
  board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
  circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
  magazine_follow:"magazine_follow",magazine_note_add:"my_article_magazine_added",magazine_note_add_follow:"magazine_article_added",jm_magazine_add:"magazine_article_added",jm_magazine_joined:"magazine_join",
- embed_note:"quote",purchase_note_update:"purchased_article_updated",qa_answer:"question_answer",note_publish:"creator_article_posted",purchase:"purchase",purchase_note:"purchase",note_purchase:"purchase",note_rating:"rating",note_recommend:"rating",support:"tip",tip:"tip"
+ stock_photo:"image_used",embed_note:"quote",purchase_note_update:"purchased_article_updated",qa_answer:"question_answer",note_publish:"creator_article_posted",purchase:"purchase",purchase_note:"purchase",note_purchase:"purchase",note_rating:"rating",note_recommend:"rating",support:"tip",tip:"tip"
 };
 function astText(v:any):string{if(typeof v==="string")return v;if(Array.isArray(v))return v.map(astText).join("");if(!v||typeof v!=="object")return "";return typeof v.value==="string"?v.value:typeof v.text==="string"?v.text:astText(v.children||v.content||[])}
 function structuredType(meta:any,target:string|null){const candidates=[meta?.kind];for(const raw of [meta?.all_area_url,meta?.featured_area_url,target]){try{candidates.push(new URL(String(raw)).searchParams.get("kind"))}catch{}}for(const kind of candidates)if(kind&&KIND_TYPES[String(kind)])return KIND_TYPES[String(kind)];return null}
 
 const cleanCounter=(v:string)=>v.replace(/\s+/g,"");
 function classify(text:string,targetUrl:string|null,meta:any={}){
-  const known=structuredType(meta,targetUrl);if(known)return known;
+  const known=structuredType(meta,targetUrl);
+  const action=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
+  // embed_note is also used by note for the explicit “話題です” notification.
+  if((!known||known==="quote")&&/あなたの記事\s*が\s*話題(?:です|になりました)/u.test(action))return "buzz";
+  if(known)return known;
+  if(/(?:さん(?:他\d+名)?が)?記事であなたの画像を使用しました/u.test(action))return "image_used";
   // Observed non-notification counter/expiry cards, retained as capture evidence.
   if(!targetUrl&&!meta.kind&&/^(?:[\d,.万]+件){1,2}\d{1,2}月\d{1,2}日まで$/u.test(cleanCounter(text)))return "capture_noise";
   text=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
@@ -141,7 +146,7 @@ Deno.serve(async(req)=>{
       for(const result of found){if(result.error)throw result.error;for(const row of result.data||[])byId.set(row.id,row as ExistingRow)}
       const candidates=[...byId.values()];
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v25-window",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v26-formats",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
@@ -153,7 +158,7 @@ Deno.serve(async(req)=>{
     }
     const confirmed=[...new Set(confirmedClientSignatures)];
     await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:confirmed.length,received_count:incoming.length,source:"browser-notification-stable-v3-confirmed"});
-    const result={ok:true,ingestedAt:new Date().toISOString(),classifierVersion:"action-v25-window",noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
+    const result={ok:true,ingestedAt:new Date().toISOString(),classifierVersion:"action-v26-formats",noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
