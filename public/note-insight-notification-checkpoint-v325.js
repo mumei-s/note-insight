@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiV3Checkpoint325)return;
-const VERSION='3.2.93';
+const VERSION='3.6.2';
 const CHECK='mumei_insight_notification_checkpoint_v2922:';
 const LOCAL='mumei_insight_notification_checkpoint_local_v325:';
 const BOUNDARY_ID='mumei-v3-saved-boundary-v3223';
@@ -30,12 +30,20 @@ function rowLegacySignature(el){
   const target=links.find(u=>/[?&]kind=/.test(u))||links.find(u=>/\/n\/|\/m\/|\/membership|kind=|scrollpos=comment/i.test(u))||'';
   return [stripTime(el?.textContent||''),String(target||'').split('#')[0],String(actor||'').split('?')[0]].join('|')
 }
-function candidateRows(){const root=document.querySelector(SHELL)||(/^\/notifications(?:\/|$)/i.test(location.pathname)?document.querySelector('main,[role="main"]'):null);if(!root)return[];const xs=[...root.querySelectorAll(ITEM)].filter(el=>clean(el.textContent).length>=3);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
+function candidateRows(){const root=window.__mumeiNotificationReaderV4?.findPanel?.()||document.querySelector(SHELL)||(/^\/notifications(?:\/|$)/i.test(location.pathname)?document.querySelector('main,[role="main"]'):null);if(!root)return[];const xs=[...root.querySelectorAll(ITEM)].filter(el=>clean(el.textContent).length>=3);return xs.filter(el=>!xs.some(o=>o!==el&&o.contains(el)))}
 function findBoundaryRow(cp){
   const xs=candidateRows(),eventId=String(cp?.boundaryEventIdentity||''),legacy=String(cp?.boundaryLegacySignature||''),display=String(cp?.boundaryDisplayText||'');
   for(const el of xs){
     const idOk=eventId?identity(el)===eventId:false;
     const legacyOk=legacy?rowLegacySignature(el)===legacy:false;
+    // Network identities are not always exposed as DOM data attributes.
+    // Match the acknowledged body and target, including the appended preview.
+    const compact=v=>stripTime(v).replace(/\s/g,''),body=compact(display),content=compact(el.textContent);
+    const bodyOk=body&&content.startsWith(body);
+    const target=String(cp?.boundaryTargetUrl||'').split('#')[0];
+    const targetOk=!target||[...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')].some(a=>String(a.href).split('#')[0]===target);
+    if(bodyOk&&targetOk)return el;
+    if(display&&!bodyOk)continue;
     if(eventId&&legacy){if(idOk&&legacyOk)return el;continue}
     if(eventId){if(idOk)return el;continue}
     if(legacy){if(legacyOk)return el;continue}
