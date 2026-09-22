@@ -70,6 +70,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);window.addEventListener("pageshow",on);document.addEventListener("visibilitychange",on);
     return()=>{dead=true;window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on);window.removeEventListener("pageshow",on);document.removeEventListener("visibilitychange",on)}
   },[]);
+  const serverErrors=(summary?.readerStatus||[]).filter((x:Row)=>x.error),lastBodySave=(summary?.readerStatus||[]).find((x:Row)=>Number(x.saved)>0);
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
   return <section id="midm" className="midm">
@@ -79,7 +80,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         <strong className={pairState?.paired?"ok":""}>{pairState?.paired?"✓ DM連携済み":"DM連携 未設定"}</strong>
         <span><b>{Number(people.length||0).toLocaleString()}</b>人</span>
         <span><b>{Number(summary?.messages||0).toLocaleString()}</b>件</span>
-        <span className="last">最終 {summary?.lastSync?.created_at?fmt(summary.lastSync.created_at):"—"}</span>
+        <span className="last">本文保存 {lastBodySave?fmt(lastBodySave.checked_at):Number(summary?.messages)>0?"保存済み":"未確認"}</span>
       </div>
       <div className="midm-control-main">
         {dmUpdateAvailable?<a className="midm-update-now" href={installHref}>⬆ DM同期 v{latestDmVersion}へ更新</a>:dmMissing?<a className="midm-update-now" href={installHref}>＋ DM同期ツールを入れる</a>:<a href="https://note.com/messages/rooms" target="_blank" rel="noreferrer">noteのDMを開く ↗</a>}
@@ -95,6 +96,8 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
       </details>
     </div>
     {reader?<p className="midm-read-status" role="status"><b>{reader.lastRunComplete?"✓ 全件確認済み":reader.lastError?"一部未取得・再開待ち":"読込中・途中保存"}</b><span>相手 {Number(reader.currentThread||0)} / {Number(reader.threadCount||0)} · 読込 {Number(reader.lastReadCount||0)} · 保存 {Number(reader.lastSavedCount||0)}</span>{reader.lastError?<small>{String(reader.lastError)}</small>:null}</p>:null}
+    {!Number(summary?.messages)&&people.length>0?<p className="midm-read-status" role="status"><b>相手一覧のみ取得・本文は未保存</b><span>人数の取得はDM本文の保存完了を意味しません。</span></p>:null}
+    {serverErrors.length?<details className="midm-read-status"><summary>本文を取得できていない相手 {serverErrors.length}人</summary>{serverErrors.map((x:Row)=><p key={x.threadKey}>{x.peerName||"相手"}：{x.error==="DM_ROOM_REDIRECTED"?"会話画面を開けませんでした":x.error==="DM_CONVERSATION_NOT_FOUND"?"会話本文の表示待ちで停止":x.error==="DM_PAGINATION_UNVERIFIED"?"本文は途中保存・過去分の確認待ち":x.error} · {fmt(x.checked_at)}</p>)}</details>:null}
     {notice?<p className="midm-notice">{notice}</p>:null}
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<details className="midm-history-panel">
