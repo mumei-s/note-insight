@@ -381,3 +381,5 @@ Android専用実装は禁止。共通Reader/保存ロジックはUA分岐させ�
 最新main `9c3f2378902ba9287970a5d34c0b42c34d3bba44` を起点に、本体2026.09.22.3／通知3.6.2／DM1.4.2／Dashboard1.4.5を実装。最新画像の「🔔にDMパネルが出ている」も対象。DM URL上に通知が重なって開く場合、DOM表示に応じてDMの巡回とパネルを停止し、遅い保存応答でも復活させない。
 
 原因・実装・保存境界の条件・DM本文の未確認事項・ブラウザ検証範囲は [WORK_FIXES_20260922_BOUNDARY.md](WORK_FIXES_20260922_BOUNDARY.md)。本人通知なし分析は別HTMLなので、React側だけの変更で完了扱いしない。本物のDM本文成功と全ブラウザ実機確認は未完了として引き継ぐ。
+
+公開確認：機能main `8a9533fa2c5aa6a6dffc3866b56d336cb5baf4b9`、Actions `35686819667` のbuild・108件テスト・Pages deploy成功。公開manifest／本人通知／DM wrapper／DM Reader／本人通知なし分析HTMLのHTTP200と内容完全一致を確認。Dashboard backend version 7もソース一致確認済み。端末の旧userscriptは各更新が必要。

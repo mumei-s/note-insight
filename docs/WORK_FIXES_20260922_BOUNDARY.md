@@ -80,4 +80,12 @@ noteではDM画面で🔔を開いてもURLが `/messages/rooms/...` のまま�
 
 Supabase `insight-dashboard-data` version 7を配備。既存のカスタム認証と `verify_jwt:false` を維持し、配備直前のversion 6ソースが開始時コードと一致することを確認。
 
-GitHub main、Pages配信と配備後ソース照合の結果は、この節へ公開後追記する。次の担当はこの文書の版を盲信せず、最新mainと公開manifest、実機に入っているuserscript版を照合すること。
+- 機能コードmain：`8a9533fa2c5aa6a6dffc3866b56d336cb5baf4b9`。14個の機能別コミットで反映し、公開直前のmainが開始時と同じであることを確認。force更新は使用していない。
+- GitHubのtree `c5eafcf0dd32539869a27686c47e6b3d621d18fb` は検証したローカルtreeと完全一致。
+- [GitHub Actions 35686819667](https://github.com/mumei-s/note-insight/actions/runs/35686819667)：機能境界、userscript構文、ビルド、回帰74件＋動作34件、Pages deployすべて成功。
+- Pagesの `insight-release.json`、本人通知userscript、DM userscript、DM Reader、本人通知なし分析HTMLをHTTPで再取得。5ファイルすべて200、検証したローカル内容とバイト単位で一致。
+- Supabase `insight-dashboard-data` version 7はACTIVE。配備後に読み戻したソースがローカルと完全一致。
+- 公開後の確認でも対象会員のDM本文保存件数は0件。端末への1.4.2導入・本物の本文取得成功を確認したという意味ではない。
+- 端末には本人通知3.6.2／DM1.4.2／Dashboard同期1.4.5の各userscript更新が必要。Web本体の更新だけでは、インストール済み旧userscriptの実行中コードは置き換わらない。
+
+次の担当は最新mainと公開manifest、実機に入っているuserscript版を照合すること。この公開記録の追記では機能コードを変更していない。
