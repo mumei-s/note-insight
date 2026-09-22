@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.0';
+const VERSION='3.6.1';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -379,14 +379,15 @@ async function syncHistory(opts={}){
  if(!await tokenFor(a.id))throw new Error('本人連携が必要です');
  let state=await historyState(a.id),journal=await readJournal(a.id);
  // Do not discard a partially saved window when the user asks for a full read.
+ if(journal?.phase==='save')journal.read=Number(journal.saved||0)+journal.rows.length;
  if(!journal||journal.schema!==1){
   journal={schema:1,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull?'':clean(state.frontierSig||''),seen:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,startedAt:Date.now()};
   await writeJournal(a.id,journal);
  }
  const publish=async(complete=false)=>{
-  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete};
+  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:complete,lastRunMode:complete?(journal.frontier?'delta':'window'):'partial',lastRunReadCount:journal.read,lastRunSavedCount:journal.saved,lastRunTotalCount:journal.total,lastError:'',direction:'bottom-up',historyComplete:complete});
-  status(`${complete?'✓ 保存完了':stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
+  status(`${complete?(journal.saved?'✓ 保存確認':'新着なし'):stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
  };
  await publish();
  try{
@@ -402,7 +403,7 @@ async function syncHistory(opts={}){
     if(signature===journal.frontier||known.has(signature)){boundary=true;break}
     if(!known.has(signature)&&unique.size<MAX_NOTICES)unique.set(signature,row);
    }
-   journal.rows=[...unique.values()];journal.pages++;
+   journal.rows=[...unique.values()];journal.pages++;journal.read=journal.saved+journal.rows.length;
    const limitReached=journal.rows.length>=MAX_NOTICES;
    const end=boundary||limitReached||terminalHint(cap.json)||!pageRows.length;
    let next=end?null:mutateNextRequest(cap,nextHint(cap.json));
@@ -423,7 +424,7 @@ async function syncHistory(opts={}){
    const part=journal.rows.slice(0,20);
    // Journal already contains the entire unsaved window before transmission.
    const result=await ingestRows(part,null,true,false);
-   journal.read+=part.length;journal.saved+=Number(result.saved||0);
+   journal.saved+=Number(result.saved||0);
    journal.seen=[...new Set([...journal.seen,...part.map(clientSig)])].slice(-1200);
    journal.rows.splice(0,part.length);
    const last=part.at(-1);
