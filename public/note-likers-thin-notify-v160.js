@@ -26,6 +26,8 @@
   let imageChoiceClickListener = null;
   let imageChoicePointerListener = null;
   let nativeInputClick = null;
+  const UPLOAD_DIAG_PREFIX = 'mumei_upload_diag_v160';
+  const uploadNetFailures = [];
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
@@ -59,6 +61,79 @@
   }
   function runKey() {
     return `${RUN_PREFIX}:${articleKey() || 'unknown'}`;
+  }
+  function uploadDiagKey() { return `${UPLOAD_DIAG_PREFIX}:${articleKey() || 'unknown'}`; }
+  function cleanNetUrl(value) {
+    try { const u = new URL(String(value || ''), location.href); return `${u.origin}${u.pathname}`; }
+    catch (_) { return String(value || '').split('?')[0].slice(0, 240); }
+  }
+  function recordUploadDiag(entry) {
+    const row = { at: new Date().toISOString(), ...entry };
+    try {
+      const prev = getJSON(uploadDiagKey(), []);
+      const next = [...(Array.isArray(prev) ? prev : []), row].slice(-20);
+      setJSON(uploadDiagKey(), next);
+    } catch (_) {}
+    return row;
+  }
+  function recordNetFailure(kind, url, status = 0, message = '') {
+    const item = { at: Date.now(), kind, url: cleanNetUrl(url), status: Number(status || 0), message: String(message || '').slice(0, 160) };
+    uploadNetFailures.push(item);
+    if (uploadNetFailures.length > 30) uploadNetFailures.splice(0, uploadNetFailures.length - 30);
+  }
+  function recentNetFailure(since) {
+    return [...uploadNetFailures].reverse().find((x) => x.at >= since) || null;
+  }
+  function visibleUploadErrorText() {
+    const nodes = document.querySelectorAll('[role="alert"],div,span,p');
+    for (const node of nodes) {
+      if (!node.getClientRects?.().length) continue;
+      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (/画像.*アップロード.*(?:失敗|できません)|アップロード.*(?:失敗|できません)/.test(text)) return text.slice(0, 180);
+    }
+    return '';
+  }
+  function installUploadNetworkProbe() {
+    if (page.__MUMEI_UPLOAD_NETWORK_PROBE_160__) return;
+    page.__MUMEI_UPLOAD_NETWORK_PROBE_160__ = true;
+    try {
+      const rawFetch = typeof page.fetch === 'function' ? page.fetch.bind(page) : null;
+      if (rawFetch) {
+        page.fetch = async function (...args) {
+          const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+          try {
+            const response = await rawFetch(...args);
+            if (response && response.status >= 400) recordNetFailure('fetch', url, response.status, response.statusText);
+            return response;
+          } catch (error) {
+            recordNetFailure('fetch-error', url, 0, error?.message || error);
+            throw error;
+          }
+        };
+      }
+    } catch (_) {}
+    try {
+      const proto = page.XMLHttpRequest?.prototype;
+      if (proto && !proto.__mumeiUploadProbe160) {
+        const rawOpen = proto.open, rawSend = proto.send;
+        proto.open = function (method, url, ...rest) {
+          try { this.__mumeiUploadUrl160 = url; } catch (_) {}
+          return rawOpen.call(this, method, url, ...rest);
+        };
+        proto.send = function (...args) {
+          if (!this.__mumeiUploadProbeBound160) {
+            this.__mumeiUploadProbeBound160 = true;
+            this.addEventListener('load', () => {
+              if (this.status >= 400) recordNetFailure('xhr', this.__mumeiUploadUrl160, this.status, this.statusText);
+            });
+            this.addEventListener('error', () => recordNetFailure('xhr-error', this.__mumeiUploadUrl160, this.status || 0, 'network error'));
+            this.addEventListener('timeout', () => recordNetFailure('xhr-timeout', this.__mumeiUploadUrl160, this.status || 0, 'timeout'));
+          }
+          return rawSend.apply(this, args);
+        };
+        proto.__mumeiUploadProbe160 = true;
+      }
+    } catch (_) {}
   }
   function getDataset() {
     const value = getJSON(DATA_KEY, null);
@@ -533,17 +608,29 @@
     setRun(run);
   }
   async function waitNewRemoteImages(view, beforeIds, expected, timeout = 180000) {
-    const deadline = Date.now() + timeout;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeout;
+    let lastCount = 0, lastGrowthAt = startedAt;
     while (Date.now() < deadline) {
       const fresh = imageNodes(view).filter((hit) => {
         const id = String(hit.node.attrs?.id || '');
         return id && !beforeIds.has(id) && remoteImage(hit.node);
       }).sort((a, b) => a.pos - b.pos);
-      if (fresh.length >= expected) return fresh.slice(0, expected);
+      if (fresh.length > lastCount) { lastCount = fresh.length; lastGrowthAt = Date.now(); }
+      if (fresh.length >= expected) return { fresh: fresh.slice(0, expected), failed: false, reason: '', net: null };
+      const uiError = visibleUploadErrorText();
+      const net = recentNetFailure(startedAt);
+      if ((uiError || net) && Date.now() - lastGrowthAt >= 2500) {
+        return { fresh: fresh.slice(0, expected), failed: true, reason: uiError || '画像アップロード通信エラー', net };
+      }
       setStatus(`画像アップロード ${Math.min(fresh.length, expected)}/${expected}…`);
       await sleep(500);
     }
-    return null;
+    const fresh = imageNodes(view).filter((hit) => {
+      const id = String(hit.node.attrs?.id || '');
+      return id && !beforeIds.has(id) && remoteImage(hit.node);
+    }).sort((a, b) => a.pos - b.pos);
+    return { fresh: fresh.slice(0, expected), failed: true, reason: '画像アップロード完了待ちタイムアウト', net: recentNetFailure(startedAt) };
   }
   function imageInput(input) {
     if (!input || input.tagName !== 'INPUT' || input.type !== 'file') return false;
@@ -627,6 +714,7 @@
     const arm = imageArm;
     if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true;
+    const doneBefore = verifiedImageCount(arm.view, arm.dataset, arm.run);
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
@@ -636,10 +724,29 @@
       input.dispatchEvent(new page.Event('input', { bubbles: true }));
       input.dispatchEvent(new page.Event('change', { bubbles: true }));
       setStatus(`${arm.files.length}枚を一括挿入・アップロード中…`);
-      const created = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 900000);
-      if (!created) throw new FatalError(`画像アップロード完了 ${arm.workRows.length}枚を確認できませんでした`);
-      await linkCreatedImages(arm.view, arm.workRows, created, arm.run);
-      await saveOnce(`極薄画像🔗 ${verifiedImageCount(arm.view, arm.dataset, arm.run)}/${arm.dataset.count} を保存中…`);
+      const result = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 900000);
+      const created = result.fresh || [];
+      if (created.length) {
+        const rows = arm.workRows.slice(0, created.length);
+        await linkCreatedImages(arm.view, rows, created, arm.run);
+        await saveOnce(`途中成功分も確定保存｜極薄画像🔗 ${verifiedImageCount(arm.view, arm.dataset, arm.run)}/${arm.dataset.count}…`);
+      }
+      if (result.failed || created.length < arm.workRows.length) {
+        const doneNow = verifiedImageCount(arm.view, arm.dataset, arm.run);
+        const left = Math.max(0, arm.dataset.count - doneNow);
+        const netText = result.net ? `｜通信 ${result.net.kind} HTTP ${result.net.status || 0} ${result.net.url}` : '';
+        const reason = result.reason || 'note側画像アップロード失敗';
+        recordUploadDiag({
+          requested: arm.workRows.length,
+          succeededThisBatch: created.length,
+          completedBefore: doneBefore,
+          completedAfter: doneNow,
+          remaining: left,
+          reason,
+          network: result.net || null
+        });
+        throw new FatalError(`note側アップロード失敗｜今回 ${created.length}/${arm.workRows.length}｜累計 ${doneNow}/${arm.dataset.count}｜残り${left}｜${reason}${netText}`);
+      }
       arm.resolve(true);
     } catch (error) {
       arm.reject(error);
@@ -879,6 +986,7 @@
     }
   }
 
+  installUploadNetworkProbe();
   setInterval(mount, 600);
   mount();
 })();
