@@ -19,16 +19,51 @@ async function investigate(scope:string,key:string){
  ]);if(relations.error)throw relations.error;if(events.error)throw events.error;
  return{ok:true,personKey:key,relations:relations.data||[],events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"全件照合の前後で確認できた関係の変化です。解除・退会・ブロックなどの原因は断定しません。"};
 }
-Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);const m=await auth(req),b=await req.json().catch(()=>({})),action=String(b.action||"events"),page=Math.max(1,Number(b.page||1)),pageSize=Math.min(100,Math.max(20,Number(b.pageSize||50))),offset=(page-1)*pageSize;
-if(action==="investigate")return out(await investigate(m.scope,String(b.personKey||"")));
-const latest=await latestRuns(m.scope,m.noteId);
-if(action==="people"){
- const direction=String(b.direction)==="followers"?"followers":"followings",run=latest[direction],window=b.window==="oldest"?"oldest":"latest",term=searchText(b.query);
- let q=db.from("insight_relations").select(PERSON_FIELDS,{count:"exact"}).eq("member_id",m.scope).eq("direction",direction);
- if(window==="latest")q=q.eq("active",true);if(term)q=q.or(`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`);
+async function windowPeople(scope:string,direction:string,window:string){
+ let q=db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction);
+ if(window==="latest")q=q.eq("active",true);
  q=window==="oldest"?q.order("first_seen_at",{ascending:true}).order("source_rank",{ascending:false}).order("person_key"):q.order("source_rank",{ascending:true}).order("person_key");
- if(offset>=1000)return out({ok:true,page,pageSize,total:1000,rows:[],direction,run,latest,noteId:m.noteId,window});
- const{data,error,count}=await q.range(offset,Math.min(999,offset+pageSize-1));if(error)throw error;
- return out({ok:true,page,pageSize,total:Math.min(1000,count||0),archiveTotal:count||0,rows:offset>=1000?[]:data||[],direction,run,latest,noteId:m.noteId,window,basis:window==="oldest"?"saved_first_seen":"latest_snapshot"});
+ const{data,error}=await q.limit(1000);if(error)throw error;return data||[];
 }
-const direction=String(b.direction||"all"),change=String(b.change||"all"),dateFrom=valid(b.dateFrom),dateTo=valid(b.dateTo);let q=db.from("insight_relation_events").select("id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count",{count:"exact"}).eq("member_id",m.scope).not("person_key","like","aggregate:%");if(action==="investigation"){q=q.eq("event_type","removed").not("person_key","like","unknown:%")}const term=searchText(b.query);if(term)q=q.or(`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`);if(direction==="followers"||direction==="followings")q=q.eq("direction",direction);if(change==="added"||change==="removed")q=q.eq("event_type",change);if(dateFrom)q=q.gte("detected_at",dateFrom);if(dateTo)q=q.lt("detected_at",dateTo);const{data,error,count}=await q.order("detected_at",{ascending:false}).range(offset,offset+pageSize-1);if(error)throw error;return out({ok:true,page,pageSize,total:count||0,rows:await annotate(m.scope,data||[]),latest,noteId:m.noteId})}catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
+const EVENT_FIELDS="id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count";
+async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,size:number){
+ const direction=String(b.direction||"all"),change=b.action==="investigation"?"removed":String(b.change||"all"),from=valid(b.dateFrom),to=valid(b.dateTo),term=searchText(b.query);
+ const chunks:(string[]|null)[]=keys===null?[null]:Array.from({length:Math.ceil(keys.length/80)},(_,i)=>keys.slice(i*80,(i+1)*80));
+ let total=0;const rows:any[]=[];
+ for(let i=0;i<chunks.length;i+=3){
+  const results=await Promise.all(chunks.slice(i,i+3).map(async chunk=>{
+   let q=db.from("insight_relation_events").select(EVENT_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
+   if(chunk)q=q.in("person_key",chunk);
+   if(b.action==="investigation")q=q.not("person_key","like","unknown:%");
+   if(direction==="followers"||direction==="followings")q=q.eq("direction",direction);
+   if(change==="added"||change==="removed")q=q.eq("event_type",change);
+   if(term)q=q.or(`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`);
+   if(from)q=q.gte("detected_at",from);if(to)q=q.lt("detected_at",to);
+   q=q.order("detected_at",{ascending:false}).order("id",{ascending:false});
+   if(chunk===null)return await q.range(offset,offset+size-1);
+   const result=await q.range(0,Math.min(999,offset+size-1));if(result.error)return result;
+   const data=[...(result.data||[])],needed=Math.min(result.count||0,offset+size);
+   for(let start=data.length;start<needed;start+=1000){const next=await q.range(start,Math.min(start+999,needed-1));if(next.error)return next;if(!next.data?.length)break;data.push(...next.data)}
+   return{...result,data};
+  }));
+  for(const r of results){if(r.error)throw r.error;total+=r.count||0;rows.push(...(r.data||[]))}
+ }
+ rows.sort((a,b)=>String(b.detected_at).localeCompare(String(a.detected_at))||Number(b.id)-Number(a.id));
+ return{total,rows:await annotate(scope,keys===null?rows:rows.slice(offset,offset+size))};
+}
+Deno.serve(async req=>{
+ if(req.method==="OPTIONS")return new Response("ok",{headers:H});
+ try{
+  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
+  const m=await auth(req),b=await req.json().catch(()=>({})),action=String(b.action||"events"),page=Math.max(1,Number(b.page||1)),pageSize=Math.min(100,Math.max(20,Number(b.pageSize||50))),offset=(page-1)*pageSize;
+  if(action==="investigate")return out(await investigate(m.scope,String(b.personKey||"")));
+  const window=["latest","oldest"].includes(b.window)?String(b.window):action==="people"?"latest":"all",direction=b.direction==="followings"?"followings":"followers";
+  const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId),window==="all"?Promise.resolve(null):windowPeople(m.scope,direction,window)]);
+  if(action==="people"){
+   const term=searchText(b.query).toLowerCase(),list=(people||[]).filter((r:any)=>!term||String(r.actor_name||"").normalize("NFKC").toLowerCase().includes(term)||String(r.actor_url||"").toLowerCase().includes(term));
+   return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="oldest"?"saved_first_seen":"latest_snapshot"});
+  }
+  const result=await windowEvents(m.scope,{...b,action,direction:window==="all"?String(b.direction||"all"):direction},people?.map((r:any)=>r.person_key)||null,offset,pageSize);
+  return out({ok:true,...result,page,pageSize,latest,noteId:m.noteId,window,windowTotal:people?.length??null});
+ }catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}
+});
