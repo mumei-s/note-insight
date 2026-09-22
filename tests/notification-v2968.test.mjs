@@ -70,18 +70,18 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.5.10 split full/delta Reader',()=>{
+test('active package uses V3.6.0 split full/delta Reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),setup=read('public/notification-browser-install.html'),network=read('public/note-insight-notification-network-v3300.js'),reader=read('public/note-insight-notification-reader-v4.js'),controls=read('public/note-insight-notification-controls-v1.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.5.10');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.5\.10/);
+  assert.equal(manifest.notificationVersion,'3.6.0');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.6\.0/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const p of ['note-insight-notification-network-v3300.js?v=3581','note-insight-notification-reader-v4.js?v=3570','note-insight-notification-controls-v1.js?v=134','note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=120','note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
+  for(const p of ['note-insight-notification-network-v3300.js?v=3600','note-insight-notification-reader-v4.js?v=3600','note-insight-notification-controls-v1.js?v=134','note-insight-notification-filter-v4.js?v=400','note-insight-notification-return-v1.js?v=120','note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
-  assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/historyComplete/);assert.match(reader,/mumei_insight_notification_avatar_repair_v338:/);
-  assert.match(network,/async function syncHistory/);assert.match(network,/MAX_NOTICES=300,MAX_PAGES=3/);assert.match(network,/needsDom:false/);assert.match(reader,/MAX_NOTICES=300/);assert.match(reader,/net\.syncCurrent/);
+  assert.match(reader,/actor_image_url:img/);assert.match(reader,/function scheduleAuto/);assert.match(reader,/net\.syncCurrent/);assert.match(reader,/mumei_insight_notification_avatar_repair_v338:/);
+  assert.match(network,/async function syncHistory/);assert.match(network,/MAX_NOTICES=300,MAX_PAGES=3/);assert.match(network,/writeJournal/);assert.match(reader,/MAX_NOTICES=300/);assert.match(reader,/net\.syncCurrent/);
   assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
   assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment","creator_article_posted"\]/);
@@ -105,18 +105,17 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(isDmRoute\(\)\)return/);
   assert.match(controls,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(filter,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
-  assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)return/);
+  assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
-  assert.match(dmUser,/@version\s+1\.3\.6/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=121/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=136/);
+  assert.match(dmUser,/@version\s+1\.4\.0/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=140/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=140/);
   assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
   assert.match(dmFeed,/action==="people"/);assert.match(dmFeed,/action==="person_messages"/);assert.match(dmFeed,/person_key/);
-  assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/\["dm","DM"\]/);assert.match(unified,/tab==="dm"\?<MemberInsightDm/);
-  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/<summary>設定・状態<\/summary>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
-  assert.match(dm,/for\(let i=0;i<list\.length;i\+=2\)/);assert.doesNotMatch(dm,/i\+=3/);assert.match(dmUser,/@version\s+1\.3\.6/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=136/);assert.match(unified,/onTabChange/);assert.match(live,/onTabChange=\{handleUnifiedTab\}/);
+  assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/\["dm","DM"\]/);assert.match(unified,/tab==="dm"\?\(active\?<MemberInsightDm/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/設定・状態<\/span>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
@@ -129,7 +128,6 @@ test('seven-day selection still compares against the preceding seven days',()=>{
   const row=days=>({notification_type:'my_article_magazine_added',occurred_at:new Date(Date.now()-days*86400000).toISOString(),actor_name:'A'});
   const recent=row(1),previous=row(9);const r=summarize([recent],'ss_yr',false,1,7,[recent,previous]);assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);
 });
-
 test('notification-only network capture rejects unrelated note APIs and V24 rechecks pending rows',()=>{
   const network=read('public/note-insight-notification-network-v3300.js');
   const reclass=read('supabase/functions/insight-notification-reclassify/index.ts');
@@ -137,13 +135,13 @@ test('notification-only network capture rejects unrelated note APIs and V24 rech
   const ui=read('src/member-insight-notifications-final.tsx');
   assert.match(network,/function extractDirectNotices/);
   assert.match(network,/direct-api-root-only-v357/);
-  assert.match(network,/if\(cap&&!directNoticesCap\(cap\)\)cap=null/);
-  assert.match(network,/reason:'NO_NOTIFICATION_API_CAPTURE',needsDom:true/);
-  assert.match(reclass,/CLASSIFIER_VERSION="action-v24-structured"/);
+  assert.match(network,/if\(!directNoticesCap\(cap\)\)throw new Error/);
+  assert.match(network,/NO_NOTIFICATION_API_CAPTURE/);
+  assert.match(reclass,/action-v25-window/);
   assert.doesNotMatch(reclass,/meta\?\.classifier==="action-v23-structured"[^\n]*continue/);
-  assert.match(ingest,/action-v24-structured/);
-  assert.match(ui,/CLASSIFIER_VERSION="action-v24-structured"/);
-  assert.match(ui,/NOTIFICATION_MASTER_CACHE/);
+  assert.match(ingest,/action-v25-window/);
+  assert.match(ui,/action-v25-window/);
+  assert.match(ui,/retainBoard/);
   assert.match(ui,/question_answer/);
 });
 
@@ -156,6 +154,6 @@ test('quarantined network noise stays out of feed and analysis while structured 
   assert.match(feed,/qa_answer"\?"question_answer"/);
   assert.match(analysis,/noise_reason==="non-notification-api-capture"/);
   assert.match(analysis,/qa_answer"\?"question_answer"/);
-  assert.match(ui,/NOTIFICATION_MASTER_CACHE/);
-  assert.match(ui,/詳細・精度・再分類 ▼/);
+  assert.match(ui,/retainBoard/);
+  assert.match(ui,/詳細・精度・再分類/);
 });

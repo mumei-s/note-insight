@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.5.7',PROTOCOL='3.5.7';
+const VERSION='3.6.0',PROTOCOL='3.6.0';
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
@@ -84,7 +84,7 @@ function readOutbox(id){try{const value=JSON.parse(localStorage.getItem(key(OUTB
 function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(rs))}
 function retain(id,rs){const pending=new Map(readOutbox(id).map(r=>[sig(r),r]));for(const r of rs)pending.set(sig(r),r);writeOutbox(id,[...pending.values()])}
 function capturePending(){if(!active)return;const {a,panel,saved}=active;try{const rs=rows(panel).slice().reverse().map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs)}catch(e){health(String(e?.message||e),'error')}}
-function pauseCapture(){capturePending();stop=true}
+function pauseCapture(){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}
 window.addEventListener('pagehide',pauseCapture,{capture:true});
 window.addEventListener('popstate',pauseCapture,{capture:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
@@ -116,190 +116,35 @@ async function sendBatch(input,a,saved,force=false){
  }
  return total;
 }
-let lastFastRepairAt=0,livePanel=null,liveAccount='',liveReadSeen=new Set(),liveSavedTotal=0;
-async function fastVisibleSync(){
- const panel=findPanel();if(!panel)return{read:0,saved:0,handled:false};
- const a=await account();if(!a)return{read:0,saved:0,handled:false};
- if(!String(await get(key(TOKEN,a.id),'')||''))return{read:0,saved:0,handled:false};
- const savedRaw=await get(key(SAVED,a.id),[]),saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
- if(panel!==livePanel||a.id!==liveAccount){livePanel=panel;liveAccount=a.id;liveReadSeen=new Set();liveSavedTotal=0}
- const allVisible=rows(panel).map(rowData).filter(Boolean).slice().reverse(),visible=[];
- for(const r of allVisible){const id=sig(r);if(liveReadSeen.has(id)||liveReadSeen.size<MAX_NOTICES){visible.push(r);liveReadSeen.add(id)}}
- if(!visible.length)return{read:0,saved:0,sessionRead:liveReadSeen.size,sessionSaved:liveSavedTotal,handled:false};
- const fresh=visible.filter(r=>!saved.has(sig(r)));
- let savedNow=0;
- if(fresh.length)savedNow=await sendBatch(fresh,a,saved,false);
- liveSavedTotal+=savedNow;
- if(Date.now()-lastFastRepairAt>60000){
-  const repair=visible.filter(r=>r.actor_url&&r.actor_image_url).slice(-40);
-  if(repair.length){lastFastRepairAt=Date.now();try{await sendBatch(repair,a,saved,true)}catch{}}
- }
- const cp=await get(key(CHECK,a.id),{}),now=Date.now();
- await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:liveReadSeen.size>=MAX_NOTICES,lastRunMode:liveReadSeen.size>=MAX_NOTICES?'window':'partial',lastRunReadCount:liveReadSeen.size,lastRunSavedCount:liveSavedTotal,lastError:'',version:VERSION,windowLimit:MAX_NOTICES});
- try{document.dispatchEvent(new Event('mumei-notification-checkpoint'))}catch{}
- return{read:visible.length,saved:savedNow,fresh:fresh.length,sessionRead:liveReadSeen.size,sessionSaved:liveSavedTotal,handled:true,windowComplete:liveReadSeen.size>=MAX_NOTICES,windowLimit:MAX_NOTICES}
-}
-let autoWindowRunning=false,autoWindowDonePanel=null;
-async function autoReadVisibleWindow(){
- if(autoWindowRunning||isDmRoute())return 0;
- const panel=findPanel();if(!panel)return 0;
- autoWindowRunning=true;stop=false;
- const host=scrollHost(panel),startTop=host?host.scrollTop:0;
- let stable=0,lastHeight=host?host.scrollHeight:0,lastCount=liveReadSeen.size,totalSaved=0,ended=false;
- try{
-  let r=await fastVisibleSync();totalSaved+=Number(r.saved||0);
-  health(`自動読込 ${Number(r.sessionRead||r.read||0)} / ${MAX_NOTICES}｜保存 ${Number(r.sessionSaved||r.saved||0)}`,'saving',{readCount:Number(r.sessionRead||r.read||0),savedCount:Number(r.sessionSaved||r.saved||0),totalCount:MAX_NOTICES,autoScroll:true,streaming:true});
-  if(!host||Number(r.sessionRead||0)>=MAX_NOTICES){ended=true;return totalSaved}
-  for(let i=0;i<180&&!stop&&liveReadSeen.size<MAX_NOTICES;i++){
-   if(findPanel()!==panel)break;
-   const maxTop=Math.max(0,host.scrollHeight-host.clientHeight),step=Math.max(220,Math.floor(host.clientHeight*.82));
-   host.scrollTop=Math.min(maxTop,host.scrollTop+step);
-   try{host.dispatchEvent(new Event('scroll',{bubbles:true}))}catch{}
-   await sleep(180);
-   r=await fastVisibleSync();totalSaved+=Number(r.saved||0);
-   const count=Number(r.sessionRead||liveReadSeen.size),saved=Number(r.sessionSaved||liveSavedTotal);
-   health(`自動読込 ${count} / ${MAX_NOTICES}｜保存 ${saved}`,'saving',{readCount:count,savedCount:saved,totalCount:MAX_NOTICES,autoScroll:true,streaming:true});
-   const height=host.scrollHeight,atBottom=host.scrollTop>=Math.max(0,height-host.clientHeight-2);
-   if(height===lastHeight&&count===lastCount&&atBottom)stable++;else stable=0;
-   lastHeight=height;lastCount=count;
-   if(stable>=5){ended=true;break}
-   if(atBottom&&stable===2){host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);try{host.dispatchEvent(new Event('scroll',{bubbles:true}))}catch{};await sleep(320)}
-  }
-  if(liveReadSeen.size>=MAX_NOTICES)ended=true;
-  return totalSaved
- }catch(e){
-  health(`⚠ 自動読込：${String(e?.message||e)}｜途中まで保存済み`,'error',{readCount:liveReadSeen.size,savedCount:liveSavedTotal,totalCount:MAX_NOTICES,autoScroll:true});
-  return totalSaved
- }finally{
-  if(host&&findPanel()===panel){try{host.scrollTop=Math.min(startTop,Math.max(0,host.scrollHeight-host.clientHeight))}catch{}}
-  if(ended&&findPanel()===panel){
-   autoWindowDonePanel=panel;
-   try{
-    const a=await account();if(a){const cp=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...cp,lastCheckAt:now,lastRunAt:now,lastRunComplete:true,lastRunMode:'window',lastRunReadCount:liveReadSeen.size,lastRunSavedCount:liveSavedTotal,lastError:'',version:VERSION,windowLimit:MAX_NOTICES,windowEndReached:liveReadSeen.size<MAX_NOTICES})}
-   }catch{}
-   health(`✓ 自動読込完了｜読込 ${liveReadSeen.size} / ${MAX_NOTICES}｜保存 ${liveSavedTotal}`,'done',{readCount:liveReadSeen.size,savedCount:liveSavedTotal,totalCount:MAX_NOTICES,autoScroll:true,windowComplete:true,windowLimit:MAX_NOTICES});
-  }
-  autoWindowRunning=false
- }
-}
-
-async function seekOldest(host,panel,capture=async()=>{},overlap=()=>false){
- if(!host){await capture();return true}
- let same=0,last=-1;
- for(let i=0;i<1200&&!stop;i++){
-  if(findPanel()!==panel)throw new Error('通知一覧を閉じたため中断しました');
-  await capture();if(overlap())return false;
-  host.scrollTop=Math.max(0,host.scrollHeight-host.clientHeight);
-  health('古い通知を確認中…','saving');await sleep(500);
-  await capture();if(overlap())return false;
-  const height=host.scrollHeight;if(height===last)same++;else same=0;last=height;
-  if(same>=6)return true;
- }
- if(!stop)throw new Error('古い通知の読み込みが続いています。次回も続きから読み込みます');
- return false;
-}
 async function scan(opts={}){
- if(isDmRoute())return;
- const fastOnly=Boolean(opts.fastOnly),forceNetwork=Boolean(opts.forceNetwork);
- if(scanning){if(fastOnly)return 0;try{window.__mumeiNotificationNetwork3300?.stop?.()}catch{}stop=true;health('停止要求｜現在ページを保存してから停止します…','saving',{stopping:true});return 0}
+ if(isDmRoute())return 0;
+ if(scanning){if(opts.automatic)return 0;stop=true;window.__mumeiNotificationNetwork3300?.stop?.();health('停止要求｜保存確認後に停止します','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
- if(!net||typeof net.syncCurrent!=='function'){health('⚠ 通信Readerを起動できません','error');return 0}
- scanning=true;stop=false;let fast={read:0,saved:0,handled:false};
- try{
-  try{
-   fast=await fastVisibleSync();
-   if(Number(fast.fresh||0)>0)health(`${fast.windowComplete?'✓ 300件確認':'✓ 追加反映'}｜読込 ${fast.sessionRead||fast.read} / ${MAX_NOTICES}｜保存 ${fast.sessionSaved||fast.saved}`,'done',{readCount:Number(fast.sessionRead||fast.read),savedCount:Number(fast.sessionSaved||fast.saved),totalCount:MAX_NOTICES,instant:true,fastOnly,streaming:true,windowComplete:Boolean(fast.windowComplete),windowLimit:MAX_NOTICES});
-  }catch{}
-  if(fastOnly)return Number(fast.saved||0);
-  const r=await net.syncCurrent({waitMs:forceNetwork?220:120});
-  const netSaved=Number(r?.saved||0),netRead=Number(r?.received||0),saved=Math.max(Number(fast.saved||0),netSaved),read=Math.max(Number(fast.read||0),netRead);
-  if(r?.handled){
-   const label=r?.partial?'途中保存':r?.full?'✓全履歴確認':r?.delta?'✓追加確認':'✓通信確認';
-   health(`${label}｜${saved}件保存確認｜${read}件読取`,'done',{readCount:read,savedCount:saved,totalCount:Number(r?.totalCount||read),partial:Boolean(r?.partial),historyComplete:Boolean(r?.historyComplete),instant:Boolean(fast.handled)});
-   return saved
-  }
-  if(fast.handled){
-   health(`✓ 表示中 ${fast.read}件確認｜${fast.saved}件保存`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,historyComplete:true,instant:true});
-   return fast.saved
-  }
-  health('通信読取待機｜🔔を開いたまま次回も続きから確認します','saving');
-  return 0
- }catch(e){
-  if(fast.handled){health(`✓ 表示中 ${fast.read}件確認｜${fast.saved}件保存（通信確認は次回継続）`,'done',{readCount:fast.read,savedCount:fast.saved,totalCount:fast.read,historyComplete:true,instant:true});return fast.saved}
-  health(`⚠ ${String(e?.message||e)}｜未保存分は次回に引継ぎ`,'error');
-  return 0
- }finally{scanning=false;stop=false}
+ if(!net?.syncCurrent){health('通信Readerを起動できません','error');return 0}
+ scanning=true;stop=false;
+ try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false)return 0;const result=await net.syncCurrent(opts);return Number(result?.saved||0)}
+ catch(e){health(`⚠ ${String(e?.message||e)}｜続きは保存地点から再開`,'error');return 0}
+ finally{scanning=false}
 }
-async function scanDomLegacy(){
- if(isDmRoute())return;
- if(scanning){stop=true;capturePending();health('停止地点まで保存します…','saving');return}
- // Lock before asynchronous login and storage checks to prevent two readers.
- scanning=true;stop=false;let a=null,saved=null,count=0,readCount=0,complete=false;
- try{
-  const panel=findPanel();if(!panel)throw new Error('本物の🔔通知一覧を開いてください');
-  a=await account();if(!a)throw new Error('noteログインを確認してください');
-  if(!String(await get(key(TOKEN,a.id),'')||''))throw new Error('本人連携が必要です')
-  const cp=await get(key(CHECK,a.id),{}),savedRaw=await get(key(SAVED,a.id),[]),repairDone=Boolean(await get(key(REPAIR,a.id),false));
-  saved=new Set(Array.isArray(savedRaw)?savedRaw.map(String):[]);
-  const previous=new Set(saved),seen=new Set(),repairSeen=new Set(),repairRows=[],host=scrollHost(panel);
-  active={a,panel,saved};
-  count+=await sendBatch(readOutbox(a.id),a,saved);
-  const currentRows=()=>rows(panel).map(el=>{const r=rowData(el);if(r)el.dataset.mumeiReaderSignature=sig(r);return r}).filter(Boolean);
-  const overlap=()=>cp.historyComplete===true&&currentRows().some(r=>previous.has(sig(r)));
-  const capture=async()=>{
-   const rs=currentRows().slice().reverse();
-   for(const r of rs){const id=sig(r);if(!seen.has(id)){seen.add(id);readCount++}if(!repairDone&&!repairSeen.has(id)){repairSeen.add(id);repairRows.push(r)}}
-   // Local write is synchronous: pagehide cannot discard a partially filled batch.
-   retain(a.id,rs.filter(r=>!saved.has(sig(r))));
-   if(readOutbox(a.id).length>=20)count+=await sendBatch(readOutbox(a.id),a,saved);
-   health(`追加読込 ${readCount}件｜保存 ${count}件`,'saving');
-  };
-  const reachedEnd=await seekOldest(host,panel,capture,overlap);
-  await capture();
-  // The initial DOM list is newest-first; preserve the oldest-to-newest send order.
-  let pending=readOutbox(a.id);
-  count+=await sendBatch(pending,a,saved);
-  complete=!stop&&(reachedEnd||overlap());
-  if(!stop&&host){
-   let steps=0;
-   while(host.scrollTop>1&&steps++<1200&&!stop){
-    if(findPanel()!==panel)throw new Error('通知一覧を閉じたため中断しました');
-    const before=host.scrollTop;host.scrollTop=Math.max(0,before-Math.max(160,host.clientHeight*.75));
-    await sleep(350);await capture();count+=await sendBatch(readOutbox(a.id),a,saved);
-    if(Math.abs(host.scrollTop-before)<1){complete=false;break}
-   }
-   if(host.scrollTop>1)complete=false;
-  }
-  if(!repairDone&&repairRows.length){health(`アイコン情報を補修中… ${repairRows.length}件`,'saving');await sendBatch(repairRows,a,saved,true)}
-  const latest=await get(key(CHECK,a.id),{});
-  if(complete){const top=currentRows().find(r=>saved.has(sig(r)));if(top){latest.boundarySignature=sig(top);latest.boundaryEventIdentity=top.meta?.event_identity;latest.boundaryLegacySignature=[stripTime(top.raw_text),String(top.target_url||'').split('#')[0],String(top.actor_url||'').split('?')[0]].join('|')}}
-  const runMode=complete?(cp.historyComplete===true?'delta':'full'):'partial',runAt=Date.now();
-  await set(key(CHECK,a.id),{...latest,lastCheckAt:runAt,manualNewCount:count,manualSeenCount:readCount,historyComplete:cp.historyComplete===true||complete,lastError:'',lastRunComplete:complete,lastRunMode:runMode,lastRunAt:runAt,lastRunSavedCount:count,lastRunReadCount:readCount,version:VERSION});
-  if(complete&&!repairDone)await set(key(REPAIR,a.id),true);
-  health(`${stop?'停止・':''}${complete?(cp.historyComplete===true?'✓追加確認':'✓全履歴確認'):'途中保存'}｜${count}件保存確認｜${readCount}件読取${complete?'':'｜続きは次回'}`,'done');
- }catch(e){
-  capturePending();
-  if(a){try{const cp=await get(key(CHECK,a.id),{}),runAt=Date.now();await set(key(CHECK,a.id),{...cp,lastError:String(e?.message||e),lastCheckAt:runAt,lastRunComplete:false,lastRunMode:'error',lastRunAt:runAt,lastRunSavedCount:count,lastRunReadCount:readCount,version:VERSION})}catch{}}
-  health(`⚠ ${String(e?.message||e)}｜未送信分は次回に引継ぎ`,'error');
- }finally{active=null;scanning=false;stop=false}
-}
-let scheduled=0,autoTimer=0,autoPanel=null,lastAutoAt=0;
-function scheduleAuto(delay=250){
- if(isDmRoute())return;
+let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0;
+function scheduleAuto(delay=150){
  clearTimeout(autoTimer);
  autoTimer=setTimeout(()=>{
-  const p=findPanel();
-  if(!p){autoPanel=null;autoWindowDonePanel=null;livePanel=null;liveAccount='';liveReadSeen=new Set();liveSavedTotal=0;return}
-  if(scanning||autoWindowRunning){autoTimer=setTimeout(()=>scheduleAuto(120),160);return}
-  autoPanel=p;lastAutoAt=Date.now();
-  if(autoWindowDonePanel===p)void scan({fastOnly:true});else void autoReadVisibleWindow()
- },delay)
+  const panel=isDmRoute()?null:findPanel();
+  if(!panel){if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;if(!scanning)stop=false;return}
+  if(scanning||document.visibilityState==='hidden')return;
+  if(panel!==autoPanel){stop=false;pausedPanel=null}
+  if(stop){pausedPanel=panel;return}
+  if(pausedPanel===panel)return;
+  if(autoPanel===panel&&Date.now()-lastAutoAt<15000)return;
+  autoPanel=panel;lastAutoAt=Date.now();void scan({automatic:true});
+ },delay);
 }
-setTimeout(()=>scheduleAuto(180),80);
-new MutationObserver(()=>{clearTimeout(scheduled);scheduled=setTimeout(()=>scheduleAuto(80),50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
-document.addEventListener('scroll',()=>{if(findPanel())scheduleAuto(140)},true);
-document.addEventListener('click',e=>{if(isDmRoute())return;const el=e.target instanceof Element?e.target.closest('button,[role="button"],[aria-label],[title],[data-testid]'):null;if(!el)return;const meta=clean([el.textContent,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid')].join(' '));if(/(?:通知|お知らせ|notification|notice|bell)/iu.test(meta))scheduleAuto(80)},true);
-window.addEventListener('pageshow',()=>scheduleAuto(180));
-window.addEventListener('focus',()=>scheduleAuto(180));
-window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,autoReadVisibleWindow,rowData,findPanel,directPanel,isDmRoute,scanDomLegacy};
+setTimeout(()=>scheduleAuto(),80);
+new MutationObserver(()=>scheduleAuto()).observe(document.documentElement,{subtree:true,childList:true});
+const poll=setInterval(()=>scheduleAuto(),15000);
+window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);window.__mumeiNotificationNetwork3300?.stop?.()});
+window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
+window.addEventListener('focus',()=>scheduleAuto());
+window.__mumeiNotificationReaderV4={version:VERSION,scan,scheduleAuto,rowData,findPanel,directPanel,isDmRoute};
 })();
