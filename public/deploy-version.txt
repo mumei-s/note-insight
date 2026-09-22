@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.7 / notification 3.6.5 / dashboard 1.4.5 / DM 1.4.4
-Bottom-first mutual relationship comparison and confirmed follower losses.
+INSIGHT 2026.09.22.8 / notification 3.6.5 / dashboard 1.4.6 / DM 1.4.5
+Repair DM room attribution and history progress, daily PV coverage, and category return navigation.
