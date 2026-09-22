@@ -30,8 +30,8 @@
 <script>
 const TOOL_KEY='mumei-dm-tool-version',RAW='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js',RELEASE='./insight-release.json',PENDING='mumei-dm-install-pending-v1';
 const q=new URLSearchParams(location.search),install=document.getElementById('install'),result=document.getElementById('result');
-function safe(v){try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
-const back=safe(q.get('return'))||new URL('./?insightMode=normal#dashboard',location.href).href;document.getElementById('back').href=back;
+function safe(v){if(!String(v||'').trim())return'';try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')&&!/\/(?:notification-browser-install|dm-browser-install|tool-setup)\.html$/.test(u.pathname)?u.href:''}catch{return''}}
+const back=safe(q.get('return'))||new URL('./?insightMode=dm#dashboard',location.href).href;document.getElementById('back').href=back;
 let latest='',returning=false;
 const current=()=>String(localStorage.getItem(TOOL_KEY)||'');
 function cmp(a,b){const pa=String(a||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1}return 0}
