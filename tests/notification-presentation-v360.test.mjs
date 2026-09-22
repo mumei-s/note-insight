@@ -71,3 +71,18 @@ test('立体円グラフは正確な割合を保ち、凡例を選ぶと件数�
 });
 
 test('通知取得が止まっていても公式ダッシュボードの取得結果を先に表示する',async()=>{const h=setup();let dashboardOnly=false;globalThis.fetch=async(url,init)=>{if(String(url).includes('notification-feed'))return new Promise(()=>{});dashboardOnly=JSON.parse(init.body).dashboardOnly;return{ok:true,json:async()=>({ok:true,noteId:'tester',latestDashboard:{pageViews:12345,likes:300,comments:100,capturedAt:'2026-09-22T00:00:00Z'},topArticles:[],followers:[]})}};const{MemberInsightAnalyticsProV3:C}=await component('src/member-insight-analytics-pro-v3.tsx',h.ctx,{...stubs,'./insight-release':{CURRENT_DASHBOARD_VERSION:'test',CURRENT_INSIGHT_APP_VERSION:'test',CURRENT_NOTIFICATION_VERSION:'test'},'./insight-donut':{InsightDonut:()=>React.createElement('div',null,'円グラフ')}});await act(async()=>{h.root.render(React.createElement(C));await new Promise(r=>setTimeout(r,20))});assert.equal(dashboardOnly,true);assert.match(document.body.textContent,/12,345/);assert.match(document.body.textContent,/通知との照合を更新中/);assert.ok(document.querySelector('.mipro-fold[open]'));await act(async()=>h.root.unmount());h.dom.window.close()});
+
+test('新着のアイコン補完を行い、次の差分応答に画像がなくても消さない',async()=>{
+ const h=setup(),timers=[];h.dom.window.setInterval=(fn,ms)=>{timers.push({fn,ms});return timers.length};h.dom.window.clearInterval=()=>{};
+ const row={id:999,notification_type:'buzz',raw_text:'あなたの記事が話題です！',target_url:'https://note.com/person/n/n123',actor_url:'https://note.com/person',actor_name:'人物',captured_at:'2026-09-22T01:00:00Z'};let holdIcons=false;
+ globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons')){if(holdIcons)return new Promise(()=>{});return{ok:true,json:async()=>({items:[{noteId:'person',image:'https://example.test/person.jpg'}]})}}const input=JSON.parse(init?.body||'{}');return{ok:true,json:async()=>({ok:true,noteId:'tester',rows:[row],total:1,categoryCounts:{all:1,buzz:1},categoryPreview:{buzz:[row]},watermark:'2026-09-22T01:00:00Z',unknownKinds:['future_kind']})}};
+ const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
+ await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,25))});assert.equal(document.querySelector('.minf-avatar').getAttribute('src'),'https://example.test/person.jpg');assert.doesNotMatch(document.body.textContent,/新しい通知形式|分類ルールの更新が必要/);
+ holdIcons=true;await act(async()=>{timers.find(t=>t.ms===1500).fn();await new Promise(r=>setTimeout(r,10))});assert.equal(document.querySelector('.minf-avatar').getAttribute('src'),'https://example.test/person.jpg');
+ await act(async()=>h.root.unmount());h.dom.window.close();
+});
+
+test('画像の読込に失敗しても通知のアイコン欄を空にしない',async()=>{
+ const h=setup();globalThis.fetch=async()=>({ok:true,json:async()=>({ok:true,noteId:'tester',rows:[{id:'broken',notification_type:'image_used',raw_text:'画像を使用しました',actor_name:'人物',actor_image_url:'https://example.test/broken.jpg',captured_at:'2026-09-22T02:00:00Z'}],total:1})});
+ const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,10))});const avatar=document.querySelector('.minf-avatar');assert.equal(avatar.tagName,'IMG');await act(async()=>avatar.dispatchEvent(new window.Event('error')));assert.ok(document.querySelector('.minf-avatar.fallback'));assert.match(document.body.textContent,/画像の使用/);await act(async()=>h.root.unmount());h.dom.window.close();
+});

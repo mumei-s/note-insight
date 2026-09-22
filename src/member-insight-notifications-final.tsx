@@ -5,7 +5,7 @@ import "./member-insight-notifications-final.css";
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
 const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const PAGE=100;
-const CLASSIFIER_VERSION="action-v25-window";
+const CLASSIFIER_VERSION="action-v26-formats";
 type Row=Record<string,any>;
 type CachedView={rows:Row[];total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number};
 const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
@@ -13,22 +13,22 @@ const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
 function accountKey(memberId=""){return (requestedNotificationAccount()||memberId||currentStoredInsightAccount()?.noteId||"").toLowerCase()}
 function boardRow(r:Row){return r.meta?.noise_reason!=="non-notification-api-capture"&&r.notification_type!=="capture_noise"&&!(!r.target_url&&!r.meta?.kind&&/^(?:[\d,.万]+件){1,2}\d{1,2}月\d{1,2}日まで$/u.test(String(r.raw_text||"").replace(/\s+/g,"")))}
 function readBoard(account:string):Row[]{if(!account)return[];const cached=NOTIFICATION_RECENT_ALL.get(account);if(cached)return cached.filter(boardRow);try{const rows=JSON.parse(localStorage.getItem(`mumei-notification-board:${account}`)||"[]");if(Array.isArray(rows)){NOTIFICATION_RECENT_ALL.set(account,rows.filter(boardRow));return rows.filter(boardRow)}}catch{}return[]}
-function retainBoard(account:string,rows:Row[]){const map=new Map(readBoard(account).map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows)map.set(String(r.id||rowKey(r)),r);const merged=[...map.values()].sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,2000);NOTIFICATION_RECENT_ALL.set(account,merged);
+function retainBoard(account:string,rows:Row[]){const map=new Map(readBoard(account).map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}const merged=[...map.values()].sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,2000);NOTIFICATION_RECENT_ALL.set(account,merged);
  for(const [key,view] of NOTIFICATION_VIEW_CACHE){if(!key.startsWith(account+"|"))continue;const[,kind,day,page]=key.split("|"),values=new Map(view.rows.map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));if(page!=="1"&&!values.has(id))continue;const match=boardRow(r)&&(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day);if(match)values.set(id,r);else values.delete(id)}NOTIFICATION_VIEW_CACHE.set(key,{...view,rows:[...values.values()].sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,PAGE)})}
  try{localStorage.setItem(`mumei-notification-board:${account}`,JSON.stringify(merged))}catch{}return merged}
 function filterBoard(account:string,kind:string,day:string){return readBoard(account).filter(r=>(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).slice(0,PAGE)}
 
 
-const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["question_answer","質問への回答"],["purchased_article_updated","購入した記事の更新"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["other","その他・未分類"]] as const;
+const CATS=[["all","すべて"],["my_article_magazine_added","自分の記事追加"],["comment_like","コメント♡"],["reply_self","自分の記事返信"],["reply_other","相手の記事返信"],["reply_unknown","返信先確認待ち"],["magazine_follow","マガジンフォロー"],["magazine_article_added","マガジン記事追加"],["magazine_join","マガジン参加"],["membership_board","メンシプ掲示板"],["membership_board_reply","掲示板返信"],["membership_reaction_self","自分のメンシプ反応"],["membership_reaction_joined","参加中のメンシプ反応"],["membership_reaction_unknown","メンシプ所有者確認待ち"],["membership_started","メンシプ開始"],["membership_plan","プラン追加"],["membership_join","メンシプ参加"],["question_box_started","質問箱開始"],["question_answer","質問への回答"],["purchased_article_updated","購入した記事の更新"],["purchase","購入"],["tip","チップ・サポート"],["buzz","話題"],["rating","高評価"],["points","ポイント"],["quote","引用・紹介"],["image_used","画像の使用"],["other","その他・未分類"]] as const;
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
-const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",other:"🔔"};
+const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",image_used:"🖼",other:"🔔"};
 
 async function post(body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);const abort=()=>c.abort();signal?.addEventListener("abort",abort,{once:true});try{const r=await fetch(FEED,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");return p}finally{window.clearTimeout(timer);signal?.removeEventListener("abort",abort)}}
 const date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
 const dayLabel=(v:string)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return"全期間";const[y,m,d]=v.split("-").map(Number);return`${y}/${m}/${d}`};
 const canonical=(v:any)=>String(v||"").replace(/保完(?=\s|$)/g," ").replace(/\s+/g," ").replace(/\s(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)$/u,"").trim();
 const short=(v:any,n=170)=>{const s=canonical(v);return s.length>n?s.slice(0,n-1)+"…":s};
-function noteId(url:any){try{const id=new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]||"";return /^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():""}catch{return""}}
+function noteId(url:any){try{const id=new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]||"";return new URL(String(url||"")).hostname==="note.com"&&/^[A-Za-z0-9_-]+$/.test(id)&&!["m","n","messages","settings","membership"].includes(id)?id.toLowerCase():""}catch{return""}}
 function requestedNotificationAccount(){try{return String(new URLSearchParams(window.location.search).get("notificationAccount")||sessionStorage.getItem("mumei-insight-notification-account")||"").trim().replace(/^@/,"").toLowerCase()}catch{return""}}
 function creatorTop(url:any,selfId=""){const id=noteId(url);return id&&id!==String(selfId||"").toLowerCase()?`https://note.com/${id}`:""}
 function safeActorImage(v:any){const s=String(v||"");return s&&!/magazine_cover|ogp|cover|\/assets\/notices\/|notices\/icon_|icon_(?:comment|magazine|notification|notice)/i.test(s)?s:""}
@@ -40,8 +40,9 @@ function mergeActorIdentity(r:Row,known:Row):Row{return{...r,actor_name:r.actor_
 function mergeMagazineJoinRows(rows:Row[]){const out:Row[]=[],map=new Map<string,number>();for(const r of rows){if(String(r.notification_type||"")!=="magazine_join"){out.push(r);continue}const day=String(r.captured_at||r.occurred_at||"").slice(0,10),k=`magazine_join|${canonical(r.raw_text)}|${day}`;const i=map.get(k);if(i==null){map.set(k,out.length);out.push(r)}else out[i]=mergePair(out[i],r)}return out}
 function actorStem(r:Row){const raw=canonical(r.raw_text),type=String(r.notification_type||"");if(type==="my_article_magazine_added"){const end=raw.indexOf("に追加されました");return end>=0?raw.slice(0,end+8):""}if(type==="reply"){const token="さんがあなたのコメントに返信しました",end=raw.indexOf(token);return end>=0?raw.slice(0,end+token.length):""}if(type==="comment"){const token="さんがあなたの記事にコメントしました",end=raw.indexOf(token);return end>=0?raw.slice(0,end+token.length):""}return""}
 function eventMs(r:Row){return Date.parse(String(r.captured_at||r.occurred_at||""))||0}
-function repairActorRows(rows:Row[]){const work:Row[]=rows.map((r:Row):Row=>{const m=metaActor(r);return{...r,actor_name:r.actor_name||m.name||null,actor_url:r.actor_url||m.url||null,actor_image_url:safeActorImage(r.actor_image_url)||m.image||null}});const alias=new Map<string,Row>();for(const r of work){const name=canonical(r.actor_name).toLowerCase();if(name&&r.actor_url){const prev=alias.get(name);if(!prev||richness(r)>richness(prev))alias.set(name,r)}}for(let i=0;i<work.length;i++){let r:Row=work[i];const type=String(r.notification_type||"");if(type==="my_article_magazine_added"&&!r.actor_url){const id=noteId(r.target_url);if(id)r={...r,actor_url:`https://note.com/${id}`,actor_name:r.actor_name||`追加先の運営者 @${id}`}}const name=canonical(r.actor_name).toLowerCase(),known=name?alias.get(name):null;if(known)r=mergeActorIdentity(r,known);const stem=actorStem(r),at=eventMs(r);if(stem){let best:Row|null=null,bestGap=Infinity;for(let j=0;j<work.length;j++){if(i===j)continue;const q=work[j];if(String(q.notification_type||"")!==type||actorStem(q)!==stem)continue;const gap=Math.abs(at-eventMs(q));if(gap<=180000&&gap<bestGap&&(q.actor_url||q.target_url||safeActorImage(q.actor_image_url))){best=q;bestGap=gap}}if(best)r=mergeActorIdentity(r,best)}if(type==="my_article_magazine_added"&&!r.actor_url){const id=noteId(r.target_url);if(id)r={...r,actor_url:`https://note.com/${id}`,actor_name:r.actor_name||`追加先の運営者 @${id}`}}work[i]=r}return work}
-async function enrich(rows:Row[]){const ids=[...new Set(rows.filter(r=>!safeActorImage(r.actor_image_url)).map(r=>noteId(r.actor_url)).filter(Boolean))];if(!ids.length)return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||null}));try{const res=await fetch(ICON,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteIds:ids}),cache:"no-store"}),p=await res.json(),m=new Map((p.items||[]).map((x:any)=>[String(x.noteId||"").toLowerCase(),x.image]));return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||String(m.get(noteId(r.actor_url))||"")||null}))}catch{return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||null}))}}
+function keepIcon(row:Row,prior?:Row):Row{if(!prior||row.actor_url&&prior.actor_url&&row.actor_url!==prior.actor_url)return row;return{...row,actor_image_url:safeActorImage(row.actor_image_url)||safeActorImage(prior.actor_image_url)||null}}
+function repairActorRows(rows:Row[]){const work:Row[]=rows.map((r:Row):Row=>{const m=metaActor(r);return{...r,actor_name:r.actor_name||m.name||null,actor_url:r.actor_url||m.url||null,actor_image_url:safeActorImage(r.actor_image_url)||m.image||null}});const alias=new Map<string,Row>();for(const r of work){const name=canonical(r.actor_name).toLowerCase();if(name&&r.actor_url){const prev=alias.get(name);if(!prev||richness(r)>richness(prev))alias.set(name,r)}}for(let i=0;i<work.length;i++){let r:Row=work[i];const type=String(r.notification_type||"");if(["my_article_magazine_added","buzz","quote","image_used"].includes(type)&&!r.actor_url){const id=noteId(r.target_url);if(id)r={...r,actor_url:`https://note.com/${id}`,actor_name:r.actor_name||(type==="my_article_magazine_added"?`追加先の運営者 @${id}`:`@${id}`)}}const name=canonical(r.actor_name).toLowerCase(),known=name?alias.get(name):null;if(known)r=mergeActorIdentity(r,known);const stem=actorStem(r),at=eventMs(r);if(stem){let best:Row|null=null,bestGap=Infinity;for(let j=0;j<work.length;j++){if(i===j)continue;const q=work[j];if(String(q.notification_type||"")!==type||actorStem(q)!==stem)continue;const gap=Math.abs(at-eventMs(q));if(gap<=180000&&gap<bestGap&&(q.actor_url||q.target_url||safeActorImage(q.actor_image_url))){best=q;bestGap=gap}}if(best)r=mergeActorIdentity(r,best)}if(["my_article_magazine_added","buzz","quote","image_used"].includes(type)&&!r.actor_url){const id=noteId(r.target_url);if(id)r={...r,actor_url:`https://note.com/${id}`,actor_name:r.actor_name||(type==="my_article_magazine_added"?`追加先の運営者 @${id}`:`@${id}`)}}work[i]=r}return work}
+async function enrich(rows:Row[]):Promise<Row[]>{const ids=[...new Set(rows.filter(r=>!safeActorImage(r.actor_image_url)).map(r=>noteId(r.actor_url)).filter(Boolean))];if(!ids.length)return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||null}));try{const res=await fetch(ICON,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteIds:ids}),cache:"no-store"}),p=await res.json(),m=new Map((p.items||[]).map((x:any)=>[String(x.noteId||"").toLowerCase(),x.image]));return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||String(m.get(noteId(r.actor_url))||"")||null}))}catch{return rows.map(r=>({...r,actor_image_url:safeActorImage(r.actor_image_url)||null}))}}
 function actorName(r:Row){if(r.actor_name)return String(r.actor_name);const m=canonical(r.raw_text).match(/^(.{1,120}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||"note通知"}
 function displayType(r:Row){return String(r.display_category||r.notification_type||"other")}
 function context(r:Row){if(r.context_label)return String(r.context_label);const u=String(r.target_url||r.source_url||"");const id=noteId(u);if(/\/n\//.test(u))return id?`@${id}の記事`:"記事";if(/\/m\//.test(u))return"マガジン";if(/\/membership/.test(u))return"メンシプ";return""}
@@ -49,7 +50,24 @@ function presentation(r:Row){const raw=canonical(r.raw_text),type=displayType(r)
 function href(r:Row){return String(r.target_url||r.source_url||r.actor_url||"")}
 function targetLabel(r:Row){const u=String(r.target_url||"");if(/\/membership/.test(u))return"メンシプを開く ↗";if(/\/m\//.test(u))return"対象マガジン ↗";if(/\/n\//.test(u))return"対象記事 ↗";return u?"対象ページ ↗":r.actor_url?"相手ページ ↗":""}
 function rowKey(r:Row){return`${displayType(r)}|${canonical(r.raw_text)}|${String(r.actor_url||"").split("?")[0]}|${String(r.occurred_at||"")}`}
-function Avatar({row,selfId}:{row:Row;selfId:string}){const name=actorName(row),img=String(row.actor_image_url||""),type=displayType(row),top=creatorTop(row.actor_url,selfId),visual=img?<img className="minf-avatar" src={img} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"/>:<span className="minf-avatar fallback">{ICON_FALLBACK[type]||([...(name||"")][0]||"🔔")}</span>;return top?<a href={top} target="_blank" rel="noreferrer" aria-label={`${name}のクリエイターページ`}>{visual}</a>:visual}
+function Avatar({row,selfId}:{row:Row;selfId:string}){
+ const name=actorName(row),img=safeActorImage(row.actor_image_url),[failed,setFailed]=useState("");
+ const type=displayType(row),top=creatorTop(row.actor_url,selfId),visual=img&&failed!==img?<img className="minf-avatar" src={img} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={()=>setFailed(img)}/>:<span className="minf-avatar fallback" aria-label={name}>{ICON_FALLBACK[type]||([...(name||"")][0]||"🔔")}</span>;
+ return top?<a href={top} target="_blank" rel="noreferrer" aria-label={`${name}のクリエイターページ`}>{visual}</a>:visual;
+}
+
+export function NotificationFormatAlerts({ownerSession=false}:{ownerSession?:boolean}){
+ const[alerts,setAlerts]=useState<Row[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState("");
+ const live=useRef(true);
+ async function request(action="list",kind=""){
+  const token=localStorage.getItem(ownerSession?"mumei-unified-owner-token":INSIGHT_TOKEN_KEY)||"";if(!token)return;
+  try{const r=await fetch(FEED.replace("feed-final","format-reviews"),{method:"POST",headers:{"Content-Type":"application/json",[ownerSession?"X-Owner-Token":"X-Insight-Token"]:token},body:JSON.stringify({action,kind}),cache:"no-store"});const p=await r.json();if(!r.ok||!p.ok)throw new Error("分類案内を確認できません");if(live.current){setAlerts(p.alerts||[]);setError("")}}catch(e){if(live.current)setError(e instanceof Error?e.message:String(e))}finally{if(live.current)setBusy("")}
+ }
+ useEffect(()=>{live.current=true;void request();const refresh=()=>{if(document.visibilityState!=="hidden")void request()},timer=window.setInterval(refresh,30000);window.addEventListener("focus",refresh);return()=>{live.current=false;window.clearInterval(timer);window.removeEventListener("focus",refresh)}},[ownerSession]);
+ if(!alerts.length&&!error)return null;
+ return <aside className="minf-owner-formats" aria-label="運営者向け分類案内"><b>運営者向け · 分類ルールの確認</b><small>全参加者の新しい通知形式を集約しています。ルールの対応後、保存済み通知も自動で再分類します。</small>{error?<p role="status">{error}</p>:null}{alerts.map(a=><div className="minf-category-alert" key={a.kind}><span>{a.read_at?"既読":"● 未読"} · {a.kind}</span><small>{Number(a.notification_count||0)}件をその他に保存済み</small><button disabled={Boolean(busy)} onClick={()=>{setBusy(a.kind);void request(a.read_at?"unread":"read",a.kind)}}>{busy===a.kind?"保存中…":a.read_at?"未読に戻す":"既読にする"}</button></div>)}</aside>
+}
+
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
   const[rows,setRows]=useState<Row[]>(()=>readBoard(accountKey(memberNoteId)).slice(0,PAGE)),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
@@ -57,8 +75,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:""});
   const lastReaderRun=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
-  const[alerts,setAlerts]=useState<string[]>([]),[alertsRead,setAlertsRead]=useState(false);
-  const alertKey=()=>`mumei-notification-alert-read:${accountKey(memberNoteId)}`;
+  const view=useRef({kind,selectedDay});view.current={kind,selectedDay};
 
   const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>({}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
   const[readerStatus,setReaderStatus]=useState<any>(null);
@@ -70,7 +87,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     try{const x=await post({kind:k,page:p,pageSize:PAGE,day:day||null,includeCategoryPreview:p===1,classificationRevision:repairRevision.current},controller.signal);if(!valid())return;
       const feedId=String(x.noteId||"").toLowerCase(),expected=accountKey(memberNoteId).toLowerCase();
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
-      const list=mergeMagazineJoinRows(repairActorRows(x.rows||[]));if(!valid())return;
+      const stored=new Map(readBoard(accountKey(memberNoteId)).map(r=>[String(r.id||rowKey(r)),r]));const list=mergeMagazineJoinRows(repairActorRows(x.rows||[])).map(r=>keepIcon(r,stored.get(String(r.id||rowKey(r)))));if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
       setRows(list);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
       NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
@@ -80,9 +97,8 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         NOTIFICATION_VIEW_CACHE.set(`${cacheAccount}|${category}|${day||""}|1`,{rows:entries,total:Number(nextCounts[category]||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
       }
       if(Number(x.reclassifyPending)>0&&!repairRunning.current&&lastRepairSync.current!==String(x.lastSyncAt||"initial")){lastRepairSync.current=String(x.lastSyncAt||"initial");void reclassify(true)}
-      const unknown=Array.isArray(x.unknownKinds)?x.unknownKinds:[];setAlerts(unknown);try{setAlertsRead(localStorage.getItem(alertKey())===unknown.join("|"))}catch{}
       // Identity enrichment never delays the notification text.
-      void enrich(list).then(enriched=>{if(!valid())return;setRows(enriched);retainBoard(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:enriched})});
+      void enrich(list).then(enriched=>{if(!valid())return;setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))));retainBoard(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:enriched})});
     }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
@@ -95,9 +111,10 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);
       const incoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow);retainBoard(account,incoming);
       if(incoming.length)setRows(previous=>{
-        const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming)map.set(String(r.id||rowKey(r)),r);
+        const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
         return [...map.values()].filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,PAGE);
       });
+      void enrich(incoming).then(enriched=>{if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)return;retainBoard(account,enriched);setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))))});
       setCheckedAt(new Date());
     }catch{/* Cached board remains visible; the full feed reports persistent errors. */}
     finally{if(recentRequest.current.controller===controller)recentRequest.current.controller=null}
@@ -120,15 +137,19 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         finally{window.clearTimeout(timer)}
         checked+=Number(x.checked||0);moved+=Number(x.moved||0);pending=Number(x.pending||0);
         const next=x.nextCursor||null;if(next&&(next===cursor||seen.has(next)))throw new Error("分類位置が進まないため停止しました");if(next)seen.add(next);cursor=next;finished=!next;
-        localStorage.setItem(progressKey,JSON.stringify({version:CLASSIFIER_VERSION,cursor,checked,moved}));
+        try{localStorage.setItem(progressKey,JSON.stringify({version:CLASSIFIER_VERSION,cursor,checked,moved}))}catch{/* Server progress remains acknowledged even if browser storage is full. */}
         setRepairStatus(`${checked}件確認・${moved}件修正${cursor?"・続きあり":""}`);
-        if(x.moved){repairRevision.current++;void load(1,kind,true,selectedDay);}
+        if(Array.isArray(x.rows)&&x.rows.length){
+          const repaired=repairActorRows(x.rows),current=view.current;retainBoard(account,repaired);repairRevision.current++;
+          setRows(previous=>{const map=new Map(previous.map(r=>[String(r.id),r]));for(const r of repaired)if(map.has(String(r.id)))map.set(String(r.id),keepIcon(r,map.get(String(r.id))));return [...map.values()].filter(r=>current.kind==="all"||displayType(r)===current.kind)});
+        }
+        if(x.moved){repairRevision.current++;void load(1,view.current.kind,true,view.current.selectedDay);}
         if(cursor)await new Promise(r=>window.setTimeout(r,50));
       }while(cursor);
       if(!finished){setRepairStatus(`${checked}件まで確認・停止中（続きから再開できます）`);return false}
-      localStorage.removeItem(progressKey);localStorage.setItem(`mumei-notification-reclassify-version:${account}`,CLASSIFIER_VERSION);
+      try{localStorage.removeItem(progressKey);localStorage.setItem(`mumei-notification-reclassify-version:${account}`,CLASSIFIER_VERSION)}catch{}
       setRepairStatus(`再分類完了：${checked}件確認・${moved}件修正。判別できない通知はその他に保存します。`);
-      void load(1,kind,true,selectedDay);return true;
+      void load(1,view.current.kind,false,view.current.selectedDay);return true;
     }catch(e){setRepairStatus(`途中保存済み・再開できます：${e instanceof Error?e.message:String(e)}`);return false}
     finally{repairRunning.current=false;setReclassifying(false)}
   }
@@ -197,7 +218,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         {readerStatus?.lastError?<p className="minf-reader-error">⚠ {String(readerStatus.lastError)}</p>:null}
       </div>
     </details>
-    {alerts.length?<div className="minf-category-alert" role="status"><span>{alertsRead?"既読":"● 未読"} · 新しい通知形式 {alerts.length}種類</span><small>その他に保存済み。分類ルールの更新が必要です：{alerts.join("、")}</small><button onClick={()=>{try{localStorage.setItem(alertKey(),alertsRead?"":alerts.join("|"))}catch{}setAlertsRead(!alertsRead)}}>{alertsRead?"未読に戻す":"既読にする"}</button></div>:null}
+    {selfId==="ss_yr"?<NotificationFormatAlerts/>:null}
     {error?<p className="minf-error">{error}</p>:null}
     {loading&&!rows.length?<p className="minf-empty">通知を読み込み中…</p>:rows.length?<div className="minf-list">{rows.map((r,i)=>{const h=href(r),actor=actorName(r),p=presentation(r),type=displayType(r),label=LABEL[type]||"その他",actorTop=creatorTop(r.actor_url,selfId);return <article key={r.id||`${rowKey(r)}-${i}`} className={`type-${type}`}><div className="minf-meta"><span>{label}</span>{r.context_label?<b>{r.context_label}</b>:null}<time>{date(r.occurred_at||r.captured_at)}</time></div><div className="minf-who"><Avatar row={r} selfId={selfId}/><div>{actorTop?<a className="minf-actor" href={actorTop} target="_blank" rel="noreferrer">{actor}</a>:<span className="minf-actor static">{actor}</span>}</div></div>{h?<a className="minf-main" href={h} target="_blank" rel="noreferrer"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</a>:<div className="minf-main static"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</div>}{type==="my_article_magazine_added"?<div className="minf-return-links">{r.meta?.article_url?<a href={r.meta.article_url} target="_blank" rel="noreferrer">追加された自分の記事 ↗</a>:null}{r.meta?.magazine_url?<a href={r.meta.magazine_url} target="_blank" rel="noreferrer">追加先マガジン ↗</a>:null}</div>:null}{targetLabel(r)&&h?<a className="minf-target" href={h} target="_blank" rel="noreferrer">{targetLabel(r)}</a>:null}</article>})}</div>:<p className="minf-empty">{selectedDay?`${dayLabel(selectedDay)} のこの分類には通知がありません。`:"この分類の通知はありません。"}</p>}
     {pages>1?<div className="minf-pager"><button disabled={page<=1||loading} onClick={()=>void load(page-1,kind,false,selectedDay)}>← 前</button><label><span>ページ</span><select value={page} onChange={e=>void load(Number(e.target.value),kind,false,selectedDay)}>{Array.from({length:pages},(_,i)=><option key={i+1} value={i+1}>{i+1} / {pages}</option>)}</select></label><button disabled={page>=pages||loading} onClick={()=>void load(page+1,kind,false,selectedDay)}>次 →</button></div>:null}
