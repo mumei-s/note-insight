@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.5 / notification 3.6.3 / dashboard 1.4.5 / DM 1.4.3
-DM controls avoid the message composer and hide while typing; drafts stay untouched.
+INSIGHT 2026.09.22.6 / notification 3.6.4 / dashboard 1.4.5 / DM 1.4.4
+Owner format review, persistent icons, notification filters; automatic DM history and durable per-room delta checkpoints.
