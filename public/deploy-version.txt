@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.2 / notification 3.6.1 / DM 1.4.1
+INSIGHT 2026.09.22.3 / notification 3.6.2 / DM 1.4.2
 Durable API notification window, cached category display, resumable DM, compact controls, accurate chart axes.
