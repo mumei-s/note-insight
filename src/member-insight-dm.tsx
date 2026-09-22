@@ -51,7 +51,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     try{
       const x=await pair("pair-start");
       const url=String(x.noteUrl||"");if(!url)throw new Error("DM_PAIR_URL_MISSING");
-      setNotice("DM連携を設定します。noteのDM画面を勝手に切り替えたり、相手を自動で開いたりしません。");
+      setNotice("noteのDMを開くと、自動で本文を保存します。");
       window.open(url,"_blank","noopener,noreferrer")
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
@@ -91,11 +91,11 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         <div className="midm-control-detail">
           <span className="midm-version-state">{toolVersion?`DM同期 v${toolVersion}`:"DM同期ツール未導入"}{dmUpdateAvailable?` / 最新 v${latestDmVersion}`:""}</span>
           <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
-          <small>更新操作は上の更新ボタン1つに統一しています。本人通知とは完全に別系統です。</small>
+
         </div>
       </details>
     </div>
-    {reader?<p className="midm-read-status" role="status"><b>{reader.lastRunComplete?"✓ 全件確認済み":reader.lastError?"一部未取得・再開待ち":"読込中・途中保存"}</b><span>相手 {Number(reader.currentThread||0)} / {Number(reader.threadCount||0)} · 読込 {Number(reader.lastReadCount||0)} · 保存 {Number(reader.lastSavedCount||0)}</span>{reader.lastError?<small>{String(reader.lastError)}</small>:null}</p>:null}
+    {reader?<p className="midm-read-status" role="status"><b>{reader.lastRunComplete?(reader.scope==="all"?"✓ 全会話保存完了・新着待ち":"✓ この会話の全件保存完了・新着待ち"):reader.lastError?"途中保存・自動再試行待ち":"過去の本文を取得中"}</b><span>{reader.scope==="all"?`完了 ${Number(reader.currentThread||0)} / ${Number(reader.threadCount||0)}人 · `:""}本文保存 {Number(reader.storedMessageCount||0)}件</span>{reader.lastError?<small>{String(reader.lastError)}</small>:null}</p>:null}
     {!Number(summary?.messages)&&people.length>0?<p className="midm-read-status" role="status"><b>相手一覧のみ取得・本文は未保存</b><span>人数の取得はDM本文の保存完了を意味しません。</span></p>:null}
     {serverErrors.length?<details className="midm-read-status"><summary>本文を取得できていない相手 {serverErrors.length}人</summary>{serverErrors.map((x:Row)=><p key={x.threadKey}>{x.peerName||"相手"}：{x.error==="DM_ROOM_REDIRECTED"?"会話画面を開けませんでした":x.error==="DM_CONVERSATION_NOT_FOUND"?"会話本文の表示待ちで停止":x.error==="DM_PAGINATION_UNVERIFIED"?"本文は途中保存・過去分の確認待ち":x.error} · {fmt(x.checked_at)}</p>)}</details>:null}
     {notice?<p className="midm-notice">{notice}</p>:null}
