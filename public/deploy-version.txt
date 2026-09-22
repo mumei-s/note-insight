@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.9 / notification 3.6.5 / dashboard 1.4.7 / DM 1.4.5
-Repair DM room attribution and history progress, daily PV coverage, and category return navigation.
+INSIGHT 2026.09.22.10 / notification 3.6.5 / dashboard 1.4.7 / DM 1.4.5
+Stop competing top launcher writers and preserve update guide controls.
