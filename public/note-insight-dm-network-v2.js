@@ -1,8 +1,8 @@
 (function(){
 'use strict';
-if(location.hostname!=='note.com'||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
+if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.2.1';
+const VERSION='1.4.0';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -13,7 +13,7 @@ async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return 
 function request(body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('DM_REQUEST_UNAVAILABLE'));fn({method:'POST',url:INGEST,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||('HTTP_'+r.status)))},onerror:()=>reject(new Error('DM_NETWORK_ERROR')),ontimeout:()=>reject(new Error('DM_TIMEOUT'))})})}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
 const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m?.[1]||'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
+function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/(?:api\/v[0-9]+\/)?messages\/rooms\/([^/?#]+)/i),id=m?.[1]||'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function abs(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const x=v.charCodeAt(i);a=Math.imul(a^x,16777619);b=Math.imul(b^x,3266489917)}return(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0')}
 const BODY=['body','message','text','content','message_body','messageBody','plain_text','plainText'];
@@ -49,7 +49,7 @@ function responseHint(url,body,json){
  try{const s=JSON.stringify(json).slice(0,250000).toLowerCase();return/(message_id|room_id|conversation_id|sender_id|messages)/.test(s)&&/(body|content|text)/.test(s)}catch{return false}
 }
 function extract(json,requestUrl,me){
- const out=[],seen=new Set(),currentRoom=roomFromUrl(location.href);
+ const out=[],seen=new Set(),currentRoom=roomFromUrl(requestUrl)||roomFromUrl(location.href);
  function walk(v,path='',depth=0,inheritedRoom=currentRoom){
   if(depth>10||v==null)return;
   if(Array.isArray(v)){for(const x of v.slice(0,3000))walk(x,path+'[]',depth+1,inheritedRoom);return}
@@ -68,14 +68,21 @@ function extract(json,requestUrl,me){
 }
 let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map();
 function addRoom(rows,field){for(const r of rows){const k=String(r.thread_key||'');if(!k)continue;const v=roomCounts.get(k)||{captured:0,saved:0};v[field]=Number(v[field]||0)+1;roomCounts.set(k,v)}}
-async function persist(rows){
- if(!rows.length)return;
- const a=await account();if(!a)return;const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)return;
+const OUTBOX='mumei_dm_network_outbox_v140:';
+function pending(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
+async function persist(rows,owner){
+ const a=await account();if(!a||owner&&owner!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+ const map=new Map(pending(a.id).map(r=>[r.message_key,r]));for(const row of rows)map.set(row.message_key,row);
+ localStorage.setItem(key(OUTBOX,a.id),JSON.stringify([...map.values()]));if(!map.size)return;
+ const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('DM_PAIR_REQUIRED');
  captured+=rows.length;addRoom(rows,'captured');
- for(let i=0;i<rows.length;i+=100){
-  const part=rows.slice(i,i+100),p=await request({noteId:a.id,threads:[],messages:part},token);
-  const confirmed=Number(p?.messageCount||0);saved+=confirmed;if(confirmed)addRoom(part.slice(0,confirmed),'saved');
-  const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastRunMode:'network',lastRunComplete:false,lastReadCount:captured,lastSavedCount:saved,lastError:'',version:VERSION})
+ while(map.size){
+  const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+  const part=[...map.values()].slice(0,50),p=await request({noteId:a.id,threads:[],messages:part},token),sent=new Set(part.map(r=>r.message_key));
+  const ack=new Set((p.confirmedMessageKeys||[]).filter(k=>sent.has(k)));for(const k of ack)map.delete(k);
+  localStorage.setItem(key(OUTBOX,a.id),JSON.stringify([...map.values()]));saved+=ack.size;addRoom(part.filter(r=>ack.has(r.message_key)),'saved');
+  const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastSaveAt:now,lastRunMode:'network',lastRunComplete:false,lastReadCount:captured,lastSavedCount:saved,lastError:'',version:VERSION});
+  if(ack.size!==part.length)throw new Error('DM_SAVE_UNCONFIRMED');
  }
 }
 async function inspect(meta,res,transport){
@@ -83,7 +90,7 @@ async function inspect(meta,res,transport){
  let txt='';try{txt=await res.text()}catch{return}if(!txt||txt.length>5000000)return;
  let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(meta.url,meta.body,json))return;
  const a=await account();if(!a)return;const rows=extract(json,meta.url,a.id);if(!rows.length)return;
- saving=saving.then(()=>persist(rows)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
+ saving=saving.then(()=>persist(rows,a.id)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
  await saving
 }
 function reqMeta(input,init){let url='',body=null,method='GET';try{if(typeof input==='string'||input instanceof URL){url=String(input);body=init?.body??null;method=String(init?.method||'GET').toUpperCase()}else if(input){url=String(input.url||'');body=init?.body??null;method=String(init?.method||input.method||'GET').toUpperCase()}}catch{}return{url:abs(url),body,method}}
@@ -99,5 +106,6 @@ function installXHR(){
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
 installFetch();installXHR();
+const retry=()=>{if(!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);setTimeout(retry,1200);
 window.__mumeiDmNetworkV2={version:VERSION,extract,getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
