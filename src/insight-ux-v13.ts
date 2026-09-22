@@ -1,12 +1,14 @@
 export {};
 const STYLE_ID="mumei-insight-ux-v13-style";
 const V14_STYLE_ID="mumei-insight-mobile-v14-style";
+const CURRENT_TOP_STYLE_ID="mumei-top-final-v17-style";
 let timer=0;
 
 function markV14(root:HTMLElement|null){
   if(!root)return false;
-  const active=Boolean(document.getElementById(V14_STYLE_ID));
-  if(active)root.dataset.mumeiV14="1";else delete root.dataset.mumeiV14;
+  const active=Boolean(document.getElementById(V14_STYLE_ID)||document.getElementById(CURRENT_TOP_STYLE_ID));
+  if(active){if(root.dataset.mumeiV14!=="1")root.dataset.mumeiV14="1"}
+  else if(root.dataset.mumeiV14)delete root.dataset.mumeiV14;
   return active
 }
 function installStyle(){
@@ -43,6 +45,9 @@ function ensureTopLink(card:HTMLElement,kind:"notice"|"dashboard"){
 }
 function enhanceTop(){
   const root=document.querySelector<HTMLElement>(".miv5-update");if(!root)return;markV14(root);
+  // Current controls own links, labels and heights. Recreating the legacy links
+  // makes their removal by the current observer trigger this writer again.
+  if(document.getElementById(CURRENT_TOP_STYLE_ID))return;
   const notice=root.querySelector<HTMLElement>(".miv5-source-card.notice"),dashboard=root.querySelector<HTMLElement>(".miv5-source-card.dashboard");
   if(notice)ensureTopLink(notice,"notice");
   if(dashboard){ensureTopLink(dashboard,"dashboard");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main strong"),"📊 分析");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main small"),"Dashboard同期＋本人通知 必須");setText(dashboard.querySelector<HTMLElement>(".miv5-source-main span"),"公式Dashboard＋INSIGHT")}
