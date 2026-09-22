@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.2';
+const VERSION='1.4.3';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -42,13 +42,15 @@ function relativeTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日
 function roomAnchors(doc=document){const map=new Map(),base=doc.defaultView?.location?.href||location.href;for(const a of doc.querySelectorAll('a[href]')){if(!shown(a))continue;const href=a.getAttribute('href')||'',k=roomKeyFromUrl(href);if(!k)continue;const u=new URL(href,base);u.hash='';map.set(k,{a,url:u.href,key:k})}return[...map.values()].slice(0,MAX_ROOMS)}
 function roomData(x){const a=x.a,box=a.closest('li,[role="listitem"],article')||a.parentElement||a;const text=clean((box&&box.textContent)||a.textContent),img=box&&box.querySelector?box.querySelector('img[src]'):null;let peerUrl=null,peerId=null;for(const l of (box&&box.querySelectorAll?box.querySelectorAll('a[href]'):[])){const id=creatorId(l.getAttribute('href'));if(id){peerId=id;peerUrl=new URL(l.getAttribute('href'),location.href).href;break}}const dt=box&&box.querySelector?box.querySelector('time[datetime],[datetime]'):null,tm=dt&&dt.getAttribute('datetime')||relativeTime(text);let name=clean((img&&img.getAttribute('alt'))||a.getAttribute('aria-label')||a.textContent).replace(/\s+(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前).*$/u,'').replace(/とのメッセージ(?:（未読のメッセージがあります）)?$/u,'').trim().slice(0,300)||null;return{thread_key:x.key,room_url:x.url,peer_note_id:peerId,peer_name:name,peer_url:peerUrl,peer_image_url:img?String(img.currentSrc||img.src||''):null,last_message_at:tm,meta:{preview:text.slice(0,4000),source:'note-dm-room-list-v1'}}}
 function previewMessage(t){let raw=clean(t?.meta?.preview||'');if(!raw)return null;const name=clean(t?.peer_name||'');let body=raw;if(name&&body.startsWith(name))body=body.slice(name.length).trim();body=body.replace(/とのメッセージ(?:（未読のメッセージがあります）)?/u,'').replace(/(?:たった今|昨日|約?\d+\s*(?:秒|分|時間|日|週)前)$/u,'').trim();if(!body)return null;return{thread_key:t.thread_key,message_key:'preview:'+t.thread_key+':'+hash(body),direction:'unknown',sender_name:t.peer_name||null,sender_url:t.peer_url||null,sender_image_url:t.peer_image_url||null,body,sent_at:t.last_message_at||null,raw_text:raw,attachment_name:null,attachment_url:null,attachment_type:null,meta:{source:'note-dm-room-preview-v130',preview:true}}}
-function textbox(doc=document){return[...doc.querySelectorAll('textarea,[contenteditable="true"],[role="textbox"]')].find(shown)||null}
+const EDITOR='textarea,[contenteditable="true"],[contenteditable="plaintext-only"],[role="textbox"]';
+function textbox(doc=document){return[...doc.querySelectorAll(EDITOR)].find(shown)||null}
+function composing(){const el=document.activeElement;return Boolean(el&&el!==document.body&&(el.matches?.(EDITOR)||el.closest?.('[contenteditable="true"],[contenteditable="plaintext-only"],[role="textbox"]')))}
 function candidateNodes(root){
  if(!root)return[];
  const selector='[class*="whitespace-pre-wrap"],[class*="whitespace-pre-line"],[class*="MessageContent" i] [class*="text" i],[class*="MessageBubble" i],[class*="message_body" i],[class*="message-content" i],[data-message-id],[data-testid*="message" i],[class*="messageItem" i],[class*="chatItem" i],[class*="bubble" i],[class*="messageBody" i],[class*="messageText" i],[class*="message_content" i],[class*="message_text" i],[class*="message-body" i],[class*="message-text" i]';
  const primary=[...root.querySelectorAll(selector)];
  let all=(primary.length?primary:[...root.querySelectorAll('p,li,[role="listitem"],article')]).filter(el=>{
-  if(!shown(el)||el.closest('nav,header,form,button,aside,time,[role="button"]')||el.querySelector('textarea,[contenteditable="true"],[role="textbox"],a[href*="/messages/rooms/"]'))return false;
+  if(!shown(el)||el.closest(EDITOR)||el.closest('nav,header,form,button,aside,time,[role="button"]')||el.querySelector(EDITOR+',a[href*="/messages/rooms/"]'))return false;
   const text=clean(el.textContent);if(/^(?:既読|未読|送信|メッセージを入力|\d{1,2}:\d{2}|\d+\s*(?:秒|分|時間|日)前)$/.test(text))return false;return (text.length>0&&text.length<=12000)||Boolean(el.querySelector('a[download],img[src]'));
  });
  // A wrapper around several bubbles must not become one combined message.
@@ -94,6 +96,9 @@ async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=
  if(!root)return{read,saved,complete:false,error:'DM_PAGINATION_UNVERIFIED'};
  const host=scrollHost(root),w=doc.defaultView||window;
  for(let i=0;i<MAX_SCROLL&&!interrupted&&alive()&&map.size<MAX_MESSAGES;i++){
+  // Keep the person's draft/caret and scroll position while they type. Hidden
+  // background rooms continue reading; already captured messages are saved.
+  if(doc===document&&composing()){capture();await flush();return{read,saved,complete:false,pausedForInput:true}}
   if(host){host.scrollTop=0;try{host.dispatchEvent(new w.Event('scroll',{bubbles:true}))}catch{}}
   await sleep(350);capture();await flush();
   const height=host?host.scrollHeight:0,count=map.size;
@@ -106,14 +111,52 @@ async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=
  if(!read&&!empty)throw new Error('DM_MESSAGE_BODY_NOT_FOUND');
  return{read,saved,complete:reachedEnd&&!interrupted&&alive(),empty};
 }
+let layoutTimer=0,composerResize=null,observedEditor=null;
+function statusLayout(){
+ const box=document.getElementById('mumei-dm-reader-status');if(!box)return;
+ if(!reconcileSurface())return;
+ const vv=window.visualViewport,layoutHeight=document.documentElement.clientHeight||innerHeight||0,viewTop=Number(vv?.offsetTop||0),viewBottom=vv?viewTop+Number(vv.height):layoutHeight;
+ const editor=roomKeyFromUrl(location.href)?textbox():null;
+ if(editor!==observedEditor){observedEditor=editor;composerResize?.disconnect();if(editor&&typeof ResizeObserver==='function'){composerResize= new ResizeObserver(scheduleStatusLayout);composerResize.observe(editor)}}
+ const hide=()=>{box.hidden=true;if(box.style.display!=='none')box.style.display='none'};
+ // If the composer is not measurable, do not guess a fixed position over it.
+ if(composing()||(roomKeyFromUrl(location.href)&&!editor)||(vv&&(layoutHeight-viewBottom>100||Number(vv.scale)>1.05))){hide();return}
+ let boundary=viewBottom;
+ if(editor){
+  const r=editor.getBoundingClientRect();boundary=Math.min(boundary,r.top);
+  let p=editor.parentElement;
+  for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<4;i++,p=p.parentElement){
+   const pr=p.getBoundingClientRect();
+   if(pr.height<1||pr.height>Math.min(260,(viewBottom-viewTop)*.45)||pr.top>r.top||pr.bottom<r.bottom)break;
+   boundary=Math.min(boundary,pr.top);
+  }
+ }
+ box.hidden=false;if(box.style.display!=='flex')box.style.display='flex';
+ const height=box.getBoundingClientRect().height||42;
+ if(boundary-viewTop<height+16){hide();return}
+ const bottom=Math.max(8,Math.ceil(layoutHeight-boundary+8));
+ const value=editor?bottom+'px':`max(${bottom}px,env(safe-area-inset-bottom))`;
+ if(box.style.bottom!==value)box.style.bottom=value;
+}
+function scheduleStatusLayout(){clearTimeout(layoutTimer);layoutTimer=setTimeout(statusLayout,16)}
+document.addEventListener('focusin',statusLayout,true);
+document.addEventListener('focusout',()=>{scheduleStatusLayout();setTimeout(()=>{if(!composing()&&dmRoute())window.__mumeiInsightDmReaderV1Api?.run()},180)},true);
+document.addEventListener('input',scheduleStatusLayout,true);
+document.addEventListener('compositionstart',statusLayout,true);
+window.addEventListener('resize',scheduleStatusLayout,{passive:true});
+window.addEventListener('orientationchange',scheduleStatusLayout,{passive:true});
+window.addEventListener('scroll',scheduleStatusLayout,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleStatusLayout,{passive:true});
+window.visualViewport?.addEventListener('scroll',scheduleStatusLayout,{passive:true});
 function showStatus(state){
  if(!reconcileSurface()||window.top!==window.self||!document.body)return;
  let box=document.getElementById('mumei-dm-reader-status');
- if(!box){box=document.createElement('div');box.id='mumei-dm-reader-status';box.style.cssText='position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:flex;align-items:center;gap:8px;padding:8px 10px;background:#0b2231;color:#e9faff;border:1px solid #527d92;border-radius:10px;font:600 11px/1.4 system-ui';const line=document.createElement('span');line.style.flex='1';line.setAttribute('role','status');const button=document.createElement('button');button.type='button';button.style.cssText='min-height:42px;min-width:68px;border:1px solid #7ebace;border-radius:7px;background:#163d4c;color:white;touch-action:manipulation';button.addEventListener('click',()=>{if((bgRunning||roomRunning)&&!manualPaused)stop();else{manualPaused=false;interrupted=false;window.__mumeiInsightDmReaderV1Api?.run()}});box.append(line,button);document.body.append(box)}
+ if(!box){box=document.createElement('div');box.id='mumei-dm-reader-status';box.style.cssText='position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:none;align-items:center;gap:6px;padding:4px 8px;background:#0b2231;color:#e9faff;border:1px solid #527d92;border-radius:9px;font:600 10.5px/1.35 system-ui';const line=document.createElement('span');line.style.cssText='flex:1;min-width:0';line.setAttribute('role','status');const button=document.createElement('button');button.type='button';button.style.cssText='min-height:32px;min-width:58px;padding:4px 7px;border:1px solid #7ebace;border-radius:6px;background:#163d4c;color:white;font:600 11px system-ui;touch-action:manipulation';button.addEventListener('click',()=>{if((bgRunning||roomRunning)&&!manualPaused)stop();else{manualPaused=false;interrupted=false;window.__mumeiInsightDmReaderV1Api?.run()}});box.append(line,button);document.body.append(box)}
  const label=state.lastError?'一部未取得':state.lastRunComplete?'確認完了':manualPaused?'途中保存':'DM読込';
  const message=`${label}｜相手 ${Number(state.currentThread||0)}/${Number(state.threadCount||0)}・本文 ${Number(state.lastReadCount||0)}・保存 ${Number(state.lastSavedCount||0)}`;
  if(box.firstElementChild.textContent!==message)box.firstElementChild.textContent=message;
  box.title=String(state.lastError||'');const button=box.lastElementChild,value=(bgRunning||roomRunning)&&!manualPaused?'停止':'続き読込';if(button.textContent!==value)button.textContent=value;
+ statusLayout();
 }
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{}),value={...prev,...patch,version:VERSION};await set(key(CHECK,a.id),value);showStatus(value)}
 async function reportRoom(a,threadKey,result){try{const token=String(await get(key(TOKEN,a.id),'')||'');if(token)await request(INGEST,{noteId:a.id,readerStatus:{threadKey,version:VERSION,read:Number(result.read||0),saved:Number(result.saved||0),complete:result.complete===true,error:String(result.error||(result.timeout?'DM_FRAME_TIMEOUT':''))}},{'X-Ingest-Token':token})}catch{}}
@@ -192,5 +235,5 @@ async function run(){
   if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:0,saved:0,error:String(e&&e.message||e)},location.origin);else cloak(false)
  }finally{roomRunning=false;showStatus(await get(key(CHECK,a.id),{}))}
 }
-{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!r.target.closest?.('#mumei-dm-reader-status')))schedule(180)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;schedule(180)});addEventListener('focus',()=>schedule(180));window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
+{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!r.target.closest?.('#mumei-dm-reader-status'))){scheduleStatusLayout();schedule(180)}}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
 })();
