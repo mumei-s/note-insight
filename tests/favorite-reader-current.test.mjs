@@ -12,7 +12,7 @@ test("production favorite tab uses durable account-scoped groups", async () => {
   const migration = await read("supabase/migrations/20260906021500_insight_favorite_groups.sql");
 
   assert.match(live, /MemberInsightFavoritesFinal/);
-  assert.match(live, /label==="お気に入り"/);
+  assert.match(live, /tab==="favorites"\?"favorites"/);
   assert.match(live, /mode==="favorites"/);
   assert.match(css, /mode-favorites/);
   for (const label of ["お気に入り・グループ管理","グループ作成","未分類","通知フィルターのグループとは別","グループ管理","名前変更","グループ削除"]) assert.match(reader, new RegExp(label));

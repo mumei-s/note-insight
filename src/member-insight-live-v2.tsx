@@ -61,15 +61,18 @@ export function MemberInsightLiveV2(){
   function openMode(next:Mode){
     if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
     const y=window.scrollY;
-    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:y},"",window.location.href);
-    setMode(next);
+    window.history.replaceState({...window.history.state,insightScrollY:y},"",window.location.href);
+    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",window.location.href);
+    setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
     if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   function handleUnifiedTab(tab:string){
     const next:Mode=tab==="comments"?"comments":tab==="favorites"?"favorites":tab==="social"?"social":tab==="notifications"?"notifications":"normal";
-    if(mode===next)return;
-    window.history.replaceState({...window.history.state,route:"dashboard",insightMode:next,insightScrollY:window.scrollY},"",window.location.href);
+    const current=window.history.state||{};
+    if(mode===next&&current.insightTab===tab)return;
+    window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
+    window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
     setMode(next);
   }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
@@ -171,7 +174,7 @@ export function MemberInsightLiveV2(){
   }
   useEffect(()=>{
     const requested=requestedMode();
-    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightScrollY:0},"",u.href);setMode(requested)}
+    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:["comments","favorites","social","notifications"].includes(requested)?requested:window.history.state?.insightTab||"likes",insightScrollY:0},"",u.href);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
     else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
     const pop=()=>{const next=history.state?.insightMode;const y=Number(history.state?.insightScrollY);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
@@ -196,12 +199,6 @@ export function MemberInsightLiveV2(){
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);window.addEventListener("mumei-notification-version-changed",refresh);document.addEventListener("visibilitychange",refresh);
     return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);window.removeEventListener("mumei-notification-version-changed",refresh);document.removeEventListener("visibilitychange",refresh);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current)}
   },[]);
-  function capture(e:React.MouseEvent){
-    const t=e.target as HTMLElement;if(!t.closest(".miu-nav"))return;const label=t.closest("button")?.textContent?.trim()||"";
-    const finalMode=label==="コメント"?"comments":label==="お気に入り"?"favorites":label==="フォロー"?"social":label==="通知"?"notifications":null;
-    if(finalMode){e.preventDefault();e.stopPropagation();openMode(finalMode);return}
-    if(mode!=="normal")openMode("normal")
-  }
   const appLatest=release?.appVersion||"";
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
   const notificationLatest=release?.notificationVersion||"";
@@ -211,7 +208,7 @@ export function MemberInsightLiveV2(){
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
-  return <div className={`miv5 mode-${mode}`} onClickCapture={capture}>
+  return <div className={`miv5 mode-${mode}`}>
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
         <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
