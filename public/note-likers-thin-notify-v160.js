@@ -510,32 +510,77 @@
       img.src = objectUrl;
     });
   }
+  function drawCircleCover(ctx, image, cx, cy, diameter) {
+    const iw = image?.width || image?.naturalWidth || 1;
+    const ih = image?.height || image?.naturalHeight || 1;
+    const scale = Math.max(diameter / iw, diameter / ih);
+    const dw = iw * scale, dh = ih * scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, diameter / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(image, cx - dw / 2, cy - dh / 2, dw, dh);
+    ctx.restore();
+  }
   async function makeThinFile(row) {
-    let image = null;
+    let image = null, avatar = null;
     if (row.thumbUrl) {
       try { image = await bitmap(await xhr(row.thumbUrl, 'blob', 30000)); } catch (_) { image = null; }
     }
+    if (row.actorImageUrl) {
+      try { avatar = await bitmap(await xhr(row.actorImageUrl, 'blob', 30000)); } catch (_) { avatar = null; }
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = '#d9dde3'; ctx.lineWidth = 1.5; roundedRect(ctx, 1, 1, W - 2, H - 2, 12); ctx.stroke();
-    const tw = 320, th = 124, tx = 532, ty = 8, textX = 16, textWidth = 504;
-    ctx.textBaseline = 'top'; ctx.fillStyle = '#171b21'; ctx.font = '700 18px system-ui,-apple-system,sans-serif';
+
+    const tw = 320, th = 124, tx = 532, ty = 8;
+    const textX = 16, textWidth = 504;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#171b21';
+    ctx.font = '700 18px system-ui,-apple-system,sans-serif';
     textLines(ctx, row.title, textWidth, 3).forEach((line, i) => ctx.fillText(line, textX, 12 + i * 24));
-    ctx.fillStyle = '#626975'; ctx.font = '14px system-ui,-apple-system,sans-serif';
-    ctx.fillText(fitText(ctx, row.creator, textWidth), textX, 110);
+
+    // Creator area: exact profile icon + readable name. Title stays visually dominant.
+    const avatarD = 34, avatarX = 16, avatarY = 98;
+    const nameX = avatarX + avatarD + 10;
+    const nameWidth = textWidth - avatarD - 10;
+    if (avatar) {
+      ctx.fillStyle = '#f3f4f6';
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + avatarD / 2, avatarD / 2 + 1, 0, Math.PI * 2); ctx.fill();
+      drawCircleCover(ctx, avatar, avatarX + avatarD / 2, avatarY + avatarD / 2, avatarD);
+      ctx.strokeStyle = '#d7dce2'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + avatarD / 2, avatarD / 2, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#eef1f4';
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + avatarD / 2, avatarD / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#9aa1aa';
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 11, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 29, 11, Math.PI, 0); ctx.fill();
+    }
+    ctx.fillStyle = '#343a43';
+    ctx.font = '700 15px system-ui,-apple-system,sans-serif';
+    const creatorLines = textLines(ctx, row.creator || 'noteクリエイター', nameWidth, 2);
+    creatorLines.forEach((line, i) => ctx.fillText(line, nameX, 99 + i * 17));
+
     ctx.fillStyle = '#f7f8fa'; roundedRect(ctx, tx, ty, tw, th, 8); ctx.fill();
     if (image) {
       const iw = image.width || image.naturalWidth || 1, ih = image.height || image.naturalHeight || 1;
       const scale = Math.min(tw / iw, th / ih), dw = iw * scale, dh = ih * scale;
       ctx.save(); roundedRect(ctx, tx, ty, tw, th, 8); ctx.clip();
       ctx.drawImage(image, tx + (tw - dw) / 2, ty + (th - dh) / 2, dw, dh); ctx.restore();
-      if (typeof image.close === 'function') image.close();
     } else {
       ctx.fillStyle = '#6b7280'; ctx.font = '800 28px system-ui,sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('note', tx + tw / 2, 48); ctx.textAlign = 'start';
     }
+
+    if (typeof image?.close === 'function') image.close();
+    if (typeof avatar?.close === 'function') avatar.close();
+
     const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('極薄カード生成失敗')), 'image/png', 1));
     return new page.File([blob], `${String(row.index).padStart(3, '0')}_thin.png`, { type: 'image/png' });
   }
