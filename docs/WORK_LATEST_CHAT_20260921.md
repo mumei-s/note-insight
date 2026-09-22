@@ -411,3 +411,8 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 
 
 公開確認: 機能main `8d456685cd8f5edbac3f3f2db943064568b35b83`、GitHub Actions `35708984900` のbuild・192件回帰テスト・Pages deploy成功。Pagesのmanifest、Social Reader、通知wrapper、Service Worker、deploy-version、index.html、本体JSの7ファイルがHTTP200でローカルビルドと内容完全一致。実際のraw GitHub @require先Social Reader `?v=100` と通知wrapperも内容完全一致。配備後のSupabase 2関数のソース一致も確認済み。利用者の端末の本人通知は3.6.5への更新が必要。実機ログイン状態の全件照合は未確認として維持する。
+
+
+## 2026-09-22 DM・曜日分析・戻る操作も統合
+
+相互照合だけが先に公開された状態から、ユーザー「ほかの更新はしたの？」を受けて残りの共有修正を統合。本体2026.09.22.8／DM1.4.5／Dashboard1.4.6／本人通知3.6.5。詳細は [WORK_FIXES_20260922_DM_DAILY_NAV.md](WORK_FIXES_20260922_DM_DAILY_NAV.md)。DMの会話不一致4件を取得URLの証拠で修復し、同条件の残り不一致は0件。207件の回帰テストとビルド成功。実機ログイン状態の全件取得・スマホのキーボード確認は未完了として維持する。

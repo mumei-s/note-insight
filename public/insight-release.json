@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.7",
+  "appVersion": "2026.09.22.8",
   "notificationVersion": "3.6.5",
-  "dashboardVersion": "1.4.5",
-  "releasedAt": "2026-09-22T09:00:40.226371+00:00",
+  "dashboardVersion": "1.4.6",
+  "releasedAt": "2026-09-22T09:21:54.507791+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "フォローとフォロワーを一覧の下から相互照合。相手からのフォローなしと、以前の相互から減った人を表示。",
-  "dmVersion": "1.4.4",
+  "note": "DMの会話混在・過去分取得・進捗と完了表示、曜日別PVの取得と欠損表示、戻る操作のカテゴリ復帰を修正。",
+  "dmVersion": "1.4.5",
   "dmLabel": "DM同期"
 }
