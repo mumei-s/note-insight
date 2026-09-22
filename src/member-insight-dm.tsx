@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { useEffect, useRef, useState } from "react";
+import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import { CURRENT_DM_VERSION, fetchInsightRelease, versionDiffers } from "./insight-release";
 import "./member-insight-dm.css";
 
@@ -21,6 +21,13 @@ function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boo
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
+  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0);
+  useEffect(()=>{const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();if(!id)return;
+    const receive=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.source==="mumei-dm-status-bridge"&&event.data?.noteId===id)setReader(event.data.status||null)};
+    const ask=()=>window.postMessage({source:"mumei-dm-status-ui",type:"read",noteId:id},location.origin);
+    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
+    return()=>{messageRequest.current++;window.clearInterval(timer);window.removeEventListener("message",receive)};
+  },[]);
   async function load(silent=false){
     if(!silent)setLoading(true);setError("");
     try{
@@ -30,12 +37,13 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(!silent)setLoading(false)}
   }
   async function loadMessages(person:Row|null){
+    const seq=++messageRequest.current,token=localStorage.getItem(INSIGHT_TOKEN_KEY);
     if(!person){setMessages([]);return}
     try{
       const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500}),total=Math.max(0,Number(first.total||0));let rows=[...(first.rows||[])],pages=Math.ceil(total/500);
       for(let page=2;page<=pages;page++){const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500});rows.push(...(x.rows||[]))}
       const seen=new Set<string>();rows=rows.filter((r:Row)=>{const k=String(r.message_key||r.id||"");if(!k||seen.has(k))return false;seen.add(k);return true});
-      setMessages(rows.slice().reverse())
+      if(seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token)setMessages(rows.slice().reverse())
     }catch(e){setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
   }
   async function startPair(){
@@ -78,7 +86,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         {dmUpdateAvailable?<span className="midm-update-required">現在 v{toolVersion} → v{latestDmVersion}</span>:!pairState?.paired?<button disabled={busy||!toolVersion} onClick={()=>void startPair()}>連携する</button>:null}
       </div>
       <details>
-        <summary>設定・状態</summary>
+        <summary><span>⚙ 設定・状態</span><b>開く / 閉じる ▾</b></summary>
         <div className="midm-control-detail">
           <span className="midm-version-state">{toolVersion?`DM同期 v${toolVersion}`:"DM同期ツール未導入"}{dmUpdateAvailable?` / 最新 v${latestDmVersion}`:""}</span>
           <button disabled={busy||!toolVersion} onClick={()=>void startPair()}>{pairState?.paired?"DM連携を再設定":"DMを連携"}</button>
@@ -86,12 +94,13 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         </div>
       </details>
     </div>
+    {reader?<p className="midm-read-status" role="status"><b>{reader.lastRunComplete?"✓ 全件確認済み":reader.lastError?"一部未取得・再開待ち":"読込中・途中保存"}</b><span>相手 {Number(reader.currentThread||0)} / {Number(reader.threadCount||0)} · 読込 {Number(reader.lastReadCount||0)} · 保存 {Number(reader.lastSavedCount||0)}</span>{reader.lastError?<small>{String(reader.lastError)}</small>:null}</p>:null}
     {notice?<p className="midm-notice">{notice}</p>:null}
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:<details className="midm-history-panel">
       <summary><span>DM履歴</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
       <div className={"midm-layout "+(selected?"is-person":"is-list")}>
-        {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>setSelected(r)}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
+        {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>{messageRequest.current++;setMessages([]);setSelected(r)}}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
         {selected?<div className="midm-person-view">
           <button className="midm-back-list" onClick={()=>{setSelected(null);setMessages([])}}>← DM履歴一覧</button>
           <div className="midm-messages"><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</div>
