@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.10 / notification 3.6.5 / dashboard 1.4.7 / DM 1.4.5
-Stop competing top launcher writers and preserve update guide controls.
+INSIGHT 2026.09.22.11 / notification 3.6.6 / dashboard 1.4.8 / DM 1.4.5
+Separate app updates and read official dashboard disclosure panels before saving.
