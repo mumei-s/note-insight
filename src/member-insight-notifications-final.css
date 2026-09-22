@@ -43,32 +43,13 @@
  .minf-detail-body dd{font-size:7.4px!important}
 }
 
-/* 2026-09-21 v21: compress detail/precision panel without reducing tap clarity */
-.minf-detail{margin-top:3px!important}
-.minf-detail>summary{padding:4px 7px!important;min-height:0!important;line-height:1.15!important}
-.minf-detail-body{padding:3px 5px 5px!important}
-.minf-reader-server{margin-top:2px!important;padding:3px 5px!important;min-height:0!important}
-.minf-detail-body dl{margin:3px 0!important;gap:3px!important}
-.minf-detail-body dl>div{padding:3px 4px!important;min-height:0!important}
-.minf-detail-body dt{font-size:6.4px!important;line-height:1!important}
-.minf-detail-body dd{margin-top:1px!important;font-size:7.6px!important;line-height:1.05!important}
-.minf-detail-body p{margin:3px 0!important;line-height:1.25!important}
-.minf-detail-body button{min-height:26px!important;padding:3px 7px!important}
-
-
-/* 2026-09-21 v22: keep classification obvious while making detail/precision denser */
-.minf-meta span{font-size:11.5px!important;padding:3px 8px!important;letter-spacing:.01em}
-.minf-detail>summary{font-size:9px!important;color:#bfeaff!important;background:#0b1b26!important;border-radius:7px}
-.minf-detail-body{display:block!important}
-.minf-detail-body .minf-reader-server{margin:0 0 3px!important}
-.minf-detail-body dl{grid-template-columns:repeat(3,minmax(0,1fr))!important;margin:2px 0!important}
-.minf-detail-body dl>div{padding:3px!important}
-.minf-detail-body>p:not([role="status"]):not(.minf-reader-error){margin:2px 0!important;font-size:6.8px!important;line-height:1.15!important}
-.minf-detail-body>button{width:100%!important;min-height:24px!important}
-@media(max-width:620px){
- .minf-meta span{font-size:11px!important}
- .minf-detail-body dl{grid-template-columns:repeat(3,minmax(0,1fr))!important}
- .minf-detail-body dl>div{padding:2px 3px!important}
- .minf-detail-body dt{font-size:5.9px!important}
- .minf-detail-body dd{font-size:7px!important}
-}
+/* Compact disclosure: keep controls large enough to tap, remove unused vertical space. */
+.minf-detail{margin:6px 0;border:1px solid #355369;border-radius:9px}
+.minf-detail>summary{display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:6px 10px;cursor:pointer;color:#d8f3ff;font-size:12px;font-weight:700;background:#102635}
+.minf-detail>summary span{font-size:10px;color:#8fcbdf}.minf-detail-body{padding:6px 8px!important;display:grid;gap:5px}
+.minf-detail-body dl{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0}
+.minf-detail-body dl>div{display:flex;align-items:center;justify-content:space-between;gap:4px;padding:4px;border-bottom:1px solid #243a49;min-width:0}
+.minf-detail-body dt{font-size:10px;color:#9bb1c1}.minf-detail-body dd{margin:0;font-size:10px;overflow-wrap:anywhere}
+.minf-detail-body p{margin:0;font-size:11px;line-height:1.4}.minf-detail-body button{min-height:36px;padding:5px 10px;width:max-content}
+.minf-category-alert{display:grid;grid-template-columns:1fr auto;gap:4px;padding:8px;border:1px solid #967937;border-radius:9px;background:#2b230e;margin:6px 0;font-size:12px}
+.minf-category-alert small{grid-column:1;font-size:11px;overflow-wrap:anywhere}.minf-category-alert button{grid-column:2;grid-row:1/3;min-height:36px}
