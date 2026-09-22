@@ -60,15 +60,28 @@
 - ブラウザ案内の確認はUA/DOMテスト。Playwrightのブラウザ取得は配信されたアーカイブが不正で失敗したため、Chromium/Firefox/WebKitの実レンダリングと全端末でのインストール成功は未確認。
 - 本人の実通知Storageエラーが解消した実機結果と、本物のDM本文保存成功は未確認。テスト成功で実機成功を代用しない。
 
-## 公開待ちの状態（2026-09-22）
+## 前回の公開待ち記録（解消済み）
 
-実装・本番ビルド・141件のテスト・機能別コミット検査は完了。本番は未更新。
+前回終了時点では実装・本番ビルド・141件のテスト・機能別コミット検査が完了し、接続エラーのため本番は未更新だった。下記のとおり、接続復旧後に公開を完了した。
 
 - ローカルブランチ：`fix/dashboard-update-panel-20260922`
 - 実装の最終コミット：`b9918549`（この文書の公開待ち追記より前）
 - 公開直前のfetchでもorigin/mainは `5664e347579eb1d19c30a024162b93b70d8adf47`。
 - 通常の非force pushはGitHubの認証情報がないため失敗。GitHubコネクタもプラグイン管理も `HTTP 400 / Invalid MCP request metadata` で呼び出しに失敗した。権限承認拒否ではない。
-- 本番mainを変更できていないため、Pages deploy成功・公開HTML一致とは報告しない。
+- 前回は本番mainを変更できていなかったため、Pages deploy成功・公開HTML一致とは報告していない。
 - 接続復旧後は最新mainを再取得し、今回のコミットを統合して非forceで公開する。許可はユーザーの「こっちから更新できるところはしておいて」により取得済み。改めて公開許可を要求しない。
 - GitHub Actionsの141件テストとPages deploy成功、公開release manifest・更新パネルHTML/JS/CSS・通知wrapper/network・Service Worker・本体bundleのHTTP内容を確認して記録する。
 
+
+## 公開再開・配信確認（2026-09-22）
+
+ユーザーの「続行」でGitHub接続の復旧を確認。最新mainは開始時点と一致し、他の変更を上書きせず、6件の機能別コミットを非forceで反映した。
+
+- 公開main：`e5deb8801ba48881b1764f973be121c2e8a19ff6`
+- 検証済みローカルと公開コミットのtree完全一致：`8625793ab72a0559fc00d43711b7b7b7c72f104d`
+- [GitHub Actions 35692419759](https://github.com/mumei-s/note-insight/actions/runs/35692419759)：機能境界検査、構文検査、TypeScript/Viteビルド、141件の回帰テスト、Pages deployすべて成功。
+- 公開ページ13ファイルをHTTP 200で取得し、ローカルの配信成果物とバイト単位で一致。対象は本体HTML/JS/CSS、release manifest、deploy-version、Service Worker、更新パネルのHTML/v2/JS/CSS、本人通知インストール画面、通知wrapper、通知network。
+- 実際に使われるraw GitHubの通知wrapper・network（`?v=3630`）・Dashboard userscriptもHTTP 200でソース完全一致。クエリなしの更新パネルURLも新HTMLとの一致を確認。
+- [ダッシュボード更新パネル](https://mumei-s.github.io/note-insight/dashboard-setup.html) と [本人通知の更新パネル](https://mumei-s.github.io/note-insight/notification-browser-install.html) は公開済み。
+- 本体2026.09.22.4とWeb更新パネルは参加者が再インストールせず、次のページ読込で反映される。通知3.6.3は端末の拡張機能が最新版を取得する必要があり、自動更新されない端末だけ更新操作が必要。
+- これは配信・ソース・自動テストの確認であり、各端末での通知Storageエラー解消や本物のDM本文取得を確認したという意味ではない。
