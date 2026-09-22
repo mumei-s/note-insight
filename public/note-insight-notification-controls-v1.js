@@ -2,7 +2,8 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.3.7';
+const VERSION='1.3.8';
+const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter-settings.html?from=note';
@@ -34,6 +35,7 @@ function leave(url,label){
  document.documentElement.appendChild(veil);requestAnimationFrame(()=>location.replace(url))
 }
 async function act(action,bar){
+ if(!featureOn())return;
  if(action==='read'){
   const b=bar?.querySelector('[data-action="read"]');if(b){const running=b.dataset.state==='busy';b.textContent=running?'停止中…':'読込中';b.dataset.state='busy'}
   const reader=window.__mumeiNotificationReaderV4;
@@ -67,7 +69,7 @@ function dedupe(){
  return keep
 }
 function mount(){
- if(isDmRoute()){for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
+ if(!featureOn()||isDmRoute()){for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
  const panel=findPanel();if(!panel){const old=dedupe();if(old)old.remove();return}
  installStyle();
  let bar=dedupe()||makeBar();
@@ -91,5 +93,6 @@ function renderStatus(d){
  text(line,message);b.title=String(d.message||message);b.setAttribute('aria-label',label+'：'+message);
 }
 window.addEventListener('mumei-notification-reader-status',e=>renderStatus(e.detail||{}));
+window.addEventListener('mumei-notification-feature-changed',()=>{lastStatus=null;mount()});
 window.__mumeiNotificationControlsV1={version:VERSION,mount,findPanel,sync};
 })();
