@@ -40,6 +40,7 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
   try{
     const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({action,...extra}),cache:"no-store",signal:c.signal});
     const p=await r.json().catch(()=>({}));
+    if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("INSIGHT_ACCOUNT_CHANGED");
     if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");
     return p;
   }finally{
@@ -148,28 +149,27 @@ export function MemberInsightLiveV2(){
     setAppBusy(true);
     const started=Date.now();
     try{
-      setStatus("INSIGHT本体の最新版を確認中…");
       showAppFeedback("INSIGHT本体の最新版を確認中…",0);
       const latest=await checkRelease();
-      const latestVersion=latest?.appVersion||CURRENT_INSIGHT_APP_VERSION;
+      if(!latest)throw new Error("最新版を確認できませんでした。通信状態を確認して再試行してください。");
+      const latestVersion=latest.appVersion;
       if(!versionDiffers(CURRENT_INSIGHT_APP_VERSION,latestVersion)){
         const wait=Math.max(0,650-(Date.now()-started));if(wait)await sleep(wait);
-        setStatus(`INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} は最新版です。`);
         showAppFeedback(`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION}｜最新版です`,5000);
         return;
       }
-      setStatus(`INSIGHT本体 v${latestVersion} を取得中…`);
       showAppFeedback(`INSIGHT本体 v${latestVersion} を読み込み中…`,0);
       if("serviceWorker" in navigator){
         const regs=await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.filter(r=>r.scope.includes("/note-insight/")).map(r=>r.update().catch(()=>undefined)));
       }
-      await fetch(`${import.meta.env.BASE_URL}index.html?insight-app-update=${Date.now()}`,{cache:"no-store"}).catch(()=>undefined);
+      const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),12000);
+      try{const fresh=await fetch(`${import.meta.env.BASE_URL}index.html?insight-app-update=${Date.now()}`,{cache:"no-store",signal:controller.signal});if(!fresh.ok)throw new Error("新しい画面を取得できませんでした。再試行してください。")}finally{window.clearTimeout(timer)}
       sessionStorage.setItem(APP_UPDATE_RESULT_KEY,latestVersion);
       window.location.reload();
     }catch(e){
       const text=e instanceof Error?`INSIGHT本体更新エラー：${e.message}`:"INSIGHT本体更新エラー";
-      setStatus(text);showAppFeedback(`⚠ ${text}`,7000);
+      showAppFeedback(`⚠ ${text}`,7000);
     }finally{setAppBusy(false)}
   }
   useEffect(()=>{
@@ -209,15 +209,15 @@ export function MemberInsightLiveV2(){
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   return <div className={`miv5 mode-${mode}`}>
+    {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
-        <div className={`miv5-source-card normal ${appUpdateAvailable?"needs-update":""}`}>
-          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="連携データを更新" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"↻ 更新中…":"✓ 通常データ"}</strong><small>本体 v{CURRENT_INSIGHT_APP_VERSION}{appUpdateAvailable&&appLatest?` → v${appLatest}`:""}</small><span>{dataBusy?"更新確認中・保存済みデータは利用可能":status}</span>{appUpdateAvailable?<em>NEW</em>:null}</button>
-          {appUpdateAvailable?<button className="miv5-install-link update-ready" disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"本体を更新"}</button>:null}
+        <div className="miv5-source-card normal">
+          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="公開データを再取得" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"読込中…":"✓ 通常データ"}</strong><small>公開記事・スキなどを再取得</small><span>{dataBusy?"保存済みデータは利用可能":status}</span></button>
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>⬆ 更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}</button>
-          <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"⬆ 本人通知を更新":notificationMissing?"＋ 本人通知を設定":"⚙ 設定・更新状態"}</a>
+          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span>{notificationUpdateAvailable?<em>更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}</button>
+          <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"本人通知を更新":notificationMissing?"＋ 本人通知を設定":"⚙ 設定・更新状態"}</a>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span></button>
