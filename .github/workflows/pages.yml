@@ -46,13 +46,14 @@ jobs:
           node --check public/note-insight-dm.user.js
           node --check public/note-insight-dm-network-v2.js
           node --check public/note-insight-dm-reader-v1.js
+          node --check public/dashboard-setup.js
           node --check public/note-insight-dashboard-sync.user.js
           node --check public/note-pon-editor-v6.user.js
       - run: npm run build
       - name: Unified INSIGHT regression tests
         run: node --test tests/insight-core-v2919.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/favorite-reader-current.test.mjs tests/notification-v2919.test.mjs tests/notification-dock-scope.test.mjs tests/notification-v3-return.test.mjs tests/polish-regression.test.mjs tests/notification-v2968.test.mjs tests/notification-dom.test.mjs
       - name: Notification continuation, display, DM and chart behavior
-        run: node --experimental-vm-modules --test tests/notification-window-v360.test.mjs tests/notification-presentation-v360.test.mjs tests/dm-resume-v140.test.mjs tests/social-history-v1.test.mjs tests/reader-controls-v361.test.mjs tests/reader-analysis-v362.test.mjs
+        run: node --experimental-vm-modules --test tests/notification-window-v360.test.mjs tests/notification-presentation-v360.test.mjs tests/dm-resume-v140.test.mjs tests/social-history-v1.test.mjs tests/reader-controls-v361.test.mjs tests/reader-analysis-v362.test.mjs tests/dashboard-setup.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -6,8 +6,8 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.22.3";
-export const CURRENT_NOTIFICATION_VERSION = "3.6.2";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.22.4";
+export const CURRENT_NOTIFICATION_VERSION = "3.6.3";
 export const CURRENT_DASHBOARD_VERSION = "1.4.5";
 export const CURRENT_DM_VERSION = "1.4.2";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";

@@ -383,3 +383,7 @@ Android専用実装は禁止。共通Reader/保存ロジックはUA分岐させ�
 原因・実装・保存境界の条件・DM本文の未確認事項・ブラウザ検証範囲は [WORK_FIXES_20260922_BOUNDARY.md](WORK_FIXES_20260922_BOUNDARY.md)。本人通知なし分析は別HTMLなので、React側だけの変更で完了扱いしない。本物のDM本文成功と全ブラウザ実機確認は未完了として引き継ぐ。
 
 公開確認：機能main `8a9533fa2c5aa6a6dffc3866b56d336cb5baf4b9`、Actions `35686819667` のbuild・108件テスト・Pages deploy成功。公開manifest／本人通知／DM wrapper／DM Reader／本人通知なし分析HTMLのHTTP200と内容完全一致を確認。Dashboard backend version 7もソース一致確認済み。端末の旧userscriptは各更新が必要。
+
+## 23. 2026-09-22 参加者の更新パネルと通知Storageエラー
+
+ユーザーから「パネルを作らないと参加者が更新できない」「既存参加者が触らず運営側で更新できる所は更新」と依頼。追加画像1000015188.jpgでは通知がStorage.setItemエラーで停止。詳細仕様・移行方法・検証範囲は [WORK_FIXES_20260922_UPDATE_PANEL.md](WORK_FIXES_20260922_UPDATE_PANEL.md)。本体2026.09.22.4／本人通知3.6.3／Dashboard1.4.5据え置き／DM1.4.2据え置き。Web配信だけで端末内の古いuserscriptまで更新したと報告しない。
