@@ -26,15 +26,15 @@ function fixture(t,{visualViewport=true,contenteditable=false,list=false}={}){
  w.eval(source.slice(0,end)+'window.__dmComposerTest={showStatus,statusLayout,composing,isManuallyPaused:()=>manualPaused};'+source.slice(end));
  const ui=w.__dmComposerTest;
  async function flushLayout(){await settle();for(let cycle=0;cycle<4;cycle++){const ready=[...timers].filter(([,v])=>v.ms<=32);if(!ready.length)break;for(const [id,v] of ready){timers.delete(id);v.fn()}await settle()}}
- return{w,ui,gm,sent,vv,get editor(){return w.document.getElementById('editor')},get panel(){return w.document.getElementById('mumei-dm-reader-status')},show:state=>ui.showStatus({threadCount:20,lastReadCount:40,lastSavedCount:20,...state}),flushLayout,geometry(v){if(v.composerTop!==undefined)composerTop=v.composerTop;if(v.editorTop!==undefined)editorTop=v.editorTop;if(v.editorHeight!==undefined)editorHeight=v.editorHeight;if(v.layoutHeight!==undefined)layoutHeight=v.layoutHeight},resize(){resizeObservers.forEach(o=>{if(o.el)o.fn()})},scrollWrites:()=>scrollWrites};
+ return{w,ui,gm,sent,vv,get editor(){return w.document.getElementById('editor')},get panel(){return w.document.getElementById('mumei-dm-reader-status')},show:state=>ui.showStatus({threadCount:20,lastReadCount:40,lastSavedCount:20,storedMessageCount:20,...state}),flushLayout,geometry(v){if(v.composerTop!==undefined)composerTop=v.composerTop;if(v.editorTop!==undefined)editorTop=v.editorTop;if(v.editorHeight!==undefined)editorHeight=v.editorHeight;if(v.layoutHeight!==undefined)layoutHeight=v.layoutHeight},resize(){resizeObservers.forEach(o=>{if(o.el)o.fn()})},scrollWrites:()=>scrollWrites};
 }
 function safeComposer(h){const r=h.panel.getBoundingClientRect(),composer=h.w.document.getElementById('composer').getBoundingClientRect(),send=h.w.document.getElementById('send').getBoundingClientRect();assert.ok(r.bottom<=composer.top-8||r.top>=composer.bottom+3);assert.ok(r.bottom<send.top||r.top>send.bottom);assert.equal(h.panel.hidden,false);assert.equal(h.panel.style.display,'flex')}
 
-test('DMは入力欄の下の隙間へ薄型進捗を置き、続き読込ボタンを出さない',t=>{const h=fixture(t);h.show();safeComposer(h);assert.match(h.panel.textContent,/読込 40 \/ 保存 20/);assert.equal(h.panel.querySelector('button'),null)});
+test('DMは入力欄の下の隙間へ薄型進捗を置き、続き読込ボタンを出さない',t=>{const h=fixture(t);h.show();safeComposer(h);assert.match(h.panel.textContent,/過去分を取得中.*本文保存 20件/);assert.equal(h.panel.querySelector('button'),null)});
 for(const contenteditable of [false,true,'plaintext-only'])test((contenteditable==='plaintext-only'?'plaintext-only':contenteditable?'contenteditable':'textarea')+'入力中は即座に隠れ、遅い保存応答でも復活せず下書きを保持する',async t=>{
  const h=fixture(t,{contenteditable});h.show();if(contenteditable)h.editor.textContent='編集中の下書き\n二行目';else h.editor.value='編集中の下書き\n二行目';h.editor.focus();
- assert.equal(h.panel.hidden,true);assert.equal(h.panel.style.display,'none');h.show({lastSavedCount:25});await h.flushLayout();assert.equal(h.panel.hidden,true);assert.equal(h.ui.isManuallyPaused(),false);assert.equal(contenteditable?h.editor.textContent:h.editor.value,'編集中の下書き\n二行目');
- h.editor.blur();await h.flushLayout();safeComposer(h);assert.match(h.panel.textContent,/保存 25/);
+ assert.equal(h.panel.hidden,true);assert.equal(h.panel.style.display,'none');h.show({lastSavedCount:25,storedMessageCount:25});await h.flushLayout();assert.equal(h.panel.hidden,true);assert.equal(h.ui.isManuallyPaused(),false);assert.equal(contenteditable?h.editor.textContent:h.editor.value,'編集中の下書き\n二行目');
+ h.editor.blur();await h.flushLayout();safeComposer(h);assert.match(h.panel.textContent,/本文保存 25件/);
 });
 test('キーボード・拡大表示中は隠し、閉じた後に安全な位置へ戻す',async t=>{
  const h=fixture(t);h.show();h.vv.height=450;h.vv.dispatchEvent(new h.w.Event('resize'));await h.flushLayout();assert.equal(h.panel.hidden,true);h.show({lastSavedCount:27});assert.equal(h.panel.hidden,true);
@@ -50,7 +50,7 @@ test('入力欄を検出できない時や上に場所がない時は表示を�
 });
 test('VisualViewportがないブラウザでも入力中は隠れ、復帰後は入力欄の上に置く',async t=>{const h=fixture(t,{visualViewport:false});h.show();safeComposer(h);h.editor.focus();assert.equal(h.panel.hidden,true);h.editor.blur();await h.flushLayout();safeComposer(h)});
 test('DM一覧では小さな取得表示だけを残し、通知画面では遅い進捗でも復活させない',async t=>{
- const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();h.show();assert.equal(h.panel.hidden,false);assert.equal(h.panel.querySelector('button'),null);assert.match(h.panel.textContent,/一覧 20人取得/);
+ const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();h.show();assert.equal(h.panel.hidden,false);assert.equal(h.panel.querySelector('button'),null);assert.match(h.panel.textContent,/0\/20人.*本文保存 20件/);
  const bell=h.w.document.createElement('section');bell.innerHTML='<button role="tab">通知</button><button role="tab">お知らせ</button><div class="m-navbarNoticeItem">通知</div>';h.w.document.body.append(bell);await h.flushLayout();assert.equal(h.panel,null);h.show({lastSavedCount:50});assert.equal(h.panel,null);
 });
 test('文字入力中も取得済み本文を保存し、本人の会話をスクロールせず途中状態を保持する',async t=>{

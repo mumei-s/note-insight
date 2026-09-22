@@ -28,6 +28,6 @@ test('DM本文のdivを取得・保存し、相対時刻が変わっても同じ
  w.eval((source.slice(0,bootstrap)+'window.__dmTest={candidateNodes,messageData,scanRoom};})();').replace('sleep=ms=>new Promise(r=>setTimeout(r,ms))','sleep=async()=>{}'));
  const root=w.document.querySelector('section'),bubble=w.document.querySelector('.messageText');
  const first=w.__dmTest.messageData(bubble,'room',root,'tester');w.Date.now=()=>Date.now()+120000;const later=w.__dmTest.messageData(bubble,'room',root,'tester');assert.equal(first.message_key,later.message_key);
- const result=await w.__dmTest.scanRoom({id:'tester'},'room');assert.equal(result.complete,false);assert.equal(result.domFallback,true);assert.equal(result.read,1);assert.equal(result.saved,1);assert.equal(saved[0].body,'こんにちは');
- const again=await w.__dmTest.scanRoom({id:'tester'},'room');assert.equal(again.saved,0);assert.equal(saved.length,1);dom.window.close();
+ const result=await w.__dmTest.scanRoom({id:'tester'},'11111111-1111-1111-1111-111111111111');assert.equal(result.complete,false);assert.equal(result.domFallback,true);assert.equal(result.read,1);assert.equal(result.saved,1);assert.equal(saved[0].body,'こんにちは');
+ const again=await w.__dmTest.scanRoom({id:'tester'},'11111111-1111-1111-1111-111111111111');assert.equal(again.saved,0);assert.equal(saved.length,1);dom.window.close();
 });
