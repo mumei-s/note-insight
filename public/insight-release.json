@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.9",
+  "appVersion": "2026.09.22.10",
   "notificationVersion": "3.6.5",
   "dashboardVersion": "1.4.7",
-  "releasedAt": "2026-09-22T11:10:21.244656+00:00",
+  "releasedAt": "2026-09-22T12:03:13.970349+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知分析の集計停止・公式日別PVの読込・点灯残留・更新表記と料金案内を修正。グラフを改善し、全体の画面遷移・保存失敗・更新処理を点検。",
+  "note": "注意事項の上にあるインストール / 更新の点滅を修正。旧表示処理の再生成を停止し、更新案内と操作ボタンを安定化。",
   "dmVersion": "1.4.5",
   "dmLabel": "DM同期"
 }
