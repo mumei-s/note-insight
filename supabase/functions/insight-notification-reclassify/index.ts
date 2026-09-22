@@ -5,7 +5,6 @@ const H={"Access-Control-Allow-Origin":ORIGIN,"Access-Control-Allow-Headers":"co
 const out=(x:unknown,s=200)=>new Response(JSON.stringify(x),{status:s,headers:H});
 async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function auth(req:Request){const raw=req.headers.get("X-Insight-Token")||"";if(!raw)throw new Error("INSIGHT_LOGIN_REQUIRED");const{data:s}=await db.from("insight_member_sessions").select("id,application_id,expires_at,revoked_at").eq("token_hash",await sha(raw)).maybeSingle();if(!s||s.revoked_at||Date.parse(s.expires_at)<=Date.now())throw new Error("INSIGHT_SESSION_INVALID");const{data:a}=await db.from("insight_access_applications").select("id,note_id,status").eq("id",s.application_id).maybeSingle();if(!a||a.status!=="active")throw new Error("INSIGHT_MEMBER_INACTIVE");const noteId=String(a.note_id||"").toLowerCase();return{id:String(a.id),scope:noteId==="ss_yr"?"owner":String(a.id),noteId}}
-const CLASSIFIER_VERSION="action-v24-structured";
 const clean=(v:unknown)=>String(v||"").replace(/\s+/g," ").trim();
 const actionText=(v:unknown)=>clean(v).replace(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/gu," ").replace(/\s+/g," ").trim();
 const KIND_TYPES:Record<string,string>={
@@ -18,8 +17,11 @@ const KIND_TYPES:Record<string,string>={
 function astText(v:any):string{if(typeof v==="string")return v;if(Array.isArray(v))return v.map(astText).join("");if(!v||typeof v!=="object")return "";return typeof v.value==="string"?v.value:typeof v.text==="string"?v.text:astText(v.children||v.content||[])}
 function structuredType(meta:any,target:string|null){const candidates=[meta?.kind];for(const raw of [meta?.all_area_url,meta?.featured_area_url,target]){try{candidates.push(new URL(String(raw)).searchParams.get("kind"))}catch{}}for(const kind of candidates)if(kind&&KIND_TYPES[String(kind)])return KIND_TYPES[String(kind)];return null}
 
+const cleanCounter=(v:string)=>v.replace(/\s+/g,"");
 function classify(text:string,targetUrl:string|null,meta:any={}){
   const known=structuredType(meta,targetUrl);if(known)return known;
+  // Observed non-notification counter/expiry cards, retained as capture evidence.
+  if(!targetUrl&&!meta.kind&&/^(?:[\d,.万]+件){1,2}\d{1,2}月\d{1,2}日まで$/u.test(cleanCounter(text)))return "capture_noise";
   text=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
   const t=actionText(text),target=targetUrl||"";
   if(/^あなたの記事[がを].{0,500}(?:追加されました|追加しました)/u.test(t))return "my_article_magazine_added";
@@ -63,18 +65,19 @@ function jstDay(v:unknown){const ms=Date.parse(String(v||""));if(!Number.isFinit
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
  const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),onlyPending=b.onlyPending===true,now=new Date().toISOString();
- let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(onlyPending)q=q.eq("notification_type","other");if(cursor)q=q.gt("id",cursor);
+ let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).or("meta->>classifier.is.null,meta->>classifier.neq.action-v25-window,meta->>reclassify_pending.eq.true").order("id").limit(100);if(onlyPending)q=q.eq("notification_type","other");if(cursor)q=q.gt("id",cursor);
  const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;
  const evidence=new Map<string,any>();
  if((data||[]).some(r=>!r.meta?.kind&&String(r.meta?.event_identity||"").startsWith("notice:"))){
   const {data:probes}=await db.from("insight_notification_network_probes").select("response_sample").in("member_id",ids).order("captured_at",{ascending:false}).limit(200);
   for(const p of probes||[])for(const n of Array.isArray(p.response_sample?.data)?p.response_sample.data:[])if(n?.id&&n?.kind&&!evidence.has("notice:"+n.id))evidence.set("notice:"+n.id,n);
  }
- for(const r of data||[]){if(r?.meta?.noise_reason==="non-notification-api-capture"){checked++;continue}if(r.notification_type==="capture_noise"&&!r.meta?.verified_shell){checked++;continue}const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:CLASSIFIER_VERSION};
- const classified=classify(String(r.raw_text||""),r.target_url,meta),nextType=classified==="other"&&type!=="capture_noise"?type:classified,finalMeta={...nextMeta,reclassify_pending:nextType==="other",classification_status:nextType==="other"?"unmatched":"matched"};
+ const processRow=async(r:any)=>{const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v25-window"};
+ const classified=meta.noise_reason==="non-notification-api-capture"?"capture_noise":classify(String(r.raw_text||""),r.target_url,meta),nextType=type==="capture_noise"&&!r.meta?.verified_shell?type:classified==="other"&&type!=="capture_noise"?type:classified,finalMeta={...nextMeta,classified_type:nextType,reclassify_pending:false,classification_status:nextType==="other"?"unmatched":"matched"};
  const actor=meta.action_users?.[0],repair:Record<string,unknown>={};
  if(actor&&/^https:\/\/note\.com\/[^/?#]+\/?$/.test(String(actor.url||""))){repair.actor_url=actor.url;if(typeof actor.name==="string")repair.actor_name=actor.name;if(/^https:\/\//.test(String(actor.user_profile_image_path||"")))repair.actor_image_url=actor.user_profile_image_path}
  if(meta.body)repair.raw_text=String(meta.body).replace(/<[^>]*>/g," ").slice(0,4000);
- const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++}
- return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,onlyPending,classifierVersion:CLASSIFIER_VERSION,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
+ const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("notification_type").single();if(up)throw up;checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++};
+ for(let i=0;i<(data||[]).length;i+=8)await Promise.all((data||[]).slice(i,i+8).map(processRow));
+ return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
