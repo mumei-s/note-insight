@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.0.0';
+const VERSION='4.0.1';
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
 const OWN='mumei-muted-v2939';
@@ -13,7 +13,7 @@ const MUT='mumei_insight_magazine_mute_ids_v5:';
 const PROFILE='mumei_insight_magazine_mute_profiles_v5:';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const STYLE='mumei-v2939-filter-style';
-const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
+const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)&&!shell();
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM);
