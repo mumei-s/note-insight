@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.0
+// @name         無名S note 極薄＋通知 URL/# 18.8.1
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.0
-// @description  本文の控え・復元・保存成功確認を追加。自動再読込なし。80枚一括投入を維持し、通知カードの待ち時間と重複走査を削減。中断後は残件から再開。
+// @version      18.8.1
+// @description  本文の控え・復元を維持。連続アップロードの待機と失敗分の再開を修正。画像表示を軽量化。パネルを縮小し、同じ人物は#の記事を優先。自動再読込なし。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -309,7 +309,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.0</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.1</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
@@ -358,8 +358,30 @@
   let nativeInputClick = null;
   const UPLOAD_DIAG_PREFIX = 'mumei_upload_diag_v160';
   const uploadNetFailures = [];
+  const uploadRequests = new Set();
+  let lastUploadActivityAt = 0, uploadSequence = 0;
+  const UPLOAD_QUIET_MS = 20000;
+  function uploadBody(body) {
+    const imageFile = value => value && typeof value === 'object' &&
+      (/^image\//i.test(String(value.type || '')) || /\.(png|jpe?g|webp|gif|avif)$/i.test(String(value.name || '')));
+    if (imageFile(body)) return true;
+    if (body && typeof body.entries === 'function') {
+      try { for (const [, value] of body.entries()) if (imageFile(value)) return true; } catch (_) {}
+    }
+    return false;
+  }
+  function beginUploadRequest(body, url) {
+    if (!imageArm?.consumed || !uploadBody(body)) return null;
+    const ticket = { id: ++uploadSequence, url: cleanNetUrl(url), at: Date.now() };
+    uploadRequests.add(ticket); lastUploadActivityAt = Date.now(); return ticket;
+  }
+  function endUploadRequest(ticket, status, message = '') {
+    if (!ticket) return;
+    uploadRequests.delete(ticket); lastUploadActivityAt = Date.now();
+    if (!status || status >= 400) recordNetFailure('image-upload', ticket.url, status, message);
+  }
 
-  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.0へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.1へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -415,56 +437,59 @@
   function recentNetFailure(since) {
     return [...uploadNetFailures].reverse().find((x) => x.at >= since) || null;
   }
-  function visibleUploadErrorText() {
-    const nodes = document.querySelectorAll('[role="alert"],div,span,p');
-    for (const node of nodes) {
-      if (!node.getClientRects?.().length) continue;
-      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-      if (/画像.*アップロード.*(?:失敗|できません)|アップロード.*(?:失敗|できません)/.test(text)) return text.slice(0, 180);
+  function visibleUploadErrors() {
+    const errors = [];
+    for (const node of document.querySelectorAll('[role="alert"],[role="status"],[aria-live]')) {
+      if (!node.getClientRects?.().length || node.closest?.('#mumei-note-source-picker-v163,#mumei-likers-thin-panel-v160,.ProseMirror')) continue;
+      const value = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (value.length <= 300 && /(?:画像|写真).*アップロード.*(?:失敗|できません)|アップロード.*(?:失敗|できません)/.test(value)) errors.push({ node, text: value });
     }
-    return '';
+    return errors;
   }
   function installUploadNetworkProbe() {
     if (page.__MUMEI_UPLOAD_NETWORK_PROBE_160__) return;
     page.__MUMEI_UPLOAD_NETWORK_PROBE_160__ = true;
-    try {
-      const rawFetch = typeof page.fetch === 'function' ? page.fetch.bind(page) : null;
-      if (rawFetch) {
-        page.fetch = async function (...args) {
-          const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-          try {
-            const response = await rawFetch(...args);
-            if (response && response.status >= 400) recordNetFailure('fetch', url, response.status, response.statusText);
-            return response;
-          } catch (error) {
-            recordNetFailure('fetch-error', url, 0, error?.message || error);
-            throw error;
-          }
-        };
-      }
-    } catch (_) {}
-    try {
-      const proto = page.XMLHttpRequest?.prototype;
-      if (proto && !proto.__mumeiUploadProbe160) {
-        const rawOpen = proto.open, rawSend = proto.send;
-        proto.open = function (method, url, ...rest) {
-          try { this.__mumeiUploadUrl160 = url; } catch (_) {}
-          return rawOpen.call(this, method, url, ...rest);
-        };
-        proto.send = function (...args) {
-          if (!this.__mumeiUploadProbeBound160) {
-            this.__mumeiUploadProbeBound160 = true;
-            this.addEventListener('load', () => {
-              if (this.status >= 400) recordNetFailure('xhr', this.__mumeiUploadUrl160, this.status, this.statusText);
-            });
-            this.addEventListener('error', () => recordNetFailure('xhr-error', this.__mumeiUploadUrl160, this.status || 0, 'network error'));
-            this.addEventListener('timeout', () => recordNetFailure('xhr-timeout', this.__mumeiUploadUrl160, this.status || 0, 'timeout'));
-          }
-          return rawSend.apply(this, args);
-        };
-        proto.__mumeiUploadProbe160 = true;
-      }
-    } catch (_) {}
+    const rawFetch = typeof page.fetch === 'function' ? page.fetch.bind(page) : null;
+    if (rawFetch) {
+      page.fetch = async function (...args) {
+        const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+        const ticket = beginUploadRequest(args[1]?.body, url);
+        try {
+          const response = await rawFetch(...args);
+          endUploadRequest(ticket, response.status, response.statusText); return response;
+        } catch (error) {
+          endUploadRequest(ticket, 0, error?.message || String(error)); throw error;
+        }
+      };
+    }
+    const proto = page.XMLHttpRequest?.prototype;
+    if (proto && !proto.__mumeiUploadProbe160) {
+      const rawOpen = proto.open, rawSend = proto.send;
+      proto.open = function (method, url, ...rest) {
+        this.__mumeiUploadUrl160 = url; return rawOpen.call(this, method, url, ...rest);
+      };
+      proto.send = function (...args) {
+        const ticket = beginUploadRequest(args[0], this.__mumeiUploadUrl160);
+        if (ticket) this.addEventListener('loadend', () => endUploadRequest(ticket, this.status, this.statusText), { once: true });
+        try { return rawSend.apply(this, args); } catch (error) { endUploadRequest(ticket, 0, error?.message); throw error; }
+      };
+      proto.__mumeiUploadProbe160 = true;
+    }
+  }
+  function optimizeUploadedImages(view, run = getRun()) {
+    if (!document.head || typeof view.nodeDOM !== 'function') return;
+    const id = 'mumei-owned-image-memory-v1881';
+    if (!document.getElementById(id)) {
+      const style = document.createElement('style'); style.id = id;
+      style.textContent = '.mumei-owned-thin-image-v1881{content-visibility:auto;contain-intrinsic-size:auto 140px}';
+      document.head.appendChild(style);
+    }
+    for (const rec of Object.values(run?.images || {})) {
+      const hit = safety().tracked(view, rec); if (!hit) continue;
+      const dom = view.nodeDOM(hit.pos), image = dom?.tagName === 'IMG' ? dom : dom?.querySelector?.('img');
+      if (image) { image.loading = 'lazy'; image.decoding = 'async'; }
+      (dom?.closest?.('figure') || dom)?.classList?.add('mumei-owned-thin-image-v1881');
+    }
   }
   function getDataset() {
     const value = getJSON(DATA_KEY, null);
@@ -816,8 +841,8 @@
     while (value && ctx.measureText(`${value}…`).width > maxWidth) value = [...value].slice(0, -1).join('');
     return `${value}…`;
   }
-  async function bitmap(blob) {
-    if (typeof page.createImageBitmap === 'function') return page.createImageBitmap(blob);
+  async function bitmap(blob, resizeWidth) {
+    if (typeof page.createImageBitmap === 'function') { try { return await page.createImageBitmap(blob, { resizeWidth, resizeQuality: 'high' }); } catch (_) { return page.createImageBitmap(blob); } }
     return new Promise((resolve, reject) => {
       const img = new page.Image(), objectUrl = URL.createObjectURL(blob);
       img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img); };
@@ -839,8 +864,8 @@
     ctx.restore();
   }
   async function makeThinFile(row) {
-    const load = async url => { if (!url) return null; try { return await bitmap(await xhr(url, 'blob', 30000)); } catch (_) { return null; } };
-    const [image, avatar] = await Promise.all([load(row.thumbUrl), load(row.actorImageUrl)]);
+    const load = async (url, width) => { if (!url) return null; try { return await bitmap(await xhr(url, 'blob', 30000), width); } catch (_) { return null; } };
+    const [image, avatar] = await Promise.all([load(row.thumbUrl, 640), load(row.actorImageUrl, 84)]);
 
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
@@ -954,39 +979,35 @@
       run.images[row.url] = { id: String(hit.node.attrs?.id || ''), src: String(hit.node.attrs?.src || '') };
     }
     setRun(run);
+    optimizeUploadedImages(view, run);
   }
-  async function waitNewRemoteImages(view, beforeIds, expected, timeout = 180000) {
-    const startedAt = Date.now();
-    const deadline = startedAt + timeout;
-    let lastCount = 0, lastGrowthAt = startedAt;
+  async function waitNewRemoteImages(view, beforeIds, expected, timeout = 1800000, baselineErrors = new Map()) {
+    const startedAt = Date.now(), deadline = startedAt + timeout;
+    let lastCount = 0, lastGrowthAt = startedAt, firstErrorAt = 0;
     while (Date.now() < deadline) {
       safety().check(view);
       const allNew = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
       const running = getRun();
       if (running?.pending && allNew.length === expected && !running.pending.slots) {
-        running.pending.slots = allNew.map(hit => String(hit.node.attrs.id));
-        setRun(running);
+        running.pending.slots = allNew.map(hit => String(hit.node.attrs.id)); setRun(running);
         if (imageArm) imageArm.run.pending = running.pending;
       }
-      const fresh = allNew.filter((hit) => {
-        const id = String(hit.node.attrs?.id || '');
-        return id && !beforeIds.has(id) && remoteImage(hit.node);
-      }).sort((a, b) => a.pos - b.pos);
+      const fresh = allNew.filter(hit => remoteImage(hit.node));
       if (fresh.length > lastCount) { lastCount = fresh.length; lastGrowthAt = Date.now(); }
-      if (fresh.length >= expected) return { fresh: fresh.slice(0, expected), failed: false, reason: '', net: null };
-      const uiError = visibleUploadErrorText();
+      if (fresh.length === expected) return { fresh, failed: false, reason: '', net: null };
+      if (fresh.length > expected) return { fresh: [], failed: true, reason: '投入枚数を超える画像を検出。順序を確認するため停止', net: null };
+      const uiError = visibleUploadErrors().find(entry => baselineErrors.get(entry.node) !== entry.text)?.text || '';
       const net = recentNetFailure(startedAt);
-      if ((uiError || net) && Date.now() - lastGrowthAt >= 2500) {
-        return { fresh: fresh.slice(0, expected), failed: true, reason: uiError || '画像アップロード通信エラー', net };
+      if ((uiError || net) && !firstErrorAt) firstErrorAt = Date.now();
+      // Keep waiting while the native image queue is active; unrelated requests and old toasts do not stop it.
+      if (firstErrorAt && !uploadRequests.size && Date.now() - Math.max(lastGrowthAt, lastUploadActivityAt, firstErrorAt) >= UPLOAD_QUIET_MS) {
+        return { fresh, failed: true, reason: uiError || '画像アップロード通信エラー', net };
       }
-      setStatus(`画像アップロード ${Math.min(fresh.length, expected)}/${expected}…`);
+      setStatus(`画像アップロード ${fresh.length}/${expected}｜処理中${uploadRequests.size}件${firstErrorAt ? '｜成功分を回収中' : ''}`);
       await sleep(500);
     }
-    const fresh = imageNodes(view).filter((hit) => {
-      const id = String(hit.node.attrs?.id || '');
-      return id && !beforeIds.has(id) && remoteImage(hit.node);
-    }).sort((a, b) => a.pos - b.pos);
-    return { fresh: fresh.slice(0, expected), failed: true, reason: '画像アップロード完了待ちタイムアウト', net: recentNetFailure(startedAt) };
+    const fresh = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id)) && remoteImage(hit.node)).sort((a,b) => a.pos-b.pos);
+    return { fresh, failed: true, reason: '画像アップロード完了待ちタイムアウト', net: recentNetFailure(startedAt) };
   }
   function imageInput(input) {
     if (!input || input.tagName !== 'INPUT' || input.type !== 'file') return false;
@@ -1070,18 +1091,26 @@
     const arm = imageArm;
     if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true;
+    if (arm.timer) clearTimeout(arm.timer);
+    arm.timer = null;
+    arm.uploadStartedAt = Date.now();
+    const baselineErrors = new Map(visibleUploadErrors().map(entry => [entry.node, entry.text]));
     const doneBefore = verifiedImageCount(arm.view, arm.dataset, arm.run);
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now() };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.1' };
       setRun(arm.run);
       input.files = transfer.files;
       input.dispatchEvent(new page.Event('input', { bubbles: true }));
       input.dispatchEvent(new page.Event('change', { bubbles: true }));
       setStatus(`${arm.files.length}枚を一括挿入・アップロード中…`);
-      const result = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 900000);
+      const result = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 1800000, baselineErrors);
       const created = result.fresh || [];
+      if (result.failed && arm.run.pending) {
+        arm.run.pending.stage = 'failed'; arm.run.pending.failedAt = Date.now();
+        arm.run.pending.failure = result.reason; setRun(arm.run);
+      }
       if (created.length) {
         const slots = arm.run.pending?.slots;
         if (created.length !== arm.workRows.length && (!slots || slots.length !== arm.workRows.length)) throw new FatalError('一部画像の順序を確認できません。誤ったリンクを付けず本文と投入記録を保持して停止しました');
@@ -1113,6 +1142,8 @@
     } finally {
       try { input.files = new page.DataTransfer().files; input.value = ''; } catch (_) {}
       arm.files.length = 0;
+      arm.beforeInputs?.clear();
+      optimizeUploadedImages(arm.view, arm.run);
     }
     return true;
   }
@@ -1166,18 +1197,37 @@
   async function recoverPending(view, dataset, run) {
     const pending = run.pending;
     if (!pending?.workUrls?.length || !Array.isArray(pending.beforeIds)) throw new FatalError('画像の投入記録が不完全です。本文の控えを確認してください');
-    const workRows = pending.workUrls.map(url => dataset.rows.find(r => r.url === url));
+    const workRows = pending.workUrls.map(url => dataset.rows.find(row => row.url === url));
+    if (workRows.some(row => !row)) throw new FatalError('画像の対象一覧が一致しません');
     const before = new Set(pending.beforeIds.map(String));
-    const fresh = imageNodes(view).filter(hit => hit.node.attrs?.id && !before.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
-    if (fresh.length !== workRows.length || fresh.some(hit => !remoteImage(hit.node)) || workRows.some(row => !row)) {
-      throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「画」で回収します');
+    const collect = () => imageNodes(view).filter(hit => hit.node.attrs?.id && !before.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
+    let all = collect();
+    const complete = all.length === workRows.length && all.every(hit => remoteImage(hit.node));
+    let retry = false;
+    if (!complete) {
+      const recordedFailure = pending.stage === 'failed' || getJSON(uploadDiagKey(), []).some(row =>
+        Date.parse(row.at) >= Number(pending.at || 0) && row.requested === workRows.length && row.succeededThisBatch < row.requested);
+      if (!recordedFailure || uploadRequests.size) throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「画」で回収します');
+      const signature = () => JSON.stringify(collect().map(hit => [hit.node.attrs.id, hit.node.attrs.src]));
+      const initial = signature();
+      await sleep(2000); safety().check(view);
+      if (uploadRequests.size || signature() !== initial || (lastUploadActivityAt && Date.now() - lastUploadActivityAt < UPLOAD_QUIET_MS)) throw new FatalError('前回のアップロードが動いています。完了後に「画」を押してください');
+      all = collect(); retry = true;
     }
-    const rows = fresh.map((hit,i) => workRows[pending.slots ? pending.slots.indexOf(String(hit.node.attrs.id)) : i]);
+    const slots = pending.slots;
+    if (all.length && (!slots || slots.length !== workRows.length) && !complete) throw new FatalError('一部画像の順序が未確認です。誤ったリンクを防ぐため本文と投入記録を保持しました');
+    if (slots && (new Set(slots).size !== slots.length || all.some(hit => !slots.includes(String(hit.node.attrs.id))))) throw new FatalError('画像IDが投入記録と一致しません');
+    const ready = all.filter(hit => remoteImage(hit.node));
+    const rows = ready.map((hit, i) => workRows[slots ? slots.indexOf(String(hit.node.attrs.id)) : i]);
     if (rows.some(row => !row)) throw new FatalError('前回の画像順序を確認できません');
-    await linkCreatedImages(view, rows, fresh, run);
-    run.pending = null; setRun(run);
-    await saveOnce(`中断画像 ${fresh.length}枚を復旧保存中…`);
-    return fresh.length;
+    if (ready.length) await linkCreatedImages(view, rows, ready, run);
+    if (retry) {
+      const placeholders = all.filter(hit => !remoteImage(hit.node));
+      if (placeholders.length) safety().remove(view, placeholders);
+    }
+    await saveOnce(retry ? `成功${ready.length}枚を保持｜失敗分だけ再準備します…` : `中断画像 ${ready.length}枚を復旧保存中…`);
+    run.pending = null; setRun(run); optimizeUploadedImages(view, run);
+    return ready.length;
   }
 
   async function insertThinImages() {
@@ -1195,6 +1245,7 @@
       operation = safety().begin('画像作成', view);
       selectionApi();
       if (run.pending) await recoverPending(view, dataset, run);
+      optimizeUploadedImages(view, run);
       const completedNow = verifiedImageCount(view, dataset, run);
       const missing = missingRows(view, dataset, run);
       if (!missing.length) {
@@ -3117,7 +3168,7 @@ function article(raw,c={}){const n=raw?.note&&typeof raw.note==='object'?raw.not
 async function contents(id,p=1,dp=true){const x=await json(`https://note.com/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${p}&disabled_pinned=${dp?'true':'false'}&with_notes=false`);await sleep(35);return x}
 const tms=v=>Date.parse(String(v||''))||0,ymd=v=>{const t=typeof v==='number'?v:tms(v);return t?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t)):''};
 async function oldest(c){const f=await contents(c.urlname,1,true),fp=await contents(c.urlname,1,false),fl=list(f),pl=list(fp),d=f?.data||{},total=Number(d.totalCount||d.total_count||0),per=Math.max(1,fl.length||1);let ll=fl;if(total>per){const p=Math.min(500,Math.ceil(total/per));if(p>1)try{ll=list(await contents(c.urlname,p,true))}catch{}}const m=new Map();for(const r of[...pl,...ll,...fl]){const a=article(r,c);if(a&&!m.has(a.latestKey))m.set(a.latestKey,a)}return[...m.values()].sort((a,b)=>(tms(a.publishAt)||Infinity)-(tms(b.publishAt)||Infinity))[0]||null}
-async function choose(c,m){try{if(m==='oldest')return oldest(c);if(m==='fixed')return article(list(await contents(c.urlname,1,false))[0],c);if(m==='todayYesterday'){const a=list(await contents(c.urlname,1,true)).map(r=>article(r,c)).filter(Boolean),days=new Set([ymd(Date.now()),ymd(Date.now()-86400000)]),hit=a.find(x=>days.has(ymd(x.publishAt)));return hit||article(list(await contents(c.urlname,1,false))[0],c)}return article(list(await contents(c.urlname,1,true))[0],c)}catch{return null}}
+async function choose(c,m){if(c.tagArticle)return{...c,...c.tagArticle,sourceKeys:c.sourceKeys||[],sourceTags:c.sourceTags||[],articleSource:'hashtag'};try{if(m==='oldest')return oldest(c);if(m==='fixed')return article(list(await contents(c.urlname,1,false))[0],c);if(m==='todayYesterday'){const a=list(await contents(c.urlname,1,true)).map(r=>article(r,c)).filter(Boolean),days=new Set([ymd(Date.now()),ymd(Date.now()-86400000)]),hit=a.find(x=>days.has(ymd(x.publishAt)));return hit||article(list(await contents(c.urlname,1,false))[0],c)}return article(list(await contents(c.urlname,1,true))[0],c)}catch{return null}}
 const label=m=>m==='oldest'?'最古':m==='fixed'?'固定':m==='todayYesterday'?'本日昨日':'最新';
 async function me(){try{const p=await json('https://note.com/api/v2/current_user'),d=p?.data??p??{},u=d.user||d;return norm(u.urlname||u.url_name||u.username)}catch{return''}}
 function creatorFromUser(u){u=u?.user||u?.creator||u||{};const id=norm(u.urlname||u.url_name||u.username);return id?{likerKey:String(u.key||u.id||id),urlname:id,creator:String(u.nickname||u.name||id),actorUrl:`https://note.com/${id}`,actorImageUrl:String(u.user_profile_image_url||u.profileImageUrl||'')}:null}
@@ -3130,7 +3181,7 @@ async function fetchSourcePage(s,pageNo,self){
     return{creators,done:!a.length||a.length<50};
   }
   const x=await json(`https://note.com/api/v3/hashtags/${encodeURIComponent(s.tag)}/notes?order=new&page=${pageNo}&paid_only=false`),d=x?.data&&typeof x.data==='object'?x.data:x,a=Array.isArray(d.notes)?d.notes:[];
-  const creators=a.map(r=>{const n=r?.note&&typeof r.note==='object'?r.note:r,c=creatorFromUser(n?.user||n?.author);return c&&c.urlname!==self?{...c,sourceTags:[s.tag]}:null}).filter(Boolean);
+  const creators=a.map(r=>{const n=r?.note&&typeof r.note==='object'?r.note:r,c=creatorFromUser(n?.user||n?.author),tagArticle=c?article(n,c):null;return c&&c.urlname!==self&&tagArticle?{...c,sourceTags:[s.tag],tagArticle}:null}).filter(Boolean);
   return{creators,done:!a.length||d.is_last_page===true||d.isLastPage===true};
 }
 function mergeCreator(target,c){
@@ -3139,6 +3190,7 @@ function mergeCreator(target,c){
   const old=target.get(id);
   old.sourceKeys=[...new Set([...(old.sourceKeys||[]),...(c.sourceKeys||[])])];
   old.sourceTags=[...new Set([...(old.sourceTags||[]),...(c.sourceTags||[])])];
+  if(!old.tagArticle&&c.tagArticle)old.tagArticle=c.tagArticle;
 }
 async function collectCombinedCreators(ss,max){
   const self=await me(),people=new Map(),states=ss.map((s,i)=>({s,index:i,page:1,done:false}));
@@ -3146,19 +3198,31 @@ async function collectCombinedCreators(ss,max){
   while(people.size<max&&states.some(x=>!x.done)&&round<500){
     round++;
     const active=states.filter(x=>!x.done);
-    status(`入力元を交互読込 ${people.size}/${max}人｜round ${round}｜${active.length}ソース`);
+    status(`入力元を交互読込 ${people.size}/${max}人｜#記事優先｜${active.length}ソース`);
     const results=await mapLimit(active,Math.min(4,active.length),async st=>{
-      try{return{st,res:await fetchSourcePage(st.s,st.page,self)}}catch(e){if([403,429].includes(Number(e.status)))throw e;return{st,res:{creators:[],done:true}}}
+      return{st,res:await fetchSourcePage(st.s,st.page,self)}
     });
     let maxLen=0;
     for(const item of results){item.st.done=!!item.res.done;if(!item.st.done)item.st.page+=1;maxLen=Math.max(maxLen,item.res.creators.length)}
-    for(let i=0;i<maxLen&&people.size<max;i++){
+    // Process every fetched row: a later # source can override an earlier URL at the count boundary.
+    for(let i=0;i<maxLen;i++){
       for(const item of results){
-        const c=item.res.creators[i];if(c)mergeCreator(people,c);
-        if(people.size>=max)break;
+        const c=item.res.creators[i];if(c&&(people.size<max||people.has(norm(c.urlname))))mergeCreator(people,c);
       }
     }
     await sleep(35);
+  }
+  // Keep the same selected people. Read remaining # pages only to resolve overlaps
+  // for already-selected URL people; do not silently substitute their latest/fixed article.
+  for(const st of states.filter(x=>x.s.type==='tag'&&!x.done)){
+    while(!st.done&&[...people.values()].some(c=>c.sourceKeys?.length&&!c.tagArticle)){
+      if(st.page>500)throw new Error('#記事の重複確認が上限に達しました。入力する#を絞ってください');
+      status(`#記事優先の重複確認｜#${st.s.tag} ${st.page}ページ｜対象${people.size}人`);
+      const result=await fetchSourcePage(st.s,st.page,self);
+      st.done=!!result.done;st.page+=1;
+      for(const c of result.creators)if(people.has(norm(c.urlname)))mergeCreator(people,c);
+      await sleep(35);
+    }
   }
   return[...people.values()].slice(0,max);
 }
@@ -3167,7 +3231,7 @@ function saveRows(rows,s,m,count){const id=`generic:${Date.now()}:${rows.length}
 function canStart(){if(page.__MUMEI_CARD_SAFETY__?.busy()){status('処理中です。完了または停止を待ってください',true);return false}const r=get(runKey(),null),cards=Array.isArray(r?.cardKeys)?r.cardKeys.length:0,images=r?.images&&typeof r.images==='object'?Object.keys(r.images).length:0;if(cards){status(`通知カードが${cards}件残っています。先に削除`,true);return false}if(images){status(`前回の極薄画像が${images}件あります。初期化してから開始`,true);return false}return enabled()&&!busy}
 async function start(){if(!canStart())return;const b=document.querySelector(`.${BOX}`),raw=b?.querySelector('[data-source]')?.value,ss=sources(raw);if(!ss.length)return status('記事URL または #タグ を入力してください。複数URLは改行でOK',true);const mode=b.querySelector('[data-choice].active')?.dataset.choice||'todayYesterday',count=Math.min(3000,Math.max(1,Number(b.querySelector('[data-count]')?.value||500)));set(PREF,{source:raw,mode,count});setBusy(true);try{const creators=await collectCombinedCreators(ss,count);if(!creators.length)throw new Error('対象者を取得できませんでした');const rows=[],people=new Set(),urls=new Set();for(let i=0;i<creators.length;i+=8){const batch=creators.slice(i,i+8);status(`記事選定 ${Math.min(i+batch.length,creators.length)}/${creators.length}｜${label(mode)}｜採用${rows.length}`);for(const r of await mapLimit(batch,8,c=>choose(c,mode))){if(!r)continue;const p=norm(r.urlname),u=cleanUrl(r.url);if(!p||people.has(p)||!u||urls.has(u))continue;people.add(p);urls.add(u);rows.push({...r,url:u})}}if(!rows.length)throw new Error('公開記事が0件です');const marker=await finalRow(),final=rows.filter(r=>norm(r.urlname)!=='fuku444'&&cleanUrl(r.url)!==cleanUrl(FINAL));final.push(marker);const meta={type:ss.length>1?'multi':ss[0].type,raw:ss.map(s=>s.type==='url'?s.raw:'#'+s.tag).join('\n'),key:ss.map(s=>s.type==='url'?s.key:s.tag).join(',')};const n=saveRows(final,meta,mode,count);status(`${ss.length}入力を交互読込 → 重複除外後${creators.length}人 → 採用${n-1}人＋確認用1件 ✅ 次は「画」`);setTimeout(()=>document.querySelector(`#${PANEL} button[data-a="image"]`)?.click(),120)}catch(e){status([403,429].includes(Number(e.status))?`HTTP ${e.status}で停止。自動再試行しません`:`開始停止：${e.message||e}`,true)}finally{setBusy(false)}}
 function css(){if(document.getElementById(STYLE)||!document.head)return;const s=document.createElement('style');s.id=STYLE;s.textContent=`#${PANEL}{width:min(340px,calc(100vw - 12px))!important}#${PANEL}>.grid2,#${PANEL}>.grid3,#${PANEL}>input[data-source],#${PANEL}>input[data-amount],#${PANEL}>[data-hint],#${PANEL}>.resume{display:none!important}#${PANEL} button[data-a="extract"]{display:none!important}#${PANEL} .actions{grid-template-columns:repeat(3,1fr)!important}#${PANEL} .${BOX}{background:#111827;border:1px solid #2563eb;border-radius:10px;padding:8px;margin-bottom:7px}#${PANEL} .${BOX} input,#${PANEL} .${BOX} textarea{display:block!important;width:100%!important;box-sizing:border-box!important;background:#020617!important;color:#fff!important;border:1px solid #475569!important;border-radius:7px!important;padding:8px!important;margin:0 0 6px!important}#${PANEL} .${BOX} textarea{min-height:58px!important;resize:vertical!important}#${PANEL} .${BOX} .choices{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}#${PANEL} .${BOX} button{padding:8px 3px;font-size:10px;font-weight:900;background:#1e293b;color:#fff;border:1px solid #475569;border-radius:7px}#${PANEL} .${BOX} button.active{background:#0f766e}#${PANEL} .${BOX} [data-start]{width:100%;font-size:13px;background:#2563eb}#${PANEL} .${BOX} .mini{font-size:9px;line-height:1.35;color:#cbd5e1;margin-top:6px}`;document.head.appendChild(s)}
-function mount(){if(!enabled())return false;const p=document.getElementById(PANEL);if(!p)return false;css();const t=p.querySelector('.mumei-title-text-v164')||p.querySelector(':scope > .title');if(t)t.textContent='極薄＋通知｜URL / #';if(p.querySelector(`.${BOX}`))return true;const pr=prefs(),b=document.createElement('div');b.className=BOX;b.innerHTML=`<div style="font-size:11px;font-weight:900;margin-bottom:6px">URL / # → 1人1記事</div><textarea data-source rows="3" placeholder="記事URL / #タグ（複数URLは改行）">${pr.source.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea><div class="choices"><button data-choice="latest">最新</button><button data-choice="oldest">最古</button><button data-choice="fixed">固定</button><button data-choice="todayYesterday">本日昨日</button></div><input data-count type="number" min="1" max="3000" value="${pr.count}"><button data-start>開始</button><div class="mini">複数URL可（改行）｜件数＝全URL合算・重複除外後の上限｜同じ人物は1人だけ｜#も混在可｜本日昨日＝今日/昨日、無ければ固定｜最後にサブ垢確認記事を1件追加</div>`;(p.querySelector('.actions')||p.firstChild).before(b);(b.querySelector(`[data-choice="${pr.mode}"]`)||b.querySelector('[data-choice="todayYesterday"]')).classList.add('active');b.onclick=e=>{const c=e.target.closest('[data-choice]');if(c&&!busy){b.querySelectorAll('[data-choice]').forEach(x=>x.classList.toggle('active',x===c));return}if(e.target.closest('[data-start]')){e.preventDefault();void start()}};return true}
+function mount(){if(!enabled())return false;const p=document.getElementById(PANEL);if(!p)return false;css();const t=p.querySelector('.mumei-title-text-v164')||p.querySelector(':scope > .title');if(t)t.textContent='極薄＋通知｜URL / #';if(p.querySelector(`.${BOX}`))return true;const pr=prefs(),b=document.createElement('div');b.className=BOX;b.innerHTML=`<div style="font-size:11px;font-weight:900;margin-bottom:6px">URL / # → 1人1記事</div><textarea data-source rows="3" placeholder="記事URL / #タグ（複数URLは改行）">${pr.source.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea><div class="choices"><button data-choice="latest">最新</button><button data-choice="oldest">最古</button><button data-choice="fixed">固定</button><button data-choice="todayYesterday">本日昨日</button></div><input data-count type="number" min="1" max="3000" value="${pr.count}"><button data-start>開始</button><div class="mini">複数URL可（改行）｜件数＝全URL合算・重複除外後の上限｜同じ人物は1人だけ｜重複時は#の記事を優先｜本日昨日＝今日/昨日、無ければ固定｜最後にサブ垢確認記事を1件追加</div>`;(p.querySelector('.actions')||p.firstChild).before(b);(b.querySelector(`[data-choice="${pr.mode}"]`)||b.querySelector('[data-choice="todayYesterday"]')).classList.add('active');b.onclick=e=>{const c=e.target.closest('[data-choice]');if(c&&!busy){b.querySelectorAll('[data-choice]').forEach(x=>x.classList.toggle('active',x===c));return}if(e.target.closest('[data-start]')){e.preventDefault();void start()}};return true}
 let n=0;const timer=setInterval(()=>{n++;if(mount()||n>80)clearInterval(timer)},400);mount();
 })();
 
@@ -3185,12 +3249,15 @@ const FLOAT_STATE='mumei_note_floating_ui_v164';
 function css(){
   if(document.getElementById(STYLE)||!document.head)return;
   const s=document.createElement('style');s.id=STYLE;s.textContent=`
-#${PANEL}{width:min(250px,calc(100vw - 10px))!important;max-width:250px!important;padding:6px!important}
-#${PANEL}>.title{min-height:24px!important;margin-bottom:4px!important;cursor:move!important;touch-action:none!important;font-size:11px!important}
+#${PANEL}{width:min(230px,calc(100vw - 10px))!important;max-width:230px!important;padding:5px!important}
+#${PANEL}>.title{min-height:22px!important;margin-bottom:3px!important;cursor:move!important;touch-action:none!important;font-size:11px!important}
 #${PANEL} .mumei-min-btn-v164{width:26px!important;min-width:26px!important;height:24px!important;line-height:22px!important;font-size:14px!important}
-#${PANEL} .mumei-prince-special-v184{padding:5px!important;margin-bottom:4px!important;border-radius:8px!important}
+#${PANEL} .mumei-prince-special-v184{padding:4px!important;margin-bottom:3px!important;border-radius:8px!important}
 #${PANEL} .mumei-prince-special-v184>div:first-child{font-size:10px!important;margin-bottom:4px!important}
 #${PANEL} .mumei-prince-special-v184 input{height:29px!important;min-height:29px!important;padding:4px 6px!important;margin:0 0 4px!important;font-size:10px!important}
+#${PANEL} .mumei-prince-special-v184 textarea[data-source]{min-height:42px!important;height:42px!important;padding:5px 6px!important;margin:0 0 4px!important;font-size:10px!important;line-height:1.25!important}
+#${PANEL} [data-card-safety]{display:flex!important;align-items:center!important;gap:3px!important;margin-top:3px!important}
+#${PANEL} [data-card-safety] button{min-height:26px!important;padding:2px 5px!important;font-size:10px!important}
 #${PANEL} .mumei-prince-special-v184 .choices{gap:2px!important;margin-bottom:4px!important}
 #${PANEL} .mumei-prince-special-v184 .choices button{height:27px!important;min-height:27px!important;padding:2px!important;font-size:9px!important}
 #${PANEL} .mumei-prince-special-v184 [data-start]{height:30px!important;min-height:30px!important;padding:3px!important;font-size:11px!important}
