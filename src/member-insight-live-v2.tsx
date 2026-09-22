@@ -232,7 +232,7 @@ export function MemberInsightLiveV2(){
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <MemberInsightCompleteness revision={revision}/>
-    <MemberInsightUnifiedV4 revision={revision} onTabChange={handleUnifiedTab}/>
+    <MemberInsightUnifiedV4 revision={revision} active={mode==="normal"} onTabChange={handleUnifiedTab}/>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
