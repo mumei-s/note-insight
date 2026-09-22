@@ -27,7 +27,7 @@ async function launcher(t, { mobile = true, update = false, reverse = false } = 
         ${update ? '<button class="miv5-install-link update-ready">本体を更新</button>' : ''}
       </div>
       <div class="miv5-source-card notice ${update ? 'needs-update' : ''}">
-        <button class="miv5-source-main"><strong>🔔 本人通知</strong><small>この端末 v3.6.5</small><span>通知履歴・追加分析</span></button>
+        <button class="miv5-source-main"><strong>🔔 本人通知</strong><small>この端末 v3.6.6</small><span>通知履歴・追加分析</span></button>
         <a class="miv5-install-link" href="./tool-setup.html">設定・更新状態</a>
       </div>
       <div class="miv5-source-card dashboard ${update ? 'needs-update' : ''}">
@@ -57,6 +57,12 @@ async function launcher(t, { mobile = true, update = false, reverse = false } = 
 }
 
 async function assertSettled(w) {
+  let pending=0,last=-1,quiet=0;
+  const initializing=new w.MutationObserver(records=>pending+=records.length);
+  initializing.observe(w.document.body,{subtree:true,childList:true,characterData:true,attributes:true});
+  for(let i=0;i<30&&quiet<3;i++){await pause(100);quiet=pending===last?quiet+1:0;last=pending}
+  initializing.disconnect();
+  assert.equal(quiet,3,'初期表示の補正が収束しない');
   const changed = [];
   const observer = new w.MutationObserver(records => changed.push(...records.map(record => ({
     type: record.type, attribute: record.attributeName, target: record.target.nodeName,
@@ -77,7 +83,7 @@ test('本番の上段補正を同時実行しても旧インストール / 更�
   assert.equal(w.document.querySelector('.miv5-update').style.height, '103px');
   const controls = w.document.querySelector('.mumei-notice-controls');
   const toggle = controls.querySelector('button');
-  assert.equal(toggle.textContent, '🔔パネル ON');
+  assert.equal(toggle.textContent, 'note公式🔔パネル ON');
   for (const kind of ['normal', 'notice', 'dashboard']) w.document.querySelector(`.${kind} .miv5-source-main`).click();
   w.document.querySelector('.mumei-detail-analysis-proxy').click();
   assert.deepEqual(clicks, ['normal', 'notice', 'dashboard', 'detail']);

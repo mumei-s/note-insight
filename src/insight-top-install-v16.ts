@@ -60,8 +60,8 @@ function installStyle(){
 .miv5-update .miv5-source-main strong{font-size:8.4px!important;line-height:1.15!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}.miv5-update .miv5-source-main small{font-size:6px!important;line-height:1.2!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}.miv5-update .miv5-source-main span{font-size:5.5px!important;line-height:1.2!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .miv5-update .miv5-install-link.${CANONICAL},.miv5-update .miv5-source-card.normal>.miv5-install-link.update-ready{box-sizing:border-box!important;display:flex!important;position:static!important;width:100%!important;height:22px!important;min-height:22px!important;max-height:22px!important;margin:0!important;padding:0 4px!important;align-items:center!important;justify-content:center!important;border-radius:999px!important;text-decoration:none!important;font:900 6.1px/1 system-ui!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .miv5-update .miv5-source-card.dashboard>.miv5-install-link.${CANONICAL},.miv5-update .miv5-source-card.notice>.miv5-install-link.${CANONICAL},.miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.miv5-install-link.${CANONICAL}{border:1px solid #5e7b8d!important;background:#0d1e29!important;color:#e1f7ff!important}.miv5-update .miv5-source-card.normal>.miv5-install-link.update-ready{border:1px solid #4f7b5d!important;background:#0b2115!important;color:#c8ffdc!important}
-.miv5-update .miv5-source-card.notice>.${NOTICE_CONTROLS}{display:grid!important;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)!important;gap:3px!important;width:100%!important;height:22px!important;min-height:22px!important;max-height:22px!important}
-.miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.${NOTICE_TOGGLE}{box-sizing:border-box!important;width:100%!important;height:22px!important;min-height:22px!important;max-height:22px!important;margin:0!important;padding:0 3px!important;border-radius:999px!important;font:950 6.2px/1 system-ui!important;white-space:nowrap!important}
+.miv5-update .miv5-source-card.notice>.${NOTICE_CONTROLS}{display:grid!important;grid-template-columns:minmax(0,2.4fr) minmax(22px,.8fr)!important;gap:3px!important;width:100%!important;height:22px!important;min-height:22px!important;max-height:22px!important}
+.miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.${NOTICE_TOGGLE}{box-sizing:border-box!important;width:100%!important;height:22px!important;min-height:22px!important;max-height:22px!important;margin:0!important;padding:0 3px!important;border-radius:999px!important;font:950 6.6px/1.1 system-ui!important;white-space:normal!important}
 .miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.${NOTICE_TOGGLE}.on{border:1px solid #4f9c72!important;background:#0b2117!important;color:#caffdc!important}
 .miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.${NOTICE_TOGGLE}.off{border:1px solid #8a5962!important;background:#2b151a!important;color:#ffd5db!important}
 .miv5-update .miv5-source-card.notice .${NOTICE_CONTROLS}>.${NOTICE_TOGGLE}.wait{border:1px solid #516777!important;background:#101c24!important;color:#9fb4c1!important}
@@ -83,14 +83,14 @@ function ensureNoticeControls(){
     toggle.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();if(featureBridgeSeen)setFeatureState(featureEnabled===false)})
   }
   toggle.disabled=!featureBridgeSeen;
-  textIfChanged(toggle,featureBridgeSeen?(featureEnabled===false?"🔔パネル OFF":"🔔パネル ON"):"🔔パネル 確認中");
+  textIfChanged(toggle,featureBridgeSeen?(featureEnabled===false?"note公式🔔パネル OFF":"note公式🔔パネル ON"):"note公式🔔パネル 確認中");
   if(toggle.getAttribute("aria-pressed")!==String(featureEnabled===true))toggle.setAttribute("aria-pressed",String(featureEnabled===true));
   classIfChanged(toggle,`${NOTICE_TOGGLE} ${featureBridgeSeen?(featureEnabled===false?"off":"on"):"wait"}`);
-  toggle.title=featureBridgeSeen?(featureEnabled===false?"noteの🔔パネル・自動読込をONにする":"noteの🔔パネル・自動読込をOFFにする"):"本人通知ツールの状態を確認中";
+  toggle.title=featureBridgeSeen?(featureEnabled===false?"note公式🔔のINSIGHTパネル・自動読込をONにする":"note公式🔔のINSIGHTパネル・自動読込をOFFにする"):"本人通知ツールの状態を確認中";
 
   let link=controls.querySelector<HTMLAnchorElement>(`a.${CANONICAL}`);
   if(!link){link=document.createElement("a");controls.appendChild(link)}
-  classIfChanged(link,`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`);link.href=hrefFor("notice");textIfChanged(link,card.classList.contains("needs-update")?"⬆ 更新あり":card.classList.contains("needs-install")?"＋ インストール":"設定");link.title=card.classList.contains("needs-update")?"本人通知の更新があります":card.classList.contains("needs-install")?"本人通知をこの端末へインストール":"本人通知の設定・更新";link.onclick=e=>e.stopPropagation();
+  classIfChanged(link,`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`);link.href=hrefFor("notice");textIfChanged(link,card.classList.contains("needs-update")?"更新あり":card.classList.contains("needs-install")?"＋ インストール":"設定");link.title=card.classList.contains("needs-update")?"本人通知の更新があります":card.classList.contains("needs-install")?"本人通知をこの端末へインストール":"本人通知の設定・更新";link.onclick=e=>e.stopPropagation();
 
   for(const el of [...card.querySelectorAll<HTMLElement>(":scope > a,:scope > button")]){if(el.classList.contains("miv5-source-main"))continue;el.remove()}
   card.classList.toggle("mumei-notification-feature-off",featureEnabled===false);
