@@ -342,3 +342,128 @@ test('パネルの幅と入力欄を少し縮小し、操作ボタンのサイ�
   assert.match(css,/width:min\(230px/);assert.match(css,/textarea\[data-source\]\{min-height:42px/);
   assert.match(css,/choices button\{height:27px/);
 });
+
+test('200枚で画像通信が失敗した後、初期化は途中40枚も除去し元本文と通常画像を残す', async () => {
+  const e = sending(307), original = [new Node('paragraph', {}, '原稿697文字を消さない'), image('original-photo')];
+  e.view.dispatch(e.view.state.tr.replaceWith(0, e.view.state.doc.content.size, new Doc(original).content));
+  e.run.images = {}; e.run.cardKeys = [];
+  class Transfer { constructor() { this.list = []; this.items = { add: f => this.list.push(f) }; } get files() { return this.list; } }
+  e.page.DataTransfer = Transfer;
+  const api = e.loadModule('note-likers-thin-notify-v160.js', 'injectImageInput,beginUploadRequest,endUploadRequest,setView(v){viewCache=v},setArm(a){imageArm=a}');
+  api.setView(e.view);
+  for (let offset = 0; offset < 240; offset += 80) {
+    const rows = e.rows.slice(offset, offset + 80); let arm;
+    const completion = new Promise((resolve, reject) => { arm = { view:e.view, dataset:e.dataset, run:e.run, workRows:rows, files:rows.map(r=>({name:r.index+'.png',type:'image/png'})), beforeIds:new Set(e.safety.index(e.view).images.map(h=>h.node.attrs.id)), beforeInputs:new Set(), resolve, reject, consumed:false }; });
+    const checked = offset === 160 ? assert.rejects(completion, /開始時160枚/) : completion;
+    const input = { tagName:'INPUT', type:'file', accept:'image/*', files:[], value:'', dispatchEvent(event) {
+      if (event.type !== 'change') return;
+      for (const row of rows) e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,
+        row.index <= 200 ? image('upload'+row.index) : new Node('image', {id:'upload'+row.index,src:'blob:failed',link:''})));
+      if (offset === 160) { const ticket = api.beginUploadRequest({type:'image/png'}, '/upload'); api.endUploadRequest(ticket, 500, 'failed'); }
+    } };
+    api.setArm(arm); await api.injectImageInput(input); await checked;
+  }
+  assert.equal(Object.keys(e.run.images).length, 200);
+  assert.equal(e.run.pending.slots.length, 80); assert.equal(e.run.pending.stage, 'failed');
+  await e.module.resetAll();
+  assert.deepEqual(e.view.state.doc.nodes, original);
+  assert.equal(e.storage.has('mumei_likers_thin_run_v160:' + key), false);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /極薄240/);
+});
+
+test('次の画像選択待ちを初期化で解除し、ファイルを解放する', async () => {
+  const e = sending(1), nativeClick = function () {};
+  e.page.HTMLInputElement.prototype.click = nativeClick;
+  const api = e.loadModule('note-likers-thin-notify-v160.js', 'installNativeInputInterceptor,prepareReset,setArm(a){imageArm=a}');
+  let arm;
+  const completion = new Promise((resolve, reject) => { arm = { consumed:false, files:[{}], beforeInputs:new Set([{}]), resolve, reject }; });
+  const checked = assert.rejects(completion, /初期化へ/);
+  api.setArm(arm); api.installNativeInputInterceptor(); await api.prepareReset(); await checked;
+  assert.equal(arm.files.length, 0); assert.equal(arm.beforeInputs.size, 0);
+  assert.equal(e.page.HTMLInputElement.prototype.click, nativeClick);
+});
+
+test('初期化は通信中と未記録の画像を削除せず、投入記録を残す', async () => {
+  const e = sending(1), api = e.loadModule('note-likers-thin-notify-v160.js', 'beginUploadRequest,endUploadRequest,setArm(a){imageArm=a}');
+  e.run.pending = { workUrls:e.rows.map(r=>r.url), beforeIds:['image0'], slots:['owned'], stage:'failed' };
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, image('unrecorded-photo')));
+  e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(e.run)); const before=e.encode();
+  api.setArm({consumed:true}); const ticket=api.beginUploadRequest({type:'image/png'},'/upload');
+  await e.module.resetAll(); assert.equal(e.encode(),before); assert.ok(e.storage.has('mumei_likers_thin_run_v160:'+key));
+  api.endUploadRequest(ticket,200); e.run.pending.stage='uploading'; e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+  await e.module.resetAll(); assert.equal(e.encode(),before); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/投入記録にない/);
+});
+
+test('307件の対象一覧は本文控え3世代で共有し、初期化後も対象一覧ごと復元できる', () => {
+  const e = sending(307);
+  e.dataset.rows.forEach(r => { r.title='長い記事の見出し'.repeat(40); r.creator='作成者'; });
+  e.storage.set('mumei_likers_thin_dataset_v160', JSON.stringify(e.dataset));
+  e.safety.checkpoint(e.view); e.safety.capture();
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph',{},'追記'))); e.safety.capture();
+  const copies=e.safety.backups(); assert.equal(copies.length,3);
+  for(const {slot,item} of copies){ assert.equal(item.dataset.rows.length,307); assert.equal(JSON.parse(e.storage.get('mumei_card_backup_v188:'+key+':'+slot)).dataset,null); }
+  const encodedCopies=copies.map(x=>JSON.stringify(x.item).length).reduce((a,b)=>a+b,0);
+  const storedCopies=[...e.storage].filter(([k])=>k.startsWith('mumei_card_backup_v188:')).reduce((sum,[,v])=>sum+v.length,0);
+  assert.ok(storedCopies < encodedCopies*0.65, `${storedCopies}/${encodedCopies}`);
+  e.storage.delete('mumei_likers_thin_dataset_v160'); e.safety.restore(copies[0].item);
+  assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_dataset_v160')).rows.length,307);
+});
+
+test('同じIDで対象一覧が変わっても古い本文控えの一覧を上書きしない', () => {
+  const e=sending(1); e.safety.capture(); const old=e.safety.backups()[0].item.dataset.rows[0].url;
+  e.dataset.rows[0].url='https://note.com/other/n/n111111111111';e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));
+  e.safety.checkpoint(e.view);const copies=e.safety.backups();
+  assert.equal(copies.find(c=>c.slot==='latest').item.dataset.rows[0].url,old);
+  assert.equal(copies.find(c=>c.slot==='before').item.dataset.rows[0].url,e.dataset.rows[0].url);
+});
+
+function imageCacheEnvironment() {
+  const e=environment(), entries=new Map(); let puts=0, deletes=0;
+  const cache={ keys:async()=>[...entries.keys()].map(url=>({url})), match:async url=>entries.get(url)?.clone(), put:async(url,response)=>{puts++;entries.set(url,response);}, delete:async url=>{deletes++;return entries.delete(url);} };
+  Object.assign(e.page,{caches:{open:async()=>cache},Response,Blob,File,setTimeout,clearTimeout});
+  e.loadModule('note-thin-image-cache-v1882.js','key');
+  return {...e,cache:e.page.__MUMEI_THIN_IMAGE_CACHE__,entries,puts:()=>puts,deletes:()=>deletes};
+}
+test('同じ画像は初期化・ページ再生成後も再利用し、タイトルや#記事が変われば作り直す', async () => {
+  const e=imageCacheEnvironment(), row={index:1,url:'https://note.com/a/n/n111111111111',title:'見出し',creator:'作者',thumbUrl:'https://assets.st-note.com/thumb.png'};
+  const blob=new Blob(['same png'],{type:'image/png'});assert.equal(await e.cache.put(row,blob),true);
+  const api=e.loadModule('note-likers-thin-notify-v160.js','makeThinFile');
+  const file=await api.makeThinFile({...row,index:200});assert.equal(file.name,'200_thin.png');assert.equal(await file.text(),'same png');
+  const next=environment();Object.assign(next.page,{caches:{open:async()=>({keys:async()=>[...e.entries.keys()].map(url=>({url})),match:async url=>e.entries.get(url)?.clone()})},Response,setTimeout,clearTimeout});
+  next.loadModule('note-thin-image-cache-v1882.js','key'); assert.equal(await (await next.page.__MUMEI_THIN_IMAGE_CACHE__.get(row)).text(),'same png');
+  for(const change of [{title:'変更後'},{url:'https://note.com/a/n/n222222222222'},{thumbUrl:'https://assets.st-note.com/new.png'},{actorImageUrl:'new-avatar'}]) assert.equal(await e.cache.get({...row,...change}),null);
+  assert.equal(e.puts(),1);
+});
+test('画像キャッシュは512件・1件128KiB以内に抑え、保存不可でも画像工程を妨げない', async () => {
+  const e=imageCacheEnvironment(), blob=new Blob(['png'],{type:'image/png'});
+  for(let i=0;i<513;i++)await e.cache.put({url:'article'+i,title:'見出し'},blob);
+  assert.equal(e.entries.size,512);assert.equal(e.deletes(),1);
+  assert.equal(await e.cache.put({url:'large'},new Blob(['x'.repeat(128*1024+1)],{type:'image/png'})),false);
+  const broken=environment();Object.assign(broken.page,{caches:{open:async()=>{throw new Error('quota');}},Response,setTimeout,clearTimeout});
+  broken.loadModule('note-thin-image-cache-v1882.js','key');assert.equal(await broken.page.__MUMEI_THIN_IMAGE_CACHE__.get({url:'a'}),null);assert.equal(await broken.page.__MUMEI_THIN_IMAGE_CACHE__.put({url:'a'},blob),false);
+});
+
+test('控えの整理は参照されない同一記事の対象一覧だけを除去する', () => {
+  const e=sending(1), prefix='mumei_card_backup_v188:'+key+':dataset:';
+  e.page.localStorage.key=i=>[...e.storage.keys()][i]??null;
+  Object.defineProperty(e.page.localStorage,'length',{get:()=>e.storage.size});
+  e.safety.capture();const referenced=JSON.parse(e.storage.get('mumei_card_backup_v188:'+key+':latest')).datasetRef;
+  e.storage.set(prefix+'obsolete','{}');e.storage.set('mumei_card_backup_v188:naaaaaaaaaaaa:dataset:other','{}');
+  e.safety.checkpoint(e.view);assert.equal(e.storage.has(prefix+'obsolete'),false);
+  assert.equal(e.storage.has(referenced),true);assert.equal(e.storage.has('mumei_card_backup_v188:naaaaaaaaaaaa:dataset:other'),true);
+  assert.equal(e.safety.backups().find(x=>x.slot==='latest').item.dataset.rows.length,1);
+});
+test('画像キャッシュは12時間を過ぎた画像を再利用しない', async () => {
+  const e=imageCacheEnvironment(), row={url:'article',title:'見出し'};
+  await e.cache.put(row,new Blob(['png'],{type:'image/png'}));e.page.Date.now=()=>100000+12*60*60*1000+1;
+  assert.equal(await e.cache.get(row),null);
+});
+test('200枚後のブラウザ例外も段階付きで停止し、読み取り専用エラーメッセージを変更しない', async () => {
+  const e=sending(200), before=e.encode();e.page.DataTransfer=class{constructor(){throw new DOMException('画像入力を準備できません','InvalidStateError');}};
+  const api=e.loadModule('note-likers-thin-notify-v160.js','injectImageInput,setArm(a){imageArm=a}');let arm;
+  const completion=new Promise((resolve,reject)=>{arm={view:e.view,dataset:e.dataset,run:e.run,workRows:[e.rows[0]],files:[{}],beforeIds:new Set(e.safety.index(e.view).images.map(x=>x.node.attrs.id)),beforeInputs:new Set(),resolve,reject};});
+  const checked=assert.rejects(completion,/画像投入｜開始時200枚｜画像入力を準備できません/);api.setArm(arm);
+  await api.injectImageInput({tagName:'INPUT',type:'file',accept:'image/*'});await checked;
+  assert.equal(e.encode(),before);assert.equal(arm.files.length,0);
+  const diag=JSON.parse(e.storage.get('mumei_upload_diag_v160:'+key));assert.equal(diag.at(-1).completedBefore,200);assert.equal(diag.at(-1).phase,'画像投入');
+});

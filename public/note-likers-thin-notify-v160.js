@@ -51,7 +51,7 @@
     if (!status || status >= 400) recordNetFailure('image-upload', ticket.url, status, message);
   }
 
-  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.1へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.2へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -146,6 +146,7 @@
       proto.__mumeiUploadProbe160 = true;
     }
   }
+  const optimizedImageDOM = new WeakSet();
   function optimizeUploadedImages(view, run = getRun()) {
     if (!document.head || typeof view.nodeDOM !== 'function') return;
     const id = 'mumei-owned-image-memory-v1881';
@@ -157,7 +158,7 @@
     for (const rec of Object.values(run?.images || {})) {
       const hit = safety().tracked(view, rec); if (!hit) continue;
       const dom = view.nodeDOM(hit.pos), image = dom?.tagName === 'IMG' ? dom : dom?.querySelector?.('img');
-      if (image) { image.loading = 'lazy'; image.decoding = 'async'; }
+      if (image && !optimizedImageDOM.has(image)) { image.loading = 'lazy'; image.decoding = 'async'; optimizedImageDOM.add(image); }
       (dom?.closest?.('figure') || dom)?.classList?.add('mumei-owned-thin-image-v1881');
     }
   }
@@ -534,6 +535,10 @@
     ctx.restore();
   }
   async function makeThinFile(row) {
+    const cache = page.__MUMEI_THIN_IMAGE_CACHE__;
+    const filename = `${String(row.index).padStart(3, '0')}_thin.png`;
+    const cached = await cache?.get(row);
+    if (cached) return new page.File([cached], filename, { type: 'image/png' });
     const load = async (url, width) => { if (!url) return null; try { return await bitmap(await xhr(url, 'blob', 30000), width); } catch (_) { return null; } };
     const [image, avatar] = await Promise.all([load(row.thumbUrl, 640), load(row.actorImageUrl, 84)]);
 
@@ -588,7 +593,8 @@
 
     const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('極薄カード生成失敗')), 'image/png', 1));
     canvas.width = 1; canvas.height = 1;
-    return new page.File([blob], `${String(row.index).padStart(3, '0')}_thin.png`, { type: 'image/png' });
+    if ((!row.thumbUrl || image) && (!row.actorImageUrl || avatar)) await cache?.put(row, blob);
+    return new page.File([blob], filename, { type: 'image/png' });
   }
 
   function findImageByState(view, record, url) {
@@ -640,10 +646,10 @@
       setStatus(`画像🔗付与 ${end}/${created.length}…`);
       if (end < created.length) await sleep(60);
     }
-    const after = imageNodes(view);
+    const afterIndex = safety().index(view), after = afterIndex.images;
     for (let i = 0; i < workRows.length; i += 1) {
       const row = workRows[i], createdId = String(created[i]?.node?.attrs?.id || '');
-      const hit = (createdId ? after.find((entry) => String(entry.node.attrs?.id || '') === createdId) : null) ||
+      const hit = (createdId ? afterIndex.byId.get(createdId) : null) ||
         after.find((entry) => normalizeUrl(entry.node.attrs?.link) === normalizeUrl(row.url) && remoteImage(entry.node));
       if (!hit || normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) throw new FatalError(`画像🔗確認NG: ${row.index}`);
       run.images[row.url] = { id: String(hit.node.attrs?.id || ''), src: String(hit.node.attrs?.src || '') };
@@ -657,7 +663,7 @@
     while (Date.now() < deadline) {
       safety().check(view);
       const allNew = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
-      const running = getRun();
+      const running = imageArm?.run || getRun();
       if (running?.pending && allNew.length === expected && !running.pending.slots) {
         running.pending.slots = allNew.map(hit => String(hit.node.attrs.id)); setRun(running);
         if (imageArm) imageArm.run.pending = running.pending;
@@ -741,6 +747,7 @@
     imageArm = null;
     if (arm?.timer) clearTimeout(arm.timer);
     uninstallImageInputBridge();
+    if (arm && !arm.consumed) { arm.files.length = 0; arm.beforeInputs?.clear(); }
     if (reason && arm?.reject) arm.reject(new FatalError(reason));
   }
   function installNativeInputInterceptor() {
@@ -761,6 +768,7 @@
     const arm = imageArm;
     if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true;
+    arm.phase = '画像投入';
     if (arm.timer) clearTimeout(arm.timer);
     arm.timer = null;
     arm.uploadStartedAt = Date.now();
@@ -769,11 +777,14 @@
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.1' };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.2' };
       setRun(arm.run);
       input.files = transfer.files;
       input.dispatchEvent(new page.Event('input', { bubbles: true }));
       input.dispatchEvent(new page.Event('change', { bubbles: true }));
+      const inserted = imageNodes(arm.view).filter(hit => hit.node.attrs?.id && !arm.beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
+      if (inserted.length === arm.workRows.length) { arm.run.pending.slots = inserted.map(hit => String(hit.node.attrs.id)); setRun(arm.run); }
+      arm.phase = 'アップロード';
       setStatus(`${arm.files.length}枚を一括挿入・アップロード中…`);
       const result = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 1800000, baselineErrors);
       const created = result.fresh || [];
@@ -786,14 +797,17 @@
         if (created.length !== arm.workRows.length && (!slots || slots.length !== arm.workRows.length)) throw new FatalError('一部画像の順序を確認できません。誤ったリンクを付けず本文と投入記録を保持して停止しました');
         const rows = created.map((hit, i) => arm.workRows[slots ? slots.indexOf(String(hit.node.attrs.id)) : i]);
         if (rows.some(row => !row)) throw new FatalError('画像の投入記録が一致しません');
+        arm.phase = 'リンク付与';
         await linkCreatedImages(arm.view, rows, created, arm.run);
         if (created.length === arm.workRows.length) { arm.run.pending = null; setRun(arm.run); }
+        arm.phase = '下書き保存確認';
         await saveOnce(`途中成功分も確定保存｜極薄画像🔗 ${verifiedImageCount(arm.view, arm.dataset, arm.run)}/${arm.dataset.count}…`);
       }
       if (result.failed || created.length < arm.workRows.length) {
         const doneNow = verifiedImageCount(arm.view, arm.dataset, arm.run);
         const left = Math.max(0, arm.dataset.count - doneNow);
         const netText = result.net ? `｜通信 ${result.net.kind} HTTP ${result.net.status || 0} ${result.net.url}` : '';
+        arm.phase = 'アップロード';
         const reason = result.reason || 'note側画像アップロード失敗';
         recordUploadDiag({
           requested: arm.workRows.length,
@@ -808,7 +822,9 @@
       }
       arm.resolve(true);
     } catch (error) {
-      arm.reject(error);
+      recordUploadDiag({ runtime: '18.8.2', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
+      const failure = new FatalError(`${arm.phase}｜開始時${doneBefore}枚｜${error?.message || String(error)}`);
+      failure.cause = error; arm.reject(failure);
     } finally {
       try { input.files = new page.DataTransfer().files; input.value = ''; } catch (_) {}
       arm.files.length = 0;
@@ -864,6 +880,30 @@
     });
     inputObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
+  async function prepareReset() {
+    if (imageArm && !imageArm.consumed) cancelImageArm('初期化へ切り替えます');
+    safety().stop();
+    const deadline = Date.now() + 60000;
+    while (busy && Date.now() < deadline) await sleep(100);
+    if (busy || uploadRequests.size) throw new FatalError('画像通信の完了を待っています。処理が終わってから初期化してください');
+  }
+  function resetImageIds(view, run) {
+    if (uploadRequests.size) throw new FatalError('画像通信中のため初期化を待っています');
+    const pending = run?.pending;
+    if (!pending) return [];
+    if (lastUploadActivityAt && Date.now() - lastUploadActivityAt < UPLOAD_QUIET_MS && pending.stage === 'failed') throw new FatalError('画像通信の停止確認中です。少し待って初期化してください');
+    const before = new Set((pending.beforeIds || []).map(String));
+    const slots = new Set((pending.slots || []).map(String));
+    const tracked = new Set(Object.values(run.images || {}).map(rec => String(rec.id || '')).filter(Boolean));
+    const unknown = imageNodes(view).filter(hit => {
+      const id = String(hit.node.attrs?.id || '');
+      return !before.has(id) && !slots.has(id) && !tracked.has(id);
+    });
+    if (unknown.length) throw new FatalError('投入記録にない画像があります。元画像を守るため初期化を止めました');
+    return [...slots].filter(id => !before.has(id));
+  }
+  page.__MUMEI_THIN_UPLOAD__ = { prepareReset, resetImageIds };
+
   async function recoverPending(view, dataset, run) {
     const pending = run.pending;
     if (!pending?.workUrls?.length || !Array.isArray(pending.beforeIds)) throw new FatalError('画像の投入記録が不完全です。本文の控えを確認してください');
