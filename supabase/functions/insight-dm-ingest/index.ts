@@ -6,6 +6,7 @@ const H={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"conte
 const out=(x:unknown,s=200)=>new Response(JSON.stringify(x),{status:s,headers:H});
 async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 const clean=(v:unknown,max=4000)=>typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null;
+const bodyText=(v:unknown,max=12000)=>typeof v==="string"?v.replace(/\u0000/g,"").replace(/\r\n?/g,"\n").trim().slice(0,max):null;
 const cleanUrl=(v:unknown)=>{const s=clean(v,1600);if(!s)return null;try{const u=new URL(s);if(!u.hostname.endsWith("note.com"))return s;u.hash="";return u.toString()}catch{return s}};
 async function identity(req:Request){
   const raw=req.headers.get("X-Ingest-Token")||"";if(!raw)throw new Error("DM_INGEST_TOKEN_REQUIRED");
@@ -29,7 +30,7 @@ Deno.serve(async req=>{
     if(body.readerStatus){
       const x=body.readerStatus,threadKey=clean(x.threadKey,400);if(!threadKey)throw new Error("THREAD_REQUIRED");
       const {data:thread,error}=await db.from("insight_dm_threads").select("meta").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(error)throw error;
-      if(thread){const {error:e}=await db.from("insight_dm_threads").update({meta:{...(thread.meta||{}),reader_status:{checked_at:new Date().toISOString(),version:clean(x.version,30),read:Math.max(0,Math.min(5000,Number(x.read)||0)),saved:Math.max(0,Math.min(5000,Number(x.saved)||0)),complete:x.complete===true,error:clean(x.error,200)}}}).eq("member_id",who.memberId).eq("thread_key",threadKey);if(e)throw e}
+      if(thread){const {error:e}=await db.from("insight_dm_threads").update({meta:{...(thread.meta||{}),reader_status:{checked_at:new Date().toISOString(),version:clean(x.version,30),read:Math.max(0,Math.min(5000,Number(x.read)||0)),saved:Math.max(0,Number(x.saved)||0),stored:Math.max(0,Number(x.stored)||0),mode:clean(x.mode,30),complete:x.complete===true,error:clean(x.error,200)}}}).eq("member_id",who.memberId).eq("thread_key",threadKey);if(e)throw e}
       return out({ok:true,statusRecorded:Boolean(thread)});
     }
     const threads=Array.isArray(body?.threads)?body.threads.slice(0,800):[];
@@ -38,15 +39,24 @@ Deno.serve(async req=>{
     for(const x of threads){
       const roomUrl=cleanUrl(x?.room_url),threadKey=clean(x?.thread_key,400)||roomUrl;
       if(!threadKey)continue;
-      const {data:existing,error:lookupError}=await db.from("insight_dm_threads").select("meta").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(lookupError)throw lookupError;
-      const row={member_id:who.memberId,thread_key:threadKey,room_url:roomUrl,peer_note_id:clean(x?.peer_note_id,120),peer_name:clean(x?.peer_name,300),peer_url:cleanUrl(x?.peer_url),peer_image_url:cleanUrl(x?.peer_image_url),last_message_at:x?.last_message_at||null,last_synced_at:new Date().toISOString(),meta:{...(existing?.meta||{}),...(x?.meta&&typeof x.meta==="object"?x.meta:{})}};
+      const {data:existing,error:lookupError}=await db.from("insight_dm_threads").select("meta,peer_note_id,peer_name,peer_url,peer_image_url,last_message_at").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(lookupError)throw lookupError;
+      const row={member_id:who.memberId,thread_key:threadKey,room_url:roomUrl,peer_note_id:clean(x?.peer_note_id,120)||existing?.peer_note_id||null,peer_name:clean(x?.peer_name,300)||existing?.peer_name||null,peer_url:cleanUrl(x?.peer_url)||existing?.peer_url||null,peer_image_url:cleanUrl(x?.peer_image_url)||existing?.peer_image_url||null,last_message_at:x?.last_message_at||null,last_synced_at:new Date().toISOString(),meta:{...(existing?.meta||{}),...(x?.meta&&typeof x.meta==="object"?x.meta:{})}};
       const{error}=await db.from("insight_dm_threads").upsert(row,{onConflict:"member_id,thread_key"});if(error)throw error;upsertedThreads++
     }
     for(const x of messages){
       const threadKey=clean(x?.thread_key,400),messageKey=clean(x?.message_key,800),direction=["inbound","outbound","unknown"].includes(String(x?.direction))?String(x.direction):"unknown";
       if(!threadKey||!messageKey)continue;
-      const row={member_id:who.memberId,thread_key:threadKey,message_key:messageKey,direction,sender_name:clean(x?.sender_name,300),sender_url:cleanUrl(x?.sender_url),sender_image_url:cleanUrl(x?.sender_image_url),body:clean(x?.body,12000),sent_at:x?.sent_at||null,raw_text:clean(x?.raw_text,16000),attachment_name:clean(x?.attachment_name,800),attachment_url:cleanUrl(x?.attachment_url),attachment_type:clean(x?.attachment_type,200),captured_at:new Date().toISOString(),meta:x?.meta&&typeof x.meta==="object"?x.meta:{}};
-      const{error}=await db.from("insight_dm_messages").upsert(row,{onConflict:"member_id,message_key"});if(error)throw error;upsertedMessages++;confirmed.push(messageKey)
+      const sourceUrl=String(x?.meta?.request_url||x?.meta?.room_url||"");
+      let sourceRoom="";try{const u=new URL(sourceUrl);if(u.hostname==="dm-api.note.com"||u.hostname==="note.com")sourceRoom=u.pathname.match(/\/rooms\/([0-9a-f-]{36})(?:\/messages)?(?:\/|$)/i)?.[1]||""}catch{}
+      if(sourceRoom&&sourceRoom!==threadKey)throw new Error("DM_THREAD_MISMATCH");
+      if(messageKey.startsWith("api:")&&!messageKey.startsWith("api:"+threadKey+":"))throw new Error("DM_THREAD_MISMATCH");
+      const row={member_id:who.memberId,thread_key:threadKey,message_key:messageKey,direction,sender_name:clean(x?.sender_name,300),sender_url:cleanUrl(x?.sender_url),sender_image_url:cleanUrl(x?.sender_image_url),body:bodyText(x?.body,12000),sent_at:x?.sent_at||null,raw_text:bodyText(x?.raw_text,16000),attachment_name:clean(x?.attachment_name,800),attachment_url:cleanUrl(x?.attachment_url),attachment_type:clean(x?.attachment_type,200),captured_at:new Date().toISOString(),meta:x?.meta&&typeof x.meta==="object"?x.meta:{}};
+      const{error}=await db.from("insight_dm_messages").upsert(row,{onConflict:"member_id,message_key"});if(error)throw error;
+      if(messageKey.startsWith("api:")&&row.sent_at&&row.body){
+        const{data:legacy,error:le}=await db.from("insight_dm_messages").select("id,message_key,meta").eq("member_id",who.memberId).eq("thread_key",threadKey).like("message_key","api-sig:%").eq("sent_at",row.sent_at).eq("body",clean(row.body,12000)).is("meta->>superseded_by",null).limit(2);if(le)throw le;
+        if(legacy?.length===1){const{error:se}=await db.from("insight_dm_messages").update({meta:{...(legacy[0].meta||{}),superseded_by:messageKey}}).eq("id",legacy[0].id).eq("member_id",who.memberId);if(se)throw se}
+      }
+      upsertedMessages++;confirmed.push(messageKey)
     }
     await db.from("insight_dm_sync_runs").insert({member_id:who.memberId,received_count:messages.length,upserted_count:upsertedMessages,thread_count:threads.length,source:"note-dm-reader-v1"});
     return out({ok:true,noteId:who.noteId,threadCount:upsertedThreads,messageCount:upsertedMessages,confirmedMessageKeys:[...new Set(confirmed)]})
