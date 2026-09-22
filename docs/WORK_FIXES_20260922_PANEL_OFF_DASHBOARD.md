@@ -35,3 +35,7 @@
 本人通知3.6.6とDashboard1.4.8は端末のuserscript更新が必要。Web公開だけで既に開いている旧ツールまで更新されたと説明しない。更新後にnoteを開き直し、Dashboardを再連携・読取する。
 
 ローカル必須ゲートは75件＋166件＝241件すべて成功。userscript構文18件と本体build、差分の空白検査も成功。公開版のActionsと配信内容は公開後に別途確認する。
+
+## 公開確認
+
+機能main `d4a88b61af5f54e93eca20a170b3ee1c704102a6`、tree `3404c6fd4e81332bf1234a3a9a62069b291d142a`。Actions `35728808727` の構文・241件回帰・build・Pages deployは成功。クエリなしのPages13ファイルと実際の@require先を含むraw GitHub7ファイル、合計20ファイルがHTTP200で検証済みローカル版と完全一致した。Supabaseは前述v10の配備後ソース一致を確認済み。端末内の旧ツール更新と、本人ログイン後の最新Dashboard保存は別途必要。
