@@ -183,7 +183,6 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
     return()=>{window.removeEventListener("message",receive);window.clearInterval(timer)}
   },[memberNoteId,revision,kind,selectedDay]);
-  useEffect(()=>{const nav=document.querySelector('.miu-nav');if(!nav)return;const buttons=[...nav.querySelectorAll('button')] as HTMLButtonElement[],prev=buttons.find(b=>b.classList.contains('active'))||null,next=buttons.find(b=>b.textContent?.trim()==='通知')||null;if(next){buttons.forEach(b=>b.classList.remove('active'));next.classList.add('active');requestAnimationFrame(()=>next.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}))}return()=>{if(next)next.classList.remove('active');if(prev)prev.classList.add('active')}} ,[]);
   const pages=Math.max(1,Math.ceil(total/PAGE)),selfId=String(memberNoteId||"").toLowerCase(),latest=syncAt||updatedAt;
   const readerMode=String(readerStatus?.lastRunMode||"");
   const readerLabel=readerMode==="full"||readerMode==="window"?"取得範囲の保存完了":readerMode==="delta"?"差分完了":readerMode==="partial"?"途中保存":readerMode==="error"?"読取エラー":readerStatus?.historyComplete?"全履歴確認済み":"端末状態 未確認";
