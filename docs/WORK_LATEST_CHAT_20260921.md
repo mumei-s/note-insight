@@ -419,3 +419,7 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 
 
 公開確認: 機能main `c013151beecab0fe313605c3658bdd4c2eb0e79b`、GitHub Actions `35710900824` のbuild・207件回帰・Pages deploy成功。Pagesのmanifest、DM wrapper/network/reader、Dashboard wrapper/core、相互照合Reader、通知wrapper、Service Worker、deploy-version、index、本体JSの12ファイルがHTTP200でローカルと内容完全一致。実際の@require先（DM `?v=145`、Dashboard `?v=146`）を含むraw GitHubの5ファイルも内容一致。利用端末にはDM1.4.5／Dashboard1.4.6への更新が必要。実機の本人ログイン状態での全件取得・キーボード動作は未確認を維持。
+
+## 2026-09-22 通知分析・公式Dashboard・全体点検
+
+ユーザーの添付3画面と「全体の不具合確認修正も」を受け、本体2026.09.22.9／Dashboard同期1.4.7へ更新。詳細は [WORK_FIXES_20260922_ANALYSIS_FULL_REVIEW.md](WORK_FIXES_20260922_ANALYSIS_FULL_REVIEW.md)。通知分析をSQL集計へ移行、公式画面の通常訪問でも可視の読込・保存状態を表示、曜日の公式日別取得を拡張。通知タブの点灯残留、TOP更新リンク復活、中央揃え、料金注意書き、グラフ表示を修正。全体点検でDMの遅い取得を定期更新が追い越す問題、お気に入り既読保存失敗の表示、TOPのDOM更新ループも修正。219件の回帰テストを使用。Dashboardの実データは9月9日から未更新・日別0日だったため、新しい日別保存の実機確認は1.4.7更新後に必要。実機未確認を完成扱いしない。

@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.8",
+  "appVersion": "2026.09.22.9",
   "notificationVersion": "3.6.5",
-  "dashboardVersion": "1.4.6",
-  "releasedAt": "2026-09-22T09:21:54.507791+00:00",
+  "dashboardVersion": "1.4.7",
+  "releasedAt": "2026-09-22T11:10:21.244656+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DMの会話混在・過去分取得・進捗と完了表示、曜日別PVの取得と欠損表示、戻る操作のカテゴリ復帰を修正。",
+  "note": "通知分析の集計停止・公式日別PVの読込・点灯残留・更新表記と料金案内を修正。グラフを改善し、全体の画面遷移・保存失敗・更新処理を点検。",
   "dmVersion": "1.4.5",
   "dmLabel": "DM同期"
 }

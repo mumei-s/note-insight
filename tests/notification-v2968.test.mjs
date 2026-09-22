@@ -1,3 +1,4 @@
+import {summaryDb} from "./notification-summary-db.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -63,11 +64,11 @@ test('different article additions survive dedupe and unknown ownership is not in
   assert.equal(decorate({notification_type:'membership_reaction',target_url:'https://note.com/membership'},'ss_yr').display_category,'membership_reaction_unknown');
 });
 
-test('private analysis keeps replies and unclassified notifications and excludes public rows',()=>{
-  const {useful,summarize}=helpers('supabase/functions/insight-notification-analysis-summary/index.ts',['useful','summarize']);
-  for(const notification_type of ['reply','membership_join','my_article_magazine_added','other'])assert.equal(useful({notification_type,raw_text:'通知です',meta:{source:'note-notification-manual-sync-v2968'}}),true);
-  for(const notification_type of ['like','follow','comment','creator_article_posted'])assert.equal(useful({notification_type,raw_text:'通知です',meta:{source:'note-notification-manual-sync-v2968'}}),false);
-  assert.equal(summarize([],'ss_yr',false,0).sample,0);
+test('private analysis keeps replies and unclassified notifications and excludes public rows',async t=>{
+ const h=await summaryDb(t);assert.equal((await h.summary()).sample,0);
+ for(const notification_type of ['reply','membership_join','my_article_magazine_added','other','like','follow','comment','creator_article_posted'])await h.insert({notification_type});
+ await h.insert({member_id:'another',notification_type:'purchase'});
+ const result=await h.summary();assert.equal(result.sample,4);assert.equal(result.comments,1);assert.equal(result.ownArticleAdds,1);assert.equal(result.membershipJoins,1);assert.equal(result.other,1);
 });
 
 test('active package uses V3.6.5 split full/delta Reader',()=>{
@@ -123,11 +124,13 @@ test('saved participants auto-recover accidental local logout but explicit logou
   assert.match(store,/EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:"/);assert.match(home,/localStorage\.setItem\(EXPLICIT_LOGOUT_KEY_PREFIX \+ activeAccount\.noteId, "1"\)/);assert.match(main,/function resumeCandidate\(\)/);
 });
 
-test('seven-day selection still compares against the preceding seven days',()=>{
-  const {summarize}=helpers('supabase/functions/insight-notification-analysis-summary/index.ts',['summarize']);
-  const row=days=>({notification_type:'my_article_magazine_added',occurred_at:new Date(Date.now()-days*86400000).toISOString(),actor_name:'A'});
-  const recent=row(1),previous=row(9);const r=summarize([recent],'ss_yr',false,1,7,[recent,previous]);assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);
+test('seven-day selection still compares against the preceding seven days',async t=>{
+ const h=await summaryDb(t);
+ await h.insert({notification_type:'my_article_magazine_added',occurred_at:'2026-09-21T12:00:00Z'});
+ await h.insert({notification_type:'my_article_magazine_added',occurred_at:'2026-09-13T12:00:00Z'});
+ const r=await h.summary(7);assert.equal(r.recent7,1);assert.equal(r.prev7,1);assert.equal(r.ownArticleAdds,1);assert.equal(r.sample,1);
 });
+
 test('notification-only network capture rejects unrelated note APIs and V24 rechecks pending rows',()=>{
   const network=read('public/note-insight-notification-network-v3300.js');
   const reclass=read('supabase/functions/insight-notification-reclassify/index.ts');
@@ -146,14 +149,18 @@ test('notification-only network capture rejects unrelated note APIs and V24 rech
 });
 
 
-test('quarantined network noise stays out of feed and analysis while structured answers leave Other',()=>{
-  const feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  const analysis=read('supabase/functions/insight-notification-analysis-summary/index.ts');
-  const ui=read('src/member-insight-notifications-final.tsx');
-  assert.match(feed,/noise_reason==="non-notification-api-capture"/);
-  assert.match(feed,/qa_answer"\?"question_answer"/);
-  assert.match(analysis,/noise_reason==="non-notification-api-capture"/);
-  assert.match(analysis,/qa_answer"\?"question_answer"/);
-  assert.match(ui,/retainBoard/);
-  assert.match(ui,/詳細・精度・再分類/);
+test('quarantined network noise stays out of feed and analysis while structured answers leave Other',async t=>{
+ const feed=read('supabase/functions/insight-notification-feed-final/index.ts'),ui=read('src/member-insight-notifications-final.tsx');
+ assert.match(feed,/noise_reason==="non-notification-api-capture"/);assert.match(feed,/qa_answer"\?"question_answer"/);
+ const h=await summaryDb(t);await h.insert({meta:{noise_reason:'non-notification-api-capture'}});await h.insert({meta:{source:'unrelated-api'}});await h.insert({meta:{kind:'qa_answer'}});
+ const r=await h.summary();assert.equal(r.sample,1);assert.equal(r.other,0);assert.deepEqual(r.topTypes,[['question_answer',1]]);
+ assert.match(ui,/retainBoard/);assert.match(ui,/詳細・精度・再分類/);
+});
+
+test('summary deduplicates latest signatures, uses JST dates and denies client RPC access',async t=>{
+ const h=await summaryDb(t);
+ await h.insert({meta:{client_signature:'same'},notification_type:'reply',target_url:'https://note.com/tester/n/n1',occurred_at:'2026-09-21T14:59:00Z',captured_at:'2026-09-21T15:00:00Z'});
+ await h.insert({meta:{client_signature:'same'},notification_type:'reply',target_url:'https://note.com/tester/n/n1',occurred_at:'2026-09-21T15:00:00Z'});
+ const r=await h.summary();assert.equal(r.sample,1);assert.deepEqual(r.dailyCounts,[{date:'2026-09-22',count:1}]);assert.deepEqual(r.topTypes,[['reply_self',1]]);assert.equal(r.peakHour,0);assert.equal(r.weekName,'火');
+ const permission=(await h.db.query("select has_function_privilege('anon','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as anon,has_function_privilege('authenticated','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as client,has_function_privilege('service_role','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as service")).rows[0];assert.deepEqual(permission,{anon:false,client:false,service:true});
 });
