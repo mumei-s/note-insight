@@ -601,7 +601,7 @@
     nativeInputClick = prototype.click;
     prototype.click = function interceptedImageClick(...args) {
       const arm = imageArm;
-      if (arm && arm.imageChoiceSelected && imageInput(this)) {
+      if (arm && imageInput(this)) {
         if (!arm.consumed) void injectImageInput(this);
         return;
       }
@@ -636,6 +636,10 @@
   }
   function installImageInputBridge() {
     if (inputObserver || !document.documentElement) return;
+    // note may reuse the same hidden file input/menu on the 3rd+ batch.
+    // Install the interceptor immediately and probe already-mounted UI.
+    installNativeInputInterceptor();
+    markNativeImageMenuReady([document.body]);
     imageChoicePointerListener = (event) => {
       const arm = imageArm;
       if (!arm || arm.consumed || arm.imageChoiceSelected || !event.isTrusted || !arm.nativeMenuReady) return;
@@ -652,7 +656,7 @@
       if (!arm || arm.consumed) return;
       const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
       const directInput = path.find((node) => imageInput(node));
-      if (arm.imageChoiceSelected && directInput) {
+      if (directInput) {
         event.preventDefault(); event.stopPropagation(); void injectImageInput(directInput); return;
       }
       if (event.isTrusted && !arm.nativeMenuReady) scheduleNativeMenuProbe([document.body]);
@@ -666,8 +670,7 @@
         if (node instanceof Element) roots.push(node);
       }
       if (!arm.imageChoiceSelected) {
-        if (!markNativeImageMenuReady(roots)) scheduleNativeMenuProbe(roots);
-        return;
+        markNativeImageMenuReady(roots);
       }
       for (const node of roots) {
         if (imageInput(node)) { void injectImageInput(node); return; }
