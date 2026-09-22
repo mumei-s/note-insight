@@ -99,18 +99,18 @@ test('本番の上段補正を同時実行しても旧インストール / 更�
   await assertSettled(w);
 });
 
-test('本体・ツールの更新がある状態でも案内ボタンを作り直さず操作を保持する', async t => {
+test('更新中も上段の操作を保持し、誤った統合更新案内を復活させない', async t => {
   const { w } = await launcher(t, { update: true });
   await assertSettled(w);
-  const panel = w.document.getElementById('mumei-insight-update-guide-v18');
-  const button = panel.querySelector('[data-kind="normal"] button');
+  assert.equal(w.document.getElementById('mumei-insight-update-guide-v18'), null);
+  const button = w.document.querySelector('.normal > .update-ready');
   let updates = 0;
   w.document.querySelector('.normal > .update-ready').onclick = () => updates++;
   button.focus();
   w.document.querySelector('nav button').textContent = '記事 266';
   await pause(500);
   assert.equal(w.document.activeElement, button);
-  assert.equal(panel.querySelector('[data-kind="normal"] button'), button);
+  assert.equal(w.document.querySelector('.normal > .update-ready'), button);
   button.click();
   assert.equal(updates, 1);
   for (const card of w.document.querySelectorAll('.needs-update')) card.classList.remove('needs-update');
