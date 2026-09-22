@@ -54,3 +54,10 @@ test('通知分析は有効なログインの保存先だけを集計し、未�
  const req=token=>new Request('https://example.test',{method:'POST',headers:token?{'X-Insight-Token':token}:{},body:JSON.stringify({member_id:'owner',noteId:'ss_yr',period:7})});assert.equal((await handler(req(''))).status,401);assert.equal(calls.length,0);
  const good=await handler(req('fixture'));assert.equal(good.status,200);assert.deepEqual(JSON.parse(JSON.stringify(calls[0].args)),{p_member_ids:['member-a'],p_note_id:'tester',p_period:7});allowed=false;assert.equal((await handler(req('fixture'))).status,401);assert.equal(calls.length,1);
 });
+for(const [file,mode] of [['notification-browser-install.html','notifications'],['dm-browser-install.html','dm']])test(file+'の戻る先は空・自分自身・外部を除外し、正規の設定復帰は維持する',async t=>{
+ const html=readFileSync('public/'+file,'utf8'),script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+ for(const back of [null,'https://example.invalid/','https://mumei-s.github.io/note-insight/'+file,'https://mumei-s.github.io/note-insight/dashboard-setup.html?auto=0']){
+  const base='https://mumei-s.github.io/note-insight/',dom=new JSDOM(html,{url:base+file+(back?'?return='+encodeURIComponent(back):''),runScripts:'outside-only'}),w=dom.window;t.after(()=>w.close());w.setTimeout=()=>0;w.setInterval=()=>0;w.fetch=async()=>Response.json({notificationVersion:'3.6.5',dmVersion:'1.4.5'});w.eval(script);await pause();const target=new URL(w.document.getElementById('back').href);
+  assert.equal(target.origin,'https://mumei-s.github.io');if(back?.includes('dashboard-setup'))assert.equal(target.href,back);else{assert.equal(target.pathname,'/note-insight/');assert.equal(target.searchParams.get('insightMode'),mode)}
+ }
+});
