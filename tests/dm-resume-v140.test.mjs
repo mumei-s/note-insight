@@ -6,6 +6,7 @@ const source=readFileSync('public/note-insight-dm-reader-v1.js','utf8');
 function harness(){
  const gm=new Map(),local=new Map(),events=new EventTarget(),doc=new EventTarget(),visited=[];let fail='r3';
  doc.documentElement={};
+ doc.querySelectorAll=()=>[];
  const start=source.indexOf('function syncFrame('),end=source.indexOf('async function syncRoomsInBackground',start);
  const injectable=source.slice(0,start)+'function syncFrame(a,url,key){return fixtureFrame(key)}\n'+source.slice(end);
  const context={URL,Event,Map,Set,Date,Math,String,Number,Boolean,JSON,Promise,location:{hostname:'note.com',pathname:'/messages/rooms',href:'https://note.com/messages/rooms',search:''},document:doc,GM:{getValue:async(k,d)=>gm.get(k)??d,setValue:async(k,v)=>gm.set(k,structuredClone(v))},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},sessionStorage:{removeItem(){}},MutationObserver:class{observe(){}},setTimeout:()=>1,clearTimeout(){},addEventListener:events.addEventListener.bind(events),fixtureFrame:async key=>{visited.push(key);return key===fail?{read:0,saved:0,error:'fixture-failure'}:{read:2,saved:2,complete:true}}};context.window=context;vm.createContext(context);vm.runInContext(injectable,context);

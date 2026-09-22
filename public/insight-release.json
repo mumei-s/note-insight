@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.2",
-  "notificationVersion": "3.6.1",
-  "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-22T03:05:31.484796+00:00",
+  "appVersion": "2026.09.22.3",
+  "notificationVersion": "3.6.2",
+  "dashboardVersion": "1.4.5",
+  "releasedAt": "2026-09-22T04:19:09.637218+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知パネルのタップ取消と再描画ループを修正。新着なし／保存確認件数を区別。DMの会話画面・構造化本文取得と相手別失敗表示、増減履歴の最新／過去1000人切替、線・棒・円グラフの立体表現。",
-  "dmVersion": "1.4.1",
+  "note": "通知の保存位置表示と差分判定を修正し、未確認の0件を完了にしない。🔔表示中のDMパネル・巡回を停止。DM本文の構造化取得、薄型通知パネル、分析の先行表示と立体円・棒・線グラフの意味と単位を改善。",
+  "dmVersion": "1.4.2",
   "dmLabel": "DM同期"
 }

@@ -19,7 +19,7 @@ for(const legacy of [false,true])test(`スマホタップ・キーボードclick
  bar.querySelector('[data-action=filter]').click();await wait();assert.equal(gm.get('mumei_insight_magazine_filter_enabled_v3:tester'),true);
  const before=requests;for(let i=0;i<5;i++)w.__mumeiNotificationControlsV1.mount();await wait();assert.equal(requests,before);
  const emit=detail=>w.dispatchEvent(new w.CustomEvent('mumei-notification-reader-status',{detail}));
- emit({state:'done',readCount:0,savedCount:0});assert.equal(read.textContent,'確認済み');assert.match(bar.textContent,/新着なし/);assert.doesNotMatch(read.textContent,/保存/);
+ emit({state:'done',readCount:0,savedCount:0});assert.equal(read.textContent,'再確認');assert.match(bar.textContent,/未確認/);emit({state:'done',readCount:0,savedCount:0,historyComplete:true,checkedCount:12});assert.equal(read.textContent,'確認済み');assert.match(bar.textContent,/確認 12件・追加0件/);assert.doesNotMatch(read.textContent,/保存/);
  emit({state:'done',readCount:300,savedCount:20,partial:true,stopping:true});assert.equal(read.textContent,'続き読込');
  emit({state:'done',readCount:5,savedCount:5,historyComplete:true});assert.equal(read.textContent,'✓保存 5');
  w.fetch=()=>new Promise(()=>{});bar.querySelector('[data-action=settings]').click();assert.match(w.document.querySelector('#mumei-route-veil-v130').textContent,/設定/);

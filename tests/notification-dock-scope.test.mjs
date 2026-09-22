@@ -15,16 +15,16 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.6.1 loads fully split notification modules",async()=>{
+test("V3.6.2 loads fully split notification modules",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-reader-v4.js");
  const controls=await read("public/note-insight-notification-controls-v1.js");
- assert.match(parent,/@version\s+3\.6\.1/);
+ assert.match(parent,/@version\s+3\.6\.2/);
  for(const p of [
-  "note-insight-notification-network-v3300.js?v=3610",
-    "note-insight-notification-reader-v4.js?v=3610",
-  "note-insight-notification-controls-v1.js?v=135",
-  "note-insight-notification-filter-v4.js?v=400",
+  "note-insight-notification-network-v3300.js?v=3620",
+    "note-insight-notification-reader-v4.js?v=3620",
+  "note-insight-notification-controls-v1.js?v=136",
+  "note-insight-notification-filter-v4.js?v=401",
   "note-insight-notification-return-v1.js?v=120",
   "note-insight-notification-status-bridge-v1.js?v=110",
   "note-insight-notification-feature-bridge-v1.js?v=100",
@@ -35,7 +35,7 @@ test("V3.6.1 loads fully split notification modules",async()=>{
  assert.match(reader,/function scheduleAuto/);assert.match(reader,/async function scan/);
  assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID|mountToolbar/);
  assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);assert.match(controls,/data-action="settings"/);
- assert.doesNotMatch(controls,/insight-notification-ingest-v2|sendBatch|historyComplete/);
+ assert.doesNotMatch(controls,/insight-notification-ingest-v2|sendBatch|syncHistory\(/);
 });
 
 test("five-panel dock stays fixed at the bottom and exposes auto on-off",async()=>{
@@ -75,5 +75,5 @@ test("ingest token bridge is origin-locked",async()=>{
 test("legacy combined runtimes and bootstrap are inactive",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=|note-insight-notification-autoscan-v2970\.js\?v=|note-insight-notification-bootstrap-v2966\.js\?v=/);
- assert.ok(parent.includes("note-insight-notification-filter-v4.js?v=400"));
+ assert.ok(parent.includes("note-insight-notification-filter-v4.js?v=401"));
 });
