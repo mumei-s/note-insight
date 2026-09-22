@@ -11,7 +11,7 @@ async function fixture(t){
  const dom=new JSDOM('<main></main>',{url:'https://note.com/messages/rooms/'+room,runScripts:'outside-only'}),w=dom.window;
  t.after(()=>dom.window.close());
  const gm=new Map([['mumei_insight_dm_sync_token_v1:tester','test-ingest']]),calls=[],writes=[],saved=new Set();
- let ids=['5','4','3','2','1'],account='tester',omit='',invalid=false,failStorage=false;
+ let ids=['5','4','3','2','1'],account='tester',omit='',invalid=false,failStorage=false,idField='id';
  w.setTimeout=()=>0;w.clearTimeout=()=>{};
  w.fetch=async(input,init={})=>{
   const u=new URL(String(input),w.location.href);
@@ -19,7 +19,7 @@ async function fixture(t){
   if(u.pathname==='/api/v3/notices')return new Response(JSON.stringify({data:[{id:'notice',body:'message という記事の通知',sender:{name:'相手'}}]}));
   assert.equal(u.origin,'https://dm-api.note.com');assert.equal(init.method||'GET','GET');
   const before=u.searchParams.get('before')||'';calls.push({before,room:u.pathname.match(/rooms\/([^/]+)/)[1]});
-  const start=before?ids.indexOf(before)+1:0,data=ids.slice(start,start+2).map(id=>({id,body:'本文 '+id,created_at:'2026-09-22T00:00:00Z',sender:{urlname:'peer',name:'相手'}}));
+  const start=before?ids.indexOf(before)+1:0,data=ids.slice(start,start+2).map(id=>({[idField]:id,body:'本文 '+id,created_at:'2026-09-22T00:00:00Z',sender:{urlname:'peer',name:'相手'}}));
   return new Response(JSON.stringify(invalid?{data:{error:'bad'}}:{data}));
  };
  w.GM={getValue:async(k,d)=>gm.has(k)?gm.get(k):d,setValue:async(k,v)=>{if(failStorage&&k.startsWith('mumei_insight_dm_history'))throw new Error('storage-full');gm.set(k,v)},xmlHttpRequest:o=>{const body=JSON.parse(o.data),keys=(body.messages||[]).map(m=>m.message_key).filter(k=>!k.endsWith(':'+omit));writes.push(body);for(const k of keys)saved.add(k);o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedMessageKeys:keys})})}};
@@ -27,7 +27,7 @@ async function fixture(t){
  await w.fetch(endpoint,{headers:{Authorization:'fixture-secret'}});
  for(let i=0;i<12;i++)await settle();
  calls.length=0;writes.length=0;
- return{w,gm,calls,writes,saved,api:w.__mumeiDmNetworkV2,setIds:v=>ids=v,setAccount:v=>account=v,omit:v=>omit=v,setInvalid:v=>invalid=v,failStorage:v=>failStorage=v};
+ return{w,gm,calls,writes,saved,api:w.__mumeiDmNetworkV2,setIds:v=>ids=v,setAccount:v=>account=v,omit:v=>omit=v,setInvalid:v=>invalid=v,failStorage:v=>failStorage=v,idField:v=>idField=v};
 }
 
 test('実際のdm-apiルートから会話を識別し、初回は自動で過去まで保存する',async t=>{
@@ -66,3 +66,7 @@ test('通知APIはDM本文として保存せず、別会話のAPI URLを現在�
  const h=await fixture(t);const rows=h.api.extract({data:[{id:'x',body:'別の会話',sender:{name:'相手'}}]},endpoint.replace(room,second),'tester');assert.equal(rows[0].thread_key,second);
  const before=h.writes.length;await h.w.fetch('https://note.com/api/v3/notices');for(let i=0;i<8;i++)await settle();assert.equal(h.writes.length,before);
 });
+
+for(const field of ['key','messageKey','message_uuid'])test('DMの識別子 '+field+' で全件保存し、保存境界から差分だけ取得',async t=>{const h=await fixture(t);h.idField(field);const r=await h.api.readHistory(room,'tester');assert.equal(r.complete,true);assert.equal(r.stored,5);h.calls.length=0;h.setIds(['6','5','4','3','2','1']);const next=await h.api.readHistory(room,'tester');assert.equal(next.saved,1);assert.equal(next.stored,6);assert.deepEqual(h.calls.map(x=>x.before),[''])});
+test('本文保存後でも識別子を確認できなければ全件完了にせず保存位置を維持',async t=>{const h=await fixture(t);h.idField('unrecognized');await assert.rejects(h.api.readHistory(room,'tester'),e=>e.message==='DM_MESSAGE_ID_UNAVAILABLE'&&e.dmProgress.complete===false);assert.equal(h.gm.has(stateKey),false)});
+test('取得URLが会話を示さない応答や矛盾するroom_idを現在の会話へ紐づけない',async t=>{const h=await fixture(t);assert.equal(h.api.extract({data:[{id:'x',body:'本文',sender:{name:'人'}}]},'https://note.com/api/v3/notices','tester').length,0);assert.equal(h.api.extract({data:[{id:'x',body:'本文',room_id:second}]},endpoint,'tester').length,0)});

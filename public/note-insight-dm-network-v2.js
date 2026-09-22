@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.4';
+const VERSION='1.4.5';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -18,8 +18,13 @@ function abs(v){try{return new URL(String(v||''),location.href).href}catch{retur
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const x=v.charCodeAt(i);a=Math.imul(a^x,16777619);b=Math.imul(b^x,3266489917)}return(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0')}
 const BODY=['body','message','text','content','message_body','messageBody','plain_text','plainText'];
 const TIME=['sent_at','sentAt','created_at','createdAt','posted_at','postedAt','timestamp','datetime'];
-const IDS=['message_id','messageId','id','uuid'];
-const ROOMS=['room_id','roomId','thread_id','threadId','conversation_id','conversationId'];
+const IDS=['message_id','messageId','message_key','messageKey','message_uuid','messageUuid','id','uuid','key'];
+function messageId(obj){
+ const direct=first(obj,IDS);if(direct)return direct;
+ const candidates=Object.entries(obj||{}).filter(([k,v])=>!/(?:room|thread|sender|user|author|account)/i.test(k)&&/(?:message|uuid|uid|id|key)/i.test(k)&&typeof v==='string'&&ROOM_ID_RE.test(v));
+ return candidates.length===1?candidates[0][1]:'';
+}
+const ROOMS=['room_id','roomId','room_key','roomKey','thread_id','threadId','conversation_id','conversationId'];
 const URLS=['url','href','link','attachment_url','attachmentUrl','file_url','fileUrl'];
 function first(obj,keys){for(const k of keys){const v=obj?.[k];if(typeof v==='string'&&clean(v))return clean(v);if(typeof v==='number'&&Number.isFinite(v))return String(v)}return''}
 function nested(obj,keys){for(const k of keys){const v=obj?.[k];if(v&&typeof v==='object'&&!Array.isArray(v))return v}return null}
@@ -34,7 +39,7 @@ function sender(obj){
  return{name,id,url:url?abs(url):id?('https://note.com/'+id):null,image:image?abs(image):null}
 }
 function bodyText(obj){for(const k of BODY){const v=obj?.[k];if(typeof v==='string'){const s=v.replace(/<br\s*\/?\s*>/gi,'\n').replace(/<\/(?:p|div)>/gi,'\n').replace(/<[^>]*>/g,'').replace(/\r\n?/g,'\n').trim();if(s&&s.length<=12000)return s}}return''}
-function roomKey(obj,inherited=''){const raw=first(obj,ROOMS)||inherited||roomFromUrl(location.href);return ROOM_ID_RE.test(String(raw||''))?String(raw):''}
+function roomKey(obj,inherited=''){const raw=first(obj,ROOMS)||inherited;return ROOM_ID_RE.test(String(raw||''))?String(raw):''}
 function attachment(obj){
  const a=nested(obj,['attachment','file','image','media']);
  const url=first(a||{},URLS)||first(obj,['attachment_url','attachmentUrl','file_url','fileUrl']);
@@ -49,19 +54,20 @@ function responseHint(url,body,json){
  try{const s=JSON.stringify(json).slice(0,250000).toLowerCase();return/(message_id|room_id|conversation_id|sender_id|messages)/.test(s)&&/(body|content|text)/.test(s)}catch{return false}
 }
 function extract(json,requestUrl,me){
- const out=[],seen=new Set(),currentRoom=roomFromUrl(requestUrl)||roomFromUrl(location.href);
+ const out=[],seen=new Set(),currentRoom=roomFromUrl(requestUrl),requestRoom=apiEndpoint(requestUrl)?currentRoom:'';
  function walk(v,path='',depth=0,inheritedRoom=currentRoom){
   if(depth>10||v==null)return;
   if(Array.isArray(v)){for(const x of v.slice(0,3000))walk(x,path+'[]',depth+1,inheritedRoom);return}
   if(typeof v!=='object')return;
   const containerRoom=/(?:^|\.)(?:room|conversation|thread)$/i.test(path)&&ROOM_ID_RE.test(String(v.id||''))?String(v.id):inheritedRoom;
-  const room=roomKey(v,containerRoom),body=bodyText(v),id=first(v,IDS),s=sender(v),at=time(v),att=attachment(v);
+  const room=roomKey(v,containerRoom),body=bodyText(v),id=messageId(v),s=sender(v),at=time(v),att=attachment(v);
+  if(requestRoom&&room&&room!==requestRoom)return;
   const keys=Object.keys(v).join(' ').toLowerCase();
   const pathHint=/message|messages|chat|conversation|room/.test((path+' '+keys).toLowerCase())||(Boolean(currentRoom)&&/^data(?:\[\])?$/.test(path));
   if(room&&(body||att.url)&&pathHint&&!/last_?message|preview/i.test(path)&&(id||at||s.name||s.id)){
    const direction=s.id?((s.id||'').toLowerCase()===me?'outbound':'inbound'):'unknown';
    const messageKey=id?('api:'+room+':'+id):('api-sig:'+hash([room,at||'',direction,body,att.url||''].join('|')));
-   if(!seen.has(messageKey)){seen.add(messageKey);out.push({thread_key:room,message_key:messageKey,direction,sender_name:s.name||null,sender_url:s.url||null,sender_image_url:s.image||null,body:body||null,sent_at:at,raw_text:body||null,attachment_name:att.name,attachment_url:att.url,attachment_type:att.type,meta:{source:'note-dm-network-v2',userscript:VERSION,request_url:requestUrl,is_read:v.is_read??v.isRead??v.read??v.seen??null,network_path:path}})}
+   if(!seen.has(messageKey)){seen.add(messageKey);out.push({thread_key:room,message_key:messageKey,direction,sender_name:s.name||null,sender_url:s.url||null,sender_image_url:s.image||null,body:body||null,sent_at:at,raw_text:body||null,attachment_name:att.name,attachment_url:att.url,attachment_type:att.type,meta:{source:'note-dm-network-v2',userscript:VERSION,request_url:requestUrl,is_read:v.is_read??v.isRead??v.read??v.seen??null,network_path:path,id_field:IDS.find(k=>v[k]!=null)||null,field_names:Object.keys(v).slice(0,40)}})}
   }
   const nextRoom=room||inheritedRoom;for(const[k,x]of Object.entries(v))if(x&&typeof x==='object')walk(x,path?path+'.'+k:k,depth+1,nextRoom)
  }
@@ -100,7 +106,7 @@ async function persist(rows,owner){
   const part=[...map.values()].slice(0,50),p=await request({noteId:a.id,threads:[],messages:part},token),sent=new Set(part.map(r=>r.message_key));
   const ack=new Set((p.confirmedMessageKeys||[]).filter(k=>sent.has(k)));for(const thread of new Set(part.map(r=>r.thread_key))){const prior=new Set(await get(key(SAVED,a.id)+':'+thread,[]));for(const row of part)if(row.thread_key===thread&&ack.has(row.message_key))prior.add(row.message_key);await set(key(SAVED,a.id)+':'+thread,[...prior].slice(-20000))}for(const k of ack)map.delete(k);
   await retain(a.id,[...map.values()]);saved+=ack.size;addRoom(part.filter(r=>ack.has(r.message_key)),'saved');
-  const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastSaveAt:now,lastRunMode:'network',lastRunComplete:false,lastReadCount:captured,lastSavedCount:saved,lastError:'',version:VERSION});
+  const prev=await get(key(CHECK,a.id),{}),now=Date.now();await set(key(CHECK,a.id),{...prev,lastRunAt:now,lastSaveAt:now,networkReadCount:captured,networkSavedCount:saved,version:VERSION});
   if(ack.size!==part.length)throw new Error('DM_SAVE_UNCONFIRMED');
  }
 }
@@ -130,7 +136,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
  const job=(async()=>{
   const stateKey=key(HISTORY,owner)+':'+thread;
   let state=await get(stateKey,{});if(!state||typeof state!=='object')state={};
-  let read=0,newSaved=0,pages=0;const seen=new Set();
+  let read=0,newSaved=0,pages=0;const seen=new Set(),readKeys=new Set();
   const canRead=async()=>{if(shouldStop())return false;const a=await account();if(a?.id!==owner)throw new Error('NOTE_ACCOUNT_CHANGED');return true};
   const checkpoint=async patch=>{state={...state,...patch,at:Date.now(),version:VERSION};await set(stateKey,state)};
   const base=apiEndpoint(template.url);base.pathname=base.pathname.replace(/\/rooms\/[^/]+\/messages/, '/rooms/'+thread+'/messages');base.searchParams.delete('before');base.searchParams.set('sort','desc');base.searchParams.set('perPage','20');
@@ -147,9 +153,13 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    const known=new Set(await get(key(SAVED,owner)+':'+thread,[])),fresh=rows.filter(r=>!known.has(r.message_key));
    remember(rows);
    const saveJob=saving.catch(()=>{}).then(()=>persist(fresh,owner));saving=saveJob;await saveJob;
-   read+=rows.length;newSaved+=fresh.length;
-   await onProgress({read,saved:newSaved,complete:false,stage:before?'history':'new'});
-   const beforeNext=json.data.length?first(json.data[json.data.length-1],IDS):'';
+   for(const row of rows)readKeys.add(row.message_key);read=readKeys.size;newSaved+=fresh.length;
+   const storedCount=(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length;
+   await onProgress({read,saved:newSaved,stored:storedCount,complete:false,stage:state.complete?'delta':'history'});
+   const ordered=json.data.map((row,i)=>({row,i,at:Date.parse(time(row)||'')}));
+   if(ordered.length&&ordered.every(x=>Number.isFinite(x.at)))ordered.sort((a,b)=>b.at-a.at||a.i-b.i);
+   const beforeNext=ordered.length?messageId(ordered[ordered.length-1].row):'';
+   if(rows.length&&!beforeNext)throw new Error('DM_MESSAGE_ID_UNAVAILABLE');
    if(rows.length&&(!/^[A-Za-z0-9_-]{1,200}$/.test(beforeNext)||beforeNext===before))throw new Error('DM_CURSOR_STALLED');
    return{keys:rows.map(r=>r.message_key),before:beforeNext,empty:!json.data.length};
   };
@@ -166,15 +176,15 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
     await checkpoint({headResumeBefore:cursor,pendingHeadKeys:newHead});
    }
    if(!headDone)return{read,saved:newSaved,complete:false,stopped:true};
-   if(state.complete)return{read,saved:newSaved,complete:true,mode:'delta'};
+   if(state.complete)return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'delta'};
    cursor=state.before||'';
    while(await canRead()){
     const p=await page(cursor);
-    if(p.empty){await checkpoint({complete:true,before:null});return{read,saved:newSaved,complete:true,mode:'history'}}
+    if(p.empty){await checkpoint({complete:true,before:null});return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'history'}}
     cursor=p.before;await checkpoint({before:cursor,complete:false});
    }
    return{read,saved:newSaved,complete:false,stopped:true};
-  }catch(e){if(String(e?.message||e)==='DM_BATCH_LIMIT')return{read,saved:newSaved,complete:false,limited:true};throw e}
+  }catch(e){const progress={read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:false};if(String(e?.message||e)==='DM_BATCH_LIMIT')return{...progress,limited:true};try{e.dmProgress=progress}catch{}throw e}
  })();historyJobs.set(jobKey,job);try{return await job}finally{historyJobs.delete(jobKey)}
 }
 function installFetch(p=pageWindow()){
