@@ -70,11 +70,11 @@ test('private analysis keeps replies and unclassified notifications and excludes
   assert.equal(summarize([],'ss_yr',false,0).sample,0);
 });
 
-test('active package uses V3.6.4 split full/delta Reader',()=>{
+test('active package uses V3.6.5 split full/delta Reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),setup=read('public/notification-browser-install.html'),network=read('public/note-insight-notification-network-v3300.js'),reader=read('public/note-insight-notification-reader-v4.js'),controls=read('public/note-insight-notification-controls-v1.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.6.4');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.6\.4/);
+  assert.equal(manifest.notificationVersion,'3.6.5');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.6\.5/);
   const meta=v3.split('// ==/UserScript==')[0];
   for(const p of ['note-insight-notification-network-v3300.js?v=3630','note-insight-notification-reader-v4.js?v=3640','note-insight-notification-controls-v1.js?v=137','note-insight-notification-filter-v4.js?v=410','note-insight-notification-return-v1.js?v=120','note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=110','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);

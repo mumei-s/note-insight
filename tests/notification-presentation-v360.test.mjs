@@ -51,14 +51,17 @@ test('全履歴の集計応答が止まっていても、新着取得の本文�
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,20))});assert.ok(recentCalls>=1);assert.match(document.querySelector('.minf-list').textContent,/新しいチップが届きました/);await act(async()=>h.root.unmount());h.dom.window.close();
 });
 
-test('フォロー一覧は最新1000人から過去の保存順1000人へ切り替えられる',async()=>{
+test('相互照合は下から始まり、最新順・減の絞り込み・個別履歴へ切り替えられる',async t=>{
  const h=setup(),requests=[];
- globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons'))return new Promise(()=>{});const b=JSON.parse(init.body);requests.push(b);return{ok:true,json:async()=>({ok:true,rows:[{person_key:b.window==='oldest'?'old':'new',actor_name:b.window==='oldest'?'過去に保存した人物':'最新の人物',active:b.window!=='oldest',first_seen_at:'2026-08-01',last_seen_at:'2026-09-21'}],total:1,latest:{}})}};
- const{MemberInsightSocialV2:C}=await component('src/member-insight-social-v2.tsx',h.ctx,stubs);await act(async()=>h.root.render(React.createElement(C)));await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.match(document.querySelector('.mis2-list').textContent,/最新の人物/);
- await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='過去から1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'oldest');assert.match(document.querySelector('.mis2-list').textContent,/過去に保存した人物/);assert.match(document.querySelector('.mis2-list').textContent,/過去の保存/);
+ t.after(async()=>{await act(async()=>h.root.unmount());h.dom.window.close()});
+ globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons'))return new Promise(()=>{});const b=JSON.parse(init.body);requests.push(b);return{ok:true,json:async()=>({ok:true,rows:[{person_key:b.window==='oldest'?'old':'new',actor_name:b.window==='oldest'?'一覧の下の人物':'最新の人物',relation:'following_only',is_following:true,is_follower:false,active:true,first_seen_at:'2026-08-01',last_seen_at:'2026-09-21'}],total:1,latest:{}})}};
+ const{MemberInsightSocialV2:C}=await component('src/member-insight-social-v2.tsx',h.ctx,stubs);await act(async()=>h.root.render(React.createElement(C)));await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).action,'comparison');assert.equal(requests.at(-1).window,'oldest');assert.match(document.querySelector('.mis2-list').textContent,/一覧の下の人物/);
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='最新1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'latest');assert.match(document.querySelector('.mis2-list').textContent,/最新の人物/);
+ await act(async()=>{const s=document.querySelector('.mis2-relationship-filter select');s.value='lost';s.dispatchEvent(new window.Event('change',{bubbles:true}))});await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).relationship,'lost');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='個別の履歴').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).action,'people');assert.equal(requests.at(-1).window,'latest');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='過去から1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'oldest');assert.match(document.querySelector('.mis2-list').textContent,/一覧の下の人物/);assert.match(document.querySelector('.mis2-list').textContent,/最新照合/);
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='【増】【減】履歴').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).action,'events');assert.equal(requests.at(-1).window,'oldest');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='最新1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'latest');
- await act(async()=>h.root.unmount());h.dom.window.close();
 });
 
 test('立体円グラフは正確な割合を保ち、凡例を選ぶと件数と割合が変わる',async()=>{

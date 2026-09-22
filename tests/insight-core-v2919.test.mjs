@@ -22,9 +22,10 @@ test("comments workflow and exact final-reply heart remain available",async()=>{
   for(const x of ["要対応","未返信","相手返信","あなたの♡で終了","自分返信","counterpartHearted","最終返信に","さんの♡あり","さんの♡なし"])assert.match(c,new RegExp(x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
 });
 
-test("social remains official-total plus latest-1000 tracking",async()=>{
+test("social adds bottom-first mutual comparison while preserving official totals and history",async()=>{
   const s=await read("src/member-insight-social-v2.tsx"),rel=await read("supabase/functions/insight-relations/index.ts");
-  for(const x of ["note公式の現在値","最新1,000人","【増】","【減】","人物一覧"])assert.match(s,new RegExp(x));
+  for(const x of ["フォローとフォロワーを照合","下から1,000人","最新1,000人","【増】","【減】","人物一覧"])assert.match(s,new RegExp(x));
+  assert.match(s,/live_expected_count\?\?r\?\.expected_count/);
   assert.match(s,/不明 −\$\{c\}/);
   for(const x of ["NOTE_IDENTITY_LIST_CAPPED_AT_1000","syncCappedFollowers","official_total_plus_latest_1000","unknownEvent"])assert.match(rel,new RegExp(x));
 });

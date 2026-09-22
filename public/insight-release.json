@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.6",
-  "notificationVersion": "3.6.4",
+  "appVersion": "2026.09.22.7",
+  "notificationVersion": "3.6.5",
   "dashboardVersion": "1.4.5",
-  "releasedAt": "2026-09-22T07:19:23.897039+00:00",
+  "releasedAt": "2026-09-22T09:00:40.226371+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "分類案内を運営者へ集約。画像使用・話題の分類と自動再分類、人物アイコン維持、通知フィルターを修正。DMは初回自動取得・保存境界から差分追加し、進捗を薄型表示。",
+  "note": "フォローとフォロワーを一覧の下から相互照合。相手からのフォローなしと、以前の相互から減った人を表示。",
   "dmVersion": "1.4.4",
   "dmLabel": "DM同期"
 }
