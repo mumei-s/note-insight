@@ -119,4 +119,9 @@ GitHub Pagesの配信結果・コードコミットは最終確認欄へ記載�
 
 - Supabase migration `notification_classifier_v25`: 適用成功。
 - Edge Functions: ingest v34 / reclassify v13 / feed v26 / social-events v6 / relations v12 / dashboard-data v6。全6関数のACTIVE状態と配備後ソースの完全一致を確認。
-- GitHub main／Pages: 最終確認中。Android・実DMの成功判定は別。
+- 機能コードのmainコミット: `dd0f5ad1cee208f764c995292e54b41faaf9b86e`。検証したローカルとGitHubのtree `0ba3178d01f4b1ed2818e08d9e42270186972908` が完全一致。20個の機能別コミットで、既存mainを強制上書きせず反映。
+- [GitHub Actions 35678522792](https://github.com/mumei-s/note-insight/actions/runs/35678522792): feature boundary、userscript構文、build、既存74＋新規17テスト、Pages deployがすべて成功。
+- この追記以降の文書のみのコミットは機能コードを変更しない。
+- Pagesのmanifestを外部取得する確認は、この環境の取得ツールがURLへ接続できず未完了。配備成功と端末に実際に届いた版を区別する。AndroidのPWAキャッシュ・導入userscriptの版、本物のDM本文の取得成功は実機確認待ち。
+- 更新入口: INSIGHTの本人通知「更新」、DMの「DM同期 v1.4.0へ更新」。新規連携のやり直しや全データ削除は不要。
+- 次の担当は必ずその時点のGitHub mainを再取得する。ローカルのGitコミットIDはGitHub連携で作成したコミットIDと異なる場合があるため、上記mainとファイル内容を正本にする。
