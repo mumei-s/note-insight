@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.4.6
+// @version      1.4.7
 // @description  INSIGHTの読込ボタンから公式Dashboardを本人通知なしでも同期。直接遷移でもアカウント照合・読込・INSIGHT復帰まで自動実行します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/tool-setup.html*
 // @match        https://mumei-s.github.io/note-insight/dashboard-setup.html*
 // @run-at       document-start
+// @grant        unsafeWindow
 // @grant        GM.xmlHttpRequest
 // @grant        GM.getValue
 // @grant        GM.setValue
@@ -16,14 +17,14 @@
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=146
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=147
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
 
 (() => {
   'use strict';
-  const VERSION='1.4.6';
+  const VERSION='1.4.7';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
@@ -53,13 +54,13 @@
   }
 
   if(location.origin!=='https://note.com')return;
-  installHideStyle(false);markVersion();
+  markVersion();
   async function currentNoteIdV143(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
   function panel(){return document.getElementById('mumei-dashboard-sync')}
   function hidePanel(){const p=panel();if(p){p.removeAttribute('data-mumei-recovery');p.style.setProperty('display','none','important');p.setAttribute('aria-hidden','true')}}
   function showPanel(){const p=panel();if(p){p.setAttribute('data-mumei-recovery','1');p.style.setProperty('display','block','important');p.removeAttribute('aria-hidden')}}
   function setCoreStatus(message,kind=''){const s=document.querySelector('#mumei-dashboard-sync .status');if(s){s.textContent=message;s.dataset.kind=kind}}
-  function ensureCorePanel(){if(panel()){hidePanel();return true}if(document.readyState!=='loading'){try{window.dispatchEvent(new Event('DOMContentLoaded'))}catch{}}const ok=!!panel();if(ok)hidePanel();return ok}
+  function ensureCorePanel(){document.dispatchEvent(new Event('mumei-dashboard-mount'));return !!panel()}
   function looksDashboard(){const p=location.pathname.toLowerCase(),body=(document.body?.innerText||'').slice(0,12000);return p.includes('/sitesettings/stats')||p.includes('/dashboard')||(/アクセス状況/.test(body)&&(/インプレッション|ページビュー|スキ/.test(body)))}
   function directPayload(){const q=new URLSearchParams(location.search),code=String(q.get('mumei_dashboard_pair')||'').replace(/\D/g,'').slice(0,8),noteId=String(q.get('mumei_dashboard_account')||'').replace(/^@/,'').toLowerCase(),returnTo=safeReturn(q.get('mumei_dashboard_return'));if(q.get('mumei_dashboard_sync')!=='1'||!/^\d{8}$/.test(code)||!/^[a-z0-9_-]+$/.test(noteId))return null;return{code,noteId,returnTo}}
   function clearDirectParams(){const u=new URL(location.href);for(const k of ['mumei_dashboard_pair','mumei_dashboard_sync','mumei_dashboard_account','mumei_dashboard_return','mumei_dashboard_tool_version'])u.searchParams.delete(k);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash)}
@@ -67,18 +68,34 @@
   async function loadPending(){const raw=await gmGet(HANDOFF_KEY,'');if(!raw)return null;try{const p=JSON.parse(String(raw));if(Date.now()-Number(p.savedAt||p.createdAt||0)>15*60*1000){await gmDel(HANDOFF_KEY);return null}return p}catch{await gmDel(HANDOFF_KEY);return null}}
   async function pairPending(){const p=await loadPending();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHTアカウント照合中…');const current=await currentNoteIdV143(),expected=String(p.noteId||'').toLowerCase();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==expected)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${expected}`);const x=await request({action:'pair-exchange',code:String(p.code||'')});const issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);markVersion();const back=safeReturn(p.returnTo);if(back)localStorage.setItem(RETURN_KEY,back);sessionStorage.setItem(FLOW_KEY,'1');await gmDel(HANDOFF_KEY);setCoreStatus(`✓ @${current} アカウント一致。公式Dashboardを読み込みます`,'ok');return true}
   async function waitPanel(){for(let i=0;i<25;i++){if(ensureCorePanel())return true;await sleep(120)}return false}
-  function watchCompletion(){const done=()=>{const s=document.querySelector('#mumei-dashboard-sync .status'),t=s?.textContent||'';if(!/同期完了/.test(t))return false;sessionStorage.removeItem(FLOW_KEY);markVersion();hidePanel();const back=safeReturn(localStorage.getItem(RETURN_KEY)||'');localStorage.removeItem(RETURN_KEY);if(back){const u=new URL(back);u.searchParams.set('dashboardSync','ok');u.searchParams.set('dashboardVersion',VERSION);u.searchParams.set('dashboardAt',new Date().toISOString());setTimeout(()=>location.assign(u.href),350)}return true};if(done())return;const o=new MutationObserver(()=>{hidePanel();if(done())o.disconnect()});o.observe(document.documentElement,{subtree:true,childList:true,characterData:true});setTimeout(()=>o.disconnect(),90000)}
-  async function startRead(){if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');hidePanel();watchCompletion();await sleep(1200);const btn=document.getElementById('mumei-dash-read');if(!btn)throw new Error('DASHBOARD_READ_BUTTON_NOT_FOUND');btn.click();hidePanel()}
-  async function boot(){
-    try{
-      installHideStyle(false);
-      const pairedDirect=await pairDirect();
-      const pairedPending=pairedDirect?false:await pairPending();
-      const flow=sessionStorage.getItem(FLOW_KEY)==='1';
-      if(!pairedDirect&&!pairedPending&&!flow){panel()?.remove();return}
-      if(!looksDashboard()){setCoreStatus('公式Dashboardへ移動中…');if(location.pathname!=='/sitesettings/stats'){location.assign('https://note.com/sitesettings/stats');return}}
-      await startRead();
-    }catch(e){ensureCorePanel();showPanel();setCoreStatus(`⚠ ${e?.message||e}｜自動読込に失敗した時だけこの復旧パネルを表示します`,'warn')}
+  function watchCompletion(){
+    if(sessionStorage.getItem(FLOW_KEY)!=='1')return;
+    const done=()=>{if(!/同期完了/.test(panel()?.querySelector('.status')?.textContent||''))return false;
+      sessionStorage.removeItem(FLOW_KEY);markVersion();const back=safeReturn(localStorage.getItem(RETURN_KEY)||'');localStorage.removeItem(RETURN_KEY);
+      if(back){const u=new URL(back);u.searchParams.set('dashboardSync','ok');u.searchParams.set('dashboardVersion',VERSION);u.searchParams.set('dashboardAt',new Date().toISOString());setTimeout(()=>location.assign(u.href),1800)}return true};
+    if(done())return;const o=new MutationObserver(()=>{if(done())o.disconnect()});o.observe(panel(),{subtree:true,childList:true,characterData:true});setTimeout(()=>o.disconnect(),90000);
   }
-  const run=()=>void boot();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();window.addEventListener('pageshow',run);window.addEventListener('popstate',run);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')run()});
+  async function startRead(){if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');showPanel();watchCompletion();await sleep(1200);const btn=document.getElementById('mumei-dash-read');if(!btn)throw new Error('DASHBOARD_READ_BUTTON_NOT_FOUND');btn.click()}
+  let running=false,lastAutoKey='';
+  async function boot(){
+    if(running)return;running=true;
+    try{
+      const direct=directPayload(),pending=direct?null:await loadPending(),flow=sessionStorage.getItem(FLOW_KEY)==='1';
+      if(!direct&&!pending&&!flow&&!looksDashboard()){panel()?.remove();lastAutoKey='';return}
+      if(!looksDashboard()){
+        // Carry direct pairing parameters to the official screen; no credentials are exchanged on other pages.
+        const u=new URL('https://note.com/sitesettings/stats');if(direct)u.search=location.search;location.assign(u.href);return;
+      }
+      ensureCorePanel();
+      const pairedDirect=await pairDirect();if(!pairedDirect&&pending)await pairPending();
+      const key=location.pathname+location.search;
+      if(key===lastAutoKey)return;
+      if(!localStorage.getItem(TOKEN_KEY)){setCoreStatus('INSIGHTの「分析 → ダッシュボード更新」から連携してください','warn');return}
+      lastAutoKey=key;await startRead();
+    }catch(e){ensureCorePanel();showPanel();setCoreStatus(`⚠ ${e?.message||e}｜INSIGHTの分析から再連携できます`,'warn')}
+    finally{running=false}
+  }
+  const run=()=>void boot();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+  window.addEventListener('pageshow',run);window.addEventListener('popstate',run);
+  let previousHref=location.href;setInterval(()=>{if(location.href!==previousHref){previousHref=location.href;run()}},750);
 })();

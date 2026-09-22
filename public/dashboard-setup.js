@@ -32,7 +32,7 @@
     text($('browserHelp'),other?'下の案内から対応ブラウザでこの画面を開いてください。':safari?'Safariの拡張機能を有効にして、下の更新ボタンを押します。':'Tampermonkeyを有効にして、下の更新ボタンを押します。すでに使っている方は拡張機能の入れ直し不要です。');
     text($('codeHelp'),safari?'Safariの拡張機能メニューから、お使いのUserscriptsまたはTampermonkeyを開き、表示中のスクリプトをインストールしてください。その後、この更新画面に戻って「更新を確認」を押します。':'ブラウザの拡張機能一覧でTampermonkeyが有効か確認し、もう一度更新ボタンを押してください。拡張機能側のサイトへのアクセスやユーザースクリプト実行の許可も確認します。');
     text($('extensionText'),safari?'UserscriptsまたはTampermonkeyのどちらかを有効にし、note.comとmumei-s.github.ioでの実行を許可してください。':'Tampermonkeyを追加して有効にします。note.comとmumei-s.github.ioでの実行を許可してください。');
-    links('extensionLinks',safari?[['Userscripts（Safari）','https://apps.apple.com/app/userscripts/id1463298887'],TM('safari')]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
+    links('extensionLinks',safari?[['Userscripts（Safari）','https://apps.apple.com/app/userscripts/id1463298887'],['Tampermonkey（Safari版・有料）','https://www.tampermonkey.net/index.php?browser=safari&locale=ja']]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
     text($('switchHelp'),id==='ios-other'?'Safariでこの更新画面を開いてください。':'この案内では、AndroidのEdgeまたはFirefoxを使用します。移動先で同じINSIGHTアカウントへログインしてください。');
     links('switchLinks',id==='android-other'?[['Edge','https://play.google.com/store/apps/details?id=com.microsoft.emmx'],['Firefox','https://play.google.com/store/apps/details?id=org.mozilla.firefox']]:[]);
   }
