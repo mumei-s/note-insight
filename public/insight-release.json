@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.4",
+  "appVersion": "2026.09.22.5",
   "notificationVersion": "3.6.3",
   "dashboardVersion": "1.4.5",
-  "releasedAt": "2026-09-22T05:41:47.119857+00:00",
+  "releasedAt": "2026-09-22T06:05:38.859612+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "参加者用ダッシュボード更新パネルを復旧。ブラウザ別案内・実起動確認・分析復帰を追加。通知の途中保存は拡張機能領域を優先し、note側Storage容量不足でも続きから保存できるよう修正。",
-  "dmVersion": "1.4.2",
+  "note": "DMパネルを薄型化して入力欄・送信ボタンの上へ配置。文字入力・キーボード表示中は非表示にし、取得済み本文を保存したまま本人の会話スクロールを止める。",
+  "dmVersion": "1.4.3",
   "dmLabel": "DM同期"
 }

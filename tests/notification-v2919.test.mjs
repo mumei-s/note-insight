@@ -36,8 +36,8 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.6.3 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.22.4");assert.equal(manifest.notificationVersion,"3.6.3");assert.equal(manifest.dmVersion,"1.4.2");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.5");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.22\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.3"/);assert.match(v3,/@version\s+3\.6\.3/);
+  assert.equal(manifest.appVersion,"2026.09.22.5");assert.equal(manifest.notificationVersion,"3.6.3");assert.equal(manifest.dmVersion,"1.4.3");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.5");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.22\.5"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.3"/);assert.match(v3,/@version\s+3\.6\.3/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
