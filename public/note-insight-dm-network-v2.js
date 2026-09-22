@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.1';
+const VERSION='1.4.2';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -33,7 +33,7 @@ function sender(obj){
  const image=first(s||{},['user_profile_image_path','profile_image_url','profileImageUrl','image_url','imageUrl','avatar_url','avatarUrl']);
  return{name,id,url:url?abs(url):id?('https://note.com/'+id):null,image:image?abs(image):null}
 }
-function bodyText(obj){for(const k of BODY){const v=obj?.[k];if(typeof v==='string'){const s=clean(v);if(s&&s.length<=12000)return s}}return''}
+function bodyText(obj){for(const k of BODY){const v=obj?.[k];if(typeof v==='string'){const s=v.replace(/<br\s*\/?\s*>/gi,'\n').replace(/<\/(?:p|div)>/gi,'\n').replace(/<[^>]*>/g,'').replace(/\r\n?/g,'\n').trim();if(s&&s.length<=12000)return s}}return''}
 function roomKey(obj,inherited=''){const raw=first(obj,ROOMS)||inherited||roomFromUrl(location.href);return ROOM_ID_RE.test(String(raw||''))?String(raw):''}
 function attachment(obj){
  const a=nested(obj,['attachment','file','image','media']);
@@ -57,7 +57,7 @@ function extract(json,requestUrl,me){
   const containerRoom=/(?:^|\.)(?:room|conversation|thread)$/i.test(path)&&ROOM_ID_RE.test(String(v.id||''))?String(v.id):inheritedRoom;
   const room=roomKey(v,containerRoom),body=bodyText(v),id=first(v,IDS),s=sender(v),at=time(v),att=attachment(v);
   const keys=Object.keys(v).join(' ').toLowerCase();
-  const pathHint=/message|messages|chat|conversation|room/.test((path+' '+keys).toLowerCase());
+  const pathHint=/message|messages|chat|conversation|room/.test((path+' '+keys).toLowerCase())||(Boolean(currentRoom)&&/^data(?:\[\])?$/.test(path));
   if(room&&(body||att.url)&&pathHint&&!/last_?message|preview/i.test(path)&&(id||at||s.name||s.id)){
    const direction=s.id?((s.id||'').toLowerCase()===me?'outbound':'inbound'):'unknown';
    const messageKey=id?('api:'+room+':'+id):('api-sig:'+hash([room,at||'',direction,body,att.url||''].join('|')));
@@ -68,9 +68,21 @@ function extract(json,requestUrl,me){
  walk(json);return out
 }
 let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map(),roomRows=new Map();
+let roomOwner='';
+function selectOwner(id){if(roomOwner!==id){roomRows.clear();roomCounts.clear();captured=0;saved=0;roomOwner=id}}
 function remember(rows){for(const row of rows){let map=roomRows.get(row.thread_key);if(!map){map=new Map();roomRows.set(row.thread_key,map)}map.set(row.message_key,row)}}
 function snapshot(k){return [...(roomRows.get(String(k))||new Map()).values()]}
-function fromDocument(doc,url,me){const rows=[];for(const script of doc.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{if(script.textContent.length>5000000)continue;rows.push(...extract(JSON.parse(script.textContent),url,me))}catch{}}return rows}
+function flightRows(text,url,me){
+ const records=new Map();for(const line of String(text||'').split('\n')){const at=line.indexOf(':');if(at<1)continue;try{records.set(line.slice(0,at),JSON.parse(line.slice(at+1)))}catch{}}
+ const resolve=(value,seen=new Set(),depth=0)=>{if(depth>18)return null;if(typeof value==='string'&&/^\$[0-9a-f]+$/i.test(value)){const id=value.slice(1);if(records.has(id)&&!seen.has(id))return resolve(records.get(id),new Set([...seen,id]),depth+1)}if(Array.isArray(value))return value.map(v=>resolve(v,seen,depth+1));if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,resolve(v,seen,depth+1)]));return value};
+ const rows=new Map();for(const value of records.values())for(const row of extract(resolve(value),url,me))rows.set(row.message_key,row);return [...rows.values()]
+}
+function fromDocument(doc,url,me){selectOwner(me);const rows=[];let flight='';for(const script of doc.querySelectorAll('script')){const text=script.textContent||'';if(text.length>5000000)continue;try{if(script.type==='application/json'||script.id==='__NEXT_DATA__')rows.push(...extract(JSON.parse(text),url,me));else{const match=text.match(/^\s*(?:self\.)?__next_f\.push\((\[[\s\S]*\])\)\s*;?\s*$/);if(match){const chunk=JSON.parse(match[1]);if(chunk[0]===1&&typeof chunk[1]==='string')flight+=chunk[1]}}}catch{}}rows.push(...flightRows(flight,url,me));remember(rows);return rows}
+async function readRoom(url,me){
+ const room=roomFromUrl(url);if(!room||new URL(url,location.href).origin!==location.origin)throw new Error('DM_ROOM_URL_INVALID');
+ const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);
+ try{const res=await fetch(url,{credentials:'include',cache:'no-store',signal:c.signal});if(!res.ok)throw new Error('DM_ROOM_HTTP_'+res.status);if(res.url&&roomFromUrl(res.url)!==room)throw new Error('DM_ROOM_REDIRECTED');const html=await res.text();return fromDocument(new DOMParser().parseFromString(html,'text/html'),url,me)}finally{clearTimeout(timer)}
+}
 function addRoom(rows,field){for(const r of rows){const k=String(r.thread_key||'');if(!k)continue;const v=roomCounts.get(k)||{captured:0,saved:0};v[field]=Number(v[field]||0)+1;roomCounts.set(k,v)}}
 const OUTBOX='mumei_dm_network_outbox_v140:';
 function pending(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
@@ -92,8 +104,8 @@ async function persist(rows,owner){
 async function inspect(meta,res,transport){
  if(!res||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)||/\/current_user(?:[/?]|$)/.test(meta.url))return;
  let txt='';try{txt=await res.text()}catch{return}if(!txt||txt.length>5000000)return;
- let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(meta.url,meta.body,json))return;
- const a=await account();if(!a)return;const rows=extract(json,meta.url,a.id);if(!rows.length)return;remember(rows);
+ let json=null;try{json=JSON.parse(txt)}catch{}if(!responseHint(meta.url,meta.body,json))return;
+ const a=await account();if(!a)return;selectOwner(a.id);const rows=json?extract(json,meta.url,a.id):flightRows(txt,meta.url,a.id);if(!rows.length)return;remember(rows);
  saving=saving.then(()=>persist(rows,a.id)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
  await saving
 }
@@ -111,5 +123,5 @@ function installXHR(p=pageWindow()){
 }
 installFetch();installXHR();
 const retry=()=>{if(!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);setTimeout(retry,1200);
-window.__mumeiDmNetworkV2={version:VERSION,extract,snapshot,fromDocument,observeWindow:p=>{installFetch(p);installXHR(p)},getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
+window.__mumeiDmNetworkV2={version:VERSION,extract,snapshot,fromDocument,readRoom,flightRows,observeWindow:p=>{installFetch(p);installXHR(p)},getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
