@@ -54,10 +54,6 @@
  .midm-back-list{position:sticky;top:0;z-index:2;background:#0d2230}
 }
 
-/* 2026-09-21: settings/status remains compact but unmistakably tappable */
-.midm-control details{margin-top:4px!important;border-top:0!important}
-.midm-control summary{min-height:29px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:5px 8px!important;border:1px solid #35576b!important;border-radius:7px!important;background:#0d2230!important;color:#c7eaf8!important;font-size:9px!important;line-height:1.1!important}
-.midm-control summary::after{content:"▼";font-size:8px;color:#79cde8}
-.midm-control details[open] summary::after{content:"▲"}
-.midm-control-detail{padding-top:3px!important;gap:3px!important}
-.midm-control-detail small{font-size:7px!important;line-height:1.2!important}
+.midm .midm-control details>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;min-height:42px;padding:7px 10px;font-size:13px;font-weight:700;color:#def8ff;background:#123044;border:1px solid #477d97;border-radius:8px;margin-top:6px}.midm-control details>summary b{font-size:11px;color:#9addf5}.midm .midm-control-detail{padding:6px 0;gap:5px}.midm .midm-head h2{margin:0 0 6px}.midm .midm-notice{font-size:11px;padding:6px;margin:6px 0}.midm .midm-threads button{padding:7px;gap:8px}.midm .midm-messages{min-height:0}
+
+.midm-read-status{display:grid;gap:3px;margin:6px 0;padding:7px 9px;border:1px solid #366174;border-radius:8px;background:#0c212e;font-size:12px}.midm-read-status span,.midm-read-status small{font-size:11px;color:#aac6d8;overflow-wrap:anywhere}
