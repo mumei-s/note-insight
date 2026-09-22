@@ -227,3 +227,118 @@ test('リンク付与の直前に本文位置が変わっても画像IDで再取
   await base.linkCreatedImages(e.view, e.rows, before, e.run);
   assert.ok(e.view.state.doc.nodes.includes(typed)); assert.equal(e.safety.tracked(e.view, { id: 'image1' }).node.attrs.link, e.rows[1].url);
 });
+
+test('307枚を同じファイル入力へ80/80/80/67枚連続投入し、3回目もタイマーを解除する', async () => {
+  const e = sending(307);
+  e.view.dispatch(e.view.state.tr.replaceWith(0, e.view.state.doc.content.size, new Doc([new Node('paragraph', {}, '保護する原稿')]).content));
+  e.run.images = {}; e.run.cardKeys = [];
+  const cancelled = []; e.page.clearTimeout = id => cancelled.push(id);
+  class Transfer { constructor(){ this.list=[]; this.items={add:f=>this.list.push(f)}; } get files(){return this.list;} }
+  e.page.DataTransfer = Transfer;
+  let arm, calls = 0;
+  const nativeClick = function(){ throw new Error('native file chooser must be intercepted'); };
+  e.page.HTMLInputElement.prototype.click = nativeClick;
+  const input = new e.page.HTMLInputElement();
+  Object.assign(input, { tagName:'INPUT', type:'file', accept:'image/*', files:[], value:'', dispatchEvent(event) {
+    if(event.type !== 'change')return;
+    calls++;
+    for(const row of arm.workRows)e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,image('uploaded'+row.index)));
+  }});
+  const base = e.loadModule('note-likers-thin-notify-v160.js',
+    'installNativeInputInterceptor,cancelImageArm,setView(v){viewCache=v},setArm(a){imageArm=a}');
+  base.setView(e.view);
+  for(let offset=0;offset<307;offset+=80){
+    const workRows=e.rows.slice(offset,offset+80);
+    const completion=new Promise((resolve,reject)=>{arm={view:e.view,dataset:e.dataset,run:e.run,workRows,files:workRows.map(r=>({name:r.index+".png",type:"image/png"})),beforeIds:new Set(e.safety.index(e.view).images.map(h=>h.node.attrs.id)),beforeInputs:new Set([input]),timer:offset+1,resolve,reject,consumed:false};});
+    base.setArm(arm);base.installNativeInputInterceptor();input.click();await completion;
+    assert.equal(arm.timer,null);assert.equal(arm.files.length,0);assert.equal(arm.beforeInputs.size,0);
+    base.cancelImageArm();assert.equal(e.page.HTMLInputElement.prototype.click,nativeClick);
+  }
+  assert.equal(calls,4);assert.equal(cancelled.length,4);
+  assert.equal(Object.keys(e.run.images).length,307);assert.equal(e.safety.index(e.view).images.length,307);
+  assert.match(e.encode(),/保護する原稿/);assert.equal(e.run.pending,null);
+});
+
+test('画像以外のHTTP失敗と前回のエラー表示ではアップロードを中断しない', async () => {
+  const e=sending(1);
+  e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,new Doc([new Node('paragraph',{},'原稿')]).content));
+  e.page.fetch=async()=>({status:500,statusText:'error'});
+  const toast={textContent:'画像のアップロードに失敗しました',getClientRects:()=>[1],closest:()=>null};
+  const oldQuery=e.page.document.querySelectorAll;
+  e.page.document.querySelectorAll=q=>q.includes('[role="alert"]')?[toast]:oldQuery(q);
+  const base=e.loadModule('note-likers-thin-notify-v160.js','waitNewRemoteImages,uploadBody,beginUploadRequest,endUploadRequest,recentNetFailure,setView(v){viewCache=v},setArm(a){imageArm=a}');
+  base.setView(e.view);base.setArm({consumed:true});
+  assert.equal(base.uploadBody(JSON.stringify({body:'本文'})),false);
+  await e.page.fetch('https://editor.note.com/api/analytics',{method:'POST',body:'{}'});
+  assert.equal(base.recentNetFailure(0),null);
+  let checks=0;const clock=e.page.setTimeout;
+  e.page.setTimeout=(fn,ms)=>clock(()=>{if(++checks===12)e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,image('late')));fn();},ms);
+  const result=await base.waitNewRemoteImages(e.view,new Set(),1,20000,new Map([[toast,toast.textContent]]));
+  assert.equal(result.failed,false);assert.ok(checks>=12);
+});
+
+test('失敗が記録された0/80枚の投入は本文を消さず再準備できる',async()=>{
+  const e=sending(1);e.run.pending={workUrls:e.rows.map(r=>r.url),beforeIds:e.safety.index(e.view).images.map(h=>h.node.attrs.id),at:1,stage:'failed'};
+  const base=e.loadModule('note-likers-thin-notify-v160.js','recoverPending,setView(v){viewCache=v}');base.setView(e.view);
+  const before=e.encode();assert.equal(await base.recoverPending(e.view,e.dataset,e.run),0);
+  assert.equal(e.encode(),before);assert.equal(e.run.pending,null);
+});
+
+test('失敗が記録された一部画像は成功分を保持し未完了の今回画像だけ除いて再開する',async()=>{
+  const e=sending(3);
+  const original=e.view.state.doc.nodes.slice();
+  const pendingRows=e.rows;
+  e.run.images={};e.run.pending={workUrls:pendingRows.map(r=>r.url),beforeIds:e.safety.index(e.view).images.map(h=>h.node.attrs.id),slots:['a','b','c'],at:1,stage:'failed'};
+  for(const n of [image('a'),new Node('image',{id:'b',src:'blob:failed',link:''}),image('c')])e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,n));
+  const base=e.loadModule('note-likers-thin-notify-v160.js','recoverPending,missingRows,setView(v){viewCache=v}');base.setView(e.view);
+  assert.equal(await base.recoverPending(e.view,e.dataset,e.run),2);
+  assert.ok(original.every(n=>e.view.state.doc.nodes.includes(n)));
+  assert.equal(e.safety.tracked(e.view,{id:'b'}),null);
+  assert.equal(e.safety.tracked(e.view,{id:'c'}).node.attrs.link,e.rows[2].url);
+  assert.deepEqual(base.missingRows(e.view,e.dataset,e.run).map(r=>r.index),[2]);
+});
+
+test('進行中の画像要求が残る間は失敗分の削除・再投入をしない',async()=>{
+  const e=sending(1);e.run.pending={workUrls:e.rows.map(r=>r.url),beforeIds:e.safety.index(e.view).images.map(h=>h.node.attrs.id),at:1,stage:'failed'};
+  const base=e.loadModule('note-likers-thin-notify-v160.js','recoverPending,beginUploadRequest,endUploadRequest,setView(v){viewCache=v},setArm(a){imageArm=a}');
+  base.setView(e.view);base.setArm({consumed:true});const ticket=base.beginUploadRequest({type:'image/png'},'/upload');
+  await assert.rejects(base.recoverPending(e.view,e.dataset,e.run),/未完了/);
+  assert.ok(e.run.pending);base.endUploadRequest(ticket,200);
+});
+
+function tagSelection(pages){
+  const e=environment();
+  e.statuses.get('mumei-note-source-picker-v163').querySelector=q=>q==='.mumei-prince-special-v184'?{}:null;
+  const api=e.loadModule('note-prince-special-v184.js','sources,collectCombinedCreators,choose,mergeCreator,setJSON(fn){json=fn}');
+  const calls=[];api.setJSON(async url=>{calls.push(url);if(url.endsWith('/current_user'))return{data:{urlname:'self'}};
+    if(url.includes('/likes?'))return{data:{likes:(pages.likes||['alice']).map(urlname=>({user:{urlname,key:urlname,nickname:urlname}}))}};
+    if(url.includes('/hashtags/')){const p=Number(new URL(url).searchParams.get('page'));const rows=pages.tags[p-1]||[];return{data:{notes:rows.map(([urlname,key])=>({key,name:'#の記事',user:{urlname,key:urlname,nickname:urlname}})),is_last_page:p>=pages.tags.length}};}
+    if(url.includes('/contents?'))return{data:{contents:[{key:'n999999999999',name:'固定記事',user:{urlname:'alice'}}]}};
+    throw new Error(url);
+  });return{e,api,calls};
+}
+test('#とURLの順序を逆にしても重複人物には#記事を採用する',async()=>{
+  for(const input of ['https://note.com/test/n/n111111111111 #企画','#企画 https://note.com/test/n/n111111111111']){
+    const {api}=tagSelection({tags:[[['alice','n222222222222']]]});
+    const people=await api.collectCombinedCreators(api.sources(input),1);
+    assert.equal(people.length,1);
+    for(const mode of ['latest','fixed','oldest','todayYesterday'])assert.equal((await api.choose(people[0],mode)).latestKey,'n222222222222');
+  }
+});
+test('人数上限到達後・#の後続ページで見つかった重複にも#記事を採用する',async()=>{
+  const {api,calls}=tagSelection({tags:[[['bob','n333333333333']],[['alice','n222222222222']]]});
+  const people=await api.collectCombinedCreators(api.sources('https://note.com/test/n/n111111111111 #企画'),1);
+  assert.equal(people.length,1);assert.equal(people[0].urlname,'alice');
+  assert.equal((await api.choose(people[0],'fixed')).latestKey,'n222222222222');
+  assert.ok(calls.some(url=>url.includes('/hashtags/')&&url.includes('page=2')));
+});
+test('URLのみの人物は選択した記事条件を維持する',async()=>{
+  const {api}=tagSelection({tags:[[['bob','n333333333333']]]});
+  const people=await api.collectCombinedCreators(api.sources('https://note.com/test/n/n111111111111 #企画'),1);
+  assert.equal((await api.choose(people[0],'fixed')).latestKey,'n999999999999');
+});
+test('パネルの幅と入力欄を少し縮小し、操作ボタンのサイズを保つ',()=>{
+  const css=source('note-generic-stability-v187.js');
+  assert.match(css,/width:min\(230px/);assert.match(css,/textarea\[data-source\]\{min-height:42px/);
+  assert.match(css,/choices button\{height:27px/);
+});
