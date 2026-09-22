@@ -88,4 +88,11 @@ Web画面・分類ルール・DB補修は運営側で反映する。端末にイ
 - 本人通知: https://mumei-s.github.io/note-insight/notification-browser-install.html
 - DM: https://mumei-s.github.io/note-insight/dm-browser-install.html
 
-公開コミット・Actions・HTTP配信一致の結果は公開後に追記する。
+公開確認:
+
+- 機能main: `40320b6e90b660496833f2f6b14b173143f4136a`。最新mainが変わっていないことを直前に確認し、15個の機能別コミットを非forceで反映。各treeはローカルと完全一致。
+- [Actions 35700371912](https://github.com/mumei-s/note-insight/actions/runs/35700371912) の機能境界チェック、構文確認、build、178件回帰テスト、Pages deployすべて成功。
+- Pagesのindex／本体JS・CSS／manifest／SW／通知・DM更新ページ／各修正スクリプトなど17ファイルでHTTP200・ローカル配信物とのバイト単位の完全一致を確認。
+- raw GitHubの通知・DM wrapperと実際の@require URL（キャッシュ用クエリ付き）の計15ファイルでHTTP200・完全一致を確認。旧@requireキャッシュのまま確認したわけではない。
+- Supabase4関数も配備後ソース一致を確認。画像使用の1件と指摘の話題分類、本番の新テーブル／RPC権限をSELECTで検証。
+- 以上は配備と自動検証の完了。端末内userscriptの更新、実機キーボード表示、本物のDM全件取得の完了確認は利用端末で行う必要がある。
