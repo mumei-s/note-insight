@@ -9,8 +9,8 @@ const clean=(v:unknown)=>String(v||"").replace(/\s+/g," ").trim();
 function personKey(r:any){
  const id=clean(r?.peer_note_id).replace(/^@/,"").toLowerCase();
  if(/^[a-z0-9_-]+$/.test(id))return "note:"+id;
- try{const u=new URL(String(r?.peer_url||""));const x=u.pathname.split("/").filter(Boolean)[0]||"";if(/^[a-z0-9_-]+$/.test(x))return "note:"+x.toLowerCase()}catch{}
- const name=clean(r?.peer_name).toLowerCase();return "name:"+(name||clean(r?.thread_key)||"unknown")
+ try{const u=new URL(String(r?.peer_url||""));const x=u.pathname.split("/").filter(Boolean)[0]||"";if(u.hostname==="note.com"&&u.pathname.split("/").filter(Boolean).length===1&&/^[a-z0-9_-]+$/.test(x))return "note:"+x.toLowerCase()}catch{}
+ return "room:"+clean(r?.thread_key)
 }
 function personRow(rows:any[]){
  const sorted=[...rows].sort((a,b)=>new Date(b?.last_message_at||b?.last_synced_at||0).getTime()-new Date(a?.last_message_at||a?.last_synced_at||0).getTime());
@@ -25,7 +25,7 @@ Deno.serve(async req=>{
   if(action==="summary"){
     const[threadResult,messageResult,runResult,statusResult]=await Promise.all([
       db.from("insight_dm_threads").select("id",{count:"exact",head:true}).eq("member_id",who.scope),
-      db.from("insight_dm_messages").select("id",{count:"exact",head:true}).eq("member_id",who.scope),
+      db.from("insight_dm_messages").select("id",{count:"exact",head:true}).is("meta->>superseded_by",null).eq("member_id",who.scope),
       db.from("insight_dm_sync_runs").select("created_at,received_count,upserted_count,thread_count").eq("member_id",who.scope).order("created_at",{ascending:false}).limit(1).maybeSingle(),
       db.from("insight_dm_threads").select("thread_key,peer_name,meta->reader_status").eq("member_id",who.scope).limit(500)
     ]);
@@ -51,13 +51,13 @@ Deno.serve(async req=>{
     const mine=(threads||[]).filter(r=>personKey(r)===key),threadKeys=mine.map(r=>String(r.thread_key||"")).filter(Boolean);
     if(!threadKeys.length)return out({ok:true,noteId:who.noteId,person:null,rows:[],total:0});
     const page=Math.max(1,Number(b.page||1)),size=Math.min(500,Math.max(1,Number(b.pageSize||200))),from=(page-1)*size,to=from+size-1;
-    const{data,error,count}=await db.from("insight_dm_messages").select("*",{count:"exact"}).eq("member_id",who.scope).in("thread_key",threadKeys).order("sent_at",{ascending:false,nullsFirst:false}).order("id",{ascending:false}).range(from,to);
+    const{data,error,count}=await db.from("insight_dm_messages").select("*",{count:"exact"}).is("meta->>superseded_by",null).eq("member_id",who.scope).in("thread_key",threadKeys).order("sent_at",{ascending:false,nullsFirst:false}).order("id",{ascending:false}).range(from,to);
     if(error)throw error;return out({ok:true,noteId:who.noteId,person:personRow(mine),rows:data||[],total:count||0,page,pageSize:size})
   }
   if(action==="messages"){
     const threadKey=String(b.threadKey||"");if(!threadKey)throw new Error("THREAD_REQUIRED");
     const page=Math.max(1,Number(b.page||1)),size=Math.min(200,Math.max(1,Number(b.pageSize||100))),from=(page-1)*size,to=from+size-1;
-    const{data,error,count}=await db.from("insight_dm_messages").select("*",{count:"exact"}).eq("member_id",who.scope).eq("thread_key",threadKey).order("sent_at",{ascending:false,nullsFirst:false}).order("id",{ascending:false}).range(from,to);
+    const{data,error,count}=await db.from("insight_dm_messages").select("*",{count:"exact"}).is("meta->>superseded_by",null).eq("member_id",who.scope).eq("thread_key",threadKey).order("sent_at",{ascending:false,nullsFirst:false}).order("id",{ascending:false}).range(from,to);
     if(error)throw error;return out({ok:true,noteId:who.noteId,rows:data||[],total:count||0,page,pageSize:size})
   }
   return out({ok:false,error:"UNKNOWN_ACTION"},400)
