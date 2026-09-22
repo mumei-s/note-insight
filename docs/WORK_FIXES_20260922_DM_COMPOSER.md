@@ -34,4 +34,12 @@
 
 UA/DOM・幾何条件の自動テストであり、全ブラウザの実機キーボードを触って確認したものではない。実機画像と矛盾した場合は実機結果を優先する。本物のDM本文の全件保存確認は別途継続事項。
 
-本番ビルド、構文検査、既存141件とDM入力保護11件の計152件のテストはすべて成功。公開後にActions・配信内容の確認結果を追記する。
+本番ビルド、構文検査、既存141件とDM入力保護11件の計152件のテストはすべて成功。
+
+## 公開確認
+
+2026-09-22、機能main `db6a9af198f230d761b41ac0275679c543630896` を公開。Git tree `1aa7f66bb72993ab9a0c2963c4af4a721aeb179a` はローカルで検証した内容と完全一致。
+
+[Actions 35693554319](https://github.com/mumei-s/note-insight/actions/runs/35693554319) のbuild・152件テスト・Pages deployが成功。公開manifest、本体JS/CSS、DM更新ページ、DM wrapper/Reader、Service Workerを含むPagesの9ファイル、およびuserscriptが実際に読み込むraw GitHubのReader `?v=143` とwrapperのHTTP200・内容完全一致を確認した。クエリなしのDM更新ページも一致し、計12項目の配信確認を完了。
+
+運営側で更新できるWeb本体と参加者用更新パネルは公開済み。端末で旧DM同期が動いている場合は、[DM更新パネル](https://mumei-s.github.io/note-insight/dm-browser-install.html) からv1.4.3へ更新し、DMページを開き直す。実機のキーボード・入力欄位置と本物のDM本文の全件保存は未検証として引き継ぐ。
