@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.1';
+const VERSION='3.6.2';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -102,7 +102,9 @@ function extract(json,requestUrl){
  return out.slice(0,1000)
 }
 function extractDirectNotices(json,requestUrl){
- const data=Array.isArray(json?.data)?json.data:[];
+ // A 200 error envelope is not an empty notification list.
+ if(!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
+ const data=json.data;
  const out=[],seen=new Set();
  for(const v of data.slice(0,MAX_NOTICES)){
   if(!v||typeof v!=='object'||Array.isArray(v)||!qualifies(v,'data[]'))continue;
@@ -246,6 +248,7 @@ async function processCapture(cap,{manual=false,probe=true}={}){
  if(probe)void saveProbe(cap,rows);
  if(!rows.length)return{handled:false,saved:0,candidate:true};
  lastCapture={...cap,rows,at:Date.now()};
+ document.dispatchEvent(new CustomEvent('mumei-notification-captured',{detail:{signature:rows.map(clientSig).join("\n")}}));
  if(manual)return ingestRows(rows,cap,true);
  return{handled:true,saved:0,received:rows.length,deferred:true}
 }
@@ -259,7 +262,7 @@ async function inspectResponse(meta,res,transport){
  let json;try{json=JSON.parse(txt)}catch{return}
  if(!candidateHint(url,meta.body,json))return;
  const cap={...meta,transport,status:Number(res.status||0),contentType:ct,json,requestInit:meta.requestInit||null};
- void processCapture(cap,{manual:false,probe:true})
+ void processCapture(cap,{manual:false,probe:true}).catch(()=>{})
 }
 function installFetch(){
  const p=pageWindow();if(!p?.fetch||p.fetch.__mumeiNetwork3300)return;
@@ -277,7 +280,7 @@ function installXHR(){
  const p=pageWindow(),X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiNetwork3300)return;
  const proto=X.prototype,open=proto.open,send=proto.send;
  proto.open=function(method,url,...rest){try{this.__mumei3300={method:String(method||'GET').toUpperCase(),url:absUrl(url),body:null}}catch{}return open.call(this,method,url,...rest)};
- proto.send=function(body){try{if(this.__mumei3300)this.__mumei3300.body=body??null;this.addEventListener('load',()=>{if(!captureActive())return;const m=this.__mumei3300||{};if(!sameNoteOrGraphql(m.url)||m.url?.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>2500000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!candidateHint(m.url,m.body,json))return;const cap={url:m.url,method:m.method||'GET',body:m.body,transport:'xhr',status:Number(this.status||0),contentType:String(this.getResponseHeader?.('content-type')||''),json,requestInit:null};void processCapture(cap,{manual:false,probe:true})},{once:true})}catch{}return send.call(this,body)};
+ proto.send=function(body){try{if(this.__mumei3300)this.__mumei3300.body=body??null;this.addEventListener('load',()=>{if(!captureActive())return;const m=this.__mumei3300||{};if(!sameNoteOrGraphql(m.url)||m.url?.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>2500000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!candidateHint(m.url,m.body,json))return;const cap={url:m.url,method:m.method||'GET',body:m.body,transport:'xhr',status:Number(this.status||0),contentType:String(this.getResponseHeader?.('content-type')||''),json,requestInit:null};void processCapture(cap,{manual:false,probe:true}).catch(()=>{})},{once:true})}catch{}return send.call(this,body)};
  try{Object.defineProperty(proto,'__mumeiNetwork3300',{value:true})}catch{}
 }
 async function waitCapture(ms=2500){
@@ -333,10 +336,13 @@ function totalHint(json){
 }
 async function directNoticeCapture(){
  const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
- const u=new URL('/api/v3/notices',location.origin);u.searchParams.set('page','1');u.searchParams.set('per','100');u.searchParams.set('body_ast','1');
+ // Match the successful request made by note. Unsupported page sizes can return
+ // an empty/error response even while the visible bell contains new notices.
+ const u=new URL('/api/v3/notices',location.origin);u.searchParams.set('page','1');u.searchParams.set('per',String(Number(lastCapture&&new URL(lastCapture.url).searchParams.get('per'))||12));u.searchParams.set('body_ast','1');
  const init={method:'GET',credentials:'include',cache:'no-store',headers:{'Accept':'application/json'}};
  const res=await original(u.href,init);if(!res.ok)throw new Error('NOTICE_API_HTTP_'+res.status);
- const json=await res.json();if(!candidateHint(u.href,null,json)&&!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
+ const json=await res.json();if(!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
+ if(!json.data.length&&(window.__mumeiNotificationReaderV4?.visibleRows?.().length||(lastCapture?.rows?.length&&Date.now()-lastCapture.at<15000)))throw new Error('通知画面とAPIの件数が一致しません。再試行してください');
  const cap={url:u.href,method:'GET',body:null,transport:'direct',status:res.status,contentType:String(res.headers.get('content-type')||''),json,requestInit:init,at:Date.now()};
  cap.rows=extractDirectNotices(json,u.href);lastCapture=cap;return cap
 }
@@ -381,11 +387,12 @@ async function syncHistory(opts={}){
  // Do not discard a partially saved window when the user asks for a full read.
  if(journal?.phase==='save')journal.read=Number(journal.saved||0)+journal.rows.length;
  if(!journal||journal.schema!==1){
-  journal={schema:1,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull?'':clean(state.frontierSig||''),seen:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,startedAt:Date.now()};
+  journal={schema:1,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull?'':clean(state.frontierSig||''),seen:opts.forceFull?[]:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,checked:0,startedAt:Date.now()};
   await writeJournal(a.id,journal);
  }
  const publish=async(complete=false)=>{
-  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
+  const cp=await get(key(CHECK,a.id),{});
+  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,checkedCount:Number(journal.checked||0),boundaryAt:cp.boundaryAt||0,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:complete,lastRunMode:complete?(journal.frontier?'delta':'window'):'partial',lastRunReadCount:journal.read,lastRunSavedCount:journal.saved,lastRunTotalCount:journal.total,lastError:'',direction:'bottom-up',historyComplete:complete});
   status(`${complete?(journal.saved?'✓ 保存確認':'新着なし'):stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
  };
@@ -397,14 +404,18 @@ async function syncHistory(opts={}){
    const pageRows=extractDirectNotices(cap.json,cap.url);
    if(!journal.newestSig&&pageRows.length)journal.newestSig=clientSig(pageRows[0]);
    const known=new Set(journal.seen),unique=new Map(journal.rows.map(r=>[clientSig(r),r]));
-   let boundary=false;
+   let knownCount=0;
    for(const row of pageRows){
     const signature=clientSig(row);
-    if(signature===journal.frontier||known.has(signature)){boundary=true;break}
+    if(signature===journal.frontier||known.has(signature)){knownCount++;continue}
     if(!known.has(signature)&&unique.size<MAX_NOTICES)unique.set(signature,row);
    }
+   // Bundled notices can move or change below a saved row. Inspect the entire
+   // page; only a fully confirmed page is a safe incremental boundary.
+   const boundary=pageRows.length>0&&knownCount===pageRows.length;
+   journal.checked=Number(journal.checked||0)+pageRows.length;
    journal.rows=[...unique.values()];journal.pages++;journal.read=journal.saved+journal.rows.length;
-   const limitReached=journal.rows.length>=MAX_NOTICES;
+   const limitReached=journal.rows.length>=MAX_NOTICES||journal.checked>=MAX_NOTICES;
    const end=boundary||limitReached||terminalHint(cap.json)||!pageRows.length;
    let next=end?null:mutateNextRequest(cap,nextHint(cap.json));
    if(!end&&!next&&directNoticesCap(cap)&&pageRows.length){
@@ -429,7 +440,8 @@ async function syncHistory(opts={}){
    journal.rows.splice(0,part.length);
    const last=part.at(-1);
    await writeJournal(a.id,journal);
-   await writeUnifiedStatus(a.id,{boundarySignature:clientSig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryAt:Date.now(),boundarySource:'network-confirmed-v360'});
+   await writeUnifiedStatus(a.id,{boundarySignature:clientSig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryDisplayText:clean(last.raw_text),boundaryTargetUrl:last.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});
+   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
    await publish();
   }
   const complete=journal.phase==='save'&&!journal.rows.length;
