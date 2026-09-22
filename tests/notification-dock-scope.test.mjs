@@ -15,19 +15,19 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.6.5 loads fully split notification modules",async()=>{
+test("V3.6.6 loads fully split notification modules",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-reader-v4.js");
  const controls=await read("public/note-insight-notification-controls-v1.js");
- assert.match(parent,/@version\s+3\.6\.5/);
+ assert.match(parent,/@version\s+3\.6\.6/);
  for(const p of [
   "note-insight-notification-network-v3300.js?v=3630",
-    "note-insight-notification-reader-v4.js?v=3640",
-  "note-insight-notification-controls-v1.js?v=137",
-  "note-insight-notification-filter-v4.js?v=410",
+    "note-insight-notification-reader-v4.js?v=3660",
+  "note-insight-notification-controls-v1.js?v=138",
+  "note-insight-notification-filter-v4.js?v=411",
   "note-insight-notification-return-v1.js?v=120",
   "note-insight-notification-status-bridge-v1.js?v=110",
-  "note-insight-notification-feature-bridge-v1.js?v=100",
+  "note-insight-notification-feature-bridge-v1.js?v=110",
   "note-insight-notification-settings-bridge-v1.js?v=110",
   "note-insight-notification-account-pair-v1.js?v=100"
  ])assert.ok(parent.includes(p),p);
@@ -75,5 +75,5 @@ test("ingest token bridge is origin-locked",async()=>{
 test("legacy combined runtimes and bootstrap are inactive",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  assert.doesNotMatch(parent,/note-insight-notification-runtime-v2958\.js\?v=|note-insight-notification-runtime-v327\.js\?v=|note-insight-notification-autoscan-v2970\.js\?v=|note-insight-notification-bootstrap-v2966\.js\?v=/);
- assert.ok(parent.includes("note-insight-notification-filter-v4.js?v=410"));
+ assert.ok(parent.includes("note-insight-notification-filter-v4.js?v=411"));
 });

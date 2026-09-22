@@ -6,9 +6,9 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.09.22.10";
-export const CURRENT_NOTIFICATION_VERSION = "3.6.5";
-export const CURRENT_DASHBOARD_VERSION = "1.4.7";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.09.22.11";
+export const CURRENT_NOTIFICATION_VERSION = "3.6.6";
+export const CURRENT_DASHBOARD_VERSION = "1.4.8";
 export const CURRENT_DM_VERSION = "1.4.5";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
@@ -40,7 +40,9 @@ export function versionDiffers(current: string, latest: string) {
 
 export async function fetchInsightRelease(): Promise<InsightRelease> {
   const url = `${import.meta.env.BASE_URL}insight-release.json?ts=${Date.now()}`;
-  const response = await fetch(url, { cache: "no-store" });
+  const controller = new AbortController(), timer = window.setTimeout(() => controller.abort(), 12000);
+  try {
+  const response = await fetch(url, { cache: "no-store", signal: controller.signal });
   if (!response.ok) throw new Error(`RELEASE_MANIFEST_${response.status}`);
   const payload = (await response.json()) as Partial<InsightRelease>;
   if (!payload.appVersion || !payload.notificationVersion || !payload.dashboardVersion) {
@@ -57,4 +59,5 @@ export async function fetchInsightRelease(): Promise<InsightRelease> {
     dashboardLabel: payload.dashboardLabel ? String(payload.dashboardLabel) : undefined,
     dmLabel: payload.dmLabel ? String(payload.dmLabel) : undefined,
   };
+  } finally { window.clearTimeout(timer); }
 }

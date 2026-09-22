@@ -71,13 +71,13 @@ test('private analysis keeps replies and unclassified notifications and excludes
  const result=await h.summary();assert.equal(result.sample,4);assert.equal(result.comments,1);assert.equal(result.ownArticleAdds,1);assert.equal(result.membershipJoins,1);assert.equal(result.other,1);
 });
 
-test('active package uses V3.6.5 split full/delta Reader',()=>{
+test('active package uses V3.6.6 split full/delta Reader',()=>{
   const manifest=JSON.parse(read('public/insight-release.json'));
   const v3=read('public/note-insight-notification-v3.user.js'),setup=read('public/notification-browser-install.html'),network=read('public/note-insight-notification-network-v3300.js'),reader=read('public/note-insight-notification-reader-v4.js'),controls=read('public/note-insight-notification-controls-v1.js'),index=read('index.html'),picker=read('src/insight-notification-ui-v18.ts'),feed=read('supabase/functions/insight-notification-feed-final/index.ts');
-  assert.equal(manifest.notificationVersion,'3.6.5');assert.equal(manifest.notificationLabel,'本人通知');
-  assert.match(v3,/@version\s+3\.6\.5/);
+  assert.equal(manifest.notificationVersion,'3.6.6');assert.equal(manifest.notificationLabel,'本人通知');
+  assert.match(v3,/@version\s+3\.6\.6/);
   const meta=v3.split('// ==/UserScript==')[0];
-  for(const p of ['note-insight-notification-network-v3300.js?v=3630','note-insight-notification-reader-v4.js?v=3640','note-insight-notification-controls-v1.js?v=137','note-insight-notification-filter-v4.js?v=410','note-insight-notification-return-v1.js?v=120','note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=100','note-insight-notification-settings-bridge-v1.js?v=110','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
+  for(const p of ['note-insight-notification-network-v3300.js?v=3630','note-insight-notification-reader-v4.js?v=3660','note-insight-notification-controls-v1.js?v=138','note-insight-notification-filter-v4.js?v=411','note-insight-notification-return-v1.js?v=120','note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=110','note-insight-notification-settings-bridge-v1.js?v=110','note-insight-notification-account-pair-v1.js?v=100'])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=/);
   assert.match(setup,/mumei-installer-boundary/);assert.match(setup,/本人通知をインストール \/ 更新/);assert.match(setup,/insight-release\.json/);assert.doesNotMatch(setup,/本人通知 V\d/);
   assert.match(reader,/function directPanel/);assert.match(reader,/function findPanel\(\)\{return directPanel\(\)\}/);
@@ -103,7 +103,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.doesNotMatch(v3,/note-insight-dm-reader-v1\.js\?v=/);
   assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(notice,/test\(location.pathname\)&&!directPanel\(\)/);
-  assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(isDmRoute\(\)\)return/);
+  assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(!featureOn\(\)\|\|isDmRoute\(\)\)return/);
   assert.match(controls,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(filter,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);

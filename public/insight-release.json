@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.10",
-  "notificationVersion": "3.6.5",
-  "dashboardVersion": "1.4.7",
-  "releasedAt": "2026-09-22T12:03:13.970349+00:00",
+  "appVersion": "2026.09.22.11",
+  "notificationVersion": "3.6.6",
+  "dashboardVersion": "1.4.8",
+  "releasedAt": "2026-09-22T12:38:30.161035+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "注意事項の上にあるインストール / 更新の点滅を修正。旧表示処理の再生成を停止し、更新案内と操作ボタンを安定化。",
+  "note": "note公式🔔パネルON/OFFを実際のパネル・読取へ反映。本体更新を通常データから独立。Dashboardの折りたたみ読取・連携失効・期間切替を修正。",
   "dmVersion": "1.4.5",
   "dmLabel": "DM同期"
 }
