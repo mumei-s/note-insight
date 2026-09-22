@@ -3,12 +3,28 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>ダッシュボードの更新・設定｜INSIGHT</title>
-<link rel="stylesheet" href="./dashboard-setup.css?v=202609229"><script src="./dashboard-setup.js?v=202609229" defer></script>
+<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><script src="./dashboard-setup.js?v=2026092212" defer></script>
 </head><body><main class="wrap">
 <a id="back" class="back" href="./?insightMode=analysis#dashboard">← 分析へ戻る</a>
-<header><p class="eyebrow">INSIGHT / ツールの更新</p><h1>ダッシュボードの更新・設定</h1><p class="lead">導入済みの拡張機能は、そのまま使えます。</p></header><aside class="install-cost" style="margin:14px 0;padding:14px 16px;border:1px solid #b79543;border-radius:12px;background:#26200e;color:#ffe6a0;font-size:13px;line-height:1.7"><strong>⚠ 拡張機能の購入料金について</strong><p style="margin:5px 0 0">Safari用Tampermonkeyは有料です。購入料金はINSIGHTの利用料金とは別にかかります。Userscriptsという無料の選択肢もあります。価格・対応端末は変更されるため、購入前に<a href="https://apps.apple.com/app/tampermonkey/id6738342400" target="_blank" rel="noopener noreferrer" style="color:#fff0b7;text-decoration:underline">App Storeの表示</a>を確認してください。他の有料アプリ・拡張機能を選ぶ場合も別途料金が必要です。</p></aside>
-<section class="card" aria-labelledby="browserTitle">
-<h2 id="browserTitle">使っているブラウザ</h2><label class="select-label" for="browser">この端末で更新するブラウザを選択</label>
+<header><p class="eyebrow">INSIGHT / ツールの更新</p><h1>ダッシュボードの更新・設定</h1><p class="lead">連携と読み込みは、下のボタンから開始します。</p></header>
+<section class="card read-card" aria-labelledby="dashboardTitle">
+<div class="tool-head"><h2 id="dashboardTitle">ダッシュボード同期</h2><span id="dashBadge" class="badge">確認中</span></div>
+<p id="account" class="hint"></p>
+<button id="startRead" class="button primary" type="button" disabled>連携して公式データを読み込む</button>
+<p id="readStatus" class="status" role="status" aria-live="polite">ツールの起動を確認しています。</p>
+<a id="loginInsight" class="text-link" href="./?insightMode=analysis#dashboard" hidden>INSIGHTにログインする</a>
+<a id="installDashboard" class="button primary" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync.user.js" target="_blank" rel="noopener noreferrer">ダッシュボード同期をインストール／更新</a>
+<button id="verifyDashboard" class="button" type="button">更新を確認</button>
+<p id="installHint" class="hint">確認画面で「更新／インストール」を押したら、このタブへ戻ってください。</p>
+<p id="dashStatus" class="status" role="status" aria-live="polite">導入済みのツールと最新版を確認しています。</p>
+<details><summary>版数・読み込みについて</summary>
+<dl class="versions"><div><dt>このブラウザ</dt><dd id="dashCurrent">起動確認待ち</dd></div><div><dt>最新版</dt><dd id="dashLatest">確認中</dd></div></dl>
+<p class="hint">本人のnoteアカウントを照合し、公式のPV・スキ・コメントなどを保存します。本人通知のインストールは不要です。</p>
+</details>
+<a id="returnAnalysis" class="text-link" href="./?insightMode=analysis#dashboard">分析へ戻る</a>
+</section>
+<details class="card browser-card">
+<summary id="browserTitle">ブラウザ・インストール方法</summary><label class="select-label" for="browser">この端末で更新するブラウザを選択</label>
 <select id="browser">
 <optgroup label="Android"><option value="android-edge">Android / Edge</option><option value="android-firefox">Android / Firefox</option><option value="android-other">Android / Chrome・Yahoo!など</option></optgroup>
 <optgroup label="iPhone・iPad"><option value="ios-safari">iPhone・iPad / Safari</option><option value="ios-other">iPhone・iPad / Safari以外</option></optgroup>
@@ -16,29 +32,13 @@
 </select><p id="browserHelp" class="hint"></p>
 <div id="switchBrowser" class="switch-box" hidden><p id="switchHelp"></p><button id="copyPage" type="button">この更新画面のURLをコピー</button><div id="switchLinks" class="link-row"></div></div>
 <details><summary>初めて使う・拡張機能が動かない場合</summary><p id="extensionText" class="hint"></p><div id="extensionLinks" class="link-row"></div></details>
-</section>
-<section class="card tool" aria-labelledby="dashboardTitle">
-<div class="tool-head"><h2 id="dashboardTitle">① ダッシュボード同期</h2><span id="dashBadge" class="badge">確認中</span></div>
-<p class="hint">note公式のPV・スキ・コメント・売上などを読み込みます。</p>
-<dl class="versions"><div><dt>このブラウザ</dt><dd id="dashCurrent">起動確認待ち</dd></div><div><dt>最新版</dt><dd id="dashLatest">確認中</dd></div></dl>
-<a id="installDashboard" class="button primary" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync.user.js" target="_blank" rel="noopener noreferrer">ダッシュボード同期をインストール／更新</a>
-<button id="verifyDashboard" class="button" type="button">更新を確認</button>
-<p id="installHint" class="hint">確認画面で「更新／インストール」を押したら、このタブへ戻ってください。</p>
-<p id="dashStatus" class="status" role="status" aria-live="polite">導入済みのツールと最新版を確認しています。</p>
-<details><summary>コードの文字列が表示された場合</summary><p id="codeHelp" class="hint"></p><a class="text-link" href="https://www.tampermonkey.net/faq.php" target="_blank" rel="noopener noreferrer">Tampermonkey公式ヘルプ</a></details>
-</section>
-<section class="card tool" aria-labelledby="noticeTitle">
-<div class="tool-head"><h2 id="noticeTitle">② 本人通知</h2><span id="noticeBadge" class="badge">確認中</span></div>
+<details><summary>コードの文字列が表示された場合</summary><p id="codeHelp" class="hint"></p><a class="text-link" href="https://www.tampermonkey.net/faq.php" target="_blank" rel="noopener noreferrer">Tampermonkey公式ヘルプ</a></details></details>
+<details class="card tool notice-option">
+<summary id="noticeTitle">本人通知（任意） <span id="noticeBadge" class="badge">確認中</span></summary>
 <p class="hint">通知と公式値を組み合わせた分析で使います。</p>
 <dl class="versions"><div><dt>導入済み</dt><dd id="noticeCurrent">確認中</dd></div><div><dt>最新版</dt><dd id="noticeLatest">確認中</dd></div></dl>
 <a id="installNotice" class="button" href="./notification-browser-install.html">本人通知のインストール／更新を開く</a>
-</section>
-<section class="card" aria-labelledby="readTitle">
-<h2 id="readTitle">更新後のデータ読み込み</h2><p id="account" class="hint"></p>
-<button id="startRead" class="button primary" type="button" disabled>公式ダッシュボードを読み込む</button>
-<p class="hint">本人のnoteアカウントを照合して読み込み、完了後はINSIGHTの分析へ戻ります。ダッシュボード同期だけでも読み込めます。</p>
-<p id="readStatus" class="status" role="status" aria-live="polite">ダッシュボード同期の起動確認後に読み込めます。</p>
-<a id="returnAnalysis" class="button" href="./?insightMode=analysis#dashboard">分析へ戻る</a>
-</section>
+</details>
+
 <noscript><p class="status warn">更新状態の確認にはJavaScriptを有効にしてください。上のインストール／更新リンクはそのまま利用できます。</p></noscript>
 </main></body></html>

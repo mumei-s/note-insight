@@ -29,10 +29,10 @@
   function browserGuide(){
     const id=$('browser').value,safari=id==='ios-safari'||id==='mac-safari',other=id==='ios-other'||id==='android-other';
     $('switchBrowser').hidden=!other;
-    text($('browserHelp'),other?'下の案内から対応ブラウザでこの画面を開いてください。':safari?'Safariの拡張機能を有効にして、下の更新ボタンを押します。':'Tampermonkeyを有効にして、下の更新ボタンを押します。すでに使っている方は拡張機能の入れ直し不要です。');
+    text($('browserHelp'),other?'下の案内から対応ブラウザでこの画面を開いてください。':safari?'Safariの拡張機能を有効にして、上の更新ボタンを押します。':'Tampermonkeyを有効にして、上の更新ボタンを押します。すでに使っている方は拡張機能の入れ直し不要です。');
     text($('codeHelp'),safari?'Safariの拡張機能メニューから、お使いのUserscriptsまたはTampermonkeyを開き、表示中のスクリプトをインストールしてください。その後、この更新画面に戻って「更新を確認」を押します。':'ブラウザの拡張機能一覧でTampermonkeyが有効か確認し、もう一度更新ボタンを押してください。拡張機能側のサイトへのアクセスやユーザースクリプト実行の許可も確認します。');
     text($('extensionText'),safari?'UserscriptsまたはTampermonkeyのどちらかを有効にし、note.comとmumei-s.github.ioでの実行を許可してください。':'Tampermonkeyを追加して有効にします。note.comとmumei-s.github.ioでの実行を許可してください。');
-    links('extensionLinks',safari?[['Userscripts（Safari）','https://apps.apple.com/app/userscripts/id1463298887'],['Tampermonkey（Safari版・有料）','https://www.tampermonkey.net/index.php?browser=safari&locale=ja']]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
+    links('extensionLinks',safari?[['Userscripts（Safari）','https://apps.apple.com/app/userscripts/id1463298887'],['Tampermonkey（有料・INSIGHTとは別料金）','https://www.tampermonkey.net/index.php?browser=safari&locale=ja']]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
     text($('switchHelp'),id==='ios-other'?'Safariでこの更新画面を開いてください。':'この案内では、AndroidのEdgeまたはFirefoxを使用します。移動先で同じINSIGHTアカウントへログインしてください。');
     links('switchLinks',id==='android-other'?[['Edge','https://play.google.com/store/apps/details?id=com.microsoft.emmx'],['Firefox','https://play.google.com/store/apps/details?id=org.mozilla.firefox']]:[]);
   }
@@ -69,16 +69,16 @@
     if(checking)return;checking=true;
     try{await loadRelease();const latest=version(release?.dashboardVersion),active=current();if(latest&&active&&compare(active,latest)>=0)return;const p=pending();if(manual||(p&&!p.reloaded))reloadForCheck();else if(p?.reloaded)status('dashStatus','更新をまだ確認できません。拡張機能で保存したことと、このサイトでの実行許可を確認してください。','warn')}finally{checking=false}
   }
-  $('installDashboard').addEventListener('click',e=>{if(!supported()){e.preventDefault();status('dashStatus','上の案内に沿って対応ブラウザで開いてください。','warn');$('browser').focus();return}put(PENDING,JSON.stringify({at:Date.now(),target:release?.dashboardVersion||'',reloaded:false}));status('dashStatus','更新画面を別タブで開きます。更新後、このタブに戻ってください。')});
+  $('installDashboard').addEventListener('click',e=>{if(!supported()){e.preventDefault();status('dashStatus','ブラウザの案内に沿って対応ブラウザで開いてください。','warn');document.querySelector('.browser-card').open=true;$('browser').focus();return}put(PENDING,JSON.stringify({at:Date.now(),target:release?.dashboardVersion||'',reloaded:false}));status('dashStatus','更新画面を別タブで開きます。更新後、このタブに戻ってください。')});
   $('verifyDashboard').addEventListener('click',()=>void verify(true));
   $('browser').addEventListener('change',()=>{browserGuide();paint()});
   $('copyPage').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(self.href);text($('copyPage'),'コピーしました')}catch{text($('copyPage'),'アドレス欄からこのページのURLをコピーしてください')}});
   async function startRead(){
     if(busy||$('startRead').disabled)return;
     const member=get(MEMBER),owner=expected==='ss_yr'?get(OWNER):'',accountAtStart=get(ACTIVE);
-    if(!member&&!owner){readStatus('INSIGHTへ戻ってログインしてから、もう一度読み込んでください。','warn');return}
+    if(!member&&!owner){$('loginInsight').hidden=false;readStatus('INSIGHTへのログインが必要です。下のリンクからログインしてください。','warn');return}
     if(expected&&accountId(accountAtStart)&&accountId(accountAtStart)!==expected){readStatus('アカウントが切り替わっています。INSIGHTへ戻り、利用するアカウントを確認してください。','warn');return}
-    busy=true;readFeedback=null;paint();readStatus('INSIGHTの本人アカウントを確認しています…');
+    busy=true;readFeedback=null;$('loginInsight').hidden=true;paint();readStatus('INSIGHTの本人アカウントを確認しています…');
     const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);
     try{
       const headers={'Content-Type':'application/json'};if(member)headers['X-Insight-Token']=member;if(owner)headers['X-Owner-Token']=owner;

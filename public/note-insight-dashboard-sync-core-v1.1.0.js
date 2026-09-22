@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.4.8
+// @version      1.4.9
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -11,7 +11,7 @@
 
 (() => {
   'use strict';
-  const VERSION='1.4.8';
+  const VERSION='1.4.9';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const DASH_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
@@ -25,7 +25,7 @@
   function xhr(url,body,headers={}){return new Promise((resolve,reject)=>(typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:typeof GM!=='undefined'&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest.bind(GM):()=>reject(new Error('DASHBOARD_REQUEST_UNAVAILABLE')))({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout:60000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300&&p?.ok!==false)resolve(p);else reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}))}
   function cleanUrl(){const u=new URL(location.href);for(const k of ['mumei_dashboard_pair','mumei_dashboard_sync','mumei_dashboard_return'])u.searchParams.delete(k);history.replaceState(history.state,'',u.href)}
   function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
-  async function currentNoteId(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=text(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+  async function currentNoteId(){const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=text(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}finally{clearTimeout(timer)}}
   const isDashboard=()=>location.origin==='https://note.com'&&/\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const periodKey=()=>{const p=detectPeriod();return JSON.stringify([p.periodStart,p.periodEnd,[...document.querySelectorAll('main [role="tab"][aria-selected="true"]')].map(el=>text(el.textContent))])};
@@ -193,17 +193,31 @@
       const message=count?`✓ 同期完了 ${at}｜記事${saved.articleCount??articles.length}件・日別PV ${count}日`:`保存済み ${at}｜記事${saved.articleCount??articles.length}件・日別PV 0日（未取得：公式の日別グラフを開いて再読込）`;
       lastSnapshotSignature=signature;
       localStorage.setItem('mumei-dashboard-last-result:'+paired,message);setStatus(message,count?'ok':'partial');
-    }catch(e){const message=String(e?.message||e);setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効になっています。「連携を直して再読込」から接続し直してください。':`⚠ ${message}`,'warn')}
-    finally{busy=false;if(button)button.disabled=false}
+    }catch(e){const message=String(e?.message||e);setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効｜接続し直してください':`⚠ ${message}`,'warn',/INGEST_TOKEN|再連携|ACCOUNT_MISMATCH|からダッシュボードを連携/.test(message)?'connect':'read')}
+    finally{busy=false;if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':'再読込'}}
   }
-  function setStatus(message,kind=''){if(!status)return;status.textContent=message;status.dataset.kind=kind;const link=panel?.querySelector('#mumei-dash-reconnect');if(link)link.hidden=kind!=='warn'}
+  let needsPair=false,connecting=false;
+  function setStatus(message,kind='',action=''){
+    if(action)needsPair=action==='connect';if(!status)return;
+    status.textContent=message;status.title=message;status.dataset.kind=kind;
+    const button=panel?.querySelector('#mumei-dash-read');if(button){button.textContent=needsPair?'連携して読み込む':busy?'読込中…':'再読込';button.dataset.action=needsPair?'connect':'read'}
+  }
+  async function connectAndRead(){
+    if(connecting||busy)return;connecting=true;const button=panel?.querySelector('#mumei-dash-read');if(button)button.disabled=true;
+    setStatus('noteアカウントを確認中…');
+    try{const id=await currentNoteId();if(!id)throw new Error('noteへのログインを確認してください');
+      const url=new URL('https://mumei-s.github.io/note-insight/dashboard-setup.html');url.searchParams.set('account',id);url.searchParams.set('auto','1');url.searchParams.set('from','note');
+      location.assign(url.href);
+    }catch(e){setStatus(String(e?.message||e),'warn','connect')}finally{connecting=false;if(button)button.disabled=false}
+  }
+  document.addEventListener('mumei-dashboard-status',e=>{const d=e.detail||{};setStatus(String(d.message||''),String(d.kind||''),String(d.action||''))});
   function mount(){
     if(!isDashboard()||!document.body)return;
     if(panel?.isConnected)return;panel=document.createElement('div');panel.id='mumei-dashboard-sync';
-    panel.innerHTML=`<style>#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));font:12px/1.5 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:14px;padding:10px;box-shadow:0 10px 30px #0008;backdrop-filter:blur(10px)}#mumei-dashboard-sync .row{display:flex;gap:8px;align-items:center}#mumei-dashboard-sync button{border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:10px;font-weight:900;min-height:40px;padding:0 12px;white-space:nowrap}#mumei-dashboard-sync button:disabled{opacity:.55}#mumei-dashboard-sync .status{min-width:0;flex:1;overflow-wrap:anywhere}#mumei-dashboard-sync .status[data-kind=ok]{color:#aaffcf}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=partial]{color:#ffd68a}</style><div class="row"><div class="status" role="status" aria-live="polite"></div><button id="mumei-dash-read">再読込</button><button id="mumei-dash-close" aria-label="読込パネルを閉じる">×</button></div>`;
-    document.body.append(panel);status=panel.querySelector('.status');setStatus(`INSIGHT ダッシュボード v${VERSION}｜起動しました`);
-    const reconnect=document.createElement('a');reconnect.id='mumei-dash-reconnect';reconnect.hidden=true;reconnect.textContent='連携を直して再読込';reconnect.href='https://mumei-s.github.io/note-insight/dashboard-setup.html?account='+encodeURIComponent(localStorage.getItem(NOTE_KEY)||'');reconnect.style.cssText='color:#b4eeff;font-weight:800;padding:8px 0;line-height:2.5';panel.append(reconnect);
-    panel.querySelector('#mumei-dash-read').onclick=()=>void syncNow();
+    panel.innerHTML=`<style>#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));font:11px/1.35 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:10px;padding:5px 6px;box-shadow:0 3px 12px #0006;box-sizing:border-box}#mumei-dashboard-sync .row{display:flex;gap:5px;align-items:center}#mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:7px;font:800 11px/1.2 system-ui;min-height:34px;margin:0;padding:0 8px;white-space:nowrap;touch-action:manipulation}#mumei-dashboard-sync button:disabled{opacity:.55}#mumei-dashboard-sync #mumei-dash-close{width:28px;padding:0;border-color:#466677}#mumei-dashboard-sync .status{min-width:0;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}#mumei-dashboard-sync .status[data-kind=ok]{color:#aaffcf}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=partial]{color:#ffd68a}</style><div class="row"><div class="status" role="status" aria-live="polite"></div><button id="mumei-dash-read" type="button">再読込</button><button id="mumei-dash-close" type="button" aria-label="読込パネルを閉じる">×</button></div>`;
+    document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
+    setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
+    panel.querySelector('#mumei-dash-read').onclick=()=>needsPair?void connectAndRead():void syncNow();
     panel.querySelector('#mumei-dash-close').onclick=()=>{panel.remove();panel=null;status=null};
   }
   window.addEventListener('DOMContentLoaded',mount,{once:true});

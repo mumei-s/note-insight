@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.4.8
+// @version      1.4.9
 // @description  INSIGHTの読込ボタンから公式Dashboardを本人通知なしでも同期。直接遷移でもアカウント照合・読込・INSIGHT復帰まで自動実行します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/tool-setup.html*
@@ -17,14 +17,14 @@
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=148
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=149
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
 
 (() => {
   'use strict';
-  const VERSION='1.4.8';
+  const VERSION='1.4.9';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
@@ -55,18 +55,18 @@
 
   if(location.origin!=='https://note.com')return;
   markVersion();
-  async function currentNoteIdV143(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
+  async function currentNoteIdV143(){const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}finally{clearTimeout(timer)}}
   function panel(){return document.getElementById('mumei-dashboard-sync')}
   function hidePanel(){const p=panel();if(p){p.removeAttribute('data-mumei-recovery');p.style.setProperty('display','none','important');p.setAttribute('aria-hidden','true')}}
   function showPanel(){const p=panel();if(p){p.setAttribute('data-mumei-recovery','1');p.style.setProperty('display','block','important');p.removeAttribute('aria-hidden')}}
-  function setCoreStatus(message,kind=''){const s=document.querySelector('#mumei-dashboard-sync .status');if(s){s.textContent=message;s.dataset.kind=kind}}
+  function setCoreStatus(message,kind='',action=''){document.dispatchEvent(new CustomEvent('mumei-dashboard-status',{detail:{message,kind,action}}))}
   function ensureCorePanel(){document.dispatchEvent(new Event('mumei-dashboard-mount'));return !!panel()}
   function looksDashboard(){const p=location.pathname.toLowerCase(),body=(document.body?.innerText||'').slice(0,12000);return p.includes('/sitesettings/stats')||p.includes('/dashboard')||(/アクセス状況/.test(body)&&(/インプレッション|ページビュー|スキ/.test(body)))}
   function directPayload(){const q=new URLSearchParams(location.search),code=String(q.get('mumei_dashboard_pair')||'').replace(/\D/g,'').slice(0,8),noteId=String(q.get('mumei_dashboard_account')||'').replace(/^@/,'').toLowerCase(),returnTo=safeReturn(q.get('mumei_dashboard_return'));if(q.get('mumei_dashboard_sync')!=='1'||!/^\d{8}$/.test(code)||!/^[a-z0-9_-]+$/.test(noteId))return null;return{code,noteId,returnTo}}
   function clearDirectParams(){const u=new URL(location.href);for(const k of ['mumei_dashboard_pair','mumei_dashboard_sync','mumei_dashboard_account','mumei_dashboard_return','mumei_dashboard_tool_version'])u.searchParams.delete(k);history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash)}
-  async function pairDirect(){const p=directPayload();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHTアカウント照合中…');const current=await currentNoteIdV143();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==p.noteId)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${p.noteId}`);const x=await request({action:'pair-exchange',code:p.code}),issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);if(p.returnTo)localStorage.setItem(RETURN_KEY,p.returnTo);sessionStorage.setItem(FLOW_KEY,'1');markVersion();clearDirectParams();setCoreStatus(`✓ @${current} アカウント一致。公式Dashboardを読み込みます`,'ok');return true}
+  async function pairDirect(){const p=directPayload();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHTアカウント照合中…');const current=await currentNoteIdV143();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==p.noteId)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${p.noteId}`);const x=await request({action:'pair-exchange',code:p.code}),issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);if(p.returnTo)localStorage.setItem(RETURN_KEY,p.returnTo);sessionStorage.setItem(FLOW_KEY,'1');markVersion();clearDirectParams();setCoreStatus(`✓ @${current} 連携済み｜読み込みます`,'ok','read');return true}
   async function loadPending(){const raw=await gmGet(HANDOFF_KEY,'');if(!raw)return null;try{const p=JSON.parse(String(raw));if(Date.now()-Number(p.savedAt||p.createdAt||0)>15*60*1000){await gmDel(HANDOFF_KEY);return null}return p}catch{await gmDel(HANDOFF_KEY);return null}}
-  async function pairPending(){const p=await loadPending();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHTアカウント照合中…');const current=await currentNoteIdV143(),expected=String(p.noteId||'').toLowerCase();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==expected)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${expected}`);const x=await request({action:'pair-exchange',code:String(p.code||'')});const issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);markVersion();const back=safeReturn(p.returnTo);if(back)localStorage.setItem(RETURN_KEY,back);sessionStorage.setItem(FLOW_KEY,'1');await gmDel(HANDOFF_KEY);setCoreStatus(`✓ @${current} アカウント一致。公式Dashboardを読み込みます`,'ok');return true}
+  async function pairPending(){const p=await loadPending();if(!p)return false;ensureCorePanel();setCoreStatus('INSIGHTアカウント照合中…');const current=await currentNoteIdV143(),expected=String(p.noteId||'').toLowerCase();if(!current)throw new Error('NOTE_LOGIN_REQUIRED');if(current!==expected)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${expected}`);const x=await request({action:'pair-exchange',code:String(p.code||'')});const issued=String(x.noteId||'').toLowerCase();if(issued!==current)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${issued}`);localStorage.setItem(TOKEN_KEY,String(x.ingestToken||''));localStorage.setItem(NOTE_KEY,current);markVersion();const back=safeReturn(p.returnTo);if(back)localStorage.setItem(RETURN_KEY,back);sessionStorage.setItem(FLOW_KEY,'1');await gmDel(HANDOFF_KEY);setCoreStatus(`✓ @${current} 連携済み｜読み込みます`,'ok','read');return true}
   async function waitPanel(){for(let i=0;i<25;i++){if(ensureCorePanel())return true;await sleep(120)}return false}
   function watchCompletion(){
     if(sessionStorage.getItem(FLOW_KEY)!=='1')return;
@@ -90,9 +90,9 @@
       const pairedDirect=await pairDirect();if(!pairedDirect&&pending)await pairPending();
       const key=location.pathname+location.search;
       if(key===lastAutoKey)return;
-      if(!localStorage.getItem(TOKEN_KEY)){setCoreStatus('INSIGHTの「分析 → ダッシュボード更新」から連携してください','warn');return}
+      if(!localStorage.getItem(TOKEN_KEY)){showPanel();setCoreStatus('未連携｜保存先を設定','warn','connect');return}
       lastAutoKey=key;await startRead();
-    }catch(e){ensureCorePanel();showPanel();setCoreStatus(`⚠ ${e?.message||e}｜INSIGHTの分析から再連携できます`,'warn')}
+    }catch(e){ensureCorePanel();showPanel();setCoreStatus(/ACCOUNT/.test(String(e?.message||e))?'アカウント不一致｜連携を確認':/LOGIN/.test(String(e?.message||e))?'noteへのログインが必要': '連携できませんでした｜再試行','warn','connect')}
     finally{running=false}
   }
   const run=()=>void boot();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();

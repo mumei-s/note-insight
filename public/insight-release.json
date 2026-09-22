@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.11",
+  "appVersion": "2026.09.22.12",
   "notificationVersion": "3.6.6",
-  "dashboardVersion": "1.4.8",
-  "releasedAt": "2026-09-22T12:38:30.161035+00:00",
+  "dashboardVersion": "1.4.9",
+  "releasedAt": "2026-09-22T13:35:37.822780+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "note公式🔔パネルON/OFFを実際のパネル・読取へ反映。本体更新を通常データから独立。Dashboardの折りたたみ読取・連携失効・期間切替を修正。",
+  "note": "分析パネルの更新表示・導線を一本化。公式Dashboardに連携して読み込むボタンを設置し、設定と読込パネルを小型化。別料金の表記を有料拡張機能のリンクへ移動。",
   "dmVersion": "1.4.5",
   "dmLabel": "DM同期"
 }
