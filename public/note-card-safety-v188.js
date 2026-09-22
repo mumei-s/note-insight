@@ -11,7 +11,17 @@
   const leaseKey = () => PREFIX + key() + ':lease';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const key = () => location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1] || '';
-  const read = name => { try { return JSON.parse(localStorage.getItem(name) || 'null'); } catch (_) { return null; } };
+  const read = name => {
+    try {
+      const item = JSON.parse(localStorage.getItem(name) || 'null');
+      if (item?.datasetRef) {
+        const dataset = JSON.parse(localStorage.getItem(item.datasetRef) || 'null');
+        if (!dataset) throw new Error('backup dataset missing');
+        return { ...item, dataset };
+      }
+      return item;
+    } catch (_) { return null; }
+  };
   const runKey = () => 'mumei_likers_thin_run_v160:' + key();
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
@@ -42,20 +52,56 @@
     current(v);
     const doc = v.state.doc.toJSON();
     return { version: 1, articleKey: key(), at: Date.now(), reason, doc, title: titleNode()?.value ?? null,
-      run: read(runKey()), dataset: read('mumei_likers_thin_dataset_v160'), ...stats(doc) };
+      run: read(runKey()), dataset: backupDataset(), ...stats(doc) };
+  }
+  let datasetRaw = null, datasetValue = null;
+  const encodedLists = new WeakMap();
+  function backupDataset() {
+    const raw = localStorage.getItem('mumei_likers_thin_dataset_v160');
+    if (raw !== datasetRaw) { datasetValue = raw ? JSON.parse(raw) : null; datasetRaw = raw; }
+    return datasetValue;
   }
   function write(slot, value) {
     const name = PREFIX + value.articleKey + ':' + slot;
-    const json = JSON.stringify(value);
     try {
+      const { datasetRef: oldRef, ...inline } = value;
+      let stored = inline;
+      if (value.dataset?.datasetId) {
+        const ref = PREFIX + value.articleKey + ':dataset:' + encodeURIComponent(value.dataset.datasetId);
+        let data = encodedLists.get(value.dataset);
+        if (!data) { data = JSON.stringify(value.dataset); encodedLists.set(value.dataset, data); }
+        const old = localStorage.getItem(ref);
+        // Keep one immutable target list shared by all three backups. Never
+        // replace an older list if a dataset ID is accidentally reused.
+        if (old === null) localStorage.setItem(ref, data);
+        if (localStorage.getItem(ref) === data) { stored = { ...value, dataset: null, datasetRef: ref }; }
+      }
+      const json = JSON.stringify(stored);
       localStorage.setItem(name, json);
       if (localStorage.getItem(name) !== json) throw new Error('書き込み確認失敗');
       error = '';
+      if (slot === 'before' || slot === 'previous') pruneDatasets(value.articleKey);
     } catch (_) {
       error = '本文の控えを保存できません。空き容量を確認するか「本文の控え」から書き出してください';
       throw new Error(error);
     }
     return value;
+  }
+  function pruneDatasets(articleKey) {
+    // Only remove unreferenced lists owned by this tool/article. Backup JSON
+    // exports contain the full list and do not depend on these storage keys.
+    try {
+      if (typeof localStorage.key !== 'function') return;
+      const root = PREFIX + articleKey + ':', refs = new Set();
+      for (const slot of ['before', 'latest', 'previous']) {
+        const item = JSON.parse(localStorage.getItem(root + slot) || 'null');
+        if (item?.datasetRef) refs.add(item.datasetRef);
+      }
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const name = localStorage.key(i);
+        if (name?.startsWith(root + 'dataset:') && !refs.has(name)) localStorage.removeItem(name);
+      }
+    } catch (_) { /* A stale list is preferable to deleting a referenced backup. */ }
   }
   function checkpoint(v, reason = '操作前') { return write('before', snapshot(v, reason)); }
   function capture() {
@@ -290,7 +336,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.1</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.2</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
