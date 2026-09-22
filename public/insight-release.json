@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.1",
-  "notificationVersion": "3.6.0",
+  "appVersion": "2026.09.22.2",
+  "notificationVersion": "3.6.1",
   "dashboardVersion": "1.4.4",
-  "releasedAt": "2026-09-22T01:57:13.395168+00:00",
+  "releasedAt": "2026-09-22T03:05:31.484796+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知は非スクロール・古い順・保存地点から再開。カテゴリ保存表示、再分類の中断再開、DM全相手巡回と失敗判定、お気に入り解除、指標と単位が分かる分析グラフ。実DM本文・Android実機確認は継続。",
-  "dmVersion": "1.4.0",
+  "note": "通知パネルのタップ取消と再描画ループを修正。新着なし／保存確認件数を区別。DMの会話画面・構造化本文取得と相手別失敗表示、増減履歴の最新／過去1000人切替、線・棒・円グラフの立体表現。",
+  "dmVersion": "1.4.1",
   "dmLabel": "DM同期"
 }

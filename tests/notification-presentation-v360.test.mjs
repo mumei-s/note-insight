@@ -55,5 +55,17 @@ test('フォロー一覧は最新1000人から過去の保存順1000人へ切り
  const h=setup(),requests=[];
  globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons'))return new Promise(()=>{});const b=JSON.parse(init.body);requests.push(b);return{ok:true,json:async()=>({ok:true,rows:[{person_key:b.window==='oldest'?'old':'new',actor_name:b.window==='oldest'?'過去に保存した人物':'最新の人物',active:b.window!=='oldest',first_seen_at:'2026-08-01',last_seen_at:'2026-09-21'}],total:1,latest:{}})}};
  const{MemberInsightSocialV2:C}=await component('src/member-insight-social-v2.tsx',h.ctx,stubs);await act(async()=>h.root.render(React.createElement(C)));await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.match(document.querySelector('.mis2-list').textContent,/最新の人物/);
- await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='過去から1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'oldest');assert.match(document.querySelector('.mis2-list').textContent,/過去に保存した人物/);assert.match(document.querySelector('.mis2-list').textContent,/過去の保存/);await act(async()=>h.root.unmount());h.dom.window.close();
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='過去から1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'oldest');assert.match(document.querySelector('.mis2-list').textContent,/過去に保存した人物/);assert.match(document.querySelector('.mis2-list').textContent,/過去の保存/);
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='【増】【減】履歴').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).action,'events');assert.equal(requests.at(-1).window,'oldest');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='最新1,000人').click());await act(async()=>{await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).window,'latest');
+ await act(async()=>h.root.unmount());h.dom.window.close();
+});
+
+test('立体円グラフは正確な割合を保ち、凡例を選ぶと件数と割合が変わる',async()=>{
+ const h=setup(),{InsightDonut:C}=await component('src/insight-donut.tsx',h.ctx);
+ await act(async()=>h.root.render(React.createElement(C,{label:'内訳',items:[{label:'コメント',value:75},{label:'購入',value:25},{label:'未取得',value:0}]})));
+ const arcs=[...document.querySelectorAll('.donut-slice circle')];assert.equal(arcs.length,2);const length=Number(arcs[0].getAttribute('stroke-dasharray').split(' ')[0]);assert.ok(Math.abs(length/(2*Math.PI*65)-.75)<1e-9);
+ await act(async()=>document.querySelectorAll('.insight-donut-legend')[1].click());assert.equal(document.querySelector('svg text').textContent,'25');assert.match(document.querySelector('svg').textContent,/25.0%/);
+ await act(async()=>h.root.render(React.createElement(C,{label:'内訳',items:[{label:'未取得',value:0}]})));assert.doesNotMatch(document.body.innerHTML,/NaN|Infinity/);
+ await act(async()=>h.root.unmount());h.dom.window.close();
 });

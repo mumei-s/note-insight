@@ -15,15 +15,15 @@ test("direct reader keeps bottom-up saved-line resume behavior",async()=>{
  assert.match(reader,/host\.scrollTop=Math\.max\(0,before-amount\)/);
 });
 
-test("V3.6.0 loads fully split notification modules",async()=>{
+test("V3.6.1 loads fully split notification modules",async()=>{
  const parent=await read("public/note-insight-notification-v3.user.js");
  const reader=await read("public/note-insight-notification-reader-v4.js");
  const controls=await read("public/note-insight-notification-controls-v1.js");
- assert.match(parent,/@version\s+3\.6\.0/);
+ assert.match(parent,/@version\s+3\.6\.1/);
  for(const p of [
-  "note-insight-notification-network-v3300.js?v=3600",
-    "note-insight-notification-reader-v4.js?v=3600",
-  "note-insight-notification-controls-v1.js?v=134",
+  "note-insight-notification-network-v3300.js?v=3610",
+    "note-insight-notification-reader-v4.js?v=3610",
+  "note-insight-notification-controls-v1.js?v=135",
   "note-insight-notification-filter-v4.js?v=400",
   "note-insight-notification-return-v1.js?v=120",
   "note-insight-notification-status-bridge-v1.js?v=110",
