@@ -10,8 +10,13 @@ type Row=Record<string,any>;
 async function post(endpoint:string,body:Record<string,unknown>){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
   if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");
-  const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store"});
-  const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"DM_API_ERROR");return p
+  const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30000);
+  try{
+    const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:controller.signal});
+    const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"DM_API_ERROR");
+    if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");return p;
+  }catch(e){if(e instanceof Error&&e.name==='AbortError')throw new Error('DMの読込が30秒以内に完了しませんでした');throw e}
+  finally{window.clearTimeout(timer)}
 }
 const feed=(action:string,extra:Record<string,unknown>={})=>post(API,{action,...extra});
 const pair=(action:string,extra:Record<string,unknown>={})=>post(PAIR,{action,...extra});
@@ -21,7 +26,8 @@ function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boo
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
-  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0);
+  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0),messageFlight=useRef<string>(""),listRunning=useRef(false);
+  const[messageOwner,setMessageOwner]=useState(""),[messagesLoading,setMessagesLoading]=useState(false);
   useEffect(()=>{const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();if(!id)return;
     const receive=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.source==="mumei-dm-status-bridge"&&event.data?.noteId===id)setReader(event.data.status||null)};
     const ask=()=>window.postMessage({source:"mumei-dm-status-ui",type:"read",noteId:id},location.origin);
@@ -29,22 +35,33 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     return()=>{messageRequest.current++;window.clearInterval(timer);window.removeEventListener("message",receive)};
   },[]);
   async function load(silent=false){
+    if(listRunning.current)return;listRunning.current=true;
     if(!silent)setLoading(true);setError("");
     try{
       const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]),filtered=(p.rows||[]).filter(validPerson);
       setSummary(s);setPeople(filtered);setPairState(st);
       setSelected(prev=>prev&&filtered.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
-    }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(!silent)setLoading(false)}
+    }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{listRunning.current=false;if(!silent)setLoading(false)}
   }
   async function loadMessages(person:Row|null){
-    const seq=++messageRequest.current,token=localStorage.getItem(INSIGHT_TOKEN_KEY);
-    if(!person){setMessages([]);return}
+    const token=localStorage.getItem(INSIGHT_TOKEN_KEY),key=person?`${token}|${person.person_key}`:'';
+    if(key&&messageFlight.current===key)return;
+    const seq=++messageRequest.current;
+    if(!person){messageFlight.current='';setMessages([]);setMessageOwner('');setMessagesLoading(false);return}
+    messageFlight.current=key;setMessagesLoading(true);
+    if(messageOwner!==person.person_key){setMessages([]);setMessageOwner(person.person_key)}
+    const current=()=>seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
+    const publish=(rows:Row[])=>{if(!current())return;const seen=new Set<string>();setMessages(rows.filter(r=>{const k=String(r.message_key||r.id||'');if(!k||seen.has(k))return false;seen.add(k);return true}).slice().reverse())};
     try{
-      const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500}),total=Math.max(0,Number(first.total||0));let rows=[...(first.rows||[])],pages=Math.ceil(total/500);
-      for(let page=2;page<=pages;page++){const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500});rows.push(...(x.rows||[]))}
-      const seen=new Set<string>();rows=rows.filter((r:Row)=>{const k=String(r.message_key||r.id||"");if(!k||seen.has(k))return false;seen.add(k);return true});
-      if(seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token)setMessages(rows.slice().reverse())
-    }catch(e){setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
+      const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500});if(!current())return;
+      let rows=[...(first.rows||[])];publish(rows);
+      const pages=Math.ceil(Math.max(0,Number(first.total||0))/500);
+      for(let page=2;page<=pages&&current();page++){
+        const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500});if(!current())return;
+        if(!x.rows?.length)break;rows.push(...x.rows);publish(rows);
+      }
+    }catch(e){if(current())setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
+    finally{if(current())setMessagesLoading(false);if(messageFlight.current===key)messageFlight.current=''}
   }
   async function startPair(){
     if(busy)return;setBusy(true);setError("");setNotice("");
@@ -70,6 +87,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
     window.addEventListener("mumei-dm-version-changed",on);window.addEventListener("focus",on);window.addEventListener("pageshow",on);document.addEventListener("visibilitychange",on);
     return()=>{dead=true;window.removeEventListener("mumei-dm-version-changed",on);window.removeEventListener("focus",on);window.removeEventListener("pageshow",on);document.removeEventListener("visibilitychange",on)}
   },[]);
+  const visibleMessages=messageOwner===selected?.person_key?messages:[];
   const serverErrors=(summary?.readerStatus||[]).filter((x:Row)=>x.error),lastBodySave=(summary?.readerStatus||[]).find((x:Row)=>Number(x.saved)>0);
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
@@ -106,7 +124,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
         {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>{messageRequest.current++;setMessages([]);setSelected(r)}}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
         {selected?<div className="midm-person-view">
           <button className="midm-back-list" onClick={()=>{setSelected(null);setMessages([])}}>← DM履歴一覧</button>
-          <div className="midm-messages"><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{messages.length?messages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">この人との保存済みDMはありません。</p>}</div>
+          <div className="midm-messages"><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{visibleMessages.length?visibleMessages.map(m=><article key={m.message_key} className={"midm-message "+(m.direction||"unknown")}><small>{m.direction==="outbound"?"あなた":m.sender_name||selected.peer_name||"相手"} · {fmt(m.sent_at||m.captured_at)}</small>{m.body?<p>{m.body}</p>:null}{m.attachment_url?<a href={m.attachment_url} target="_blank" rel="noreferrer">{m.attachment_name||"添付ファイル"} ↗</a>:null}</article>):<p className="midm-empty">{messagesLoading?"DM本文を読み込み中…":"この人との保存済みDMはありません。"}</p>}</div>
         </div>:null}
       </div>
     </details>}
