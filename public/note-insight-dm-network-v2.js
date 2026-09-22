@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.0';
+const VERSION='1.4.1';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -54,10 +54,11 @@ function extract(json,requestUrl,me){
   if(depth>10||v==null)return;
   if(Array.isArray(v)){for(const x of v.slice(0,3000))walk(x,path+'[]',depth+1,inheritedRoom);return}
   if(typeof v!=='object')return;
-  const room=roomKey(v,inheritedRoom),body=bodyText(v),id=first(v,IDS),s=sender(v),at=time(v),att=attachment(v);
+  const containerRoom=/(?:^|\.)(?:room|conversation|thread)$/i.test(path)&&ROOM_ID_RE.test(String(v.id||''))?String(v.id):inheritedRoom;
+  const room=roomKey(v,containerRoom),body=bodyText(v),id=first(v,IDS),s=sender(v),at=time(v),att=attachment(v);
   const keys=Object.keys(v).join(' ').toLowerCase();
   const pathHint=/message|messages|chat|conversation|room/.test((path+' '+keys).toLowerCase());
-  if(room&&(body||att.url)&&pathHint&&(id||at||s.name||s.id)){
+  if(room&&(body||att.url)&&pathHint&&!/last_?message|preview/i.test(path)&&(id||at||s.name||s.id)){
    const direction=s.id?((s.id||'').toLowerCase()===me?'outbound':'inbound'):'unknown';
    const messageKey=id?('api:'+room+':'+id):('api-sig:'+hash([room,at||'',direction,body,att.url||''].join('|')));
    if(!seen.has(messageKey)){seen.add(messageKey);out.push({thread_key:room,message_key:messageKey,direction,sender_name:s.name||null,sender_url:s.url||null,sender_image_url:s.image||null,body:body||null,sent_at:at,raw_text:body||null,attachment_name:att.name,attachment_url:att.url,attachment_type:att.type,meta:{source:'note-dm-network-v2',userscript:VERSION,request_url:requestUrl,is_read:v.is_read??v.isRead??v.read??v.seen??null,network_path:path}})}
@@ -66,7 +67,10 @@ function extract(json,requestUrl,me){
  }
  walk(json);return out
 }
-let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map();
+let saving=Promise.resolve(),captured=0,saved=0;const roomCounts=new Map(),roomRows=new Map();
+function remember(rows){for(const row of rows){let map=roomRows.get(row.thread_key);if(!map){map=new Map();roomRows.set(row.thread_key,map)}map.set(row.message_key,row)}}
+function snapshot(k){return [...(roomRows.get(String(k))||new Map()).values()]}
+function fromDocument(doc,url,me){const rows=[];for(const script of doc.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{if(script.textContent.length>5000000)continue;rows.push(...extract(JSON.parse(script.textContent),url,me))}catch{}}return rows}
 function addRoom(rows,field){for(const r of rows){const k=String(r.thread_key||'');if(!k)continue;const v=roomCounts.get(k)||{captured:0,saved:0};v[field]=Number(v[field]||0)+1;roomCounts.set(k,v)}}
 const OUTBOX='mumei_dm_network_outbox_v140:';
 function pending(id){try{const v=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(v)?v:[]}catch{return[]}}
@@ -86,26 +90,26 @@ async function persist(rows,owner){
  }
 }
 async function inspect(meta,res,transport){
- if(!res||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
+ if(!res||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)||/\/current_user(?:[/?]|$)/.test(meta.url))return;
  let txt='';try{txt=await res.text()}catch{return}if(!txt||txt.length>5000000)return;
  let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(meta.url,meta.body,json))return;
- const a=await account();if(!a)return;const rows=extract(json,meta.url,a.id);if(!rows.length)return;
+ const a=await account();if(!a)return;const rows=extract(json,meta.url,a.id);if(!rows.length)return;remember(rows);
  saving=saving.then(()=>persist(rows,a.id)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
  await saving
 }
 function reqMeta(input,init){let url='',body=null,method='GET';try{if(typeof input==='string'||input instanceof URL){url=String(input);body=init?.body??null;method=String(init?.method||'GET').toUpperCase()}else if(input){url=String(input.url||'');body=init?.body??null;method=String(init?.method||input.method||'GET').toUpperCase()}}catch{}return{url:abs(url),body,method}}
-function installFetch(){
- const p=pageWindow();if(!p?.fetch||p.fetch.__mumeiDmNetworkV2)return;const original=p.fetch.bind(p);
+function installFetch(p=pageWindow()){
+ if(!p?.fetch||p.fetch.__mumeiDmNetworkV2)return;const original=p.fetch.bind(p);
  const wrapped=function(input,init){const meta=reqMeta(input,init),promise=original(input,init);try{Promise.resolve(promise).then(r=>void inspect(meta,r.clone(),'fetch')).catch(()=>{})}catch{}return promise};
  try{Object.defineProperty(wrapped,'__mumeiDmNetworkV2',{value:true});p.fetch=wrapped}catch{}
 }
-function installXHR(){
- const p=pageWindow(),X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiDmNetworkV2)return;const proto=X.prototype,open=proto.open,send=proto.send;
+function installXHR(p=pageWindow()){
+ const X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiDmNetworkV2)return;const proto=X.prototype,open=proto.open,send=proto.send;
  proto.open=function(method,url,...rest){this.__mumeiDmV2={method:String(method||'GET').toUpperCase(),url:abs(url),body:null};return open.call(this,method,url,...rest)};
  proto.send=function(body){try{if(this.__mumeiDmV2)this.__mumeiDmV2.body=body??null;this.addEventListener('load',()=>{const m=this.__mumeiDmV2||{};let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>5000000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(m.url,m.body,json))return;const fake={text:async()=>txt};void inspect(m,fake,'xhr')},{once:true})}catch{}return send.call(this,body)};
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
 installFetch();installXHR();
 const retry=()=>{if(!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);setTimeout(retry,1200);
-window.__mumeiDmNetworkV2={version:VERSION,extract,getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
+window.__mumeiDmNetworkV2={version:VERSION,extract,snapshot,fromDocument,observeWindow:p=>{installFetch(p);installXHR(p)},getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
