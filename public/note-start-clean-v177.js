@@ -120,7 +120,7 @@
   }
 
   async function autoArmNextChunk() {
-    if (autoArmLock) return;
+    if (autoArmLock || !page.__MUMEI_CARD_SAFETY__ || page.__MUMEI_CARD_SAFETY__.busy() || page.__MUMEI_CARD_SAFETY__.stopped()) return;
     const d = dataset();
     const r = run();
     if (!d?.count || !r || r.datasetId !== d.datasetId) return;
@@ -143,6 +143,7 @@
   }
 
   function mirrorUsefulStatus() {
+    if (page.__MUMEI_CARD_SAFETY__?.stopped()) return;
     const d = dataset();
     const r = run();
     if (!d?.count || !r || r.datasetId !== d.datasetId) return;
@@ -202,6 +203,7 @@
     const r = run();
     const done = imageCount(r);
     if (d?.count && r?.datasetId === d.datasetId && done !== lastImages) {
+      if (page.__MUMEI_CARD_SAFETY__?.busy() || page.__MUMEI_CARD_SAFETY__?.stopped()) return;
       lastImages = done;
       if (done > 0 && done < d.count && !r.pending) void autoArmNextChunk();
     }
@@ -213,3 +215,4 @@
 
   attach();
 })();
+
