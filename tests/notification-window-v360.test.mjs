@@ -4,11 +4,11 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('public/note-insight-notification-network-v3300.js','utf8');
 function harness(shared={gm:new Map(),local:new Map(),saved:[]}){
- let notices=[],apiCalls=0,onSave=null,rejectSave=false,badEnvelope=false,me='tester';
+ let notices=[],apiCalls=0,onSave=null,rejectSave=false,badEnvelope=false,me='tester',localFailure='',removeBlocked=false,gmFailure=()=>false;
  const events=new EventTarget(),doc=new EventTarget();
  class CE extends Event{constructor(name,init){super(name);this.detail=init?.detail}}
- const storage={getItem:k=>shared.local.get(k)??null,setItem:(k,v)=>shared.local.set(k,v)};
- const gm={getValue:async(k,d)=>shared.gm.get(k)??d,setValue:async(k,v)=>shared.gm.set(k,structuredClone(v)),xmlHttpRequest:opts=>{
+ const storage={getItem:k=>{if(localFailure==='security')throw new Error('SecurityError');return shared.local.get(k)??null},setItem:(k,v)=>{if(localFailure)throw new Error('QuotaExceededError');shared.local.set(k,v)},removeItem:k=>{if(removeBlocked||localFailure==='security')throw new Error('SecurityError');shared.local.delete(k)}};
+ const gm={getValue:async(k,d)=>shared.gm.get(k)??d,setValue:async(k,v)=>{if(gmFailure(k))throw new Error('fixture GM storage failure');shared.gm.set(k,structuredClone(v))},xmlHttpRequest:opts=>{
    const input=JSON.parse(opts.data),rows=input.notifications||[];
    if(!opts.url.includes('ingest'))return opts.onload({status:200,responseText:'{"ok":true}'});
    if(rejectSave){rejectSave=false;return opts.onerror()}
@@ -23,7 +23,7 @@ function harness(shared={gm:new Map(),local:new Map(),saved:[]}){
   return{ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>j,text:async()=>JSON.stringify(j),clone(){return this}};
  }};
  context.window=context;vm.createContext(context);vm.runInContext(source,context);
- return{api:context.__mumeiNotificationNetwork3300,shared,setRows(rows){notices=rows},rows:()=>notices,bad(){badEnvelope=true},setNotices(n){notices=Array.from({length:n},(_,i)=>({id:n-i,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${n-i}`,noticed_at:new Date(1700000000000+(n-i)*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}]}))},setOnSave(fn){onSave=fn},rejectNext(){rejectSave=true},changeAccount(){me='other'},get calls(){return apiCalls}};
+ return{api:context.__mumeiNotificationNetwork3300,shared,failLocal(kind='quota'){localFailure=kind},blockRemove(){removeBlocked=true},failGM(fn=()=>true){gmFailure=fn},setRows(rows){notices=rows},rows:()=>notices,bad(){badEnvelope=true},setNotices(n){notices=Array.from({length:n},(_,i)=>({id:n-i,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${n-i}`,noticed_at:new Date(1700000000000+(n-i)*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}]}))},setOnSave(fn){onSave=fn},rejectNext(){rejectSave=true},changeAccount(){me='other'},get calls(){return apiCalls}};
 }
 test('300件は画面を動かさず古い順に保存し、2回目は新着5件のみ',async()=>{
  const h=harness();h.setNotices(300);const first=await h.api.syncCurrent();assert.equal(first.received,300);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
@@ -45,3 +45,27 @@ test('前回の先頭通知が消えても保存済みの別通知で止まり�
 
 test('既読行の下にある新着と、本文が更新されたまとめ通知も保存する',async()=>{const h=harness();h.setNotices(24);await h.api.syncCurrent();const old=h.rows();h.setNotices(25);const added=h.rows()[0];h.setRows([old[0],added,{...old[1],body:old[1].body+' 追記'},...old.slice(2)]);const r=await h.api.syncCurrent();assert.equal(r.saved,2);assert.deepEqual(h.shared.saved.slice(-2),[23,25]);const cp=h.shared.gm.get('mumei_insight_notification_checkpoint_v2922:tester');assert.match(cp.boundaryDisplayText,/25/);assert.equal(cp.boundaryEventIdentity,'notice:25')});
 test('HTTP200のエラー応答を通知0件として完了させない',async()=>{const h=harness();h.bad();await assert.rejects(h.api.syncCurrent(),/NOTICE_API_UNEXPECTED/);assert.equal(h.shared.saved.length,0);assert.equal(h.shared.gm.get('mumei_insight_notification_checkpoint_v2922:tester').lastRunComplete,false)});
+
+for(const failure of ['quota','security'])test(`note.com Storageの${failure}エラーでも300件を保存し、再起動後は差分5件だけ保存`,async()=>{
+ const h=harness();h.shared.local.set('note-site-data','keep');h.shared.local.set('mumei_insight_notification_sync_token_v2:other','keep-other');h.failLocal(failure);h.setNotices(300);const first=await h.api.syncCurrent();assert.equal(first.saved,300);assert.equal(first.historyComplete,true);
+ const resumed=harness(h.shared);resumed.failLocal(failure);resumed.setNotices(305);const delta=await resumed.api.syncCurrent();assert.equal(delta.saved,5);assert.equal(resumed.calls,2);assert.deepEqual(h.shared.saved,Array.from({length:305},(_,i)=>i+1));assert.equal(h.shared.local.get('note-site-data'),'keep');assert.equal(h.shared.local.get('mumei_insight_notification_sync_token_v2:other'),'keep-other');
+});
+test('容量不足と通信失敗が重なっても未送信分を保持し、再読込せず続きから保存',async()=>{
+ const h=harness();h.failLocal();h.setNotices(12);h.rejectNext();await assert.rejects(h.api.syncCurrent());assert.equal(h.shared.saved.length,0);
+ const resumed=harness(h.shared);resumed.failLocal();resumed.setNotices(15);await resumed.api.syncCurrent();assert.equal(resumed.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:12},(_,i)=>i+1));await resumed.api.syncCurrent();assert.deepEqual(h.shared.saved.slice(-3),[13,14,15]);
+});
+test('旧ローカルの途中データを移行し、削除不能の古いコピーで保存位置を巻き戻さない',async()=>{
+ const journalKey='mumei_notification_window_v360:tester',h=harness();h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();
+ const legacy={...h.shared.gm.get(journalKey)};delete legacy.__mumeiDurable;delete legacy.revision;assert.equal(legacy.schema,1);assert.equal(legacy.rows.length,280);h.shared.local.set(journalKey,JSON.stringify(legacy));h.shared.gm.delete(journalKey);
+ const resumed=harness(h.shared);resumed.failLocal();resumed.blockRemove();resumed.setNotices(305);const result=await resumed.api.syncCurrent();assert.equal(result.saved,300);assert.equal(resumed.calls,0);
+ const next=harness(h.shared);next.failLocal();next.blockRemove();next.setNotices(305);const delta=await next.api.syncCurrent();assert.equal(delta.saved,5);assert.deepEqual(h.shared.saved,Array.from({length:305},(_,i)=>i+1));
+});
+test('拡張保存の一時失敗はローカルへ退避し、復帰後は新しい途中データから再開',async()=>{
+ const journalKey='mumei_notification_window_v360:tester',h=harness();h.failGM(k=>k===journalKey);h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();assert.equal(h.shared.saved.length,20);
+ const resumed=harness(h.shared);resumed.failLocal();resumed.setNotices(305);const result=await resumed.api.syncCurrent();assert.equal(result.saved,300);assert.equal(resumed.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
+});
+test('両方の保存先が使えない時は送信前に止め、以前の保存位置と未送信データを維持',async()=>{
+ const h=harness();h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();const cpKey='mumei_insight_notification_checkpoint_v2922:tester',checkpoint=structuredClone(h.shared.gm.get(cpKey));
+ const resumed=harness(h.shared);resumed.failLocal();resumed.failGM();await assert.rejects(resumed.api.syncCurrent(),/途中保存ができません/);assert.equal(h.shared.saved.length,20);assert.deepEqual(h.shared.gm.get(cpKey),checkpoint);
+ const recovered=harness(h.shared);recovered.setNotices(305);await recovered.api.syncCurrent();assert.equal(recovered.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
+});

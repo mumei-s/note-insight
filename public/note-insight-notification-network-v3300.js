@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.2';
+const VERSION='3.6.3';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -25,7 +25,32 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const clean=v=>String(v??'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
-async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
+async function set(k,v){try{if(modern()&&typeof GM.setValue==='function'){await GM.setValue(k,v);return true}if(typeof GM_setValue==='function'){await GM_setValue(k,v);return true}}catch{}return false}
+const STORAGE_ERROR='通知の途中保存ができません。拡張機能の保存容量・実行権限を確認して再試行してください。保存完了にはしていません。';
+let storageRevision=0;
+// note.com localStorage shares a small quota with the site. Keep notification
+// windows in userscript storage; legacy local copies remain readable for migration.
+async function readDurable(k,fallback){
+ const gm=await get(k,undefined);let local;
+ try{const raw=localStorage.getItem(k);if(raw!==null)local=JSON.parse(raw)}catch{}
+ const record=v=>v&&v.__mumeiDurable===1&&Number.isFinite(v.revision);
+ const g=record(gm),l=record(local);
+ if(g||l){const latest=l&&(!g||local.revision>gm.revision)?local:gm;storageRevision=Math.max(storageRevision,latest.revision);return latest.__mumeiDeleted?null:latest}
+ return local??gm??fallback;
+}
+async function writeDurable(k,value){
+ storageRevision=Math.max(Date.now(),storageRevision+1);
+ // Keep legacy journal/history fields at the top level so an already-open old
+ // runtime can still resume them. schema:0 is a cleared journal, not a saved window.
+ const record={...(value||{schema:0,__mumeiDeleted:true}),__mumeiDurable:1,revision:storageRevision};
+ if(await set(k,record)){
+  // Remove only this successfully migrated notification copy, never other site data.
+  try{localStorage.removeItem(k)}catch{}
+  return;
+ }
+ try{localStorage.setItem(k,JSON.stringify(record));return}catch{}
+ throw new Error(STORAGE_ERROR);
+}
 function request(url,body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
 function status(message,kind='info',extra={}){
@@ -192,7 +217,7 @@ function clientSig(r){
  return ['network-v331',clean(r?.meta?.event_identity||''),clean(r?.occurred_at||''),clean(r?.raw_text||''),clean(r?.target_url||''),clean(r?.actor_url||r?.actor_name||'')].join('|')
 }
 async function readOutbox(id){const v=await get(key(OUTBOX,id),[]);return Array.isArray(v)?v:[]}
-async function writeOutbox(id,rows){await set(key(OUTBOX,id),Array.isArray(rows)?rows:[])}
+async function writeOutbox(id,rows){if(!await set(key(OUTBOX,id),Array.isArray(rows)?rows:[]))throw new Error(STORAGE_ERROR)}
 function mergePending(existing,rows,cap,manual){
  const m=new Map();
  for(const r of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(rows)?rows:[])]){
@@ -202,11 +227,11 @@ function mergePending(existing,rows,cap,manual){
  return m
 }
 async function pendingCount(id){return (await readOutbox(id)).length}
-async function historyState(id){let local=null;try{local=JSON.parse(localStorage.getItem(key(HISTORY,id))||'null')}catch{}const v=local||await get(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
-async function writeHistoryState(id,v){const value=v&&typeof v==='object'?v:{};localStorage.setItem(key(HISTORY,id),JSON.stringify(value));await set(key(HISTORY,id),value)}
+async function historyState(id){const v=await readDurable(key(HISTORY,id),{});return v&&typeof v==='object'?v:{}}
+async function writeHistoryState(id,v){await writeDurable(key(HISTORY,id),v&&typeof v==='object'?v:{})}
 async function writeUnifiedStatus(id,patch){
  const cp=await get(key(CHECK,id),{});
- await set(key(CHECK,id),{...cp,...patch,version:VERSION});
+ if(!await set(key(CHECK,id),{...cp,...patch,version:VERSION}))throw new Error(STORAGE_ERROR);
 }
 async function ingestRows(rows,cap,manual=false,emitStatus=true){
  const a=await account();if(!a)throw new Error('noteログインを確認してください');
@@ -368,12 +393,8 @@ function directPageRequest(cap,page){
 // A durable window journal owns collection and confirmation separately. Page numbers
 // are only transport cursors; confirmed notification identities are the boundary.
 const JOURNAL='mumei_notification_window_v360:';
-function localJournal(id){try{return JSON.parse(localStorage.getItem(key(JOURNAL,id))||'null')}catch{return null}}
-async function readJournal(id){return localJournal(id)||await get(key(JOURNAL,id),null)}
-async function writeJournal(id,value){
- localStorage.setItem(key(JOURNAL,id),JSON.stringify(value));
- await set(key(JOURNAL,id),value);
-}
+async function readJournal(id){return readDurable(key(JOURNAL,id),null)}
+async function writeJournal(id,value){await writeDurable(key(JOURNAL,id),value)}
 function ascending(rows){return rows.map((r,i)=>({r,i})).sort((a,b)=>{
  const x=Date.parse(a.r.occurred_at||''),y=Date.parse(b.r.occurred_at||'');
  return Number.isFinite(x)&&Number.isFinite(y)&&x!==y?x-y:b.i-a.i;
