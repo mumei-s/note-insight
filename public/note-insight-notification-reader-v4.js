@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.0',PROTOCOL='3.6.0';
+const VERSION='3.6.1',PROTOCOL='3.6.0';
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const TOKEN='mumei_insight_notification_sync_token_v2:',SAVED='mumei_insight_notification_saved_v2919:',CHECK='mumei_insight_notification_checkpoint_v2922:',REPAIR='mumei_insight_notification_avatar_repair_v338:';
@@ -121,7 +121,7 @@ async function scan(opts={}){
  if(scanning){if(opts.automatic)return 0;stop=true;window.__mumeiNotificationNetwork3300?.stop?.();health('停止要求｜保存確認後に停止します','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
  if(!net?.syncCurrent){health('通信Readerを起動できません','error');return 0}
- scanning=true;stop=false;
+ scanning=true;stop=false;health('新着を確認中…','saving',{readCount:0,savedCount:0});
  try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false)return 0;const result=await net.syncCurrent(opts);return Number(result?.saved||0)}
  catch(e){health(`⚠ ${String(e?.message||e)}｜続きは保存地点から再開`,'error');return 0}
  finally{scanning=false}
@@ -141,7 +141,7 @@ function scheduleAuto(delay=150){
  },delay);
 }
 setTimeout(()=>scheduleAuto(),80);
-new MutationObserver(()=>scheduleAuto()).observe(document.documentElement,{subtree:true,childList:true});
+function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element)||!r.target.closest('[data-mumei-notification-controls]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true})}observe();
 const poll=setInterval(()=>scheduleAuto(),15000);
 window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);window.__mumeiNotificationNetwork3300?.stop?.()});
 window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
