@@ -23,7 +23,7 @@
   let viewCache = null;
   let selectionCache = null;
   let noteUrlCommand = null;
-  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.0へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.2へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -779,28 +779,30 @@
     let operation;
     setBusy(true);
     try {
-      const run = currentBaseRun();
       const view = findView();
       if (!view) throw new FatalError('編集画面が見つかりません');
       if (!page.confirm('今回作成した極薄画像と通知カードを削除し、初期化します。元の本文・画像は保持します。実行しますか？')) return;
+      await page.__MUMEI_THIN_UPLOAD__?.prepareReset();
       operation = safety().begin('初期化', view);
-      let removedCards = 0;
-      let removedImages = 0;
-      if (view && run) {
-        const wantedKeys = new Set((run.cardKeys || []).map((x) => x.key).filter(Boolean));
-        if (wantedKeys.size) {
-          const hits = embedNodes(view).filter((hit) => wantedKeys.has(cardKey(hit)));
-          removedCards = deleteHits(view, hits);
+      const run = currentBaseRun();
+      let removedCards = 0, removedImages = 0;
+      if (run) {
+        // Resolve every owned node before changing the document. A pending upload
+        // must not lose its record while unfinished image nodes remain in the editor.
+        const pendingIds = page.__MUMEI_THIN_UPLOAD__?.resetImageIds(view, run) || [];
+        if (run.pending && !page.__MUMEI_THIN_UPLOAD__) throw new FatalError('画像投入記録を確認できません。更新後に初期化してください');
+        const wantedKeys = new Set((run.cardKeys || []).map(x => x.key).filter(Boolean));
+        const wantedIds = new Set(pendingIds);
+        const bySrc = new Map();
+        for (const [url, rec] of Object.entries(run.images || {})) {
+          if (rec.id) wantedIds.add(String(rec.id));
+          else if (rec.src) bySrc.set(String(rec.src) + '\n' + normalizeUrl(url), true);
         }
-        const trackedImages = Object.entries(run.images || {});
-        if (trackedImages.length) {
-          const hits = imageNodes(view).filter((hit) => trackedImages.some(([url, rec]) => {
-            const id = String(hit.node.attrs?.id || '');
-            const src = String(hit.node.attrs?.src || '');
-            return rec?.id ? String(rec.id) === id : Boolean(rec?.src && String(rec.src) === src && normalizeUrl(hit.node.attrs?.link) === normalizeUrl(url));
-          }));
-          removedImages = deleteHits(view, hits);
-        }
+        const cardHits = embedNodes(view).filter(hit => wantedKeys.has(cardKey(hit)));
+        const imageHits = imageNodes(view).filter(hit => wantedIds.has(String(hit.node.attrs?.id || '')) ||
+          bySrc.has(String(hit.node.attrs?.src || '') + '\n' + normalizeUrl(hit.node.attrs?.link)));
+        removedCards = cardHits.length; removedImages = imageHits.length;
+        deleteHits(view, [...cardHits, ...imageHits]);
         await saveOnce(`初期化 ${removedCards + removedImages}件を保存中…`);
       }
       setJSON(DATA_KEY, null);
