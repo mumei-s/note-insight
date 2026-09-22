@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export const modules = [
   'note-card-safety-v188.js',
+  'note-thin-image-cache-v1882.js',
   'note-likers-thin-notify-v160.js',
   'note-source-picker-v163.js',
   'note-start-clean-v177.js',
@@ -15,10 +16,10 @@ export const modules = [
 const publicDir = new URL('../public/', import.meta.url);
 const output = new URL('note-card-batch-bridge-v610.user.js', publicDir);
 const header = `// ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.1
+// @name         無名S note 極薄＋通知 URL/# 18.8.2
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.1
-// @description  本文の控え・復元を維持。連続アップロードの待機と失敗分の再開を修正。画像表示を軽量化。パネルを縮小し、同じ人物は#の記事を優先。自動再読込なし。
+// @version      18.8.2
+// @description  本文を保持して途中画像も初期化。画像キャッシュで作り直しを高速化し、本文控えの重複データを削減。小型パネル・#記事優先を維持。自動再読込なし。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -41,6 +42,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log('Card userscript source/bundle: identical');
   } else {
     writeFileSync(output, build());
-    console.log('Built v18.8.1 standalone card userscript');
+    console.log('Built v18.8.2 standalone card userscript');
   }
 }

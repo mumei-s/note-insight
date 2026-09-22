@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.1
+// @name         無名S note 極薄＋通知 URL/# 18.8.2
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.1
-// @description  本文の控え・復元を維持。連続アップロードの待機と失敗分の再開を修正。画像表示を軽量化。パネルを縮小し、同じ人物は#の記事を優先。自動再読込なし。
+// @version      18.8.2
+// @description  本文を保持して途中画像も初期化。画像キャッシュで作り直しを高速化し、本文控えの重複データを削減。小型パネル・#記事優先を維持。自動再読込なし。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -30,7 +30,17 @@
   const leaseKey = () => PREFIX + key() + ':lease';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const key = () => location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1] || '';
-  const read = name => { try { return JSON.parse(localStorage.getItem(name) || 'null'); } catch (_) { return null; } };
+  const read = name => {
+    try {
+      const item = JSON.parse(localStorage.getItem(name) || 'null');
+      if (item?.datasetRef) {
+        const dataset = JSON.parse(localStorage.getItem(item.datasetRef) || 'null');
+        if (!dataset) throw new Error('backup dataset missing');
+        return { ...item, dataset };
+      }
+      return item;
+    } catch (_) { return null; }
+  };
   const runKey = () => 'mumei_likers_thin_run_v160:' + key();
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
@@ -61,20 +71,56 @@
     current(v);
     const doc = v.state.doc.toJSON();
     return { version: 1, articleKey: key(), at: Date.now(), reason, doc, title: titleNode()?.value ?? null,
-      run: read(runKey()), dataset: read('mumei_likers_thin_dataset_v160'), ...stats(doc) };
+      run: read(runKey()), dataset: backupDataset(), ...stats(doc) };
+  }
+  let datasetRaw = null, datasetValue = null;
+  const encodedLists = new WeakMap();
+  function backupDataset() {
+    const raw = localStorage.getItem('mumei_likers_thin_dataset_v160');
+    if (raw !== datasetRaw) { datasetValue = raw ? JSON.parse(raw) : null; datasetRaw = raw; }
+    return datasetValue;
   }
   function write(slot, value) {
     const name = PREFIX + value.articleKey + ':' + slot;
-    const json = JSON.stringify(value);
     try {
+      const { datasetRef: oldRef, ...inline } = value;
+      let stored = inline;
+      if (value.dataset?.datasetId) {
+        const ref = PREFIX + value.articleKey + ':dataset:' + encodeURIComponent(value.dataset.datasetId);
+        let data = encodedLists.get(value.dataset);
+        if (!data) { data = JSON.stringify(value.dataset); encodedLists.set(value.dataset, data); }
+        const old = localStorage.getItem(ref);
+        // Keep one immutable target list shared by all three backups. Never
+        // replace an older list if a dataset ID is accidentally reused.
+        if (old === null) localStorage.setItem(ref, data);
+        if (localStorage.getItem(ref) === data) { stored = { ...value, dataset: null, datasetRef: ref }; }
+      }
+      const json = JSON.stringify(stored);
       localStorage.setItem(name, json);
       if (localStorage.getItem(name) !== json) throw new Error('書き込み確認失敗');
       error = '';
+      if (slot === 'before' || slot === 'previous') pruneDatasets(value.articleKey);
     } catch (_) {
       error = '本文の控えを保存できません。空き容量を確認するか「本文の控え」から書き出してください';
       throw new Error(error);
     }
     return value;
+  }
+  function pruneDatasets(articleKey) {
+    // Only remove unreferenced lists owned by this tool/article. Backup JSON
+    // exports contain the full list and do not depend on these storage keys.
+    try {
+      if (typeof localStorage.key !== 'function') return;
+      const root = PREFIX + articleKey + ':', refs = new Set();
+      for (const slot of ['before', 'latest', 'previous']) {
+        const item = JSON.parse(localStorage.getItem(root + slot) || 'null');
+        if (item?.datasetRef) refs.add(item.datasetRef);
+      }
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const name = localStorage.key(i);
+        if (name?.startsWith(root + 'dataset:') && !refs.has(name)) localStorage.removeItem(name);
+      }
+    } catch (_) { /* A stale list is preferable to deleting a referenced backup. */ }
   }
   function checkpoint(v, reason = '操作前') { return write('before', snapshot(v, reason)); }
   function capture() {
@@ -309,7 +355,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.1</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.2</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
@@ -325,6 +371,63 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopped = true; try { capture(); } catch (_) {} } });
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
   setInterval(() => { if (active && active.key === key() && read(leaseKey())?.owner === owner) localStorage.setItem(leaseKey(), JSON.stringify({ owner, until: Date.now() + 30000 })); }, 10000);
+})();
+
+// MODULE: note-thin-image-cache-v1882.js
+(function () {
+  'use strict';
+  const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  if (page.__MUMEI_THIN_IMAGE_CACHE__) return;
+  const NAME = 'mumei-thin-png-v1882', MAX_ENTRIES = 512, MAX_BYTES = 128 * 1024, TTL = 12 * 60 * 60 * 1000;
+  let opening = null, queue = Promise.resolve(), disabled = false;
+  function limited(promise) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('cache timeout')), 1500);
+      Promise.resolve(promise).then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
+    });
+  }
+  function key(row) {
+    // Includes all rendered content; a different title, article or image never reuses the previous PNG.
+    const value = JSON.stringify(['860x140-png-1882', row.url, row.title, row.creator, row.thumbUrl || '', row.actorImageUrl || '']);
+    return value.length <= 12000 ? location.origin + '/__mumei_thin_cache__/' + encodeURIComponent(value) : null;
+  }
+  async function open() {
+    if (disabled || !page.caches || !page.Response) return null;
+    if (!opening) opening = limited((async () => {
+      const cache = await page.caches.open(NAME), requests = await cache.keys();
+      const keys = new Set(requests.map(request => request.url));
+      while (keys.size > MAX_ENTRIES) { const first = keys.values().next().value; await cache.delete(first); keys.delete(first); }
+      return { cache, keys };
+    })()).catch(() => { disabled = true; return null; });
+    return opening;
+  }
+  async function get(row) {
+    const url = key(row); if (!url) return null;
+    try {
+      const state = await open(); if (!state) return null;
+      const response = await limited(state.cache.match(url));
+      const at = Number(response?.headers.get('x-mumei-at'));
+      if (!response || !at || Date.now() - at > TTL || response.headers.get('content-type') !== 'image/png') return null;
+      const blob = await limited(response.blob());
+      return blob.size > 0 && blob.size <= MAX_BYTES ? blob : null;
+    } catch (_) { disabled = true; return null; }
+  }
+  function put(row, blob) {
+    const url = key(row);
+    if (!url || !blob || blob.type !== 'image/png' || !blob.size || blob.size > MAX_BYTES) return Promise.resolve(false);
+    // Serialize writes/eviction. Cache failure never prevents image creation or article saving.
+    const task = queue.then(async () => {
+      const state = await open(); if (!state || disabled) return false;
+      while (!state.keys.has(url) && state.keys.size >= MAX_ENTRIES) {
+        const first = state.keys.values().next().value;
+        await limited(state.cache.delete(first)); state.keys.delete(first);
+      }
+      await limited(state.cache.put(url, new page.Response(blob, { headers: { 'content-type': 'image/png', 'x-mumei-at': String(Date.now()) } })));
+      state.keys.add(url); return true;
+    }).catch(() => { disabled = true; return false; });
+    queue = task; return task;
+  }
+  page.__MUMEI_THIN_IMAGE_CACHE__ = { get, put };
 })();
 
 // MODULE: note-likers-thin-notify-v160.js
@@ -381,7 +484,7 @@
     if (!status || status >= 400) recordNetFailure('image-upload', ticket.url, status, message);
   }
 
-  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.1へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.2へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -476,6 +579,7 @@
       proto.__mumeiUploadProbe160 = true;
     }
   }
+  const optimizedImageDOM = new WeakSet();
   function optimizeUploadedImages(view, run = getRun()) {
     if (!document.head || typeof view.nodeDOM !== 'function') return;
     const id = 'mumei-owned-image-memory-v1881';
@@ -487,7 +591,7 @@
     for (const rec of Object.values(run?.images || {})) {
       const hit = safety().tracked(view, rec); if (!hit) continue;
       const dom = view.nodeDOM(hit.pos), image = dom?.tagName === 'IMG' ? dom : dom?.querySelector?.('img');
-      if (image) { image.loading = 'lazy'; image.decoding = 'async'; }
+      if (image && !optimizedImageDOM.has(image)) { image.loading = 'lazy'; image.decoding = 'async'; optimizedImageDOM.add(image); }
       (dom?.closest?.('figure') || dom)?.classList?.add('mumei-owned-thin-image-v1881');
     }
   }
@@ -864,6 +968,10 @@
     ctx.restore();
   }
   async function makeThinFile(row) {
+    const cache = page.__MUMEI_THIN_IMAGE_CACHE__;
+    const filename = `${String(row.index).padStart(3, '0')}_thin.png`;
+    const cached = await cache?.get(row);
+    if (cached) return new page.File([cached], filename, { type: 'image/png' });
     const load = async (url, width) => { if (!url) return null; try { return await bitmap(await xhr(url, 'blob', 30000), width); } catch (_) { return null; } };
     const [image, avatar] = await Promise.all([load(row.thumbUrl, 640), load(row.actorImageUrl, 84)]);
 
@@ -918,7 +1026,8 @@
 
     const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('極薄カード生成失敗')), 'image/png', 1));
     canvas.width = 1; canvas.height = 1;
-    return new page.File([blob], `${String(row.index).padStart(3, '0')}_thin.png`, { type: 'image/png' });
+    if ((!row.thumbUrl || image) && (!row.actorImageUrl || avatar)) await cache?.put(row, blob);
+    return new page.File([blob], filename, { type: 'image/png' });
   }
 
   function findImageByState(view, record, url) {
@@ -970,10 +1079,10 @@
       setStatus(`画像🔗付与 ${end}/${created.length}…`);
       if (end < created.length) await sleep(60);
     }
-    const after = imageNodes(view);
+    const afterIndex = safety().index(view), after = afterIndex.images;
     for (let i = 0; i < workRows.length; i += 1) {
       const row = workRows[i], createdId = String(created[i]?.node?.attrs?.id || '');
-      const hit = (createdId ? after.find((entry) => String(entry.node.attrs?.id || '') === createdId) : null) ||
+      const hit = (createdId ? afterIndex.byId.get(createdId) : null) ||
         after.find((entry) => normalizeUrl(entry.node.attrs?.link) === normalizeUrl(row.url) && remoteImage(entry.node));
       if (!hit || normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) throw new FatalError(`画像🔗確認NG: ${row.index}`);
       run.images[row.url] = { id: String(hit.node.attrs?.id || ''), src: String(hit.node.attrs?.src || '') };
@@ -987,7 +1096,7 @@
     while (Date.now() < deadline) {
       safety().check(view);
       const allNew = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
-      const running = getRun();
+      const running = imageArm?.run || getRun();
       if (running?.pending && allNew.length === expected && !running.pending.slots) {
         running.pending.slots = allNew.map(hit => String(hit.node.attrs.id)); setRun(running);
         if (imageArm) imageArm.run.pending = running.pending;
@@ -1071,6 +1180,7 @@
     imageArm = null;
     if (arm?.timer) clearTimeout(arm.timer);
     uninstallImageInputBridge();
+    if (arm && !arm.consumed) { arm.files.length = 0; arm.beforeInputs?.clear(); }
     if (reason && arm?.reject) arm.reject(new FatalError(reason));
   }
   function installNativeInputInterceptor() {
@@ -1091,6 +1201,7 @@
     const arm = imageArm;
     if (!arm || arm.consumed || !imageInput(input)) return false;
     arm.consumed = true;
+    arm.phase = '画像投入';
     if (arm.timer) clearTimeout(arm.timer);
     arm.timer = null;
     arm.uploadStartedAt = Date.now();
@@ -1099,11 +1210,14 @@
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.1' };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.2' };
       setRun(arm.run);
       input.files = transfer.files;
       input.dispatchEvent(new page.Event('input', { bubbles: true }));
       input.dispatchEvent(new page.Event('change', { bubbles: true }));
+      const inserted = imageNodes(arm.view).filter(hit => hit.node.attrs?.id && !arm.beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
+      if (inserted.length === arm.workRows.length) { arm.run.pending.slots = inserted.map(hit => String(hit.node.attrs.id)); setRun(arm.run); }
+      arm.phase = 'アップロード';
       setStatus(`${arm.files.length}枚を一括挿入・アップロード中…`);
       const result = await waitNewRemoteImages(arm.view, arm.beforeIds, arm.workRows.length, 1800000, baselineErrors);
       const created = result.fresh || [];
@@ -1116,14 +1230,17 @@
         if (created.length !== arm.workRows.length && (!slots || slots.length !== arm.workRows.length)) throw new FatalError('一部画像の順序を確認できません。誤ったリンクを付けず本文と投入記録を保持して停止しました');
         const rows = created.map((hit, i) => arm.workRows[slots ? slots.indexOf(String(hit.node.attrs.id)) : i]);
         if (rows.some(row => !row)) throw new FatalError('画像の投入記録が一致しません');
+        arm.phase = 'リンク付与';
         await linkCreatedImages(arm.view, rows, created, arm.run);
         if (created.length === arm.workRows.length) { arm.run.pending = null; setRun(arm.run); }
+        arm.phase = '下書き保存確認';
         await saveOnce(`途中成功分も確定保存｜極薄画像🔗 ${verifiedImageCount(arm.view, arm.dataset, arm.run)}/${arm.dataset.count}…`);
       }
       if (result.failed || created.length < arm.workRows.length) {
         const doneNow = verifiedImageCount(arm.view, arm.dataset, arm.run);
         const left = Math.max(0, arm.dataset.count - doneNow);
         const netText = result.net ? `｜通信 ${result.net.kind} HTTP ${result.net.status || 0} ${result.net.url}` : '';
+        arm.phase = 'アップロード';
         const reason = result.reason || 'note側画像アップロード失敗';
         recordUploadDiag({
           requested: arm.workRows.length,
@@ -1138,7 +1255,9 @@
       }
       arm.resolve(true);
     } catch (error) {
-      arm.reject(error);
+      recordUploadDiag({ runtime: '18.8.2', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
+      const failure = new FatalError(`${arm.phase}｜開始時${doneBefore}枚｜${error?.message || String(error)}`);
+      failure.cause = error; arm.reject(failure);
     } finally {
       try { input.files = new page.DataTransfer().files; input.value = ''; } catch (_) {}
       arm.files.length = 0;
@@ -1194,6 +1313,30 @@
     });
     inputObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
+  async function prepareReset() {
+    if (imageArm && !imageArm.consumed) cancelImageArm('初期化へ切り替えます');
+    safety().stop();
+    const deadline = Date.now() + 60000;
+    while (busy && Date.now() < deadline) await sleep(100);
+    if (busy || uploadRequests.size) throw new FatalError('画像通信の完了を待っています。処理が終わってから初期化してください');
+  }
+  function resetImageIds(view, run) {
+    if (uploadRequests.size) throw new FatalError('画像通信中のため初期化を待っています');
+    const pending = run?.pending;
+    if (!pending) return [];
+    if (lastUploadActivityAt && Date.now() - lastUploadActivityAt < UPLOAD_QUIET_MS && pending.stage === 'failed') throw new FatalError('画像通信の停止確認中です。少し待って初期化してください');
+    const before = new Set((pending.beforeIds || []).map(String));
+    const slots = new Set((pending.slots || []).map(String));
+    const tracked = new Set(Object.values(run.images || {}).map(rec => String(rec.id || '')).filter(Boolean));
+    const unknown = imageNodes(view).filter(hit => {
+      const id = String(hit.node.attrs?.id || '');
+      return !before.has(id) && !slots.has(id) && !tracked.has(id);
+    });
+    if (unknown.length) throw new FatalError('投入記録にない画像があります。元画像を守るため初期化を止めました');
+    return [...slots].filter(id => !before.has(id));
+  }
+  page.__MUMEI_THIN_UPLOAD__ = { prepareReset, resetImageIds };
+
   async function recoverPending(view, dataset, run) {
     const pending = run.pending;
     if (!pending?.workUrls?.length || !Array.isArray(pending.beforeIds)) throw new FatalError('画像の投入記録が不完全です。本文の控えを確認してください');
@@ -1450,7 +1593,7 @@
   let viewCache = null;
   let selectionCache = null;
   let noteUrlCommand = null;
-  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.0へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.2へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -2206,28 +2349,30 @@
     let operation;
     setBusy(true);
     try {
-      const run = currentBaseRun();
       const view = findView();
       if (!view) throw new FatalError('編集画面が見つかりません');
       if (!page.confirm('今回作成した極薄画像と通知カードを削除し、初期化します。元の本文・画像は保持します。実行しますか？')) return;
+      await page.__MUMEI_THIN_UPLOAD__?.prepareReset();
       operation = safety().begin('初期化', view);
-      let removedCards = 0;
-      let removedImages = 0;
-      if (view && run) {
-        const wantedKeys = new Set((run.cardKeys || []).map((x) => x.key).filter(Boolean));
-        if (wantedKeys.size) {
-          const hits = embedNodes(view).filter((hit) => wantedKeys.has(cardKey(hit)));
-          removedCards = deleteHits(view, hits);
+      const run = currentBaseRun();
+      let removedCards = 0, removedImages = 0;
+      if (run) {
+        // Resolve every owned node before changing the document. A pending upload
+        // must not lose its record while unfinished image nodes remain in the editor.
+        const pendingIds = page.__MUMEI_THIN_UPLOAD__?.resetImageIds(view, run) || [];
+        if (run.pending && !page.__MUMEI_THIN_UPLOAD__) throw new FatalError('画像投入記録を確認できません。更新後に初期化してください');
+        const wantedKeys = new Set((run.cardKeys || []).map(x => x.key).filter(Boolean));
+        const wantedIds = new Set(pendingIds);
+        const bySrc = new Map();
+        for (const [url, rec] of Object.entries(run.images || {})) {
+          if (rec.id) wantedIds.add(String(rec.id));
+          else if (rec.src) bySrc.set(String(rec.src) + '\n' + normalizeUrl(url), true);
         }
-        const trackedImages = Object.entries(run.images || {});
-        if (trackedImages.length) {
-          const hits = imageNodes(view).filter((hit) => trackedImages.some(([url, rec]) => {
-            const id = String(hit.node.attrs?.id || '');
-            const src = String(hit.node.attrs?.src || '');
-            return rec?.id ? String(rec.id) === id : Boolean(rec?.src && String(rec.src) === src && normalizeUrl(hit.node.attrs?.link) === normalizeUrl(url));
-          }));
-          removedImages = deleteHits(view, hits);
-        }
+        const cardHits = embedNodes(view).filter(hit => wantedKeys.has(cardKey(hit)));
+        const imageHits = imageNodes(view).filter(hit => wantedIds.has(String(hit.node.attrs?.id || '')) ||
+          bySrc.has(String(hit.node.attrs?.src || '') + '\n' + normalizeUrl(hit.node.attrs?.link)));
+        removedCards = cardHits.length; removedImages = imageHits.length;
+        deleteHits(view, [...cardHits, ...imageHits]);
         await saveOnce(`初期化 ${removedCards + removedImages}件を保存中…`);
       }
       setJSON(DATA_KEY, null);
