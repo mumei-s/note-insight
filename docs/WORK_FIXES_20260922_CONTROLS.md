@@ -67,7 +67,11 @@
 - 既存回帰74件＋動作23件＝97件成功。タップ、旧新GM、停止によるフレーム破棄、構造化DMのroom引継ぎ、プレビュー除外、増減履歴の対象切替、過去人物の全体ページ順、円の正確な割合と選択を含む。
 - TypeScript／Vite build、現行Readerの構文、変更Edge Function 3本の構文を確認。
 - Supabase: `insight-dm-ingest` v3、`insight-dm-feed` v3、`insight-social-events` v7。すべてACTIVE、公開後の取得ソースがローカルと完全一致。
-- Pagesの最終結果は公開確認後に追記する。
+- 機能コードmain `da3fc5f22d2d8b2f2cd5d2ee731e69796df43898`。16個の機能別コミットで反映。検証したローカルとGitHubのtree `c0e954874437ed09fac91221a0f770450d91b35b` が完全一致。
+- [GitHub Actions 35682571223](https://github.com/mumei-s/note-insight/actions/runs/35682571223): build、機能境界、userscript構文、回帰74件＋動作23件、Pages deployがすべて成功。
+- 本番SQLで最新1,000人／過去1,000人を確認。確認時点で過去枠の169人は最新枠外、過去枠に紐づく増減履歴12件。新しいDM診断は端末更新前のため0件。
+- Pages manifest本文の直接取得は外部取得ツールで接続できず未確認。Pages deploy成功と、各端末で新しいuserscriptが動いたことは区別する。
+- この公開記録の追記は文書だけを変更し、機能コードは変更しない。
 
 ## 次に実機で確認する順番
 
