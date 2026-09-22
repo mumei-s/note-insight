@@ -2,17 +2,18 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.3';
+const VERSION='1.4.4';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
 const MAX_ROOMS=500,MAX_SCROLL=1200,MAX_MESSAGES=5000;
 const OUTBOX='mumei_dm_outbox_v140:';
 let interrupted=false,manualPaused=false,roomRunning=false;
-function stop(){interrupted=true;manualPaused=true;const b=document.querySelector('#mumei-dm-reader-status button');if(b)b.textContent='続き読込'}
-window.addEventListener('pagehide',stop,{capture:true});
-window.addEventListener('popstate',()=>{if(!dmRoute())stop()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')stop()});
+function stop(){interrupted=true;manualPaused=true}
+function suspend(){interrupted=true}
+window.addEventListener('pagehide',suspend,{capture:true});
+window.addEventListener('popstate',()=>{if(!dmRoute())suspend()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')suspend();else{interrupted=false;window.__mumeiInsightDmReaderV1Api?.run()}});
 function pending(id){try{return JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]')}catch{return[]}}
 function retainMessages(id,rows){const map=new Map(pending(id).map(r=>[r.message_key,r]));for(const r of rows)map.set(r.message_key,r);localStorage.setItem(key(OUTBOX,id),JSON.stringify([...map.values()]))}
 
@@ -57,13 +58,21 @@ function candidateNodes(root){
  return all.filter(el=>!all.some(child=>child!==el&&el.contains(child)));
 }
 function conversationRoot(doc=document){const input=textbox(doc),win=doc.defaultView||window;if(input){let p=input.parentElement,best=null,d=0;while(p&&p!==doc.body&&p!==doc.documentElement&&d++<14){if(shown(p)){const xs=candidateNodes(p),roomLinks=p.querySelectorAll('a[href*="/messages/rooms/"]').length;if(xs.length&&roomLinks<3)best=p;const r=p.getBoundingClientRect();if(best&&r.height>(win.innerHeight||800)*.7)break}p=p.parentElement}if(best)return best}for(const root of doc.querySelectorAll('main,[role="main"],section,[class*="message" i],[class*="chat" i],[class*="conversation" i]')){if(!shown(root))continue;const xs=candidateNodes(root),roomLinks=root.querySelectorAll('a[href*="/messages/rooms/"]').length;if(xs.length&&roomLinks<3)return root}return null}
-function scrollHost(root){if(!root)return null;const w=root.ownerDocument?.defaultView||window,xs=candidateNodes(root);let p=xs[0]||root;while(p&&root.contains(p)){const s=w.getComputedStyle(p);if(p.scrollHeight>p.clientHeight+30&&/(auto|scroll)/.test(s.overflowY))return p;if(p===root)break;p=p.parentElement}for(const el of root.querySelectorAll('div,section,main')){if(!shown(el))continue;const s=w.getComputedStyle(el);if(el.scrollHeight>el.clientHeight+30&&/(auto|scroll)/.test(s.overflowY)&&candidateNodes(el).length)return el}return root.scrollHeight>root.clientHeight+30?root:null}
+function scrollHost(root){
+ if(!root)return null;const doc=root.ownerDocument||document,w=doc.defaultView||window;
+ const scrollable=el=>el&&el.scrollHeight>el.clientHeight+12&&/(auto|scroll)/.test(w.getComputedStyle(el).overflowY);
+ for(const node of candidateNodes(root)){for(let p=node;p&&p!==doc.documentElement;p=p.parentElement)if(scrollable(p))return p}
+ for(const el of root.querySelectorAll('div,section,main'))if(shown(el)&&scrollable(el)&&candidateNodes(el).length)return el;
+ const page=doc.scrollingElement||doc.documentElement;return page?.scrollHeight>page?.clientHeight+12?page:null;
+}
 function direction(el,root,me){const meta=clean([el.getAttribute('data-testid'),el.getAttribute('data-direction'),el.getAttribute('class'),el.getAttribute('aria-label')].join(' ')).toLowerCase();if(/(?:outgoing|sent|mine|my-message|from-me|self)/.test(meta))return'outbound';if(/(?:incoming|received|from-them|other)/.test(meta))return'inbound';for(const a of el.querySelectorAll('a[href]')){const id=creatorId(a.getAttribute('href'));if(id)return id===me?'outbound':'inbound'}const rr=root.getBoundingClientRect(),r=el.getBoundingClientRect(),center=r.left+r.width/2;if(center>rr.left+rr.width*.62)return'outbound';if(center<rr.left+rr.width*.38)return'inbound';return'unknown'}
 function messageData(el,threadKey,root,me,duplicateFromNewest=0){const raw=String(el.innerText||el.textContent||'').replace(/\r\n?/g,'\n').trim(),dt=el.querySelector('time[datetime],[datetime]'),tm=dt&&dt.getAttribute('datetime')||relativeTime(raw),dir=direction(el,root,me),baseHref=el.ownerDocument?.defaultView?.location?.href||location.href;let senderUrl=null,senderName=null,senderImage=null;for(const a of el.querySelectorAll('a[href]')){const id=creatorId(a.getAttribute('href'));if(id){senderUrl=new URL(a.getAttribute('href'),baseHref).href;senderName=clean(a.textContent)||id;break}}const img=[...el.querySelectorAll('img[src]')].find(x=>!/emoji|stamp|attachment|upload/i.test(String(x.className||'')+' '+String(x.alt||'')));if(img)senderImage=String(img.currentSrc||img.src||'');let attachmentUrl=null,attachmentName=null,attachmentType=null;for(const a of el.querySelectorAll('a[href]')){const href=String(a.href||'');if(!href||creatorId(href)||/\/messages\/rooms/i.test(href))continue;attachmentUrl=href;attachmentName=clean(a.getAttribute('download')||a.textContent)||null;attachmentType=/\.(?:png|jpe?g|gif|webp|heic)(?:$|\?)/i.test(href)?'image':'file';break}if(!attachmentUrl){const ai=[...el.querySelectorAll('img[src]')].find(x=>x!==img);if(ai){attachmentUrl=String(ai.currentSrc||ai.src||'');attachmentName=clean(ai.alt)||null;attachmentType='image'}}let body=raw;if(senderName&&body.startsWith(senderName))body=body.slice(senderName.length).trim();body=body.replace(/\s*(?:既読|未読)?\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前)?$/u,'').trim();const domId=el.closest('[data-message-id]')?.getAttribute('data-message-id')||el.getAttribute('data-message-id')||el.getAttribute('data-id')||el.getAttribute('id')||'',base=[threadKey,domId,dt?.getAttribute('datetime')||'',dir,body,attachmentUrl||'',duplicateFromNewest].join('|');return{thread_key:threadKey,message_key:domId?('dom:'+threadKey+':'+domId):('sig:'+hash(base)),direction:dir,sender_name:senderName,sender_url:senderUrl,sender_image_url:senderImage,body:body||null,sent_at:tm,raw_text:raw||null,attachment_name:attachmentName,attachment_url:attachmentUrl,attachment_type:attachmentType,meta:{source:'note-dm-dom-v1',room_url:location.href,time_estimated:!dt}}}
 async function save(a,threads,messages){const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('DM_PAIR_REQUIRED');return request(INGEST,{noteId:a.id,threads,messages},{'X-Ingest-Token':token})}
 function cloak(on){try{if(on){document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-dm-scan-cloak','1')}else{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-dm-scan-cloak')}}catch{}}
 async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=>true){
  const network=window.__mumeiDmNetworkV2;
+ const direct=await network?.readHistory?.(threadKey,a.id,{shouldStop:()=>interrupted||!alive()||!dmRoute(),onProgress:async p=>updateCheck(a,{lastRunAt:Date.now(),lastReadCount:p.read,lastSavedCount:p.saved,lastThreadKey:threadKey,lastRunComplete:false,lastError:'',lastRunMode:'automatic'})});
+ if(direct)return direct;
  const structured=network?.fromDocument?.(doc,roomUrl,a.id)||[];
  let root=null;
  for(let i=0;i<60&&!interrupted&&alive();i++){root=conversationRoot(doc);if(root||structured.length||network?.snapshot?.(threadKey)?.length)break;await sleep(180)}
@@ -94,22 +103,23 @@ async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=
  };
  capture();await flush();
  if(!root)return{read,saved,complete:false,error:'DM_PAGINATION_UNVERIFIED'};
- const host=scrollHost(root),w=doc.defaultView||window;
+ let host=scrollHost(root);const w=doc.defaultView||window;
  for(let i=0;i<MAX_SCROLL&&!interrupted&&alive()&&map.size<MAX_MESSAGES;i++){
   // Keep the person's draft/caret and scroll position while they type. Hidden
   // background rooms continue reading; already captured messages are saved.
   if(doc===document&&composing()){capture();await flush();return{read,saved,complete:false,pausedForInput:true}}
-  if(host){host.scrollTop=0;try{host.dispatchEvent(new w.Event('scroll',{bubbles:true}))}catch{}}
+  host=scrollHost(root)||host;const reverse=host&&w.getComputedStyle(host).flexDirection==='column-reverse';
+  if(host){host.scrollTop=reverse?-(host.scrollHeight-host.clientHeight):0;try{host.dispatchEvent(new w.Event('scroll',{bubbles:true}))}catch{}}
   await sleep(350);capture();await flush();
   const height=host?host.scrollHeight:0,count=map.size;
-  if(height===lastHeight&&count===lastCount&&(!host||host.scrollTop===0))stable++;else stable=0;
+  if(height===lastHeight&&count===lastCount&&host&&(host.scrollTop<=0))stable++;else stable=0;
   lastHeight=height;lastCount=count;
-  if(stable>=8){reachedEnd=true;break}
+  if(!host||stable>=8)break; // A quiet DOM alone cannot prove API history is complete.
  }
  capture();await flush();
  const empty=/(?:メッセージはありません|まだメッセージがありません|会話を始め)/u.test(clean(root.textContent));
  if(!read&&!empty)throw new Error('DM_MESSAGE_BODY_NOT_FOUND');
- return{read,saved,complete:reachedEnd&&!interrupted&&alive(),empty};
+ return{read,saved,complete:empty&&!interrupted&&alive(),empty,domFallback:true};
 }
 let layoutTimer=0,composerResize=null,observedEditor=null;
 function statusLayout(){
@@ -121,18 +131,20 @@ function statusLayout(){
  const hide=()=>{box.hidden=true;if(box.style.display!=='none')box.style.display='none'};
  // If the composer is not measurable, do not guess a fixed position over it.
  if(composing()||(roomKeyFromUrl(location.href)&&!editor)||(vv&&(layoutHeight-viewBottom>100||Number(vv.scale)>1.05))){hide();return}
- let boundary=viewBottom;
+ let boundary=viewBottom,composerBottom=0;
  if(editor){
-  const r=editor.getBoundingClientRect();boundary=Math.min(boundary,r.top);
+  const r=editor.getBoundingClientRect();boundary=Math.min(boundary,r.top);composerBottom=r.bottom;
   let p=editor.parentElement;
   for(let i=0;p&&p!==document.body&&p!==document.documentElement&&i<4;i++,p=p.parentElement){
    const pr=p.getBoundingClientRect();
-   if(pr.height<1||pr.height>Math.min(260,(viewBottom-viewTop)*.45)||pr.top>r.top||pr.bottom<r.bottom)break;
-   boundary=Math.min(boundary,pr.top);
+   if(pr.height<1||pr.height>Math.min(260,Math.max(120,(viewBottom-viewTop)*.45))||pr.top>r.top||pr.bottom<r.bottom)break;
+   boundary=Math.min(boundary,pr.top);composerBottom=Math.max(composerBottom,pr.bottom);
   }
  }
  box.hidden=false;if(box.style.display!=='flex')box.style.display='flex';
- const height=box.getBoundingClientRect().height||42;
+ const height=box.getBoundingClientRect().height||18;
+ // Prefer the actual gap below the composer; never cover its controls.
+ if(editor&&viewBottom-composerBottom>=height+6){const value=Math.max(3,Math.ceil(layoutHeight-viewBottom+3))+'px';if(box.style.bottom!==value)box.style.bottom=value;return}
  if(boundary-viewTop<height+16){hide();return}
  const bottom=Math.max(8,Math.ceil(layoutHeight-boundary+8));
  const value=editor?bottom+'px':`max(${bottom}px,env(safe-area-inset-bottom))`;
@@ -148,15 +160,16 @@ window.addEventListener('orientationchange',scheduleStatusLayout,{passive:true})
 window.addEventListener('scroll',scheduleStatusLayout,{passive:true});
 window.visualViewport?.addEventListener('resize',scheduleStatusLayout,{passive:true});
 window.visualViewport?.addEventListener('scroll',scheduleStatusLayout,{passive:true});
+let statusHideTimer=0;
 function showStatus(state){
  if(!reconcileSurface()||window.top!==window.self||!document.body)return;
  let box=document.getElementById('mumei-dm-reader-status');
- if(!box){box=document.createElement('div');box.id='mumei-dm-reader-status';box.style.cssText='position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:none;align-items:center;gap:6px;padding:4px 8px;background:#0b2231;color:#e9faff;border:1px solid #527d92;border-radius:9px;font:600 10.5px/1.35 system-ui';const line=document.createElement('span');line.style.cssText='flex:1;min-width:0';line.setAttribute('role','status');const button=document.createElement('button');button.type='button';button.style.cssText='min-height:32px;min-width:58px;padding:4px 7px;border:1px solid #7ebace;border-radius:6px;background:#163d4c;color:white;font:600 11px system-ui;touch-action:manipulation';button.addEventListener('click',()=>{if((bgRunning||roomRunning)&&!manualPaused)stop();else{manualPaused=false;interrupted=false;window.__mumeiInsightDmReaderV1Api?.run()}});box.append(line,button);document.body.append(box)}
- const label=state.lastError?'一部未取得':state.lastRunComplete?'確認完了':manualPaused?'途中保存':'DM読込';
- const message=`${label}｜相手 ${Number(state.currentThread||0)}/${Number(state.threadCount||0)}・本文 ${Number(state.lastReadCount||0)}・保存 ${Number(state.lastSavedCount||0)}`;
+ if(!box){box=document.createElement('div');box.id='mumei-dm-reader-status';box.style.cssText='position:fixed;left:8px;right:8px;bottom:3px;z-index:2147483000;display:none;align-items:center;padding:1px 6px;background:#0b2231;color:#e9faff;border:1px solid #527d92;border-radius:5px;font:600 9px/14px system-ui;pointer-events:none';const line=document.createElement('span');line.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';line.setAttribute('role','status');box.append(line);document.body.append(box)}
+ const label=state.lastError?'接続待ち・自動再試行':manualPaused?'一時停止':state.lastRunComplete?'差分確認済み':'自動保存中';
+ const message=rootRoute()?`一覧 ${Number(state.threadCount||0)}人取得 · ${label}`:`DM ${label} · 読込 ${Number(state.lastReadCount||0)} / 保存 ${Number(state.lastSavedCount||0)}`;
  if(box.firstElementChild.textContent!==message)box.firstElementChild.textContent=message;
- box.title=String(state.lastError||'');const button=box.lastElementChild,value=(bgRunning||roomRunning)&&!manualPaused?'停止':'続き読込';if(button.textContent!==value)button.textContent=value;
- statusLayout();
+ box.title=String(state.lastError||'');statusLayout();
+ clearTimeout(statusHideTimer);if(rootRoute()&&!bgRunning)statusHideTimer=setTimeout(()=>box.remove(),2000);
 }
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{}),value={...prev,...patch,version:VERSION};await set(key(CHECK,a.id),value);showStatus(value)}
 async function reportRoom(a,threadKey,result){try{const token=String(await get(key(TOKEN,a.id),'')||'');if(token)await request(INGEST,{noteId:a.id,readerStatus:{threadKey,version:VERSION,read:Number(result.read||0),saved:Number(result.saved||0),complete:result.complete===true,error:String(result.error||(result.timeout?'DM_FRAME_TIMEOUT':''))}},{'X-Ingest-Token':token})}catch{}}
@@ -177,31 +190,37 @@ function syncFrame(a,url,threadKey){
 async function syncRoomsInBackground(a,rooms){
  if(bgRunning||!Array.isArray(rooms)||!rooms.length)return;
  const previous=await get(key(QUEUE,a.id),null);
- if(!previous&&Date.now()-bgLastAt<45000)return;
+ if(bgLastAt&&Date.now()-bgLastAt<15000)return;
  bgRunning=true;bgLastAt=Date.now();interrupted=false;
- const list=rooms.slice(0,MAX_ROOMS),completed=new Set(previous?.completed||[]),errors=[];
+ const list=rooms.slice(0,MAX_ROOMS),completed=new Set(previous?.completed||[]),errors=[],checkedAt={...(previous?.checkedAt||{})};
  let read=Number(previous?.read||0),saved=Number(previous?.saved||0);
  const checkpoint=async()=>{
-  const value={completed:[...completed],read,saved,at:Date.now()};await set(key(QUEUE,a.id),value);
+  const value={completed:[...completed],checkedAt,read,saved,at:Date.now()};await set(key(QUEUE,a.id),value);
   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:'background',lastRunComplete:false,lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:completed.size,lastError:errors.join(' / '),navigationMode:'background-hidden'});
  };
  try{
   await checkpoint();
   for(const room of list){
    if(interrupted||!dmRoute())break;
-   if(completed.has(room.key))continue;
-   // Read server-rendered message payloads before waiting for a hydrated frame.
-   try{await window.__mumeiDmNetworkV2?.readRoom?.(room.url,a.id)}catch{}
-   if(interrupted||!dmRoute())break;
-   const result=await syncFrame(a,room.url,room.key);
+   if(completed.has(room.key)&&Date.now()-Number(checkedAt[room.key]||0)<30000)continue;
+   let result;
+   try{
+    result=await window.__mumeiDmNetworkV2?.readHistory?.(room.key,a.id,{shouldStop:()=>interrupted||!dmRoute(),onProgress:async p=>updateCheck(a,{lastReadCount:read+p.read,lastSavedCount:saved+p.saved,lastRunComplete:false,lastError:''})});
+    if(!result){
+     try{await window.__mumeiDmNetworkV2?.readRoom?.(room.url,a.id)}catch{}
+     if(interrupted||!dmRoute())break;
+     result=await syncFrame(a,room.url,room.key);
+    }
+   }catch(e){result={read:0,saved:0,complete:false,error:String(e?.message||e)}}
    await reportRoom(a,room.key,result);
    read+=Number(result.read||0);saved+=Number(result.saved||0);
-   if(result.complete&&!result.error&&!result.timeout)completed.add(room.key);
-   else{const reason=result.error||(result.timeout?'TIMEOUT':'途中保存');errors.push(`${room.key}: ${reason}`);await updateCheck(a,{lastError:String(reason),lastThreadKey:room.key,lastStage:'message-body'});}
+   if(result.complete&&!result.error&&!result.timeout){completed.add(room.key);checkedAt[room.key]=Date.now()}
+   else{completed.delete(room.key);const reason=result.error||(result.timeout?'TIMEOUT':'途中保存');errors.push(`${room.key}: ${reason}`);await updateCheck(a,{lastError:String(reason),lastThreadKey:room.key,lastStage:'message-body'});}
    await checkpoint();
   }
   const complete=list.length>0&&list.every(room=>completed.has(room.key));
-  if(complete)await set(key(QUEUE,a.id),null);
+  // Keep per-room completion and check times, including after all rooms finish.
+  await checkpoint();
   await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:complete?'full':'partial',lastRunComplete:complete,...(complete?{lastFullScanAt:Date.now()}:{}),lastReadCount:read,lastSavedCount:saved,threadCount:list.length,currentThread:completed.size,lastError:errors.join(' / '),navigationMode:'background-hidden'});
  }catch(e){errors.push(String(e?.message||e));await checkpoint()}
  finally{bgRunning=false;showStatus(await get(key(CHECK,a.id),{}));if(interrupted&&!manualPaused&&dmRoute())setTimeout(()=>window.__mumeiInsightDmReaderV1Api?.run(),0)}
@@ -227,13 +246,13 @@ async function run(){
  try{
   const r=await scanRoom(a,threadKey,document,location.href,dmRoute);await reportRoom(a,threadKey,r);
   await set(key(SAVED,a.id),{lastThreadKey:threadKey,lastSavedAt:Date.now()});
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:isBg?'background-room':'single-passive',lastRunComplete:Boolean(r.complete),lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:r.error||'',navigationMode:isBg?'background-hidden':'passive'});
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunMode:isBg?'background-room':'automatic',lastRunComplete:Boolean(r.complete),lastReadCount:r.read,lastSavedCount:r.saved,lastThreadKey:threadKey,lastError:r.error||'',navigationMode:isBg?'background-hidden':'passive'});
   if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:r.read,saved:r.saved},location.origin)
  }catch(e){
   await reportRoom(a,threadKey,{error:String(e?.message||e)});
-  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:isBg?'background-room':'single-passive',lastError:String(e&&e.message||e),navigationMode:isBg?'background-hidden':'passive'});
+  await updateCheck(a,{lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:isBg?'background-room':'automatic',lastError:String(e&&e.message||e),navigationMode:isBg?'background-hidden':'passive'});
   if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:0,saved:0,error:String(e&&e.message||e)},location.origin);else cloak(false)
  }finally{roomRunning=false;showStatus(await get(key(CHECK,a.id),{}))}
 }
-{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!r.target.closest?.('#mumei-dm-reader-status'))){scheduleStatusLayout();schedule(180)}}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
+{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);setInterval(()=>{if(document.visibilityState!=='hidden'&&!manualPaused)schedule(0)},5000);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!r.target.closest?.('#mumei-dm-reader-status'))){scheduleStatusLayout();schedule(180)}}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
 })();
