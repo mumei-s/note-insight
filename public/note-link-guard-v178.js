@@ -19,6 +19,7 @@
   let lastCompletedDataset = '';
   let recoveryLock = false;
 
+  const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.0へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   class FatalError extends Error {}
 
@@ -64,7 +65,7 @@
     } catch (_) { return false; }
   }
   function findView() {
-    if (looksLikeView(viewCache) && viewCache.dom?.isConnected) return viewCache;
+    if (looksLikeView(viewCache) && viewCache.dom?.isConnected) return safety().attach(viewCache);
     const root = editor();
     if (!root) return null;
     const seen = new Set(), queue = [];
@@ -75,14 +76,14 @@
       const [value, depth] = queue.shift();
       if (!value || seen.has(value)) continue;
       seen.add(value);
-      if (looksLikeView(value)) return (viewCache = value);
+      if (looksLikeView(value)) return safety().attach(viewCache = value);
       let keys = [];
       try { keys = Object.getOwnPropertyNames(value); } catch (_) { continue; }
       for (const key of keys) {
         if (['window','document','ownerDocument','parentNode','children','childNodes','style'].includes(key)) continue;
         let next;
         try { next = value[key]; } catch (_) { continue; }
-        if (looksLikeView(next)) return (viewCache = next);
+        if (looksLikeView(next)) return safety().attach(viewCache = next);
         if (depth < 7 && next && (typeof next === 'object' || typeof next === 'function') && next !== page && next !== document) {
           queue.push([next, depth + 1]);
         }
@@ -114,23 +115,10 @@
     coreCache = { serialize, normalizeDOM, cleanHTML };
     return coreCache;
   }
-  function imageNodes(view) {
-    const out = [];
-    view.state.doc.descendants((node, pos) => { if (node.type?.name === 'image') out.push({ node, pos }); });
-    return out;
-  }
+  function imageNodes(view) { return safety().index(view).images; }
   function trackedImage(view, record) {
     if (!record) return null;
-    const images = imageNodes(view);
-    if (record.id) {
-      const hit = images.find((entry) => String(entry.node.attrs?.id || '') === String(record.id));
-      if (hit) return hit;
-    }
-    if (record.src) {
-      const hit = images.find((entry) => String(entry.node.attrs?.src || '') === String(record.src));
-      if (hit) return hit;
-    }
-    return null;
+    return safety().tracked(view, record);
   }
   function trackedRows(d, r) {
     return (d?.rows || []).filter((row) => r?.images?.[row.url]);
@@ -176,7 +164,7 @@
     for (const row of rows) {
       const hit = trackedImage(view, r?.images?.[row.url]);
       if (!hit) throw new FatalError(`画像実体が見つかりません: ${row.index || row.url}`);
-      work.push({ row, hit });
+      if (normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) work.push({ row, hit });
     }
     const chunk = 24;
     for (let start = 0; start < work.length; start += chunk) {
@@ -184,7 +172,7 @@
       const end = Math.min(start + chunk, work.length);
       for (let i = start; i < end; i += 1) {
         const { row, hit } = work[i];
-        tr = tr.setNodeMarkup(hit.pos, hit.node.type, { ...hit.node.attrs, link: normalizeUrl(row.url) }, hit.node.marks);
+        tr = safety().relink(view, hit, normalizeUrl(row.url), tr);
       }
       view.dispatch(tr);
       setStatus(`🔗再確認 ${end}/${work.length}…`);
@@ -194,18 +182,12 @@
     return verifyRows(view, d, r, requireAll);
   }
   async function saveOnce(label) {
-    setStatus(label);
-    await sleep(1800);
-    const button = [...document.querySelectorAll('button')].find((node) => {
-      const text = node.textContent?.trim();
-      return (text === '一時保存' || text === '下書き保存') && node.getClientRects().length;
-    });
-    if (button && !button.disabled) button.click();
-    await sleep(5000);
+    return safety().save(findView(), label);
   }
   async function hardenAllBeforeSend() {
-    if (guardBusy) return false;
+    if (guardBusy || safety().busy()) return false;
     guardBusy = true;
+    let operation;
     try {
       const d = dataset(), r = run();
       if (!d?.datasetId || !r || r.datasetId !== d.datasetId) throw new FatalError('対象データがありません');
@@ -214,6 +196,7 @@
       if (count !== d.count) throw new FatalError(`極薄画像不足 ${count}/${d.count}`);
       const view = findView();
       if (!view) throw new FatalError('EditorViewなし');
+      operation = safety().begin('リンク確認', view);
       await forceRelink(view, d, r, true);
       await saveOnce(`全${d.count}件の🔗を保存中…`);
       verifyRows(view, d, r, true);
@@ -222,13 +205,16 @@
       setStatus(`極薄画像🔗 ${d.count}/${d.count} 保存HTMLまで確認済み ✅ 次は「送」`);
       return true;
     } catch (error) {
+      safety().stop();
       setStatus(`送信停止：${error?.message || String(error)}`, true);
       return false;
     } finally {
+      page.__MUMEI_CARD_SAFETY__?.end(operation);
       guardBusy = false;
     }
   }
   async function autoHardenWhenComplete() {
+    if (safety().busy() || safety().stopped()) return;
     const d = dataset(), r = run();
     if (!d?.datasetId || !r || r.datasetId !== d.datasetId || r.pending) return;
     if (Object.keys(r.images || {}).length !== d.count) return;
@@ -241,7 +227,7 @@
     await hardenAllBeforeSend();
   }
   async function recoverOldPending() {
-    if (recoveryLock) return;
+    if (recoveryLock || safety().busy() || safety().stopped()) return;
     const d = dataset(), r = run();
     if (!d?.datasetId || !r || r.datasetId !== d.datasetId || !r.pending) return;
     const age = Date.now() - Number(r.pending?.at || 0);
@@ -257,6 +243,8 @@
       recoveryLock = false;
     }
   }
+
+  safety().setSerializer(serializedHtml);
 
   document.addEventListener('click', (event) => {
     const send = event.target?.closest?.(`#${PANEL} button[data-a="send"]`);
@@ -284,3 +272,4 @@
     // v18以降はパネルタイトルを書き換えない。
   }, 1200);
 })();
+
