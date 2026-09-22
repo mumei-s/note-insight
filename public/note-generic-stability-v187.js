@@ -11,12 +11,15 @@ const FLOAT_STATE='mumei_note_floating_ui_v164';
 function css(){
   if(document.getElementById(STYLE)||!document.head)return;
   const s=document.createElement('style');s.id=STYLE;s.textContent=`
-#${PANEL}{width:min(250px,calc(100vw - 10px))!important;max-width:250px!important;padding:6px!important}
-#${PANEL}>.title{min-height:24px!important;margin-bottom:4px!important;cursor:move!important;touch-action:none!important;font-size:11px!important}
+#${PANEL}{width:min(230px,calc(100vw - 10px))!important;max-width:230px!important;padding:5px!important}
+#${PANEL}>.title{min-height:22px!important;margin-bottom:3px!important;cursor:move!important;touch-action:none!important;font-size:11px!important}
 #${PANEL} .mumei-min-btn-v164{width:26px!important;min-width:26px!important;height:24px!important;line-height:22px!important;font-size:14px!important}
-#${PANEL} .mumei-prince-special-v184{padding:5px!important;margin-bottom:4px!important;border-radius:8px!important}
+#${PANEL} .mumei-prince-special-v184{padding:4px!important;margin-bottom:3px!important;border-radius:8px!important}
 #${PANEL} .mumei-prince-special-v184>div:first-child{font-size:10px!important;margin-bottom:4px!important}
 #${PANEL} .mumei-prince-special-v184 input{height:29px!important;min-height:29px!important;padding:4px 6px!important;margin:0 0 4px!important;font-size:10px!important}
+#${PANEL} .mumei-prince-special-v184 textarea[data-source]{min-height:42px!important;height:42px!important;padding:5px 6px!important;margin:0 0 4px!important;font-size:10px!important;line-height:1.25!important}
+#${PANEL} [data-card-safety]{display:flex!important;align-items:center!important;gap:3px!important;margin-top:3px!important}
+#${PANEL} [data-card-safety] button{min-height:26px!important;padding:2px 5px!important;font-size:10px!important}
 #${PANEL} .mumei-prince-special-v184 .choices{gap:2px!important;margin-bottom:4px!important}
 #${PANEL} .mumei-prince-special-v184 .choices button{height:27px!important;min-height:27px!important;padding:2px!important;font-size:9px!important}
 #${PANEL} .mumei-prince-special-v184 [data-start]{height:30px!important;min-height:30px!important;padding:3px!important;font-size:11px!important}
