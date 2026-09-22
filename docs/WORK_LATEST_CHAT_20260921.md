@@ -408,3 +408,6 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 ## 2026-09-22 相互照合を下から行う修正
 
 ユーザーの最新指示「それぞれではなく互いを照らし合わせて増減、減を知りたい」「今実装しているのを下から」を反映。共有の相互照合実装を採用して、本人のフォロー一覧を末尾のページ・人物から保存する。本体2026.09.22.7／本人通知3.6.5。詳細は [WORK_FIXES_20260922_SOCIAL_BOTTOM.md](WORK_FIXES_20260922_SOCIAL_BOTTOM.md)。DM・Dashboard・戻る操作の同時進行差分は共有作業領域に保持し、この照合公開には混ぜていない。後続の公開は必ず最新mainと版数を取り込む。
+
+
+公開確認: 機能main `8d456685cd8f5edbac3f3f2db943064568b35b83`、GitHub Actions `35708984900` のbuild・192件回帰テスト・Pages deploy成功。Pagesのmanifest、Social Reader、通知wrapper、Service Worker、deploy-version、index.html、本体JSの7ファイルがHTTP200でローカルビルドと内容完全一致。実際のraw GitHub @require先Social Reader `?v=100` と通知wrapperも内容完全一致。配備後のSupabase 2関数のソース一致も確認済み。利用者の端末の本人通知は3.6.5への更新が必要。実機ログイン状態の全件照合は未確認として維持する。

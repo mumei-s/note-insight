@@ -19,3 +19,6 @@
 - 不採用のsocial_reciprocal_bottomプロトタイプは実データ0件を確認して削除済み。作成と削除の移行履歴のみ保存。
 
 検証: ビルド成功。Pagesと同じ回帰テストは74件＋118件＝192件すべて成功（相互照合14件と、下から／最新／減／個別履歴の画面切替を含む）。公開配信の最終結果は追記する。実機でのnote本人ログイン・実データ全件取得は未確認。端末内の旧userscriptがWeb配信だけで更新済みになるとは報告しない。
+
+
+公開確認: 機能main `8d456685cd8f5edbac3f3f2db943064568b35b83`、GitHub Actions `35708984900` のbuild・192件回帰テスト・Pages deploy成功。Pagesのmanifest、Social Reader、通知wrapper、Service Worker、deploy-version、index.html、本体JSの7ファイルがHTTP200でローカルビルドと内容完全一致。実際のraw GitHub @require先Social Reader `?v=100` と通知wrapperも内容完全一致。配備後のSupabase 2関数のソース一致も確認済み。利用者の端末の本人通知は3.6.5への更新が必要。実機ログイン状態の全件照合は未確認として維持する。
