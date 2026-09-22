@@ -2,7 +2,8 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.1.0';
+const VERSION='4.1.1';
+const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
 const OWN='mumei-muted-v2939';
@@ -39,11 +40,13 @@ async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)retu
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');el.setAttribute(FORCE,'1')}else el.removeAttribute(FORCE)}
 function setHidden(el,want){if(!el)return;forceVisible(el,!want);el.classList.toggle(OWN,Boolean(want))}
-async function refresh(forceState=false){if(isDmRoute())return;installStyle();const r=shell();if(!r)return;attach(r);const st=await state(forceState);if(!st)return;for(const el of rows(r)){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}}
+function clearHides(){for(const el of document.querySelectorAll(`.${OWN},.${LEGACY}`))setHidden(el,false)}
+async function refresh(forceState=false){if(!featureOn()){clearHides();return}if(isDmRoute())return;installStyle();const r=shell();if(!r)return;attach(r);const st=await state(forceState);if(!featureOn()){clearHides();return}if(!st)return;for(const el of rows(r)){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}}
 function schedule(ms=50,force=false){clearTimeout(timer);timer=setTimeout(()=>void refresh(force),ms)}
 function attach(r){if(root===r&&obs)return;if(obs)obs.disconnect();root=r;obs=new MutationObserver(ms=>{if(ms.some(m=>m.type==='childList'&&m.addedNodes.length))schedule(70,false)});obs.observe(r,{childList:true,subtree:true})}
 function discover(){if(isDmRoute())return;const r=shell();if(r)attach(r);schedule(40,false)}
 window.addEventListener(EVT,()=>{cache=null;cacheAt=0;for(const ms of [20,120,420,1000])setTimeout(()=>void refresh(true),ms)});
+window.addEventListener('mumei-notification-feature-changed',()=>{cache=null;cacheAt=0;clearTimeout(timer);if(featureOn())schedule(0,true);else clearHides()});
 document.addEventListener('click',()=>setTimeout(discover,80),true);
 addEventListener('focus',discover);addEventListener('pageshow',discover);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')discover()});
 installStyle();setTimeout(discover,120);
