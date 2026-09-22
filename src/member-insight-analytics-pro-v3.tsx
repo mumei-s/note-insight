@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import { CURRENT_DASHBOARD_VERSION, CURRENT_INSIGHT_APP_VERSION, CURRENT_NOTIFICATION_VERSION } from "./insight-release";
 import "./member-insight-analytics-pro-v3.css";
+import { InsightDonut } from "./insight-donut";
 
 const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
 const FEED="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-feed-final";
@@ -26,8 +27,12 @@ function jtime(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime(
 function jstDay(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime()))return"";return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 function pearson(xs:number[],ys:number[]){if(xs.length!==ys.length||xs.length<7)return null;const ax=avg(xs),ay=avg(ys),dx=xs.map(x=>x-ax),dy=ys.map(y=>y-ay),den=Math.sqrt(sum(dx.map(x=>x*x))*sum(dy.map(y=>y*y)));if(!den)return null;return sum(dx.map((x,i)=>x*dy[i]))/den}
 async function api(endpoint:string,body:Record<string,unknown>){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),60000);try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"分析データを取得できませんでした");return p}finally{window.clearTimeout(timer)}}
-async function notificationSample(){try{const first=await api(FEED,{kind:"all",page:1,pageSize:100}),total=Math.max(0,num(first.total)),pages=Math.min(10,Math.max(1,Math.ceil(total/100))),rows:Row[]=[...(first.rows||[])];for(let p=2;p<=pages;p++){const x=await api(FEED,{kind:"all",page:p,pageSize:100});rows.push(...(x.rows||[]))}return{rows,total,truncated:pages<Math.ceil(Math.max(1,total)/100)}}catch{return{rows:[] as Row[],total:0,truncated:false}}}
-async function loadAll(){const[dash,notifications]=await Promise.all([api(DASH,{action:"analysis",days:365}),notificationSample()]);return{...dash,notifications}}
+async function notificationSample(onPartial:(data:any)=>void){
+ const first=await api(FEED,{kind:"all",page:1,pageSize:100}),total=Math.max(0,num(first.total)),pages=Math.min(10,Math.max(1,Math.ceil(total/100))),rows:Row[]=[...(first.rows||[])];
+ const result=()=>({rows:[...rows],total,truncated:rows.length<total});onPartial(result());
+ for(let p=2;p<=pages;p+=3){const batch=await Promise.all(Array.from({length:Math.min(3,pages-p+1)},(_,i)=>api(FEED,{kind:"all",page:p+i,pageSize:100})));for(const x of batch)rows.push(...(x.rows||[]));onPartial(result())}
+ return result();
+}
 function cacheKey(){const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();return id?CACHE_PREFIX+id:""}
 function readCache(){const key=cacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);if(!raw)return null;const x=JSON.parse(raw);if(!x?.data||!Number.isFinite(Number(x?.cachedAt)))return null;if(Date.now()-Number(x.cachedAt)>CACHE_MAX_AGE)return null;return x}catch{return null}}
 function cachePayload(data:any){const notices=data?.notifications||{};return{...data,notifications:{...notices,rows:(notices.rows||[]).slice(0,1000).map((r:Row)=>({occurred_at:r.occurred_at||null,captured_at:r.captured_at||null}))}}}
@@ -67,17 +72,30 @@ function TrendChart({rows,cumulative=false}:{rows:Row[];cumulative?:boolean}){
   <small className="mipro-chart-source">出典：note公式ダッシュボードの保存データ。欠損日は線を切り、取得済みの0件は0として表示します。</small>
  </div>
 }
-function Bars({items}:{items:{label:string;value:number;sub?:string}[]}){const mx=Math.max(1,...items.map(x=>x.value));return <div className="mipro-bars">{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i><b style={{width:`${Math.max(0,x.value/mx*100)}%`}}/></i><strong>{n(x.value)}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</div>}
-function Fold({title,sub,children}:{title:string;sub:string;children:ReactNode}){return <details className="mipro-fold"><summary><span><b>{title}</b><small>{sub}</small></span><em>開く</em></summary><div className="mipro-fold-body">{children}</div></details>}
+function Bars({items,title,unit}:{items:{label:string;value:number;sub?:string}[];title:string;unit:string}){const mx=Math.max(1,...items.map(x=>x.value));return <figure className="mipro-bars"><figcaption><b>{title}</b><small>横の長さ＝{unit}・最大 {n(mx)}{unit}</small></figcaption>{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i aria-hidden="true"><b style={{width:`${Math.max(0,x.value/mx*100)}%`}}/></i><strong>{n(x.value)} {unit}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</figure>}
+function Fold({title,sub,children,defaultOpen=false}:{title:string;sub:string;children:ReactNode;defaultOpen?:boolean}){return <details className="mipro-fold" open={defaultOpen}><summary><span><b>{title}</b><small>{sub}</small></span><em>開く</em></summary><div className="mipro-fold-body">{children}</div></details>}
 function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <div className="mipro-kpis">{items.map(x=><article key={x.label}><small>{x.label}</small><b>{x.value}</b><span>{x.sub}</span></article>)}</div>}
 
 export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:number;onBack?:()=>void}){
-  const initial=readCache();
+  const initial=useMemo(()=>readCache(),[]);
   const[data,setData]=useState<any>(initial?.data||null),[loading,setLoading]=useState(!initial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(initial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
-  async function refresh(background=Boolean(data)){if(background)setRefreshing(true);else setLoading(true);setError("");try{const next=await loadAll();setData(next);setCachedAt(Date.now());writeCache(next)}catch(e){setError(e instanceof Error?e.message:"分析データを取得できませんでした")}finally{setLoading(false);setRefreshing(false)}}
-  useEffect(()=>{void refresh(Boolean(data))},[revision]);
+  const requestSeq=useRef(0),[noticesLoading,setNoticesLoading]=useState(false);
+  async function refresh(background=Boolean(data)){
+    const seq=++requestSeq.current,owner=cacheKey(),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
+    const current=()=>seq===requestSeq.current&&owner===cacheKey()&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
+    if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(true);setError("");
+    let dashboard:any=null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
+    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications};setData(next);setCachedAt(Date.now());writeCache(next)};
+    const noticeTask=notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)});
+    try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true});publish()}
+    catch(e){if(current())setError(e instanceof Error?e.message:"分析データを取得できませんでした")}
+    finally{if(current()){setLoading(false);setRefreshing(false)}}
+    await noticeTask;
+  }
+  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision]);
+  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[]);
   const articles=useMemo(()=>normalizeArticles(data?.topArticles||[]),[data]);
-  if(loading)return <section className="mipro-state">公式Dashboard＋本人通知を統合分析中…</section>;
+  if(loading)return <section className="mipro-state">保存済みダッシュボードを取得中…</section>;
   if(error&&!data)return <section className="mipro-state error">⚠ {error}<button onClick={()=>void refresh()}>再試行</button></section>;
   const latest=data?.latestDashboard||{},noteId=String(data?.noteId||"").replace(/^@/,"").toLowerCase(),metrics=metricRows(data),followers:Row[]=data?.followers||[],latestFollower=followers.at(-1),trafficRows:Row[]=data?.traffic?.rows||[],trafficTotal=Math.max(0,num(data?.traffic?.total)||sum(trafficRows.map(r=>num(r.pv)))),notifications:Row[]=data?.notifications?.rows||[];
   const comparable=articles.filter(r=>r.conversion!=null),invalid=articles.filter(r=>r.impressions>0&&r.pageViews>r.impressions),convVals=comparable.map(r=>r.conversion as number),convMed=median(convVals),conv75=q75(convVals),pvVals=articles.map(r=>r.pageViews),pvMed=median(pvVals),reactVals=articles.filter(r=>r.reactionsPer1k!=null).map(r=>r.reactionsPer1k as number),reactMed=median(reactVals),react75=q75(reactVals);
@@ -96,11 +114,13 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
   return <section className="mipro" ref={root}>
     <header className="mipro-head"><div><small>INSIGHT PRO ANALYTICS V3</small><h2>公式Dashboardを超えて「意味のある判断」まで</h2><p><strong>@{noteId||"—"}</strong> の公式値＋本人通知を統合。保存済み分析は即表示し、最新取得は画面を止めずに更新します。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ 最新データをバックグラウンド更新中":cacheStale?"保存済み表示・更新待ち":`保存済み即表示 ${jtime(new Date(cachedAt).toISOString())}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>Dashboard更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"更新中…":"再分析"}</button></div></header>
     {error?<p className="mipro-warning">更新失敗・保存済みの分析を表示中：{error}</p>:null}
+    {noticesLoading?<p className="mipro-note" role="status">通知との照合を更新中… ダッシュボードは操作できます。</p>:null}
     <div className="mipro-release"><span>本体 {CURRENT_INSIGHT_APP_VERSION}</span><span>Dashboard {CURRENT_DASHBOARD_VERSION}</span><span>本人通知 {CURRENT_NOTIFICATION_VERSION}</span><span>照合 @{noteId||"—"}</span></div>
     <div className="mipro-fold-controls"><button onClick={()=>openAll(true)}>分析をすべて開く</button><button onClick={()=>openAll(false)}>すべて収納</button></div>
 
-    <Fold title="① 公式Dashboard 現在値" sub="PV・Imp・スキ・コメント・売上・フォロワー">
+    <Fold defaultOpen title="① 公式Dashboard 現在値" sub="PV・Imp・スキ・コメント・売上・フォロワー">
       <Kpis items={[{label:"ページビュー(PV)",value:n(latest.pageViews??latest.views),sub:"note公式Dashboard"},{label:"インプレッション(Imp)",value:n(latest.impressions),sub:"note内表示回数"},{label:"スキ",value:n(latest.likes),sub:"公式集計"},{label:"コメント",value:n(latest.comments),sub:"公式集計"},{label:"売上",value:money(latest.salesYen),sub:"公式集計"},{label:"フォロワー",value:`${n(latestFollower?.count)}人`,sub:"最新保存値"}]}/>
+      <InsightDonut label="スキ・コメント構成比" items={[{label:"スキ",value:num(latest.likes)},{label:"コメント",value:num(latest.comments)}]}/>
       <div className="mipro-note">公式取得 {jtime(latest.officialCollectedAt||latest.capturedAt)} ／ INSIGHT保存 {jtime(latest.capturedAt)}</div>
     </Fold>
 
@@ -126,16 +146,17 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
 
     <Fold title="⑥ 流入分析" sub={`流入PV ${n(trafficTotal)} ・ 分散度 ${diversity.toFixed(0)}/100`}>
       <Kpis items={[{label:"流入分散度",value:`${diversity.toFixed(0)}/100`,sub:"1媒体への偏りが少ないほど高い"},{label:"検索",value:pct(trafficTotal?num(groups.search)/trafficTotal*100:0),sub:`${n(groups.search)} PV`},{label:"通知",value:pct(trafficTotal?num(groups.notification)/trafficTotal*100:0),sub:`${n(groups.notification)} PV`},{label:"外部",value:pct(trafficTotal?num(groups.external)/trafficTotal*100:0),sub:`${n(groups.external)} PV`}]}/>
-      <Bars items={shares.map(x=>({label:groupLabel[x.k]||x.k,value:x.value,sub:trafficTotal?pct(x.value/trafficTotal*100):"—"}))}/>
+      <InsightDonut label="流入元の構成比" unit="PV" items={shares.map(x=>({label:groupLabel[x.k]||x.k,value:x.value}))}/>
+      <Bars title="流入元ごとのページビュー" unit="PV" items={shares.map(x=>({label:groupLabel[x.k]||x.k,value:x.value,sub:trafficTotal?pct(x.value/trafficTotal*100):"—"}))}/>
     </Fold>
 
     <Fold title="⑦ 収益分析" sub={`売上 ${money(latest.salesYen)} ・ 1,000PV売上 ${money(num(latest.pageViews??latest.views)>0?num(latest.salesYen)/num(latest.pageViews??latest.views)*1000:0)}`}>
       <Kpis items={[{label:"公式売上",value:money(latest.salesYen),sub:"Dashboard総計"},{label:"1,000PV売上",value:money(num(latest.pageViews??latest.views)>0?num(latest.salesYen)/num(latest.pageViews??latest.views)*1000:0),sub:"PVあたり収益効率"},{label:"売上あり記事",value:`${articles.filter(r=>r.salesYen>0).length}件`,sub:`全${articles.length}記事`},{label:"上位5記事売上集中",value:pct(salesConcentration),sub:salesConcentration>=70?"上位依存が強い":"分散あり"}]}/>
-      <Bars items={[...articles].filter(r=>r.salesYen>0).sort((a,b)=>b.salesYen-a.salesYen).slice(0,10).map(r=>({label:short(r.title,28),value:r.salesYen,sub:r.pageViews>0?`${money(r.revenuePer1k)}/1,000PV`:"PVなし"}))}/>
+      <Bars title="記事別の売上（上位10記事）" unit="円" items={[...articles].filter(r=>r.salesYen>0).sort((a,b)=>b.salesYen-a.salesYen).slice(0,10).map(r=>({label:short(r.title,28),value:r.salesYen,sub:r.pageViews>0?`${money(r.revenuePer1k)}/1,000PV`:"PVなし"}))}/>
     </Fold>
 
     <Fold title="⑧ 曜日別パフォーマンス" sub="公式日別PVを曜日ごとの平均PVで比較">
-      <Bars items={weekdays}/>
+      <Bars title="曜日ごとの平均ページビュー" unit="PV/日" items={weekdays}/>
       <p className="mipro-note">曜日ごとの<strong>平均PV/日</strong>です。「平均」が何の平均か分からない表示は使いません。</p>
     </Fold>
 
