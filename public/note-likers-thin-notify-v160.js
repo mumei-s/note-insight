@@ -26,6 +26,9 @@
   let imageChoiceClickListener = null;
   let imageChoicePointerListener = null;
   let nativeInputClick = null;
+  let sessionBaseImageCount = null;
+  const SESSION_UPLOAD_LIMIT = 160;
+  const SESSION_RESUME_PREFIX = 'mumei_image_session_resume_v160';
   const UPLOAD_DIAG_PREFIX = 'mumei_upload_diag_v160';
   const uploadNetFailures = [];
 
@@ -63,6 +66,12 @@
     return `${RUN_PREFIX}:${articleKey() || 'unknown'}`;
   }
   function uploadDiagKey() { return `${UPLOAD_DIAG_PREFIX}:${articleKey() || 'unknown'}`; }
+  function sessionResumeKey() { return `${SESSION_RESUME_PREFIX}:${articleKey() || 'unknown'}`; }
+  function requestSessionReload(dataset, completed, remaining) {
+    setJSON(sessionResumeKey(), { datasetId: dataset?.datasetId || '', completed, remaining, at: Date.now() });
+    setStatus(`極薄画像🔗 ${completed}/${dataset.count} ✅ 2巡160枚完了｜3巡目失敗回避のため自動再読込…`);
+    setTimeout(() => location.reload(), 900);
+  }
   function cleanNetUrl(value) {
     try { const u = new URL(String(value || ''), location.href); return `${u.origin}${u.pathname}`; }
     catch (_) { return String(value || '').split('?')[0].slice(0, 240); }
@@ -542,11 +551,11 @@
     const textX = 16, textWidth = 504;
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#171b21';
-    ctx.font = '700 18px system-ui,-apple-system,sans-serif';
-    textLines(ctx, row.title, textWidth, 3).forEach((line, i) => ctx.fillText(line, textX, 12 + i * 24));
+    ctx.font = '700 19px system-ui,-apple-system,sans-serif';
+    textLines(ctx, row.title, textWidth, 3).forEach((line, i) => ctx.fillText(line, textX, 9 + i * 22));
 
     // Creator area: exact profile icon + readable name. Title stays visually dominant.
-    const avatarD = 34, avatarX = 16, avatarY = 98;
+    const avatarD = 42, avatarX = 16, avatarY = 88;
     const nameX = avatarX + avatarD + 10;
     const nameWidth = textWidth - avatarD - 10;
     if (avatar) {
@@ -559,13 +568,13 @@
       ctx.fillStyle = '#eef1f4';
       ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + avatarD / 2, avatarD / 2, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#9aa1aa';
-      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 11, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 29, 11, Math.PI, 0); ctx.fill();
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 13, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(avatarX + avatarD / 2, avatarY + 35, 14, Math.PI, 0); ctx.fill();
     }
     ctx.fillStyle = '#343a43';
-    ctx.font = '700 15px system-ui,-apple-system,sans-serif';
+    ctx.font = '700 16px system-ui,-apple-system,sans-serif';
     const creatorLines = textLines(ctx, row.creator || 'noteクリエイター', nameWidth, 2);
-    creatorLines.forEach((line, i) => ctx.fillText(line, nameX, 99 + i * 17));
+    creatorLines.forEach((line, i) => ctx.fillText(line, nameX, 91 + i * 18));
 
     ctx.fillStyle = '#f7f8fa'; roundedRect(ctx, tx, ty, tw, th, 8); ctx.fill();
     if (image) {
@@ -878,7 +887,13 @@
       if (!view) throw new FatalError('EditorViewなし。画面を再読込してください');
       selectionApi();
       if (run.pending) await recoverPending(view, dataset, run);
+      const completedNow = verifiedImageCount(view, dataset, run);
+      if (sessionBaseImageCount == null) sessionBaseImageCount = completedNow;
       const missing = missingRows(view, dataset, run);
+      if (missing.length && completedNow - sessionBaseImageCount >= SESSION_UPLOAD_LIMIT) {
+        requestSessionReload(dataset, completedNow, missing.length);
+        return;
+      }
       if (!missing.length) {
         verifyConfirmationImage(view, dataset, run);
         setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
@@ -904,7 +919,12 @@
       setStatus(`${workRows.length}枚 準備OK｜note本文の「＋」→「画像」を1回`);
       await completion;
       const left = missingRows(view, dataset, run).length;
-      if (left) setStatus(`極薄画像🔗 ${dataset.count - left}/${dataset.count} ✅ 残り${left}件 → もう一度「画」`);
+      const completedAfter = dataset.count - left;
+      if (left && completedAfter - sessionBaseImageCount >= SESSION_UPLOAD_LIMIT) {
+        requestSessionReload(dataset, completedAfter, left);
+        return;
+      }
+      if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → もう一度「画」`);
       else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
     } catch (error) {
       setStatus(`画像停止：${error?.message || String(error)}（「画」で再開）`, true);
@@ -1034,4 +1054,15 @@
   installUploadNetworkProbe();
   setInterval(mount, 600);
   mount();
+  setTimeout(() => {
+    try {
+      const resume = getJSON(sessionResumeKey(), null);
+      const dataset = getDataset(), run = getRun();
+      if (!resume || !dataset || !run || resume.datasetId !== dataset.datasetId || run.datasetId !== dataset.datasetId) return;
+      setJSON(sessionResumeKey(), null);
+      sessionBaseImageCount = verifiedImageCount(findView(), dataset, run);
+      setStatus(`再読込完了 ✅ 極薄画像🔗 ${sessionBaseImageCount}/${dataset.count}｜残りを準備します…`);
+      setTimeout(() => document.querySelector(`#${PANEL} button[data-a="image"]`)?.click(), 600);
+    } catch (_) {}
+  }, 2200);
 })();
