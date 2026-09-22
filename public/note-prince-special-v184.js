@@ -19,7 +19,7 @@ function article(raw,c={}){const n=raw?.note&&typeof raw.note==='object'?raw.not
 async function contents(id,p=1,dp=true){const x=await json(`https://note.com/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${p}&disabled_pinned=${dp?'true':'false'}&with_notes=false`);await sleep(35);return x}
 const tms=v=>Date.parse(String(v||''))||0,ymd=v=>{const t=typeof v==='number'?v:tms(v);return t?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t)):''};
 async function oldest(c){const f=await contents(c.urlname,1,true),fp=await contents(c.urlname,1,false),fl=list(f),pl=list(fp),d=f?.data||{},total=Number(d.totalCount||d.total_count||0),per=Math.max(1,fl.length||1);let ll=fl;if(total>per){const p=Math.min(500,Math.ceil(total/per));if(p>1)try{ll=list(await contents(c.urlname,p,true))}catch{}}const m=new Map();for(const r of[...pl,...ll,...fl]){const a=article(r,c);if(a&&!m.has(a.latestKey))m.set(a.latestKey,a)}return[...m.values()].sort((a,b)=>(tms(a.publishAt)||Infinity)-(tms(b.publishAt)||Infinity))[0]||null}
-async function choose(c,m){try{if(m==='oldest')return oldest(c);if(m==='fixed')return article(list(await contents(c.urlname,1,false))[0],c);if(m==='todayYesterday'){const a=list(await contents(c.urlname,1,true)).map(r=>article(r,c)).filter(Boolean),days=new Set([ymd(Date.now()),ymd(Date.now()-86400000)]),hit=a.find(x=>days.has(ymd(x.publishAt)));return hit||article(list(await contents(c.urlname,1,false))[0],c)}return article(list(await contents(c.urlname,1,true))[0],c)}catch{return null}}
+async function choose(c,m){if(c.tagArticle)return{...c,...c.tagArticle,sourceKeys:c.sourceKeys||[],sourceTags:c.sourceTags||[],articleSource:'hashtag'};try{if(m==='oldest')return oldest(c);if(m==='fixed')return article(list(await contents(c.urlname,1,false))[0],c);if(m==='todayYesterday'){const a=list(await contents(c.urlname,1,true)).map(r=>article(r,c)).filter(Boolean),days=new Set([ymd(Date.now()),ymd(Date.now()-86400000)]),hit=a.find(x=>days.has(ymd(x.publishAt)));return hit||article(list(await contents(c.urlname,1,false))[0],c)}return article(list(await contents(c.urlname,1,true))[0],c)}catch{return null}}
 const label=m=>m==='oldest'?'最古':m==='fixed'?'固定':m==='todayYesterday'?'本日昨日':'最新';
 async function me(){try{const p=await json('https://note.com/api/v2/current_user'),d=p?.data??p??{},u=d.user||d;return norm(u.urlname||u.url_name||u.username)}catch{return''}}
 function creatorFromUser(u){u=u?.user||u?.creator||u||{};const id=norm(u.urlname||u.url_name||u.username);return id?{likerKey:String(u.key||u.id||id),urlname:id,creator:String(u.nickname||u.name||id),actorUrl:`https://note.com/${id}`,actorImageUrl:String(u.user_profile_image_url||u.profileImageUrl||'')}:null}
@@ -32,7 +32,7 @@ async function fetchSourcePage(s,pageNo,self){
     return{creators,done:!a.length||a.length<50};
   }
   const x=await json(`https://note.com/api/v3/hashtags/${encodeURIComponent(s.tag)}/notes?order=new&page=${pageNo}&paid_only=false`),d=x?.data&&typeof x.data==='object'?x.data:x,a=Array.isArray(d.notes)?d.notes:[];
-  const creators=a.map(r=>{const n=r?.note&&typeof r.note==='object'?r.note:r,c=creatorFromUser(n?.user||n?.author);return c&&c.urlname!==self?{...c,sourceTags:[s.tag]}:null}).filter(Boolean);
+  const creators=a.map(r=>{const n=r?.note&&typeof r.note==='object'?r.note:r,c=creatorFromUser(n?.user||n?.author),tagArticle=c?article(n,c):null;return c&&c.urlname!==self&&tagArticle?{...c,sourceTags:[s.tag],tagArticle}:null}).filter(Boolean);
   return{creators,done:!a.length||d.is_last_page===true||d.isLastPage===true};
 }
 function mergeCreator(target,c){
@@ -41,6 +41,7 @@ function mergeCreator(target,c){
   const old=target.get(id);
   old.sourceKeys=[...new Set([...(old.sourceKeys||[]),...(c.sourceKeys||[])])];
   old.sourceTags=[...new Set([...(old.sourceTags||[]),...(c.sourceTags||[])])];
+  if(!old.tagArticle&&c.tagArticle)old.tagArticle=c.tagArticle;
 }
 async function collectCombinedCreators(ss,max){
   const self=await me(),people=new Map(),states=ss.map((s,i)=>({s,index:i,page:1,done:false}));
@@ -48,19 +49,31 @@ async function collectCombinedCreators(ss,max){
   while(people.size<max&&states.some(x=>!x.done)&&round<500){
     round++;
     const active=states.filter(x=>!x.done);
-    status(`入力元を交互読込 ${people.size}/${max}人｜round ${round}｜${active.length}ソース`);
+    status(`入力元を交互読込 ${people.size}/${max}人｜#記事優先｜${active.length}ソース`);
     const results=await mapLimit(active,Math.min(4,active.length),async st=>{
-      try{return{st,res:await fetchSourcePage(st.s,st.page,self)}}catch(e){if([403,429].includes(Number(e.status)))throw e;return{st,res:{creators:[],done:true}}}
+      return{st,res:await fetchSourcePage(st.s,st.page,self)}
     });
     let maxLen=0;
     for(const item of results){item.st.done=!!item.res.done;if(!item.st.done)item.st.page+=1;maxLen=Math.max(maxLen,item.res.creators.length)}
-    for(let i=0;i<maxLen&&people.size<max;i++){
+    // Process every fetched row: a later # source can override an earlier URL at the count boundary.
+    for(let i=0;i<maxLen;i++){
       for(const item of results){
-        const c=item.res.creators[i];if(c)mergeCreator(people,c);
-        if(people.size>=max)break;
+        const c=item.res.creators[i];if(c&&(people.size<max||people.has(norm(c.urlname))))mergeCreator(people,c);
       }
     }
     await sleep(35);
+  }
+  // Keep the same selected people. Read remaining # pages only to resolve overlaps
+  // for already-selected URL people; do not silently substitute their latest/fixed article.
+  for(const st of states.filter(x=>x.s.type==='tag'&&!x.done)){
+    while(!st.done&&[...people.values()].some(c=>c.sourceKeys?.length&&!c.tagArticle)){
+      if(st.page>500)throw new Error('#記事の重複確認が上限に達しました。入力する#を絞ってください');
+      status(`#記事優先の重複確認｜#${st.s.tag} ${st.page}ページ｜対象${people.size}人`);
+      const result=await fetchSourcePage(st.s,st.page,self);
+      st.done=!!result.done;st.page+=1;
+      for(const c of result.creators)if(people.has(norm(c.urlname)))mergeCreator(people,c);
+      await sleep(35);
+    }
   }
   return[...people.values()].slice(0,max);
 }
@@ -69,6 +82,6 @@ function saveRows(rows,s,m,count){const id=`generic:${Date.now()}:${rows.length}
 function canStart(){if(page.__MUMEI_CARD_SAFETY__?.busy()){status('処理中です。完了または停止を待ってください',true);return false}const r=get(runKey(),null),cards=Array.isArray(r?.cardKeys)?r.cardKeys.length:0,images=r?.images&&typeof r.images==='object'?Object.keys(r.images).length:0;if(cards){status(`通知カードが${cards}件残っています。先に削除`,true);return false}if(images){status(`前回の極薄画像が${images}件あります。初期化してから開始`,true);return false}return enabled()&&!busy}
 async function start(){if(!canStart())return;const b=document.querySelector(`.${BOX}`),raw=b?.querySelector('[data-source]')?.value,ss=sources(raw);if(!ss.length)return status('記事URL または #タグ を入力してください。複数URLは改行でOK',true);const mode=b.querySelector('[data-choice].active')?.dataset.choice||'todayYesterday',count=Math.min(3000,Math.max(1,Number(b.querySelector('[data-count]')?.value||500)));set(PREF,{source:raw,mode,count});setBusy(true);try{const creators=await collectCombinedCreators(ss,count);if(!creators.length)throw new Error('対象者を取得できませんでした');const rows=[],people=new Set(),urls=new Set();for(let i=0;i<creators.length;i+=8){const batch=creators.slice(i,i+8);status(`記事選定 ${Math.min(i+batch.length,creators.length)}/${creators.length}｜${label(mode)}｜採用${rows.length}`);for(const r of await mapLimit(batch,8,c=>choose(c,mode))){if(!r)continue;const p=norm(r.urlname),u=cleanUrl(r.url);if(!p||people.has(p)||!u||urls.has(u))continue;people.add(p);urls.add(u);rows.push({...r,url:u})}}if(!rows.length)throw new Error('公開記事が0件です');const marker=await finalRow(),final=rows.filter(r=>norm(r.urlname)!=='fuku444'&&cleanUrl(r.url)!==cleanUrl(FINAL));final.push(marker);const meta={type:ss.length>1?'multi':ss[0].type,raw:ss.map(s=>s.type==='url'?s.raw:'#'+s.tag).join('\n'),key:ss.map(s=>s.type==='url'?s.key:s.tag).join(',')};const n=saveRows(final,meta,mode,count);status(`${ss.length}入力を交互読込 → 重複除外後${creators.length}人 → 採用${n-1}人＋確認用1件 ✅ 次は「画」`);setTimeout(()=>document.querySelector(`#${PANEL} button[data-a="image"]`)?.click(),120)}catch(e){status([403,429].includes(Number(e.status))?`HTTP ${e.status}で停止。自動再試行しません`:`開始停止：${e.message||e}`,true)}finally{setBusy(false)}}
 function css(){if(document.getElementById(STYLE)||!document.head)return;const s=document.createElement('style');s.id=STYLE;s.textContent=`#${PANEL}{width:min(340px,calc(100vw - 12px))!important}#${PANEL}>.grid2,#${PANEL}>.grid3,#${PANEL}>input[data-source],#${PANEL}>input[data-amount],#${PANEL}>[data-hint],#${PANEL}>.resume{display:none!important}#${PANEL} button[data-a="extract"]{display:none!important}#${PANEL} .actions{grid-template-columns:repeat(3,1fr)!important}#${PANEL} .${BOX}{background:#111827;border:1px solid #2563eb;border-radius:10px;padding:8px;margin-bottom:7px}#${PANEL} .${BOX} input,#${PANEL} .${BOX} textarea{display:block!important;width:100%!important;box-sizing:border-box!important;background:#020617!important;color:#fff!important;border:1px solid #475569!important;border-radius:7px!important;padding:8px!important;margin:0 0 6px!important}#${PANEL} .${BOX} textarea{min-height:58px!important;resize:vertical!important}#${PANEL} .${BOX} .choices{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}#${PANEL} .${BOX} button{padding:8px 3px;font-size:10px;font-weight:900;background:#1e293b;color:#fff;border:1px solid #475569;border-radius:7px}#${PANEL} .${BOX} button.active{background:#0f766e}#${PANEL} .${BOX} [data-start]{width:100%;font-size:13px;background:#2563eb}#${PANEL} .${BOX} .mini{font-size:9px;line-height:1.35;color:#cbd5e1;margin-top:6px}`;document.head.appendChild(s)}
-function mount(){if(!enabled())return false;const p=document.getElementById(PANEL);if(!p)return false;css();const t=p.querySelector('.mumei-title-text-v164')||p.querySelector(':scope > .title');if(t)t.textContent='極薄＋通知｜URL / #';if(p.querySelector(`.${BOX}`))return true;const pr=prefs(),b=document.createElement('div');b.className=BOX;b.innerHTML=`<div style="font-size:11px;font-weight:900;margin-bottom:6px">URL / # → 1人1記事</div><textarea data-source rows="3" placeholder="記事URL / #タグ（複数URLは改行）">${pr.source.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea><div class="choices"><button data-choice="latest">最新</button><button data-choice="oldest">最古</button><button data-choice="fixed">固定</button><button data-choice="todayYesterday">本日昨日</button></div><input data-count type="number" min="1" max="3000" value="${pr.count}"><button data-start>開始</button><div class="mini">複数URL可（改行）｜件数＝全URL合算・重複除外後の上限｜同じ人物は1人だけ｜#も混在可｜本日昨日＝今日/昨日、無ければ固定｜最後にサブ垢確認記事を1件追加</div>`;(p.querySelector('.actions')||p.firstChild).before(b);(b.querySelector(`[data-choice="${pr.mode}"]`)||b.querySelector('[data-choice="todayYesterday"]')).classList.add('active');b.onclick=e=>{const c=e.target.closest('[data-choice]');if(c&&!busy){b.querySelectorAll('[data-choice]').forEach(x=>x.classList.toggle('active',x===c));return}if(e.target.closest('[data-start]')){e.preventDefault();void start()}};return true}
+function mount(){if(!enabled())return false;const p=document.getElementById(PANEL);if(!p)return false;css();const t=p.querySelector('.mumei-title-text-v164')||p.querySelector(':scope > .title');if(t)t.textContent='極薄＋通知｜URL / #';if(p.querySelector(`.${BOX}`))return true;const pr=prefs(),b=document.createElement('div');b.className=BOX;b.innerHTML=`<div style="font-size:11px;font-weight:900;margin-bottom:6px">URL / # → 1人1記事</div><textarea data-source rows="3" placeholder="記事URL / #タグ（複数URLは改行）">${pr.source.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea><div class="choices"><button data-choice="latest">最新</button><button data-choice="oldest">最古</button><button data-choice="fixed">固定</button><button data-choice="todayYesterday">本日昨日</button></div><input data-count type="number" min="1" max="3000" value="${pr.count}"><button data-start>開始</button><div class="mini">複数URL可（改行）｜件数＝全URL合算・重複除外後の上限｜同じ人物は1人だけ｜重複時は#の記事を優先｜本日昨日＝今日/昨日、無ければ固定｜最後にサブ垢確認記事を1件追加</div>`;(p.querySelector('.actions')||p.firstChild).before(b);(b.querySelector(`[data-choice="${pr.mode}"]`)||b.querySelector('[data-choice="todayYesterday"]')).classList.add('active');b.onclick=e=>{const c=e.target.closest('[data-choice]');if(c&&!busy){b.querySelectorAll('[data-choice]').forEach(x=>x.classList.toggle('active',x===c));return}if(e.target.closest('[data-start]')){e.preventDefault();void start()}};return true}
 let n=0;const timer=setInterval(()=>{n++;if(mount()||n>80)clearInterval(timer)},400);mount();
 })();
