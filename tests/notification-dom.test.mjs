@@ -68,14 +68,14 @@ test('reader starts from the lower side, marks the completion line, and next run
 
 test('persistent checkpoint mirrors the saved boundary across page closes without global DOM observer',()=>{assert.match(checkpoint,/mumei_insight_notification_checkpoint_local_v325:/);assert.match(checkpoint,/localStorage\.setItem/);assert.match(checkpoint,/addEventListener\('pagehide'/);assert.match(checkpoint,/visibilitychange/);assert.match(checkpoint,/async function restore\(/);assert.match(checkpoint,/ここまで保存済み/);assert.doesNotMatch(checkpoint,/new MutationObserver/)});
 
-test('V3.6.3 wrapper activates only split modules',()=>{
+test('V3.6.4 wrapper activates only split modules',()=>{
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.6\.3/);
+  assert.match(v3,/@version\s+3\.6\.4/);
   for(const part of [
-    'note-insight-notification-network-v3300.js?v=3630','note-insight-notification-reader-v4.js?v=3620','note-insight-notification-controls-v1.js?v=136',
-    'note-insight-notification-filter-v4.js?v=401','note-insight-notification-return-v1.js?v=120',
+    'note-insight-notification-network-v3300.js?v=3630','note-insight-notification-reader-v4.js?v=3640','note-insight-notification-controls-v1.js?v=137',
+    'note-insight-notification-filter-v4.js?v=410','note-insight-notification-return-v1.js?v=120',
     'note-insight-notification-status-bridge-v1.js?v=110','note-insight-notification-feature-bridge-v1.js?v=100',
-    'note-insight-notification-settings-bridge-v1.js?v=100','note-insight-notification-account-pair-v1.js?v=100'
+    'note-insight-notification-settings-bridge-v1.js?v=110','note-insight-notification-account-pair-v1.js?v=100'
   ])assert.ok(meta.includes(part),part);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
   assert.match(splitReader,/function scheduleAuto/);assert.doesNotMatch(splitReader,/autoReadVisibleWindow/);assert.match(splitReader,/async function scan/);
@@ -98,7 +98,7 @@ test('installer is isolated behind a redirect shell and stays versionless',async
   const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/notification-browser-install.html',runScripts:'outside-only'});
   const w=dom.window;
   try{
-    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.6.3'})});
+    w.fetch=async()=>({ok:true,json:async()=>({notificationVersion:'3.6.4'})});
     for(const s of w.document.querySelectorAll('script'))w.eval(s.textContent);
     await new Promise(resolve=>setTimeout(resolve,0));
     const install=w.document.getElementById('install'),u=new URL(install.href);
@@ -244,7 +244,7 @@ test('read completion stays visible on the dock until the notification panel clo
 
 test('network Reader is primary while legacy DOM parser remains isolated',async()=>{
   const meta=v3.split('// ==/UserScript==')[0],network=await read('note-insight-notification-network-v3300.js');
-  assert.ok(meta.includes('note-insight-notification-network-v3300.js?v=3630'));assert.ok(meta.includes('note-insight-notification-reader-v4.js?v=3620'));
+  assert.ok(meta.includes('note-insight-notification-network-v3300.js?v=3630'));assert.ok(meta.includes('note-insight-notification-reader-v4.js?v=3640'));
   assert.doesNotMatch(meta,/note-insight-notification-autoscan-v2970\.js\?v=/);
   assert.match(network,/async function syncHistory/);assert.match(network,/writeJournal/);
   assert.match(splitReader,/function rowData/);assert.match(splitReader,/actor_image_url:img/);

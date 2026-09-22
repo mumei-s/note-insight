@@ -4,19 +4,19 @@ import fs from 'node:fs';
 
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('V3.4.4 package is only a module loader and version reporter',()=>{
+test('Current notification package is only a module loader and version reporter',()=>{
   const v3=read('public/note-insight-notification-v3.user.js');
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.4\.4/);
+  assert.match(v3,/@version\s+3\.6\.4/);
   for(const p of [
-    'note-insight-notification-network-v3300.js?v=3430',
-    'note-insight-notification-reader-v4.js?v=3430',
-    'note-insight-notification-controls-v1.js?v=120',
-    'note-insight-notification-filter-v4.js?v=400',
+    'note-insight-notification-network-v3300.js?v=3630',
+    'note-insight-notification-reader-v4.js?v=3640',
+    'note-insight-notification-controls-v1.js?v=137',
+    'note-insight-notification-filter-v4.js?v=410',
     'note-insight-notification-return-v1.js?v=120',
-    'note-insight-notification-status-bridge-v1.js?v=100',
+    'note-insight-notification-status-bridge-v1.js?v=110',
     'note-insight-notification-feature-bridge-v1.js?v=100',
-    'note-insight-notification-settings-bridge-v1.js?v=100',
+    'note-insight-notification-settings-bridge-v1.js?v=110',
     'note-insight-notification-account-pair-v1.js?v=100'
   ])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
@@ -33,11 +33,11 @@ test('Reader owns only detection, reading, persistence and checkpoints',()=>{
   assert.doesNotMatch(r,/INSIGHT【通知】|フィルター ON|フィルター OFF|notification-filter-settings\.html|mumei_insight_magazine_filter_enabled_v3:|TOOLBAR_ID|mountToolbar|toolbarAction/);
 });
 
-test('Controls own navigation and filter toggle but never reading or saving',()=>{
+test('Controls own navigation, status and filter toggle but never notification collection or saving',()=>{
   const c=read('public/note-insight-notification-controls-v1.js');
   assert.match(c,/フィルター ON|フィルター OFF/);assert.match(c,/INSIGHT【通知】/);assert.match(c,/notification-filter-settings\.html/);
   assert.match(c,/mumei_insight_magazine_filter_enabled_v3:/);assert.match(c,/mumei-insight-filter-refresh-v2939/);
-  assert.doesNotMatch(c,/insight-notification-ingest-v2|sendBatch|historyComplete|mumei_insight_notification_checkpoint_v2922:|mumei_insight_notification_saved_v2919:/);
+  assert.doesNotMatch(c,/insight-notification-ingest-v2|sendBatch|mumei_insight_notification_checkpoint_v2922:|mumei_insight_notification_saved_v2919:/);
 });
 
 test('Filter owns visibility only and never saving, return or INSIGHT navigation',()=>{
@@ -77,6 +77,6 @@ test('DM remains isolated from every notification runtime',()=>{
   assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   for(const src of [reader,controls,filter])assert.match(src,/messages\\\/rooms|isDmRoute/);
   assert.match(reader,/if\(isDmRoute\(\)\)return/);
-  assert.match(controls,/if\(isDmRoute\(\)\)return/);
+  assert.match(controls,/if\(isDmRoute\(\)\)\{for[^\n]+el\.remove\(\);return\}/);
   assert.match(filter,/if\(isDmRoute\(\)\)return/);
 });

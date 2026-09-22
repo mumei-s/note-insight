@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.5",
-  "notificationVersion": "3.6.3",
+  "appVersion": "2026.09.22.6",
+  "notificationVersion": "3.6.4",
   "dashboardVersion": "1.4.5",
-  "releasedAt": "2026-09-22T06:05:38.859612+00:00",
+  "releasedAt": "2026-09-22T07:19:23.897039+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "DMパネルを薄型化して入力欄・送信ボタンの上へ配置。文字入力・キーボード表示中は非表示にし、取得済み本文を保存したまま本人の会話スクロールを止める。",
-  "dmVersion": "1.4.3",
+  "note": "分類案内を運営者へ集約。画像使用・話題の分類と自動再分類、人物アイコン維持、通知フィルターを修正。DMは初回自動取得・保存境界から差分追加し、進捗を薄型表示。",
+  "dmVersion": "1.4.4",
   "dmLabel": "DM同期"
 }
