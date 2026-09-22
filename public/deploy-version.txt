@@ -1,2 +1,2 @@
-2026-09-21T17:04+09:00
-INSIGHT v2026.09.21.25: notification V3.5.8 viewport-bottom toolbar; DM V1.3.4 parent-frame DOM full sync.
+INSIGHT 2026.09.22.1 / notification 3.6.0 / DM 1.4.0
+Durable API notification window, cached category display, resumable DM, compact controls, accurate chart axes.
