@@ -416,3 +416,6 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 ## 2026-09-22 DM・曜日分析・戻る操作も統合
 
 相互照合だけが先に公開された状態から、ユーザー「ほかの更新はしたの？」を受けて残りの共有修正を統合。本体2026.09.22.8／DM1.4.5／Dashboard1.4.6／本人通知3.6.5。詳細は [WORK_FIXES_20260922_DM_DAILY_NAV.md](WORK_FIXES_20260922_DM_DAILY_NAV.md)。DMの会話不一致4件を取得URLの証拠で修復し、同条件の残り不一致は0件。207件の回帰テストとビルド成功。実機ログイン状態の全件取得・スマホのキーボード確認は未完了として維持する。
+
+
+公開確認: 機能main `c013151beecab0fe313605c3658bdd4c2eb0e79b`、GitHub Actions `35710900824` のbuild・207件回帰・Pages deploy成功。Pagesのmanifest、DM wrapper/network/reader、Dashboard wrapper/core、相互照合Reader、通知wrapper、Service Worker、deploy-version、index、本体JSの12ファイルがHTTP200でローカルと内容完全一致。実際の@require先（DM `?v=145`、Dashboard `?v=146`）を含むraw GitHubの5ファイルも内容一致。利用端末にはDM1.4.5／Dashboard1.4.6への更新が必要。実機の本人ログイン状態での全件取得・キーボード動作は未確認を維持。

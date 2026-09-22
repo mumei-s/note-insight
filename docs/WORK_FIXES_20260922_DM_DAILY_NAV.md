@@ -30,3 +30,6 @@ DM:
 - DMの保存拒否・改行・本人スコープ・同名相手の分離、ページ継続、入力欄、日別値と曜日計算、実コンポーネントの戻る・進む・お気に入り復帰を含む。
 - 本物のnoteにログインした各利用端末の全件取得やスマホのキーボードは未確認。自動テスト成功を実機成功と扱わない。
 - 公開後のPages・raw GitHub配信照合結果は追記する。
+
+
+公開確認: 機能main `c013151beecab0fe313605c3658bdd4c2eb0e79b`、GitHub Actions `35710900824` のbuild・207件回帰・Pages deploy成功。Pagesのmanifest、DM wrapper/network/reader、Dashboard wrapper/core、相互照合Reader、通知wrapper、Service Worker、deploy-version、index、本体JSの12ファイルがHTTP200でローカルと内容完全一致。実際の@require先（DM `?v=145`、Dashboard `?v=146`）を含むraw GitHubの5ファイルも内容一致。利用端末にはDM1.4.5／Dashboard1.4.6への更新が必要。実機の本人ログイン状態での全件取得・キーボード動作は未確認を維持。
