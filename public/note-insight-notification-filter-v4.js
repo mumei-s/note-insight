@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.0.1';
+const VERSION='4.1.0';
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
 const OWN='mumei-muted-v2939';
@@ -17,6 +17,9 @@ const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)&&!shel
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM);
+async function put(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
+let profileJob=null;const profileAttempt=new Map();
+function hydrateProfiles(id,ids,profiles){const missing=ids.filter(x=>!profiles.some(p=>p.id===x&&p.name)&&Date.now()-(profileAttempt.get(x)||0)>60000);if(!missing.length||profileJob)return;profileJob=(async()=>{const next=new Map(profiles.map(p=>[p.id,p]));for(let i=0;i<missing.length;i+=4){await Promise.all(missing.slice(i,i+4).map(async who=>{profileAttempt.set(who,Date.now());try{const r=await fetch('/api/v2/creators/'+encodeURIComponent(who),{credentials:'include'});if(!r.ok)return;const j=await r.json(),d=j.data||j,name=clean(d.nickname||d.name);if(name)next.set(who,{id:who,name,image:d.profileImageUrl||''})}catch{}}))}await put(key(PROFILE,id),[...next.values()]);cache=null;cacheAt=0;schedule(0,true)})().catch(()=>{}).finally(()=>{profileJob=null})}
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
 let accountId='',cache=null,cacheAt=0,root=null,obs=null,timer=0;
 async function account(){if(accountId)return{id:accountId};try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id))return null;accountId=id;return{id}}catch{return null}}
@@ -24,15 +27,15 @@ function installStyle(){if(document.getElementById(STYLE))return;const s=documen
 function shown(el){if(!el?.getBoundingClientRect)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}
 function exact(v){return[...document.querySelectorAll('button,a,[role="tab"],[role="button"],div,span')].find(el=>shown(el)&&clean(el.textContent)===v)||null}
 function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)&&shown(p)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>100)return p}}return null}
-function shell(){return commonShell(exact('通知'),exact('お知らせ'))}
-function rows(r){if(!r)return[];let xs=[...r.querySelectorAll(ITEM)];if(!xs.length)xs=[...r.querySelectorAll('li,[role="listitem"],article')].filter(el=>{const t=clean(el.textContent);return t.length>5&&/(?:さん|新しい記事|マガジン|運営メンバー)/u.test(t)});return[...new Set(xs)]}
+function shell(){const native=window.__mumeiNotificationReaderV4?.findPanel?.();return native||commonShell(exact('通知'),exact('お知らせ'))}
+function rows(r){if(!r)return[];let xs=[...r.querySelectorAll(ITEM)];if(!xs.length)xs=[...r.querySelectorAll('li,[role="listitem"],article')].filter(el=>{const t=clean(el.textContent);return t.length>5&&/(?:さん|新しい記事|マガジン|運営メンバー)/u.test(t)});xs=[...new Set(xs)];return xs.filter(el=>!xs.some(child=>child!==el&&el.contains(child)))}
 function creatorIdFromUrl(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean);if(!u.hostname.endsWith('note.com')||p.length!==1)return'';const id=(p[0]||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:creatorIdFromUrl(a.getAttribute('href')),txt:clean(a.textContent)})).filter(x=>x.id)}
 function leadName(t){const m=clean(t).match(/^(.{1,180}?)\s*さん(?:他\d+名)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||''}
 function norm(v){return clean(v).toLowerCase().replace(/\s+/g,'').replace(/[.…⋯]+$/u,'')}
 function nameMatch(lead,full){const a=norm(lead),b=norm(full);if(!a||!b)return false;if(a===b)return true;return /[.…⋯]$/u.test(clean(lead))&&a.length>=2&&b.startsWith(a)}
 function magazineNoise(t){const s=clean(t);return /さん(?:他\d+名)?が.*(?:マガジン|共同運営|共同マガ|運営メンバー).*?(?:新しい記事を\d+本追加しました|記事を\d+本追加しました|仲間入りしました)/u.test(s)||/さん(?:他\d+名)?が.*新しい記事を\d+本追加しました/u.test(s)}
-async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
+async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(enabled)hydrateProfiles(a.id,ids,profiles);cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');el.setAttribute(FORCE,'1')}else el.removeAttribute(FORCE)}
 function setHidden(el,want){if(!el)return;forceVisible(el,!want);el.classList.toggle(OWN,Boolean(want))}
@@ -45,4 +48,5 @@ document.addEventListener('click',()=>setTimeout(discover,80),true);
 addEventListener('focus',discover);addEventListener('pageshow',discover);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')discover()});
 installStyle();setTimeout(discover,120);
 window.__mumeiNotificationFilterV4={version:VERSION,refresh};
+const listen=modern()&&GM.addValueChangeListener||typeof GM_addValueChangeListener==='function'&&GM_addValueChangeListener;if(listen)void account().then(a=>{if(a)for(const prefix of [FIL,GRP,MUT,PROFILE])try{listen(key(prefix,a.id),()=>{cache=null;schedule(0,true)})}catch{}});
 })();
