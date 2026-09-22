@@ -26,9 +26,6 @@
   let imageChoiceClickListener = null;
   let imageChoicePointerListener = null;
   let nativeInputClick = null;
-  let sessionBaseImageCount = null;
-  const SESSION_UPLOAD_LIMIT = 160;
-  const SESSION_RESUME_PREFIX = 'mumei_image_session_resume_v160';
   const UPLOAD_DIAG_PREFIX = 'mumei_upload_diag_v160';
   const uploadNetFailures = [];
 
@@ -66,12 +63,6 @@
     return `${RUN_PREFIX}:${articleKey() || 'unknown'}`;
   }
   function uploadDiagKey() { return `${UPLOAD_DIAG_PREFIX}:${articleKey() || 'unknown'}`; }
-  function sessionResumeKey() { return `${SESSION_RESUME_PREFIX}:${articleKey() || 'unknown'}`; }
-  function requestSessionReload(dataset, completed, remaining) {
-    setJSON(sessionResumeKey(), { datasetId: dataset?.datasetId || '', completed, remaining, at: Date.now() });
-    setStatus(`極薄画像🔗 ${completed}/${dataset.count} ✅ 2巡160枚完了｜3巡目失敗回避のため自動再読込…`);
-    setTimeout(() => location.reload(), 900);
-  }
   function cleanNetUrl(value) {
     try { const u = new URL(String(value || ''), location.href); return `${u.origin}${u.pathname}`; }
     catch (_) { return String(value || '').split('?')[0].slice(0, 240); }
@@ -888,12 +879,7 @@
       selectionApi();
       if (run.pending) await recoverPending(view, dataset, run);
       const completedNow = verifiedImageCount(view, dataset, run);
-      if (sessionBaseImageCount == null) sessionBaseImageCount = completedNow;
       const missing = missingRows(view, dataset, run);
-      if (missing.length && completedNow - sessionBaseImageCount >= SESSION_UPLOAD_LIMIT) {
-        requestSessionReload(dataset, completedNow, missing.length);
-        return;
-      }
       if (!missing.length) {
         verifyConfirmationImage(view, dataset, run);
         setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
@@ -920,11 +906,7 @@
       await completion;
       const left = missingRows(view, dataset, run).length;
       const completedAfter = dataset.count - left;
-      if (left && completedAfter - sessionBaseImageCount >= SESSION_UPLOAD_LIMIT) {
-        requestSessionReload(dataset, completedAfter, left);
-        return;
-      }
-      if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → もう一度「画」`);
+      if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → 同じ画面のまま「画」で続行`);
       else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
     } catch (error) {
       setStatus(`画像停止：${error?.message || String(error)}（「画」で再開）`, true);
@@ -1052,17 +1034,8 @@
   }
 
   installUploadNetworkProbe();
+  // Safety invariant: this tool must never reload or navigate away from the editor automatically.
+  // Unsaved article text and inserted images belong to the current editor session.
   setInterval(mount, 600);
   mount();
-  setTimeout(() => {
-    try {
-      const resume = getJSON(sessionResumeKey(), null);
-      const dataset = getDataset(), run = getRun();
-      if (!resume || !dataset || !run || resume.datasetId !== dataset.datasetId || run.datasetId !== dataset.datasetId) return;
-      setJSON(sessionResumeKey(), null);
-      sessionBaseImageCount = verifiedImageCount(findView(), dataset, run);
-      setStatus(`再読込完了 ✅ 極薄画像🔗 ${sessionBaseImageCount}/${dataset.count}｜残りを準備します…`);
-      setTimeout(() => document.querySelector(`#${PANEL} button[data-a="image"]`)?.click(), 600);
-    } catch (_) {}
-  }, 2200);
 })();
