@@ -208,6 +208,8 @@ export function MemberInsightLiveV2(){
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
+  const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
+  const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>更新あり</em>:dashboardMissing?<em>未導入</em>:null}</>;
   return <div className={`miv5 mode-${mode}`}>
     {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
     <section className="miv5-update" aria-label="INSIGHT主要機能">
@@ -220,7 +222,7 @@ export function MemberInsightLiveV2(){
           <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"本人通知を更新":notificationMissing?"＋ 本人通知を設定":"⚙ 設定・更新状態"}</a>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")}><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span></button>
+          {dashboardUpdateAvailable||dashboardMissing?<a className="miv5-source-main" href={dashboardSetupHref} aria-label={dashboardUpdateAvailable?"分析：ダッシュボード同期を更新":"分析：ダッシュボード同期を導入"}>{dashboardCardContent}</a>:<button className="miv5-source-main" onClick={()=>openMode("analysis")}>{dashboardCardContent}</button>}
         </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>

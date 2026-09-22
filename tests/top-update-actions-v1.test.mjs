@@ -10,10 +10,11 @@ import {createRoot} from 'react-dom/client';
 const {act}=React;
 const pause=()=>new Promise(r=>setTimeout(r,20));
 
-async function page(t,{release,fetcher}={}){
- const dom=new JSDOM('<div id="root"></div>',{url:'https://mumei-s.github.io/note-insight/#dashboard'}),w=dom.window;
+async function page(t,{release,fetcher,storage={},enhance=false}={}){
+ const dom=new JSDOM('<div id="root"></div>',{url:'https://mumei-s.github.io/note-insight/#dashboard',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
  for(const key of ['window','document','localStorage','HTMLElement','Element'])globalThis[key]=w[key];globalThis.IS_REACT_ACT_ENVIRONMENT=true;
  w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.localStorage.setItem('token','first-account');
+ for(const [key,value]of Object.entries(storage))w.localStorage.setItem(key,value);
  const calls=[];
  const fetch=async(url,init={})=>{calls.push({url,body:JSON.parse(init.body||'{}')});if(fetcher)return fetcher(url,init);return Response.json({ok:true,member:{noteId:'tester'},scannedArticles:3,catalog:{stored:5}})};
  const ctx=vm.createContext({window:w,document:w.document,history:w.history,location:w.location,localStorage:w.localStorage,sessionStorage:w.sessionStorage,navigator:w.navigator,URL,URLSearchParams,AbortController,Event:w.Event,requestAnimationFrame:fn=>fn(),clearTimeout:w.clearTimeout.bind(w),fetch,console});
@@ -24,7 +25,9 @@ async function page(t,{release,fetcher}={}){
  const m=new vm.SourceTextModule(code,{context:ctx,initializeImportMeta:meta=>meta.env={BASE_URL:'/note-insight/'}});
  await m.link(name=>{const exports=deps[name]||(name.endsWith('.css')||name==='./insight-ux-v12'?{}:null);if(!exports)throw Error(name);return new vm.SyntheticModule(Object.keys(exports),function(){for(const[k,v]of Object.entries(exports))this.setExport(k,v)},{context:ctx})});await m.evaluate();
  const root=createRoot(w.document.getElementById('root'));t.after(async()=>{await act(async()=>root.unmount());w.close()});
- await act(async()=>{root.render(React.createElement(m.namespace.MemberInsightLiveV2));await pause()});return{w,calls};
+ await act(async()=>{root.render(React.createElement(m.namespace.MemberInsightLiveV2));await pause()});
+ if(enhance){w.fetch=fetch;w.matchMedia=()=>({matches:true});for(const file of ['insight-dashboard-label-v19','insight-inline-updates-v1','insight-top-install-v16','insight-update-guide-v18','insight-ux-v11','insight-ux-v12','insight-ux-v13'])w.eval(`(()=>{${ts.transpileModule(readFileSync(`src/${file}.ts`,'utf8').replace('export {};',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText}\n})()`);await act(async()=>new Promise(r=>setTimeout(r,350)))}
+ return{w,calls};
 }
 
 test('本体更新を通常データから独立させ、公開データの操作と状況表示を混ぜない',async t=>{
@@ -51,4 +54,22 @@ test('アカウントを切り替えた後に古い公開データの応答を�
  h.w.localStorage.setItem('token','next-account');
  await act(async()=>{finish(Response.json({ok:true,scannedArticles:9876,catalog:{stored:9876}}));await pause()});
  assert.doesNotMatch(h.w.document.querySelector('.normal span').textContent,/9,876|9876|更新済み/);
+});
+
+for(const [state,installed]of [['更新','0'],['未導入','']])test(`分析の${state}はパネル自体から正しい更新画面へ進める`,async t=>{
+ const {w}=await page(t,{storage:{'dash-version':installed,'notice-version':'1'},enhance:true});
+ const card=w.document.querySelector('.dashboard'),action=card.querySelector('.miv5-source-main');
+ assert.equal(card.classList.contains(installed?'needs-update':'needs-install'),true);assert.equal(action.tagName,'A');assert.match(action.querySelector('em').textContent,installed?/更新あり/:/未導入/);
+ assert.equal(w.document.getElementById('mumei-insight-update-guide-v18'),null);
+ let clicked;action.addEventListener('click',e=>{clicked={blocked:e.defaultPrevented,url:new URL(action.href)};e.preventDefault()});action.click();
+ assert.equal(clicked.blocked,false);assert.equal(clicked.url.pathname,'/note-insight/dashboard-setup.html');assert.equal(clicked.url.searchParams.get('account'),'tester');assert.match(clicked.url.searchParams.get('return'),/#dashboard/);
+ assert.equal(w.getComputedStyle(action).animation,'none');
+ w.localStorage.setItem('dash-version','1');await act(async()=>{w.dispatchEvent(new w.Event('focus'));await new Promise(r=>setTimeout(r,350))});
+ assert.equal(card.classList.contains('needs-update'),false);assert.equal(card.classList.contains('needs-install'),false);assert.equal(card.querySelector('em'),null);
+ const current=card.querySelector('.miv5-source-main');assert.equal(current.tagName,'BUTTON');await act(async()=>current.click());assert.equal(w.history.state.insightMode,'analysis');
+});
+
+test('本人通知だけの更新では分析に更新ランプを付けない',async t=>{
+ const {w}=await page(t,{storage:{'dash-version':'1','notice-version':'0'},enhance:true});
+ assert.equal(w.document.querySelector('.notice').classList.contains('needs-update'),true);assert.equal(w.document.querySelector('.dashboard').classList.contains('needs-update'),false);assert.equal(w.document.querySelector('.dashboard .miv5-source-main').tagName,'BUTTON');assert.equal(w.document.getElementById('mumei-insight-update-guide-v18'),null);
 });
