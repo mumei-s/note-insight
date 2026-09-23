@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.9
+// @name         無名S note 極薄＋通知 URL/# 18.8.10
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.9
+// @version      18.8.10
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -397,7 +397,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.9</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.10</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
@@ -2401,7 +2401,16 @@
   function genuineCard(hit, url) {
     const key = cardKey(hit);
     const html = String(hit?.node?.attrs?.htmlForEmbed || '');
-    return cardUrl(hit) === normalizeUrl(url) && /^emb[a-z0-9]+$/i.test(key) && html.includes('note-embed');
+    if (!/^emb[a-z0-9]+$/i.test(key) || !html.includes('note-embed')) return false;
+    if (cardUrl(hit) === normalizeUrl(url)) return true;
+    // note's parseDOM can read iframe.src when a saved figure has no data-src.
+    // Match the exact note origin and article key, never a substring of a URL.
+    try {
+      const src = new URL(cardUrl(hit)), expected = new URL(url);
+      const embeddedKey = src.pathname.match(/^\/embed\/notes\/(n[a-f0-9]{12})\/?$/i)?.[1];
+      return src.origin === 'https://note.com' && expected.origin === 'https://note.com' &&
+        Boolean(embeddedKey) && embeddedKey === noteKey(url);
+    } catch (_) { return false; }
   }
   function ensureEndSelection(view) {
     const paragraph = view.state.schema.nodes.paragraph;
@@ -2492,6 +2501,58 @@
     return safety().save(findView(), label);
   }
 
+  function reconcileCards(view, dataset, run) {
+    const tracked = Array.isArray(run.cardKeys) ? run.cardKeys : [];
+    const urls = new Set(dataset.rows.map(row => row.url));
+    if (new Set(tracked.map(x => x.url)).size !== tracked.length || new Set(tracked.map(x => x.key)).size !== tracked.length ||
+        tracked.some(x => !urls.has(x.url) || !/^emb[a-z0-9]+$/i.test(x.key))) throw new FatalError('通知カード記録の重複または対象記事の違いを検出しました');
+    const pending = run.pendingCard;
+    if (pending && (!urls.has(pending.url) || !Array.isArray(pending.beforeKeys))) throw new FatalError('途中カード記録と対象記事が一致しません');
+    const hits = embedNodes(view), present = [], missing = [];
+    const originalKeys = new Set((run.cardBaselineKeys || pending?.beforeKeys || []).filter(k => !tracked.some(x => x.key === k)));
+    for (const entry of tracked) {
+      const matches = hits.filter(h => cardKey(h) === entry.key);
+      if (matches.length > 1) throw new FatalError('同じ通知カードのキーが複数あります。本文を保持しました');
+      if (matches.length === 1) {
+        if (!genuineCard(matches[0], entry.url)) throw new FatalError(`通知カードの記事を確認できません：${entry.key}。本文を保持しました`);
+        present.push(entry);
+      } else {
+        // An unknown key with this URL might be a card whose record changed.
+        // Never create a duplicate or assume ownership of an original card.
+        if (hits.some(h => genuineCard(h, entry.url) && !originalKeys.has(cardKey(h)))) throw new FatalError('同じ記事のカードが別キーで残っています。重複を増やさず本文を保持しました');
+        missing.push(entry);
+      }
+    }
+    run.cardRecovery = { at: Date.now(), recorded: tracked.length, present: present.length, missing };
+    run.cardKeys = present;
+    run.savedCardCount = 0; // Establish server-save proof for the current document below.
+    if (!Array.isArray(run.cardBaselineKeys)) {
+      run.cardBaselineKeys = [...new Set([...originalKeys, ...hits.map(cardKey).filter(k =>
+        !tracked.some(x => x.key === k) && !(pending && !pending.beforeKeys.includes(k)))])];
+    }
+    return missing.length;
+  }
+  function recordCard(view, dataset, run, row, hit) {
+    const order = new Map(dataset.rows.map((r, i) => [r.url, i]));
+    // A recovered gap is generated at the end by note, then placed before the
+    // next surviving tool card. Move only this new node; preserve every original.
+    const nextEntry = run.cardKeys.filter(x => order.get(x.url) > order.get(row.url)).sort((a, b) => order.get(a.url) - order.get(b.url))[0];
+    const next = nextEntry && embedNodes(view).find(h => cardKey(h) === nextEntry.key);
+    if (next && hit.pos > next.pos) {
+      safety().dispatch(view, view.state.tr.delete(hit.pos, hit.pos + hit.node.nodeSize).insert(next.pos, hit.node));
+    }
+    run.cardKeys.push({ url: row.url, key: cardKey(hit) });
+    run.cardKeys.sort((a, b) => order.get(a.url) - order.get(b.url));
+    run.pendingCard = null;
+    run.cardError = null;
+    setJSON(runKey(), run);
+  }
+  async function saveCards(run, dataset, label) {
+    await saveOnce(`画像 ${dataset.count}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count} ${label}…`);
+    run.savedCardCount = run.cardKeys.length;
+    setJSON(runKey(), run);
+  }
+
   async function resumableSend() {
     if (busy || !enabled()) return;
     const dataset = getJSON(DATA_KEY, null);
@@ -2501,104 +2562,103 @@
       return;
     }
     setPaused(false);
-    let operation;
+    let operation, imagesComplete = false;
     setBusy(true);
     try {
       const view = findView();
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
       operation = safety().begin('通知カード作成', view);
-      // A late callback from a timed-out attempt must never affect a new run.
       activeConversion = null;
       selectionApi();
       noteUrlCommandFactory();
       const imageCount = verifiedImageCount(view, dataset, run);
-      if (imageCount !== dataset.count) {
-        throw new FatalError(`極薄画像🔗不足 ${imageCount}/${dataset.count}。先に「画」または「再開」`);
-      }
-
-      const tracked = Array.isArray(run.cardKeys) ? run.cardKeys : [];
-      for (const entry of tracked) {
-        if (!embedNodes(view).some((hit) => cardKey(hit) === entry.key && genuineCard(hit, entry.url))) {
-          throw new FatalError('途中カードの記録と本文が一致しません。本文の控えから復元するか、記事の保存状態を確認してください');
-        }
-      }
-
-      let index = tracked.length;
+      if (imageCount !== dataset.count) throw new FatalError(`極薄画像🔗不足 ${imageCount}/${dataset.count}。先に「画」または「再開」`);
+      imagesComplete = true;
+      const missing = reconcileCards(view, dataset, run);
       run.stage = 'cards_building';
-      run.cardKeys = tracked;
       setJSON(runKey(), run);
+      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count} 照合済み${missing ? `・未保存${missing}件を補完` : ''}`);
+      if (run.cardKeys.length) await saveCards(run, dataset, '保存確認');
 
-      for (; index < dataset.rows.length; index += 1) {
+      // Finish the outstanding native command first, even if an earlier unsaved
+      // batch disappeared on reopen. Then fill missing rows in dataset order.
+      const pendingRow = run.pendingCard && dataset.rows.find(r => r.url === run.pendingCard.url);
+      const work = pendingRow ? [pendingRow, ...dataset.rows.filter(r => r.url !== pendingRow.url)] : dataset.rows;
+      for (const row of work) {
+        if (run.cardKeys.some(x => x.url === row.url)) {
+          if (run.pendingCard?.url === row.url) { run.pendingCard = null; setJSON(runKey(), run); }
+          continue;
+        }
         if (isPaused() || safety().stopped()) {
           run.stage = 'cards_paused';
           setJSON(runKey(), run);
-          await saveOnce(`途中保存 ${run.cardKeys.length}/${dataset.count}…`);
-          setStatus(`停止・保存済み ${run.cardKeys.length}/${dataset.count} ✅ 「再開」で続きから`);
+          await saveCards(run, dataset, '途中保存');
+          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード 停止・保存済み ${run.cardKeys.length}/${dataset.count} ✅ 「送」で続きから`);
           return;
         }
-        const row = dataset.rows[index];
         const pending = run.pendingCard;
         const beforeKeys = new Set(pending?.beforeKeys || embedNodes(view).map(cardKey).filter(Boolean));
+        let hit;
         if (pending) {
-          if (pending.url !== row.url || !Array.isArray(pending.beforeKeys)) throw new FatalError('途中カード記録と対象記事が一致しません');
-          const recovered = embedNodes(view).filter(hit => genuineCard(hit, pending.url) && !beforeKeys.has(cardKey(hit)));
+          if (pending.url !== row.url) throw new FatalError('途中カード記録と対象記事が一致しません');
+          const recovered = embedNodes(view).filter(h => genuineCard(h, pending.url) && !beforeKeys.has(cardKey(h)));
           if (recovered.length > 1) throw new FatalError('途中カードが複数あります。重複を増やさず停止しました');
-          if (recovered.length === 1) {
-            run.cardKeys.push({ url: pending.url, key: cardKey(recovered[0]) });
-            run.pendingCard = null; setJSON(runKey(), run);
-            continue;
-          }
-          resumeUrlAtEnd(view, pending);
+          hit = recovered[0];
+          if (!hit) resumeUrlAtEnd(view, pending);
         } else {
           run.pendingCard = { url: row.url, beforeKeys: [...beforeKeys], rawBeforeCount: exactUrlParagraphs(view, row.url).length };
           setJSON(runKey(), run);
           insertUrlAtEnd(view, row.url);
         }
-        run.pendingCard.attempts = (run.pendingCard.attempts || 0) + 1;
-        run.pendingCard.rawNodeId = insertedUrlNode.attrs?.id || null;
-        setJSON(runKey(), run);
-        setStatus(`本物通知カード ${index + 1}/${dataset.count} ${pending ? '再開' : '生成'}中…`);
-        const attempt = activeConversion = { node: insertedUrlNode, error: null };
-        const command = noteUrlCommandFactory()(row.url);
-        const handled = command(view.state, (transaction) => {
-          if (activeConversion !== attempt || attempt.error) return;
-          const current = currentBaseRun();
-          if (current?.datasetId !== run.datasetId || current.pendingCard?.url !== row.url || !['cards_building', 'cards_paused'].includes(current.stage)) return;
-          if (safety().busy() && !busy) return;
-          try { safety().dispatch(view, transaction, [attempt.node]); } catch (e) { attempt.error = e; }
-        }, view);
-        if (!handled) {
-          throw new FatalError(`${index + 1}/${dataset.count} note正規URLコマンド未処理`);
-        }
-        const hit = await waitForNewCard(view, row.url, beforeKeys, attempt);
         if (!hit) {
-          throw new FatalError(`${index + 1}/${dataset.count} 新規embカード確認タイムアウト`);
+          run.pendingCard.attempts = (run.pendingCard.attempts || 0) + 1;
+          run.pendingCard.rawNodeId = insertedUrlNode.attrs?.id || null;
+          setJSON(runKey(), run);
+          const progress = `${run.cardKeys.length + 1}/${dataset.count}`;
+          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${progress} ${pending ? '再開' : '生成'}中…`);
+          const attempt = activeConversion = { node: insertedUrlNode, error: null };
+          const command = noteUrlCommandFactory()(row.url);
+          const handled = command(view.state, (transaction) => {
+            if (activeConversion !== attempt || attempt.error) return;
+            const current = currentBaseRun();
+            if (current?.datasetId !== run.datasetId || current.pendingCard?.url !== row.url || !['cards_building', 'cards_paused'].includes(current.stage)) return;
+            if (safety().busy() && !busy) return;
+            try { safety().dispatch(view, transaction, [attempt.node]); } catch (e) { attempt.error = e; }
+          }, view);
+          if (!handled) throw new FatalError(`${progress} note正規URLコマンド未処理`);
+          hit = await waitForNewCard(view, row.url, beforeKeys, attempt);
+          if (!hit) throw new FatalError(`${progress} 新規embカード確認タイムアウト`);
+          deleteLastExactUrl(view, row.url);
+          // Deleting a raw work paragraph can change the card's position.
+          hit = embedNodes(view).find(h => cardKey(h) === cardKey(hit));
         }
-        deleteLastExactUrl(view, row.url);
-        run.cardKeys.push({ url: row.url, key: cardKey(hit) });
-        run.pendingCard = null;
-        run.cardError = null;
-        setJSON(runKey(), run);
-        setStatus(`本物通知カード ${index + 1}/${dataset.count} ✅`);
-        if (index < dataset.rows.length - 1) await sleep(60);
+        recordCard(view, dataset, run, row, hit);
+        if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
+        setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
+        if (run.cardKeys.length < dataset.rows.length) await sleep(60);
       }
 
       if (run.cardKeys.length !== dataset.count || new Set(run.cardKeys.map(x => x.key)).size !== dataset.count) throw new FatalError('通知カードの件数が一致しません');
       const final = dataset.rows[dataset.rows.length - 1];
       if (dataset.confirmationUrl && (!final?.finalMarker || final.url !== dataset.confirmationUrl)) throw new FatalError('末尾の確認用記事が一致しません');
-      for (const entry of run.cardKeys) if (!embedNodes(view).some(hit => cardKey(hit) === entry.key && genuineCard(hit, entry.url))) throw new FatalError('カードの最終確認に失敗しました');
+      let lastPos = -1;
+      for (const entry of run.cardKeys) {
+        const hit = embedNodes(view).find(h => cardKey(h) === entry.key && genuineCard(h, entry.url));
+        if (!hit || hit.pos <= lastPos) throw new FatalError('通知カードの内容または順序の最終確認に失敗しました');
+        lastPos = hit.pos;
+      }
+      await saveCards(run, dataset, '最終保存');
       run.stage = 'cards_ready';
       setJSON(runKey(), run);
-      await saveOnce(`通知カード ${dataset.count}件を保存中…`);
-      setStatus(`通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
-      page.alert(`準備完了\n\n通知カード: ${dataset.count}件\n途中再開対応: ON\n\nそのまま公開/更新。通知後「削」。`);
+      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
+      page.alert(`準備完了\n\n画像: ${imageCount}件（保持）\n通知カード: ${dataset.count}件（保存確認済み）\n\nそのまま公開/更新。通知後「削」。`);
     } catch (error) {
       if (operation) {
         run.cardError = { at: Date.now(), url: run.pendingCard?.url || '', message: error?.message || String(error) };
         setJSON(runKey(), run);
       }
       page.__MUMEI_CARD_SAFETY__?.stop();
-      setStatus(`送信停止 ${run.cardKeys?.length || 0}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
+      setStatus(`${imagesComplete ? `画像 ${dataset.count}/${dataset.count} 完了｜` : ''}通知カード停止 ${run.cardKeys?.length || 0}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
     } finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
   }
 
