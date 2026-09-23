@@ -510,7 +510,7 @@ test('同じsrc＋リンクが複数なら初期化で消さずに記録を保�
   const before=e.encode();await e.module.resetAll();assert.equal(e.encode(),before);assert.ok(e.storage.has('mumei_likers_thin_run_v160:'+key));assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/複数/);
 });
 
-test('完成307枚は1回の開始で40枚ずつ投入し、名前・リンク・実績を確認。カード一括削除後も画像を保持',async()=>{
+test('完成307枚は1回の開始で1枚ずつ投入し、名前・リンク・実績を確認。カード一括削除後も画像を保持',async()=>{
   const e=sending(307);e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,new Doc([new Node('paragraph',{},'守る本文')]).content));
   e.dataset.preparedBatch=true;e.run.images={};
   e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i,preparedBatchId:'test',creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i}}));
@@ -522,7 +522,7 @@ test('完成307枚は1回の開始で40枚ずつ投入し、名前・リンク�
   const batches=[];
   base.setNative((view,files,pos,kind)=>{assert.equal(kind,'image');batches.push(files.length);for(let i=0;i<files.length;i++){const n=new Node('image',{id:'ready'+parseInt(files[i].name),src:'https://assets.st-note.com/'+files[i].name,link:''});n.nodeSize=2;view.dispatch(view.state.tr.insert(pos+1+2*i,n));}return true;});
   await base.insertThinImages();
-  assert.deepEqual(batches,[40,40,40,40,40,40,40,27]);assert.equal(e.safety.index(e.view).images.length,307);
+  assert.deepEqual(batches,Array(307).fill(1));assert.equal(e.safety.index(e.view).images.length,307);
   for(let i=0;i<307;i++){const n=e.safety.tracked(e.view,{id:'ready'+(i+1)}).node;assert.equal(n.textContent,'作者'+i+'さん');assert.equal(n.attrs.link,e.rows[i].url);}
   assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/完成/);
   await e.module.resumableSend();assert.equal(e.safety.index(e.view).embeds.length,307);
@@ -571,4 +571,56 @@ test('#全記事モードは同じ作者の別記事を保持し、URL側の重�
   const duplicate=clone();duplicate.rows[1]={...duplicate.rows[0],index:2};assert.throws(()=>api.validate(duplicate),/重複/);
   const missing=clone();missing.hashtagArticleKeys.pop();assert.throws(()=>api.validate(missing),/全記事/);
   const legacy=clone();delete legacy.hashtagArticleMode;assert.throws(()=>api.validate(legacy),/重複/);
+});
+
+test('実機と同じ200枚済み・旧0/40記録から再開し、署名取得429とネイティブ警告で停止、待機後308枚まで重複なく完了',async()=>{
+  const e=sending(308);
+  e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,new Doc(e.view.state.doc.nodes.slice(0,202)).content));
+  e.dataset.preparedBatch=true;
+  e.run.images=Object.fromEntries(Object.entries(e.run.images).slice(0,200));
+  e.run.pending={workUrls:e.rows.slice(200,240).map(r=>r.url),beforeIds:Array.from({length:200},(_,i)=>'old'+i),at:1,stage:'uploading',runtime:'18.8.3'};
+  e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i,preparedBatchId:'test',creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i}}));
+  e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+  e.page.File=File;e.page.Blob=Blob;e.page.DataTransfer=class{constructor(){this.list=[];this.items={add:f=>this.list.push(f)}}get files(){return this.list}};
+  e.page.__MUMEI_PREPARED_BATCH__={image:async()=>new Blob(['png'],{type:'image/png'})};
+  let requests=0,alertCount=0,active=0,maxActive=0;
+  e.page.fetch=async()=>({status:++requests===3?429:200,statusText:'Too Many Requests',headers:{get:()=>requests===3?'120':null}});
+  e.page.alert=()=>alertCount++;
+  e.loadModule('note-card-creator-v1883.js','caption');
+  const base=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}},setNative(fn){preparedImageCommand=()=>fn}');base.setView(e.view);
+  const attempted=[];
+  base.setNative((view,files,pos)=>{
+    assert.equal(files.length,1);const index=parseInt(files[0].name);attempted.push(index);active++;maxActive=Math.max(maxActive,active);
+    const id='new'+index;view.dispatch(view.state.tr.insert(pos+1,new Node('image',{id,src:'blob:pending',link:''})));
+    void(async()=>{
+      const response=await e.page.fetch('https://note.com/api/v3/images/upload/presigned_post',{method:'POST',body:{entries:function*(){yield ['filename',files[0].name]}}});
+      await new Promise(resolve=>e.page.setTimeout(resolve,1500));
+      const hit=e.safety.tracked(view,{id});
+      if(response.status===429){view.dispatch(view.state.tr.delete(hit.pos,hit.pos+hit.node.nodeSize));e.page.alert('画像のアップロードに失敗しました');}
+      else view.dispatch(view.state.tr.setNodeMarkup(hit.pos,hit.node.type,{...hit.node.attrs,src:'https://assets.st-note.com/'+index+'.png'}));
+      active--;
+    })();return true;
+  });
+  await base.insertThinImages();
+  assert.deepEqual(attempted,[201,202,203]);assert.equal(maxActive,1);assert.equal(alertCount,1);
+  assert.equal(e.safety.index(e.view).images.length,202);
+  assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/HTTP 429/);
+  let run=JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key));assert.equal(run.pending.stage,'failed');assert.ok(run.pending.retryAt>e.time());
+  await base.insertThinImages();assert.equal(attempted.length,3);assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/通信制限待ち/);
+  await new Promise(resolve=>e.page.setTimeout(resolve,120000));
+  await base.insertThinImages();
+  assert.equal(e.safety.index(e.view).images.length,308);assert.equal(attempted.length,109);assert.equal(maxActive,1);
+  run=JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key));assert.equal(Object.keys(run.images).length,308);assert.equal(run.pending,null);
+  for(let i=0;i<308;i++){const hit=e.safety.tracked(e.view,run.images[e.rows[i].url]);assert.equal(hit.node.attrs.link,e.rows[i].url);assert.equal(hit.node.textContent,'作者'+i+'さん');}
+  assert.match(e.encode(),/消さない本文/);assert.ok(e.view.state.doc.nodes.includes(e.existing));
+  assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/308\/308 完成/);
+});
+
+test('HTTPエラーが見えない場合もネイティブ画像失敗警告を記録し30分待ちを終える',async()=>{
+  const e=sending(1);let alerts=0;e.page.alert=()=>alerts++;
+  const api=e.loadModule('note-likers-thin-notify-v160.js','waitNewRemoteImages,setArm(a){imageArm=a}');
+  api.setArm({consumed:true,uploadStartedAt:e.time(),currentUploadStartedAt:e.time()});
+  e.page.alert('画像のアップロードに失敗しました');
+  const start=e.time(),result=await api.waitNewRemoteImages(e.view,new Set(['image0']),1,120000);
+  assert.equal(alerts,1);assert.equal(result.failed,true);assert.equal(result.net.kind,'note-alert');assert.ok(e.time()-start<30000);
 });
