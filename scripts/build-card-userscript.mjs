@@ -19,9 +19,9 @@ export const modules = [
 const publicDir = new URL('../public/', import.meta.url);
 const output = new URL('note-card-batch-bridge-v610.user.js', publicDir);
 const header = `// ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.7
+// @name         無名S note 極薄＋通知 URL/# 18.8.8
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.7
+// @version      18.8.8
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -46,6 +46,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log('Card userscript source/bundle: identical');
   } else {
     writeFileSync(output, build());
-    console.log('Built v18.8.7 standalone card userscript');
+    console.log('Built v18.8.8 standalone card userscript');
   }
 }
