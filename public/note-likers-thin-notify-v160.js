@@ -418,6 +418,13 @@
     noteUrlCommand = candidate;
     return noteUrlCommand;
   }
+  function preparedImageCommand() {
+    const req = webpackRequire(); let command;
+    try { command = req?.(94928)?.CwN; } catch (_) {}
+    // Same native command as note's file-drop handler, inspected against the current editor.
+    const code = typeof command === 'function' ? Function.prototype.toString.call(command) : '';
+    return command?.length === 4 && /Array\.from/.test(code) && /imageUploading/.test(code) && /entries/.test(code) ? command : null;
+  }
   function imageNodes(view) { return safety().index(view).images; }
   function embedNodes(view) { return safety().index(view).embeds; }
   function cardKey(hit) { return String(hit?.node?.attrs?.embeddedContentKey || ''); }
@@ -537,6 +544,12 @@
   async function makeThinFile(row) {
     const cache = page.__MUMEI_THIN_IMAGE_CACHE__;
     const filename = `${String(row.index).padStart(3, '0')}_thin.png`;
+    const prepared = page.__MUMEI_PREPARED_BATCH__;
+    if (row.preparedBatchId) {
+      if (!prepared) throw new FatalError('完成データの読込機能がありません。最新版に更新してください');
+      const blob = await prepared.image(row);
+      return new page.File([blob], filename, { type: 'image/png' });
+    }
     const cached = await cache?.get(row);
     if (cached) return new page.File([cached], filename, { type: 'image/png' });
     const load = async (url, width) => { if (!url) return null; try { return await bitmap(await xhr(url, 'blob', 30000), width); } catch (_) { return null; } };
@@ -634,13 +647,16 @@
 
   async function linkCreatedImages(view, workRows, created, run) {
     if (created.length !== workRows.length) throw new FatalError(`新規画像数不一致 ${created.length}/${workRows.length}`);
+    const ordered = created.map((hit, i) => ({ hit, row: workRows[i] })).sort((a, b) => a.hit.pos - b.hit.pos);
+    created = ordered.map(x => x.hit); workRows = ordered.map(x => x.row);
     const chunkSize = created.length > 40 ? 24 : created.length;
     for (let start = 0; start < created.length; start += chunkSize) {
       let tr = view.state.tr;
       const end = Math.min(start + chunkSize, created.length);
-      for (let i = start; i < end; i += 1) {
-        const hit = created[i], row = workRows[i];
-        tr = safety().relink(view, hit, row.url, tr);
+      for (let i = end - 1; i >= start; i -= 1) {
+        const row = workRows[i], hit = safety().tracked(view, created[i].node.attrs);
+        if (!hit) throw new FatalError("画像の対応を確認できません");
+        tr = page.__MUMEI_CARD_CREATOR__ ? page.__MUMEI_CARD_CREATOR__.apply(view, hit, row, tr) : safety().relink(view, hit, row.url, tr);
       }
       view.dispatch(tr);
       setStatus(`画像🔗付与 ${end}/${created.length}…`);
@@ -652,6 +668,7 @@
       const hit = (createdId ? afterIndex.byId.get(createdId) : null) ||
         after.find((entry) => normalizeUrl(entry.node.attrs?.link) === normalizeUrl(row.url) && remoteImage(entry.node));
       if (!hit || normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) throw new FatalError(`画像🔗確認NG: ${row.index}`);
+      if (page.__MUMEI_CARD_CREATOR__ && hit.node.textContent !== page.__MUMEI_CARD_CREATOR__.caption(row)) throw new FatalError(`キャプション確認NG: ${row.index}`);
       run.images[row.url] = { id: String(hit.node.attrs?.id || ''), src: String(hit.node.attrs?.src || '') };
     }
     setRun(run);
@@ -766,8 +783,9 @@
   }
   async function injectImageInput(input) {
     const arm = imageArm;
-    if (!arm || arm.consumed || !imageInput(input)) return false;
+    if (!arm || arm.consumed || !(arm.nativeCommand || imageInput(input))) return false;
     arm.consumed = true;
+    arm.nativeInput = input;
     arm.phase = '画像投入';
     if (arm.timer) clearTimeout(arm.timer);
     arm.timer = null;
@@ -777,11 +795,17 @@
     try {
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.2' };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.3' };
       setRun(arm.run);
-      input.files = transfer.files;
-      input.dispatchEvent(new page.Event('input', { bubbles: true }));
-      input.dispatchEvent(new page.Event('change', { bubbles: true }));
+      if (arm.nativeCommand) {
+        const pos = arm.view.state.selection.from;
+        if (!Number.isInteger(pos) || pos < 1) throw new FatalError('画像の挿入位置を確認できません');
+        if (arm.nativeCommand(arm.view, transfer.files, pos - 1, 'image') !== true) throw new FatalError('noteの正規画像処理が開始されませんでした');
+      } else {
+        input.files = transfer.files;
+        input.dispatchEvent(new page.Event('input', { bubbles: true }));
+        input.dispatchEvent(new page.Event('change', { bubbles: true }));
+      }
       const inserted = imageNodes(arm.view).filter(hit => hit.node.attrs?.id && !arm.beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
       if (inserted.length === arm.workRows.length) { arm.run.pending.slots = inserted.map(hit => String(hit.node.attrs.id)); setRun(arm.run); }
       arm.phase = 'アップロード';
@@ -822,7 +846,7 @@
       }
       arm.resolve(true);
     } catch (error) {
-      recordUploadDiag({ runtime: '18.8.2', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
+      recordUploadDiag({ runtime: '18.8.3', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
       const failure = new FatalError(`${arm.phase}｜開始時${doneBefore}枚｜${error?.message || String(error)}`);
       failure.cause = error; arm.reject(failure);
     } finally {
@@ -954,8 +978,21 @@
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
       operation = safety().begin('画像作成', view);
       selectionApi();
+      if (page.__MUMEI_CARD_CREATOR__) {
+        await page.__MUMEI_CARD_CREATOR__.verifyRows(dataset.rows, (n, total) => setStatus(`投稿者名の照合 ${n}/${total}…`));
+        setJSON(DATA_KEY, dataset);
+        const oldRows = [], oldImages = [];
+        for (const row of dataset.rows) {
+          const hit = findImageByState(view, run.images?.[row.url], row.url);
+          if (hit && remoteImage(hit.node) && hit.node.textContent !== row.caption) { oldRows.push(row); oldImages.push(hit); }
+        }
+        if (oldRows.length) await linkCreatedImages(view, oldRows, oldImages, run);
+      }
       if (run.pending) await recoverPending(view, dataset, run);
       optimizeUploadedImages(view, run);
+      const nativeCommand = dataset.preparedBatch ? preparedImageCommand() : null;
+      let reusableInput = null;
+      for (;;) {
       const completedNow = verifiedImageCount(view, dataset, run);
       const missing = missingRows(view, dataset, run);
       if (!missing.length) {
@@ -963,7 +1000,7 @@
         await saveOnce('極薄画像の保存状態を確認中…');
         setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
       }
-      const workRows = missing.slice(0, IMAGE_CHUNK);
+      const workRows = missing.slice(0, dataset.preparedBatch ? 40 : IMAGE_CHUNK);
       setStatus(`極薄画像 ${workRows.length}枚を生成中…`);
       const files = await mapLimit(workRows, 4, async (row, index) => {
         if (safety().stopped()) throw new FatalError('画像準備を停止しました');
@@ -976,21 +1013,28 @@
       ensureEndSelection(view);
       const completion = new Promise((resolve, reject) => {
         imageArm = {
-          dataset, run, view, workRows, files, resolve, reject,
+          dataset, run, view, workRows, files, resolve, reject, nativeCommand,
           consumed: false, nativeMenuReady: false, nativeImageChoice: null, menuProbeScheduled: false, imageChoiceSelected: false,
           beforeIds: new Set(imageNodes(view).map((hit) => String(hit.node.attrs?.id || '')).filter(Boolean)),
           beforeInputs: new Set(document.querySelectorAll('input[type="file"]'))
         };
       });
       installImageInputBridge();
-      imageArm.timer = setTimeout(() => imageArm?.reject(new FatalError('画像選択待機が10分を超えました')), 600000);
+      if (!nativeCommand) imageArm.timer = setTimeout(() => imageArm?.reject(new FatalError('画像選択待機が10分を超えました')), 600000);
       setStatus(`${workRows.length}枚 準備OK｜note本文の「＋」→「画像」を1回`);
+      if (nativeCommand) { setStatus(`完成画像 ${completedNow + 1}〜${completedNow + workRows.length}/${dataset.count}を投入中…`); void injectImageInput(null); }
+      else if (dataset.preparedBatch && reusableInput?.isConnected && imageInput(reusableInput)) void injectImageInput(reusableInput);
       await completion;
+      reusableInput = imageArm?.nativeInput || null;
+      cancelImageArm();
       if (safety().stopped()) { setStatus('画像投入と保存を終えて停止しました。続きは「画」'); return; }
       const left = missingRows(view, dataset, run).length;
       const completedAfter = dataset.count - left;
       if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → 同じ画面のまま「画」で続行`);
-      else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
+      else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗＋名前さん ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
+      if (!dataset.preparedBatch || !left) break;
+      await sleep(80);
+      }
     } catch (error) {
       page.__MUMEI_CARD_SAFETY__?.stop();
       setStatus(`画像停止：${error?.message || String(error)}（「画」で再開）`, true);
