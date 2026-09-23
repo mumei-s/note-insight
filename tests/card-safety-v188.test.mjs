@@ -33,7 +33,7 @@ class Tr {
   setSelection() { return this; }
 }
 function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest: InitialXHR, nodes = [new Node('paragraph', {}, '本文'.repeat(348) + '。')] } = {}) {
-  let time = 100000, quota = false;
+  let time = 100000, quota = false, savedDraft = null;
   const events = new Map(), documentEvents = new Map();
   const statuses = new Map(['mumei-note-source-status-v163', 'mumei-likers-thin-status-v160'].map(id => [id, { textContent: '', dataset: {} }]));
   statuses.set('mumei-note-source-picker-v163', { querySelectorAll: () => [], querySelector: () => null });
@@ -71,13 +71,15 @@ function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest:
   vm.runInContext(source('note-card-safety-v188.js'), ctx);
   const safety = page.__MUMEI_CARD_SAFETY__;
   safety.attach(view); safety.setSerializer(v => JSON.stringify(v.state.doc.toJSON()));
+  safety.setDraftParser?.(n => view.state.schema.nodeFromJSON(JSON.parse(n.body)));
+  if (!initialFetch) page.fetch = async () => ({ status: savedDraft ? 200 : 404, json: async () => ({ data: savedDraft }), clone: () => ({ json: async () => ({ data: savedDraft }) }) });
   const encode = () => JSON.stringify(view.state.doc.toJSON());
-  function succeed() { const ticket = safety.requestStart('PUT', '/api/v1/text_notes/' + key, JSON.stringify({ body: encode() })); safety.requestEnd(ticket, 200, { data: {} }); }
+  function succeed() { savedDraft = {key, id:4321, name:title.value, body:encode()}; const ticket = safety.requestStart('PUT', '/api/v1/text_notes/' + key, JSON.stringify({ body: encode() })); safety.requestEnd(ticket, 200, { data: {} }); }
   function loadModule(name, exports) {
     const text = source(name).replace(/\}\)\(\);\s*$/, 'page.__test = {' + exports + '};\n})();');
     vm.runInContext(text, ctx); return page.__test;
   }
-  return { page, safety, view, storage, title, button, statuses, observers, documentEvents, ctx, loadModule, succeed, encode, quota: value => { quota = value; }, time: () => time };
+  return { page, safety, view, storage, title, button, statuses, observers, documentEvents, ctx, loadModule, succeed, encode, setSavedDraft: value => { savedDraft = value; }, savedDraft: () => savedDraft, quota: value => { quota = value; }, time: () => time };
 }
 const image = (id = 'i1', link = '') => new Node('image', { id, src: 'https://assets.st-note.com/' + id + '.png', link });
 const embed = (id, url) => new Node('embed', { embeddedContentKey: id, src: url, htmlForEmbed: '<div class="note-embed"></div>' });
@@ -189,6 +191,39 @@ test('ID以外の本文・画像・リンク・カードキーの変更は保存
     await assert.rejects(e.safety.save(e.view, '保存中'), /本文が変わりました/, kind);
   }
 });
+test('保存応答の監視が間に合わなくても下書きの読戻し一致で保存確認できる', async () => {
+  let saved;
+  const e = environment({ fetch: async () => ({ status: 200, json: async () => ({ data: saved }), clone: () => ({ json: async () => ({ data: saved }) }) }) });
+  e.safety.setDraftParser?.(n => e.view.state.schema.nodeFromJSON(JSON.parse(n.body)));
+  e.button.click = () => { saved = { key, id: 4321, name: e.title.value, body: e.encode() }; };
+  assert.equal(await e.safety.save(e.view, '全310件の🔗を保存中…'), true);
+});
+test('保存側の画像既定値は現在本文も同じ解析を通して比較する', async () => {
+  const e = environment({ nodes: [image('i1')] });
+  const parser = n => {
+    const doc = JSON.parse(n.body); for (const node of doc.content) if (node.type === 'image' && node.attrs.width == null) node.attrs.width = 620;
+    return e.view.state.schema.nodeFromJSON(doc);
+  };
+  e.safety.setDraftParser(parser);
+  const draft = JSON.parse(e.encode()); draft.content[0].attrs.width = 620;
+  e.setSavedDraft({ key, id: 4321, name: e.title.value, body: JSON.stringify(draft) });
+  assert.equal((await e.safety.readDraft(e.view)).matches, true);
+});
+test('15秒を越えて到着する保存応答も待ち、保存操作を重ねて送らない', async () => {
+  const e = environment(); let clicks = 0, respond;
+  const timer = e.page.setTimeout; e.page.setTimeout = (fn, ms) => timer(() => { if (e.time() >= 120000) respond?.(); fn(); }, ms);
+  e.button.click = () => { clicks++; respond = e.succeed; };
+  assert.equal(await e.safety.save(e.view, '保存中'), true); assert.equal(clicks, 1); assert.ok(e.time() >= 120000);
+});
+test('別記事・古い本文・別タイトルを読み戻しても保存成功にしない', async () => {
+  for (const kind of ['other', 'old', 'title']) {
+    let saved;
+    const e = environment({ fetch: async () => ({ status: 200, json: async () => ({ data: saved }), clone: () => ({ json: async () => ({ data: saved }) }) }) });
+    e.safety.setDraftParser?.(n => e.view.state.schema.nodeFromJSON(JSON.parse(n.body)));
+    saved = { key: kind === 'other' ? 'nffffffffffff' : key, id: 4321, name: kind === 'title' ? '別タイトル' : e.title.value, body: kind === 'old' ? JSON.stringify(new Doc([new Node('paragraph', {}, '古い本文')]).toJSON()) : e.encode() };
+    await assert.rejects(e.safety.save(e.view, '保存中'), /保存完了を確認できません/);
+  }
+});
 test('3000枚の画像検証は本文を1回だけ走査し変更後だけ再走査', () => {
   const e = environment({ nodes: Array.from({ length: 3000 }, (_, i) => image('image' + i)) }); const doc = e.view.state.doc;
   for (let i = 0; i < 3000; i++) assert.equal(e.safety.tracked(e.view, { id: 'image' + i }).node.attrs.id, 'image' + i);
@@ -203,7 +238,7 @@ function sending(count = 3) {
   const dataset = { version: '16.0.0', sourceKey: 'n08825c632afd', datasetId: 'd1', count, rows, confirmationUrl: rows.at(-1).url };
   const run = { version: '16.0.0', articleKey: key, datasetId: 'd1', images: Object.fromEntries(rows.map((r, i) => [r.url, { id: 'image' + i, src: nodes[i + 2].attrs.src }])), cardKeys: [] };
   e.storage.set('mumei_likers_thin_dataset_v160', JSON.stringify(dataset)); e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(run));
-  const module = e.loadModule('note-source-picker-v163.js', 'syncBaseStatus, resumableSend, resetAll, deleteLastExactUrl, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
+  const module = e.loadModule('note-source-picker-v163.js', 'syncBaseStatus, resumableSend, resetAll, deleteLastExactUrl, auditDocuments, checkAllCards, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
   module.setView(e.view); let calls = 0;
   module.setCommand(url => (state, dispatch) => {
     calls++;
@@ -231,6 +266,32 @@ test('310件の通知カードを10件ごとのID正規化・遅延保存を経�
   assert.match(e.encode(), /消さない本文/);
   assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
   await e.module.resumableSend(); assert.equal(e.calls(), 310); assert.equal(saves, 31);
+});
+test('保存済み下書きに1枚足りなければ全件完成扱いにしない', async () => {
+  const e = sending(3); const succeed = e.succeed;
+  e.button.click = () => { succeed(); const n = e.savedDraft(), doc = JSON.parse(n.body); doc.content = doc.content.filter(x => x.attrs?.embeddedContentKey !== 'emb2'); e.setSavedDraft({ ...n, body: JSON.stringify(doc) }); };
+  await e.module.resumableSend();
+  const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.notEqual(run.stage, 'cards_ready'); assert.equal(run.cardAudit.savedCards, 2);
+  assert.equal(run.cardAudit.complete, false); assert.equal(run.cardAudit.rows[1].savedCard, false);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /全件確認が未完了/);
+});
+test('全件確認は本文を変更せず、画像だけ・未記録・重複・順序・保存不足を区別する', async () => {
+  const e = sending(3); let a = e.module.auditDocuments(e.view, e.dataset, e.run, null);
+  assert.equal(a.images, 3); assert.equal(a.cards, 0); assert.equal(a.complete, false);
+  await e.module.resumableSend(); const before = e.encode(); await e.module.checkAllCards(); assert.equal(e.encode(), before);
+  let run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)); assert.equal(run.cardAudit.complete, true);
+  const cards = e.safety.index(e.view).embeds;
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, cards[0].node));
+  a = e.module.auditDocuments(e.view, e.dataset, run, null); assert.equal(a.duplicates, 1); assert.equal(a.complete, false);
+  e.view.dispatch(e.view.state.tr.delete(e.view.state.doc.content.size - cards[0].node.nodeSize, e.view.state.doc.content.size));
+  run.cardKeys = []; a = e.module.auditDocuments(e.view, e.dataset, run, { doc: e.view.state.doc, matches: true });
+  assert.equal(a.cards, 3); assert.equal(a.recorded, 0); assert.equal(a.complete, false);
+  run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  const first = e.safety.index(e.view).embeds[0];
+  e.view.dispatch(e.view.state.tr.delete(first.pos, first.pos + first.node.nodeSize).insert(e.view.state.doc.content.size - first.node.nodeSize, first.node));
+  a = e.module.auditDocuments(e.view, e.dataset, run, { doc: e.view.state.doc, matches: true });
+  assert.equal(a.cards, 3); assert.equal(a.order, false); assert.equal(a.complete, false);
 });
 test('実際の送処理: 途中停止は現在のカードを保存し次の操作で残件だけ作る', async () => {
   const e = sending(3); let calls = 0;
@@ -461,13 +522,14 @@ test('実際の初期化: 生成画像・カードだけを削除し本文と通
   assert.equal(e.safety.index(e.view).images.length, 1); assert.equal(e.safety.index(e.view).embeds.length, 0);
   assert.equal(e.storage.has('mumei_likers_thin_run_v160:' + key), false); assert.ok(e.safety.backups().find(x => x.slot === 'before').item.images >= 4);
 });
-test('500件の固定待ち時間を短縮し、全件確認と本文保持を行う', async () => {
+test('500件を1件ずつ待機し、10件ごとの保存と全件確認を行う', async () => {
   const e = sending(500); let saves = 0; e.button.click = () => { saves++; e.succeed(); };
   const started = e.time(); await e.module.resumableSend();
   assert.equal(e.calls(), 500); assert.equal(e.safety.index(e.view).embeds.length, 500); assert.ok(e.view.state.doc.nodes.includes(e.existing));
   const elapsed = e.time() - started; assert.equal(saves, 50);
   // Each verified native save polls its synchronous test response after 100 ms.
-  assert.ok(elapsed - saves * 100 < 32000, String(elapsed));
+  assert.ok(elapsed - saves * 100 >= 499 * 1200, String(elapsed));
+  assert.ok(elapsed - saves * 100 < 499 * 1200 + 3000, String(elapsed));
 });
 test('配布対象コードには自動再読み込み・自動遷移が存在しない', () => {
   for (const name of ['note-card-safety-v188.js','note-likers-thin-notify-v160.js','note-source-picker-v163.js','note-link-guard-v178.js','note-start-clean-v177.js','note-prince-special-v184.js','note-generic-stability-v187.js','note-generic-controls-v189.js']) {

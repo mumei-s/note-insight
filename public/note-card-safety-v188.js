@@ -6,7 +6,7 @@
   const PANEL = 'mumei-note-source-picker-v163';
   let active = null, view = null, viewKey = '', lastDoc = null, confirmedDoc = null;
   let stopped = false, error = '', captureTimer = null, previousAt = 0, lastTitle = null;
-  let serializer = null, confirmedTitle = null;
+  let serializer = null, draftParser = null, confirmedTitle = null;
   const noteIdentity = new Map(), loadedDraft = new Map();
   const owner = Date.now().toString(36) + Math.random().toString(36).slice(2);
   const leaseKey = () => PREFIX + key() + ':lease';
@@ -288,6 +288,38 @@
     };
     return JSON.stringify(visit(doc.toJSON()));
   }
+  async function readDraft(v = view) {
+    check(v);
+    if (typeof page.fetch !== 'function') throw new Error('保存済み下書きを読み取れません');
+    const article = key(), target = v;
+    const controller = typeof page.AbortController === 'function' ? new page.AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+    try {
+      const url = 'https://note.com/api/v3/notes/' + article + '?draft=true&_card_verify=' + Date.now();
+      const response = await page.fetch(url, { credentials: 'include', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) });
+      const payload = await response.json(), n = payload?.data;
+      check(target);
+      if (key() !== article || response.status < 200 || response.status >= 300 || failedPayload(payload) ||
+          n?.key !== article || !/^\d+$/.test(String(n.id || '')) || typeof n.body !== 'string' || typeof n.name !== 'string') {
+        throw new Error('現在の記事の保存済み下書きを確認できません');
+      }
+      observeNoteResponse(url, response.status, payload);
+      const doc = draftParser ? draftParser(n) : null;
+      const html = serializer?.(target);
+      let sameBody = n.body === html;
+      if (!sameBody && doc && typeof html === 'string') {
+        // Compare both sides after note's own HTML parser. It supplies defaults
+        // such as image width and nullable embed attributes on reopening.
+        const embeddedContents = [];
+        target.state.doc.descendants(node => { if (node.attrs?.embeddedContentKey) embeddedContents.push({ key: node.attrs.embeddedContentKey, htmlForEmbed: node.attrs.htmlForEmbed }); });
+        const currentDoc = draftParser({ body: html, embeddedContents });
+        sameBody = contentWithoutBlockIds(doc) === contentWithoutBlockIds(currentDoc);
+      }
+      const matches = n.name === (titleNode()?.value ?? null) && sameBody;
+      if (matches) { confirmedDoc = target.state.doc; confirmedTitle = n.name; }
+      return { doc, matches: Boolean(matches), at: Date.now(), articleKey: article };
+    } finally { if (timer !== null) clearTimeout(timer); }
+  }
   async function save(v, label) {
     check(v); capture(); status(label);
     let expected = v.state.doc, expectedContent = null;
@@ -296,6 +328,7 @@
     const loaded = loadedDraft.get(key());
     if (loaded && loaded.title === expectedTitle && loaded.body === serializer?.(v)) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
     let uiConfirmed = false, savingSeen = false, clicked = false, nativeError = null, nativePending = false;
+    let reading = false, lastRead = 0, readError = '', seconds = -1, waiting = true;
     const observer = new MutationObserver(records => {
       for (const record of records) {
         const candidates = record.type === 'characterData' ? [record.target] : [...record.addedNodes];
@@ -311,7 +344,8 @@
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     try {
-      const deadline = Date.now() + 15000;
+      const started = Date.now(), deadline = started + 60000;
+      lastRead = started;
       while (Date.now() < deadline) {
         check(v);
         if (nativeError) throw new Error('noteの下書き保存に失敗しました：' + (nativeError.message || String(nativeError)));
@@ -325,6 +359,14 @@
           throw new Error('保存確認中に本文が変わりました。控えを残して停止しました');
         }
         if ((confirmedDoc === expected && confirmedTitle === expectedTitle) || uiConfirmed) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
+        const elapsed = Math.floor((Date.now() - started) / 1000);
+        if (elapsed !== seconds) { seconds = elapsed; status(label + `（保存確認 ${elapsed}秒）`); }
+        if (!reading && Date.now() - lastRead >= 5000 && typeof page.fetch === 'function') {
+          reading = true; lastRead = Date.now();
+          void readDraft(v).then(result => { if (waiting) readError = result.matches ? '' : '下書きは現在の本文とまだ一致していません'; })
+            .catch(e => { if (waiting) readError = e?.name === 'AbortError' ? '下書きの読戻しがタイムアウトしました' : (e?.message || String(e)); })
+            .finally(() => { reading = false; });
+        }
         if (!clicked) {
           const button = [...document.querySelectorAll('button')].find(b => /^(一時保存|下書き保存)$/.test(b.textContent?.trim()) && b.getClientRects().length && !b.disabled);
           if (button) { clicked = true; button.click(); }
@@ -341,8 +383,8 @@
         }
         await sleep(100);
       }
-      throw new Error('noteの保存完了を確認できません。本文の控えは保存済みです。noteの保存表示を確認後、同じ操作で再開してください');
-    } finally { observer.disconnect(); }
+      throw new Error('noteの保存完了を確認できません。' + (readError ? readError + '。' : '') + '本文の控えは保存済みです。「全件確認」で保存状況を確認できます');
+    } finally { waiting = false; observer.disconnect(); }
   }
   function restore(item) {
     check(view);
@@ -397,11 +439,11 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.11</span>';
-    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.12</span>';
+    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
-    setSerializer: fn => { serializer = fn; },
+    setSerializer: fn => { serializer = fn; }, setDraftParser: fn => { draftParser = fn; }, readDraft,
     busy: () => Boolean(active), stopped: () => stopped, stop, status, requestStart, requestEnd };
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
