@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.13
+// @name         無名S note 極薄＋通知 URL/# 18.8.14
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.13
+// @version      18.8.14
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -460,7 +460,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.13</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.14</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
@@ -476,6 +476,113 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopped = true; try { capture(); } catch (_) {} } });
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
   setInterval(() => { if (active && active.key === key() && read(leaseKey())?.owner === owner) localStorage.setItem(leaseKey(), JSON.stringify({ owner, until: Date.now() + 30000 })); }, 10000);
+})();
+
+// MODULE: note-card-visible-v18814.js
+(function () {
+  'use strict';
+  const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const pending = new Map();
+  const rendered = new WeakMap(), refreshed = new WeakSet();
+  page.addEventListener('message', event => {
+    if (event.origin !== 'https://note.com' || !event.source) return;
+    const parts = String(event.data).split('::'), height = Number(parts[2]);
+    if (parts[0] === 'height' && height >= 80 && height <= 4000) rendered.set(event.source, height);
+  });
+  let generation = 0;
+  const keyOf = url => { try { const u = new URL(url); return u.origin === 'https://note.com' && u.pathname.match(/^\/(?:[a-z0-9_]+\/n|embed\/notes)\/(n[a-f0-9]{12})\/?$/i)?.[1] || ''; } catch (_) { return ''; } };
+  const article = () => page.location.pathname.match(/\/(n[a-f0-9]{12})(?:\/|$)/i)?.[1] || '';
+  function parsed(html, url) {
+    const holder = document.createElement('div'); holder.innerHTML = String(html || '');
+    const frames = [...holder.querySelectorAll('iframe')];
+    if (!keyOf(url) || frames.length !== 1 || keyOf(frames[0].getAttribute('src')) !== keyOf(url) || !frames[0].classList.contains('note-embed')) throw new Error('noteカードの表示内容と対象URLが一致しません');
+    return { holder, frame: frames[0] };
+  }
+  function usableHtml(html, url) {
+    const { holder, frame } = parsed(html, url);
+    // Keep the official iframe and key. Only repair an invisible height on
+    // tool-owned cards; never substitute an image or fabricate an embed key.
+    const height = Number.parseFloat(frame.getAttribute('height'));
+    const inline = Number.parseFloat(frame.style.height);
+    if (!(height >= 80) || (Number.isFinite(inline) && inline < 80)) {
+      frame.setAttribute('height', '360'); frame.style.removeProperty('height');
+    }
+    return holder.innerHTML;
+  }
+  function factory(req) {
+    const api = req(13550)?.MI;
+    if (typeof api !== 'function' || !Function.prototype.toString.call(api).includes('/v1/embed')) throw new Error('note公式カード登録処理を取得できません');
+    return (url, onError = () => {}) => (state, dispatch, view) => {
+      const sourceKey = article(), targetKey = keyOf(url);
+      if (!sourceKey || !targetKey) throw new Error('カードの対象記事を確認できません');
+      let raw = null;
+      state.doc.forEach((node, pos) => { if (node.type.name !== 'paragraph' || node.textContent) raw = { node, pos }; });
+      if (!raw || raw.node.type.name !== 'paragraph' || raw.node.textContent !== url) throw new Error('作業用URLを確認できません');
+      const id = sourceKey + ':' + url;
+      const ownGeneration = generation;
+      if (!pending.has(id)) {
+        const form = new page.FormData();
+        form.append('url', url); form.append('height', '360'); form.append('embeddable_type', 'Note'); form.append('embeddable_key', sourceKey);
+        // Use note's authenticated client, exactly as its URL command does.
+        // Do not wait for the global, unscoped iframe-height listener.
+        const request = Promise.resolve().then(() => api(form)).then(result => {
+          const e = result?.embeddedContent;
+          if (!e || !/^emb[a-z0-9]+$/i.test(e.key) || String(e.service).toLowerCase() !== 'note' || e.identifier !== targetKey || (e.url && keyOf(e.url) !== targetKey)) throw new Error('note公式カード応答が対象記事と一致しません');
+          return { src: url, style: '', htmlForEmbed: usableHtml(e.htmlForEmbed, url), identifier: targetKey, embeddedService: e.service, embeddedContentKey: e.key };
+        });
+        pending.set(id, request); request.catch(() => { if (pending.get(id) === request) pending.delete(id); });
+      }
+      pending.get(id).then(attrs => {
+        if (generation !== ownGeneration || article() !== sourceKey || !view.dom?.isConnected) return;
+        let hit = null;
+        view.state.doc.forEach((node, pos) => { if (node === raw.node) hit = { node, pos }; });
+        if (!hit) return; // A stopped/older attempt cannot replace another node.
+        dispatch(view.state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, view.state.schema.nodes.embed.create(attrs)));
+      }).catch(onError);
+      return true;
+    };
+  }
+  function inspect(view, hit, url) {
+    try {
+      parsed(hit.node.attrs.htmlForEmbed, url);
+      const dom = view.nodeDOM(hit.pos), figure = dom?.matches?.('figure') ? dom : dom?.querySelector?.('figure[embedded-content-key]');
+      if (!figure || !view.dom.contains(figure) || figure.getAttribute('embedded-content-key') !== hit.node.attrs.embeddedContentKey) return false;
+      const frame = figure.querySelector('iframe.note-embed');
+      if (!frame || keyOf(frame.getAttribute('src')) !== keyOf(url) || !rendered.has(frame.contentWindow)) return false;
+      const bounds = frame.getBoundingClientRect(), style = page.getComputedStyle(frame);
+      return bounds.width >= 80 && bounds.height >= 80 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') !== 0;
+    } catch (_) { return false; }
+  }
+  async function wait(view, hit, url) {
+    const old = hit.node.attrs.htmlForEmbed, fixed = usableHtml(old, url);
+    if (fixed !== old) page.__MUMEI_CARD_SAFETY__.dispatch(view, view.state.tr.setNodeMarkup(hit.pos, hit.node.type, { ...hit.node.attrs, htmlForEmbed: fixed }), [hit.node]);
+    const started = Date.now(), until = started + 45000;
+    const label = document.getElementById('mumei-note-source-status-v163')?.textContent || 'カード表示確認';
+    let shown = -1;
+    while (Date.now() < until) {
+      const current = page.__MUMEI_CARD_SAFETY__.index(view).embeds.find(h => h.node.attrs.embeddedContentKey === hit.node.attrs.embeddedContentKey);
+      // note updates iframe heights asynchronously. Keep only this verified,
+      // tool-owned frame from collapsing again; this does not alter saved HTML.
+      if (current) {
+        const dom = view.nodeDOM?.(current.pos), frame = dom?.querySelector?.('iframe.note-embed');
+        if (frame && keyOf(frame.getAttribute('src')) === keyOf(url)) {
+          frame.style.minHeight = '80px';
+          // A frame restored before the listener was installed gets one reload
+          // of its own preview only. No new embed registration or body rewrite.
+          if (!rendered.has(frame.contentWindow) && Date.now() - started > 10000 && !refreshed.has(frame)) {
+            refreshed.add(frame); frame.setAttribute('src', frame.getAttribute('src'));
+          }
+        }
+      }
+      if (current && inspect(view, current, url)) return current;
+      if (page.__MUMEI_CARD_SAFETY__.stopped()) throw new Error('表示確認を停止しました。途中のカードは保持しています');
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      if (seconds !== shown) { shown = seconds; page.__MUMEI_CARD_SAFETY__.status(label + `（表示応答待ち ${seconds}秒）`); }
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+    throw new Error('カードの本文表示を確認できません。件数を進めず保持しました');
+  }
+  page.__MUMEI_CARD_VISIBLE__ = { factory, inspect, wait, cancel() { generation++; pending.clear(); } };
 })();
 
 // MODULE: note-thin-image-cache-v1882.js
@@ -2418,6 +2525,7 @@
     if (typeof noteUrlCommand === 'function') return noteUrlCommand;
     const req = webpackRequire();
     if (!req) throw new FatalError('note内部URL処理を取得できません');
+    if (page.__MUMEI_CARD_VISIBLE__) return (noteUrlCommand = page.__MUMEI_CARD_VISIBLE__.factory(req));
     let mod;
     try { mod = req(94928); } catch (_) {}
     let candidate = typeof mod?.fjT === 'function' ? mod.fjT : null;
@@ -2558,7 +2666,7 @@
       safety().check(view);
       if (safety().stopped()) throw new FatalError('停止要求：処理中の1件は未確認です。完成分と途中記録を保持しました');
       const second = Math.floor((Date.now() - started) / 1000);
-      if (attempt.progress && second !== shownSecond) { shownSecond = second; setStatus(`画像 ${attempt.images}/${attempt.images} 完了｜通知カード ${attempt.progress} noteの変換待ち ${second}秒…`); }
+      if (attempt.progress && second !== shownSecond) { shownSecond = second; setStatus(`画像 ${attempt.images}/${attempt.images} 完了｜通知カード確認済み ${attempt.completed}｜処理中 ${attempt.progress}・登録待ち ${second}秒…`); }
       await sleep(80);
     }
     return null;
@@ -2632,7 +2740,8 @@
       const cards = list => list.filter(h => !baseline.has(cardKey(h)) && genuineCard(h, row.url));
       const a = images(current.images), b = cards(current.cards), c = images(stored.images), d = cards(stored.cards);
       const recorded = b.length === 1 && tracked?.key === cardKey(b[0]);
-      return { index: i + 1, url: row.url, image: a.length === 1, card: b.length === 1, recorded,
+      const displayed = b.length === 1 && (!page.__MUMEI_CARD_VISIBLE__ || page.__MUMEI_CARD_VISIBLE__.inspect(view, b[0], row.url));
+      return { index: i + 1, url: row.url, image: a.length === 1, card: b.length === 1, recorded, displayed,
         savedImage: c.length === 1, savedCard: d.length === 1 && recorded && cardKey(d[0]) === tracked.key,
         duplicates: a.length > 1 || b.length > 1 || c.length > 1 || d.length > 1,
         cardPos: b.length === 1 ? b[0].pos : -1, savedPos: d.length === 1 ? d[0].pos : -1 };
@@ -2640,17 +2749,17 @@
     const count = field => rows.filter(r => r[field]).length;
     const order = field => rows.every((r, i) => r[field] >= 0 && (!i || r[field] > rows[i - 1][field]));
     const confirmation = !dataset.confirmationUrl || (dataset.rows.at(-1)?.finalMarker && dataset.rows.at(-1).url === dataset.confirmationUrl);
-    const result = { at: Date.now(), target: dataset.count, images: count('image'), cards: count('card'), recorded: count('recorded'),
-      savedImages: count('savedImage'), savedCards: count('savedCard'), missing: rows.filter(r => !r.image || !r.card || (saved?.doc && (!r.savedImage || !r.savedCard))).length,
+    const result = { at: Date.now(), target: dataset.count, images: count('image'), cards: count('card'), displayed: count('displayed'), recorded: count('recorded'),
+      savedImages: count('savedImage'), savedCards: count('savedCard'), missing: rows.filter(r => !r.image || !r.card || !r.displayed || (saved?.doc && (!r.savedImage || !r.savedCard))).length,
       duplicates: count('duplicates'), order: order('cardPos'), savedOrder: order('savedPos'), confirmation: Boolean(confirmation),
       savedDocumentMatches: Boolean(saved?.matches), savedRead: Boolean(saved?.doc), error: saved?.error || '', rows };
     result.complete = rows.length === dataset.count && new Set(rows.map(r => r.url)).size === dataset.count &&
       [result.images, result.cards, result.recorded, result.savedImages, result.savedCards].every(n => n === dataset.count) &&
-      result.duplicates === 0 && result.order && result.savedOrder && result.confirmation && result.savedDocumentMatches;
+      result.displayed === dataset.count && result.duplicates === 0 && result.order && result.savedOrder && result.confirmation && result.savedDocumentMatches;
     return result;
   }
   function auditSummary(a) {
-    return `画像 ${a.images}/${a.target}｜通知カード ${a.cards}/${a.target}｜保存 ${a.savedRead ? a.savedCards + '/' + a.target : '未確認'}｜不足 ${a.missing}・重複 ${a.duplicates}` + (a.cards > a.recorded ? `・記録未照合 ${a.cards - a.recorded}` : '');
+    return `画像 ${a.images}/${a.target}｜通知カード ${a.cards}/${a.target}｜本文表示 ${a.displayed}/${a.target}｜保存 ${a.savedRead ? a.savedCards + '/' + a.target : '未確認'}｜不足 ${a.missing}・重複 ${a.duplicates}` + (a.cards > a.recorded ? `・記録未照合 ${a.cards - a.recorded}` : '');
   }
   async function auditCurrent(view, dataset, run) {
     setStatus('全件確認：noteに保存済みの下書きを読み直しています…');
@@ -2679,6 +2788,55 @@
   }
   page.__MUMEI_CARD_AUDIT__ = { check: checkAllCards };
 
+  async function deleteCardsOnly() {
+    if (busy || safety().busy() || !enabled()) return;
+    const run = currentBaseRun();
+    if (!run) { setStatus('今回の通知カード記録は0件です'); return; }
+    let operation; setBusy(true);
+    try {
+      const view = findView();
+      if (!view) throw new FatalError('編集画面の準備を待ってください');
+      operation = safety().begin('通知カード一括削除', view);
+      activeConversion = null;
+      page.__MUMEI_CARD_VISIBLE__?.cancel();
+      const entries = run.cardKeys || [], wanted = new Set(entries.map(e => e.key)), baseline = new Set(run.cardBaselineKeys || []);
+      if ([...wanted].some(k => baseline.has(k))) throw new FatalError('元のカードと削除記録が重なっています。本文を保持しました');
+      const hits = embedNodes(view).filter(h => wanted.has(cardKey(h)));
+      for (const hit of hits) if (!genuineCard(hit, entries.find(e => e.key === cardKey(hit)).url)) throw new FatalError('削除対象の記事が記録と一致しません');
+      const pending = run.pendingCard;
+      if (pending) {
+        if (!Array.isArray(pending.beforeKeys)) throw new FatalError('途中カードの記録を確認できません');
+        const unfinished = embedNodes(view).filter(h => genuineCard(h, pending.url) && !pending.beforeKeys.includes(cardKey(h)) && !baseline.has(cardKey(h)) && !wanted.has(cardKey(h)));
+        if (unfinished.length > 1) throw new FatalError('途中カードを一意に確認できません');
+        for (const h of unfinished) { hits.push(h); wanted.add(cardKey(h)); }
+        // A URL whose conversion never completed is work owned by this run.
+        // Preserve every identical URL that was present before insertion.
+        const raw = exactUrlParagraphs(view, pending.url);
+        if (Number.isInteger(pending.rawBeforeCount) && raw.length === pending.rawBeforeCount + 1) {
+          let last; view.state.doc.forEach((node, pos) => { if (node.type.name !== 'paragraph' || node.textContent) last = { node, pos }; });
+          const extra = raw.find(h => h.node === last?.node && (!pending.rawNodeId || h.node.attrs.id === pending.rawNodeId));
+          if (!extra) throw new FatalError('途中URLの削除位置を確認できません');
+          hits.push(extra);
+        } else if (Number.isInteger(pending.rawBeforeCount) && raw.length !== pending.rawBeforeCount) throw new FatalError('途中URLの数が記録と一致しません');
+      }
+      const cardCount = hits.filter(h => h.node.type.name === 'embed').length;
+      run.stage = 'cards_deleting';
+      run.cardDeletion = { at: Date.now(), keys: [...wanted], count: cardCount };
+      setJSON(runKey(), run);
+      deleteHits(view, hits);
+      await saveOnce(`通知カード ${cardCount}件を一括削除・保存中…`);
+      const saved = await safety().readDraft(view);
+      const remaining = [];
+      saved.doc?.descendants(node => { if (node.type.name === 'embed' && wanted.has(String(node.attrs.embeddedContentKey || ''))) remaining.push(node); });
+      if (!saved.doc || !saved.matches || remaining.length) throw new FatalError('削除後の保存内容を確認できません。記録を保持しました。もう一度「削」で保存確認');
+      run.cardKeys = []; run.pendingCard = null; run.cardAudit = null; run.savedCardCount = 0; run.stage = 'cards_deleted'; run.cardDeletion = null;
+      setJSON(runKey(), run);
+      setStatus(`通知カード一括削除・保存確認済み ✅ 本文・画像・元のカードは保持`);
+    } catch (e) {
+      safety().stop(); setStatus('カード一括削除停止：' + (e?.message || String(e)) + '｜本文の控えと削除記録は保持', true);
+    } finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
+  }
+
   async function resumableSend() {
     if (busy || !enabled()) return;
     const dataset = getJSON(DATA_KEY, null);
@@ -2703,6 +2861,15 @@
       const missing = reconcileCards(view, dataset, run);
       run.stage = 'cards_building';
       setJSON(runKey(), run);
+      if (page.__MUMEI_CARD_VISIBLE__) {
+        let displayed = 0;
+        for (const entry of run.cardKeys) {
+          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜既存カードの本文表示 ${displayed}/${run.cardKeys.length} 確認中…`);
+          const hit = embedNodes(view).find(h => cardKey(h) === entry.key);
+          await page.__MUMEI_CARD_VISIBLE__.wait(view, hit, entry.url);
+          displayed++;
+        }
+      }
       setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count} 照合済み${missing ? `・未保存${missing}件を補完` : ''}`);
       if (run.cardKeys.length) await saveCards(run, dataset, '保存確認');
 
@@ -2741,9 +2908,10 @@
           run.pendingCard.rawNodeId = insertedUrlNode.attrs?.id || null;
           setJSON(runKey(), run);
           const progress = `${run.cardKeys.length + 1}/${dataset.count}`;
-          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${progress} ${pending ? '再開' : '生成'}中…`);
-          const attempt = activeConversion = { node: insertedUrlNode, error: null, progress, images: imageCount };
-          const command = noteUrlCommandFactory()(row.url);
+          const completed = `${run.cardKeys.length}/${dataset.count}`;
+          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード確認済み ${completed}｜処理中 ${progress}…`);
+          const attempt = activeConversion = { node: insertedUrlNode, error: null, progress, completed, images: imageCount };
+          const command = noteUrlCommandFactory()(row.url, error => { attempt.error = error; });
           const handled = command(view.state, (transaction) => {
             if (activeConversion !== attempt || attempt.error) return;
             const current = currentBaseRun();
@@ -2757,6 +2925,10 @@
           deleteLastExactUrl(view, row.url);
           // Deleting a raw work paragraph can change the card's position.
           hit = embedNodes(view).find(h => cardKey(h) === cardKey(hit));
+        }
+        if (page.__MUMEI_CARD_VISIBLE__) {
+          setStatus(`通知カード確認済み ${run.cardKeys.length}/${dataset.count}｜次の1件の本文表示を確認中…`);
+          hit = await page.__MUMEI_CARD_VISIBLE__.wait(view, hit, row.url);
         }
         recordCard(view, dataset, run, row, hit);
         if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
@@ -2786,7 +2958,12 @@
         setJSON(runKey(), run);
       }
       page.__MUMEI_CARD_SAFETY__?.stop();
-      setStatus(`${imagesComplete ? `画像 ${dataset.count}/${dataset.count} 完了｜` : ''}通知カード停止 ${run.cardKeys?.length || 0}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
+      let confirmed = run.cardKeys?.length || 0;
+      if (page.__MUMEI_CARD_VISIBLE__) {
+        try { const view = findView(); confirmed = (run.cardKeys || []).filter(e => { const hit = embedNodes(view).find(h => cardKey(h) === e.key); return hit && page.__MUMEI_CARD_VISIBLE__.inspect(view, hit, e.url); }).length; }
+        catch (_) { confirmed = 0; }
+      }
+      setStatus(`${imagesComplete ? `画像 ${dataset.count}/${dataset.count} 完了｜` : ''}通知カード停止 ${confirmed}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
     } finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
   }
 
@@ -2974,7 +3151,7 @@
         baseAction('image');
       }
       if (button.dataset.a === 'send') void resumableSend();
-      if (button.dataset.a === 'delete') baseAction('delete');
+      if (button.dataset.a === 'delete') void deleteCardsOnly();
       if (button.dataset.a === 'resume') void resumeAny();
       if (button.dataset.a === 'reset') void resetAll();
     });
