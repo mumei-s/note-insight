@@ -13,6 +13,8 @@ class Node {
   eq(n) { return n && JSON.stringify(n.toJSON()) === JSON.stringify(this.toJSON()); }
 }
 types.paragraph.create = (_, text) => new Node('paragraph', {}, text || '');
+types.image.spec = { content: 'inline*' };
+types.image.create = (attrs, text) => { const n = new Node('image', attrs, text || ''); n.nodeSize = n.textContent.length + 2; return n; };
 class Doc {
   constructor(nodes) { this.nodes = nodes; this.content = { size: nodes.reduce((n, x) => n + x.nodeSize, 0), nodes }; this.lastChild = nodes.at(-1); this.scans = 0; }
   descendants(fn) { this.scans++; this.forEach(fn); }
@@ -39,7 +41,7 @@ function environment({ storage = new Map(), nodes = [new Node('paragraph', {}, '
   const title = { value: '消えてはいけないタイトル', tagName: 'TEXTAREA', dispatchEvent() {} };
   const schema = { nodes: types, text: x => x, nodeFromJSON: data => new Doc(data.content.map(n => new Node(n.type, n.attrs || {}, n.content?.map(x => x.text || '').join('') || ''))) };
   const view = { dom: { isConnected: true }, focus() {}, posAtDOM() {}, state: null, dispatch(tr) { if (tr.before !== this.state.doc) throw new Error('stale'); this.state = state(tr.doc); } };
-  function state(doc) { return { doc, schema, get tr() { return new Tr(doc); } }; }
+  function state(doc) { return { doc, schema, selection: {from: doc.content.size-1}, get tr() { return new Tr(doc); } }; }
   view.state = state(new Doc(nodes));
   const button = { textContent: '下書き保存', disabled: false, getClientRects: () => [1], click() {} };
   const document = {
@@ -466,4 +468,87 @@ test('200枚後のブラウザ例外も段階付きで停止し、読み取り�
   await api.injectImageInput({tagName:'INPUT',type:'file',accept:'image/*'});await checked;
   assert.equal(e.encode(),before);assert.equal(arm.files.length,0);
   const diag=JSON.parse(e.storage.get('mumei_upload_diag_v160:'+key));assert.equal(diag.at(-1).completedBefore,200);assert.equal(diag.at(-1).phase,'画像投入');
+});
+
+test('全件の投稿者ID・記事キーを照合し名前に「さん」を付ける。誤った名義は拒否する', async () => {
+  const e = environment(), api = e.loadModule('note-card-creator-v1883.js','identity,caption,verifyRows');
+  const row = {url:'https://note.com/author/n/n111111111111',urlname:'author',latestKey:'n111111111111',creator:'スキした人の仮名'};
+  let calls=0;
+  e.page.GM_xmlhttpRequest = o => {calls++;o.onload({status:200,responseText:JSON.stringify({data:{key:row.latestKey,user:{urlname:'author',nickname:'確認済みの作者 🌙'}}})});};
+  await api.verifyRows([row]); assert.equal(row.creator,'確認済みの作者 🌙'); assert.equal(api.caption(row),'確認済みの作者 🌙さん');
+  await api.verifyRows([row]); assert.equal(calls,1);
+  assert.throws(()=>api.caption({...row,urlname:'other'}),/一致しません/);
+  assert.throws(()=>api.caption({...row,creator:'別人'}),/未確認/);
+  const other={...row,creatorVerified:null};e.page.GM_xmlhttpRequest=o=>o.onload({status:200,responseText:JSON.stringify({data:{key:row.latestKey,user:{urlname:'wrong',nickname:'別人'}}})});
+  await assert.rejects(api.verifyRows([other]),/照合不一致/);assert.equal(other.creatorVerified,null);
+});
+
+test('50枚の長さが違うキャプションを追加しても本文位置・人物・リンクはずれない', async () => {
+  const e=sending(50);e.loadModule('note-card-creator-v1883.js','caption');
+  e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i+'🌙'.repeat(i%5),creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i+'🌙'.repeat(i%5)}}));
+  const api=e.loadModule('note-likers-thin-notify-v160.js','linkCreatedImages');
+  const hits=e.safety.index(e.view).images;
+  e.view.dispatch(e.view.state.tr.insert(0,new Node('paragraph',{},'挿入直前の手入力')));
+  await api.linkCreatedImages(e.view,e.rows,hits,e.run);
+  for(let i=0;i<50;i++) {const hit=e.safety.tracked(e.view,{id:'image'+i});assert.equal(hit.node.textContent,e.rows[i].creator+'さん');assert.equal(hit.node.attrs.link,e.rows[i].url);}
+  assert.match(e.encode(),/挿入直前の手入力/);assert.match(e.encode(),/消さない本文/);
+});
+
+test('初期化は再表示でIDが変わった極薄も保存済みsrc＋リンクで特定する', async()=>{
+  const e=sending(3), normal=image('normal'); e.view.dispatch(e.view.state.tr.insert(0,normal));
+  for(const hit of e.safety.index(e.view).images.filter(h=>h.node!==normal))e.view.dispatch(e.view.state.tr.setNodeMarkup(hit.pos,hit.node.type,{...hit.node.attrs,id:'regenerated-'+hit.node.attrs.id}));
+  await e.module.resetAll();assert.deepEqual(Array.from(e.safety.index(e.view).images,h=>h.node),[normal]);assert.match(e.encode(),/消さない本文/);
+});
+test('進捗が消えても同じ記事の控えにある画像記録から初期化する',async()=>{
+  const e=sending(2);e.safety.capture();e.storage.delete('mumei_likers_thin_run_v160:'+key);
+  await e.module.resetAll();assert.equal(e.safety.index(e.view).images.length,0);assert.match(e.encode(),/消さない本文/);
+});
+test('同じsrc＋リンクが複数なら初期化で消さずに記録を保持する',async()=>{
+  const e=sending(1),old=e.safety.index(e.view).images[0];
+  e.view.dispatch(e.view.state.tr.setNodeMarkup(old.pos,old.node.type,{...old.node.attrs,id:'new-id'}));
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,new Node('image',{...old.node.attrs,id:'another-id'})));
+  const before=e.encode();await e.module.resetAll();assert.equal(e.encode(),before);assert.ok(e.storage.has('mumei_likers_thin_run_v160:'+key));assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/複数/);
+});
+
+test('完成307枚は1回の開始で40枚ずつ投入し、名前・リンク・実績を確認。カード一括削除後も画像を保持',async()=>{
+  const e=sending(307);e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,new Doc([new Node('paragraph',{},'守る本文')]).content));
+  e.dataset.preparedBatch=true;e.run.images={};
+  e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i,preparedBatchId:'test',creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i}}));
+  e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+  e.page.File=File;e.page.Blob=Blob;e.page.DataTransfer=class{constructor(){this.list=[];this.items={add:f=>this.list.push(f)}}get files(){return this.list}};
+  e.page.__MUMEI_PREPARED_BATCH__={image:async()=>new Blob(['png'],{type:'image/png'})};
+  e.loadModule('note-card-creator-v1883.js','caption');
+  const base=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,deleteCardsOnly,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}},setNative(fn){preparedImageCommand=()=>fn}');base.setView(e.view);
+  const batches=[];
+  base.setNative((view,files,pos,kind)=>{assert.equal(kind,'image');batches.push(files.length);for(let i=0;i<files.length;i++){const n=new Node('image',{id:'ready'+parseInt(files[i].name),src:'https://assets.st-note.com/'+files[i].name,link:''});n.nodeSize=2;view.dispatch(view.state.tr.insert(pos+1+2*i,n));}return true;});
+  await base.insertThinImages();
+  assert.deepEqual(batches,[40,40,40,40,40,40,40,27]);assert.equal(e.safety.index(e.view).images.length,307);
+  for(let i=0;i<307;i++){const n=e.safety.tracked(e.view,{id:'ready'+(i+1)}).node;assert.equal(n.textContent,'作者'+i+'さん');assert.equal(n.attrs.link,e.rows[i].url);}
+  assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/完成/);
+  await e.module.resumableSend();assert.equal(e.safety.index(e.view).embeds.length,307);
+  await base.deleteCardsOnly();assert.equal(e.safety.index(e.view).embeds.length,0);assert.equal(e.safety.index(e.view).images.length,307);assert.match(e.encode(),/守る本文/);
+});
+
+test('本日昨日は当日・昨日→本物の固定→最新の優先順位で、古い固定も採用する',async()=>{
+  const e=environment();e.page.document.getElementById=()=>null;
+  let latest=[{key:'n111111111111',name:'最新だが古い',publish_at:'2020-01-01',user:{urlname:'a',nickname:'作者'}}], pinned=[];
+  e.page.GM_xmlhttpRequest=o=>o.onload({status:200,responseText:JSON.stringify({data:{contents:o.url.includes('disabled_pinned=true')?latest:pinned}})});
+  const api=e.loadModule('note-prince-special-v184.js','choose');
+  const c={urlname:'a',creator:'作者'};
+  pinned=[{...latest[0],key:'n222222222222',name:'古い固定',isPinned:true,publish_at:'2015-01-01'}];
+  assert.equal((await api.choose(c,'todayYesterday')).latestKey,'n222222222222');
+  pinned=[{...pinned[0],isPinned:false}];assert.equal((await api.choose(c,'todayYesterday')).latestKey,'n111111111111');
+  latest=[{...latest[0],publish_at:new Date(e.time()).toISOString()}];assert.equal((await api.choose(c,'todayYesterday')).latestKey,'n111111111111');
+});
+
+test('完成データの検証は人物重複・氏名違い・#の後混入・実績の欠落をすべて拒否する',()=>{
+  const e=environment();e.loadModule('note-card-creator-v1883.js','caption');const api=e.loadModule('note-prepared-batch-v1883.js','validate');
+  const row=(id,key,index,articleSource)=>({urlname:id,latestKey:key,url:`https://note.com/${id}/n/${key}`,index,articleSource,creator:id,caption:id+'さん',creatorVerified:{urlname:id,articleKey:key,name:id},pngSha256:'0'.repeat(64)});
+  const data={format:'mumei-thin-prepared-v1',batchId:'test',count:3,rows:[row('tag','n111111111111',1,'hashtag'),row('normal','n222222222222',2,'todayYesterday'),{...row('fuku444','nb4f6934381e9',3,'final'),finalMarker:true}]};
+  api.validate(data);
+  const changed=fn=>{const copy=JSON.parse(JSON.stringify(data));fn(copy);return copy;};
+  assert.throws(()=>api.validate(changed(d=>d.rows[1].creator='wrong')),/氏名|未確認/);
+  assert.throws(()=>api.validate(changed(d=>d.rows[1]={...d.rows[0],index:2})),/重複/);
+  assert.throws(()=>api.validate(changed(d=>{d.rows[0].articleSource='todayYesterday';d.rows[1].articleSource='hashtag';})),/先頭/);
+  assert.throws(()=>api.validate(changed(d=>delete d.rows[2].finalMarker)),/実績/);
 });
