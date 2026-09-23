@@ -1036,7 +1036,7 @@
     if (!dataset || !run || run.datasetId !== dataset.datasetId) {
       setStatus('先に「抽」で対象を取得してください', true); return;
     }
-    if (run.cardKeys?.length) { setStatus('通知カードが残っています。先に「削」', true); return; }
+    if (run.cardKeys?.length && !dataset.preparedBatch) { setStatus('通知カードが残っています。先に「削」', true); return; }
     let operation;
     setBusy(true);
     try {
