@@ -15,15 +15,20 @@
   async function digest(bytes) { return Array.from(new Uint8Array(await page.crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join(''); }
   function validate(data) {
     if (data?.format !== 'mumei-thin-prepared-v1' || !/^[a-z0-9-]+$/.test(data.batchId) || !Array.isArray(data.rows) || data.rows.length !== data.count || data.count < 1 || data.count > 3000) throw new Error('完成データの形式・件数が違います');
-    const people = new Set(), urls = new Set(); let rest = false;
+    const people = new Map(), urls = new Set(); let rest = false;
+    const allTagArticles = data.hashtagArticleMode === 'all';
+    const tagKeys = [];
     for (let i = 0; i < data.rows.length; i++) {
       const row = data.rows[i];
       if (row.index !== i + 1 || row.caption !== page.__MUMEI_CARD_CREATOR__.caption(row) || !/^[a-f0-9]{64}$/.test(row.pngSha256 || '')) throw new Error(`行${i + 1}の氏名・画像対応が不正です`);
-      if (people.has(row.urlname) || urls.has(row.url)) throw new Error('同じ人物・記事が重複しています');
-      people.add(row.urlname); urls.add(row.url);
+      const repeatedTagAuthor = allTagArticles && row.articleSource === 'hashtag' && people.get(row.urlname) === 'hashtag';
+      if (urls.has(row.url) || (people.has(row.urlname) && !repeatedTagAuthor)) throw new Error('同じ人物・記事が重複しています');
+      people.set(row.urlname, row.articleSource); urls.add(row.url);
+      if (row.articleSource === 'hashtag') tagKeys.push(row.latestKey);
       if (row.articleSource !== 'hashtag') rest = true;
       else if (rest) throw new Error('#記事が先頭にまとまっていません');
     }
+    if (allTagArticles && (!Array.isArray(data.hashtagArticleKeys) || JSON.stringify(tagKeys) !== JSON.stringify(data.hashtagArticleKeys))) throw new Error('#全記事の件数・順序が一致しません');
     if (data.rows.at(-1).url !== FINAL || !data.rows.at(-1).finalMarker || data.rows.slice(0,-1).some(r => r.finalMarker)) throw new Error('最後に実績の算数がありません');
   }
   async function prepare(data) {
@@ -57,12 +62,12 @@
       const next = { version:'16.0.0', articleKey:articleKey(), datasetId, stage:'extracted', images:{}, cardKeys:[], pending:null };
       // Store only verified metadata; PNGs stay outside localStorage/body backups.
       localStorage.setItem(DATA, JSON.stringify(dataset)); localStorage.setItem(runKey(), JSON.stringify(next));
-      status(`完成データ ${rows.length}件｜#先頭・最後は実績の算数｜画像を準備します`);
+      status(`完成データ ${rows.length}件｜#${data.hashtagArticleKeys?.length || data.hashtagPeople || ''}件が先頭・最後は実績の算数｜画像を準備します`);
       document.querySelector('#mumei-note-source-picker-v163 button[data-a="image"]')?.click();
       return rows.length;
     } finally { busy = false; }
   }
-  function download() { return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url:URL_BATCH+'?v=1883',timeout:120000,responseType:'text',onload:r=>{try{if(r.status!==200)throw new Error('完成データ HTTP '+r.status);resolve(JSON.parse(r.responseText));}catch(e){reject(e);}},onerror:()=>reject(new Error('完成データの通信失敗')),ontimeout:()=>reject(new Error('完成データの時間切れ'))})); }
+  function download() { return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url:URL_BATCH+'?v=1884&ts='+Date.now(),timeout:120000,responseType:'text',onload:r=>{try{if(r.status!==200)throw new Error('完成データ HTTP '+r.status);resolve(JSON.parse(r.responseText));}catch(e){reject(e);}},onerror:()=>reject(new Error('完成データの通信失敗')),ontimeout:()=>reject(new Error('完成データの時間切れ'))})); }
   function mount() {
     if (!articleKey()) return false;
     const box = document.querySelector('.mumei-prince-special-v184'); if (!box) return false;

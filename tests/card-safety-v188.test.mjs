@@ -558,3 +558,17 @@ test('固定なしの最新29件に相当する群は、すべて通常群の後
   const rows=[{id:'latest1',articleSource:'latestFallback'},{id:'today',articleSource:'todayYesterday'},{id:'tag',articleSource:'hashtag'},{id:'latest2',articleSource:'latestFallback'},{id:'fixed',articleSource:'fixedFallback'},{id:'math',finalMarker:true}];
   assert.deepEqual(Array.from(api.orderRows(rows),r=>r.id),['tag','today','fixed','latest1','latest2','math']);
 });
+
+
+test('#全記事モードは同じ作者の別記事を保持し、URL側の重複と記事重複を拒否する',()=>{
+  const e=environment();e.loadModule('note-card-creator-v1883.js','caption');const api=e.loadModule('note-prepared-batch-v1883.js','validate');
+  const row=(id,key,index,articleSource)=>({urlname:id,latestKey:key,url:`https://note.com/${id}/n/${key}`,index,articleSource,creator:id,caption:id+'さん',creatorVerified:{urlname:id,articleKey:key,name:id},pngSha256:'0'.repeat(64)});
+  const rows=[row('author','n111111111111',1,'hashtag'),row('author','n222222222222',2,'hashtag'),{...row('fuku444','nb4f6934381e9',3,'final'),finalMarker:true}];
+  const d={format:'mumei-thin-prepared-v1',batchId:'all-tag',count:3,hashtagArticleMode:'all',hashtagArticleKeys:rows.slice(0,2).map(r=>r.latestKey),rows};
+  api.validate(d);
+  const clone=()=>JSON.parse(JSON.stringify(d));
+  const url=clone();url.rows[1].articleSource='todayYesterday';assert.throws(()=>api.validate(url),/重複/);
+  const duplicate=clone();duplicate.rows[1]={...duplicate.rows[0],index:2};assert.throws(()=>api.validate(duplicate),/重複/);
+  const missing=clone();missing.hashtagArticleKeys.pop();assert.throws(()=>api.validate(missing),/全記事/);
+  const legacy=clone();delete legacy.hashtagArticleMode;assert.throws(()=>api.validate(legacy),/重複/);
+});
