@@ -78,6 +78,7 @@
       #${PANEL_ID}.${MIN_CLASS}>:not(.title):not(#mumei-note-source-status-v163){display:none!important}
       #${PANEL_ID}.${MIN_CLASS}>.title{margin-bottom:0!important;cursor:pointer!important}
       #${PANEL_ID}.${MIN_CLASS} #mumei-note-source-status-v163{display:block!important;max-width:140px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;margin-top:2px!important;font-size:8px!important;opacity:.82!important}
+      #${PANEL_ID}.${MIN_CLASS} #mumei-note-source-status-v163[data-bad="1"]{white-space:normal!important;overflow:auto!important;text-overflow:clip!important;max-height:140px!important;font-size:10px!important;opacity:1!important;overflow-wrap:anywhere!important}
       #mumei-direct-success-panel,#mumei-direct-success-btn,#mumei-notify-test-panel,#mumei-notify-test-btn,#mumei-notify-clean-btn,#mumei-card-system-toggle{display:none!important}
     `;
     document.head.appendChild(style);
