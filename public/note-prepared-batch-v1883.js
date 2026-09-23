@@ -64,7 +64,7 @@
   async function sync(dataset, run) {
     const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
     if (!dataset.preparedBatch || !patch || !dataset.rows.every(r => r.preparedBatchId === patch.batchId)) return 0;
-    if (run.datasetId !== dataset.datasetId || run.cardKeys?.length) throw new Error('通知カード作成前に追加分を反映してください');
+    if (run.datasetId !== dataset.datasetId) throw new Error('この記事と対象一覧の記録が一致しません');
     const before = new Set(dataset.rows.map(r => r.url));
     const combined = withAdditions({format:'mumei-thin-prepared-v1',batchId:patch.batchId,count:dataset.count,rows:dataset.rows,
       hashtagArticleMode:'all',hashtagArticleKeys:dataset.rows.filter(r=>r.articleSource==='hashtag').map(r=>r.latestKey)});
@@ -75,8 +75,19 @@
     const next = {...dataset, count:combined.count, rows:combined.rows.map(r => prepared.get(r.url) || r)};
     // Keep the run identity, completed image records and pending upload intact.
     localStorage.setItem(DATA, JSON.stringify(next)); Object.assign(dataset, next);
+    if (run.cardKeys?.length) { run.stage = 'cards_paused'; run.cardAudit = null; run.savedCardCount = 0; localStorage.setItem(runKey(), JSON.stringify(run)); }
     status(`追加${additions.length}件を反映｜全${next.count}件｜完成画像を保持して再開`);
     return additions.length;
+  }
+  function missingAdditions(dataset) {
+    const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
+    if (!dataset?.preparedBatch || !patch || !dataset.rows.every(r => r.preparedBatchId === patch.batchId)) return [];
+    const people = new Set(dataset.rows.map(r => r.urlname));
+    return patch.rows.filter(r => !people.has(r.urlname));
+  }
+  function requireCurrent(dataset) {
+    const missing = missingAdditions(dataset);
+    if (missing.length) throw new Error(`追加${missing.length}名（${missing.map(r => r.creator).join('・')}）が未反映です。「追加分」で既存の画像・カードを保持して反映してください`);
   }
   async function image(row) {
     const response = await (await page.caches.open(CACHE)).match(cacheKey(row));
@@ -111,8 +122,16 @@
     button.onclick=async()=>{button.disabled=true;try{status('作成済み画像を読込中…');await install(await download());}catch(e){status(e.message,true);}finally{button.disabled=false;}};
     const fileButton=document.createElement('button');fileButton.textContent='データ読込';fileButton.type='button';fileButton.style.flex='1';
     fileButton.onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=async()=>{try{if(input.files?.[0])await install(JSON.parse(await input.files[0].text()));}catch(e){status(e.message,true);}};input.click();};
-    row.append(button,fileButton);box.append(row);return true;
+    const additions=document.createElement('button');additions.textContent='追加分';additions.type='button';additions.style.flex='1';
+    additions.onclick=()=>{
+      if (busy || page.__MUMEI_CARD_SAFETY__?.busy()) { status('現在の処理が停止してから追加してください',true); return; }
+      const dataset=read(DATA);
+      if (!dataset?.preparedBatch) { status('追加元の宵空セットがありません',true); return; }
+      // The image action already checkpoints and inserts only missing rows.
+      document.querySelector('#mumei-note-source-picker-v163 button[data-a="image"]')?.click();
+    };
+    row.append(button,fileButton,additions);box.append(row);return true;
   }
-  page.__MUMEI_PREPARED_BATCH__={image,install,validate,prepare,sync};
+  page.__MUMEI_PREPARED_BATCH__={image,install,validate,prepare,sync,requireCurrent,missingAdditions};
   let tries=0;const timer=setInterval(()=>{if(mount()||++tries>120)clearInterval(timer);},400);mount();
 })();
