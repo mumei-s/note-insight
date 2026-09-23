@@ -96,6 +96,9 @@ def main():
             if 'excluded' in r:excluded.append(r)
             else:rows.append(r)
             print('verified',i,'/',len(pairs),flush=True)
+    marker=rows.pop()
+    rows.sort(key=lambda r: 2 if r['articleSource']=='latestFallback' else (0 if r['articleSource']=='hashtag' else 1))
+    rows.append(marker)
     for i,r in enumerate(rows,1):r['index']=i
     rows[-1]['finalMarker']=True;rows[-1]['articleSource']='final'
     assert rows[-1]['latestKey']==FINAL

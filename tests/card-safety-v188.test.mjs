@@ -552,3 +552,9 @@ test('完成データの検証は人物重複・氏名違い・#の後混入・�
   assert.throws(()=>api.validate(changed(d=>{d.rows[0].articleSource='todayYesterday';d.rows[1].articleSource='hashtag';})),/先頭/);
   assert.throws(()=>api.validate(changed(d=>delete d.rows[2].finalMarker)),/実績/);
 });
+
+test('固定なしの最新29件に相当する群は、すべて通常群の後・実績の直前へ移す',()=>{
+  const e=environment();e.page.document.getElementById=()=>null;const api=e.loadModule('note-prince-special-v184.js','orderRows');
+  const rows=[{id:'latest1',articleSource:'latestFallback'},{id:'today',articleSource:'todayYesterday'},{id:'tag',articleSource:'hashtag'},{id:'latest2',articleSource:'latestFallback'},{id:'fixed',articleSource:'fixedFallback'},{id:'math',finalMarker:true}];
+  assert.deepEqual(Array.from(api.orderRows(rows),r=>r.id),['tag','today','fixed','latest1','latest2','math']);
+});

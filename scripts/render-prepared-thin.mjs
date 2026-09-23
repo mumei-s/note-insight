@@ -3,16 +3,17 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-const [directory, font] = process.argv.slice(2);
+const [directory, font, emojiFont] = process.argv.slice(2);
 const dep = process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES;
 const sharp = createRequire(import.meta.url)(dep ? path.join(dep,'sharp') : 'sharp');
 const {createCanvas,loadImage,GlobalFonts} = await import(dep ? pathToFileURL(path.join(dep,'@napi-rs/canvas/index.js')).href : '@napi-rs/canvas');
 if (!GlobalFonts.registerFromPath(font,'Noto Sans CJK JP')) throw new Error('Japanese font unavailable');
+if(emojiFont && !GlobalFonts.registerFromPath(emojiFont,'Noto Color Emoji')) throw new Error('Emoji font unavailable');
 const out=path.resolve(directory), cards=path.join(out,'cards'), assets=path.join(out,'assets');
 await fs.mkdir(cards,{recursive:true});await fs.mkdir(assets,{recursive:true});
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 async function augment(row){const file=path.join(out,'api-cache',sha('/api/v3/notes/'+row.latestKey)+'.json');const p=JSON.parse(await fs.readFile(file,'utf8')),n=p.data||p,u=n.user||{};if(u.urlname!==row.urlname)throw new Error('avatar author mismatch');return {...row,actorImageUrl:u.user_profile_image_url||u.user_profile_image_path||u.userProfileImagePath||row.actorImageUrl};}
-const fingerprint=row=>sha(JSON.stringify([row.url,row.title,row.creator,row.actorImageUrl,row.thumbUrl]));
+const fingerprint=row=>sha(JSON.stringify(['alphabetic-v1',emojiFont || '',row.url,row.title,row.creator,row.actorImageUrl,row.thumbUrl]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function lines(ctx,text,width,count) {const result=[];let line='';for(const c of String(text)){if(ctx.measureText(line+c).width>width){result.push(line);line='';if(result.length===count){result[count-1]=result[count-1].slice(0,-1)+'…';return result;}}line+=c;}if(line)result.push(line);return result;}
 async function picture(url,width=640) {
@@ -33,14 +34,14 @@ async function render(row) {
   const [thumb,avatar]=await Promise.all([picture(row.thumbUrl),picture(row.actorImageUrl,84)]);
   const canvas=createCanvas(860,140),ctx=canvas.getContext('2d');
   ctx.fillStyle='#fff';ctx.fillRect(0,0,860,140);ctx.strokeStyle='#d9dde3';ctx.lineWidth=1.5;rounded(ctx,1,1,858,138,12);ctx.stroke();
-  ctx.textBaseline='top';ctx.fillStyle='#171b21';ctx.font='700 19px "Noto Sans CJK JP"';
-  lines(ctx,row.title,504,3).forEach((line,i)=>ctx.fillText(line,16,9+i*22));
+  ctx.textBaseline='alphabetic';ctx.fillStyle='#171b21';ctx.font='700 19px "Noto Sans CJK JP", "Noto Color Emoji"';
+  lines(ctx,row.title,504,3).forEach((line,i)=>ctx.fillText(line,16,28+i*22));
   ctx.fillStyle='#eef1f4';ctx.beginPath();ctx.arc(37,109,21,0,Math.PI*2);ctx.fill();
   if(avatar){ctx.save();ctx.beginPath();ctx.arc(37,109,21,0,Math.PI*2);ctx.clip();const scale=Math.max(42/avatar.width,42/avatar.height);ctx.drawImage(avatar,37-avatar.width*scale/2,109-avatar.height*scale/2,avatar.width*scale,avatar.height*scale);ctx.restore();}
-  ctx.fillStyle='#343a43';ctx.font='700 16px "Noto Sans CJK JP"';lines(ctx,row.creator,452,2).forEach((line,i)=>ctx.fillText(line,68,91+i*18));
+  ctx.fillStyle='#343a43';ctx.font='700 16px "Noto Sans CJK JP", "Noto Color Emoji"';lines(ctx,row.creator,452,2).forEach((line,i)=>ctx.fillText(line,68,108+i*18));
   ctx.fillStyle='#f7f8fa';rounded(ctx,532,8,320,124,8);ctx.fill();
   if(thumb){const scale=Math.min(320/thumb.width,124/thumb.height);ctx.save();rounded(ctx,532,8,320,124,8);ctx.clip();ctx.drawImage(thumb,532+(320-thumb.width*scale)/2,8+(124-thumb.height*scale)/2,thumb.width*scale,thumb.height*scale);ctx.restore();}
-  else{ctx.fillStyle='#9ca3af';ctx.font='20px "Noto Sans CJK JP"';ctx.fillText('note',665,57);}
+  else{ctx.fillStyle='#9ca3af';ctx.font='20px "Noto Sans CJK JP"';ctx.fillText('note',665,72);}
   await fs.writeFile(file,await canvas.encode('png'));await fs.writeFile(file+'.fingerprint',fingerprint(row));
 }
 const done=new Map();let completed=false;

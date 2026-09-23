@@ -11,7 +11,7 @@ def stamp(n):return datetime.datetime.fromisoformat(n.get('publishAt') or n.get(
 people=json.loads((p/'people.json').read_text());clock=datetime.datetime.fromisoformat(data['createdAt']);days={clock.date(),(clock-datetime.timedelta(days=1)).date()}
 assert len(rows)==data['count']==len(set(r['urlname'] for r in rows))==len(set(r['url'] for r in rows))
 assert rows[-1]['url']=='https://note.com/fuku444/n/nb4f6934381e9' and rows[-1]['finalMarker']
-rest=False
+rest=False;latest_tail=False
 for i,r in enumerate(rows,1):
     assert r['index']==i
     n=cached('/api/v3/notes/'+r['latestKey']);u=n['user'];name=str(u.get('nickname') or u.get('name') or '').strip()
@@ -20,6 +20,8 @@ for i,r in enumerate(rows,1):
     assert r['creator']==name and r['caption']==name+'さん'
     assert r['creatorVerified']['name']==name and r['creatorVerified']['articleKey']==n['key']
     if r.get('finalMarker'):continue
+    if r['articleSource']=='latestFallback':latest_tail=True
+    elif latest_tail:raise AssertionError('最新へのフォールバックは実績の算数の直前にまとめる')
     c=people[r['urlname']]
     if c.get('tagKey'):
         assert not rest and r['articleSource']=='hashtag' and r['latestKey']==c['tagKey']
@@ -41,7 +43,8 @@ counts=collections.Counter(r['articleSource'] for r in rows)
 report={'count':len(rows),'types':dict(counts),'excluded':data['excluded'],'captionVerified':len(rows),'imageHashVerified':len(rows),'dimensions':'860x140','duplicates':0,'last':rows[-1]['url'],'asOf':data['createdAt']}
 (p/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 esc=html.escape
-figures='\n'.join(f'<figure><a href="{esc(r["url"])}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" width="860" height="140" src="cards/{r["index"]:03}.png" alt="{esc(r["title"])}"></a><figcaption>{r["index"]}. {esc(r["caption"])} <small>｜{esc(r["articleSource"])}</small></figcaption></figure>' for r in rows)
+labels={'hashtag':'#参加記事','todayYesterday':'今日・昨日','fixedFallback':'固定記事','latestFallback':'最新記事（固定なし）','final':'実績の算数'}
+figures='\n'.join(f'<figure><a href="{esc(r["url"])}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" width="860" height="140" src="cards/{r["index"]:03}.png" alt="{esc(r["title"])}"></a><figcaption>{r["index"]}. {esc(r["caption"])} <small>｜{esc(labels[r["articleSource"]])}</small></figcaption></figure>' for r in rows)
 preview='<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>宵空カップ 完成一覧</title><style>body{font-family:system-ui,sans-serif;margin:20px auto;max-width:860px;padding:0 10px;color:#17212b}figure{margin:24px 0}img{max-width:100%;height:auto}figcaption{text-align:center;font-size:14px}small{color:#667}</style><h1>宵空カップ 完成一覧</h1><p>'+str(len(rows))+'件。#先頭・人物の重複なし・最後は実績の算数。全件、投稿者ID・記事キー・氏名・PNGを照合済み。</p><p>今日／昨日 → 固定（古くても可）→ 最新。取得基準：'+esc(data['createdAt'])+'</p>'+figures+'</html>'
 (p/'preview.html').write_text(preview)
 readme='''極薄＋通知 v18.8.3 宵空カップ用
