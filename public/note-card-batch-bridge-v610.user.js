@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.12
+// @name         無名S note 極薄＋通知 URL/# 18.8.13
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.12
+// @version      18.8.13
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -337,6 +337,7 @@
       }
       const matches = n.name === (titleNode()?.value ?? null) && sameBody;
       if (matches) { confirmedDoc = target.state.doc; confirmedTitle = n.name; }
+      else if (confirmedDoc === target.state.doc) { confirmedDoc = null; confirmedTitle = null; }
       return { doc, matches: Boolean(matches), at: Date.now(), articleKey: article };
     } finally { if (timer !== null) clearTimeout(timer); }
   }
@@ -459,7 +460,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.12</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.13</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
