@@ -626,7 +626,7 @@
 
   function findImageByState(view, record, url) {
     const wanted = normalizeUrl(url);
-    const hit = safety().tracked(view, record);
+    const hit = safety().tracked(view, record, url);
     if (hit && (record?.id || normalizeUrl(hit.node.attrs?.link) === wanted)) return hit;
     return null;
   }
