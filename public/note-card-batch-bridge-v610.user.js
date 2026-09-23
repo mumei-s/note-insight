@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.4
+// @name         無名S note 極薄＋通知 URL/# 18.8.5
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.4
+// @version      18.8.5
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -356,7 +356,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.4</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.5</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
@@ -511,6 +511,7 @@
   const uploadRequests = new Set();
   let lastUploadActivityAt = 0, uploadSequence = 0;
   const UPLOAD_QUIET_MS = 20000;
+  const UPLOAD_PAGE_TOKEN = `${Date.now()}-${Math.random()}`;
   function uploadBody(body) {
     const imageFile = value => value && typeof value === 'object' &&
       (/^image\//i.test(String(value.type || '')) || /\.(png|jpe?g|webp|gif|avif)$/i.test(String(value.name || '')));
@@ -521,14 +522,19 @@
     return false;
   }
   function beginUploadRequest(body, url) {
-    if (!imageArm?.consumed || !uploadBody(body)) return null;
+    const presign = /^https:\/\/note\.com\/api\/v3\/images\/upload\/presigned_post$/.test(cleanNetUrl(url));
+    if (!imageArm?.consumed || !(presign || uploadBody(body))) return null;
     const ticket = { id: ++uploadSequence, url: cleanNetUrl(url), at: Date.now() };
     uploadRequests.add(ticket); lastUploadActivityAt = Date.now(); return ticket;
   }
-  function endUploadRequest(ticket, status, message = '') {
+  function endUploadRequest(ticket, status, message = '', retryAfter = '') {
     if (!ticket) return;
     uploadRequests.delete(ticket); lastUploadActivityAt = Date.now();
-    if (!status || status >= 400) recordNetFailure('image-upload', ticket.url, status, message);
+    if (!status || status >= 400) {
+      const seconds = Number(retryAfter);
+      const retryAt = retryAfter ? (Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(retryAfter)) : 0;
+      recordNetFailure('image-upload', ticket.url, status, message, retryAt);
+    }
   }
 
   const safety = () => { if (!page.__MUMEI_CARD_SAFETY__) throw new Error('本文保護機能を読み込めません。ツールを18.8.2へ更新してください'); return page.__MUMEI_CARD_SAFETY__; };
@@ -579,8 +585,8 @@
     } catch (_) {}
     return row;
   }
-  function recordNetFailure(kind, url, status = 0, message = '') {
-    const item = { at: Date.now(), kind, url: cleanNetUrl(url), status: Number(status || 0), message: String(message || '').slice(0, 160) };
+  function recordNetFailure(kind, url, status = 0, message = '', retryAt = 0) {
+    const item = { at: Date.now(), kind, url: cleanNetUrl(url), status: Number(status || 0), message: String(message || '').slice(0, 160), retryAt: Number.isFinite(retryAt) ? retryAt : 0 };
     uploadNetFailures.push(item);
     if (uploadNetFailures.length > 30) uploadNetFailures.splice(0, uploadNetFailures.length - 30);
   }
@@ -606,12 +612,20 @@
         const ticket = beginUploadRequest(args[1]?.body, url);
         try {
           const response = await rawFetch(...args);
-          endUploadRequest(ticket, response.status, response.statusText); return response;
+          endUploadRequest(ticket, response.status, response.statusText, response.headers?.get?.('Retry-After')); return response;
         } catch (error) {
           endUploadRequest(ticket, 0, error?.message || String(error)); throw error;
         }
       };
     }
+    const rawAlert = typeof page.alert === 'function' ? page.alert.bind(page) : null;
+    if (rawAlert) page.alert = function (message) {
+      if (imageArm?.consumed && /画像.*アップロード.*失敗/.test(String(message)) &&
+          !recentNetFailure(imageArm.currentUploadStartedAt || imageArm.uploadStartedAt)) {
+        recordNetFailure('note-alert', '', 0, message);
+      }
+      return rawAlert(message);
+    };
     const proto = page.XMLHttpRequest?.prototype;
     if (proto && !proto.__mumeiUploadProbe160) {
       const rawOpen = proto.open, rawSend = proto.send;
@@ -620,7 +634,7 @@
       };
       proto.send = function (...args) {
         const ticket = beginUploadRequest(args[0], this.__mumeiUploadUrl160);
-        if (ticket) this.addEventListener('loadend', () => endUploadRequest(ticket, this.status, this.statusText), { once: true });
+        if (ticket) this.addEventListener('loadend', () => endUploadRequest(ticket, this.status, this.statusText, this.getResponseHeader?.('Retry-After')), { once: true });
         try { return rawSend.apply(this, args); } catch (error) { endUploadRequest(ticket, 0, error?.message); throw error; }
       };
       proto.__mumeiUploadProbe160 = true;
@@ -1170,13 +1184,14 @@
       if (fresh.length === expected) return { fresh, failed: false, reason: '', net: null };
       if (fresh.length > expected) return { fresh: [], failed: true, reason: '投入枚数を超える画像を検出。順序を確認するため停止', net: null };
       const uiError = visibleUploadErrors().find(entry => baselineErrors.get(entry.node) !== entry.text)?.text || '';
-      const net = recentNetFailure(startedAt);
+      const net = recentNetFailure(imageArm?.currentUploadStartedAt || startedAt);
       if ((uiError || net) && !firstErrorAt) firstErrorAt = Date.now();
       // Keep waiting while the native image queue is active; unrelated requests and old toasts do not stop it.
       if (firstErrorAt && !uploadRequests.size && Date.now() - Math.max(lastGrowthAt, lastUploadActivityAt, firstErrorAt) >= UPLOAD_QUIET_MS) {
         return { fresh, failed: true, reason: uiError || '画像アップロード通信エラー', net };
       }
-      setStatus(`画像アップロード ${fresh.length}/${expected}｜処理中${uploadRequests.size}件${firstErrorAt ? '｜成功分を回収中' : ''}`);
+      const completed = imageArm?.nativeCommand ? verifiedImageCount(view, imageArm.dataset, imageArm.run) : null;
+      setStatus(completed !== null ? `画像 ${completed}/${imageArm.dataset.count}｜${firstErrorAt ? '失敗を確認中' : '次の1枚を処理中'}` : `画像アップロード ${fresh.length}/${expected}｜処理中${uploadRequests.size}件${firstErrorAt ? '｜成功分を回収中' : ''}`);
       await sleep(500);
     }
     const fresh = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id)) && remoteImage(hit.node)).sort((a,b) => a.pos-b.pos);
@@ -1261,6 +1276,48 @@
       return nativeInputClick.apply(this, args);
     };
   }
+  async function injectPreparedImages(arm) {
+    let unsaved = false;
+    try {
+      for (let i = 0; i < arm.workRows.length; i++) {
+        safety().check(arm.view);
+        if (safety().stopped()) throw new FatalError('画像作成を停止しました');
+        const row = arm.workRows[i];
+        ensureEndSelection(arm.view);
+        const before = new Set(imageNodes(arm.view).map(hit => String(hit.node.attrs?.id || '')).filter(Boolean));
+        arm.currentUploadStartedAt = Date.now();
+        arm.run.pending = { workUrls: [row.url], beforeIds: [...before], at: Date.now(), stage: 'uploading', runtime: '18.8.5', pageToken: UPLOAD_PAGE_TOKEN };
+        setRun(arm.run);
+        const baseline = new Map(visibleUploadErrors().map(entry => [entry.node, entry.text]));
+        const transfer = new page.DataTransfer(); transfer.items.add(arm.files[i]);
+        const pos = arm.view.state.selection.from;
+        if (!Number.isInteger(pos) || pos < 1) throw new FatalError('画像の挿入位置を確認できません');
+        arm.phase = 'アップロード';
+        if (arm.nativeCommand(arm.view, transfer.files, pos - 1, 'image') !== true) throw new FatalError('noteの正規画像処理が開始されませんでした');
+        // note returns before its upload finishes. Never start another file until this one is remote.
+        const result = await waitNewRemoteImages(arm.view, before, 1, 120000, baseline);
+        if (result.failed || result.fresh.length !== 1) {
+          arm.run.pending.stage = 'failed'; arm.run.pending.failure = result.reason;
+          arm.run.pending.retryAt = result.net?.retryAt || 0; setRun(arm.run);
+          const completed = verifiedImageCount(arm.view, arm.dataset, arm.run);
+          const net = result.net?.status ? ` HTTP ${result.net.status}` : '';
+          recordUploadDiag({runtime:'18.8.5', requested:1, succeededThisBatch:0, completedAfter:completed, network:result.net, reason:result.reason});
+          throw new FatalError(`累計${completed}/${arm.dataset.count}｜${result.reason}${net}｜成功分を保持`);
+        }
+        arm.phase = 'リンク付与';
+        await linkCreatedImages(arm.view, [row], result.fresh, arm.run);
+        arm.run.pending = null; setRun(arm.run); unsaved = true;
+        arm.files[i] = null;
+        // Pace successful requests as well; HTTP errors stop the queue without automatic retries.
+        await sleep(750);
+      }
+    } finally {
+      if (unsaved) {
+        arm.phase = '下書き保存確認';
+        await saveOnce(`成功分を保存中｜画像 ${verifiedImageCount(arm.view, arm.dataset, arm.run)}/${arm.dataset.count}…`);
+      }
+    }
+  }
   async function injectImageInput(input) {
     const arm = imageArm;
     if (!arm || arm.consumed || !(arm.nativeCommand || imageInput(input))) return false;
@@ -1273,9 +1330,10 @@
     const baselineErrors = new Map(visibleUploadErrors().map(entry => [entry.node, entry.text]));
     const doneBefore = verifiedImageCount(arm.view, arm.dataset, arm.run);
     try {
+      if (arm.nativeCommand) { await injectPreparedImages(arm); arm.resolve(true); return true; }
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.3' };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.5', pageToken: UPLOAD_PAGE_TOKEN };
       setRun(arm.run);
       if (arm.nativeCommand) {
         const pos = arm.view.state.selection.from;
@@ -1326,7 +1384,8 @@
       }
       arm.resolve(true);
     } catch (error) {
-      recordUploadDiag({ runtime: '18.8.3', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
+      if (arm.run.pending) { arm.run.pending.stage = 'failed'; arm.run.pending.failure = error?.message || String(error); setRun(arm.run); }
+      recordUploadDiag({ runtime: '18.8.5', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
       const failure = new FatalError(`${arm.phase}｜開始時${doneBefore}枚｜${error?.message || String(error)}`);
       failure.cause = error; arm.reject(failure);
     } finally {
@@ -1413,7 +1472,14 @@
     if (!pending?.workUrls?.length || !Array.isArray(pending.beforeIds)) throw new FatalError('画像の投入記録が不完全です。本文の控えを確認してください');
     const workRows = pending.workUrls.map(url => dataset.rows.find(row => row.url === url));
     if (workRows.some(row => !row)) throw new FatalError('画像の対象一覧が一致しません');
+    if (Number(pending.retryAt || 0) > Date.now()) throw new FatalError(`noteの通信制限待ちです。あと${Math.ceil((pending.retryAt - Date.now()) / 1000)}秒後に「画」を押してください`);
     const before = new Set(pending.beforeIds.map(String));
+    // Saved image IDs may change when the editor is reopened; verify source and link before rebasing.
+    for (const row of dataset.rows) {
+      if (pending.workUrls.includes(row.url)) continue;
+      const hit = findImageByState(view, run.images?.[row.url], row.url);
+      if (hit && remoteImage(hit.node) && normalizeUrl(hit.node.attrs.link) === normalizeUrl(row.url)) before.add(String(hit.node.attrs.id));
+    }
     const collect = () => imageNodes(view).filter(hit => hit.node.attrs?.id && !before.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
     let all = collect();
     const complete = all.length === workRows.length && all.every(hit => remoteImage(hit.node));
@@ -1421,7 +1487,8 @@
     if (!complete) {
       const recordedFailure = pending.stage === 'failed' || getJSON(uploadDiagKey(), []).some(row =>
         Date.parse(row.at) >= Number(pending.at || 0) && row.requested === workRows.length && row.succeededThisBatch < row.requested);
-      if (!recordedFailure || uploadRequests.size) throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「画」で回収します');
+      const abandonedEmpty = !all.length && pending.pageToken !== UPLOAD_PAGE_TOKEN && !lastUploadActivityAt && !imageArm;
+      if ((!recordedFailure && !abandonedEmpty) || uploadRequests.size) throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「画」で回収します');
       const signature = () => JSON.stringify(collect().map(hit => [hit.node.attrs.id, hit.node.attrs.src]));
       const initial = signature();
       await sleep(2000); safety().check(view);
@@ -1480,7 +1547,7 @@
         await saveOnce('極薄画像の保存状態を確認中…');
         setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
       }
-      const workRows = missing.slice(0, dataset.preparedBatch ? 40 : IMAGE_CHUNK);
+      const workRows = missing.slice(0, dataset.preparedBatch ? (nativeCommand ? 10 : 1) : IMAGE_CHUNK);
       setStatus(`極薄画像 ${workRows.length}枚を生成中…`);
       const files = await mapLimit(workRows, 4, async (row, index) => {
         if (safety().stopped()) throw new FatalError('画像準備を停止しました');
@@ -1517,7 +1584,7 @@
       }
     } catch (error) {
       page.__MUMEI_CARD_SAFETY__?.stop();
-      setStatus(`画像停止：${error?.message || String(error)}（「画」で再開）`, true);
+      setStatus(`停止 ${Object.keys(run.images || {}).length}/${dataset.count}｜${error?.message || String(error)}（「画」で再開）`, true);
     } finally {
       cancelImageArm();
       page.__MUMEI_CARD_SAFETY__?.end(operation);
