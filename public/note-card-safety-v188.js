@@ -24,6 +24,35 @@
     } catch (_) { return null; }
   };
   const runKey = () => 'mumei_likers_thin_run_v160:' + key();
+  const networkKey = 'mumei_card_network_hold_v18815';
+  let memoryHold = null;
+  const networkHold = () => memoryHold || read(networkKey);
+  function networkMessage(hold) {
+    const wait = Math.max(0, Math.ceil(((hold.until || 0) - Date.now()) / 1000));
+    return (hold.code ? `noteが通信を拒否しました（HTTP ${hold.code}）。` : 'noteとの通信に失敗しました。HTTPの状態は確認できません。') + '本文と途中記録は保持しています。' +
+      (wait ? `${wait}秒以上待ち、` : '') + 'noteの通常表示が戻ってから「通信停止解除」→「送」で再開してください';
+  }
+  function assertNetwork() { const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
+  function observeHttp(code, retryAfter) {
+    code = Number(code);
+    if (![0, 401, 403, 429].includes(code)) return false;
+    const seconds = Number(retryAfter), date = Date.parse(String(retryAfter || ''));
+    const until = retryAfter && Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Number.isFinite(date) ? date : 0;
+    const hold = { code, at: Date.now(), until: Math.max(until, networkHold()?.until || 0) };
+    memoryHold = hold;
+    try { localStorage.setItem(networkKey, JSON.stringify(hold)); } catch (_) { /* Still stop this page if storage is full. */ }
+    stopped = true; page.__MUMEI_CARD_VISIBLE__?.cancel();
+    try { capture(); } catch (_) { /* Retain earlier copies as well. */ }
+    status(networkMessage(hold), true);
+    return true;
+  }
+  function resumeNetwork() {
+    const hold = networkHold();
+    if (active) throw new Error('現在の処理が停止するまでお待ちください');
+    if (hold?.until > Date.now()) throw new Error(networkMessage(hold));
+    localStorage.removeItem(networkKey); memoryHold = null; stopped = true;
+    status('通信停止を解除しました。自動再送はしません。「送」で不足分から再開できます');
+  }
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
   function stats(doc) {
@@ -116,6 +145,7 @@
   }
   function begin(label, v) {
     attach(v); current(v);
+    assertNetwork();
     if (active) throw new Error(active.label + 'の完了を待ってください');
     const lease = read(leaseKey());
     if (lease && lease.owner !== owner && lease.until > Date.now()) throw new Error('別のタブでこの記事を処理中です。その処理を終えてから再開してください');
@@ -251,8 +281,11 @@
         const method = args[1]?.method || args[0]?.method || 'GET', url = args[0]?.url || args[0];
         const metadata = /^GET$/i.test(method) && metadataUrl(url);
         const ticket = requestStart(method, url, args[1]?.body);
-        const response = await fetch(...args);
+        let response;
+        try { response = await fetch(...args); }
+        catch (e) { if (active && (ticket || metadata)) observeHttp(0); throw e; }
         if (ticket || metadata) {
+          if (active) observeHttp(response.status, response.headers?.get?.('retry-after'));
           try { const payload = await response.clone().json(); if (metadata) observeNoteResponse(url, response.status, payload); requestEnd(ticket, response.status, payload); } catch (_) { /* no proof */ }
         }
         return response;
@@ -265,7 +298,9 @@
       proto.send = function (...args) {
         const info = this.__mumeiSave, metadata = /^GET$/i.test(info?.method || '') && metadataUrl(info?.url);
         const t = requestStart(info?.method, info?.url, args[0]);
+        if (t || metadata) this.addEventListener('error', () => { if (active) observeHttp(0); }, { once: true });
         if (t || metadata) this.addEventListener('load', () => {
+          if (active) observeHttp(this.status, this.getResponseHeader?.('retry-after'));
           try { const payload = this.responseType === 'json' ? this.response : JSON.parse(this.responseText); if (metadata) observeNoteResponse(info.url, this.status, payload); requestEnd(t, this.status, payload); } catch (_) { /* no proof */ }
         }, { once: true });
         return send.apply(this, args);
@@ -289,14 +324,18 @@
     return JSON.stringify(visit(doc.toJSON()));
   }
   async function readDraft(v = view) {
-    check(v);
+    check(v); assertNetwork();
     if (typeof page.fetch !== 'function') throw new Error('保存済み下書きを読み取れません');
     const article = key(), target = v;
     const controller = typeof page.AbortController === 'function' ? new page.AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
     try {
       const url = 'https://note.com/api/v3/notes/' + article + '?draft=true&_card_verify=' + Date.now();
-      const response = await page.fetch(url, { credentials: 'include', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) });
+      let response;
+      try { response = await page.fetch(url, { credentials: 'include', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) }); }
+      catch (e) { observeHttp(0); assertNetwork(); throw e; }
+      if (observeHttp(response.status, response.headers?.get?.('retry-after'))) assertNetwork();
+      if (response.status < 200 || response.status >= 300) throw new Error('保存済み下書きの読戻し HTTP ' + response.status);
       const payload = await response.json(), n = payload?.data;
       check(target);
       if (key() !== article || response.status < 200 || response.status >= 300 || failedPayload(payload) ||
@@ -322,7 +361,7 @@
     } finally { if (timer !== null) clearTimeout(timer); }
   }
   async function save(v, label) {
-    check(v); capture(); status(label);
+    check(v); capture(); assertNetwork(); status(label);
     let expected = v.state.doc, expectedContent = null;
     const expectedTitle = titleNode()?.value ?? null;
     if (confirmedDoc === expected && confirmedTitle === expectedTitle) return true;
@@ -348,7 +387,7 @@
       const started = Date.now(), deadline = started + 60000;
       lastRead = started;
       while (Date.now() < deadline) {
-        check(v);
+        check(v); assertNetwork();
         if (nativeError) throw new Error('noteの下書き保存に失敗しました：' + (nativeError.message || String(nativeError)));
         if (confirmedDoc === v.state.doc && confirmedTitle === (titleNode()?.value ?? null)) return true;
         if (v.state.doc !== expected) {
@@ -411,41 +450,56 @@
   function download(item) {
     const blob = new page.Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
     const url = page.URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = 'note-' + item.articleKey + '-backup.json'; a.click();
+    a.href = url; a.download = 'note-' + item.articleKey + '-backup.json'; a.style.display = 'none'; document.body.append(a); a.click(); a.remove();
     setTimeout(() => page.URL.revokeObjectURL(url), 30000);
   }
   function showBackups() {
     if (document.getElementById('mumei-card-backups')) return;
     const box = document.createElement('div'); box.id = 'mumei-card-backups';
     Object.assign(box.style, { position: 'fixed', inset: '10% 6px auto', zIndex: '2147483647', background: '#fff', color: '#111827', padding: '14px', border: '2px solid #2563eb', borderRadius: '12px', maxHeight: '75vh', overflow: 'auto', fontSize: '13px' });
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'この記事の本文の控え');
+    const button = (text, action) => {
+      const el = document.createElement('button'); el.type = 'button'; el.textContent = text;
+      // The editor's theme can hide unstyled buttons on this white dialog.
+      for (const [name, value] of Object.entries({ display:'inline-block', visibility:'visible', opacity:'1', color:'#fff', background:'#1d4ed8', border:'1px solid #1e40af', padding:'10px 12px', margin:'5px 5px 5px 0', 'border-radius':'8px', font:'bold 14px sans-serif', 'min-height':'42px', 'line-height':'1.4', 'text-indent':'0', 'white-space':'normal', cursor:'pointer' })) el.style.setProperty(name, value, 'important');
+      el.onclick = action; return el;
+    };
     const title = document.createElement('strong'); title.textContent = 'この記事の本文の控え'; box.append(title);
-    const close = document.createElement('button'); close.textContent = '閉じる'; close.onclick = () => box.remove(); box.append(close);
+    const close = button('閉じる', () => box.remove()); box.append(close);
+    const feedback = document.createElement('p'); feedback.setAttribute('role', 'status'); feedback.style.color = '#9f1239'; box.append(feedback);
+    const fail = e => { feedback.textContent = e?.message || String(e); };
+    const exportCopy = item => { try { download(item); feedback.textContent = '控えファイルの保存を開始しました。ブラウザのダウンロード一覧で確認してください'; } catch (e) { fail(e); } };
     const list = backups();
     if (!list.length) { const p = document.createElement('p'); p.textContent = '保存された控えはまだありません'; box.append(p); }
     for (const { item } of list) {
       const row = document.createElement('p');
       row.textContent = new Date(item.at).toLocaleString() + '｜' + item.reason + '｜' + item.characters + '文字・画像' + item.images + '枚 ';
-      const restoreButton = document.createElement('button'); restoreButton.textContent = '復元';
-      restoreButton.onclick = () => { if (!page.confirm('この時点の本文・画像に戻します。現在の内容も控えに残します。復元しますか？')) return; try { restore(item); box.remove(); } catch (e) { status(e.message, true); } };
-      const exportButton = document.createElement('button'); exportButton.textContent = '書き出す'; exportButton.onclick = () => download(item);
-      row.append(restoreButton, exportButton); box.append(row);
+      const exportButton = button('この控えを書き出す', () => exportCopy(item));
+      const restoreButton = button('この控えを復元', () => { if (!page.confirm('この時点の本文・画像に戻します。現在の内容も控えに残します。復元しますか？')) return; try { restore(item); box.remove(); } catch (e) { fail(e); } });
+      row.append(exportButton, restoreButton); box.append(row);
     }
-    const live = document.createElement('button'); live.textContent = '現在の本文を書き出す'; live.onclick = () => { try { download(snapshot(view, '書き出し')); } catch (e) { status(e.message, true); } }; box.append(live);
+    const live = button('現在の本文を書き出す', () => { try { exportCopy(snapshot(view, '書き出し')); } catch (e) { fail(e); } }); box.append(live);
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json';
+    input.style.maxWidth = '100%';
     const label = document.createElement('p'); label.textContent = '書き出した控えを読み込む'; box.append(label, input);
-    input.onchange = async () => { try { const item = JSON.parse(await input.files[0].text()); if (page.confirm('読み込んだ控えでこの記事を復元しますか？')) { restore(item); box.remove(); } } catch (e) { status(e.message, true); } };
+    input.onchange = async () => { try { if (!input.files?.[0]) return; const item = JSON.parse(await input.files[0].text()); if (page.confirm('読み込んだ控えでこの記事を復元しますか？')) { restore(item); box.remove(); } } catch (e) { fail(e); } };
     document.body.append(box);
   }
   function mount() {
     const panel = document.getElementById(PANEL);
-    if (!panel || panel.querySelector('[data-card-safety]')) return;
+    if (!panel) return;
+    const existing = panel.querySelector('[data-card-safety]');
+    if (existing) { const resume = existing.querySelector('[data-safe="resume"]'); if (resume) resume.hidden = !networkHold(); return; }
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.14</span>';
-    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); }); panel.append(row);
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.15</span>';
+    row.querySelector('[data-safe="resume"]').hidden = !networkHold();
+    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); if (a === 'resume') { try { resumeNetwork(); mount(); } catch (err) { status(err.message, true); } } }); panel.append(row);
+    if (networkHold()) status(networkMessage(networkHold()), true);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
     setSerializer: fn => { serializer = fn; }, setDraftParser: fn => { draftParser = fn; }, readDraft,
-    busy: () => Boolean(active), stopped: () => stopped, stop, status, requestStart, requestEnd };
+    busy: () => Boolean(active), stopped: () => stopped || Boolean(networkHold()), stop, status, requestStart, requestEnd,
+    observeHttp, assertNetwork, networkHold, resumeNetwork, showBackups };
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
   page.addEventListener('pagehide', () => { stopped = true; try { capture(); } catch (_) {} });
