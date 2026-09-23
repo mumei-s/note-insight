@@ -1,4 +1,4 @@
-# Card tool 18.8.12: paced insertion and saved-draft audit
+# Card tool 18.8.12–18.8.13: paced insertion and saved-draft audit
 
 ## User report
 
@@ -62,8 +62,16 @@ on the user's Android device or delivery of notifications to recipients.
 
 ## Recovery flow
 
-Save the current draft, install 18.8.12, reopen the editor, verify the footer,
+Save the current draft, install 18.8.13, reopen the editor, verify the footer,
 and press `全件確認`. It reports current and saved counts. Press `送` to resume
 missing/unconfirmed work. Completion requires all 310 targets and saved
 content to match with zero missing or duplicate entries. Do not reinsert the
 310 completed images or initialize the article for this update.
+
+## Final readback contradiction correction (18.8.13)
+
+A fresh readback that disagrees with the editor invalidates an older save-response
+proof for that same document. Otherwise a subsequent send could skip the actual
+resave and repeatedly fail the audit. The saved-card omission regression now
+continues by resuming, verifies one real resave and zero extra card insertions,
+and reaches a complete saved audit.

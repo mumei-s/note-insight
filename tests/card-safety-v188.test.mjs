@@ -275,6 +275,12 @@ test('保存済み下書きに1枚足りなければ全件完成扱いにしな�
   assert.notEqual(run.stage, 'cards_ready'); assert.equal(run.cardAudit.savedCards, 2);
   assert.equal(run.cardAudit.complete, false); assert.equal(run.cardAudit.rows[1].savedCard, false);
   assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /全件確認が未完了/);
+  // A contradictory readback invalidates the old response proof: resume must
+  // actually save again, not repeatedly skip the write as 'already saved'.
+  let retries = 0; e.button.click = () => { retries++; e.succeed(); };
+  await e.module.resumableSend();
+  const completed = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.equal(retries, 1); assert.equal(e.calls(), 3); assert.equal(completed.stage, 'cards_ready'); assert.equal(completed.cardAudit.savedCards, 3);
 });
 test('全件確認は本文を変更せず、画像だけ・未記録・重複・順序・保存不足を区別する', async () => {
   const e = sending(3); let a = e.module.auditDocuments(e.view, e.dataset, e.run, null);
