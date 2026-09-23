@@ -767,7 +767,7 @@
     }
     return missing.length;
   }
-  function recordCard(view, dataset, run, row, hit) {
+  function positionCard(view, dataset, run, row, hit) {
     const order = new Map(dataset.rows.map((r, i) => [r.url, i]));
     // A recovered gap is generated at the end by note, then placed before the
     // next surviving tool card. Move only this new node; preserve every original.
@@ -776,6 +776,10 @@
     if (next && hit.pos > next.pos) {
       safety().dispatch(view, view.state.tr.delete(hit.pos, hit.pos + hit.node.nodeSize).insert(next.pos, hit.node));
     }
+    return embedNodes(view).find(h => cardKey(h) === cardKey(hit));
+  }
+  function recordCard(view, dataset, run, row, hit) {
+    const order = new Map(dataset.rows.map((r, i) => [r.url, i]));
     run.cardKeys.push({ url: row.url, key: cardKey(hit) });
     run.cardKeys.sort((a, b) => order.get(a.url) - order.get(b.url));
     run.pendingCard = null;
@@ -840,6 +844,7 @@
       const dataset = getJSON(DATA_KEY, null), run = currentBaseRun(), view = findView();
       if (!dataset || !run || run.datasetId !== dataset.datasetId || !view) throw new FatalError('この記事の対象データを確認できません');
       operation = safety().begin('全件確認', view);
+      page.__MUMEI_PREPARED_BATCH__?.requireCurrent?.(dataset);
       const a = await auditCurrent(view, dataset, run);
       if (a.complete) { run.stage = 'cards_ready'; run.savedCardCount = dataset.count; setJSON(runKey(), run); }
       setStatus((a.complete ? '全件確認済み ✅ ' : '未完了：') + auditSummary(a) +
@@ -913,6 +918,7 @@
       const view = findView();
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
       operation = safety().begin('通知カード作成', view);
+      page.__MUMEI_PREPARED_BATCH__?.requireCurrent?.(dataset);
       activeConversion = null;
       selectionApi();
       noteUrlCommandFactory();
@@ -987,6 +993,7 @@
           // Deleting a raw work paragraph can change the card's position.
           hit = embedNodes(view).find(h => cardKey(h) === cardKey(hit));
         }
+        hit = positionCard(view, dataset, run, row, hit);
         if (page.__MUMEI_CARD_VISIBLE__) {
           setStatus(`通知カード確認済み ${run.cardKeys.length}/${dataset.count}｜次の1件の本文表示を確認中…`);
           hit = await page.__MUMEI_CARD_VISIBLE__.wait(view, hit, row.url);
@@ -994,7 +1001,7 @@
         recordCard(view, dataset, run, row, hit);
         if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
-        if (run.cardKeys.length < dataset.rows.length) await sleep(1200);
+        if (run.cardKeys.length < dataset.rows.length) await sleep(3000);
       }
 
       if (run.cardKeys.length !== dataset.count || new Set(run.cardKeys.map(x => x.key)).size !== dataset.count) throw new FatalError('通知カードの件数が一致しません');
