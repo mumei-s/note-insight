@@ -129,6 +129,20 @@
     c.normalizeDOM(holder);
     return c.cleanHTML(holder.innerHTML);
   }
+  function parseSavedDraft(note) {
+    const req = webpackRequire();
+    if (!req) throw new FatalError('保存済み下書きの解析処理を取得できません');
+    const schema = req(35130)?.fK, parser = req(9119)?.aw, helpers = req(51910), hydrate = req(94928)?.thC;
+    if (!schema || !parser?.fromSchema || typeof helpers?.CO !== 'function' || typeof helpers?.p6 !== 'function' || typeof hydrate !== 'function') {
+      throw new FatalError('noteの下書き解析処理を確認できません');
+    }
+    const holder = document.createElement('div'); holder.innerHTML = note.body;
+    helpers.CO(holder); helpers.p6(holder);
+    const embeddedContents = (note.embedded_contents || note.embeddedContents || []).map(item => ({
+      ...item, htmlForEmbed: item.html_for_embed ?? item.htmlForEmbed
+    }));
+    return parser.fromSchema(schema).parse(hydrate(holder, { ...note, embeddedContents }));
+  }
   function htmlLinkedUrls(view) {
     const html = serializedHtml(view);
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -196,7 +210,7 @@
       if (!view) throw new FatalError('EditorViewなし');
       operation = safety().begin('リンク確認', view);
       await forceRelink(view, d, r, true);
-      await saveOnce(`全${d.count}件の🔗を保存中…`);
+      await saveOnce(`画像リンク ${d.count}/${d.count}｜通知カード作成前の保存確認中…`);
       verifyRows(view, d, r, true);
       setJSON(verifiedKey(), { datasetId: d.datasetId, count: d.count, verifiedAt: Date.now() });
       lastCompletedDataset = d.datasetId;
@@ -246,6 +260,7 @@
   }
 
   safety().setSerializer(serializedHtml);
+  safety().setDraftParser(parseSavedDraft);
 
   document.addEventListener('click', (event) => {
     const send = event.target?.closest?.(`#${PANEL} button[data-a="send"]`);
@@ -273,4 +288,3 @@
     // v18以降はパネルタイトルを書き換えない。
   }, 1200);
 })();
-
