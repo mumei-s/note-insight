@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         無名S note 極薄＋通知 URL/# 18.8.11
+// @name         無名S note 極薄＋通知 URL/# 18.8.12
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.11
+// @version      18.8.12
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
   const PANEL = 'mumei-note-source-picker-v163';
   let active = null, view = null, viewKey = '', lastDoc = null, confirmedDoc = null;
   let stopped = false, error = '', captureTimer = null, previousAt = 0, lastTitle = null;
-  let serializer = null, confirmedTitle = null;
+  let serializer = null, draftParser = null, confirmedTitle = null;
   const noteIdentity = new Map(), loadedDraft = new Map();
   const owner = Date.now().toString(36) + Math.random().toString(36).slice(2);
   const leaseKey = () => PREFIX + key() + ':lease';
@@ -308,6 +308,38 @@
     };
     return JSON.stringify(visit(doc.toJSON()));
   }
+  async function readDraft(v = view) {
+    check(v);
+    if (typeof page.fetch !== 'function') throw new Error('保存済み下書きを読み取れません');
+    const article = key(), target = v;
+    const controller = typeof page.AbortController === 'function' ? new page.AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+    try {
+      const url = 'https://note.com/api/v3/notes/' + article + '?draft=true&_card_verify=' + Date.now();
+      const response = await page.fetch(url, { credentials: 'include', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) });
+      const payload = await response.json(), n = payload?.data;
+      check(target);
+      if (key() !== article || response.status < 200 || response.status >= 300 || failedPayload(payload) ||
+          n?.key !== article || !/^\d+$/.test(String(n.id || '')) || typeof n.body !== 'string' || typeof n.name !== 'string') {
+        throw new Error('現在の記事の保存済み下書きを確認できません');
+      }
+      observeNoteResponse(url, response.status, payload);
+      const doc = draftParser ? draftParser(n) : null;
+      const html = serializer?.(target);
+      let sameBody = n.body === html;
+      if (!sameBody && doc && typeof html === 'string') {
+        // Compare both sides after note's own HTML parser. It supplies defaults
+        // such as image width and nullable embed attributes on reopening.
+        const embeddedContents = [];
+        target.state.doc.descendants(node => { if (node.attrs?.embeddedContentKey) embeddedContents.push({ key: node.attrs.embeddedContentKey, htmlForEmbed: node.attrs.htmlForEmbed }); });
+        const currentDoc = draftParser({ body: html, embeddedContents });
+        sameBody = contentWithoutBlockIds(doc) === contentWithoutBlockIds(currentDoc);
+      }
+      const matches = n.name === (titleNode()?.value ?? null) && sameBody;
+      if (matches) { confirmedDoc = target.state.doc; confirmedTitle = n.name; }
+      return { doc, matches: Boolean(matches), at: Date.now(), articleKey: article };
+    } finally { if (timer !== null) clearTimeout(timer); }
+  }
   async function save(v, label) {
     check(v); capture(); status(label);
     let expected = v.state.doc, expectedContent = null;
@@ -316,6 +348,7 @@
     const loaded = loadedDraft.get(key());
     if (loaded && loaded.title === expectedTitle && loaded.body === serializer?.(v)) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
     let uiConfirmed = false, savingSeen = false, clicked = false, nativeError = null, nativePending = false;
+    let reading = false, lastRead = 0, readError = '', seconds = -1, waiting = true;
     const observer = new MutationObserver(records => {
       for (const record of records) {
         const candidates = record.type === 'characterData' ? [record.target] : [...record.addedNodes];
@@ -331,7 +364,8 @@
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     try {
-      const deadline = Date.now() + 15000;
+      const started = Date.now(), deadline = started + 60000;
+      lastRead = started;
       while (Date.now() < deadline) {
         check(v);
         if (nativeError) throw new Error('noteの下書き保存に失敗しました：' + (nativeError.message || String(nativeError)));
@@ -345,6 +379,14 @@
           throw new Error('保存確認中に本文が変わりました。控えを残して停止しました');
         }
         if ((confirmedDoc === expected && confirmedTitle === expectedTitle) || uiConfirmed) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
+        const elapsed = Math.floor((Date.now() - started) / 1000);
+        if (elapsed !== seconds) { seconds = elapsed; status(label + `（保存確認 ${elapsed}秒）`); }
+        if (!reading && Date.now() - lastRead >= 5000 && typeof page.fetch === 'function') {
+          reading = true; lastRead = Date.now();
+          void readDraft(v).then(result => { if (waiting) readError = result.matches ? '' : '下書きは現在の本文とまだ一致していません'; })
+            .catch(e => { if (waiting) readError = e?.name === 'AbortError' ? '下書きの読戻しがタイムアウトしました' : (e?.message || String(e)); })
+            .finally(() => { reading = false; });
+        }
         if (!clicked) {
           const button = [...document.querySelectorAll('button')].find(b => /^(一時保存|下書き保存)$/.test(b.textContent?.trim()) && b.getClientRects().length && !b.disabled);
           if (button) { clicked = true; button.click(); }
@@ -361,8 +403,8 @@
         }
         await sleep(100);
       }
-      throw new Error('noteの保存完了を確認できません。本文の控えは保存済みです。noteの保存表示を確認後、同じ操作で再開してください');
-    } finally { observer.disconnect(); }
+      throw new Error('noteの保存完了を確認できません。' + (readError ? readError + '。' : '') + '本文の控えは保存済みです。「全件確認」で保存状況を確認できます');
+    } finally { waiting = false; observer.disconnect(); }
   }
   function restore(item) {
     check(view);
@@ -417,11 +459,11 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.11</span>';
-    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button><span style="font-size:9px"> v18.8.12</span>';
+    row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,
-    setSerializer: fn => { serializer = fn; },
+    setSerializer: fn => { serializer = fn; }, setDraftParser: fn => { draftParser = fn; }, readDraft,
     busy: () => Boolean(active), stopped: () => stopped, stop, status, requestStart, requestEnd };
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
@@ -2503,8 +2545,8 @@
     const list = exactUrlParagraphs(view, url).filter(hit => hit.node === insertedUrlNode).sort((a, b) => b.pos - a.pos);
     if (list[0]) deleteHits(view, [list[0]]);
   }
-  async function waitForNewCard(view, url, beforeKeys, attempt, timeout = 45000) {
-    const deadline = Date.now() + timeout;
+  async function waitForNewCard(view, url, beforeKeys, attempt, timeout = 90000) {
+    const started = Date.now(), deadline = started + timeout; let shownSecond = -1;
     while (Date.now() < deadline) {
       if (attempt.error) throw attempt.error;
       const hit = embedNodes(view).find((entry) => {
@@ -2513,6 +2555,9 @@
       });
       if (hit) return hit;
       safety().check(view);
+      if (safety().stopped()) throw new FatalError('停止要求：処理中の1件は未確認です。完成分と途中記録を保持しました');
+      const second = Math.floor((Date.now() - started) / 1000);
+      if (attempt.progress && second !== shownSecond) { shownSecond = second; setStatus(`画像 ${attempt.images}/${attempt.images} 完了｜通知カード ${attempt.progress} noteの変換待ち ${second}秒…`); }
       await sleep(80);
     }
     return null;
@@ -2572,6 +2617,66 @@
     run.savedCardCount = run.cardKeys.length;
     setJSON(runKey(), run);
   }
+
+  function auditDocuments(view, dataset, run, saved) {
+    const scan = doc => {
+      const images = [], cards = [];
+      doc?.descendants((node, pos) => { if (node.type.name === 'image') images.push({ node, pos }); if (node.type.name === 'embed') cards.push({ node, pos }); });
+      return { images, cards };
+    };
+    const current = scan(view.state.doc), stored = scan(saved?.doc), baseline = new Set(run.cardBaselineKeys || []);
+    const rows = dataset.rows.map((row, i) => {
+      const rec = run.images?.[row.url], tracked = (run.cardKeys || []).find(r => r.url === row.url);
+      const images = list => list.filter(h => rec?.src && h.node.attrs.src === rec.src && normalizeUrl(h.node.attrs.link) === normalizeUrl(row.url));
+      const cards = list => list.filter(h => !baseline.has(cardKey(h)) && genuineCard(h, row.url));
+      const a = images(current.images), b = cards(current.cards), c = images(stored.images), d = cards(stored.cards);
+      const recorded = b.length === 1 && tracked?.key === cardKey(b[0]);
+      return { index: i + 1, url: row.url, image: a.length === 1, card: b.length === 1, recorded,
+        savedImage: c.length === 1, savedCard: d.length === 1 && recorded && cardKey(d[0]) === tracked.key,
+        duplicates: a.length > 1 || b.length > 1 || c.length > 1 || d.length > 1,
+        cardPos: b.length === 1 ? b[0].pos : -1, savedPos: d.length === 1 ? d[0].pos : -1 };
+    });
+    const count = field => rows.filter(r => r[field]).length;
+    const order = field => rows.every((r, i) => r[field] >= 0 && (!i || r[field] > rows[i - 1][field]));
+    const confirmation = !dataset.confirmationUrl || (dataset.rows.at(-1)?.finalMarker && dataset.rows.at(-1).url === dataset.confirmationUrl);
+    const result = { at: Date.now(), target: dataset.count, images: count('image'), cards: count('card'), recorded: count('recorded'),
+      savedImages: count('savedImage'), savedCards: count('savedCard'), missing: rows.filter(r => !r.image || !r.card || (saved?.doc && (!r.savedImage || !r.savedCard))).length,
+      duplicates: count('duplicates'), order: order('cardPos'), savedOrder: order('savedPos'), confirmation: Boolean(confirmation),
+      savedDocumentMatches: Boolean(saved?.matches), savedRead: Boolean(saved?.doc), error: saved?.error || '', rows };
+    result.complete = rows.length === dataset.count && new Set(rows.map(r => r.url)).size === dataset.count &&
+      [result.images, result.cards, result.recorded, result.savedImages, result.savedCards].every(n => n === dataset.count) &&
+      result.duplicates === 0 && result.order && result.savedOrder && result.confirmation && result.savedDocumentMatches;
+    return result;
+  }
+  function auditSummary(a) {
+    return `画像 ${a.images}/${a.target}｜通知カード ${a.cards}/${a.target}｜保存 ${a.savedRead ? a.savedCards + '/' + a.target : '未確認'}｜不足 ${a.missing}・重複 ${a.duplicates}` + (a.cards > a.recorded ? `・記録未照合 ${a.cards - a.recorded}` : '');
+  }
+  async function auditCurrent(view, dataset, run) {
+    setStatus('全件確認：noteに保存済みの下書きを読み直しています…');
+    let saved;
+    try { saved = await safety().readDraft(view); if (!saved.doc) throw new Error('保存済み下書きの解析ができません'); }
+    catch (e) { saved = { error: e?.message || String(e) }; }
+    const audit = auditDocuments(view, dataset, run, saved);
+    run.cardAudit = audit;
+    if (!audit.complete && run.stage === 'cards_ready') run.stage = 'cards_paused';
+    setJSON(runKey(), run);
+    return audit;
+  }
+  async function checkAllCards() {
+    if (busy || safety().busy() || !enabled()) { setStatus('現在の処理が終わってから「全件確認」を押してください'); return; }
+    let operation; setBusy(true);
+    try {
+      const dataset = getJSON(DATA_KEY, null), run = currentBaseRun(), view = findView();
+      if (!dataset || !run || run.datasetId !== dataset.datasetId || !view) throw new FatalError('この記事の対象データを確認できません');
+      operation = safety().begin('全件確認', view);
+      const a = await auditCurrent(view, dataset, run);
+      if (a.complete) { run.stage = 'cards_ready'; run.savedCardCount = dataset.count; setJSON(runKey(), run); }
+      setStatus((a.complete ? '全件確認済み ✅ ' : '未完了：') + auditSummary(a) +
+        (a.complete ? '｜全対象の記事と保存内容が一致しました' : '｜' + (a.error || '不足・未保存分は「送」で続きから')), !a.complete);
+    } catch (e) { setStatus('全件確認停止：' + (e?.message || String(e)), true); }
+    finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
+  }
+  page.__MUMEI_CARD_AUDIT__ = { check: checkAllCards };
 
   async function resumableSend() {
     if (busy || !enabled()) return;
@@ -2636,7 +2741,7 @@
           setJSON(runKey(), run);
           const progress = `${run.cardKeys.length + 1}/${dataset.count}`;
           setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${progress} ${pending ? '再開' : '生成'}中…`);
-          const attempt = activeConversion = { node: insertedUrlNode, error: null };
+          const attempt = activeConversion = { node: insertedUrlNode, error: null, progress, images: imageCount };
           const command = noteUrlCommandFactory()(row.url);
           const handled = command(view.state, (transaction) => {
             if (activeConversion !== attempt || attempt.error) return;
@@ -2655,7 +2760,7 @@
         recordCard(view, dataset, run, row, hit);
         if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
-        if (run.cardKeys.length < dataset.rows.length) await sleep(60);
+        if (run.cardKeys.length < dataset.rows.length) await sleep(1200);
       }
 
       if (run.cardKeys.length !== dataset.count || new Set(run.cardKeys.map(x => x.key)).size !== dataset.count) throw new FatalError('通知カードの件数が一致しません');
@@ -2668,9 +2773,11 @@
         lastPos = hit.pos;
       }
       await saveCards(run, dataset, '最終保存');
+      const audit = await auditCurrent(view, dataset, run);
+      if (!audit.complete) throw new FatalError('全件確認が未完了：' + auditSummary(audit) + (audit.error ? '｜' + audit.error : '｜保存済み下書きと対象記事を確認してください'));
       run.stage = 'cards_ready';
       setJSON(runKey(), run);
-      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
+      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ 全件照合済み・不足0・重複0 このまま公開/更新`);
       page.alert(`準備完了\n\n画像: ${imageCount}件（保持）\n通知カード: ${dataset.count}件（保存確認済み）\n\nそのまま公開/更新。通知後「削」。`);
     } catch (error) {
       if (operation) {
@@ -3264,6 +3371,20 @@
     c.normalizeDOM(holder);
     return c.cleanHTML(holder.innerHTML);
   }
+  function parseSavedDraft(note) {
+    const req = webpackRequire();
+    if (!req) throw new FatalError('保存済み下書きの解析処理を取得できません');
+    const schema = req(35130)?.fK, parser = req(9119)?.aw, helpers = req(51910), hydrate = req(94928)?.thC;
+    if (!schema || !parser?.fromSchema || typeof helpers?.CO !== 'function' || typeof helpers?.p6 !== 'function' || typeof hydrate !== 'function') {
+      throw new FatalError('noteの下書き解析処理を確認できません');
+    }
+    const holder = document.createElement('div'); holder.innerHTML = note.body;
+    helpers.CO(holder); helpers.p6(holder);
+    const embeddedContents = (note.embedded_contents || note.embeddedContents || []).map(item => ({
+      ...item, htmlForEmbed: item.html_for_embed ?? item.htmlForEmbed
+    }));
+    return parser.fromSchema(schema).parse(hydrate(holder, { ...note, embeddedContents }));
+  }
   function htmlLinkedUrls(view) {
     const html = serializedHtml(view);
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -3331,7 +3452,7 @@
       if (!view) throw new FatalError('EditorViewなし');
       operation = safety().begin('リンク確認', view);
       await forceRelink(view, d, r, true);
-      await saveOnce(`全${d.count}件の🔗を保存中…`);
+      await saveOnce(`画像リンク ${d.count}/${d.count}｜通知カード作成前の保存確認中…`);
       verifyRows(view, d, r, true);
       setJSON(verifiedKey(), { datasetId: d.datasetId, count: d.count, verifiedAt: Date.now() });
       lastCompletedDataset = d.datasetId;
@@ -3381,6 +3502,7 @@
   }
 
   safety().setSerializer(serializedHtml);
+  safety().setDraftParser(parseSavedDraft);
 
   document.addEventListener('click', (event) => {
     const send = event.target?.closest?.(`#${PANEL} button[data-a="send"]`);
