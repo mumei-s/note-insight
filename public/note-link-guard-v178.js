@@ -49,10 +49,8 @@
     } catch (_) { return raw; }
   }
   function setStatus(text, bad = false) {
-    const node = document.getElementById(STATUS);
-    if (!node) return;
-    node.textContent = text;
-    node.dataset.bad = bad ? '1' : '0';
+    // Both panels share the terminal result; the status mirror must not restore an older stop message.
+    safety().status(text, bad);
   }
 
   function editor() {
@@ -116,9 +114,9 @@
     return coreCache;
   }
   function imageNodes(view) { return safety().index(view).images; }
-  function trackedImage(view, record) {
+  function trackedImage(view, record, url = '') {
     if (!record) return null;
-    return safety().tracked(view, record);
+    return safety().tracked(view, record, url);
   }
   function trackedRows(d, r) {
     return (d?.rows || []).filter((row) => r?.images?.[row.url]);
@@ -147,7 +145,7 @@
     const bad = [];
     for (const row of rows) {
       const record = r?.images?.[row.url];
-      const hit = trackedImage(view, record);
+      const hit = trackedImage(view, record, row.url);
       const wanted = normalizeUrl(row.url);
       const nodeOK = Boolean(hit && normalizeUrl(hit.node.attrs?.link) === wanted);
       const htmlOK = htmlUrls.has(wanted);
@@ -162,7 +160,7 @@
     if (requireAll && rows.length !== Number(d?.count || 0)) throw new FatalError(`極薄画像不足 ${rows.length}/${d?.count || 0}`);
     const work = [];
     for (const row of rows) {
-      const hit = trackedImage(view, r?.images?.[row.url]);
+      const hit = trackedImage(view, r?.images?.[row.url], row.url);
       if (!hit) throw new FatalError(`画像実体が見つかりません: ${row.index || row.url}`);
       if (normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) work.push({ row, hit });
     }
@@ -206,7 +204,10 @@
       return true;
     } catch (error) {
       safety().stop();
-      setStatus(`送信停止：${error?.message || String(error)}`, true);
+      const d = dataset(), r = run();
+      const message = `送信停止（画像記録${Object.keys(r?.images || {}).length}/${d?.count || 0}）：${error?.message || String(error)}`;
+      try { setJSON('mumei_link_guard_error_v1887:' + articleKey(), {at:Date.now(), message}); } catch (_) {}
+      setStatus(message, true);
       return false;
     } finally {
       page.__MUMEI_CARD_SAFETY__?.end(operation);
