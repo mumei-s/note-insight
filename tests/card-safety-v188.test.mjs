@@ -145,6 +145,50 @@ test('保存応答を待つ間の手入力を未保存のまま成功扱いに�
   e.button.click = () => { const ticket = e.safety.requestStart('PUT', '/api/v1/text_notes/' + key, JSON.stringify({ body: e.encode() })); e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph', {}, '追記'))); e.safety.requestEnd(ticket, 200, {}); };
   await assert.rejects(e.safety.save(e.view, '保存中'), /本文が変わりました/); assert.match(e.encode(), /追記/);
 });
+// Native draft save assigns missing/duplicate block IDs before its HTTP request.
+// The visible save button does not expose that request's promise to our caller.
+async function afterSavePolls(fn) { for (let i = 0; i < 8; i++) await Promise.resolve(); fn(); }
+function changeOnlyIds(e) {
+  let tr = e.view.state.tr, index = 0;
+  e.view.state.doc.forEach((node, pos) => { tr = tr.setNodeMarkup(pos, node.type, { ...node.attrs, id: 'saved-' + ++index }); });
+  e.view.dispatch(tr);
+}
+test('実機10/310: 保存ボタンが管理IDを付け直した後も遅延した保存応答を待つ', async () => {
+  const e = environment({ nodes: [new Node('paragraph', { id: 'duplicate' }, '本文'), image('duplicate'), embed('embexisting', 'https://note.com/user/n/n000000000000')] });
+  let response, completed = false;
+  e.button.click = () => { changeOnlyIds(e); response = afterSavePolls(() => { e.succeed(); completed = true; }); };
+  assert.equal(await e.safety.save(e.view, '保存中'), true); await response;
+  assert.equal(completed, true); assert.match(e.encode(), /本文/); assert.equal(e.safety.index(e.view).images.length, 1);
+});
+test('IDだけ変わっても保存成功応答なしでは完了としない', async () => {
+  const e = environment(); e.button.click = () => changeOnlyIds(e);
+  await assert.rejects(e.safety.save(e.view, '保存中'), /保存完了を確認できません/);
+});
+test('同一内容の別documentオブジェクトでも保存応答を待つ', async () => {
+  const e = environment(); let response;
+  e.button.click = () => {
+    e.view.dispatch(e.view.state.tr.replaceWith(0, e.view.state.doc.content.size, new Doc(e.view.state.doc.nodes.slice()).content));
+    response = afterSavePolls(e.succeed);
+  };
+  assert.equal(await e.safety.save(e.view, '保存中'), true); await response;
+});
+test('ID以外の本文・画像・リンク・カードキーの変更は保存通知だけで許可しない', async () => {
+  for (const kind of ['text', 'image', 'link', 'card', 'title']) {
+    const e = environment({ nodes: [new Node('paragraph', {}, '本文'), image('i1', 'https://note.com/a'), embed('embone', 'https://note.com/user/n/n000000000000')] });
+    e.button.click = () => {
+      changeOnlyIds(e);
+      const nodes = e.view.state.doc.nodes, pos = nodes[0].nodeSize;
+      if (kind === 'text') e.view.dispatch(e.view.state.tr.replaceWith(0, pos, new Node('paragraph', nodes[0].attrs, '書き換え')));
+      if (kind === 'image') e.view.dispatch(e.view.state.tr.setNodeMarkup(pos, types.image, { ...nodes[1].attrs, src: 'https://assets.st-note.com/other.png' }));
+      if (kind === 'link') e.view.dispatch(e.view.state.tr.setNodeMarkup(pos, types.image, { ...nodes[1].attrs, link: 'https://note.com/b' }));
+      if (kind === 'card') e.view.dispatch(e.view.state.tr.setNodeMarkup(pos + nodes[1].nodeSize, types.embed, { ...nodes[2].attrs, embeddedContentKey: 'embother' }));
+      if (kind === 'title') e.title.value = '別タイトル';
+      const observer = e.observers.at(-1);
+      for (const text of ['保存中', '保存しました']) observer.fn([{ type: 'childList', addedNodes: [{ textContent: text, closest: () => null, getClientRects: () => [1] }] }]);
+    };
+    await assert.rejects(e.safety.save(e.view, '保存中'), /本文が変わりました/, kind);
+  }
+});
 test('3000枚の画像検証は本文を1回だけ走査し変更後だけ再走査', () => {
   const e = environment({ nodes: Array.from({ length: 3000 }, (_, i) => image('image' + i)) }); const doc = e.view.state.doc;
   for (let i = 0; i < 3000; i++) assert.equal(e.safety.tracked(e.view, { id: 'image' + i }).node.attrs.id, 'image' + i);
@@ -175,6 +219,18 @@ test('実際の送処理: 既存の同じURLと本文を残し、カードを作
   assert.equal(e.safety.index(e.view).embeds.length, 10);
   await e.module.resumableSend(); assert.equal(e.calls(), 10); assert.equal(e.safety.index(e.view).embeds.length, 10);
   assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /完成・保存/);
+});
+test('310件の通知カードを10件ごとのID正規化・遅延保存を経て全件完了する', async () => {
+  const e = sending(310); let saves = 0, response;
+  e.button.click = () => { saves++; changeOnlyIds(e); response = afterSavePolls(e.succeed); };
+  await e.module.resumableSend(); await response;
+  const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.equal(run.stage, 'cards_ready', e.statuses.get('mumei-note-source-status-v163').textContent);
+  assert.equal(e.calls(), 310); assert.equal(saves, 31); assert.equal(run.savedCardCount, 310);
+  assert.equal(e.safety.index(e.view).images.length, 310); assert.equal(e.safety.index(e.view).embeds.length, 310);
+  assert.match(e.encode(), /消さない本文/);
+  assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
+  await e.module.resumableSend(); assert.equal(e.calls(), 310); assert.equal(saves, 31);
 });
 test('実際の送処理: 途中停止は現在のカードを保存し次の操作で残件だけ作る', async () => {
   const e = sending(3); let calls = 0;
