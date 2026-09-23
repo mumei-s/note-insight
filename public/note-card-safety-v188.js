@@ -7,6 +7,7 @@
   let active = null, view = null, viewKey = '', lastDoc = null, confirmedDoc = null;
   let stopped = false, error = '', captureTimer = null, previousAt = 0, lastTitle = null;
   let serializer = null, confirmedTitle = null;
+  const noteIdentity = new Map(), loadedDraft = new Map();
   const owner = Date.now().toString(36) + Math.random().toString(36).slice(2);
   const leaseKey = () => PREFIX + key() + ':lease';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -172,11 +173,14 @@
     });
     indexedDoc = v.state.doc; return (cachedIndex = { images, embeds, byId, bySrc });
   }
-  function tracked(v, rec) {
+  function tracked(v, rec, expectedUrl = '') {
     if (!rec) return null;
-    const i = index(v);
-    if (rec.id) return i.byId.get(String(rec.id)) || null;
-    const matches = i.bySrc.get(String(rec.src || '')) || [];
+    const i = index(v), exact = rec.id ? i.byId.get(String(rec.id)) : null;
+    if (exact) return !rec.src || String(exact.node.attrs.src || '') === String(rec.src) ? exact : null;
+    if (!rec.src) return null;
+    const normalize = value => { try { const u = new URL(String(value), location.href); u.search = ''; u.hash = ''; return u.href; } catch (_) { return String(value || ''); } };
+    const wanted = expectedUrl || rec.link || '';
+    const matches = (i.bySrc.get(String(rec.src)) || []).filter(hit => !wanted || normalize(hit.node.attrs.link) === normalize(wanted));
     return matches.length === 1 ? matches[0] : null;
   }
   function remove(v, hits) {
@@ -197,18 +201,36 @@
     return tr.setNodeMarkup(fresh.pos, fresh.node.type, { ...fresh.node.attrs, link: url }, fresh.node.marks);
   }
 
-  // Success must belong to a save request started for this exact editor document.
+  function apiUrl(rawUrl) {
+    try { const u = new URL(String(rawUrl), location.href); return [location.origin,'https://note.com'].includes(u.origin) ? u : null; } catch (_) { return null; }
+  }
+  function metadataUrl(rawUrl) {
+    const u = apiUrl(rawUrl);
+    return u && u.pathname === '/api/v3/notes/' + key() ? u : null;
+  }
+  function failedPayload(payload) {
+    return !payload || payload.error || (payload.errors && Object.keys(payload.errors).length) || payload.success === false || payload.status === 'error' ||
+      payload.data?.error || (payload.data?.errors && Object.keys(payload.data.errors).length) || payload.data?.success === false || payload.data?.status === 'error';
+  }
+  function observeNoteResponse(rawUrl, code, payload) {
+    const u = metadataUrl(rawUrl), n = payload?.data;
+    if (!u || code < 200 || code >= 300 || failedPayload(payload) || n?.key !== key() || !/^\d+$/.test(String(n.id || ''))) return;
+    noteIdentity.set(key(), String(n.id));
+    if (u.searchParams.get('draft') === 'true' && typeof n.body === 'string' && typeof n.name === 'string') loadedDraft.set(key(), {body:n.body,title:n.name});
+  }
+  // Match the actual note draft endpoint by its numeric note ID as well as the editor HTML/title.
   function requestStart(method, rawUrl, body) {
     if (!view || key() !== viewKey || !/^(POST|PUT|PATCH)$/i.test(method || '')) return null;
     try {
-      const u = new URL(String(rawUrl), location.href);
-      if (u.origin !== location.origin && u.origin !== 'https://note.com') return null;
-      const escaped = key().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (!new RegExp('/(?:text_)?notes/' + escaped + '(?:/(?:draft|save))?/?$').test(u.pathname)) return null;
+      const u = apiUrl(rawUrl); if (!u) return null;
       let data = body;
       if (typeof body === 'string') {
         try { data = JSON.parse(body); } catch (_) { data = Object.fromEntries(new URLSearchParams(body)); }
       } else if (body && typeof body.entries === 'function') data = Object.fromEntries(body.entries());
+      const keyed = new RegExp('/(?:text_)?notes/' + key() + '(?:/(?:draft|save))?/?$').test(u.pathname);
+      const nativeDraft = u.pathname === '/api/v1/text_notes/draft_save';
+      const id = String(u.searchParams.get('id') || data?.id || '');
+      if (!keyed && (!nativeDraft || !id || (id !== key() && id !== noteIdentity.get(key())))) return null;
       const html = serializer?.(view);
       const candidates = [data?.body, data?.body_html, data?.html, data?.content, data?.note?.body];
       if (typeof html !== 'string' || !candidates.some(value => value === html)) return null;
@@ -219,18 +241,19 @@
     } catch (_) { return null; }
   }
   function requestEnd(ticket, code, payload) {
-    if (!ticket || ticket.key !== key() || ticket.view !== view || ticket.doc !== view.state.doc || ticket.title !== (titleNode()?.value ?? null) || code < 200 || code >= 300) return;
-    if (payload?.error || (payload?.errors && Object.keys(payload.errors).length) || payload?.success === false || payload?.status === 'error') return;
+    if (!ticket || ticket.key !== key() || ticket.view !== view || ticket.doc !== view.state.doc || ticket.title !== (titleNode()?.value ?? null) || code < 200 || code >= 300 || failedPayload(payload)) return;
     confirmedDoc = ticket.doc; confirmedTitle = ticket.title;
   }
   function installSaveProbe() {
     if (typeof page.fetch === 'function') {
       const fetch = page.fetch.bind(page);
       page.fetch = async function (...args) {
-        const ticket = requestStart(args[1]?.method || args[0]?.method || 'GET', args[0]?.url || args[0], args[1]?.body);
+        const method = args[1]?.method || args[0]?.method || 'GET', url = args[0]?.url || args[0];
+        const metadata = /^GET$/i.test(method) && metadataUrl(url);
+        const ticket = requestStart(method, url, args[1]?.body);
         const response = await fetch(...args);
-        if (ticket) {
-          try { requestEnd(ticket, response.status, await response.clone().json()); } catch (_) { /* no proof */ }
+        if (ticket || metadata) {
+          try { const payload = await response.clone().json(); if (metadata) observeNoteResponse(url, response.status, payload); requestEnd(ticket, response.status, payload); } catch (_) { /* no proof */ }
         }
         return response;
       };
@@ -240,9 +263,10 @@
       const open = proto.open, send = proto.send;
       proto.open = function (method, url, ...rest) { this.__mumeiSave = { method, url }; return open.call(this, method, url, ...rest); };
       proto.send = function (...args) {
-        const t = requestStart(this.__mumeiSave?.method, this.__mumeiSave?.url, args[0]);
-        this.addEventListener('load', () => {
-          try { requestEnd(t, this.status, this.responseType === 'json' ? this.response : JSON.parse(this.responseText)); } catch (_) { /* no proof */ }
+        const info = this.__mumeiSave, metadata = /^GET$/i.test(info?.method || '') && metadataUrl(info?.url);
+        const t = requestStart(info?.method, info?.url, args[0]);
+        if (t || metadata) this.addEventListener('load', () => {
+          try { const payload = this.responseType === 'json' ? this.response : JSON.parse(this.responseText); if (metadata) observeNoteResponse(info.url, this.status, payload); requestEnd(t, this.status, payload); } catch (_) { /* no proof */ }
         }, { once: true });
         return send.apply(this, args);
       };
@@ -253,7 +277,9 @@
     const expected = v.state.doc;
     const expectedTitle = titleNode()?.value ?? null;
     if (confirmedDoc === expected && confirmedTitle === expectedTitle) return true;
-    let uiConfirmed = false, savingSeen = false, clicked = false;
+    const loaded = loadedDraft.get(key());
+    if (loaded && loaded.title === expectedTitle && loaded.body === serializer?.(v)) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
+    let uiConfirmed = false, savingSeen = false, clicked = false, nativeError = null, nativePending = false;
     const observer = new MutationObserver(records => {
       for (const record of records) {
         const candidates = record.type === 'characterData' ? [record.target] : [...record.addedNodes];
@@ -272,11 +298,26 @@
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
         check(v);
-        if (v.state.doc !== expected || (titleNode()?.value ?? null) !== expectedTitle) throw new Error('保存確認中に本文が変わりました。控えを残して停止しました');
+        if (nativeError) throw new Error('noteの下書き保存に失敗しました：' + (nativeError.message || String(nativeError)));
+        if (confirmedDoc === v.state.doc && confirmedTitle === (titleNode()?.value ?? null)) return true;
+        if (v.state.doc !== expected || (titleNode()?.value ?? null) !== expectedTitle) {
+          if (nativePending) { await sleep(100); continue; }
+          throw new Error('保存確認中に本文が変わりました。控えを残して停止しました');
+        }
         if ((confirmedDoc === expected && confirmedTitle === expectedTitle) || uiConfirmed) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
         if (!clicked) {
           const button = [...document.querySelectorAll('button')].find(b => /^(一時保存|下書き保存)$/.test(b.textContent?.trim()) && b.getClientRects().length && !b.disabled);
           if (button) { clicked = true; button.click(); }
+          else if (typeof page.noteEditor?.registerNoteDraft === 'function') {
+            clicked = true; nativePending = true;
+            Promise.resolve().then(() => page.noteEditor.registerNoteDraft('manual')).catch(e => { nativeError = e; }).finally(() => { nativePending = false; });
+          } else if (typeof page.KeyboardEvent === 'function') {
+            // The current editor registers Ctrl+S on window for its own instant draft save.
+            clicked = true; nativePending = true;
+            const event = new page.KeyboardEvent('keydown', {key:'s',code:'KeyS',ctrlKey:true,bubbles:true,cancelable:true});
+            page.dispatchEvent(event);
+            if (!event.defaultPrevented) throw new Error('noteの下書き保存操作を開始できません。本文を保持して停止しました');
+          }
         }
         await sleep(100);
       }
@@ -336,7 +377,7 @@
     const panel = document.getElementById(PANEL);
     if (!panel || panel.querySelector('[data-card-safety]')) return;
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.6</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button><span style="font-size:9px"> v18.8.7</span>';
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); }); panel.append(row);
   }
   page.__MUMEI_CARD_SAFETY__ = { attach, begin, end, check, checkpoint, capture, save, index, tracked, remove, relink, restore, backups, snapshot, dispatch,

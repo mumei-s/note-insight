@@ -32,7 +32,7 @@ class Tr {
   scrollIntoView() { return this; }
   setSelection() { return this; }
 }
-function environment({ storage = new Map(), nodes = [new Node('paragraph', {}, '本文'.repeat(348) + '。')] } = {}) {
+function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest: InitialXHR, nodes = [new Node('paragraph', {}, '本文'.repeat(348) + '。')] } = {}) {
   let time = 100000, quota = false;
   const events = new Map(), documentEvents = new Map();
   const statuses = new Map(['mumei-note-source-status-v163', 'mumei-likers-thin-status-v160'].map(id => [id, { textContent: '', dataset: {} }]));
@@ -64,6 +64,8 @@ function environment({ storage = new Map(), nodes = [new Node('paragraph', {}, '
     confirm: () => true, alert() {}, console,
     HTMLTextAreaElement: class {}, HTMLInputElement: class {},
   };
+  if (initialFetch) page.fetch = initialFetch;
+  if (InitialXHR) page.XMLHttpRequest = InitialXHR;
   page.window = page; page.unsafeWindow = page;
   const ctx = vm.createContext(page);
   vm.runInContext(source('note-card-safety-v188.js'), ctx);
@@ -157,7 +159,7 @@ function sending(count = 3) {
   const dataset = { version: '16.0.0', sourceKey: 'n08825c632afd', datasetId: 'd1', count, rows, confirmationUrl: rows.at(-1).url };
   const run = { version: '16.0.0', articleKey: key, datasetId: 'd1', images: Object.fromEntries(rows.map((r, i) => [r.url, { id: 'image' + i, src: nodes[i + 2].attrs.src }])), cardKeys: [] };
   e.storage.set('mumei_likers_thin_dataset_v160', JSON.stringify(dataset)); e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(run));
-  const module = e.loadModule('note-source-picker-v163.js', 'resumableSend, resetAll, deleteLastExactUrl, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
+  const module = e.loadModule('note-source-picker-v163.js', 'syncBaseStatus, resumableSend, resetAll, deleteLastExactUrl, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
   module.setView(e.view); let calls = 0;
   module.setCommand(url => (state, dispatch) => {
     calls++;
@@ -654,4 +656,75 @@ test('実績の画像が先に完成済みでも追加画像をその前に入�
   const api=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}},setNative(fn){preparedImageCommand=()=>fn}');api.setView(e.view);
   api.setNative((view,files,pos)=>{const i=parseInt(files[0].name);view.dispatch(view.state.tr.insert(pos+1,image('new'+i)));return true;});
   await api.insertThinImages();assert.deepEqual(Array.from(e.safety.index(e.view).images,h=>h.node.attrs.link),e.rows.map(r=>r.url));assert.equal(e.safety.index(e.view).images.at(-1).node.attrs.id,'final');
+});
+
+test('note実APIの数値記事ID付きdraft_saveを認識し、Androidの正規保存関数で完了を確認する',async()=>{
+  let e,requests=0,nativeCalls=0;
+  const fetch=async(url,init)=>{requests++;return{status:200,clone:()=>({json:async()=>url.includes('/api/v3/notes/')?{data:{key,id:4321}}:{data:{updated_at:'2026-09-24T01:00:00+09:00'}}})}};
+  e=environment({fetch});await e.page.fetch('https://note.com/api/v3/notes/'+key+'?draft=true');
+  e.page.document.querySelectorAll=()=>[];
+  e.page.noteEditor={registerNoteDraft:async mode=>{nativeCalls++;assert.equal(mode,'manual');
+    // Native save may normalize the document before sending it.
+    e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,new Node('paragraph')));
+    await e.page.fetch('https://note.com/api/v1/text_notes/draft_save?id=4321&is_temp_saved=true',{method:'POST',body:JSON.stringify({body:e.encode(),name:e.title.value})});
+  }};
+  assert.equal(await e.safety.save(e.view,'保存確認'),true);assert.equal(nativeCalls,1);assert.equal(requests,2);
+});
+
+test('XHRで読んだ現在の記事IDだけを保存先と認め、他記事・古い本文・業務エラーを成功扱いにしない',async()=>{
+  class XHR {open(method,url){this.url=url}addEventListener(type,fn){this.done=fn}send(){this.status=200;this.responseText=JSON.stringify({data:{key,id:4321}});this.done?.()}}
+  const e=environment({XMLHttpRequest:XHR});const xhr=new e.page.XMLHttpRequest();xhr.open('GET','https://note.com/api/v3/notes/'+key+'?draft=true');xhr.send();
+  const body=JSON.stringify({body:e.encode(),name:e.title.value}),url='https://note.com/api/v1/text_notes/draft_save?id=';
+  assert.equal(e.safety.requestStart('POST',url+'9999',body),null);
+  assert.equal(e.safety.requestStart('POST',url+'4321',JSON.stringify({body:'古い本文',name:e.title.value})),null);
+  e.button.click=()=>e.safety.requestEnd(e.safety.requestStart('POST',url+'4321',body),200,{data:{error:{message:'保存失敗'}}});
+  await assert.rejects(e.safety.save(e.view,'保存確認'),/保存完了を確認できません/);
+  e.button.click=()=>e.safety.requestEnd(e.safety.requestStart('POST',url+'4321',body),200,{data:{updated_at:'2026-09-24'}});
+  assert.equal(await e.safety.save(e.view,'保存確認'),true);
+});
+
+test('開き直した直後の本文・タイトルが取得済みの下書きと一致すれば再保存を待たない',async()=>{
+  let payload;
+  const e=environment({fetch:async()=>({status:200,clone:()=>({json:async()=>payload})})});
+  payload={data:{key,id:4321,body:e.encode(),name:e.title.value}};
+  await e.page.fetch('https://note.com/api/v3/notes/'+key+'?draft=true');
+  e.button.click=()=>assert.fail('保存済み本文を再保存しない');
+  assert.equal(await e.safety.save(e.view,'保存確認'),true);
+});
+
+test('保存済み310画像のIDが再表示で変わっても通知カード全310件を作成し、画像と本文を保持する',async()=>{
+  const e=sending(310);
+  for(const hit of e.safety.index(e.view).images.slice().reverse()) e.view.dispatch(e.view.state.tr.setNodeMarkup(hit.pos,hit.node.type,{...hit.node.attrs,id:'reopened-'+hit.node.attrs.id}));
+  await e.module.resumableSend();
+  assert.equal(e.calls(),310);assert.equal(e.safety.index(e.view).images.length,310);assert.equal(e.safety.index(e.view).embeds.length,310);assert.match(e.encode(),/消さない本文/);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/310\/310 完成・保存/);
+});
+
+test('再表示した同じ画像が複数ある場合は記事リンクまで照合し、曖昧なら再利用しない',()=>{
+  const a=image('new1','https://note.com/a/n/n111111111111'),b=image('new2','https://note.com/b/n/n222222222222');b.attrs.src=a.attrs.src;
+  const e=environment({nodes:[a,b]}),rec={id:'old',src:a.attrs.src};
+  assert.equal(e.safety.tracked(e.view,rec),null);assert.equal(e.safety.tracked(e.view,rec,b.attrs.link).node,b);
+  b.attrs.link=a.attrs.link;assert.equal(e.safety.tracked(e.view,rec,a.attrs.link),null);
+});
+
+test('送の前の検証エラーは状態ミラー後も具体的な理由を表示し、汎用の停止要求へ戻らない',async()=>{
+  const e=sending(3),mirror=e.module;
+  const guard=e.loadModule('note-link-guard-v178.js','hardenAllBeforeSend,setView(v){viewCache=v},failVerify(){forceRelink=async()=>{throw new Error("noteの保存完了を確認できません")}}');
+  guard.setView(e.view);guard.failVerify();assert.equal(await guard.hardenAllBeforeSend(),false);
+  mirror.syncBaseStatus();
+  for(const id of ['mumei-note-source-status-v163','mumei-likers-thin-status-v160']){assert.match(e.statuses.get(id).textContent,/送信停止.*保存完了を確認できません/);assert.equal(e.statuses.get(id).dataset.bad,'1');}
+});
+
+test('保存ボタンが表示されないブラウザではnoteのCtrl+S処理を使い、API成功が来るまで保存済みにしない',async()=>{
+  const e=environment({fetch:async()=>({status:200,clone:()=>({json:async()=>({data:{key,id:4321}})})})});
+  await e.page.fetch('https://note.com/api/v3/notes/'+key+'?draft=true');e.page.document.querySelectorAll=()=>[];
+  e.page.KeyboardEvent=class{constructor(type,init){this.type=type;Object.assign(this,init);this.defaultPrevented=false}preventDefault(){this.defaultPrevented=true}};
+  let calls=0;e.page.dispatchEvent=event=>{assert.equal(event.key,'s');assert.equal(event.ctrlKey,true);calls++;event.preventDefault();
+    e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,new Node('paragraph')));
+    const ticket=e.safety.requestStart('POST','https://note.com/api/v1/text_notes/draft_save?id=4321',JSON.stringify({body:e.encode(),name:e.title.value}));
+    e.page.setTimeout(()=>e.safety.requestEnd(ticket,200,{data:{updated_at:'2026-09-24'}}),700);
+  };
+  assert.equal(await e.safety.save(e.view,'保存確認'),true);assert.equal(calls,1);
+  const rejected=environment();rejected.page.document.querySelectorAll=()=>[];rejected.page.KeyboardEvent=e.page.KeyboardEvent;rejected.page.dispatchEvent=()=>{};
+  await assert.rejects(rejected.safety.save(rejected.view,'保存確認'),/保存操作を開始できません/);
 });
