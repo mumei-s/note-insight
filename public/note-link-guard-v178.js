@@ -203,6 +203,7 @@
     try {
       const d = dataset(), r = run();
       if (!d?.datasetId || !r || r.datasetId !== d.datasetId) throw new FatalError('対象データがありません');
+      page.__MUMEI_PREPARED_BATCH__?.requireCurrent?.(d);
       if (r.pending) throw new FatalError('画像アップロード途中です。続きの回収を先に完了します');
       const count = Object.keys(r.images || {}).length;
       if (count !== d.count) throw new FatalError(`極薄画像不足 ${count}/${d.count}`);
