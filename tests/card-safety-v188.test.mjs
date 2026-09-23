@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
+import { JSDOM } from 'jsdom';
 
 const path = new URL('../public/', import.meta.url);
 const source = name => fs.readFileSync(new URL(name, path), 'utf8');
@@ -238,7 +239,7 @@ function sending(count = 3) {
   const dataset = { version: '16.0.0', sourceKey: 'n08825c632afd', datasetId: 'd1', count, rows, confirmationUrl: rows.at(-1).url };
   const run = { version: '16.0.0', articleKey: key, datasetId: 'd1', images: Object.fromEntries(rows.map((r, i) => [r.url, { id: 'image' + i, src: nodes[i + 2].attrs.src }])), cardKeys: [] };
   e.storage.set('mumei_likers_thin_dataset_v160', JSON.stringify(dataset)); e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(run));
-  const module = e.loadModule('note-source-picker-v163.js', 'syncBaseStatus, resumableSend, resetAll, deleteLastExactUrl, auditDocuments, checkAllCards, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
+  const module = e.loadModule('note-source-picker-v163.js', 'syncBaseStatus, resumableSend, deleteCardsOnly, resetAll, deleteLastExactUrl, auditDocuments, checkAllCards, setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}, setCommand(fn){noteUrlCommand=fn}');
   module.setView(e.view); let calls = 0;
   module.setCommand(url => (state, dispatch) => {
     calls++;
@@ -1063,4 +1064,137 @@ test('保存ボタンが表示されないブラウザではnoteのCtrl+S処理�
   assert.equal(await e.safety.save(e.view,'保存確認'),true);assert.equal(calls,1);
   const rejected=environment();rejected.page.document.querySelectorAll=()=>[];rejected.page.KeyboardEvent=e.page.KeyboardEvent;rejected.page.dispatchEvent=()=>{};
   await assert.rejects(rejected.safety.save(rejected.view,'保存確認'),/保存操作を開始できません/);
+});
+
+function directSending(count = 3, respond) {
+  const e = sending(count), dom = new JSDOM('<body><div class="ProseMirror"></div></body>');
+  e.page.document.createElement = dom.window.document.createElement.bind(dom.window.document);
+  e.page.FormData = dom.window.FormData;
+  e.page.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+  e.view.dom = dom.window.document.querySelector('.ProseMirror');
+  types.embed.create = attrs => new Node('embed', attrs);
+  let hidden = false, message = true;
+  const domNodes = new Map(), cache = new WeakMap();
+  const render = () => {
+    domNodes.clear(); const wanted = [];
+    e.view.state.doc.forEach((node, pos) => {
+      if (cache.has(node)) { const el = cache.get(node); wanted.push(el); domNodes.set(pos, el); return; }
+      const el = dom.window.document.createElement(node.type.name === 'embed' ? 'figure' : 'p');
+      if (node.type.name === 'embed') {
+        el.setAttribute('embedded-content-key', node.attrs.embeddedContentKey); el.innerHTML = node.attrs.htmlForEmbed;
+        const frame = el.querySelector('iframe');
+        if (frame) frame.getBoundingClientRect = () => ({ width: 320, height: hidden ? 0 : Number(frame.getAttribute('height')) });
+      } else el.textContent = node.textContent;
+      cache.set(node, el); wanted.push(el); domNodes.set(pos, el);
+    });
+    const keep = new Set(wanted);
+    for (const el of [...e.view.dom.children]) if (!keep.has(el)) el.remove();
+    wanted.forEach((el, i) => { if (e.view.dom.children[i] !== el) e.view.dom.insertBefore(el, e.view.dom.children[i] || null); });
+    if (message) for (const frame of e.view.dom.querySelectorAll('iframe')) e.page.dispatchEvent({ type: 'message', origin: 'https://note.com', source: frame.contentWindow, data: 'height::' + frame.getAttribute('src') + '::360' });
+  };
+  const dispatch = e.view.dispatch.bind(e.view); e.view.dispatch = tr => { dispatch(tr); render(); }; e.view.nodeDOM = pos => domNodes.get(pos); render();
+  vm.runInContext(source('note-card-visible-v18814.js'), e.ctx);
+  const calls = [];
+  const api = async form => { // note native client: /v1/embed
+    const fields = Object.fromEntries(form.entries()); calls.push(fields);
+    if (respond) return respond(fields, calls.length);
+    const id = fields.url.split('/').pop();
+    return { embeddedContent: { key: 'embdirect' + calls.length, service: 'note', identifier: id, htmlForEmbed: `<iframe class="note-embed" src="https://note.com/embed/notes/${id}" height="360"></iframe>` } };
+  };
+  e.module.setCommand(e.page.__MUMEI_CARD_VISIBLE__.factory(id => { assert.equal(id, 13550); return { MI: api }; }));
+  return { ...e, directCalls: calls, render, hidden: value => { hidden = value; }, message: value => { message = value; }, dom, close: () => dom.window.close() };
+}
+test('18.8.14: official registration targets the current article; all 310 visible cards are inserted and bulk deleted with images/body intact', async () => {
+  const e = directSending(310);
+  try {
+    const original = e.view.state.doc.nodes.slice();
+    const keep = embed('emboriginal', e.rows[0].url); e.view.dispatch(e.view.state.tr.insert(0, keep));
+    await e.module.resumableSend();
+    assert.equal(e.directCalls.length, 310, e.statuses.get('mumei-note-source-status-v163').textContent);
+    assert.ok(e.directCalls.every(f => f.height === '360' && f.embeddable_type === 'Note' && f.embeddable_key === key));
+    let run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(run.cardAudit.displayed, 310); assert.equal(run.stage, 'cards_ready');
+    assert.equal(e.safety.index(e.view).embeds.length, 311);
+    await e.module.deleteCardsOnly();
+    assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node), [keep]);
+    assert.equal(e.safety.index(e.view).images.length, 310);
+    for (const n of original) assert.ok(e.view.state.doc.nodes.includes(n));
+    assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_deleted');
+  } finally { e.close(); }
+});
+test('18.8.14: invisible DOM never advances the counter; pending card resumes without duplicate registration', async () => {
+  const e = directSending(2);
+  try {
+    e.hidden(true); await e.module.resumableSend();
+    let run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(run.cardKeys.length, 0); assert.ok(run.pendingCard); assert.equal(e.directCalls.length, 1);
+    assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /本文表示を確認できません/);
+    e.hidden(false); await e.module.resumableSend();
+    run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(e.directCalls.length, 2); assert.equal(run.stage, 'cards_ready'); assert.equal(run.cardKeys.length, 2);
+  } finally { e.close(); }
+});
+test('18.8.14: an empty iframe box or another frame height message never counts as a displayed card', async () => {
+  const e = directSending(1);
+  try {
+    e.message(false);
+    e.page.dispatchEvent({ type: 'message', origin: 'https://note.com', source: {}, data: 'height::https://note.com/embed/notes/n000000000000::360' });
+    await e.module.resumableSend();
+    assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).cardKeys.length, 0);
+    const frame = e.view.dom.querySelector('iframe');
+    e.page.dispatchEvent({ type: 'message', origin: 'https://example.com', source: frame.contentWindow, data: 'height::x::360' });
+    e.page.dispatchEvent({ type: 'message', origin: 'https://note.com', source: frame.contentWindow, data: 'height::x::0' });
+    assert.equal(e.page.__MUMEI_CARD_VISIBLE__.inspect(e.view, e.safety.index(e.view).embeds[0], e.rows[0].url), false);
+    e.message(true); e.render(); await e.module.resumableSend();
+    assert.equal(e.directCalls.length, 1); assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_ready');
+  } finally { e.close(); }
+});
+test('18.8.14: bulk deletion includes an unrecorded pending card and preserves the original identical URL', async () => {
+  const e = directSending(1);
+  try {
+    e.hidden(true); await e.module.resumableSend();
+    assert.equal(e.safety.index(e.view).embeds.length, 1);
+    await e.module.deleteCardsOnly();
+    assert.equal(e.safety.index(e.view).embeds.length, 0); assert.ok(e.view.state.doc.nodes.includes(e.existing)); assert.equal(e.safety.index(e.view).images.length, 1);
+    assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).pendingCard, null);
+  } finally { e.close(); }
+});
+test('18.8.14: deletion cancels a late official response, clears only the work URL and keeps the original URL', async () => {
+  let reply; const e = directSending(1, () => new Promise(resolve => { reply = resolve; }));
+  try {
+    await e.module.resumableSend(); assert.equal(e.directCalls.length, 1);
+    await e.module.deleteCardsOnly();
+    reply({ embeddedContent: { key: 'emblate', service: 'note', identifier: 'n000000000000', htmlForEmbed: '<iframe class="note-embed" src="https://note.com/embed/notes/n000000000000" height="360"></iframe>' } });
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    assert.equal(e.safety.index(e.view).embeds.length, 0);
+    assert.equal(e.view.state.doc.nodes.filter(n => n.textContent === e.rows[0].url).length, 1); assert.ok(e.view.state.doc.nodes.includes(e.existing));
+  } finally { e.close(); }
+});
+test('18.8.14: wrong official response is rejected without changing body/images', async () => {
+  const e = directSending(1, () => ({ embeddedContent: { key: 'embwrong', service: 'note', identifier: 'naaaaaaaaaaaa' } }));
+  try {
+    await e.module.resumableSend(); assert.equal(e.safety.index(e.view).embeds.length, 0); assert.equal(e.safety.index(e.view).images.length, 1); assert.ok(e.view.state.doc.nodes.includes(e.existing));
+    assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /公式カード応答/);
+  } finally { e.close(); }
+});
+test('18.8.14: repair a zero-height owned card in place, without replacing its official embed key', async () => {
+  const e = directSending(1);
+  try {
+    const n = new Node('embed', { src: e.rows[0].url, embeddedContentKey: 'embzero', htmlForEmbed: '<iframe class="note-embed" src="https://note.com/embed/notes/n000000000000" height="0" style="height:0px"></iframe>' });
+    e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, n));
+    const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)); run.cardKeys = [{ key: 'embzero', url: e.rows[0].url }]; e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(run));
+    await e.module.resumableSend();
+    assert.equal(e.directCalls.length, 0); assert.equal(e.safety.index(e.view).embeds.length, 1);
+    assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_ready');
+    assert.match(e.safety.index(e.view).embeds[0].node.attrs.htmlForEmbed, /height="360"/);
+  } finally { e.close(); }
+});
+test('18.8.14: deletion retains recovery records when the saved draft still has cards, then retries without harming images', async () => {
+  const e = sending(2); await e.module.resumableSend(); const saved = e.savedDraft();
+  e.safety.readDraft = async () => ({ matches: false, doc: e.view.state.schema.nodeFromJSON(JSON.parse(saved.body)) });
+  await e.module.deleteCardsOnly();
+  assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).cardKeys.length, 2);
+  assert.equal(e.safety.index(e.view).embeds.length, 0); assert.equal(e.safety.index(e.view).images.length, 2);
+  e.safety.readDraft = async () => ({ matches: true, doc: e.view.state.doc });
+  await e.module.deleteCardsOnly(); assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_deleted');
 });
