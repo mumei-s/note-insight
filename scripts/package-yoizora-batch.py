@@ -9,8 +9,21 @@ def content(who,pinned):return cached(f'/api/v2/creators/{who}/contents?kind=not
 def unwrap(n):return n.get('note',n)
 def stamp(n):return datetime.datetime.fromisoformat(n.get('publishAt') or n.get('publish_at')).astimezone(datetime.timezone(datetime.timedelta(hours=9)))
 people=json.loads((p/'people.json').read_text());clock=datetime.datetime.fromisoformat(data['createdAt']);days={clock.date(),(clock-datetime.timedelta(days=1)).date()}
-assert len(rows)==data['count']==len(set(r['urlname'] for r in rows))==len(set(r['url'] for r in rows))
+assert len(rows)==data['count']==len(set(r['url'] for r in rows))
+all_tags=data.get('hashtagArticleMode')=='all'
+tag_rows=[r for r in rows if r['articleSource']=='hashtag']
+if all_tags:
+    assert [r['latestKey'] for r in tag_rows]==data['hashtagArticleKeys']
+    tag_people={r['urlname'] for r in tag_rows}
+    non_tag=[r['urlname'] for r in rows if r['articleSource']!='hashtag']
+    assert len(non_tag)==len(set(non_tag)) and not tag_people.intersection(non_tag)
+else:assert len(rows)==len(set(r['urlname'] for r in rows))
 assert rows[-1]['url']=='https://note.com/fuku444/n/nb4f6934381e9' and rows[-1]['finalMarker']
+appended=data.get('appendedPeople',[])
+assert len(appended)==len(set(appended))
+if appended:
+    assert [r['urlname'] for r in rows[-len(appended)-1:-1]]==appended
+    assert not any(people[who].get('tagKey') for who in appended)
 rest=False;latest_tail=False
 for i,r in enumerate(rows,1):
     assert r['index']==i
@@ -21,12 +34,15 @@ for i,r in enumerate(rows,1):
     assert r['creatorVerified']['name']==name and r['creatorVerified']['articleKey']==n['key']
     if r.get('finalMarker'):continue
     if r['articleSource']=='latestFallback':latest_tail=True
-    elif latest_tail:raise AssertionError('最新へのフォールバックは実績の算数の直前にまとめる')
+    elif latest_tail and r['urlname'] not in appended:raise AssertionError('既存の最新群より後には追加分だけを配置する')
     c=people[r['urlname']]
-    if c.get('tagKey'):
-        assert not rest and r['articleSource']=='hashtag' and r['latestKey']==c['tagKey']
+    if r['articleSource']=='hashtag':
+        assert not rest
+        assert r['latestKey'] in (data['hashtagArticleKeys'] if all_tags else [c.get('tagKey')])
     else:
-        rest=True;recent=[unwrap(n) for n in content(r['urlname'],False)];hits=[n for n in recent if stamp(n).date() in days]
+        selection_clock=datetime.datetime.fromisoformat(r.get('selectionCheckedAt',data['createdAt']))
+        selection_days={selection_clock.date(),(selection_clock-datetime.timedelta(days=1)).date()}
+        rest=True;recent=[unwrap(n) for n in content(r['urlname'],False)];hits=[n for n in recent if stamp(n).date() in selection_days]
         if hits:chosen=max(hits,key=stamp);origin='todayYesterday'
         else:
             fixed=[unwrap(n) for n in content(r['urlname'],True) if unwrap(n).get('isPinned') is True or unwrap(n).get('is_pinned') is True]
@@ -40,14 +56,14 @@ for r in rows:
 included={r['urlname'] for r in rows};excluded={x['excluded'] for x in data['excluded']}
 assert set(people)-{'fuku444'}==(included-{'fuku444'})|excluded
 counts=collections.Counter(r['articleSource'] for r in rows)
-report={'count':len(rows),'types':dict(counts),'excluded':data['excluded'],'captionVerified':len(rows),'imageHashVerified':len(rows),'dimensions':'860x140','duplicates':0,'last':rows[-1]['url'],'asOf':data['createdAt']}
+report={'count':len(rows),'types':dict(counts),'excluded':data['excluded'],'captionVerified':len(rows),'imageHashVerified':len(rows),'dimensions':'860x140','articleDuplicates':0,'uniqueCreators':len(set(r['urlname'] for r in rows)),'hashtagArticles':len(tag_rows),'last':rows[-1]['url'],'asOf':data['createdAt'],'appendedPeople':appended,'sourceCheckedAt':data.get('sourceCheckedAt')}
 (p/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 esc=html.escape
 labels={'hashtag':'#参加記事','todayYesterday':'今日・昨日','fixedFallback':'固定記事','latestFallback':'最新記事（固定なし）','final':'実績の算数'}
 figures='\n'.join(f'<figure><a href="{esc(r["url"])}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" width="860" height="140" src="cards/{r["index"]:03}.png" alt="{esc(r["title"])}"></a><figcaption>{r["index"]}. {esc(r["caption"])} <small>｜{esc(labels[r["articleSource"]])}</small></figcaption></figure>' for r in rows)
-preview='<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>宵空カップ 完成一覧</title><style>body{font-family:system-ui,sans-serif;margin:20px auto;max-width:860px;padding:0 10px;color:#17212b}figure{margin:24px 0}img{max-width:100%;height:auto}figcaption{text-align:center;font-size:14px}small{color:#667}</style><h1>宵空カップ 完成一覧</h1><p>'+str(len(rows))+'件。#先頭・人物の重複なし・最後は実績の算数。全件、投稿者ID・記事キー・氏名・PNGを照合済み。</p><p>今日／昨日 → 固定（古くても可）→ 最新。取得基準：'+esc(data['createdAt'])+'</p>'+figures+'</html>'
+preview='<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>宵空カップ 完成一覧</title><style>body{font-family:system-ui,sans-serif;margin:20px auto;max-width:860px;padding:0 10px;color:#17212b}figure{margin:24px 0}img{max-width:100%;height:auto}figcaption{text-align:center;font-size:14px}small{color:#667}</style><h1>宵空カップ 完成一覧</h1><p>'+str(len(rows))+'件。#全記事が先頭・URL側の人物重複なし・最後は実績の算数。全件、投稿者ID・記事キー・氏名・PNGを照合済み。</p><p>今日／昨日 → 固定（古くても可）→ 最新。取得基準：'+esc(data['createdAt'])+'</p>'+figures+'</html>'
 (p/'preview.html').write_text(preview)
-readme='''極薄＋通知 v18.8.3 宵空カップ用
+readme='''極薄＋通知 v18.8.4 宵空カップ用
 
 1. 更新ページからツールを更新し、note下書きの保存完了後に編集画面を開き直す。
 2. 前回の画像が残る場合は「初期化」。
@@ -62,7 +78,7 @@ cards/ は独立した860×140 PNG。yoizora-ready.jsonは対応情報と全画�
 Android実機での300枚以上の再成功は未確認です。通信・保存失敗時は記録を残して停止します。
 '''
 (p/'README.txt').write_text(readme)
-zip_path=p.parent/'yoizora-cards-1883.zip'
+zip_path=p.parent/('yoizora-cards-1884-tag42.zip' if all_tags else 'yoizora-cards-1883-added.zip')
 with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
     for name in ['yoizora-ready.json','preview.html','README.txt','verification.json']:z.write(p/name,name)
     for r in rows:z.write(p/'cards'/f'{r["index"]:03}.png',f'cards/{r["index"]:03}.png')
