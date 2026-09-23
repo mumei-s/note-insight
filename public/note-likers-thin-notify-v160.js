@@ -806,12 +806,14 @@
         ensureEndSelection(arm.view);
         const before = new Set(imageNodes(arm.view).map(hit => String(hit.node.attrs?.id || '')).filter(Boolean));
         arm.currentUploadStartedAt = Date.now();
-        arm.run.pending = { workUrls: [row.url], beforeIds: [...before], at: Date.now(), stage: 'uploading', runtime: '18.8.5', pageToken: UPLOAD_PAGE_TOKEN };
+        arm.run.pending = { workUrls: [row.url], beforeIds: [...before], at: Date.now(), stage: 'uploading', runtime: '18.8.6', pageToken: UPLOAD_PAGE_TOKEN };
         setRun(arm.run);
         const baseline = new Map(visibleUploadErrors().map(entry => [entry.node, entry.text]));
         const transfer = new page.DataTransfer(); transfer.items.add(arm.files[i]);
-        const pos = arm.view.state.selection.from;
-        if (!Number.isInteger(pos) || pos < 1) throw new FatalError('画像の挿入位置を確認できません');
+        const last = confirmationRow(arm.dataset);
+        const anchor = row.url === last.url ? null : findImageByState(arm.view, arm.run.images?.[last.url], last.url);
+        const pos = anchor ? anchor.pos : arm.view.state.selection.from;
+        if (!Number.isInteger(pos) || pos < 0) throw new FatalError('画像の挿入位置を確認できません');
         arm.phase = 'アップロード';
         if (arm.nativeCommand(arm.view, transfer.files, pos - 1, 'image') !== true) throw new FatalError('noteの正規画像処理が開始されませんでした');
         // note returns before its upload finishes. Never start another file until this one is remote.
@@ -821,7 +823,7 @@
           arm.run.pending.retryAt = result.net?.retryAt || 0; setRun(arm.run);
           const completed = verifiedImageCount(arm.view, arm.dataset, arm.run);
           const net = result.net?.status ? ` HTTP ${result.net.status}` : '';
-          recordUploadDiag({runtime:'18.8.5', requested:1, succeededThisBatch:0, completedAfter:completed, network:result.net, reason:result.reason});
+          recordUploadDiag({runtime:'18.8.6', requested:1, succeededThisBatch:0, completedAfter:completed, network:result.net, reason:result.reason});
           throw new FatalError(`累計${completed}/${arm.dataset.count}｜${result.reason}${net}｜成功分を保持`);
         }
         arm.phase = 'リンク付与';
@@ -853,17 +855,11 @@
       if (arm.nativeCommand) { await injectPreparedImages(arm); arm.resolve(true); return true; }
       const transfer = new page.DataTransfer();
       arm.files.forEach((file) => transfer.items.add(file));
-      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.5', pageToken: UPLOAD_PAGE_TOKEN };
+      arm.run.pending = { workUrls: arm.workRows.map((r) => r.url), beforeIds: [...arm.beforeIds], at: Date.now(), stage: 'uploading', runtime: '18.8.6', pageToken: UPLOAD_PAGE_TOKEN };
       setRun(arm.run);
-      if (arm.nativeCommand) {
-        const pos = arm.view.state.selection.from;
-        if (!Number.isInteger(pos) || pos < 1) throw new FatalError('画像の挿入位置を確認できません');
-        if (arm.nativeCommand(arm.view, transfer.files, pos - 1, 'image') !== true) throw new FatalError('noteの正規画像処理が開始されませんでした');
-      } else {
-        input.files = transfer.files;
-        input.dispatchEvent(new page.Event('input', { bubbles: true }));
-        input.dispatchEvent(new page.Event('change', { bubbles: true }));
-      }
+      input.files = transfer.files;
+      input.dispatchEvent(new page.Event('input', { bubbles: true }));
+      input.dispatchEvent(new page.Event('change', { bubbles: true }));
       const inserted = imageNodes(arm.view).filter(hit => hit.node.attrs?.id && !arm.beforeIds.has(String(hit.node.attrs.id))).sort((a,b) => a.pos-b.pos);
       if (inserted.length === arm.workRows.length) { arm.run.pending.slots = inserted.map(hit => String(hit.node.attrs.id)); setRun(arm.run); }
       arm.phase = 'アップロード';
@@ -905,7 +901,7 @@
       arm.resolve(true);
     } catch (error) {
       if (arm.run.pending) { arm.run.pending.stage = 'failed'; arm.run.pending.failure = error?.message || String(error); setRun(arm.run); }
-      recordUploadDiag({ runtime: '18.8.5', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
+      recordUploadDiag({ runtime: '18.8.6', phase: arm.phase, requested: arm.workRows.length, completedBefore: doneBefore, completedAfter: Object.keys(arm.run.images || {}).length, reason: error?.message || String(error), network: recentNetFailure(arm.uploadStartedAt) });
       const failure = new FatalError(`${arm.phase}｜開始時${doneBefore}枚｜${error?.message || String(error)}`);
       failure.cause = error; arm.reject(failure);
     } finally {
@@ -1044,6 +1040,7 @@
       const view = findView();
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
       operation = safety().begin('画像作成', view);
+      if (dataset.preparedBatch) await page.__MUMEI_PREPARED_BATCH__?.sync?.(dataset, run);
       selectionApi();
       if (page.__MUMEI_CARD_CREATOR__) {
         await page.__MUMEI_CARD_CREATOR__.verifyRows(dataset.rows, (n, total) => setStatus(`投稿者名の照合 ${n}/${total}…`));
