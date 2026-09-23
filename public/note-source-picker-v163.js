@@ -714,8 +714,8 @@
     const list = exactUrlParagraphs(view, url).filter(hit => hit.node === insertedUrlNode).sort((a, b) => b.pos - a.pos);
     if (list[0]) deleteHits(view, [list[0]]);
   }
-  async function waitForNewCard(view, url, beforeKeys, attempt, timeout = 45000) {
-    const deadline = Date.now() + timeout;
+  async function waitForNewCard(view, url, beforeKeys, attempt, timeout = 90000) {
+    const started = Date.now(), deadline = started + timeout; let shownSecond = -1;
     while (Date.now() < deadline) {
       if (attempt.error) throw attempt.error;
       const hit = embedNodes(view).find((entry) => {
@@ -724,6 +724,9 @@
       });
       if (hit) return hit;
       safety().check(view);
+      if (safety().stopped()) throw new FatalError('停止要求：処理中の1件は未確認です。完成分と途中記録を保持しました');
+      const second = Math.floor((Date.now() - started) / 1000);
+      if (attempt.progress && second !== shownSecond) { shownSecond = second; setStatus(`画像 ${attempt.images}/${attempt.images} 完了｜通知カード ${attempt.progress} noteの変換待ち ${second}秒…`); }
       await sleep(80);
     }
     return null;
@@ -783,6 +786,66 @@
     run.savedCardCount = run.cardKeys.length;
     setJSON(runKey(), run);
   }
+
+  function auditDocuments(view, dataset, run, saved) {
+    const scan = doc => {
+      const images = [], cards = [];
+      doc?.descendants((node, pos) => { if (node.type.name === 'image') images.push({ node, pos }); if (node.type.name === 'embed') cards.push({ node, pos }); });
+      return { images, cards };
+    };
+    const current = scan(view.state.doc), stored = scan(saved?.doc), baseline = new Set(run.cardBaselineKeys || []);
+    const rows = dataset.rows.map((row, i) => {
+      const rec = run.images?.[row.url], tracked = (run.cardKeys || []).find(r => r.url === row.url);
+      const images = list => list.filter(h => rec?.src && h.node.attrs.src === rec.src && normalizeUrl(h.node.attrs.link) === normalizeUrl(row.url));
+      const cards = list => list.filter(h => !baseline.has(cardKey(h)) && genuineCard(h, row.url));
+      const a = images(current.images), b = cards(current.cards), c = images(stored.images), d = cards(stored.cards);
+      const recorded = b.length === 1 && tracked?.key === cardKey(b[0]);
+      return { index: i + 1, url: row.url, image: a.length === 1, card: b.length === 1, recorded,
+        savedImage: c.length === 1, savedCard: d.length === 1 && recorded && cardKey(d[0]) === tracked.key,
+        duplicates: a.length > 1 || b.length > 1 || c.length > 1 || d.length > 1,
+        cardPos: b.length === 1 ? b[0].pos : -1, savedPos: d.length === 1 ? d[0].pos : -1 };
+    });
+    const count = field => rows.filter(r => r[field]).length;
+    const order = field => rows.every((r, i) => r[field] >= 0 && (!i || r[field] > rows[i - 1][field]));
+    const confirmation = !dataset.confirmationUrl || (dataset.rows.at(-1)?.finalMarker && dataset.rows.at(-1).url === dataset.confirmationUrl);
+    const result = { at: Date.now(), target: dataset.count, images: count('image'), cards: count('card'), recorded: count('recorded'),
+      savedImages: count('savedImage'), savedCards: count('savedCard'), missing: rows.filter(r => !r.image || !r.card || (saved?.doc && (!r.savedImage || !r.savedCard))).length,
+      duplicates: count('duplicates'), order: order('cardPos'), savedOrder: order('savedPos'), confirmation: Boolean(confirmation),
+      savedDocumentMatches: Boolean(saved?.matches), savedRead: Boolean(saved?.doc), error: saved?.error || '', rows };
+    result.complete = rows.length === dataset.count && new Set(rows.map(r => r.url)).size === dataset.count &&
+      [result.images, result.cards, result.recorded, result.savedImages, result.savedCards].every(n => n === dataset.count) &&
+      result.duplicates === 0 && result.order && result.savedOrder && result.confirmation && result.savedDocumentMatches;
+    return result;
+  }
+  function auditSummary(a) {
+    return `画像 ${a.images}/${a.target}｜通知カード ${a.cards}/${a.target}｜保存 ${a.savedRead ? a.savedCards + '/' + a.target : '未確認'}｜不足 ${a.missing}・重複 ${a.duplicates}` + (a.cards > a.recorded ? `・記録未照合 ${a.cards - a.recorded}` : '');
+  }
+  async function auditCurrent(view, dataset, run) {
+    setStatus('全件確認：noteに保存済みの下書きを読み直しています…');
+    let saved;
+    try { saved = await safety().readDraft(view); if (!saved.doc) throw new Error('保存済み下書きの解析ができません'); }
+    catch (e) { saved = { error: e?.message || String(e) }; }
+    const audit = auditDocuments(view, dataset, run, saved);
+    run.cardAudit = audit;
+    if (!audit.complete && run.stage === 'cards_ready') run.stage = 'cards_paused';
+    setJSON(runKey(), run);
+    return audit;
+  }
+  async function checkAllCards() {
+    if (busy || safety().busy() || !enabled()) { setStatus('現在の処理が終わってから「全件確認」を押してください'); return; }
+    let operation; setBusy(true);
+    try {
+      const dataset = getJSON(DATA_KEY, null), run = currentBaseRun(), view = findView();
+      if (!dataset || !run || run.datasetId !== dataset.datasetId || !view) throw new FatalError('この記事の対象データを確認できません');
+      operation = safety().begin('全件確認', view);
+      const a = await auditCurrent(view, dataset, run);
+      if (a.complete) { run.stage = 'cards_ready'; run.savedCardCount = dataset.count; setJSON(runKey(), run); }
+      setStatus((a.complete ? '全件確認済み ✅ ' : '未完了：') + auditSummary(a) +
+        (a.complete ? '｜全対象の記事と保存内容が一致しました' : '｜' + (a.error || '不足・未保存分は「送」で続きから')), !a.complete);
+    } catch (e) { setStatus('全件確認停止：' + (e?.message || String(e)), true); }
+    finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
+  }
+  page.__MUMEI_CARD_AUDIT__ = { check: checkAllCards };
 
   async function resumableSend() {
     if (busy || !enabled()) return;
@@ -847,7 +910,7 @@
           setJSON(runKey(), run);
           const progress = `${run.cardKeys.length + 1}/${dataset.count}`;
           setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${progress} ${pending ? '再開' : '生成'}中…`);
-          const attempt = activeConversion = { node: insertedUrlNode, error: null };
+          const attempt = activeConversion = { node: insertedUrlNode, error: null, progress, images: imageCount };
           const command = noteUrlCommandFactory()(row.url);
           const handled = command(view.state, (transaction) => {
             if (activeConversion !== attempt || attempt.error) return;
@@ -866,7 +929,7 @@
         recordCard(view, dataset, run, row, hit);
         if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
-        if (run.cardKeys.length < dataset.rows.length) await sleep(60);
+        if (run.cardKeys.length < dataset.rows.length) await sleep(1200);
       }
 
       if (run.cardKeys.length !== dataset.count || new Set(run.cardKeys.map(x => x.key)).size !== dataset.count) throw new FatalError('通知カードの件数が一致しません');
@@ -879,9 +942,11 @@
         lastPos = hit.pos;
       }
       await saveCards(run, dataset, '最終保存');
+      const audit = await auditCurrent(view, dataset, run);
+      if (!audit.complete) throw new FatalError('全件確認が未完了：' + auditSummary(audit) + (audit.error ? '｜' + audit.error : '｜保存済み下書きと対象記事を確認してください'));
       run.stage = 'cards_ready';
       setJSON(runKey(), run);
-      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
+      setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ 全件照合済み・不足0・重複0 このまま公開/更新`);
       page.alert(`準備完了\n\n画像: ${imageCount}件（保持）\n通知カード: ${dataset.count}件（保存確認済み）\n\nそのまま公開/更新。通知後「削」。`);
     } catch (error) {
       if (operation) {
