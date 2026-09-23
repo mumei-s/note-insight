@@ -257,9 +257,83 @@ test('実機0/310: 旧版のpendingだけ残りURLがない下書きから310件
   const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
   assert.equal(run.cardKeys.length, 310); assert.equal(run.pendingCard, null); assert.equal(run.stage, 'cards_ready');
   assert.equal(e.safety.index(e.view).images.length, 310); assert.equal(e.safety.index(e.view).embeds.length, 310);
-  assert.equal(saves, 1); assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.equal(saves, 31); assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
   assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
   assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /310\/310 完成・保存/);
+});
+// Reopened drafts can contain fewer cards than the old per-card local journal.
+function reopenCards(e, recorded, present, pendingIndex = null) {
+  e.run.cardKeys = e.rows.slice(0, recorded).map((r, i) => ({ url: r.url, key: 'embsaved' + i }));
+  for (const i of present) e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, embed('embsaved' + i, e.rows[i].url)));
+  if (pendingIndex != null) e.run.pendingCard = { url: e.rows[pendingIndex].url, beforeKeys: e.run.cardKeys.map(x => x.key) };
+  e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(e.run));
+}
+test('147/310の記録だけ残った再読込から画像310枚を保持し通知310件を復旧する', async () => {
+  const e = sending(310); reopenCards(e, 147, [], 147); nativeBlockIds(e);
+  const protectedNodes = e.view.state.doc.nodes.slice();
+  e.module.setCommand(nativeCardCommand(e)); let saves = 0;
+  e.button.click = () => { saves++; e.succeed(); };
+  await e.module.resumableSend();
+  const r = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.equal(r.stage, 'cards_ready'); assert.equal(r.cardKeys.length, 310); assert.equal(r.savedCardCount, 310);
+  assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.equal(e.safety.index(e.view).images.length, 310); assert.equal(saves, 31);
+  assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
+});
+test('再読込後の途中欠落だけを補い、残存カード・原文・画像と最終確認カードの順序を保持する', async () => {
+  const e = sending(8); reopenCards(e, 7, [0, 2, 5, 6], 7);
+  const protectedNodes = e.view.state.doc.nodes.slice();
+  await e.module.resumableSend();
+  assert.equal(e.calls(), 4); assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
+});
+test('欠落の後のpendingカードが既に完成していれば回収し順序を保って不足だけ補う', async () => {
+  const e = sending(6); reopenCards(e, 4, [0, 2], 4);
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, embed('embpending', e.rows[4].url)));
+  const originalCards = e.safety.index(e.view).embeds.map(h => h.node);
+  await e.module.resumableSend(); assert.equal(e.calls(), 3);
+  assert.ok(originalCards.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node.attrs.src), e.rows.map(r => r.url));
+});
+test('保存後srcがiframe URLになるカードを既存キーで認識し重複しない', async () => {
+  const e = sending(2); reopenCards(e, 1, [0]);
+  const hit = e.safety.index(e.view).embeds[0];
+  e.view.dispatch(e.view.state.tr.setNodeMarkup(hit.pos, types.embed, { ...hit.node.attrs,
+    src: 'https://note.com/embed/notes/' + e.rows[0].url.split('/').at(-1),
+    htmlForEmbed: '<iframe class="note-embed" src="https://note.com/embed/notes/' + e.rows[0].url.split('/').at(-1) + '"></iframe>' }));
+  await e.module.resumableSend();
+  assert.equal(e.calls(), 1); assert.equal(e.safety.index(e.view).embeds.length, 2);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /完成・保存/);
+});
+test('同じキーが別記事・偽ドメインに変わった場合は本文を変更しない', async () => {
+  for (const src of ['https://note.com/embed/notes/nffffffffffff', 'https://note.com.evil.test/embed/notes/n000000000000']) {
+    const e = sending(2); reopenCards(e, 1, [0]); const h = e.safety.index(e.view).embeds[0];
+    e.view.dispatch(e.view.state.tr.setNodeMarkup(h.pos, types.embed, { ...h.node.attrs, src }));
+    const before = e.encode(); await e.module.resumableSend();
+    assert.equal(e.calls(), 0); assert.equal(e.encode(), before); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /記事を確認できません/);
+  }
+});
+test('キーのない同URLカードが別にある場合は再生成も削除もしない', async () => {
+  const e = sending(2); reopenCards(e, 1, []);
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, embed('embdifferent', e.rows[0].url)));
+  const before = e.encode(); await e.module.resumableSend();
+  assert.equal(e.calls(), 0); assert.equal(e.encode(), before); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /同じ記事のカード/);
+});
+test('10件の保存に失敗したら11件目を作らず、同じ本文から重複なしで再開する', async () => {
+  const e = sending(25); e.button.click = () => {};
+  await e.module.resumableSend();
+  assert.equal(e.calls(), 10); let r = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.notEqual(r.stage, 'cards_ready'); assert.equal(r.savedCardCount || 0, 0);
+  e.button.click = e.succeed; await e.module.resumableSend();
+  r = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.equal(e.calls(), 25); assert.equal(r.savedCardCount, 25); assert.equal(r.stage, 'cards_ready');
+});
+test('最終保存に失敗しても完成扱いにせず再送で保存だけを行う', async () => {
+  const e = sending(2); e.button.click = () => {};
+  await e.module.resumableSend();
+  assert.notEqual(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_ready');
+  e.button.click = e.succeed; await e.module.resumableSend(); assert.equal(e.calls(), 2);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /完成・保存/);
 });
 test('旧版の作業URLがなく元本文の同じURLだけある場合、その原文を保持して続行する', async () => {
   const e = sending(2); nativeBlockIds(e); const protectedNodes = e.view.state.doc.nodes.slice();
@@ -332,9 +406,12 @@ test('実際の初期化: 生成画像・カードだけを削除し本文と通
   assert.equal(e.storage.has('mumei_likers_thin_run_v160:' + key), false); assert.ok(e.safety.backups().find(x => x.slot === 'before').item.images >= 4);
 });
 test('500件の固定待ち時間を短縮し、全件確認と本文保持を行う', async () => {
-  const e = sending(500); const started = e.time(); await e.module.resumableSend();
+  const e = sending(500); let saves = 0; e.button.click = () => { saves++; e.succeed(); };
+  const started = e.time(); await e.module.resumableSend();
   assert.equal(e.calls(), 500); assert.equal(e.safety.index(e.view).embeds.length, 500); assert.ok(e.view.state.doc.nodes.includes(e.existing));
-  const elapsed = e.time() - started; assert.ok(elapsed < 32000, String(elapsed));
+  const elapsed = e.time() - started; assert.equal(saves, 50);
+  // Each verified native save polls its synchronous test response after 100 ms.
+  assert.ok(elapsed - saves * 100 < 32000, String(elapsed));
 });
 test('配布対象コードには自動再読み込み・自動遷移が存在しない', () => {
   for (const name of ['note-card-safety-v188.js','note-likers-thin-notify-v160.js','note-source-picker-v163.js','note-link-guard-v178.js','note-start-clean-v177.js','note-prince-special-v184.js','note-generic-stability-v187.js','note-generic-controls-v189.js']) {
