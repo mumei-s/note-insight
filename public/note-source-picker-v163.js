@@ -619,7 +619,7 @@
   function findTrackedImage(view, record, url) {
     const wanted = normalizeUrl(url);
     if (!record) return null;
-    const hit = safety().tracked(view, record);
+    const hit = safety().tracked(view, record, url);
     return hit && normalizeUrl(hit.node.attrs?.link) === wanted && remoteImage(hit.node) ? hit : null;
   }
   function verifiedImageCount(view, dataset, run) {
