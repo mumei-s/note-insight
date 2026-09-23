@@ -466,8 +466,11 @@
     safety().check(view);
     ensureEndSelection(view);
     const paragraph = view.state.schema.nodes.paragraph;
-    insertedUrlNode = paragraph.create(null, view.state.schema.text(url));
-    view.dispatch(view.state.tr.insert(view.state.doc.content.size, insertedUrlNode));
+    const pos = view.state.doc.content.size;
+    view.dispatch(view.state.tr.insert(pos, paragraph.create(null, view.state.schema.text(url))));
+    // note assigns an ID via appendTransaction; retain the resulting node.
+    insertedUrlNode = view.state.doc.nodeAt(pos);
+    if (insertedUrlNode?.type !== paragraph || insertedUrlNode.textContent !== url) throw new FatalError('挿入したURLを確認できません。本文を保持して停止しました');
     view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());
     view.focus();
   }
