@@ -624,3 +624,34 @@ test('HTTPエラーが見えない場合もネイティブ画像失敗警告を�
   const start=e.time(),result=await api.waitNewRemoteImages(e.view,new Set(['image0']),1,120000);
   assert.equal(alerts,1);assert.equal(result.failed,true);assert.equal(result.net.kind,'note-alert');assert.ok(e.time()-start<30000);
 });
+
+test('追加2名は完成200枚と旧40枚の投入記録を保持し、実績の直前にだけ追加する。再開2回でも310件',async()=>{
+  const e=environment();e.loadModule('note-card-creator-v1883.js','caption');
+  vm.runInContext(source('note-yoizora-additions-v1886.js'),e.ctx);
+  const original=JSON.parse(source('note-yoizora-prepared-20260923.json'));
+  const dataset={preparedBatch:true,datasetId:'keep-this-id',count:original.count,rows:original.rows.map(({pngBase64,...r})=>({...r,preparedBatchId:original.batchId}))};
+  const run={datasetId:dataset.datasetId,images:Object.fromEntries(dataset.rows.slice(0,200).map(r=>[r.url,{id:'i'+r.index,src:'https://assets.st-note.com/'+r.index+'.png'}])),pending:{workUrls:dataset.rows.slice(200,240).map(r=>r.url),stage:'uploading'},cardKeys:[]};
+  const runBefore=JSON.stringify(run),first307=JSON.stringify(dataset.rows.slice(0,307)),cached=new Map();
+  e.page.crypto=(await import('node:crypto')).webcrypto;e.page.atob=atob;e.page.Response=Response;
+  e.page.caches={open:async()=>({put:async(k,v)=>cached.set(k,v),match:async k=>cached.get(k)?.clone()})};
+  const api=e.loadModule('note-prepared-batch-v1883.js','sync,withAdditions,image');
+  assert.equal(api.withAdditions(original).count,310);assert.equal(await api.sync(dataset,run),2);
+  assert.equal(dataset.count,310);assert.equal(dataset.datasetId,'keep-this-id');assert.equal(JSON.stringify(run),runBefore);assert.equal(JSON.stringify(dataset.rows.slice(0,307)),first307);
+  assert.deepEqual(Array.from(dataset.rows.slice(-3),r=>r.urlname),['noah_woaks','star246','fuku444']);
+  assert.equal(dataset.rows[249].urlname,'sanraku01');assert.equal(dataset.rows[309].index,310);
+  for(const r of dataset.rows.slice(-3,-1)){assert.ok((await api.image(r)).size>20000);assert.ok(!('pngBase64'in r));}
+  assert.equal(await api.sync(dataset,run),0);assert.equal(dataset.count,310);assert.equal(cached.size,2);
+  assert.equal(dataset.rows.filter(r=>r.articleSource==='hashtag').length,42);
+});
+
+test('実績の画像が先に完成済みでも追加画像をその前に入れ、最後の位置を守る',async()=>{
+  const e=sending(3);e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,new Doc([new Node('paragraph',{},'本文'),image('final',e.rows[2].url)]).content));
+  e.dataset.preparedBatch=true;e.run.images={[e.rows[2].url]:{id:'final',src:'https://assets.st-note.com/final.png'}};
+  e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i,preparedBatchId:'test',creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i}}));
+  e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+  e.page.File=File;e.page.Blob=Blob;e.page.DataTransfer=class{constructor(){this.list=[];this.items={add:f=>this.list.push(f)}}get files(){return this.list}};
+  e.page.__MUMEI_PREPARED_BATCH__={image:async()=>new Blob(['png'],{type:'image/png'})};e.loadModule('note-card-creator-v1883.js','caption');
+  const api=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}},setNative(fn){preparedImageCommand=()=>fn}');api.setView(e.view);
+  api.setNative((view,files,pos)=>{const i=parseInt(files[0].name);view.dispatch(view.state.tr.insert(pos+1,image('new'+i)));return true;});
+  await api.insertThinImages();assert.deepEqual(Array.from(e.safety.index(e.view).images,h=>h.node.attrs.link),e.rows.map(r=>r.url));assert.equal(e.safety.index(e.view).images.at(-1).node.attrs.id,'final');
+});

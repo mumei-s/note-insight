@@ -36,14 +36,47 @@
     if (!page.caches || !page.crypto?.subtle) throw new Error('完成画像を保存できません。このブラウザの保存機能を確認してください');
     const cache = await page.caches.open(CACHE), rows = [];
     for (const source of data.rows) {
-      const { pngBase64, ...meta } = source, row = { ...meta, preparedBatchId: data.batchId };
-      if (!pngBase64 || pngBase64.length > 700000) throw new Error(`画像データ不正：${row.index}`);
-      const bytes = Uint8Array.from(page.atob(pngBase64), c => c.charCodeAt(0)), header = new DataView(bytes.buffer);
-      if (bytes.length < 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(16) !== 860 || header.getUint32(20) !== 140 || await digest(bytes) !== row.pngSha256) throw new Error(`画像の照合不一致：${row.index}`);
-      await cache.put(cacheKey(row), new page.Response(bytes, { headers: { 'content-type':'image/png', 'x-mumei-url':encodeURIComponent(row.url) } }));
-      rows.push(row); status(`完成画像を準備 ${rows.length}/${data.count}｜全員「名前＋さん」`);
+      rows.push(await prepareOne(source, data.batchId, cache));
+      status(`完成画像を準備 ${rows.length}/${data.count}｜全員「名前＋さん」`);
     }
     return rows;
+  }
+  async function prepareOne(source, batchId, cache) {
+    const { pngBase64, ...meta } = source, row = { ...meta, preparedBatchId: batchId };
+    if (!pngBase64 || pngBase64.length > 700000) throw new Error(`画像データ不正：${row.index}`);
+    const bytes = Uint8Array.from(page.atob(pngBase64), c => c.charCodeAt(0)), header = new DataView(bytes.buffer);
+    if (bytes.length < 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(16) !== 860 || header.getUint32(20) !== 140 || await digest(bytes) !== row.pngSha256) throw new Error(`画像の照合不一致：${row.index}`);
+    await cache.put(cacheKey(row), new page.Response(bytes, { headers: { 'content-type':'image/png', 'x-mumei-url':encodeURIComponent(row.url) } }));
+    return row;
+  }
+  function withAdditions(data) {
+    const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
+    if (!patch || patch.batchId !== data.batchId) return data;
+    validate(data);
+    if (patch.format !== 'mumei-thin-additions-v1' || patch.count !== patch.rows?.length) throw new Error('追加データの形式が違います');
+    const people = new Set(data.rows.map(r => r.urlname));
+    const added = patch.rows.filter(r => !people.has(r.urlname));
+    if (!added.length) return data;
+    const rows = [...data.rows.slice(0,-1), ...added, data.rows.at(-1)].map((r,i) => ({...r,index:i+1}));
+    const next = {...data,rows,count:rows.length}; validate(next);
+    return next;
+  }
+  async function sync(dataset, run) {
+    const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
+    if (!dataset.preparedBatch || !patch || !dataset.rows.every(r => r.preparedBatchId === patch.batchId)) return 0;
+    if (run.datasetId !== dataset.datasetId || run.cardKeys?.length) throw new Error('通知カード作成前に追加分を反映してください');
+    const before = new Set(dataset.rows.map(r => r.url));
+    const combined = withAdditions({format:'mumei-thin-prepared-v1',batchId:patch.batchId,count:dataset.count,rows:dataset.rows,
+      hashtagArticleMode:'all',hashtagArticleKeys:dataset.rows.filter(r=>r.articleSource==='hashtag').map(r=>r.latestKey)});
+    const additions = combined.rows.filter(r => !before.has(r.url));
+    if (!additions.length) return 0;
+    const cache = await page.caches.open(CACHE), prepared = new Map();
+    for (const row of additions) prepared.set(row.url, await prepareOne(row, patch.batchId, cache));
+    const next = {...dataset, count:combined.count, rows:combined.rows.map(r => prepared.get(r.url) || r)};
+    // Keep the run identity, completed image records and pending upload intact.
+    localStorage.setItem(DATA, JSON.stringify(next)); Object.assign(dataset, next);
+    status(`追加${additions.length}件を反映｜全${next.count}件｜完成画像を保持して再開`);
+    return additions.length;
   }
   async function image(row) {
     const response = await (await page.caches.open(CACHE)).match(cacheKey(row));
@@ -56,6 +89,7 @@
     if (run?.pending || run?.cardKeys?.length || Object.keys(run?.images || {}).length) throw new Error('前回の画像・カードがあります。先に「初期化」を押してください');
     busy = true;
     try {
+      data = withAdditions(data);
       const rows = await prepare(data), datasetId = data.batchId + ':' + Date.now();
       const dataset = { version:'16.0.0', sourceKey:'n08825c632afd', datasetId, count:rows.length, rows, preparedBatch:true,
         sourceMode:'prepared-hashtag-first', sourceUrl:data.sources.join('\n'), articleChoice:data.articleChoice, extractedAt:data.createdAt, confirmationUrl:FINAL, confirmationKey:'nb4f6934381e9' };
@@ -67,7 +101,7 @@
       return rows.length;
     } finally { busy = false; }
   }
-  function download() { return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url:URL_BATCH+'?v=1884&ts='+Date.now(),timeout:120000,responseType:'text',onload:r=>{try{if(r.status!==200)throw new Error('完成データ HTTP '+r.status);resolve(JSON.parse(r.responseText));}catch(e){reject(e);}},onerror:()=>reject(new Error('完成データの通信失敗')),ontimeout:()=>reject(new Error('完成データの時間切れ'))})); }
+  function download() { return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url:URL_BATCH+'?v=1886&ts='+Date.now(),timeout:120000,responseType:'text',onload:r=>{try{if(r.status!==200)throw new Error('完成データ HTTP '+r.status);resolve(JSON.parse(r.responseText));}catch(e){reject(e);}},onerror:()=>reject(new Error('完成データの通信失敗')),ontimeout:()=>reject(new Error('完成データの時間切れ'))})); }
   function mount() {
     if (!articleKey()) return false;
     const box = document.querySelector('.mumei-prince-special-v184'); if (!box) return false;
@@ -79,6 +113,6 @@
     fileButton.onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=async()=>{try{if(input.files?.[0])await install(JSON.parse(await input.files[0].text()));}catch(e){status(e.message,true);}};input.click();};
     row.append(button,fileButton);box.append(row);return true;
   }
-  page.__MUMEI_PREPARED_BATCH__={image,install,validate,prepare};
+  page.__MUMEI_PREPARED_BATCH__={image,install,validate,prepare,sync};
   let tries=0;const timer=setInterval(()=>{if(mount()||++tries>120)clearInterval(timer);},400);mount();
 })();
