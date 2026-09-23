@@ -2,7 +2,7 @@
   'use strict';
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const pending = new Map();
-  const rendered = new WeakMap(), refreshed = new WeakSet();
+  const rendered = new WeakMap();
   page.addEventListener('message', event => {
     if (event.origin !== 'https://note.com' || !event.source) return;
     const parts = String(event.data).split('::'), height = Number(parts[2]);
@@ -32,6 +32,7 @@
     const api = req(13550)?.MI;
     if (typeof api !== 'function' || !Function.prototype.toString.call(api).includes('/v1/embed')) throw new Error('note公式カード登録処理を取得できません');
     return (url, onError = () => {}) => (state, dispatch, view) => {
+      page.__MUMEI_CARD_SAFETY__.assertNetwork();
       const sourceKey = article(), targetKey = keyOf(url);
       if (!sourceKey || !targetKey) throw new Error('カードの対象記事を確認できません');
       let raw = null;
@@ -44,10 +45,16 @@
         form.append('url', url); form.append('height', '360'); form.append('embeddable_type', 'Note'); form.append('embeddable_key', sourceKey);
         // Use note's authenticated client, exactly as its URL command does.
         // Do not wait for the global, unscoped iframe-height listener.
-        const request = Promise.resolve().then(() => api(form)).then(result => {
+        const request = Promise.resolve().then(() => { page.__MUMEI_CARD_SAFETY__.assertNetwork(); return api(form); }).then(result => {
           const e = result?.embeddedContent;
           if (!e || !/^emb[a-z0-9]+$/i.test(e.key) || String(e.service).toLowerCase() !== 'note' || e.identifier !== targetKey || (e.url && keyOf(e.url) !== targetKey)) throw new Error('note公式カード応答が対象記事と一致しません');
           return { src: url, style: '', htmlForEmbed: usableHtml(e.htmlForEmbed, url), identifier: targetKey, embeddedService: e.service, embeddedContentKey: e.key };
+        }).catch(error => {
+          const response = error?.response;
+          page.__MUMEI_CARD_SAFETY__.observeHttp(response?.status || error?.status, response?.headers?.get?.('retry-after') || response?.headers?.['retry-after']);
+          if (!response && (error?.request || error?.code === 'ERR_NETWORK' || error?.name === 'TypeError')) page.__MUMEI_CARD_SAFETY__.observeHttp(0);
+          page.__MUMEI_CARD_SAFETY__.assertNetwork();
+          throw error;
         });
         pending.set(id, request); request.catch(() => { if (pending.get(id) === request) pending.delete(id); });
       }
@@ -79,6 +86,7 @@
     const label = document.getElementById('mumei-note-source-status-v163')?.textContent || 'カード表示確認';
     let shown = -1;
     while (Date.now() < until) {
+      page.__MUMEI_CARD_SAFETY__.assertNetwork();
       const current = page.__MUMEI_CARD_SAFETY__.index(view).embeds.find(h => h.node.attrs.embeddedContentKey === hit.node.attrs.embeddedContentKey);
       // note updates iframe heights asynchronously. Keep only this verified,
       // tool-owned frame from collapsing again; this does not alter saved HTML.
@@ -86,11 +94,7 @@
         const dom = view.nodeDOM?.(current.pos), frame = dom?.querySelector?.('iframe.note-embed');
         if (frame && keyOf(frame.getAttribute('src')) === keyOf(url)) {
           frame.style.minHeight = '80px';
-          // A frame restored before the listener was installed gets one reload
-          // of its own preview only. No new embed registration or body rewrite.
-          if (!rendered.has(frame.contentWindow) && Date.now() - started > 10000 && !refreshed.has(frame)) {
-            refreshed.add(frame); frame.setAttribute('src', frame.getAttribute('src'));
-          }
+          // Missing display proof may be an access denial. Never reload it automatically.
         }
       }
       if (current && inspect(view, current, url)) return current;
