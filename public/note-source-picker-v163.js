@@ -783,24 +783,33 @@
       if (!view) throw new FatalError('編集画面が見つかりません');
       if (!page.confirm('今回作成した極薄画像と通知カードを削除し、初期化します。元の本文・画像は保持します。実行しますか？')) return;
       await page.__MUMEI_THIN_UPLOAD__?.prepareReset();
-      operation = safety().begin('初期化', view);
+      const remembered = (safety().backups?.() || []).map(x => x.item?.run).filter(r => r?.articleKey === articleKey());
       const run = currentBaseRun();
+      operation = safety().begin('初期化', view);
       let removedCards = 0, removedImages = 0;
-      if (run) {
+      if (run || remembered.length) {
         // Resolve every owned node before changing the document. A pending upload
         // must not lose its record while unfinished image nodes remain in the editor.
         const pendingIds = page.__MUMEI_THIN_UPLOAD__?.resetImageIds(view, run) || [];
-        if (run.pending && !page.__MUMEI_THIN_UPLOAD__) throw new FatalError('画像投入記録を確認できません。更新後に初期化してください');
-        const wantedKeys = new Set((run.cardKeys || []).map(x => x.key).filter(Boolean));
-        const wantedIds = new Set(pendingIds);
-        const bySrc = new Map();
-        for (const [url, rec] of Object.entries(run.images || {})) {
-          if (rec.id) wantedIds.add(String(rec.id));
-          else if (rec.src) bySrc.set(String(rec.src) + '\n' + normalizeUrl(url), true);
+        if (run?.pending && !page.__MUMEI_THIN_UPLOAD__) throw new FatalError('画像投入記録を確認できません。更新後に初期化してください');
+        const runs = [run, ...remembered].filter(Boolean);
+        const wantedKeys = new Set(runs.flatMap(r => (r.cardKeys || []).map(x => x.key)).filter(Boolean));
+        const allImages = imageNodes(view), wantedIds = new Set(pendingIds), owned = new Map();
+        for (const r of runs) for (const [url, rec] of Object.entries(r.images || {})) {
+          const exact = rec.id ? allImages.find(h => String(h.node.attrs?.id || '') === String(rec.id)) : null;
+          if (exact) {
+            if (rec.src && String(exact.node.attrs?.src || '') !== String(rec.src)) throw new FatalError('画像IDの内容が変わっています。本文を保持して停止します');
+            owned.set(exact.pos, exact); continue;
+          }
+          // note can regenerate image IDs on reopen. Require the saved source AND link.
+          if (!rec.src) continue;
+          const matches = allImages.filter(h => String(h.node.attrs?.src || '') === String(rec.src) && normalizeUrl(h.node.attrs?.link) === normalizeUrl(url));
+          if (matches.length > 1) throw new FatalError('同じ画像が複数あり削除対象を特定できません。記録を保持しました');
+          if (matches.length === 1) owned.set(matches[0].pos, matches[0]);
         }
+        for (const hit of allImages) if (wantedIds.has(String(hit.node.attrs?.id || ''))) owned.set(hit.pos, hit);
         const cardHits = embedNodes(view).filter(hit => wantedKeys.has(cardKey(hit)));
-        const imageHits = imageNodes(view).filter(hit => wantedIds.has(String(hit.node.attrs?.id || '')) ||
-          bySrc.has(String(hit.node.attrs?.src || '') + '\n' + normalizeUrl(hit.node.attrs?.link)));
+        const imageHits = [...owned.values()];
         removedCards = cardHits.length; removedImages = imageHits.length;
         deleteHits(view, [...cardHits, ...imageHits]);
         await saveOnce(`初期化 ${removedCards + removedImages}件を保存中…`);
