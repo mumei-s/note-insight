@@ -190,6 +190,95 @@ test('実際の送処理: タイムアウト後に完成したカードを回収
   e.module.setCommand(url => (state, dispatch) => { calls++; const last = state.doc.nodes.at(-1); dispatch(state.tr.replaceWith(state.doc.content.size - last.nodeSize, state.doc.content.size, embed('embremaining', url))); return true; });
   await e.module.resumableSend(); assert.equal(calls, 1); assert.equal(e.safety.index(e.view).embeds.length, 2);
 });
+
+// The published note editor assigns block IDs in appendTransaction and consumes
+// URL text BEFORE its asynchronous embed request resolves. Keep both behaviors.
+function nativeBlockIds(e) {
+  const dispatch = e.view.dispatch.bind(e.view); let sequence = 0;
+  e.view.dispatch = tr => {
+    dispatch(tr);
+    const nodes = e.view.state.doc.nodes.map(n => n.attrs.id ? n : new Node(n.type.name, { ...n.attrs, id: 'native-' + ++sequence }, n.textContent));
+    if (nodes.some((n, i) => n !== e.view.state.doc.nodes[i])) dispatch(e.view.state.tr.replaceWith(0, e.view.state.doc.content.size, new Doc(nodes).content));
+  };
+  e.view.dispatch(e.view.state.tr);
+}
+function nativeCardCommand(e, { fail = false, late } = {}) {
+  let sequence = 0;
+  return url => (state, dispatch) => {
+    const node = state.doc.lastChild, pos = state.doc.content.size - node.nodeSize;
+    // First dispatch removes the typed URL while retaining the paragraph ID.
+    dispatch(state.tr.replaceWith(pos, pos + node.nodeSize, new Node('paragraph', node.attrs)));
+    const complete = () => {
+      const placeholder = e.view.state.doc.nodeAt(pos);
+      dispatch(e.view.state.tr.replaceWith(pos, pos + placeholder.nodeSize,
+        fail ? new Node('paragraph', node.attrs, url) : embed('embnative' + ++sequence, url)));
+    };
+    if (late) late(complete); else queueMicrotask(complete);
+    return true;
+  };
+}
+test('noteの自動ID付与とURL先行削除を再現し、本文保護を維持してカード化する', async () => {
+  const e = sending(3); nativeBlockIds(e);
+  const protectedNodes = e.view.state.doc.nodes.slice();
+  e.module.setCommand(nativeCardCommand(e));
+  await e.module.resumableSend();
+  assert.equal(e.safety.index(e.view).embeds.length, 3);
+  assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /3\/3 完成・保存/);
+});
+test('v18.8.7の未確認記録と末尾URLから「送」で復旧し、既存の同じURLを残す', async () => {
+  const e = sending(3); nativeBlockIds(e);
+  const protectedNodes = e.view.state.doc.nodes.slice();
+  const url = e.rows[0].url;
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph', {}, 'おわり')));
+  e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph', {}, url)));
+  e.run.pendingCard = { url, beforeKeys: [] }; e.run.stage = 'cards_building';
+  e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(e.run));
+  e.module.setCommand(nativeCardCommand(e));
+  await e.module.resumableSend();
+  const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+  assert.equal(run.pendingCard, null); assert.equal(run.cardKeys.length, 3);
+  assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.equal(e.view.state.doc.nodes.filter(n => n.textContent === url).length, 1);
+  assert.match(e.encode(), /おわり/);
+});
+test('新しい試行の開始後は古い非同期変換を無効化し二重カードにしない', async () => {
+  const e = sending(2); nativeBlockIds(e); let late;
+  e.module.setCommand(nativeCardCommand(e, { late: fn => { late = fn; } }));
+  await e.module.resumableSend(); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /タイムアウト/);
+  const command = nativeCardCommand(e); let fired = false;
+  e.module.setCommand(url => (state, dispatch, view) => {
+    if (!fired) { fired = true; late(); }
+    return command(url)(view.state, dispatch, view);
+  });
+  await e.module.resumableSend();
+  assert.equal(e.safety.index(e.view).embeds.length, 2);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /2\/2 完成・保存/);
+});
+test('カードAPI失敗でURLへ戻った後も「送」で再試行できる', async () => {
+  const e = sending(1); nativeBlockIds(e);
+  e.module.setCommand(nativeCardCommand(e, { fail: true }));
+  await e.module.resumableSend(); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /タイムアウト/);
+  e.module.setCommand(nativeCardCommand(e)); await e.module.resumableSend();
+  assert.equal(e.safety.index(e.view).embeds.length, 1);
+  assert.equal(e.view.state.doc.nodes.filter(n => n.textContent === e.rows[0].url).length, 1);
+});
+test('旧版の途中URLが複数ある場合は本文もURLも削除せず止める', async () => {
+  const e = sending(1), url = e.rows[0].url;
+  for (let i = 0; i < 2; i++) e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph', {}, url)));
+  e.run.pendingCard = { url, beforeKeys: [] };
+  e.storage.set('mumei_likers_thin_run_v160:' + key, JSON.stringify(e.run));
+  const before = e.encode(); await e.module.resumableSend();
+  assert.equal(e.encode(), before); assert.equal(e.calls(), 0);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /一意に確認できません/);
+});
+test('再試行中の変換が元本文を消そうとしても本文保護は拒否する', async () => {
+  const e = sending(1); nativeBlockIds(e); const protectedNodes = e.view.state.doc.nodes.slice();
+  e.module.setCommand(url => (state, dispatch) => { dispatch(state.tr.delete(0, state.doc.content.size)); return true; });
+  await e.module.resumableSend();
+  assert.ok(protectedNodes.every(n => e.view.state.doc.nodes.includes(n)));
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /元の本文または画像を失う変更/);
+});
 test('実際の初期化: 生成画像・カードだけを削除し本文と通常画像を維持', async () => {
   const e = sending(3); const normalImage = image('normal'); e.view.dispatch(e.view.state.tr.insert(0, normalImage)); await e.module.resumableSend();
   await e.module.resetAll(); assert.ok(e.view.state.doc.nodes.includes(normalImage)); assert.ok(e.view.state.doc.nodes.includes(e.existing)); assert.match(e.encode(), /消さない本文/);

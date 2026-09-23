@@ -643,21 +643,52 @@
     view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());
     view.focus();
   }
-  let insertedUrlNode = null, conversionError = null;
+  let insertedUrlNode = null, activeConversion = null;
   function insertUrlAtEnd(view, url) {
-    conversionError = null;
     safety().check(view);
     ensureEndSelection(view);
     const paragraph = view.state.schema.nodes.paragraph;
-    insertedUrlNode = paragraph.create(null, view.state.schema.text(url));
-    view.dispatch(view.state.tr.insert(view.state.doc.content.size, insertedUrlNode));
+    const pos = view.state.doc.content.size;
+    view.dispatch(view.state.tr.insert(pos, paragraph.create(null, view.state.schema.text(url))));
+    // note's appendTransaction assigns block IDs. The created object is no
+    // longer the paragraph in the document; only authorize the actual URL node.
+    insertedUrlNode = view.state.doc.nodeAt(pos);
+    if (insertedUrlNode?.type !== paragraph || insertedUrlNode.textContent !== url) throw new FatalError('挿入したURLを確認できません。本文を保持して停止しました');
     view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());
+    view.focus();
+  }
+  function resumeUrlAtEnd(view, pending) {
+    const matches = exactUrlParagraphs(view, pending.url).filter(h => h.node.type === view.state.schema.nodes.paragraph);
+    if (Number.isInteger(pending.rawBeforeCount) && matches.length === pending.rawBeforeCount) {
+      // None of the extra URL paragraphs remains; preserve every original URL.
+      insertUrlAtEnd(view, pending.url); return;
+    }
+    let last = null;
+    view.state.doc.forEach((node, pos) => { if (node.type.name !== 'paragraph' || node.content.size) last = { node, pos }; });
+    const hit = matches.find(h => h.node === last?.node);
+    if (!hit) {
+      throw new FatalError('途中URLが末尾に見つかりません。本文の控えを保持しました');
+    }
+    if (Number.isInteger(pending.rawBeforeCount)) {
+      if (matches.length !== pending.rawBeforeCount + 1) throw new FatalError('途中URLの数が変わりました。本文を保持して停止しました');
+    } else {
+      // v18.8.7 recorded only URL/beforeKeys. Adopt only the lone raw URL
+      // after the generated images/cards; identical URLs in the original body stay intact.
+      let boundary = -1;
+      for (const item of [...imageNodes(view), ...embedNodes(view)]) boundary = Math.max(boundary, item.pos);
+      if (hit.pos <= boundary || matches.filter(h => h.pos > boundary).length !== 1) throw new FatalError('途中URLを一意に確認できません。本文を保持して停止しました');
+      pending.rawBeforeCount = matches.length - 1;
+    }
+    insertedUrlNode = hit.node;
+    const Selection = selectionApi();
+    const selection = typeof Selection.near === 'function' ? Selection.near(view.state.doc.resolve(hit.pos + hit.node.nodeSize - 1)) : Selection.atEnd(view.state.doc);
+    view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
     view.focus();
   }
   function exactUrlParagraphs(view, url) {
     const wanted = normalizeUrl(url), out = [];
-    view.state.doc.descendants((node, pos) => {
-      if (node.isTextblock && normalizeUrl((node.textContent || '').trim()) === wanted) out.push({ node, pos });
+    view.state.doc.forEach((node, pos) => {
+      if (node.type === view.state.schema.nodes.paragraph && normalizeUrl((node.textContent || '').trim()) === wanted) out.push({ node, pos });
     });
     return out;
   }
@@ -666,10 +697,10 @@
     const list = exactUrlParagraphs(view, url).filter(hit => hit.node === insertedUrlNode).sort((a, b) => b.pos - a.pos);
     if (list[0]) deleteHits(view, [list[0]]);
   }
-  async function waitForNewCard(view, url, beforeKeys, timeout = 45000) {
+  async function waitForNewCard(view, url, beforeKeys, attempt, timeout = 45000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      if (conversionError) throw conversionError;
+      if (attempt.error) throw attempt.error;
       const hit = embedNodes(view).find((entry) => {
         const key = cardKey(entry);
         return key && !beforeKeys.has(key) && genuineCard(entry, url);
@@ -699,6 +730,8 @@
       const view = findView();
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
       operation = safety().begin('通知カード作成', view);
+      // A late callback from a timed-out attempt must never affect a new run.
+      activeConversion = null;
       selectionApi();
       noteUrlCommandFactory();
       const imageCount = verifiedImageCount(view, dataset, run);
@@ -727,32 +760,47 @@
           return;
         }
         const row = dataset.rows[index];
-        const beforeKeys = new Set(embedNodes(view).map(cardKey).filter(Boolean));
         const pending = run.pendingCard;
+        const beforeKeys = new Set(pending?.beforeKeys || embedNodes(view).map(cardKey).filter(Boolean));
         if (pending) {
           if (pending.url !== row.url || !Array.isArray(pending.beforeKeys)) throw new FatalError('途中カード記録と対象記事が一致しません');
-          const recovered = embedNodes(view).find(hit => genuineCard(hit, pending.url) && !pending.beforeKeys.includes(cardKey(hit)));
-          if (!recovered) throw new FatalError('前回のカード処理が未確認です。本文とURLを保持して停止しました。noteの処理完了後に「送」で再開');
-          run.cardKeys.push({ url: pending.url, key: cardKey(recovered) });
-          run.pendingCard = null; setJSON(runKey(), run);
-          continue;
+          const recovered = embedNodes(view).filter(hit => genuineCard(hit, pending.url) && !beforeKeys.has(cardKey(hit)));
+          if (recovered.length > 1) throw new FatalError('途中カードが複数あります。重複を増やさず停止しました');
+          if (recovered.length === 1) {
+            run.cardKeys.push({ url: pending.url, key: cardKey(recovered[0]) });
+            run.pendingCard = null; setJSON(runKey(), run);
+            continue;
+          }
+          resumeUrlAtEnd(view, pending);
+        } else {
+          run.pendingCard = { url: row.url, beforeKeys: [...beforeKeys], rawBeforeCount: exactUrlParagraphs(view, row.url).length };
+          setJSON(runKey(), run);
+          insertUrlAtEnd(view, row.url);
         }
-        run.pendingCard = { url: row.url, beforeKeys: [...beforeKeys] };
+        run.pendingCard.attempts = (run.pendingCard.attempts || 0) + 1;
+        run.pendingCard.rawNodeId = insertedUrlNode.attrs?.id || null;
         setJSON(runKey(), run);
-        insertUrlAtEnd(view, row.url);
-        setStatus(`本物通知カード ${index + 1}/${dataset.count} 生成中…`);
+        setStatus(`本物通知カード ${index + 1}/${dataset.count} ${pending ? '再開' : '生成'}中…`);
+        const attempt = activeConversion = { node: insertedUrlNode, error: null };
         const command = noteUrlCommandFactory()(row.url);
-        const handled = command(view.state, (transaction) => { try { safety().dispatch(view, transaction, [insertedUrlNode]); } catch (e) { conversionError = e; } }, view);
+        const handled = command(view.state, (transaction) => {
+          if (activeConversion !== attempt || attempt.error) return;
+          const current = currentBaseRun();
+          if (current?.datasetId !== run.datasetId || current.pendingCard?.url !== row.url || !['cards_building', 'cards_paused'].includes(current.stage)) return;
+          if (safety().busy() && !busy) return;
+          try { safety().dispatch(view, transaction, [attempt.node]); } catch (e) { attempt.error = e; }
+        }, view);
         if (!handled) {
           throw new FatalError(`${index + 1}/${dataset.count} note正規URLコマンド未処理`);
         }
-        const hit = await waitForNewCard(view, row.url, beforeKeys);
+        const hit = await waitForNewCard(view, row.url, beforeKeys, attempt);
         if (!hit) {
           throw new FatalError(`${index + 1}/${dataset.count} 新規embカード確認タイムアウト`);
         }
         deleteLastExactUrl(view, row.url);
         run.cardKeys.push({ url: row.url, key: cardKey(hit) });
         run.pendingCard = null;
+        run.cardError = null;
         setJSON(runKey(), run);
         setStatus(`本物通知カード ${index + 1}/${dataset.count} ✅`);
         if (index < dataset.rows.length - 1) await sleep(60);
@@ -768,8 +816,12 @@
       setStatus(`通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ このまま公開/更新`);
       page.alert(`準備完了\n\n通知カード: ${dataset.count}件\n途中再開対応: ON\n\nそのまま公開/更新。通知後「削」。`);
     } catch (error) {
+      if (operation) {
+        run.cardError = { at: Date.now(), url: run.pendingCard?.url || '', message: error?.message || String(error) };
+        setJSON(runKey(), run);
+      }
       page.__MUMEI_CARD_SAFETY__?.stop();
-      setStatus(`送信停止：${error?.message || String(error)}（「再開」または「削」）`, true);
+      setStatus(`送信停止 ${run.cardKeys?.length || 0}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
     } finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
   }
 
