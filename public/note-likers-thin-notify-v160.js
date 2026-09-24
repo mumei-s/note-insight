@@ -17,6 +17,15 @@
   const STATUS = 'mumei-likers-thin-status-v160';
   const STYLE = 'mumei-likers-thin-style-v160';
 
+  // Exact prepared-addition PNGs are also served from GitHub Pages so the
+  // final few rows can be recovered without another note image-upload call.
+  const PREPARED_HOSTED_HASHES = new Set(["0e7521e07ef776dcb6254b458687d234612b12ec550208a6d67044cf8e148ee0","7b49f6a8ef9948124c2337c749aa13661eb85fe26ab5e3a5ca36a9f44f9212fc","18105ea7ff938f472287ea8a378a29992f37e7b06520bb9d5c74f9e2fd70da28","5e751a9ff80cb938013404e6b3227296d73943178259955802e2efdc9e04a6d0","bdc68e75c9d5d04a40d261d89a4470a22b39e1126c9b3982eaa3ac5d686cba3e"]);
+  const PREPARED_HOSTED_BASE = 'https://mumei-s.github.io/note-insight/card-fallback-18820/';
+  function preparedHostedUrl(row) {
+    const hash = String(row?.pngSha256 || '');
+    return row?.preparedBatchId && PREPARED_HOSTED_HASHES.has(hash) ? PREPARED_HOSTED_BASE + hash + '.png' : '';
+  }
+
   let busy = false;
   let viewCache = null;
   let selectionCache = null;
@@ -670,6 +679,38 @@
     if (!row || !row.finalMarker) throw new FatalError('確認用サブ垢記事が最後にありません');
     return row;
   }
+  async function insertHostedPreparedImages(view, rows, dataset, run) {
+    if (!rows.length) return 0;
+    const template = safety().index(view).images.find(hit => remoteImage(hit.node))?.node;
+    if (!template || template.type?.name !== 'image') throw new FatalError('外部復旧用の画像ひな形を確認できません');
+    for (const row of rows) {
+      safety().check(view);
+      const src = preparedHostedUrl(row);
+      if (!src) throw new FatalError('外部復旧画像がありません: ' + (row.index || row.creator || row.url));
+      const last = confirmationRow(dataset);
+      const anchor = row.url === last.url ? null : findImageByState(view, run.images?.[last.url], last.url);
+      const pos = anchor ? anchor.pos : view.state.doc.content.size;
+      const caption = page.__MUMEI_CARD_CREATOR__?.caption(row) || row.caption || ((row.creator || 'noteクリエイター') + 'さん');
+      const attrs = { ...template.attrs, id: 'mumei-hosted-' + String(row.latestKey || row.index || '').replace(/[^a-z0-9_-]/gi, ''), src, link: row.url };
+      const node = template.type.create(attrs, view.state.schema.text(caption), template.marks);
+      view.dispatch(view.state.tr.insert(pos, node));
+      const hit = safety().index(view).images.find(entry =>
+        String(entry.node.attrs?.src || '') === src && normalizeUrl(entry.node.attrs?.link) === normalizeUrl(row.url));
+      if (!hit) throw new FatalError('外部復旧画像を本文へ挿入できません: ' + (row.index || row.creator || row.url));
+      run.images[row.url] = { id: String(hit.node.attrs?.id || ''), src };
+      setRun(run);
+      setStatus(`外部復旧画像 ${verifiedImageCount(view, dataset, run)}/${dataset.count}…`);
+    }
+    await saveOnce(`外部復旧画像 ${rows.length}件を保存確認中…`);
+    for (const row of rows) {
+      const hit = findImageByState(view, run.images?.[row.url], row.url);
+      if (!hit || String(hit.node.attrs?.src || '') !== preparedHostedUrl(row) ||
+          normalizeUrl(hit.node.attrs?.link) !== normalizeUrl(row.url)) {
+        throw new FatalError('外部復旧画像の保存確認NG: ' + (row.index || row.creator || row.url));
+      }
+    }
+    return rows.length;
+  }
   function verifyConfirmationImage(view, dataset, run) {
     const row = confirmationRow(dataset);
     const hit = findImageByState(view, run.images?.[row.url], row.url);
@@ -1062,6 +1103,13 @@
     try {
       const view = findView();
       if (!view) throw new FatalError('編集画面の準備ができていません。本文を保持したまま少し待って再操作してください');
+      const unknownHold = safety().networkHold?.();
+      if (dataset.preparedBatch && Number(unknownHold?.code) === 0 &&
+          missingRows(view, dataset, run).some(row => preparedHostedUrl(row))) {
+        // Never clear 401/403/429. This only releases a status-0 hold when an
+        // exact hosted copy exists for a missing prepared row.
+        safety().resumeNetwork();
+      }
       operation = safety().begin('画像作成', view);
       if (dataset.preparedBatch) await page.__MUMEI_PREPARED_BATCH__?.sync?.(dataset, run);
       selectionApi();
@@ -1086,6 +1134,12 @@
         verifyConfirmationImage(view, dataset, run);
         await saveOnce('極薄画像の保存状態を確認中…');
         setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み`); return true;
+      }
+      const hostedRows = dataset.preparedBatch ? missing.filter(row => preparedHostedUrl(row)).slice(0, 5) : [];
+      if (hostedRows.length) {
+        setStatus(`note画像アップロードを使わず残り${hostedRows.length}件を外部復旧中…`);
+        await insertHostedPreparedImages(view, hostedRows, dataset, run);
+        continue;
       }
       const workRows = missing.slice(0, dataset.preparedBatch ? (nativeCommand ? 10 : 1) : IMAGE_CHUNK);
       setStatus(`極薄画像 ${workRows.length}枚を生成中…`);
