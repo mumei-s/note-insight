@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.16
+// @version      18.9.17
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.16' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.17' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -620,7 +620,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.16';
+const VERSION='18.9.17';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -929,7 +929,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.16',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.17',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -949,11 +949,12 @@ function adoptSavedBodyImages(view,dataset,seedRun={}){
   const hits=imageNodes(view),images={};
   let duplicates=0;
   for(const row of dataset.rows){
-    const matches=hits.filter(hit=>
+    const linked=hits.filter(hit=>
       remoteImage(hit.node)&&
-      normalize(hit.node.attrs?.link)===normalize(row.url)&&
-      String(hit.node.textContent||'').trim()===row.caption
+      normalize(hit.node.attrs?.link)===normalize(row.url)
     );
+    const exact=linked.filter(hit=>String(hit.node.textContent||'').trim()===row.caption);
+    const matches=exact.length?exact:linked;
     if(matches.length){
       const hit=matches.at(-1);
       images[row.url]={id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:row.url};
@@ -962,7 +963,7 @@ function adoptSavedBodyImages(view,dataset,seedRun={}){
   }
   const run={
     ...seedRun,
-    version:'18.9.16',
+    version:'18.9.17',
     articleKey:articleKey(),
     datasetId:dataset.datasetId,
     stage:'images_building',
@@ -1010,7 +1011,7 @@ async function rebuildImages(autoCards=false){
       dataset=makeLiveDataset(manifest,meta);
       if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
         stagedData=dataset;
-        run={version:'18.9.16',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+        run={version:'18.9.17',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
         write(stageDataKey(),stagedData);write(stageRunKey(),run);
       }
     }
@@ -1044,8 +1045,13 @@ async function rebuildImages(autoCards=false){
       await sleep(40);
     }
     const actual=reconcileStageImages(view,dataset,run);
-    if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
-    await safety().save(view,'新しい極薄 '+dataset.count+'/'+dataset.count+' 最終保存確認中…');
+    if(run.adoptedFromSavedBody===true){
+      const tailMissing=dataset.rows.filter(row=>Number(row.index||0)>resumeFloor&&!run.images?.[row.url]);
+      if(tailMissing.length)throw new FatalError('残り極薄の実体不足 '+tailMissing.length+'件');
+    }else if(actual!==dataset.count){
+      throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
+    }
+    await safety().save(view,'極薄の残りを最終保存確認中…');
 
     const owned=(oldRun?.datasetId===dataset.datasetId||run.adoptedFromSavedBody)
       ? {images:[],cards:[]}
@@ -1054,6 +1060,10 @@ async function rebuildImages(autoCards=false){
       setStatus('新しい極薄は保存済み。旧ツール生成物だけ整理中…');
       removeHits(view,[...owned.cards,...owned.images]);
       await safety().save(view,'旧生成物を整理して保存確認中…');
+    }
+    if(run.adoptedFromSavedBody===true){
+      const adoptedFinal=adoptSavedBodyImages(view,dataset,run);
+      run=adoptedFinal.run;
     }
     run={...run,stage:'images_ready',cardKeys:[],savedCardCount:0,pendingCard:null,
       cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)};
@@ -1295,7 +1305,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.16',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.17',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
