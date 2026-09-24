@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.3';
+const VERSION='18.9.4';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -14,7 +14,17 @@ const META='https://raw.githubusercontent.com/mumei-s/note-insight/main/data/not
 const RAW_BASE='https://raw.githubusercontent.com/mumei-s/note-insight/main/public';
 const FINAL='https://note.com/fuku444/n/nb4f6934381e9';
 
-let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null;
+let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,wakeLock=null;
+async function keepAwake(){
+  if(!page.navigator?.wakeLock?.request||document.hidden)return false;
+  try{
+    if(wakeLock&&!wakeLock.released)return true;
+    wakeLock=await page.navigator.wakeLock.request('screen');
+    wakeLock.addEventListener?.('release',()=>{wakeLock=null},{once:true});
+    return true;
+  }catch(_){return false}
+}
+async function releaseAwake(){try{await wakeLock?.release?.()}catch(_){}wakeLock=null;}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 class FatalError extends Error{}
 const safety=()=>{if(!page.__MUMEI_CARD_SAFETY__)throw new FatalError('本文保護機能を読み込めません');return page.__MUMEI_CARD_SAFETY__;};
@@ -323,7 +333,8 @@ async function rebuildImages(autoCards=false){
 async function startOvernight(){
   if(busy)return;
   write(overnightKey(),true);
-  setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます');
+  const awake=await keepAwake();
+  setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます'+(awake?'｜画面スリープ抑止ON':'｜スリープ抑止は端末非対応'));
   await rebuildImages(true);
 }
 function maybeResumeOvernight(){
@@ -411,13 +422,9 @@ async function buildCards(){
         if(raws.length===beforeRaw+1)removeHits(view,[raws.at(-1)]);
         run.pendingCard={...run.pendingCard,lastError:error?.message||String(error),status:code,at:Date.now()};
         run.stage='cards_waiting';write(runKey(),run);
-        if(run.cardKeys.length>run.savedCardCount){
-          await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' まで保存中…');
-          run.savedCardCount=run.cardKeys.length;write(runKey(),run);
-        }
         const attempts=run.pendingCard.attempts||1;
-        const wait=code===429?180000:code===403?180000:90000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。'+Math.ceil(wait/1000)+'秒休止して同じ1件から再開',true);
+        const wait=code===429?600000:code===403?600000:180000;
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。連打せず '+Math.ceil(wait/60000)+'分休止 → 同じ1件から再開',true);
         if(attempts<4){
           clearTimeout(resumeTimer);
           resumeTimer=setTimeout(()=>{if(!busy&&enabled())void buildCards()},wait);
@@ -430,21 +437,17 @@ async function buildCards(){
       run.cardKeys.push({url:row.url,key:cardKey(hit)});
       run.pendingCard=null;run.stage='cards_building';write(runKey(),run);
 
-      if(run.cardKeys.length-run.savedCardCount>=5){
-        await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 保存確認中…');
-        run.savedCardCount=run.cardKeys.length;write(runKey(),run);
-      }
-      setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜保存済み '+run.savedCardCount);
-      await sleep(3000);
-      if(run.cardKeys.length>0&&run.cardKeys.length%20===0&&run.cardKeys.length<dataset.count){
-        await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 区切り保存…');
-        run.savedCardCount=run.cardKeys.length;write(runKey(),run);
-        const longRest = run.cardKeys.length % 60 === 0;
-        const restMs = longRest ? 180000 : 60000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜403予防の'+Math.ceil(restMs/1000)+'秒休止中…');
+      // Manual-mimic mode: do not hammer note's draft-save/readback API.
+      // Let note's own autosave run while we keep a local checkpoint after every card.
+      setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜note自動保存待ち');
+      await sleep(5500);
+      if(run.cardKeys.length>0&&run.cardKeys.length%15===0&&run.cardKeys.length<dataset.count){
+        const restMs = run.cardKeys.length % 60 === 0 ? 180000 : 45000;
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜手動操作相当の休止 '+Math.ceil(restMs/1000)+'秒（note自動保存待ち）');
         await sleep(restMs);
       }
     }
+    await sleep(12000);
     await safety().save(view,'通知カード最終保存…');
     run.savedCardCount=run.cardKeys.length;
     if(run.cardKeys.length!==dataset.count)throw new FatalError('カード件数不足 '+run.cardKeys.length+'/'+dataset.count);
@@ -452,6 +455,7 @@ async function buildCards(){
     if(unique.size!==dataset.count)throw new FatalError('カードキー重複');
     run.stage='cards_ready';run.pendingCard=null;write(runKey(),run);
     localStorage.removeItem(overnightKey());
+    await releaseAwake();
     setStatus('極薄 '+dataset.count+'/'+dataset.count+'｜通知カード '+dataset.count+'/'+dataset.count+' 保存済み ✅ 夜間一括完了');
   }catch(error){
     const run=currentRun();if(run){run.stage='cards_paused';write(runKey(),run)}
@@ -552,6 +556,6 @@ function mount(){
 }
 page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight};
 page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(maybeResumeOvernight,1200)});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(read(overnightKey(),false)===true)void keepAwake();setTimeout(maybeResumeOvernight,1200)}});
 setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
 })();
