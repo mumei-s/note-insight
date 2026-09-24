@@ -11,18 +11,14 @@
 <body>
 <main class="wrap"><section class="card">
   <h1>極薄＋通知ツール</h1>
-  <span class="ver">v18.8.25</span>
-  <div class="note"><b>「追加＋カード続き」にまとめました。</b><br>  <b>v18.8.25：更新後にnoteのログイン画面が点滅して戻れない問題を修正。</b>編集画面の離脱防止がnote公式の認証リダイレクトまで止めていたため、本文控えだけ保存してログイン遷移は妨げないように変更。<br><b>画像復旧の run 未定義エラー修正・名前だけ残骸の自動削除も継続。</b>失敗時に本文末尾へ残った「はなさん」「しろのあるさん」等の名前だけの行を自動削除し、極薄画像の保存状態を再確認してからカード処理へ進みます。<br><b>403になる1人で全体を止めない方式も継続。</b>失敗した人はいったん保留して次の人へ進み、残りを保存したあと保留だけ自動再試行します。画像アップロード失敗で残った「名前だけ」の行も、用意済み極薄画像へ置き換えて掃除します。<br>note正規URLカード処理を優先し、カードiframeの表示確認は完了条件にしません。正規カードノード＋保存済み下書きで判定し、HTTP状態不明は停止記録にせず、一時通信エラーは同じ位置から自動再開します。<br><b>追加3名（ぱぽこめ／ナラ／ルルトアヤコ）も現在の途中データへ自動追記します。</b>当日・前日の記事があれば最新、なければ固定記事を採用し、既存画像・カードは保持します。<br>
-
-  <b>v18.8.25：画像が多い下書きで「本文の控え」の容量不足が出る問題を修正。</b>100枚以上では重複する「1つ前」の控えを持たず、容量不足時は古いprevious控えから整理します。本文・現在の最新控え・途中記録・対象データは消しません。<br>
-  不足画像の追加 → リンクと保存の確認 → 通知カードの続きを、1つのボタンで進めます。「画」「不足画像のみ追加」「追加分」は個別に押す必要がありません。<br>
-  追加に失敗した場合はカード作成に進まず、既存の本文・画像・カードを保持します。画像受付／画像送信のどちらで失敗したかと、取得できたHTTP状態を表示します。自動再送はしません。<br>
-  <b>保存が確認できない編集タブは閉じたり再読み込みしたりせず、「本文の控え」から現在の本文を書き出してください。</b><br>
-  下書き保存と控えを確認 → 下のボタンで更新 → 編集画面を開き直し、v18.8.25を確認 →「全件確認」。<br>
-  通常時は「追加＋カード続き」で不足分から進めます。「削（一括）」は公開・通知後の操作です。<br>
-  はなさん・しろのあるさん＋追加3名を反映して全316件、#の42記事が先頭、最後は「実績の算数」。完成は本文内のカードと保存済み下書きの全件照合で判定します。<br>
-  <b>v18.8.25では、Androidで一時的に出るHTTP状態不明（status 0）だけでは停止しません。</b>画像が実際に失敗したことまで確認してから停止します。v18.8.17で残ったstatus 0停止記録は新版で無効化します。401/403/429は従来どおり即停止します。<br><b>403が続いている間は「追加＋カード続き」「通信停止解除」を押さないでください。</b>この更新は403を解消するものではありません。失敗していた操作が通常どおり使える状態に戻った後に解除してください。端末上の全件完了・通知受信は未確認です。<br>
-  「旧版」「複数版が混在」と出る場合は、Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください。以前のスクリプトを削除する必要はありません。</div>
+  <span class="ver">v18.9.0</span>
+  <div class="note"><b>v18.9.0：極薄＋通知を新規構築し直しました。</b><br>
+  旧v18.8系の「宵空セット」「追加＋カード続き」「画像アップロード復旧」などは今回の実行経路から外しています。古い仕様を継ぎ足さず、現在のスキ・現在の記事から新しい対象一覧を作ります。<br><br>
+  <b>最新から再構築</b>：#イケメングランプリ宵空カップは現在の全記事を先頭に保持。指定2記事の現在のスキ一覧を再取得し、#投稿者との重複を除外。非#は「今日・昨日の最新 → 固定 → 最新」で現在の記事を選びます。最新の明示追加プロフィールも合流し、最後は「実績の算数」です。<br>
+  極薄サムネイルは860×140をGitHub側で作成済みにして、note側で300枚以上を再アップロードしません。本文には完成済み極薄画像＋記事リンク＋名前さんを順番に配置し、区切り保存します。<br><br>
+  <b>カード開始</b>：note正規URLカード処理だけを使います。iframeの403表示は完成判定に使いません。8件ごとに下書き保存、32件ごとに45秒休止して連打を避けます。403/429/通信失敗が出た場合は完成分を保存して停止連打せず、長めの待機後に同じ1件から再開します。<br>
+  <b>カード削除</b>：公開・通知後、今回作成した通知カードだけを削除し、極薄サムネイルは残します。<br><br>
+  INSIGHT本体は変更しません。旧v18.8系の途中記録は最新再構築時に今回の管理記録へ切り替えます。</div>
   <a id="install" class="btn" href="./note-card-batch-bridge-v610.user.js">インストール／更新</a>
   <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js">Raw直結で開く</a>
   <div class="copybox"><input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js"><button id="copy" type="button">更新URLをコピー</button></div>
@@ -42,7 +38,7 @@
   else if(android) status.innerHTML='Androidブラウザを確認。Yahooアプリ等でUserscript拡張が反応しない場合は「更新URLをコピー」→Edgeのアドレス欄へ貼り付けて開いてください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptマネージャーの更新確認画面が開けば、そのまま更新してください。';});
   copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ 更新URLをコピーしました。Edgeのアドレス欄へ貼り付けて開いてください。':'コピーできませんでした。欄を長押ししてURLをコピーしてください。';});
-  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.8.25&ts='+ts;});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.9.0&ts='+ts;});
 })();
 </script>
 </body>
