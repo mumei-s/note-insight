@@ -203,7 +203,6 @@
     try {
       let d = dataset(), r = run();
       if (!d?.datasetId || !r || r.datasetId !== d.datasetId) throw new FatalError('対象データがありません');
-      safety().assertNetwork();
       if (d.preparedBatch) {
         const view = findView();
         const additions = page.__MUMEI_PREPARED_BATCH__?.missingAdditions?.(d) || [];
@@ -218,6 +217,7 @@
           if (articleKey() !== article || d?.datasetId !== id || r?.datasetId !== id) throw new FatalError('追加中に対象が変わったため停止しました');
         }
       }
+      safety().assertNetwork();
       page.__MUMEI_PREPARED_BATCH__?.requireCurrent?.(d);
       if (r.pending) throw new FatalError('画像アップロード途中です。続きの回収を先に完了します');
       const count = Object.keys(r.images || {}).length;
