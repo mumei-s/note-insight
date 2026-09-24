@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.9
+// @version      18.9.10
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.9' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.10' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -91,6 +91,12 @@
     if (hold?.until > Date.now()) throw new Error(networkMessage(hold));
     localStorage.removeItem(networkKey); memoryHold = null; stopped = true;
     status('通信停止を解除しました。自動再送はしません。「追加＋カード続き」で不足分から再開できます');
+  }
+  function confirmNetworkRecovered() {
+    if (active) return false;
+    localStorage.removeItem(networkKey); memoryHold = null; stopped = false;
+    status('通信復旧を確認しました。待機再開から不足分だけ続けます');
+    return true;
   }
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
@@ -594,7 +600,7 @@
     sameContent: (a, b) => contentWithoutBlockIds(a) === contentWithoutBlockIds(b),
     setSerializer: fn => { serializer = fn; }, setDraftParser: fn => { draftParser = fn; }, readDraft,
     busy: () => Boolean(active), stopped: () => stopped || Boolean(networkHold()), stop, status, requestStart, requestEnd,
-    observeHttp, assertNetwork, networkHold, resumeNetwork, showBackups };
+    observeHttp, assertNetwork, networkHold, resumeNetwork, confirmNetworkRecovered, showBackups };
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
   page.addEventListener('pagehide', () => { stopped = true; try { capture(); } catch (_) {} });
@@ -615,7 +621,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.9';
+const VERSION='18.9.10';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -625,7 +631,7 @@ const META='https://raw.githubusercontent.com/mumei-s/note-insight/main/data/not
 const RAW_BASE='https://raw.githubusercontent.com/mumei-s/note-insight/main/public';
 const FINAL='https://note.com/fuku444/n/nb4f6934381e9';
 
-let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,wakeLock=null;
+let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,waitResumeTimer=null,wakeLock=null;
 async function keepAwake(){
   if(!page.navigator?.wakeLock?.request||document.hidden)return false;
   try{
@@ -644,6 +650,7 @@ const runKey=()=>RUN_PREFIX+':'+articleKey();
 const stageDataKey=()=>`mumei_live_stage_dataset_v1:${articleKey()}`;
 const stageRunKey=()=>`mumei_live_stage_run_v1:${articleKey()}`;
 const overnightKey=()=>`mumei_live_overnight_v1:${articleKey()}`;
+const waitResumeKey=()=>`mumei_live_wait_resume_v1:${articleKey()}`;
 const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_){return f}};
 const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const normalize=value=>{try{const u=new URL(String(value||''),location.href);u.search='';u.hash='';return u.href}catch(_){return String(value||'')}};
@@ -921,7 +928,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.9',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.10',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -965,7 +972,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.10',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -1023,7 +1030,101 @@ async function startOvernight(){
   setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます'+(awake?'｜画面スリープ抑止ON':'｜スリープ抑止は端末非対応'));
   await rebuildImages(true);
 }
+
+const WAIT_RETRY_MS=10*60*1000;
+function waitResumeState(){return read(waitResumeKey(),null)}
+function waitResumeArmed(){return waitResumeState()?.armed===true}
+function scheduleWaitResume(delay=1000){
+  clearTimeout(waitResumeTimer);
+  if(!waitResumeArmed()||!enabled())return;
+  waitResumeTimer=setTimeout(()=>{void runWaitResumeCycle()},Math.max(500,delay));
+}
+function clearWaitResume(message=''){
+  clearTimeout(waitResumeTimer);waitResumeTimer=null;
+  localStorage.removeItem(waitResumeKey());
+  if(message)setStatus(message);
+  updateButtons();
+}
+async function probeNoteReady(){
+  const article=articleKey();
+  if(!article||typeof page.fetch!=='function')return false;
+  const controller=typeof page.AbortController==='function'?new page.AbortController():null;
+  const timer=controller?setTimeout(()=>controller.abort(),10000):null;
+  try{
+    const response=await page.fetch('https://note.com/api/v3/notes/'+article+'?draft=true&_resume_probe='+Date.now(),{
+      credentials:'include',cache:'no-store',...(controller?{signal:controller.signal}:{})
+    });
+    if([401,403,429].includes(response.status)){
+      safety().observeHttp?.(response.status,response.headers?.get?.('retry-after'));
+      return false;
+    }
+    if(response.status<200||response.status>=300)return false;
+    const payload=await response.json().catch(()=>null);
+    return payload?.data?.key===article;
+  }catch(_){
+    return false;
+  }finally{
+    if(timer!==null)clearTimeout(timer);
+  }
+}
+async function runWaitResumeCycle(){
+  if(!waitResumeArmed()||!enabled())return;
+  if(busy){scheduleWaitResume(60000);return;}
+  const state=waitResumeState()||{};
+  const hold=safety().networkHold?.();
+  const notBefore=Math.max(Number(state.notBefore||0),Number(hold?.until||0));
+  if(Date.now()<notBefore){
+    const sec=Math.max(1,Math.ceil((notBefore-Date.now())/1000));
+    setStatus('待機再開ON｜通信休止中 あと約'+Math.ceil(sec/60)+'分｜復旧確認後に不足分だけ自動再開');
+    scheduleWaitResume(Math.min(60000,notBefore-Date.now()+1000));
+    return;
+  }
+  setStatus('待機再開ON｜note通信の復旧を確認中…');
+  const ready=await probeNoteReady();
+  if(!ready){
+    const next={...state,armed:true,lastProbe:Date.now(),notBefore:Date.now()+WAIT_RETRY_MS};
+    write(waitResumeKey(),next);
+    setStatus('まだ通信エラー中｜10分休止して再確認します。本文・成功済み分は保持');
+    scheduleWaitResume(WAIT_RETRY_MS);
+    updateButtons();
+    return;
+  }
+  safety().confirmNetworkRecovered?.();
+  const next={...state,armed:true,lastProbe:Date.now(),notBefore:Date.now()};
+  write(waitResumeKey(),next);
+  setStatus('通信復旧確認 ✅ 不足分だけ自動再開します');
+  await resumeWork();
+  const run=currentRun();
+  if(run?.stage==='cards_ready'){
+    clearWaitResume('待機再開完了 ✅ 極薄・通知カードとも残りまで完了しました');
+    return;
+  }
+  if(!waitResumeArmed())return;
+  const holdAfter=safety().networkHold?.();
+  if(holdAfter||['cards_waiting','cards_paused'].includes(run?.stage)){
+    write(waitResumeKey(),{...waitResumeState(),armed:true,notBefore:Date.now()+WAIT_RETRY_MS});
+    setStatus('再開先で通信エラーを検出｜完成分を保持して10分休止→自動再確認');
+    scheduleWaitResume(WAIT_RETRY_MS);
+    return;
+  }
+  scheduleWaitResume(60000);
+}
+async function armWaitResume(){
+  if(waitResumeArmed()){
+    clearWaitResume('待機再開をOFFにしました');
+    localStorage.removeItem(overnightKey());
+    return;
+  }
+  const now=Date.now();
+  write(waitResumeKey(),{armed:true,articleKey:articleKey(),armedAt:now,notBefore:now+WAIT_RETRY_MS,lastProbe:0});
+  write(overnightKey(),true);
+  const awake=await keepAwake();
+  setStatus('待機再開ON ✅ まず10分休止 → 通信復旧を確認できたら不足分だけ自動再開'+(awake?'｜画面スリープ抑止ON':''));
+  updateButtons();
+  scheduleWaitResume(1000);
+}
 function maybeResumeOvernight(){
+  if(waitResumeArmed()){scheduleWaitResume(1500);return;}
   if(read(overnightKey(),false)!==true||busy||!enabled())return;
   const run=currentRun(),stage=read(stageRunKey(),null);
   if(stage?.stage==='images_building'||!run?.liveBatch){
@@ -1163,7 +1264,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.10',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
@@ -1220,7 +1321,7 @@ async function resumeWork(){
       });
       if(missingImages.length){
         write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.9',stage:'images_building',pendingImage:null});
+        write(stageRunKey(),{...run,version:'18.9.10',stage:'images_building',pendingImage:null});
         setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
         return await rebuildImages(overnight);
       }
@@ -1269,6 +1370,8 @@ function updateButtons(){
   const count=data?.count||0,cards=run?.cardKeys?.length||0,images=run?.images?Object.keys(run.images).length:0;
   p.querySelector('[data-a="overnight"]')?.removeAttribute('disabled');
   p.querySelector('[data-a="resume"]')?.toggleAttribute('disabled',busy);
+  const waitButton=p.querySelector('[data-a="waitresume"]');
+  if(waitButton){waitButton.textContent=waitResumeArmed()?'待機再開OFF':'エラー解消待ち再開';waitButton.toggleAttribute('disabled',false);}
   p.querySelector('[data-a="bennett"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
@@ -1284,7 +1387,7 @@ function mount(){
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
+      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="waitresume" type="button">エラー解消待ち再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
       '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
@@ -1330,6 +1433,7 @@ function mount(){
       const a=e.target.closest('button[data-a]')?.dataset.a;if(!a||a==='min')return;
       if(a==='overnight')void startOvernight();
       if(a==='resume')void resumeWork();
+      if(a==='waitresume')void armWaitResume();
       if(a==='bennett')void resumeAfterBennett();
       if(a==='fresh')void rebuildImages(false);
       if(a==='cards')void buildCards();
@@ -1340,7 +1444,7 @@ function mount(){
   }
   updateButtons();
 }
-page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett};
+page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett,armWaitResume,runWaitResumeCycle};
 page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(read(overnightKey(),false)===true)void keepAwake();setTimeout(maybeResumeOvernight,1200)}});
 setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
