@@ -201,8 +201,23 @@
     guardBusy = true;
     let operation;
     try {
-      const d = dataset(), r = run();
+      let d = dataset(), r = run();
       if (!d?.datasetId || !r || r.datasetId !== d.datasetId) throw new FatalError('対象データがありません');
+      safety().assertNetwork();
+      if (d.preparedBatch) {
+        const view = findView();
+        const additions = page.__MUMEI_PREPARED_BATCH__?.missingAdditions?.(d) || [];
+        const missing = d.rows.some(row => !trackedImage(view, r.images?.[row.url], row.url));
+        if (additions.length || r.pending || missing) {
+          const id = d.datasetId, article = articleKey();
+          if (!page.__MUMEI_THIN_IMAGES__?.run) throw new FatalError('画像追加機能の版が一致しません。旧版を停止して更新してください');
+          // Image creation owns its own safety operation and returns success
+          // only after preserving, linking and saving the resulting images.
+          if (await page.__MUMEI_THIN_IMAGES__.run() !== true || safety().stopped()) return false;
+          d = dataset(); r = run();
+          if (articleKey() !== article || d?.datasetId !== id || r?.datasetId !== id) throw new FatalError('追加中に対象が変わったため停止しました');
+        }
+      }
       page.__MUMEI_PREPARED_BATCH__?.requireCurrent?.(d);
       if (r.pending) throw new FatalError('画像アップロード途中です。続きの回収を先に完了します');
       const count = Object.keys(r.images || {}).length;
@@ -215,7 +230,7 @@
       verifyRows(view, d, r, true);
       setJSON(verifiedKey(), { datasetId: d.datasetId, count: d.count, verifiedAt: Date.now() });
       lastCompletedDataset = d.datasetId;
-      setStatus(`極薄画像🔗 ${d.count}/${d.count} 保存HTMLまで確認済み ✅ 次は「送」`);
+      setStatus(`極薄画像🔗 ${d.count}/${d.count} 保存確認済み｜通知カードの続きを準備中…`);
       return true;
     } catch (error) {
       safety().stop();
@@ -283,9 +298,6 @@
     lastCompletedDataset = '';
   }, true);
 
-  setInterval(() => {
-    void autoHardenWhenComplete();
-    void recoverOldPending();
-    // v18以降はパネルタイトルを書き換えない。
-  }, 1200);
+  // Additions, recovery and link saves start only from an explicit action.
+  // Reopening an old pending upload must not restart network work on a timer.
 })();
