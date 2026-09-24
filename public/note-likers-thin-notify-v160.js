@@ -1045,7 +1045,7 @@
     if (unknown.length) throw new FatalError('投入記録にない画像があります。元画像を守るため初期化を止めました');
     return [...slots].filter(id => !before.has(id));
   }
-  page.__MUMEI_THIN_UPLOAD__ = { prepareReset, resetImageIds };
+  page.__MUMEI_THIN_UPLOAD__ = { prepareReset, resetImageIds, insert: insertThinImages };
 
   async function recoverPending(view, dataset, run) {
     const pending = run.pending;
