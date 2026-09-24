@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.5
-// @description  最新対象から極薄をnote正規画像アップロードで再構築し、指定見出し・仕切り線を入れて通知カードまで夜間一括・再開対応。
+// @version      18.9.6
+// @description  最新対象から極薄をnote正規画像アップロードで連続再構築し、指定見出し・仕切り線を入れて通知カードまで夜間一括・再開対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.5' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.6' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -615,7 +615,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.5';
+const VERSION='18.9.6';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -921,7 +921,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.5',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.6',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -965,7 +965,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.5',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.6',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -984,15 +984,11 @@ async function rebuildImages(autoCards=false){
       setStatus('極薄 '+Object.keys(run.images).length+'/'+dataset.count+'｜'+(i+1)+'番 '+row.creator+' をnoteへアップロード中…');
       await uploadOneThin(view,row,run,dataset);
       const done=Object.keys(run.images).length;
-      if(done%5===0||done===dataset.count){
+      if(done%20===0||done===dataset.count){
         await safety().save(view,'極薄 '+done+'/'+dataset.count+' 保存確認中…');
       }
-      if(done%20===0&&done<dataset.count){
-        setStatus('極薄 '+done+'/'+dataset.count+' 保存済み｜30秒休止中…');
-        await sleep(30000);
-      }else{
-        await sleep(900);
-      }
+      setStatus('極薄 '+done+'/'+dataset.count+'｜note画像確認済み・連続処理中…');
+      await sleep(450);
     }
     const actual=reconcileStageImages(view,dataset,run);
     if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
@@ -1021,8 +1017,8 @@ async function rebuildImages(autoCards=false){
   }
 }
 async function startOvernight(){
-  if(busy)return;
   write(overnightKey(),true);
+  if(busy){setStatus('夜間一括ON｜現在の処理が終わり次第、そのまま極薄→カードまで継続します');return;}
   const awake=await keepAwake();
   setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます'+(awake?'｜画面スリープ抑止ON':'｜スリープ抑止は端末非対応'));
   await rebuildImages(true);
@@ -1175,7 +1171,7 @@ function updateButtons(){
   const p=document.getElementById(PANEL);if(!p)return;
   const run=currentRun(),data=currentData();
   const count=data?.count||0,cards=run?.cardKeys?.length||0,images=run?.images?Object.keys(run.images).length:0;
-  p.querySelector('[data-a="overnight"]')?.toggleAttribute('disabled',busy);
+  p.querySelector('[data-a="overnight"]')?.removeAttribute('disabled');
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
   p.querySelector('[data-a="delete"]')?.toggleAttribute('disabled',busy||!cards);
@@ -1187,7 +1183,7 @@ function mount(){
   let p=document.getElementById(PANEL);
   if(!p){
     p=document.createElement('div');p.id=PANEL;
-    p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:none';
+    p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
       '<button data-a="overnight" type="button">夜間一括</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
