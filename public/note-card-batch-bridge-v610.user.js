@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.11
+// @version      18.9.12
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.11' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.12' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -500,12 +500,9 @@
         if ((confirmedDoc === expected && confirmedTitle === expectedTitle) || uiConfirmed) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
         const elapsed = Math.floor((Date.now() - started) / 1000);
         if (elapsed !== seconds) { seconds = elapsed; status(label + `（保存確認 ${elapsed}秒）`); }
-        if (!reading && Date.now() - lastRead >= 5000 && typeof page.fetch === 'function') {
-          reading = true; lastRead = Date.now();
-          void readDraft(v).then(result => { if (waiting) readError = result.matches ? '' : '下書きは現在の本文とまだ一致していません'; })
-            .catch(e => { if (waiting) readError = e?.name === 'AbortError' ? '下書きの読戻しがタイムアウトしました' : (e?.message || String(e)); })
-            .finally(() => { reading = false; });
-        }
+        // Do not poll the draft GET API here. The native save request itself is
+        // observed by installSaveProbe(), which is enough to confirm the same
+        // document without repeatedly touching note's auth/session endpoint.
         if (!clicked) {
           const button = [...document.querySelectorAll('button')].find(b => /^(一時保存|下書き保存)$/.test(b.textContent?.trim()) && b.getClientRects().length && !b.disabled);
           if (button) { clicked = true; button.click(); }
@@ -621,7 +618,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.11';
+const VERSION='18.9.12';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -928,7 +925,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.11',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.12',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -943,6 +940,38 @@ function reconcileStageImages(view,dataset,run){
   }
   run.images=next;write(stageRunKey(),run);
   return Object.keys(next).length;
+}
+function adoptSavedBodyImages(view,dataset,seedRun={}){
+  const hits=imageNodes(view),images={};
+  let duplicates=0;
+  for(const row of dataset.rows){
+    const matches=hits.filter(hit=>
+      remoteImage(hit.node)&&
+      normalize(hit.node.attrs?.link)===normalize(row.url)&&
+      String(hit.node.textContent||'').trim()===row.caption
+    );
+    if(matches.length){
+      const hit=matches.at(-1);
+      images[row.url]={id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:row.url};
+      if(matches.length>1)duplicates+=matches.length-1;
+    }
+  }
+  const run={
+    ...seedRun,
+    version:'18.9.12',
+    articleKey:articleKey(),
+    datasetId:dataset.datasetId,
+    stage:'images_building',
+    images,
+    pendingImage:null,
+    cardKeys:Array.isArray(seedRun.cardKeys)?seedRun.cardKeys:[],
+    savedCardCount:Number(seedRun.savedCardCount||0),
+    likeBoundaryInserted:hasExactText(view,LIKE_HEADING)||Boolean(seedRun.likeBoundaryInserted),
+    finalBoundaryInserted:Boolean(seedRun.finalBoundaryInserted),
+    adoptedFromSavedBody:true,
+    adoptedAt:Date.now()
+  };
+  return {run,count:Object.keys(images).length,duplicates};
 }
 async function uploadOneThin(view,row,run,dataset){
   ensureEnd(view);
@@ -972,7 +1001,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.11',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.12',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -1001,7 +1030,9 @@ async function rebuildImages(autoCards=false){
     if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
     await safety().save(view,'新しい極薄 '+dataset.count+'/'+dataset.count+' 最終保存確認中…');
 
-    const owned=oldOwnedHits(view,oldRun,oldData,newUrls);
+    const owned=(oldRun?.datasetId===dataset.datasetId||run.adoptedFromSavedBody)
+      ? {images:[],cards:[]}
+      : oldOwnedHits(view,oldRun,oldData,newUrls);
     if(owned.cards.length||owned.images.length){
       setStatus('新しい極薄は保存済み。旧ツール生成物だけ整理中…');
       removeHits(view,[...owned.cards,...owned.images]);
@@ -1045,28 +1076,6 @@ function clearWaitResume(message=''){
   if(message)setStatus(message);
   updateButtons();
 }
-async function probeNoteReady(){
-  const article=articleKey();
-  if(!article||typeof page.fetch!=='function')return false;
-  const controller=typeof page.AbortController==='function'?new page.AbortController():null;
-  const timer=controller?setTimeout(()=>controller.abort(),10000):null;
-  try{
-    const response=await page.fetch('https://note.com/api/v3/notes/'+article+'?draft=true&_resume_probe='+Date.now(),{
-      credentials:'include',cache:'no-store',...(controller?{signal:controller.signal}:{})
-    });
-    if([401,403,429].includes(response.status)){
-      safety().observeHttp?.(response.status,response.headers?.get?.('retry-after'));
-      return false;
-    }
-    if(response.status<200||response.status>=300)return false;
-    const payload=await response.json().catch(()=>null);
-    return payload?.data?.key===article;
-  }catch(_){
-    return false;
-  }finally{
-    if(timer!==null)clearTimeout(timer);
-  }
-}
 async function runWaitResumeCycle(){
   if(!waitResumeArmed()||!enabled())return;
   if(busy){scheduleWaitResume(60000);return;}
@@ -1075,40 +1084,39 @@ async function runWaitResumeCycle(){
   const notBefore=Math.max(Number(state.notBefore||0),Number(hold?.until||0));
   if(Date.now()<notBefore){
     const sec=Math.max(1,Math.ceil((notBefore-Date.now())/1000));
-    setStatus('待機再開ON｜通信休止中 あと約'+Math.ceil(sec/60)+'分｜復旧確認後に不足分だけ自動再開');
+    setStatus('待機再開ON｜あと約'+Math.ceil(sec/60)+'分休止｜時間後に保存済み位置を照合して1回だけ再開');
     scheduleWaitResume(Math.min(60000,notBefore-Date.now()+1000));
     return;
   }
-  setStatus('待機再開ON｜note通信の復旧を確認中…');
-  const ready=await probeNoteReady();
-  if(!ready){
-    const next={...state,armed:true,lastProbe:Date.now(),notBefore:Date.now()+WAIT_RETRY_MS};
-    write(waitResumeKey(),next);
-    setStatus('まだ通信エラー中｜10分休止して再確認します。本文・成功済み分は保持');
-    scheduleWaitResume(WAIT_RETRY_MS);
-    updateButtons();
-    return;
-  }
+
+  // No background GET probe: it was needlessly touching note's auth/session
+  // endpoint and could make the login UI flash. After the cooldown, make one
+  // real resume attempt. A fresh 401/403/429 will be caught by the safety layer.
   safety().confirmNetworkRecovered?.();
-  const next={...state,armed:true,lastProbe:Date.now(),notBefore:Date.now()};
-  write(waitResumeKey(),next);
-  setStatus('通信復旧確認 ✅ 不足分だけ自動再開します');
+  write(waitResumeKey(),{...state,armed:true,lastAttempt:Date.now(),notBefore:Date.now()});
+  setStatus('待機時間終了 ✅ 保存済み本文を照合し、残りだけ再開します');
   await resumeWork();
+
   const run=currentRun();
   if(run?.stage==='cards_ready'){
-    clearWaitResume('待機再開完了 ✅ 極薄・通知カードとも残りまで完了しました');
+    clearWaitResume('待機再開完了 ✅ 残りまで完了しました');
     return;
   }
   if(!waitResumeArmed())return;
   const holdAfter=safety().networkHold?.();
   if(holdAfter||['cards_waiting','cards_paused'].includes(run?.stage)){
     write(waitResumeKey(),{...waitResumeState(),armed:true,notBefore:Date.now()+WAIT_RETRY_MS});
-    setStatus('再開先で通信エラーを検出｜完成分を保持して10分休止→自動再確認');
+    setStatus('まだ通信制限あり｜完成分を保持して10分休止 → 残りから再試行');
     scheduleWaitResume(WAIT_RETRY_MS);
     return;
   }
-  scheduleWaitResume(60000);
+  // If an image operation stopped for a transient reason without an HTTP hold,
+  // retry only after another cooldown, never immediately loop.
+  write(waitResumeKey(),{...waitResumeState(),armed:true,notBefore:Date.now()+WAIT_RETRY_MS});
+  setStatus('処理停止を検出｜完成分を保持して10分休止 → 残りから再試行');
+  scheduleWaitResume(WAIT_RETRY_MS);
 }
+
 async function armWaitResume(){
   if(waitResumeArmed()){
     clearWaitResume('待機再開をOFFにしました');
@@ -1119,7 +1127,7 @@ async function armWaitResume(){
   write(waitResumeKey(),{armed:true,articleKey:articleKey(),armedAt:now,notBefore:now+WAIT_RETRY_MS,lastProbe:0});
   write(overnightKey(),true);
   const awake=await keepAwake();
-  setStatus('待機再開ON ✅ まず10分休止 → 通信復旧を確認できたら不足分だけ自動再開'+(awake?'｜画面スリープ抑止ON':''));
+  setStatus('待機再開ON ✅ 10分休止 → 保存済み位置を本文から照合 → 残りだけ自動再開'+(awake?'｜画面スリープ抑止ON':''));
   updateButtons();
   scheduleWaitResume(1000);
 }
@@ -1258,7 +1266,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.11',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.12',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
@@ -1297,45 +1305,63 @@ async function resumeWork(){
   if(busy){setStatus('現在の処理中です。終了後に不足位置から再開します');return false;}
   const view=findView();
   if(!view){setStatus('編集画面の準備ができていません',true);return false;}
-  const staged=read(stageRunKey(),null);
-  const stagedData=read(stageDataKey(),null);
-  const run=currentRun(),data=currentData();
+  let staged=read(stageRunKey(),null);
+  let stagedData=read(stageDataKey(),null);
+  let run=currentRun(),data=currentData();
   const overnight=read(overnightKey(),false)===true;
   try{
-    if(staged&&stagedData&&staged.datasetId===stagedData.datasetId){
-      const present=reconcileStageImages(view,stagedData,staged);
-      setStatus('再開確認：極薄 '+present+'/'+stagedData.count+'｜不足から続けます');
+    // The visible/saved editor body is the recovery source of truth.
+    // Prefer the frozen dataset from this job so new likes arriving later do not
+    // shift the target list while resuming.
+    let dataset=(stagedData?.liveBatch&&stagedData)||(data?.liveBatch&&data)||null;
+    if(!dataset){
+      setStatus('再開確認：対象一覧を復元中…');
+      const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
+      validate(manifest,meta);
+      dataset=makeLiveDataset(manifest,meta);
+    }
+
+    const seed=(staged&&staged.datasetId===dataset.datasetId)
+      ? staged
+      : (run&&run.datasetId===dataset.datasetId?run:{});
+    const adopted=adoptSavedBodyImages(view,dataset,seed);
+    staged=adopted.run;stagedData=dataset;
+    write(stageDataKey(),dataset);write(stageRunKey(),staged);
+
+    if(adopted.count<dataset.count){
+      setStatus('保存済み極薄 '+adopted.count+'/'+dataset.count+' を本文から確認 ✅ 残り '+(dataset.count-adopted.count)+'件だけ続けます'+(adopted.duplicates?'｜重複候補 '+adopted.duplicates:''));
       return await rebuildImages(overnight);
     }
-    if(data?.liveBatch&&run&&run.datasetId===data.datasetId){
-      const missingImages=data.rows.filter(row=>{
-        const rec=run.images?.[row.url];
-        const hit=rec&&safety().tracked(view,rec,row.url);
-        return !(hit&&remoteImage(hit.node)&&normalize(hit.node.attrs?.link)===normalize(row.url)&&hit.node.textContent===row.caption);
-      });
-      if(missingImages.length){
-        write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.11',stage:'images_building',pendingImage:null});
-        setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
-        return await rebuildImages(overnight);
-      }
-      const presentCards=(run.cardKeys||[]).filter(rec=>embedNodes(view).some(h=>cardKey(h)===rec.key&&genuineCard(h,rec.url)));
-      if(presentCards.length!==(run.cardKeys||[]).length){
-        run.cardKeys=presentCards;
-        run.savedCardCount=Math.min(Number(run.savedCardCount||0),presentCards.length);
-        run.pendingCard=null;
-        run.stage='cards_paused';
-        write(runKey(),run);
-      }
-      if(run.stage==='cards_ready'&&presentCards.length===data.count){
-        setStatus('全件そろっています｜極薄 '+data.count+'/'+data.count+'｜カード '+data.count+'/'+data.count+' ✅');
-        return true;
-      }
-      setStatus('再開確認：極薄 '+data.count+'/'+data.count+'｜カード '+presentCards.length+'/'+data.count+'｜不足から続けます');
-      return await buildCards();
+
+    // All thin thumbnails exist in the actual body. Promote that state and
+    // continue with cards; never rebuild thumbnails just because local records
+    // were lost or an update changed versions.
+    run={
+      ...staged,
+      stage:run?.stage&&run.datasetId===dataset.datasetId?run.stage:'images_ready',
+      cardKeys:Array.isArray(run?.cardKeys)?run.cardKeys:(Array.isArray(staged.cardKeys)?staged.cardKeys:[]),
+      savedCardCount:Number(run?.savedCardCount||staged.savedCardCount||0),
+      pendingCard:null,
+      cardBaselineKeys:Array.isArray(run?.cardBaselineKeys)?run.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)
+    };
+    data=dataset;
+    write(DATA_KEY,dataset);write(runKey(),run);
+    localStorage.removeItem(stageDataKey());localStorage.removeItem(stageRunKey());
+
+    const presentCards=(run.cardKeys||[]).filter(rec=>embedNodes(view).some(h=>cardKey(h)===rec.key&&genuineCard(h,rec.url)));
+    if(presentCards.length!==(run.cardKeys||[]).length){
+      run.cardKeys=presentCards;
+      run.savedCardCount=Math.min(Number(run.savedCardCount||0),presentCards.length);
+      run.pendingCard=null;
+      run.stage='cards_paused';
+      write(runKey(),run);
     }
-    setStatus('旧記録または未開始状態です。最新327件の極薄から再構築して続けます');
-    return await rebuildImages(overnight);
+    if(run.stage==='cards_ready'&&presentCards.length===dataset.count){
+      setStatus('全件そろっています｜極薄 '+dataset.count+'/'+dataset.count+'｜カード '+dataset.count+'/'+dataset.count+' ✅');
+      return true;
+    }
+    setStatus('極薄は保存済み '+dataset.count+'/'+dataset.count+' ✅｜カード '+presentCards.length+'/'+dataset.count+'｜カードの残りだけ続けます');
+    return await buildCards();
   }catch(error){
     setStatus('再開確認停止：'+(error?.message||String(error))+'｜本文は保持しています',true);
     return false;
@@ -1381,7 +1407,7 @@ function mount(){
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="waitresume" type="button">エラー解消待ち再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
+      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="waitresume" type="button">エラー解消待ち再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">投稿後カード一括削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
       '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
