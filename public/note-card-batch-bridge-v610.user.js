@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.1
+// @version      18.9.2
 // @description  投稿者照合・全件名前＋さんのキャプション。最新対象から極薄を再構築し、通知カードを安全な間隔で連続作成。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.1' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.2' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -615,7 +615,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.1';
+const VERSION='18.9.2';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -1004,19 +1004,59 @@ function mount(){
   let p=document.getElementById(PANEL);
   if(!p){
     p=document.createElement('div');p.id=PANEL;
-    p.style.cssText='position:fixed;right:6px;bottom:8px;z-index:2147483646;width:min(360px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:8px;font:12px/1.4 system-ui;box-shadow:0 8px 30px #0008';
-    p.innerHTML='<div class="title" style="font-weight:900;margin-bottom:6px">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></div>'+
-      '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px">'+
+    p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:none';
+    p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
+      '<div data-body><div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px">'+
       '<button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
-      '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div>';
+      '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
+    const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
+    const posKey='mumei_live_fresh_panel_pos_v1',minKey='mumei_live_fresh_panel_min_v1';
+    try{
+      const saved=JSON.parse(localStorage.getItem(posKey)||'null');
+      if(saved&&Number.isFinite(saved.left)&&Number.isFinite(saved.top)){
+        p.style.left=saved.left+'px';p.style.top=saved.top+'px';p.style.right='auto';
+      }
+    }catch(_){}
+    const applyMin=()=>{
+      const on=localStorage.getItem(minKey)==='1';
+      body.style.display=on?'none':'block';
+      min.textContent=on?'＋':'−';
+      p.style.width=on?'190px':'min(330px,calc(100vw - 12px))';
+    };
+    min.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();localStorage.setItem(minKey,body.style.display==='none'?'0':'1');applyMin();});
+    let drag=null;
+    title.addEventListener('pointerdown',e=>{
+      if(e.target.closest('button'))return;
+      const r=p.getBoundingClientRect();
+      drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top};
+      try{title.setPointerCapture(e.pointerId)}catch(_){}
+    });
+    title.addEventListener('pointermove',e=>{
+      if(!drag||e.pointerId!==drag.id)return;
+      e.preventDefault();
+      const vw=page.visualViewport?.width||page.innerWidth||360;
+      const vh=page.visualViewport?.height||page.innerHeight||640;
+      const r=p.getBoundingClientRect();
+      const left=Math.max(4,Math.min(drag.left+e.clientX-drag.x,vw-r.width-4));
+      const top=Math.max(56,Math.min(drag.top+e.clientY-drag.y,vh-Math.min(r.height,vh-64)-4));
+      p.style.left=Math.round(left)+'px';p.style.top=Math.round(top)+'px';p.style.right='auto';
+    });
+    const finish=e=>{
+      if(!drag||e.pointerId!==drag.id)return;
+      const r=p.getBoundingClientRect();
+      localStorage.setItem(posKey,JSON.stringify({left:Math.round(r.left),top:Math.round(r.top)}));
+      drag=null;
+    };
+    title.addEventListener('pointerup',finish);title.addEventListener('pointercancel',finish);
     p.addEventListener('click',e=>{
-      const a=e.target.closest('button[data-a]')?.dataset.a;if(!a)return;
+      const a=e.target.closest('button[data-a]')?.dataset.a;if(!a||a==='min')return;
       if(a==='fresh')void rebuildImages();
       if(a==='cards')void buildCards();
       if(a==='delete')void deleteOwnedCards();
     });
     document.body.appendChild(p);
+    applyMin();
   }
   updateButtons();
 }
