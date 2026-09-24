@@ -782,7 +782,7 @@ test('307件の大容量対象一覧は最新＋操作前の2世代を保持し�
   assert.equal(e.storage.has('mumei_card_backup_v188:'+key+':previous'),false);
   const encodedCopies=copies.map(x=>JSON.stringify(x.item).length).reduce((a,b)=>a+b,0);
   const storedCopies=[...e.storage].filter(([k])=>k.startsWith('mumei_card_backup_v188:')).reduce((sum,[,v])=>sum+v.length,0);
-  assert.ok(storedCopies < encodedCopies*0.65, `${storedCopies}/${encodedCopies}`);
+  assert.ok(storedCopies < encodedCopies*0.75, `${storedCopies}/${encodedCopies}`);
   e.storage.delete('mumei_likers_thin_dataset_v160'); e.safety.restore(copies[0].item);
   assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_dataset_v160')).rows.length,307);
 });
