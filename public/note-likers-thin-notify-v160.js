@@ -54,6 +54,7 @@
       const seconds = Number(retryAfter);
       const retryAt = retryAfter ? (Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(retryAfter)) : 0;
       recordNetFailure('image-upload', ticket.url, status, message, retryAt);
+      page.__MUMEI_CARD_SAFETY__?.observeHttp(status, retryAfter);
     }
   }
 
@@ -112,6 +113,13 @@
   }
   function recentNetFailure(since) {
     return [...uploadNetFailures].reverse().find((x) => x.at >= since) || null;
+  }
+  function uploadFailureText(net) {
+    if (!net) return '';
+    if (net.kind === 'note-alert') return 'noteの画像処理が失敗（HTTP状態は取得できません）';
+    let host = '', phase = '画像送信';
+    try { const u = new URL(net.url); host = u.host; if (u.pathname.endsWith('/images/upload/presigned_post')) phase = '画像受付'; } catch (_) {}
+    return `${phase}${host ? ` ${host}` : ''}：${net.status ? `HTTP ${net.status}` : '応答なし（HTTP状態不明）'}`;
   }
   function visibleUploadErrors() {
     const errors = [];
@@ -825,9 +833,9 @@
           arm.run.pending.stage = 'failed'; arm.run.pending.failure = result.reason;
           arm.run.pending.retryAt = result.net?.retryAt || 0; setRun(arm.run);
           const completed = verifiedImageCount(arm.view, arm.dataset, arm.run);
-          const net = result.net?.status ? ` HTTP ${result.net.status}` : '';
+          const net = uploadFailureText(result.net);
           recordUploadDiag({runtime:'18.8.6', requested:1, succeededThisBatch:0, completedAfter:completed, network:result.net, reason:result.reason});
-          throw new FatalError(`累計${completed}/${arm.dataset.count}｜${result.reason}${net}｜成功分を保持`);
+          throw new FatalError(`累計${completed}/${arm.dataset.count}｜対象 ${row.creator || row.index}｜${net || result.reason}｜成功分を保持`);
         }
         arm.phase = 'リンク付与';
         await linkCreatedImages(arm.view, [row], result.fresh, arm.run);
@@ -887,7 +895,7 @@
       if (result.failed || created.length < arm.workRows.length) {
         const doneNow = verifiedImageCount(arm.view, arm.dataset, arm.run);
         const left = Math.max(0, arm.dataset.count - doneNow);
-        const netText = result.net ? `｜通信 ${result.net.kind} HTTP ${result.net.status || 0} ${result.net.url}` : '';
+        const netText = result.net ? `｜${uploadFailureText(result.net)}` : '';
         arm.phase = 'アップロード';
         const reason = result.reason || 'note側画像アップロード失敗';
         recordUploadDiag({
@@ -1007,11 +1015,11 @@
       const recordedFailure = pending.stage === 'failed' || getJSON(uploadDiagKey(), []).some(row =>
         Date.parse(row.at) >= Number(pending.at || 0) && row.requested === workRows.length && row.succeededThisBatch < row.requested);
       const abandonedEmpty = !all.length && pending.pageToken !== UPLOAD_PAGE_TOKEN && !lastUploadActivityAt && !imageArm;
-      if ((!recordedFailure && !abandonedEmpty) || uploadRequests.size) throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「画」で回収します');
+      if ((!recordedFailure && !abandonedEmpty) || uploadRequests.size) throw new FatalError('前回の画像アップロードが未完了です。本文と投入記録を保持しています。noteの処理完了後に「追加＋カード続き」で回収します');
       const signature = () => JSON.stringify(collect().map(hit => [hit.node.attrs.id, hit.node.attrs.src]));
       const initial = signature();
       await sleep(2000); safety().check(view);
-      if (uploadRequests.size || signature() !== initial || (lastUploadActivityAt && Date.now() - lastUploadActivityAt < UPLOAD_QUIET_MS)) throw new FatalError('前回のアップロードが動いています。完了後に「画」を押してください');
+      if (uploadRequests.size || signature() !== initial || (lastUploadActivityAt && Date.now() - lastUploadActivityAt < UPLOAD_QUIET_MS)) throw new FatalError('前回のアップロードが動いています。完了後に「追加＋カード続き」を押してください');
       all = collect(); retry = true;
     }
     const slots = pending.slots;
@@ -1031,12 +1039,12 @@
   }
 
   async function insertThinImages() {
-    if (busy || !enabled()) return;
+    if (busy || !enabled()) return false;
     const dataset = getDataset(), run = getRun();
     if (!dataset || !run || run.datasetId !== dataset.datasetId) {
-      setStatus('先に「抽」で対象を取得してください', true); return;
+      setStatus('先に対象を取得してください', true); return false;
     }
-    if (run.cardKeys?.length && !dataset.preparedBatch) { setStatus('通知カードが残っています。先に「削」', true); return; }
+    if (run.cardKeys?.length && !dataset.preparedBatch) { setStatus('通知カードが残っています。先に「削」', true); return false; }
     let operation;
     setBusy(true);
     try {
@@ -1065,7 +1073,7 @@
       if (!missing.length) {
         verifyConfirmationImage(view, dataset, run);
         await saveOnce('極薄画像の保存状態を確認中…');
-        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み｜次は「送」`); return;
+        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み`); return true;
       }
       const workRows = missing.slice(0, dataset.preparedBatch ? (nativeCommand ? 10 : 1) : IMAGE_CHUNK);
       setStatus(`極薄画像 ${workRows.length}枚を生成中…`);
@@ -1094,17 +1102,20 @@
       await completion;
       reusableInput = imageArm?.nativeInput || null;
       cancelImageArm();
-      if (safety().stopped()) { setStatus('画像投入と保存を終えて停止しました。続きは「画」'); return; }
+      if (safety().stopped()) { setStatus('画像投入と保存を終えて停止しました。自動再開はしません'); return false; }
       const left = missingRows(view, dataset, run).length;
       const completedAfter = dataset.count - left;
-      if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → 同じ画面のまま「画」で続行`);
+      if (left) setStatus(`極薄画像🔗 ${completedAfter}/${dataset.count} ✅ 残り${left}件 → 同じ画面のまま「追加＋カード続き」で続行`);
       else { verifyConfirmationImage(view, dataset, run); setStatus(`極薄画像🔗＋名前さん ${dataset.count}/${dataset.count} 完成 ✅ 最後の実績の算数も確認済み｜次は「送」`); }
       if (!dataset.preparedBatch || !left) break;
       await sleep(80);
       }
+      return missingRows(view, dataset, run).length === 0;
     } catch (error) {
       page.__MUMEI_CARD_SAFETY__?.stop();
-      setStatus(`停止 ${Object.keys(run.images || {}).length}/${dataset.count}｜${error?.message || String(error)}（「画」で再開）`, true);
+      const message = `画像追加停止 ${Object.keys(run.images || {}).length}/${dataset.count}｜${error?.message || String(error)}｜カード作成には進みません。自動再開なし`;
+      setStatus(message, true); page.__MUMEI_CARD_SAFETY__?.status(message, true);
+      return false;
     } finally {
       cancelImageArm();
       page.__MUMEI_CARD_SAFETY__?.end(operation);
@@ -1237,6 +1248,7 @@
   }
 
   setInterval(() => { try { const v = findView(); if (v) safety().capture(); } catch (_) {} }, 2000);
+  page.__MUMEI_THIN_IMAGES__ = { run: insertThinImages };
   page.addEventListener('mumei-card-stop', () => { if (imageArm && !imageArm.consumed) imageArm.reject(new FatalError('画像選択待機を停止しました')); });
   installUploadNetworkProbe();
   // Safety invariant: this tool must never reload or navigate away from the editor automatically.
