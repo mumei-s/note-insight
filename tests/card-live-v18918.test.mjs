@@ -9,8 +9,8 @@ const read = (path) => readFile(new URL(path, root), "utf8");
 test("18.9.20 bundle is generated from the current source modules", async () => {
   const bundle = await read("public/note-card-batch-bridge-v610.user.js");
   assert.equal(bundle, build());
-  assert.match(bundle, /@version\s+18\.9\.19/);
-  assert.match(bundle, /const VERSION='18\.9\.19'/);
+  assert.match(bundle, /@version\s+18\.9\.20/);
+  assert.match(bundle, /const VERSION='18\.9\.20'/);
 });
 
 test("card-only emergency UI exposes only current-position resume and post-publish delete", async () => {
