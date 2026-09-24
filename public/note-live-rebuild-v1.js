@@ -578,9 +578,12 @@ function adoptCardsThroughCheckpoint(view,dataset,run){
   for(let i=0;i<=checkpoint;i++){
     const row=dataset.rows[i];
     const matches=embeds.filter(hit=>genuineCard(hit,row.url));
-    if(!matches.length)throw new FatalError('完了済みカードを本文で確認できません：'+(i+1)+'番 '+row.creator);
-    const hit=matches.at(-1);
-    adopted.push({url:row.url,key:cardKey(hit)});
+    // The user explicitly confirmed this prefix is finished. Missing detection
+    // must never cause us to regenerate any of rows 1..166.
+    if(matches.length){
+      const hit=matches.at(-1);
+      adopted.push({url:row.url,key:cardKey(hit)});
+    }
   }
   // Preserve any already-recorded cards after the checkpoint if they still exist.
   for(const rec of Array.isArray(run.cardKeys)?run.cardKeys:[]){
@@ -623,6 +626,7 @@ async function buildCards(){
 
     for(let i=0;i<dataset.rows.length;i++){
       const row=dataset.rows[i];
+      if(i<adopted.checkpoint)continue;
       if((run.cardKeys||[]).some(x=>normalize(x.url)===normalize(row.url)))continue;
       // Do not adopt pre-existing body cards that were present before this run.
       const existing=embedNodes(view).find(h=>genuineCard(h,row.url)&&!baseline.has(cardKey(h)));
