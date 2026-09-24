@@ -35,7 +35,7 @@ class Tr {
   setSelection() { return this; }
 }
 function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest: InitialXHR, nodes = [new Node('paragraph', {}, '本文'.repeat(348) + '。')] } = {}) {
-  let time = 100000, quota = false, savedDraft = null;
+  let time = 100000, quota = false, quotaLimit = Infinity, savedDraft = null;
   const events = new Map(), documentEvents = new Map();
   const statuses = new Map(['mumei-note-source-status-v163', 'mumei-likers-thin-status-v160'].map(id => [id, { textContent: '', dataset: {} }]));
   statuses.set('mumei-note-source-picker-v163', { querySelectorAll: () => [], querySelector: () => null });
@@ -58,7 +58,18 @@ function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest:
   const page = {
     location: { pathname: '/notes/' + key + '/edit', href: 'https://editor.note.com/notes/' + key + '/edit', origin: 'https://editor.note.com' },
     document, Date: class extends Date { static now() { return time; } }, URL, URLSearchParams,
-    localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { if (quota) throw new Error('quota'); storage.set(k, String(v)); }, removeItem: k => storage.delete(k) },
+    localStorage: {
+      getItem: k => storage.get(k) ?? null,
+      setItem: (k, v) => {
+        const text = String(v);
+        const total = [...storage.entries()].reduce((n,[name,value]) => n + (name === k ? 0 : String(value).length), 0) + text.length;
+        if (quota || total > quotaLimit) throw new Error('quota');
+        storage.set(k, text);
+      },
+      removeItem: k => storage.delete(k),
+      key: i => [...storage.keys()][i] ?? null,
+      get length() { return storage.size; }
+    },
     MutationObserver: Observer, Event: class { constructor(type) { this.type = type; } },
     setTimeout: (fn, ms) => { queueMicrotask(() => { time += ms || 0; fn(); }); return 1; }, clearTimeout() {}, setInterval() {}, clearInterval() {},
     addEventListener: (type, fn) => { const a = events.get(type) || []; a.push(fn); events.set(type, a); },
@@ -81,7 +92,7 @@ function environment({ storage = new Map(), fetch: initialFetch, XMLHttpRequest:
     const text = source(name).replace(/\}\)\(\);\s*$/, 'page.__test = {' + exports + '};\n})();');
     vm.runInContext(text, ctx); return page.__test;
   }
-  return { page, safety, view, storage, title, button, statuses, observers, documentEvents, ctx, loadModule, succeed, encode, setSavedDraft: value => { savedDraft = value; }, savedDraft: () => savedDraft, quota: value => { quota = value; }, time: () => time };
+  return { page, safety, view, storage, title, button, statuses, observers, documentEvents, ctx, loadModule, succeed, encode, setSavedDraft: value => { savedDraft = value; }, savedDraft: () => savedDraft, quota: value => { quota = value; }, quotaLimit: value => { quotaLimit = value; }, time: () => time };
 }
 const image = (id = 'i1', link = '') => new Node('image', { id, src: 'https://assets.st-note.com/' + id + '.png', link });
 const embed = (id, url) => new Node('embed', { embeddedContentKey: id, src: url, htmlForEmbed: '<div class="note-embed"></div>' });
@@ -99,6 +110,28 @@ test('容量不足なら本文を変更する前に停止し前回の控えを�
   const e = environment(); e.safety.capture(); const before = e.encode(); const old = e.storage.get('mumei_card_backup_v188:' + key + ':latest'); e.quota(true);
   assert.throws(() => e.safety.begin('削除', e.view), /控えを保存できません/);
   assert.equal(e.encode(), before); assert.equal(e.storage.get('mumei_card_backup_v188:' + key + ':latest'), old);
+});
+test('18.8.19: 容量不足時はpreviousを整理して現在本文の操作前控えを確保する', () => {
+  const e = environment(); e.safety.capture();
+  const latestKey='mumei_card_backup_v188:'+key+':latest';
+  const previousKey='mumei_card_backup_v188:'+key+':previous';
+  e.storage.set(previousKey, e.storage.get(latestKey));
+  const used=[...e.storage.values()].reduce((n,v)=>n+String(v).length,0);
+  const latestSize=String(e.storage.get(latestKey)).length;
+  // A new before copy does not fit while previous exists, but does after previous is reclaimed.
+  e.quotaLimit(used + Math.floor(latestSize/2));
+  const token=e.safety.begin('画像作成',e.view);
+  assert.equal(e.storage.has(previousKey),false);
+  assert.ok(e.storage.get('mumei_card_backup_v188:'+key+':before'));
+  e.safety.end(token);
+});
+test('18.8.19: 100枚以上の大きい本文ではpreviousを持たずlatestを更新する', () => {
+  const nodes=[new Node('paragraph',{},'本文'),...Array.from({length:100},(_,i)=>image('large'+i))];
+  const e=environment({nodes});
+  e.storage.set('mumei_card_backup_v188:'+key+':previous',JSON.stringify({version:1,articleKey:key,doc:{type:'doc',content:[]}}));
+  e.safety.capture();
+  assert.equal(e.storage.has('mumei_card_backup_v188:'+key+':previous'),false);
+  assert.ok(e.storage.get('mumei_card_backup_v188:'+key+':latest'));
 });
 test('同じ記事への二重操作と別タブの処理を拒否する', () => {
   const e = environment(), token = e.safety.begin('画像作成', e.view);
