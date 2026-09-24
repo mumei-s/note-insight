@@ -51,11 +51,11 @@ jobs:
           node --check public/dashboard-setup.js
           node --check public/note-insight-dashboard-sync.user.js
           node --check public/note-pon-editor-v6.user.js
-      - name: Card tool safety and bundle verification
+      - name: Card tool 18.9.x safety and bundle verification
         run: |
           node scripts/build-card-userscript.mjs --check
           node --check public/note-card-batch-bridge-v610.user.js
-          node --test tests/card-safety-v188.test.mjs
+          node --test tests/card-live-v18918.test.mjs
       - run: npm run build
       - name: Unified INSIGHT regression tests
         run: node --test tests/insight-core-v2919.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/favorite-reader-current.test.mjs tests/notification-v2919.test.mjs tests/notification-dock-scope.test.mjs tests/notification-v3-return.test.mjs tests/polish-regression.test.mjs tests/notification-v2968.test.mjs tests/notification-dom.test.mjs
