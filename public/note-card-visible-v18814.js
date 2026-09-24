@@ -51,9 +51,11 @@
           return { src: url, style: '', htmlForEmbed: usableHtml(e.htmlForEmbed, url), identifier: targetKey, embeddedService: e.service, embeddedContentKey: e.key };
         }).catch(error => {
           const response = error?.response;
-          page.__MUMEI_CARD_SAFETY__.observeHttp(response?.status || error?.status, response?.headers?.get?.('retry-after') || response?.headers?.['retry-after']);
-          if (!response && (error?.request || error?.code === 'ERR_NETWORK' || error?.name === 'TypeError')) page.__MUMEI_CARD_SAFETY__.observeHttp(0);
-          page.__MUMEI_CARD_SAFETY__.assertNetwork();
+          const code = Number(response?.status || error?.status || 0);
+          if ([401, 403, 429].includes(code)) {
+            page.__MUMEI_CARD_SAFETY__.observeHttp(code, response?.headers?.get?.('retry-after') || response?.headers?.['retry-after']);
+            page.__MUMEI_CARD_SAFETY__.assertNetwork();
+          }
           throw error;
         });
         pending.set(id, request); request.catch(() => { if (pending.get(id) === request) pending.delete(id); });
