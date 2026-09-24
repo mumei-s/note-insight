@@ -38,7 +38,7 @@
   function networkMessage(hold) {
     const wait = Math.max(0, Math.ceil(((hold.until || 0) - Date.now()) / 1000));
     return (hold.code ? `noteが通信を拒否しました（HTTP ${hold.code}）。` : 'noteとの通信に失敗しました。HTTPの状態は確認できません。') + '本文と途中記録は保持しています。' +
-      (wait ? `${wait}秒以上待ち、` : '') + '失敗していた操作が使える状態に戻ってから「通信停止解除」→「追加＋カード続き」で再開してください';
+      (wait ? `${wait}秒以上待ち、` : '') + '失敗していた操作が使える状態に戻ってから「通信解除＋再開」を1回だけ押してください';
   }
   function assertNetwork() { page.__MUMEI_CARD_RUNTIME__?.verify?.(); const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
   function observeHttp(code, retryAfter) {
@@ -59,7 +59,13 @@
     if (active) throw new Error('現在の処理が停止するまでお待ちください');
     if (hold?.until > Date.now()) throw new Error(networkMessage(hold));
     localStorage.removeItem(networkKey); memoryHold = null; stopped = true;
-    status('通信停止を解除しました。自動再送はしません。「追加＋カード続き」で不足分から再開できます');
+    status('通信停止を解除しました。自動再送はしません。「通信解除＋再開」または「保存位置から再開」で不足分から続けます');
+  }
+  function confirmNetworkRecovered() {
+    if (active) return false;
+    localStorage.removeItem(networkKey); memoryHold = null; stopped = false;
+    status('通信復旧を確認しました。待機再開から不足分だけ続けます');
+    return true;
   }
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
@@ -296,6 +302,14 @@
   function apiUrl(rawUrl) {
     try { const u = new URL(String(rawUrl), location.href); return [location.origin,'https://note.com'].includes(u.origin) ? u : null; } catch (_) { return null; }
   }
+  function monitoredWriteUrl(rawUrl) {
+    const u = apiUrl(rawUrl);
+    if (!u) return null;
+    // Only observe write traffic that can actually belong to image/file upload.
+    // Generic note POST/PUT/PATCH traffic (analytics, reactions, unrelated UI
+    // mutations, etc.) must not stop the batch just because it returns 403.
+    return /(?:image|images|upload|uploads|asset|assets|photo|media|attach|attachment|file|files)/i.test(u.pathname) ? u : null;
+  }
   function metadataUrl(rawUrl) {
     const u = apiUrl(rawUrl);
     return u && u.pathname === '/api/v3/notes/' + key() ? u : null;
@@ -342,11 +356,12 @@
       page.fetch = async function (...args) {
         const method = args[1]?.method || args[0]?.method || 'GET', url = args[0]?.url || args[0];
         const metadata = /^GET$/i.test(method) && metadataUrl(url);
+        const noteWrite = /^(POST|PUT|PATCH)$/i.test(method) && Boolean(monitoredWriteUrl(url));
         const ticket = requestStart(method, url, args[1]?.body);
         let response;
         try { response = await fetch(...args); }
-        catch (e) { if (active && (ticket || metadata)) observeHttp(0); throw e; }
-        if (ticket || metadata) {
+        catch (e) { if (active && (ticket || metadata || noteWrite)) observeHttp(0); throw e; }
+        if (ticket || metadata || noteWrite) {
           if (active) observeHttp(response.status, response.headers?.get?.('retry-after'));
           try { const payload = await response.clone().json(); if (metadata) observeNoteResponse(url, response.status, payload); requestEnd(ticket, response.status, payload); } catch (_) { /* no proof */ }
         }
@@ -359,9 +374,10 @@
       proto.open = function (method, url, ...rest) { this.__mumeiSave = { method, url }; return open.call(this, method, url, ...rest); };
       proto.send = function (...args) {
         const info = this.__mumeiSave, metadata = /^GET$/i.test(info?.method || '') && metadataUrl(info?.url);
+        const noteWrite = /^(POST|PUT|PATCH)$/i.test(info?.method || '') && Boolean(monitoredWriteUrl(info?.url));
         const t = requestStart(info?.method, info?.url, args[0]);
-        if (t || metadata) this.addEventListener('error', () => { if (active) observeHttp(0); }, { once: true });
-        if (t || metadata) this.addEventListener('load', () => {
+        if (t || metadata || noteWrite) this.addEventListener('error', () => { if (active) observeHttp(0); }, { once: true });
+        if (t || metadata || noteWrite) this.addEventListener('load', () => {
           if (active) observeHttp(this.status, this.getResponseHeader?.('retry-after'));
           try { const payload = this.responseType === 'json' ? this.response : JSON.parse(this.responseText); if (metadata) observeNoteResponse(info.url, this.status, payload); requestEnd(t, this.status, payload); } catch (_) { /* no proof */ }
         }, { once: true });
@@ -463,12 +479,9 @@
         if ((confirmedDoc === expected && confirmedTitle === expectedTitle) || uiConfirmed) { confirmedDoc = expected; confirmedTitle = expectedTitle; return true; }
         const elapsed = Math.floor((Date.now() - started) / 1000);
         if (elapsed !== seconds) { seconds = elapsed; status(label + `（保存確認 ${elapsed}秒）`); }
-        if (!reading && Date.now() - lastRead >= 5000 && typeof page.fetch === 'function') {
-          reading = true; lastRead = Date.now();
-          void readDraft(v).then(result => { if (waiting) readError = result.matches ? '' : '下書きは現在の本文とまだ一致していません'; })
-            .catch(e => { if (waiting) readError = e?.name === 'AbortError' ? '下書きの読戻しがタイムアウトしました' : (e?.message || String(e)); })
-            .finally(() => { reading = false; });
-        }
+        // Do not poll the draft GET API here. The native save request itself is
+        // observed by installSaveProbe(), which is enough to confirm the same
+        // document without repeatedly touching note's auth/session endpoint.
         if (!clicked) {
           const button = [...document.querySelectorAll('button')].find(b => /^(一時保存|下書き保存)$/.test(b.textContent?.trim()) && b.getClientRects().length && !b.disabled);
           if (button) { clicked = true; button.click(); }
@@ -563,7 +576,7 @@
     sameContent: (a, b) => contentWithoutBlockIds(a) === contentWithoutBlockIds(b),
     setSerializer: fn => { serializer = fn; }, setDraftParser: fn => { draftParser = fn; }, readDraft,
     busy: () => Boolean(active), stopped: () => stopped || Boolean(networkHold()), stop, status, requestStart, requestEnd,
-    observeHttp, assertNetwork, networkHold, resumeNetwork, showBackups };
+    observeHttp, assertNetwork, networkHold, resumeNetwork, confirmNetworkRecovered, showBackups };
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
   page.addEventListener('pagehide', () => { stopped = true; try { capture(); } catch (_) {} });
@@ -576,3 +589,4 @@
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
   setInterval(() => { if (active && active.key === key() && read(leaseKey())?.owner === owner) localStorage.setItem(leaseKey(), JSON.stringify({ owner, until: Date.now() + 30000 })); }, 10000);
 })();
+
