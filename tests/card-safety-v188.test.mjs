@@ -770,14 +770,16 @@ test('初期化は通信中と未記録の画像を削除せず、投入記録�
   await e.module.resetAll(); assert.equal(e.encode(),before); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/投入記録にない/);
 });
 
-test('307件の対象一覧は本文控え3世代で共有し、初期化後も対象一覧ごと復元できる', () => {
+test('307件の大容量対象一覧は最新＋操作前の2世代を保持し、古い3世代目を容量回収しても対象一覧ごと復元できる', () => {
   const e = sending(307);
   e.dataset.rows.forEach(r => { r.title='長い記事の見出し'.repeat(40); r.creator='作成者'; });
   e.storage.set('mumei_likers_thin_dataset_v160', JSON.stringify(e.dataset));
   e.safety.checkpoint(e.view); e.safety.capture();
   e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size, new Node('paragraph',{},'追記'))); e.safety.capture();
-  const copies=e.safety.backups(); assert.equal(copies.length,3);
+  const copies=e.safety.backups(); assert.equal(copies.length,2);
+  assert.deepEqual(new Set(copies.map(x=>x.slot)),new Set(['before','latest']));
   for(const {slot,item} of copies){ assert.equal(item.dataset.rows.length,307); assert.equal(JSON.parse(e.storage.get('mumei_card_backup_v188:'+key+':'+slot)).dataset,null); }
+  assert.equal(e.storage.has('mumei_card_backup_v188:'+key+':previous'),false);
   const encodedCopies=copies.map(x=>JSON.stringify(x.item).length).reduce((a,b)=>a+b,0);
   const storedCopies=[...e.storage].filter(([k])=>k.startsWith('mumei_card_backup_v188:')).reduce((sum,[,v])=>sum+v.length,0);
   assert.ok(storedCopies < encodedCopies*0.65, `${storedCopies}/${encodedCopies}`);
