@@ -1,0 +1,60 @@
+name: Refresh live note batch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/refresh-note-live-batch.mjs
+      - .github/workflows/refresh-note-live-batch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-live-note-batch
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install card rendering support
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          npm install --no-save --ignore-scripts=false sharp@0.34.3
+      - name: Refresh current hashtag, likes and selected articles
+        run: node scripts/refresh-note-live-batch.mjs
+      - name: Build current 860x140 thin cards
+        run: |
+          COUNT=$(grep -c '^https://note.com/' data/note-live-batch-urls.txt)
+          node scripts/build-note-batch-cards.mjs data/note-live-batch-urls.txt public/note-live-batch "$COUNT" live-current
+      - name: Verify live batch contract
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const meta=JSON.parse(fs.readFileSync('data/note-live-batch-live.json','utf8'));
+          const manifest=JSON.parse(fs.readFileSync('public/note-live-batch/manifest.json','utf8'));
+          if(meta.count!==manifest.count||manifest.items.length!==meta.count)throw new Error('count mismatch');
+          if(new Set(manifest.items.map(x=>x.url)).size!==manifest.count)throw new Error('url duplicate');
+          if(manifest.items.at(-1)?.url!=='https://note.com/fuku444/n/nb4f6934381e9')throw new Error('final mismatch');
+          if(meta.tagArticles<1||!meta.rows.slice(0,meta.tagArticles).every(x=>x.source==='hashtag'))throw new Error('hashtag prefix mismatch');
+          for(let i=0;i<meta.count;i++){
+            if(meta.rows[i].url!==manifest.items[i].url)throw new Error('order mismatch '+(i+1));
+          }
+          console.log({count:meta.count,tagArticles:meta.tagArticles,likeCounts:meta.likeCounts});
+          NODE
+      - name: Commit refreshed batch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/note-live-batch-urls.txt data/note-live-batch-live.json public/note-live-batch
+          git diff --cached --quiet && exit 0
+          git commit -m "Refresh current note thin-card batch"
+          git push
