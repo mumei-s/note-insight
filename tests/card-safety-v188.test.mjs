@@ -306,13 +306,14 @@ test('実際の送処理: 途中停止は現在のカードを保存し次の操
   await e.module.resumableSend(); assert.equal(calls, 1); assert.match(e.encode(), /消さない本文/);
   await e.module.resumableSend(); assert.equal(calls, 3); assert.equal(e.safety.index(e.view).embeds.length, 3);
 });
-test('実際の送処理: タイムアウト後に完成したカードを回収して二重生成しない', async () => {
+test('実際の送処理: タイムアウト後の書込みを止め、明示再開で未完了分だけ作る', async () => {
   const e = sending(2); let pending;
   e.module.setCommand(url => (state, dispatch) => { const last = state.doc.nodes.at(-1); pending = () => dispatch(state.tr.replaceWith(state.doc.content.size - last.nodeSize, state.doc.content.size, embed('emblate', url))); return true; });
   await e.module.resumableSend(); assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /タイムアウト/);
-  pending(); let calls = 0;
-  e.module.setCommand(url => (state, dispatch) => { calls++; const last = state.doc.nodes.at(-1); dispatch(state.tr.replaceWith(state.doc.content.size - last.nodeSize, state.doc.content.size, embed('embremaining', url))); return true; });
-  await e.module.resumableSend(); assert.equal(calls, 1); assert.equal(e.safety.index(e.view).embeds.length, 2);
+  const before=e.encode(); pending(); assert.equal(e.encode(),before); let calls = 0;
+  e.module.setCommand(url => (state, dispatch) => { calls++; const last = state.doc.nodes.at(-1); dispatch(state.tr.replaceWith(state.doc.content.size - last.nodeSize, state.doc.content.size, embed('embremaining'+calls, url))); return true; });
+  await e.module.resumableSend(); assert.equal(calls, 2); assert.equal(e.safety.index(e.view).embeds.length, 2);
+  assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key)).stage,'cards_ready');
 });
 
 // The published note editor assigns block IDs in appendTransaction and consumes
@@ -964,7 +965,7 @@ test('HTTPエラーが見えない場合もネイティブ画像失敗警告を�
   assert.equal(alerts,1);assert.equal(result.failed,true);assert.equal(result.net.kind,'note-alert');assert.ok(e.time()-start<30000);
 });
 
-test('追加3名は完成200枚と旧40枚の投入記録を保持し、実績の直前にだけ追加する。再開2回でも311件',async()=>{
+test('追加5名は完成200枚と旧40枚の投入記録を保持し、実績の直前にだけ追加する。再開2回でも313件',async()=>{
   const e=environment();e.loadModule('note-card-creator-v1883.js','caption');
   vm.runInContext(source('note-yoizora-additions-v1886.js'),e.ctx);
   const original=JSON.parse(source('note-yoizora-prepared-20260923.json'));
@@ -974,12 +975,12 @@ test('追加3名は完成200枚と旧40枚の投入記録を保持し、実績�
   e.page.crypto=(await import('node:crypto')).webcrypto;e.page.atob=atob;e.page.Response=Response;
   e.page.caches={open:async()=>({put:async(k,v)=>cached.set(k,v),match:async k=>cached.get(k)?.clone()})};
   const api=e.loadModule('note-prepared-batch-v1883.js','sync,withAdditions,image');
-  assert.equal(api.withAdditions(original).count,311);assert.equal(await api.sync(dataset,run),3);
-  assert.equal(dataset.count,311);assert.equal(dataset.datasetId,'keep-this-id');assert.equal(JSON.stringify(run),runBefore);assert.equal(JSON.stringify(dataset.rows.slice(0,307)),first307);
-  assert.deepEqual(Array.from(dataset.rows.slice(-4),r=>r.urlname),['noah_woaks','star246','ann43tsukinomiya','fuku444']);
-  assert.equal(dataset.rows[249].urlname,'sanraku01');assert.equal(dataset.rows[310].index,311);
-  for(const r of dataset.rows.slice(-3,-1)){assert.ok((await api.image(r)).size>1000);assert.ok(!('pngBase64'in r));}
-  assert.equal(await api.sync(dataset,run),0);assert.equal(dataset.count,311);assert.equal(cached.size,3);
+  assert.equal(api.withAdditions(original).count,313);assert.equal(await api.sync(dataset,run),5);
+  assert.equal(dataset.count,313);assert.equal(dataset.datasetId,'keep-this-id');assert.equal(JSON.stringify(run),runBefore);assert.equal(JSON.stringify(dataset.rows.slice(0,307)),first307);
+  assert.deepEqual(Array.from(dataset.rows.slice(-6),r=>r.urlname),['noah_woaks','star246','ann43tsukinomiya','ai_hana_yocchi','shirono_aru','fuku444']);
+  assert.equal(dataset.rows[249].urlname,'sanraku01');assert.equal(dataset.rows[312].index,313);
+  for(const r of dataset.rows.slice(-6,-1)){assert.ok((await api.image(r)).size>1000);assert.ok(!('pngBase64'in r));}
+  assert.equal(await api.sync(dataset,run),0);assert.equal(dataset.count,313);assert.equal(cached.size,5);
   assert.equal(dataset.rows.filter(r=>r.articleSource==='hashtag').length,42);
 });
 
@@ -1104,20 +1105,105 @@ function directSending(count = 3, respond) {
   e.module.setCommand(e.page.__MUMEI_CARD_VISIBLE__.factory(id => { assert.equal(id, 13550); return { MI: api }; }));
   return { ...e, directCalls: calls, render, hidden: value => { hidden = value; }, message: value => { message = value; }, dom, close: () => dom.window.close() };
 }
-test('18.8.15: official registration targets the current article; all 311 visible cards are inserted and bulk deleted with images/body intact', async () => {
-  const e = directSending(311);
+test('18.8.16: native save can replace block IDs while an embed request is pending', async () => {
+  let e;
+  e = directSending(3, (fields, n) => {
+    changeOnlyIds(e);
+    const id = fields.url.split('/').pop();
+    return { embeddedContent: { key: 'embids' + n, service: 'note', identifier: id, htmlForEmbed: `<iframe class="note-embed" src="https://note.com/embed/notes/${id}" height="360"></iframe>` } };
+  });
+  try {
+    await e.module.resumableSend();
+    const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(run.stage, 'cards_ready', e.statuses.get('mumei-note-source-status-v163').textContent);
+    assert.equal(e.directCalls.length, 3); assert.equal(run.cardAudit.savedCards, 3);
+    assert.equal(e.safety.index(e.view).images.length, 3);
+    assert.ok(e.view.state.doc.nodes.some(n => n.textContent === e.existing.textContent));
+  } finally { e.close(); }
+});
+test('18.8.16: completed-image controls show continuation/deletion without reset or image reupload', () => {
+  const dom = new JSDOM(`<body><div id="mumei-note-source-picker-v163"><div class="mumei-prince-special-v184"><div>設定</div><textarea data-source></textarea><div class="choices">選択</div><input data-count><button data-start>開始</button><div id="mumei-prepared-load"><button>宵空セット</button><button>データ読込</button><button data-prepared-additions>追加分</button></div></div><div class="actions"><button data-a="send">送</button><button data-a="delete">削</button></div><div data-card-safety><button data-safe="stop">停止</button><button data-safe="backup">本文の控え</button><button data-safe="audit">全件確認</button></div><div id="mumei-note-source-status-v163" data-bad="1">エラーの詳しい内容</div></div></body>`, {url:'https://editor.note.com/notes/'+key+'/edit',runScripts:'outside-only'});
+  const w = dom.window, d = w.document;
+  w.setInterval = () => 1; w.clearInterval = () => {};
+  w.localStorage.setItem('mumei_likers_thin_dataset_v160', JSON.stringify({datasetId:'test',count:2}));
+  w.localStorage.setItem('mumei_likers_thin_run_v160:'+key, JSON.stringify({datasetId:'test',images:{a:{},b:{}},cardKeys:[]}));
+  w.__MUMEI_PREPARED_BATCH__={missingAdditions:()=>[]};
+  try {
+    w.eval(source('note-generic-controls-v189.js').replace(/\}\)\(\);\s*$/, 'page.__testControls = updateControls;})();'));
+    const panel=d.getElementById('mumei-note-source-picker-v163');w.__testControls(panel);
+    const display=s=>w.getComputedStyle(d.querySelector(s)).display;
+    assert.equal(display('[data-g="image"]'),'none'); assert.equal(display('[data-g="reset"]'),'none');
+    assert.equal(display('[data-source]'),'none'); assert.equal(display('[data-start]'),'none');
+    assert.notEqual(display('[data-safe="backup"]'),'none'); assert.equal(display('[data-prepared-additions]'),'none');
+    for(const s of ['[data-g="send"]','[data-g="delete"]','[data-safe="stop"]','[data-safe="audit"]'])assert.notEqual(display(s),'none');
+    assert.equal(w.getComputedStyle(d.querySelector('[data-bad]')).maxHeight,'none');
+    d.querySelector('[data-bad]').dataset.bad='0';w.__testControls(panel);assert.equal(display('[data-safe="backup"]'),'none');
+    w.__MUMEI_CARD_SAFETY__={networkHold:()=>({code:403})};w.__testControls(panel);assert.notEqual(display('[data-safe="backup"]'),'none');
+    let sends=0,deletes=0;d.querySelector('[data-a="send"]').onclick=()=>sends++;d.querySelector('[data-a="delete"]').onclick=()=>deletes++;
+    d.querySelector('[data-g="send"]').click();d.querySelector('[data-g="delete"]').click();assert.equal(sends,1);assert.equal(deletes,1);
+    w.__MUMEI_PREPARED_BATCH__.missingAdditions=()=>[{}];w.__testControls(panel);assert.notEqual(display('[data-prepared-additions]'),'none');
+    w.localStorage.removeItem('mumei_likers_thin_run_v160:'+key);w.__testControls(panel);
+    assert.notEqual(display('[data-start]'),'none');assert.notEqual(display('[data-g="image"]'),'none');
+  } finally {w.close();}
+});
+test('18.8.16: a changed work URL is retained and never replaced by a late embed response', async () => {
+  let e;
+  e = directSending(1, (fields) => {
+    changeOnlyIds(e);
+    let hit; e.view.state.doc.forEach((node, pos) => { if (node.textContent === fields.url) hit = {node,pos}; });
+    e.view.dispatch(e.view.state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, new Node('paragraph', {}, 'ユーザーが編集した本文')));
+    const id = fields.url.split('/').pop();
+    return { embeddedContent: { key: 'embunsafe', service: 'note', identifier: id, htmlForEmbed: `<iframe class="note-embed" src="https://note.com/embed/notes/${id}" height="360"></iframe>` } };
+  });
+  try {
+    await e.module.resumableSend();
+    assert.equal(e.safety.index(e.view).embeds.length, 0);
+    assert.match(e.encode(), /ユーザーが編集した本文/);
+    assert.equal(e.safety.index(e.view).images.length, 1);
+    assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /作業用URLが変更/);
+  } finally { e.close(); }
+});
+test('18.8.16: a late API response after timeout cannot edit the stopped draft', async () => {
+  let reply;
+  const e = directSending(1, () => new Promise(resolve => { reply = resolve; }));
+  try {
+    await e.module.resumableSend();
+    const before = e.encode();
+    const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(run.stage, 'cards_paused'); assert.ok(run.pendingCard);
+    const id = e.rows[0].url.split('/').pop();
+    reply({ embeddedContent: { key: 'emblatetimeout', service: 'note', identifier: id, htmlForEmbed: `<iframe class="note-embed" src="https://note.com/embed/notes/${id}" height="360"></iframe>` } });
+    for (let i = 0; i < 15; i++) await Promise.resolve();
+    assert.equal(e.encode(), before); assert.equal(e.directCalls.length, 1);
+    assert.match(e.statuses.get('mumei-note-source-status-v163').textContent, /自動再開はしません/);
+  } finally { e.close(); }
+});
+test('18.8.16: existing cards are saved before resume display verification can time out', async () => {
+  const e = directSending(2);
+  try {
+    await e.module.resumableSend();
+    e.view.dispatch(e.view.state.tr.insert(0, new Node('paragraph', {}, '保存が必要な追記')));
+    e.hidden(true); await e.module.resumableSend();
+    assert.match(e.savedDraft().body, /保存が必要な追記/);
+    const run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
+    assert.equal(run.stage, 'cards_paused'); assert.equal(run.savedCardCount, 2);
+    assert.equal(e.directCalls.length, 2); assert.equal(e.safety.index(e.view).images.length, 2);
+  } finally { e.close(); }
+});
+test('18.8.16: official registration targets the current article; all 313 visible cards are inserted and bulk deleted with images/body intact', async () => {
+  const e = directSending(313);
   try {
     const original = e.view.state.doc.nodes.slice();
     const keep = embed('emboriginal', e.rows[0].url); e.view.dispatch(e.view.state.tr.insert(0, keep));
     await e.module.resumableSend();
-    assert.equal(e.directCalls.length, 311, e.statuses.get('mumei-note-source-status-v163').textContent);
+    assert.equal(e.directCalls.length, 313, e.statuses.get('mumei-note-source-status-v163').textContent);
     assert.ok(e.directCalls.every(f => f.height === '360' && f.embeddable_type === 'Note' && f.embeddable_key === key));
     let run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
-    assert.equal(run.cardAudit.displayed, 311); assert.equal(run.stage, 'cards_ready');
+    assert.equal(run.cardAudit.displayed, 313); assert.equal(run.stage, 'cards_ready');
     assert.equal(e.safety.index(e.view).embeds.length, 312);
     await e.module.deleteCardsOnly();
     assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node), [keep]);
-    assert.equal(e.safety.index(e.view).images.length, 311);
+    assert.equal(e.safety.index(e.view).images.length, 313);
     for (const n of original) assert.ok(e.view.state.doc.nodes.includes(n));
     assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key)).stage, 'cards_deleted');
   } finally { e.close(); }
@@ -1268,17 +1354,17 @@ test('18.8.15: backup export and close remain visible and usable during save/403
     assert.ok(e.safety.busy());e.safety.end(token);
   } finally {dom.window.close();}
 });
-test('18.8.15: addition invalidates a completed run while keeping its cards, image records and pending work', async () => {
+test('18.8.16: two additions invalidate a completed run while keeping its cards, image records and pending work', async () => {
   const e=environment();e.loadModule('note-card-creator-v1883.js','caption');vm.runInContext(source('note-yoizora-additions-v1886.js'),e.ctx);
   const base=JSON.parse(source('note-yoizora-prepared-20260923.json')), patches=e.page.__MUMEI_YOIZORA_ADDITIONS__.rows;
-  const rows=[...base.rows.slice(0,-1),...patches.slice(0,2),base.rows.at(-1)].map(({pngBase64,...r},i)=>({...r,index:i+1,preparedBatchId:base.batchId}));
-  const dataset={preparedBatch:true,datasetId:'same',count:310,rows};
-  const run={datasetId:'same',stage:'cards_ready',cardKeys:rows.map((r,i)=>({url:r.url,key:'emb'+i})),images:Object.fromEntries(rows.map(r=>[r.url,{id:'img'+r.index,src:'https://assets.st-note.com/'+r.index+'.png'}])),pendingCard:{url:rows[0].url,beforeKeys:[]},cardAudit:{complete:true},savedCardCount:310};
+  const rows=[...base.rows.slice(0,-1),...patches.slice(0,3),base.rows.at(-1)].map(({pngBase64,...r},i)=>({...r,index:i+1,preparedBatchId:base.batchId}));
+  const dataset={preparedBatch:true,datasetId:'same',count:311,rows};
+  const run={datasetId:'same',stage:'cards_ready',cardKeys:rows.map((r,i)=>({url:r.url,key:'emb'+i})),images:Object.fromEntries(rows.map(r=>[r.url,{id:'img'+r.index,src:'https://assets.st-note.com/'+r.index+'.png'}])),pendingCard:{url:rows[0].url,beforeKeys:[]},cardAudit:{complete:true},savedCardCount:311};
   const records=JSON.stringify([run.cardKeys,run.images,run.pendingCard]);
   e.page.crypto=(await import('node:crypto')).webcrypto;e.page.atob=atob;e.page.Response=Response;e.page.caches={open:async()=>({put:async()=>{}})};
   const api=e.loadModule('note-prepared-batch-v1883.js','sync,requireCurrent');
-  assert.throws(()=>api.requireCurrent(dataset),/月ノ宮闇/);assert.equal(await api.sync(dataset,run),1);
-  assert.equal(dataset.count,311);assert.equal(dataset.rows.at(-2).urlname,'ann43tsukinomiya');assert.equal(dataset.rows.at(-1).urlname,'fuku444');
+  assert.throws(()=>api.requireCurrent(dataset),/はな・しろのある/);assert.equal(await api.sync(dataset,run),2);
+  assert.equal(dataset.count,313);assert.equal(dataset.rows.at(-3).urlname,'ai_hana_yocchi');assert.equal(dataset.rows.at(-2).urlname,'shirono_aru');assert.equal(dataset.rows.at(-1).urlname,'fuku444');
   assert.equal(JSON.stringify([run.cardKeys,run.images,run.pendingCard]),records);assert.equal(run.stage,'cards_paused');assert.equal(run.cardAudit,null);assert.equal(run.savedCardCount,0);
   assert.doesNotThrow(()=>api.requireCurrent(dataset));assert.equal(await api.sync(dataset,run),0);
 });
