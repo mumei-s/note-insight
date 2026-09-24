@@ -57,4 +57,6 @@ jobs:
           git add data/note-live-batch-urls.txt data/note-live-batch-live.json public/note-live-batch
           git diff --cached --quiet && exit 0
           git commit -m "Refresh current note thin-card batch"
+          git fetch origin main
+          git rebase origin/main
           git push
