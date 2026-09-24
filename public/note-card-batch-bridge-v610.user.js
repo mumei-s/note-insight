@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.18
+// @version      18.8.19
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -25,7 +25,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.18' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.19' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -129,9 +129,43 @@
     if (raw !== datasetRaw) { datasetValue = raw ? JSON.parse(raw) : null; datasetRaw = raw; }
     return datasetValue;
   }
+  function storageKeys() {
+    const out = [];
+    try { for (let i = 0; i < localStorage.length; i++) out.push(localStorage.key(i)); } catch (_) {}
+    return out.filter(Boolean);
+  }
+  function pruneAllDatasets() {
+    try {
+      const refs = new Set();
+      for (const name of storageKeys()) {
+        if (!name.startsWith(PREFIX) || name.includes(':dataset:')) continue;
+        const item = JSON.parse(localStorage.getItem(name) || 'null');
+        if (item?.datasetRef) refs.add(item.datasetRef);
+      }
+      for (const name of storageKeys()) {
+        if (name.startsWith(PREFIX) && name.includes(':dataset:') && !refs.has(name)) localStorage.removeItem(name);
+      }
+    } catch (_) {}
+  }
+  function reclaimBackupSpace(articleKey, aggressive = false) {
+    try {
+      // previous is only the third recovery copy; latest/before are more useful.
+      for (const name of storageKeys()) if (name.startsWith(PREFIX) && name.endsWith(':previous')) localStorage.removeItem(name);
+      pruneAllDatasets();
+      if (aggressive) {
+        // Under real quota pressure preserve every article's latest copy, but
+        // old operation-start copies from other articles may be discarded.
+        for (const name of storageKeys()) {
+          if (name.startsWith(PREFIX) && name.endsWith(':before') && !name.startsWith(PREFIX + articleKey + ':')) localStorage.removeItem(name);
+        }
+        pruneAllDatasets();
+      }
+    } catch (_) {}
+  }
   function write(slot, value) {
     const name = PREFIX + value.articleKey + ':' + slot;
-    try {
+    let json = '';
+    const encodeStored = () => {
       const { datasetRef: oldRef, ...inline } = value;
       let stored = inline;
       if (value.dataset?.datasetId) {
@@ -139,20 +173,33 @@
         let data = encodedLists.get(value.dataset);
         if (!data) { data = JSON.stringify(value.dataset); encodedLists.set(value.dataset, data); }
         const old = localStorage.getItem(ref);
-        // Keep one immutable target list shared by all three backups. Never
-        // replace an older list if a dataset ID is accidentally reused.
         if (old === null) localStorage.setItem(ref, data);
-        if (localStorage.getItem(ref) === data) { stored = { ...value, dataset: null, datasetRef: ref }; }
+        if (localStorage.getItem(ref) === data) stored = { ...value, dataset: null, datasetRef: ref };
       }
-      const json = JSON.stringify(stored);
+      return JSON.stringify(stored);
+    };
+    const attempt = () => {
+      json = encodeStored();
       localStorage.setItem(name, json);
       if (localStorage.getItem(name) !== json) throw new Error('書き込み確認失敗');
-      error = '';
-      if (slot === 'before' || slot === 'previous') pruneDatasets(value.articleKey);
+    };
+    try {
+      pruneDatasets(value.articleKey);
+      attempt();
     } catch (_) {
-      error = '本文の控えを保存できません。空き容量を確認するか「本文の控え」から書き出してください';
-      throw new Error(error);
+      reclaimBackupSpace(value.articleKey, false);
+      try { attempt(); }
+      catch (_) {
+        reclaimBackupSpace(value.articleKey, true);
+        try { attempt(); }
+        catch (_) {
+          error = '本文の控えを保存できません。空き容量を確認するか「本文の控え」から書き出してください';
+          throw new Error(error);
+        }
+      }
     }
+    error = '';
+    if (slot === 'before' || slot === 'previous') pruneDatasets(value.articleKey);
     return value;
   }
   function pruneDatasets(articleKey) {
@@ -178,7 +225,14 @@
     // Empty/remounted editors must never overwrite the last nonempty copy.
     if (!meaningful(item.doc)) return;
     const old = read(PREFIX + key() + ':latest');
-    if (old && Date.now() - previousAt > 30000) { write('previous', old); previousAt = Date.now(); }
+    // Hundreds of image nodes make three full document copies needlessly large.
+    // For large drafts keep latest + operation-start; previous is disposable.
+    const large = item.images >= 100 || JSON.stringify(item.doc).length >= 750000;
+    if (large) {
+      try { localStorage.removeItem(PREFIX + key() + ':previous'); pruneDatasets(key()); } catch (_) {}
+    } else if (old && Date.now() - previousAt > 30000) {
+      write('previous', old); previousAt = Date.now();
+    }
     write('latest', item); lastDoc = view.state.doc; lastTitle = item.title;
   }
   function begin(label, v) {
@@ -529,7 +583,7 @@
     const existing = panel.querySelector('[data-card-safety]');
     if (existing) { const resume = existing.querySelector('[data-safe="resume"]'); if (resume) resume.hidden = !networkHold(); return; }
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.18</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.19</span>';
     row.querySelector('[data-safe="resume"]').hidden = !networkHold();
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); if (a === 'resume') { try { resumeNetwork(); mount(); } catch (err) { status(err.message, true); } } }); panel.append(row);
     if (networkHold()) status(networkMessage(networkHold()), true);
