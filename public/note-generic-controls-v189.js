@@ -21,7 +21,7 @@ function css(){
 #${PANEL}[data-card-phase="work"] .mumei-prince-special-v184>:not(.mumei-generic-controls-v189):not(#mumei-prepared-load){display:none!important}
 #${PANEL}[data-card-phase="work"] .mumei-generic-controls-v189{grid-template-columns:repeat(2,1fr)}
 #${PANEL}[data-card-phase="work"] [data-g="reset"],#${PANEL}[data-card-phase="work"] [data-g="image"]{display:none!important}
-#${PANEL}[data-card-phase="work"][data-card-needs-images="1"] [data-g="image"]{display:block!important;grid-column:1/-1}
+#${PANEL}[data-card-combined="1"] [data-g="image"],#${PANEL}[data-card-combined="1"] #mumei-prepared-load{display:none!important}
 #${PANEL}[data-card-phase="work"] #mumei-prepared-load>button:not([data-prepared-additions]){display:none!important}
 #${PANEL}[data-card-phase="work"] #mumei-prepared-load{margin-top:0!important}
 #${PANEL} [data-prepared-additions][hidden],#${PANEL} [data-safe][hidden]{display:none!important}
@@ -64,12 +64,13 @@ function updateControls(panel){
   const count=matching?Object.keys(run.images||{}).length:0;
   const working=matching&&(count>0||run.cardKeys?.length>0||!!run.pending);
   panel.dataset.cardPhase=working?'work':'';
+  panel.dataset.cardCombined=matching&&data.preparedBatch?'1':'0';
   panel.dataset.cardNeedsImages=matching&&count<data.count?'1':'0';
   panel.dataset.cardNeedsRecovery=page.__MUMEI_CARD_SAFETY__?.networkHold?.()||panel.querySelector('#mumei-note-source-status-v163')?.dataset.bad==='1'?'1':'0';
   const additions=panel.querySelector('[data-prepared-additions]');
-  if(additions)additions.hidden=!matching||!(page.__MUMEI_PREPARED_BATCH__?.missingAdditions(data).length);
+  if(additions)additions.hidden=!!data?.preparedBatch||!matching||!(page.__MUMEI_PREPARED_BATCH__?.missingAdditions(data).length);
   const send=panel.querySelector('[data-g="send"]'),del=panel.querySelector('[data-g="delete"]'),img=panel.querySelector('[data-g="image"]');
-  if(send)send.textContent=working?'送（続き）':'送';
+  if(send)send.textContent=data?.preparedBatch?'追加＋カード続き':working?'送（続き）':'送';
   if(del)del.textContent=working?'削（一括）':'削';
   if(img)img.textContent=working?'不足画像のみ追加':'画';
  }catch(_){ /* Preserve the existing controls if metadata cannot be read. */ }
