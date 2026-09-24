@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.4';
+const VERSION='18.9.5';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -46,11 +46,14 @@ function webpackRequire(){
   try{chunks.push([[id],{},r=>{req=r}]);}catch(_){}
   return req;
 }
-function selectionApi(){
-  const req=webpackRequire();if(!req)throw new FatalError('note編集APIを取得できません');
-  let api;try{api=req(35130)?.sW}catch(_){}
-  if(!api?.atEnd)throw new FatalError('note選択APIを取得できません');
-  return api;
+function selectionAtEnd(view){
+  const current=view?.state?.selection?.constructor;
+  if(typeof current?.atEnd==='function')return current.atEnd(view.state.doc);
+  const req=webpackRequire();let api;
+  try{api=req?.(35130)?.sW}catch(_){}
+  if(typeof api?.atEnd==='function')return api.atEnd(view.state.doc);
+  if(typeof current?.near==='function')return current.near(view.state.doc.resolve(view.state.doc.content.size));
+  throw new FatalError('note末尾位置を取得できません');
 }
 function looksLikeView(value){
   try{return Boolean(value&&typeof value==='object'&&value.state?.doc&&value.state?.schema&&typeof value.dispatch==='function'&&value.dom&&typeof value.posAtDOM==='function');}catch(_){return false}
@@ -202,7 +205,7 @@ function nativeUrlCommand(){
 function ensureEnd(view){
   const p=view.state.schema.nodes.paragraph;if(!p)throw new FatalError('paragraph nodeなし');
   if(view.state.doc.lastChild?.type!==p||view.state.doc.lastChild.textContent!=='')view.dispatch(view.state.tr.insert(view.state.doc.content.size,p.create()));
-  view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());view.focus();
+  view.dispatch(view.state.tr.setSelection(selectionAtEnd(view)).scrollIntoView());view.focus();
 }
 function exactUrlParagraphs(view,url){
   const wanted=normalize(url),out=[];
@@ -212,6 +215,76 @@ function exactUrlParagraphs(view,url){
 function removeHits(view,hits){if(hits.length)safety().remove(view,hits.sort((a,b)=>b.pos-a.pos));}
 function currentRun(){return read(runKey(),null);}
 function currentData(){return read(DATA_KEY,null);}
+
+const PARTICIPANT_HEADING='【イケメングランプリ参加者様】';
+const TAG_HEADING='#イケメングランプリ宵空カップ';
+const LIKE_HEADING='【スキをありがとう(* ᴗ ᴗ)⁾⁾】';
+const DIVIDER_FALLBACK='━━━━━━━━━━━━━━━━━━━━━━━━';
+
+function hasExactText(view,text){
+  let found=false;
+  view.state.doc.descendants(node=>{if(String(node.textContent||'').trim()===text)found=true;});
+  return found;
+}
+function headingNode(view,text){
+  const schema=view.state.schema,heading=schema.nodes.heading,content=schema.text(text);
+  if(heading){
+    for(const attrs of [{level:2},{level:1},null]){
+      try{
+        const node=typeof heading.createAndFill==='function'?heading.createAndFill(attrs,content):heading.create(attrs,content);
+        if(node)return node;
+      }catch(_){}
+    }
+  }
+  return schema.nodes.paragraph.create(null,content);
+}
+function dividerNode(view){
+  const schema=view.state.schema;
+  for(const name of ['horizontal_rule','horizontalRule','divider','hr']){
+    const type=schema.nodes[name];
+    if(!type)continue;
+    try{
+      const node=typeof type.createAndFill==='function'?type.createAndFill():type.create();
+      if(node)return node;
+    }catch(_){}
+  }
+  return schema.nodes.paragraph.create(null,schema.text(DIVIDER_FALLBACK));
+}
+function appendNodes(view,nodes){
+  let tr=view.state.tr;
+  for(const node of nodes)tr=tr.insert(tr.doc.content.size,node);
+  view.dispatch(tr);
+}
+function trailingDividerCount(view){
+  const list=[];
+  view.state.doc.forEach(node=>list.push(node));
+  let count=0;
+  for(let i=list.length-1;i>=0;i--){
+    const node=list[i],name=node.type?.name||'',text=String(node.textContent||'').trim();
+    if(['horizontal_rule','horizontalRule','divider','hr'].includes(name)||text===DIVIDER_FALLBACK)count++;
+    else if(node.type===view.state.schema.nodes.paragraph&&!text)continue;
+    else break;
+  }
+  return count;
+}
+function ensureParticipantIntro(view){
+  const nodes=[];
+  if(!hasExactText(view,PARTICIPANT_HEADING))nodes.push(headingNode(view,PARTICIPANT_HEADING));
+  if(!hasExactText(view,TAG_HEADING))nodes.push(view.state.schema.nodes.paragraph.create(null,view.state.schema.text(TAG_HEADING)));
+  if(nodes.length)appendNodes(view,nodes);
+}
+async function ensureLikeBoundary(view,run){
+  if(hasExactText(view,LIKE_HEADING)){run.likeBoundaryInserted=true;write(stageRunKey(),run);return;}
+  appendNodes(view,[dividerNode(view),dividerNode(view),headingNode(view,LIKE_HEADING)]);
+  run.likeBoundaryInserted=true;write(stageRunKey(),run);
+  await safety().save(view,'スキ見出しと仕切り線を保存確認中…');
+}
+async function ensureFinalBoundary(view,run){
+  if(run.finalBoundaryInserted&&trailingDividerCount(view)>=2)return;
+  if(trailingDividerCount(view)<2)appendNodes(view,[dividerNode(view),dividerNode(view)]);
+  run.finalBoundaryInserted=true;write(stageRunKey(),run);
+  await safety().save(view,'実績の算数前の仕切り線を保存確認中…');
+}
 
 function oldOwnedHits(view,oldRun,oldData,newUrls){
   const images=[],cards=[];
@@ -237,7 +310,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.3',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.5',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -281,15 +354,21 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.3',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.5',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
     const newUrls=new Set(dataset.rows.map(x=>normalize(x.url)));
-    reconcileStageImages(view,dataset,run);
+    const stagedCount=reconcileStageImages(view,dataset,run);
+    if(stagedCount===0){
+      ensureParticipantIntro(view);
+      await safety().save(view,'参加者見出しを保存確認中…');
+    }
     for(let i=0;i<dataset.rows.length;i++){
       const row=dataset.rows[i];
       if(run.images[row.url])continue;
+      if(i===Number(dataset.meta?.tagArticles||0))await ensureLikeBoundary(view,run);
+      if(i===dataset.rows.length-1)await ensureFinalBoundary(view,run);
       run.pendingImage={url:row.url,index:i+1,at:Date.now()};write(stageRunKey(),run);
       setStatus('極薄 '+Object.keys(run.images).length+'/'+dataset.count+'｜'+(i+1)+'番 '+row.creator+' をnoteへアップロード中…');
       await uploadOneThin(view,row,run,dataset);
@@ -354,7 +433,7 @@ function insertWorkUrl(view,url){
   view.dispatch(view.state.tr.insert(pos,p.create(null,view.state.schema.text(url))));
   const node=view.state.doc.nodeAt(pos);
   if(node?.type!==p||node.textContent!==url)throw new FatalError('作業用URLを配置できません');
-  view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());view.focus();
+  view.dispatch(view.state.tr.setSelection(selectionAtEnd(view)).scrollIntoView());view.focus();
   return {node,pos};
 }
 async function waitCard(view,url,beforeKeys,attempt,timeout=30000){
