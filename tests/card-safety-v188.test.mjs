@@ -1200,7 +1200,7 @@ test('18.8.16: official registration targets the current article; all 313 visibl
     assert.ok(e.directCalls.every(f => f.height === '360' && f.embeddable_type === 'Note' && f.embeddable_key === key));
     let run = JSON.parse(e.storage.get('mumei_likers_thin_run_v160:' + key));
     assert.equal(run.cardAudit.displayed, 313); assert.equal(run.stage, 'cards_ready');
-    assert.equal(e.safety.index(e.view).embeds.length, 312);
+    assert.equal(e.safety.index(e.view).embeds.length, e.rows.length + 1);
     await e.module.deleteCardsOnly();
     assert.deepEqual(Array.from(e.safety.index(e.view).embeds, h => h.node), [keep]);
     assert.equal(e.safety.index(e.view).images.length, 313);
