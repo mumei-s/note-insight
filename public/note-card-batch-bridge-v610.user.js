@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.17
+// @version      18.8.18
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -25,7 +25,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.17' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.18' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -56,7 +56,15 @@
   const runKey = () => 'mumei_likers_thin_run_v160:' + key();
   const networkKey = 'mumei_card_network_hold_v18815';
   let memoryHold = null;
-  const networkHold = () => memoryHold || read(networkKey);
+  const networkHold = () => {
+    const hold = memoryHold || read(networkKey);
+    if (hold && Number(hold.code) === 0 && hold.confirmed !== true) {
+      memoryHold = null;
+      try { localStorage.removeItem(networkKey); } catch (_) {}
+      return null;
+    }
+    return hold;
+  };
   function networkMessage(hold) {
     const wait = Math.max(0, Math.ceil(((hold.until || 0) - Date.now()) / 1000));
     return (hold.code ? `noteが通信を拒否しました（HTTP ${hold.code}）。` : 'noteとの通信に失敗しました。HTTPの状態は確認できません。') + '本文と途中記録は保持しています。' +
@@ -68,7 +76,7 @@
     if (![0, 401, 403, 429].includes(code)) return false;
     const seconds = Number(retryAfter), date = Date.parse(String(retryAfter || ''));
     const until = retryAfter && Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Number.isFinite(date) ? date : 0;
-    const hold = { code, at: Date.now(), until: Math.max(until, networkHold()?.until || 0) };
+    const hold = { code, at: Date.now(), until: Math.max(until, networkHold()?.until || 0), confirmed: true };
     memoryHold = hold;
     try { localStorage.setItem(networkKey, JSON.stringify(hold)); } catch (_) { /* Still stop this page if storage is full. */ }
     stopped = true; page.__MUMEI_CARD_VISIBLE__?.cancel();
@@ -521,7 +529,7 @@
     const existing = panel.querySelector('[data-card-safety]');
     if (existing) { const resume = existing.querySelector('[data-safe="resume"]'); if (resume) resume.hidden = !networkHold(); return; }
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.17</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.18</span>';
     row.querySelector('[data-safe="resume"]').hidden = !networkHold();
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); if (a === 'resume') { try { resumeNetwork(); mount(); } catch (err) { status(err.message, true); } } }); panel.append(row);
     if (networkHold()) status(networkMessage(networkHold()), true);
@@ -821,7 +829,9 @@
       const seconds = Number(retryAfter);
       const retryAt = retryAfter ? (Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(retryAfter)) : 0;
       recordNetFailure('image-upload', ticket.url, status, message, retryAt);
-      page.__MUMEI_CARD_SAFETY__?.observeHttp(status, retryAfter);
+      // status 0 can be a transient/opaque/aborted native upload on Android.
+      // Do not poison the whole batch until the editor also confirms that the image failed.
+      if ([401, 403, 429].includes(Number(status))) page.__MUMEI_CARD_SAFETY__?.observeHttp(status, retryAfter);
     }
   }
 
@@ -880,6 +890,13 @@
   }
   function recentNetFailure(since) {
     return [...uploadNetFailures].reverse().find((x) => x.at >= since) || null;
+  }
+  function confirmUnknownNetworkFailure(net, uiError = '') {
+    if ((net && Number(net.status) === 0) || (uiError && !net)) {
+      page.__MUMEI_CARD_SAFETY__?.observeHttp(0, '');
+      return true;
+    }
+    return false;
   }
   function uploadFailureText(net) {
     if (!net) return '';
@@ -1486,6 +1503,7 @@
       if ((uiError || net) && !firstErrorAt) firstErrorAt = Date.now();
       // Keep waiting while the native image queue is active; unrelated requests and old toasts do not stop it.
       if (firstErrorAt && !uploadRequests.size && Date.now() - Math.max(lastGrowthAt, lastUploadActivityAt, firstErrorAt) >= UPLOAD_QUIET_MS) {
+        confirmUnknownNetworkFailure(net, uiError);
         return { fresh, failed: true, reason: uiError || '画像アップロード通信エラー', net };
       }
       const completed = imageArm?.nativeCommand ? verifiedImageCount(view, imageArm.dataset, imageArm.run) : null;
@@ -1493,7 +1511,9 @@
       await sleep(500);
     }
     const fresh = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id)) && remoteImage(hit.node)).sort((a,b) => a.pos-b.pos);
-    return { fresh, failed: true, reason: '画像アップロード完了待ちタイムアウト', net: recentNetFailure(startedAt) };
+    const net = recentNetFailure(startedAt);
+    confirmUnknownNetworkFailure(net);
+    return { fresh, failed: true, reason: '画像アップロード完了待ちタイムアウト', net };
   }
   function imageInput(input) {
     if (!input || input.tagName !== 'INPUT' || input.type !== 'file') return false;
