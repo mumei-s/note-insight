@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.20
-// @description  極薄完了済み本文から、現在見えている通知カードを採用し、403待機を守って残りだけ安全速度で再開。
+// @version      18.9.21
+// @description  緊急停止版。note上では極薄・通知カード処理、通信監視、自動再開を一切起動しません。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -21,12 +21,16 @@
   'use strict';
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   if (page.__MUMEI_CARD_RUNTIME__) return;
-  if (page.__MUMEI_CARD_SAFETY__ || page.__MUMEI_LIVE_REBUILD_V1__) {
-    page.__MUMEI_CARD_SAFETY__?.stop();
-    page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
-    return;
-  }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.20' };
+  page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.21', disabled: true };
+  try { page.__MUMEI_CARD_SAFETY__?.stop?.(); } catch (_) {}
+  const cleanup = () => {
+    for (const id of ['mumei-note-source-picker-v163','mumei-likers-thin-panel-v160','mumei-note-source-status-v163']) {
+      try { document.getElementById(id)?.remove(); } catch (_) {}
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cleanup, { once: true });
+  else cleanup();
+  return;
 
 // MODULE: note-card-safety-v188.js
 (function () {
