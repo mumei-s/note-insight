@@ -567,9 +567,10 @@
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
   page.addEventListener('pagehide', () => { stopped = true; try { capture(); } catch (_) {} });
-  page.addEventListener('beforeunload', e => {
+  page.addEventListener('beforeunload', () => {
+    // Never block note's own authentication/login redirect. Preserve a recovery
+    // snapshot, but allow the browser to leave the editor normally.
     try { capture(); } catch (_) {}
-    if (view && key() === viewKey && (active || read(runKey())) && (confirmedDoc !== view.state.doc || confirmedTitle !== (titleNode()?.value ?? null))) { e.preventDefault(); e.returnValue = ''; }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopped = true; try { capture(); } catch (_) {} } });
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
