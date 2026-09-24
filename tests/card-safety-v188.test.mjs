@@ -1484,6 +1484,7 @@ test('18.8.20: prepared addition can recover from a confirmed status-zero hold u
   e.dataset.preparedBatch=true;
   e.rows.forEach((row,i)=>{
     row.urlname='user'; row.latestKey=row.url.split('/').at(-1); row.creator='作者'+i;
+    row.preparedBatchId='yoizora-20260923-tag42';
     row.creatorVerified={articleKey:row.latestKey,urlname:'user',name:row.creator};
     row.caption=row.creator+'さん';
   });
