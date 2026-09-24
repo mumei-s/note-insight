@@ -162,7 +162,7 @@
     }
     return missing;
   }
-  function requireCurrent(dataset) {  function requireCurrent(dataset) {
+  function requireCurrent(dataset) {
     const missing = missingAdditions(dataset);
     if (missing.length) throw new Error(`追加${missing.length}名（${missing.map(r => r.creator).join('・')}）が未反映です。「追加分」で既存の画像・カードを保持して反映してください`);
   }
