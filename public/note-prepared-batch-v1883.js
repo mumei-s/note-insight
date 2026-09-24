@@ -122,7 +122,7 @@
     button.onclick=async()=>{button.disabled=true;try{status('作成済み画像を読込中…');await install(await download());}catch(e){status(e.message,true);}finally{button.disabled=false;}};
     const fileButton=document.createElement('button');fileButton.textContent='データ読込';fileButton.type='button';fileButton.style.flex='1';
     fileButton.onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=async()=>{try{if(input.files?.[0])await install(JSON.parse(await input.files[0].text()));}catch(e){status(e.message,true);}};input.click();};
-    const additions=document.createElement('button');additions.textContent='追加分';additions.type='button';additions.style.flex='1';
+    const additions=document.createElement('button');additions.textContent='追加分';additions.type='button';additions.style.flex='1';additions.dataset.preparedAdditions='1';
     additions.onclick=()=>{
       if (busy || page.__MUMEI_CARD_SAFETY__?.busy()) { status('現在の処理が停止してから追加してください',true); return; }
       const dataset=read(DATA);
