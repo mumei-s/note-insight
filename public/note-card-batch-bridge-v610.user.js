@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.18
-// @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
+// @version      18.9.19
+// @description  極薄完了済み本文から、るるちゃん166番後の通知カードだけを高速再開・最後に1回保存。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.18' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.19' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -628,7 +628,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.18';
+const VERSION='18.9.19';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -637,6 +637,8 @@ const MANIFEST='https://raw.githubusercontent.com/mumei-s/note-insight/main/publ
 const META='https://raw.githubusercontent.com/mumei-s/note-insight/main/data/note-live-batch-live.json';
 const RAW_BASE='https://raw.githubusercontent.com/mumei-s/note-insight/main/public';
 const FINAL='https://note.com/fuku444/n/nb4f6934381e9';
+const CARD_CHECKPOINT_URL='https://note.com/ruruchan_kawaii/n/n5423e36ce1e1';
+const CARD_CHECKPOINT_LABEL='るるちゃん💖🌙';
 
 let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,waitResumeTimer=null,wakeLock=null;
 async function keepAwake(){
@@ -937,7 +939,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.18',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.19',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -971,7 +973,7 @@ function adoptSavedBodyImages(view,dataset,seedRun={}){
   }
   const run={
     ...seedRun,
-    version:'18.9.18',
+    version:'18.9.19',
     articleKey:articleKey(),
     datasetId:dataset.datasetId,
     stage:'images_building',
@@ -1019,7 +1021,7 @@ async function rebuildImages(autoCards=false){
       dataset=makeLiveDataset(manifest,meta);
       if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
         stagedData=dataset;
-        run={version:'18.9.18',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+        run={version:'18.9.19',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
         write(stageDataKey(),stagedData);write(stageRunKey(),run);
       }
     }
@@ -1132,7 +1134,7 @@ function clearWaitResume(message=''){
   updateButtons();
 }
 async function runWaitResumeCycle(){
-  // v18.9.18: automatic recovery retries are intentionally disabled.
+  // v18.9.19: automatic recovery retries are intentionally disabled.
   // Repeated automatic attempts were re-triggering 403 and could start work
   // again after a reload. Recovery is now always an explicit user action.
   clearWaitResume('自動再開は停止しました。通信が戻ったら「通信解除＋再開」を1回だけ押してください');
@@ -1172,37 +1174,83 @@ function insertWorkUrl(view,url){
 }
 async function waitCard(view,url,beforeKeys,attempt,timeout=30000){
   const deadline=Date.now()+timeout;
+  let errorAt=0;
   while(Date.now()<deadline){
-    if(attempt.error)throw attempt.error;
+    // A valid card in the editor wins over a late/auxiliary error callback.
+    // This fixes the real-device case where one card is visibly created and
+    // the command reports 403 immediately afterwards.
     const hit=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,url)});
     if(hit)return hit;
+    if(attempt.error){
+      if(!errorAt)errorAt=Date.now();
+      if(Date.now()-errorAt>=2500)throw attempt.error;
+    }
     safety().check(view);
     if(safety().stopped())throw new FatalError('停止しました');
     await sleep(100);
   }
-  throw new FatalError('カード生成待ちタイムアウト');
+  throw attempt.error||new FatalError('カード生成待ちタイムアウト');
 }
 function statusCode(error){
   return Number(error?.response?.status||error?.status||String(error?.message||'').match(/\b(401|403|429)\b/)?.[1]||0);
+}
+function adoptCardsThroughCheckpoint(view,dataset,run){
+  const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(CARD_CHECKPOINT_URL));
+  if(checkpoint<0)throw new FatalError('るるちゃんのカード位置を対象一覧から確認できません');
+  const embeds=embedNodes(view);
+  const adopted=[];
+  for(let i=0;i<=checkpoint;i++){
+    const row=dataset.rows[i];
+    const matches=embeds.filter(hit=>genuineCard(hit,row.url));
+    // The user explicitly confirmed this prefix is finished. Missing detection
+    // must never cause us to regenerate any of rows 1..166.
+    if(matches.length){
+      const hit=matches.at(-1);
+      adopted.push({url:row.url,key:cardKey(hit)});
+    }
+  }
+  // Preserve any already-recorded cards after the checkpoint if they still exist.
+  for(const rec of Array.isArray(run.cardKeys)?run.cardKeys:[]){
+    if(adopted.some(x=>normalize(x.url)===normalize(rec.url)))continue;
+    const hit=embeds.find(h=>cardKey(h)===String(rec.key||'')&&genuineCard(h,rec.url));
+    if(hit)adopted.push({url:rec.url,key:cardKey(hit)});
+  }
+  // A card may have appeared just before the previous error but not reached
+  // cardKeys yet. If it is the pending URL, adopt it now and avoid duplication.
+  const pendingUrl=run.pendingCard?.url;
+  if(pendingUrl&&!adopted.some(x=>normalize(x.url)===normalize(pendingUrl))){
+    const hit=embeds.find(h=>genuineCard(h,pendingUrl));
+    if(hit)adopted.push({url:pendingUrl,key:cardKey(hit)});
+  }
+  run.cardKeys=adopted;
+  run.savedCardCount=Math.min(Number(run.savedCardCount||0),adopted.length);
+  run.pendingCard=null;
+  run.cardCheckpoint={url:CARD_CHECKPOINT_URL,index:checkpoint+1,label:CARD_CHECKPOINT_LABEL,adoptedAt:Date.now()};
+  write(runKey(),run);
+  return {checkpoint:checkpoint+1,count:adopted.length};
 }
 async function buildCards(){
   if(busy||!enabled())return;
   busy=true;let token;
   try{
     const dataset=currentData(),run=currentRun(),view=findView();
-    if(!dataset?.liveBatch||!run||run.datasetId!==dataset.datasetId)throw new FatalError('先に「最新から再構築」で極薄を作ってください');
-    const imageCount=dataset.rows.filter(row=>safety().tracked(view,run.images?.[row.url],row.url)).length;
-    if(imageCount!==dataset.count)throw new FatalError('極薄不足 '+imageCount+'/'+dataset.count);
-    try{if(safety().networkHold?.())safety().resumeNetwork()}catch(e){throw new FatalError(e.message)}
-    token=safety().begin('通知カード作成',view);
+    if(!dataset?.liveBatch||!run||run.datasetId!==dataset.datasetId)throw new FatalError('今回のカード対象一覧を確認できません');
+    // Emergency card-only path: the user confirmed the thin thumbnails are
+    // already complete. Never rebuild or validate thin images here.
+    try{if(safety().networkHold?.())safety().resumeNetwork()}catch(_){
+      // A stale hold must not send us back into image/rebuild work. The actual
+      // card command below is the source of truth; a real error will stop there.
+      safety().confirmNetworkRecovered?.();
+    }
+    token=safety().begin('カードだけ続行',view);
+    const adopted=adoptCardsThroughCheckpoint(view,dataset,run);
     run.stage='cards_building';write(runKey(),run);
     const baseline=new Set(run.cardBaselineKeys||[]);
-    // Reconcile current cards from this run only.
-    run.cardKeys=(run.cardKeys||[]).filter(rec=>embedNodes(view).some(h=>cardKey(h)===rec.key&&genuineCard(h,rec.url)));
-    write(runKey(),run);
+    setStatus('カード専用再開 ✅ '+CARD_CHECKPOINT_LABEL+' '+adopted.checkpoint+'/'+dataset.count+'まで固定｜'+(adopted.checkpoint+1)+'番から残りだけ続けます');
 
     for(let i=0;i<dataset.rows.length;i++){
       const row=dataset.rows[i];
+      if(i<adopted.checkpoint)continue;
       if((run.cardKeys||[]).some(x=>normalize(x.url)===normalize(row.url)))continue;
       // Do not adopt pre-existing body cards that were present before this run.
       const existing=embedNodes(view).find(h=>genuineCard(h,row.url)&&!baseline.has(cardKey(h)));
@@ -1229,15 +1277,27 @@ async function buildCards(){
       try{
         hit=await waitCard(view,row.url,beforeKeys,attempt,30000);
       }catch(error){
+        // One last reconciliation: note can insert the genuine card before an
+        // auxiliary request reports 403. If the card exists, keep it and move on.
+        const recovered=embedNodes(view).find(h=>{
+          const k=cardKey(h);
+          return k&&!beforeKeys.has(k)&&genuineCard(h,row.url);
+        });
+        if(recovered){
+          const raws=exactUrlParagraphs(view,row.url);
+          if(raws.length>beforeRaw)removeHits(view,[raws.at(-1)]);
+          run.cardKeys.push({url:row.url,key:cardKey(recovered)});
+          run.pendingCard=null;run.stage='cards_building';write(runKey(),run);
+          setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜表示済みカードを採用して続行');
+          await sleep(900);
+          continue;
+        }
         const code=statusCode(error);
-        // Remove only the extra raw work URL if it survived.
         const raws=exactUrlParagraphs(view,row.url);
         if(raws.length===beforeRaw+1)removeHits(view,[raws.at(-1)]);
         run.pendingCard={...run.pendingCard,lastError:error?.message||String(error),status:code,at:Date.now()};
         run.stage='cards_waiting';write(runKey(),run);
-        const attempts=run.pendingCard.attempts||1;
-        const wait=code===429?600000:code===403?600000:180000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。完成分を保持して停止しました。自動再試行はしません。通信が戻ったら「通信解除＋再開」を1回だけ押してください',true);
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' で停止 '+(code?'HTTP '+code:'通信エラー')+'。完成分は保持。もう一度「るるちゃん後カード再開」で同じ残りから続けます',true);
         clearTimeout(resumeTimer);
         resumeTimer=null;
         return;
@@ -1248,18 +1308,14 @@ async function buildCards(){
       run.cardKeys.push({url:row.url,key:cardKey(hit)});
       run.pendingCard=null;run.stage='cards_building';write(runKey(),run);
 
-      // Manual-mimic mode: do not hammer note's draft-save/readback API.
-      // Let note's own autosave run while we keep a local checkpoint after every card.
-      setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜note自動保存待ち');
-      await sleep(5500);
-      if(run.cardKeys.length>0&&run.cardKeys.length%15===0&&run.cardKeys.length<dataset.count){
-        const restMs = run.cardKeys.length % 60 === 0 ? 180000 : 45000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜手動操作相当の休止 '+Math.ceil(restMs/1000)+'秒（note自動保存待ち）');
-        await sleep(restMs);
-      }
+      // Card-only emergency mode: keep moving like the older proven card-only
+      // tool. Do not wait 5.5s for autosave after every card and do not pause in
+      // 15-card blocks. Save once after the full remaining tail is built.
+      setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+' ✅｜カードだけ連続作成中');
+      await sleep(900);
     }
-    await sleep(12000);
-    await safety().save(view,'通知カード最終保存…');
+    await sleep(1800);
+    await safety().save(view,'残り通知カードを最後に1回だけ保存…');
     run.savedCardCount=run.cardKeys.length;
     if(run.cardKeys.length!==dataset.count)throw new FatalError('カード件数不足 '+run.cardKeys.length+'/'+dataset.count);
     const unique=new Set(run.cardKeys.map(x=>x.key));
@@ -1288,7 +1344,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.18',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.19',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
@@ -1422,7 +1478,7 @@ function updateButtons(){
   if(waitButton){waitButton.textContent='通信解除＋再開';waitButton.toggleAttribute('disabled',busy);}
   p.querySelector('[data-a="bennett"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
-  p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
+  p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||!count);
   p.querySelector('[data-a="delete"]')?.toggleAttribute('disabled',busy||!cards);
   const mini=p.querySelector('[data-progress]');
   if(mini)mini.textContent='極薄 '+images+'/'+count+'｜カード '+cards+'/'+count;
@@ -1435,9 +1491,9 @@ function mount(){
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">保存位置から再開</button><button data-a="waitresume" type="button">通信解除＋再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">投稿後カード一括削除</button></div>'+
+      '<button data-a="cards" type="button" style="grid-column:1 / -1">るるちゃん後カード再開</button><button data-a="delete" type="button" style="grid-column:1 / -1">投稿後カード一括削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
-      '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
+      '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">極薄は完了済み｜るるちゃん166番までカード完了 → 残りだけ</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
     const posKey='mumei_live_fresh_panel_pos_v1',minKey='mumei_live_fresh_panel_min_v1';
     try{
