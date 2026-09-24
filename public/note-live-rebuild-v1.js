@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.0';
+const VERSION='18.9.1';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
