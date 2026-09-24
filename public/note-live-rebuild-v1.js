@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.9';
+const VERSION='18.9.18';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -14,7 +14,7 @@ const META='https://raw.githubusercontent.com/mumei-s/note-insight/main/data/not
 const RAW_BASE='https://raw.githubusercontent.com/mumei-s/note-insight/main/public';
 const FINAL='https://note.com/fuku444/n/nb4f6934381e9';
 
-let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,wakeLock=null;
+let busy=false,viewCache=null,coreCache=null,noteUrlCommand=null,resumeTimer=null,waitResumeTimer=null,wakeLock=null;
 async function keepAwake(){
   if(!page.navigator?.wakeLock?.request||document.hidden)return false;
   try{
@@ -33,6 +33,7 @@ const runKey=()=>RUN_PREFIX+':'+articleKey();
 const stageDataKey=()=>`mumei_live_stage_dataset_v1:${articleKey()}`;
 const stageRunKey=()=>`mumei_live_stage_run_v1:${articleKey()}`;
 const overnightKey=()=>`mumei_live_overnight_v1:${articleKey()}`;
+const waitResumeKey=()=>`mumei_live_wait_resume_v1:${articleKey()}`;
 const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_){return f}};
 const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const normalize=value=>{try{const u=new URL(String(value||''),location.href);u.search='';u.hash='';return u.href}catch(_){return String(value||'')}};
@@ -137,6 +138,8 @@ async function waitNewNoteImage(view,beforeIds,timeout=150000){
   const deadline=Date.now()+timeout;
   while(Date.now()<deadline){
     safety().check(view);
+    safety().assertNetwork();
+    if(safety().stopped())throw new FatalError('停止しました');
     const fresh=imageNodes(view).filter(hit=>{
       const id=String(hit.node.attrs?.id||'');
       return id&&!beforeIds.has(id)&&remoteImage(hit.node);
@@ -310,7 +313,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.9',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.18',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -325,6 +328,39 @@ function reconcileStageImages(view,dataset,run){
   }
   run.images=next;write(stageRunKey(),run);
   return Object.keys(next).length;
+}
+function adoptSavedBodyImages(view,dataset,seedRun={}){
+  const hits=imageNodes(view),images={};
+  let duplicates=0;
+  for(const row of dataset.rows){
+    const linked=hits.filter(hit=>
+      remoteImage(hit.node)&&
+      normalize(hit.node.attrs?.link)===normalize(row.url)
+    );
+    const exact=linked.filter(hit=>String(hit.node.textContent||'').trim()===row.caption);
+    const matches=exact.length?exact:linked;
+    if(matches.length){
+      const hit=matches.at(-1);
+      images[row.url]={id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:row.url};
+      if(matches.length>1)duplicates+=matches.length-1;
+    }
+  }
+  const run={
+    ...seedRun,
+    version:'18.9.18',
+    articleKey:articleKey(),
+    datasetId:dataset.datasetId,
+    stage:'images_building',
+    images,
+    pendingImage:null,
+    cardKeys:Array.isArray(seedRun.cardKeys)?seedRun.cardKeys:[],
+    savedCardCount:Number(seedRun.savedCardCount||0),
+    likeBoundaryInserted:hasExactText(view,LIKE_HEADING)||Boolean(seedRun.likeBoundaryInserted),
+    finalBoundaryInserted:Boolean(seedRun.finalBoundaryInserted),
+    adoptedFromSavedBody:true,
+    adoptedAt:Date.now()
+  };
+  return {run,count:Object.keys(images).length,duplicates};
 }
 async function uploadOneThin(view,row,run,dataset){
   ensureEnd(view);
@@ -347,19 +383,37 @@ async function rebuildImages(autoCards=false){
     const view=findView();if(!view)throw new FatalError('編集画面の準備ができていません');
     try{if(safety().networkHold?.())safety().resumeNetwork()}catch(e){throw new FatalError(e.message)}
     token=safety().begin('最新から再構築',view);
-    setStatus('最新327件の極薄データを確認中…');
-    const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
-    validate(manifest,meta);
-    const dataset=makeLiveDataset(manifest,meta);
-    let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
-    if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
-      stagedData=dataset;
-      run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
-      write(stageDataKey(),stagedData);write(stageRunKey(),run);
+    let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null),dataset=null;
+    const frozenResume=Boolean(stagedData?.liveBatch&&run&&run.datasetId===stagedData.datasetId&&run.adoptedFromSavedBody===true);
+    if(frozenResume){
+      dataset=stagedData;
+      setStatus('保存済み本文の続きデータを確認中…');
+    }else{
+      setStatus('最新327件の極薄データを確認中…');
+      const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
+      validate(manifest,meta);
+      dataset=makeLiveDataset(manifest,meta);
+      if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
+        stagedData=dataset;
+        run={version:'18.9.18',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+        write(stageDataKey(),stagedData);write(stageRunKey(),run);
+      }
     }
     const oldRun=currentRun(),oldData=currentData();
     const newUrls=new Set(dataset.rows.map(x=>normalize(x.url)));
     const stagedCount=reconcileStageImages(view,dataset,run);
+    let resumeFloor=0;
+    if(run.adoptedFromSavedBody===true){
+      // Resume from the end of the *continuous saved prefix*, never from the
+      // largest scattered index. This prevents a later stray match from making
+      // us skip an earlier missing item.
+      for(const row of dataset.rows){
+        const index=Number(row.index||resumeFloor+1);
+        if(index!==resumeFloor+1||!run.images?.[row.url])break;
+        resumeFloor=index;
+      }
+      if(resumeFloor>0)setStatus('保存済み '+resumeFloor+'番まで固定 ✅ '+(resumeFloor+1)+'番以降だけ続けます');
+    }
     if(stagedCount===0){
       ensureParticipantIntro(view);
       await safety().save(view,'参加者見出しを保存確認中…');
@@ -367,6 +421,7 @@ async function rebuildImages(autoCards=false){
     for(let i=0;i<dataset.rows.length;i++){
       const row=dataset.rows[i];
       if(run.images[row.url])continue;
+      if(run.adoptedFromSavedBody===true&&Number(row.index||i+1)<=resumeFloor)continue;
       if(i===Number(dataset.meta?.tagArticles||0))await ensureLikeBoundary(view,run);
       if(i===dataset.rows.length-1)await ensureFinalBoundary(view,run);
       run.pendingImage={url:row.url,index:i+1,at:Date.now()};write(stageRunKey(),run);
@@ -376,18 +431,33 @@ async function rebuildImages(autoCards=false){
       if(done%40===0||done===dataset.count){
         await safety().save(view,'極薄 '+done+'/'+dataset.count+' 保存確認中…');
       }
-      setStatus('極薄 '+done+'/'+dataset.count+'｜note画像確認済み・高速連続処理中…');
-      await sleep(40);
+      setStatus('極薄 '+done+'/'+dataset.count+'｜note画像確認済み・安全間隔で連続処理中…');
+      await sleep(650);
+      if(done>0&&done<dataset.count&&done%20===0){
+        setStatus('極薄 '+done+'/'+dataset.count+'｜403回避のため15秒だけ休止（完成分は保持）');
+        await sleep(15000);
+      }
     }
     const actual=reconcileStageImages(view,dataset,run);
-    if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
-    await safety().save(view,'新しい極薄 '+dataset.count+'/'+dataset.count+' 最終保存確認中…');
+    if(run.adoptedFromSavedBody===true){
+      const tailMissing=dataset.rows.filter(row=>Number(row.index||0)>resumeFloor&&!run.images?.[row.url]);
+      if(tailMissing.length)throw new FatalError('残り極薄の実体不足 '+tailMissing.length+'件');
+    }else if(actual!==dataset.count){
+      throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
+    }
+    await safety().save(view,'極薄の残りを最終保存確認中…');
 
-    const owned=oldOwnedHits(view,oldRun,oldData,newUrls);
+    const owned=(oldRun?.datasetId===dataset.datasetId||run.adoptedFromSavedBody)
+      ? {images:[],cards:[]}
+      : oldOwnedHits(view,oldRun,oldData,newUrls);
     if(owned.cards.length||owned.images.length){
       setStatus('新しい極薄は保存済み。旧ツール生成物だけ整理中…');
       removeHits(view,[...owned.cards,...owned.images]);
       await safety().save(view,'旧生成物を整理して保存確認中…');
+    }
+    if(run.adoptedFromSavedBody===true){
+      const adoptedFinal=adoptSavedBodyImages(view,dataset,run);
+      run=adoptedFinal.run;
     }
     run={...run,stage:'images_ready',cardKeys:[],savedCardCount:0,pendingCard:null,
       cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)};
@@ -412,16 +482,60 @@ async function startOvernight(){
   setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます'+(awake?'｜画面スリープ抑止ON':'｜スリープ抑止は端末非対応'));
   await rebuildImages(true);
 }
+
+const WAIT_RETRY_MS=10*60*1000;
+const FIRST_RETRY_MS=2*60*1000;
+function retryDelay(state){return Number(state?.retryCount||0)<1?FIRST_RETRY_MS:WAIT_RETRY_MS;}
+function waitResumeState(){return read(waitResumeKey(),null)}
+function waitResumeArmed(){
+  const state=waitResumeState();
+  if(state?.armed===true&&state.version!==VERSION){
+    localStorage.removeItem(waitResumeKey());
+    localStorage.removeItem(overnightKey());
+    return false;
+  }
+  return state?.armed===true;
+}
+function scheduleWaitResume(delay=1000){
+  clearTimeout(waitResumeTimer);
+  if(!waitResumeArmed()||!enabled())return;
+  waitResumeTimer=setTimeout(()=>{void runWaitResumeCycle()},Math.max(500,delay));
+}
+function clearWaitResume(message=''){
+  clearTimeout(waitResumeTimer);waitResumeTimer=null;
+  localStorage.removeItem(waitResumeKey());
+  if(message)setStatus(message);
+  updateButtons();
+}
+async function runWaitResumeCycle(){
+  // v18.9.18: automatic recovery retries are intentionally disabled.
+  // Repeated automatic attempts were re-triggering 403 and could start work
+  // again after a reload. Recovery is now always an explicit user action.
+  clearWaitResume('自動再開は停止しました。通信が戻ったら「通信解除＋再開」を1回だけ押してください');
+  localStorage.removeItem(overnightKey());
+  return false;
+}
+
+async function armWaitResume(){
+  if(busy){setStatus('現在の処理が停止してから再開してください');return false;}
+  clearTimeout(waitResumeTimer);waitResumeTimer=null;
+  localStorage.removeItem(waitResumeKey());
+  localStorage.removeItem(overnightKey());
+  try{
+    if(safety().networkHold?.())safety().resumeNetwork();
+  }catch(error){
+    setStatus('まだ通信停止中：'+(error?.message||String(error))+'｜自動では再試行しません',true);
+    return false;
+  }
+  const awake=await keepAwake();
+  setStatus('手動再開 ✅ 保存済み本文を照合し、残りだけ続けます'+(awake?'｜画面スリープ抑止ON':''));
+  return await resumeWork(true);
+}
 function maybeResumeOvernight(){
-  if(read(overnightKey(),false)!==true||busy||!enabled())return;
-  const run=currentRun(),stage=read(stageRunKey(),null);
-  if(stage?.stage==='images_building'||!run?.liveBatch){
-    setTimeout(()=>{if(!busy&&enabled())void rebuildImages(true)},1500);
-    return;
-  }
-  if(['images_ready','cards_building','cards_waiting','cards_paused'].includes(run.stage)){
-    setTimeout(()=>{if(!busy&&enabled())void buildCards()},1500);
-  }
+  // Reload/open must never restart a batch by itself.
+  clearTimeout(waitResumeTimer);waitResumeTimer=null;
+  if(waitResumeState())localStorage.removeItem(waitResumeKey());
+  if(read(overnightKey(),false)===true)localStorage.removeItem(overnightKey());
 }
 function insertWorkUrl(view,url){
   ensureEnd(view);
@@ -499,11 +613,9 @@ async function buildCards(){
         run.stage='cards_waiting';write(runKey(),run);
         const attempts=run.pendingCard.attempts||1;
         const wait=code===429?600000:code===403?600000:180000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。連打せず '+Math.ceil(wait/60000)+'分休止 → 同じ1件から再開',true);
-        if(attempts<4){
-          clearTimeout(resumeTimer);
-          resumeTimer=setTimeout(()=>{if(!busy&&enabled())void buildCards()},wait);
-        }
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。完成分を保持して停止しました。自動再試行はしません。通信が戻ったら「通信解除＋再開」を1回だけ押してください',true);
+        clearTimeout(resumeTimer);
+        resumeTimer=null;
         return;
       }
       // Remove any raw paragraph left after successful conversion.
@@ -552,7 +664,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.18',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
@@ -587,49 +699,73 @@ async function resumeAfterBennett(){
   }
 }
 
-async function resumeWork(){
+async function resumeWork(manual=false){
+  if(manual){
+    // A manual recovery must never inherit an old overnight/auto-run state.
+    localStorage.removeItem(overnightKey());
+    localStorage.removeItem(waitResumeKey());
+    clearTimeout(waitResumeTimer);waitResumeTimer=null;
+  }
   if(busy){setStatus('現在の処理中です。終了後に不足位置から再開します');return false;}
   const view=findView();
   if(!view){setStatus('編集画面の準備ができていません',true);return false;}
-  const staged=read(stageRunKey(),null);
-  const stagedData=read(stageDataKey(),null);
-  const run=currentRun(),data=currentData();
-  const overnight=read(overnightKey(),false)===true;
+  let staged=read(stageRunKey(),null);
+  let stagedData=read(stageDataKey(),null);
+  let run=currentRun(),data=currentData();
+  const overnight=!manual&&read(overnightKey(),false)===true;
   try{
-    if(staged&&stagedData&&staged.datasetId===stagedData.datasetId){
-      const present=reconcileStageImages(view,stagedData,staged);
-      setStatus('再開確認：極薄 '+present+'/'+stagedData.count+'｜不足から続けます');
-      return await rebuildImages(overnight);
+    // The visible/saved editor body is the recovery source of truth.
+    // Prefer the frozen dataset from this job so new likes arriving later do not
+    // shift the target list while resuming.
+    let dataset=(stagedData?.liveBatch&&stagedData)||(data?.liveBatch&&data)||null;
+    if(!dataset){
+      setStatus('再開確認：対象一覧を復元中…');
+      const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
+      validate(manifest,meta);
+      dataset=makeLiveDataset(manifest,meta);
     }
-    if(data?.liveBatch&&run&&run.datasetId===data.datasetId){
-      const missingImages=data.rows.filter(row=>{
-        const rec=run.images?.[row.url];
-        const hit=rec&&safety().tracked(view,rec,row.url);
-        return !(hit&&remoteImage(hit.node)&&normalize(hit.node.attrs?.link)===normalize(row.url)&&hit.node.textContent===row.caption);
-      });
-      if(missingImages.length){
-        write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.9',stage:'images_building',pendingImage:null});
-        setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
-        return await rebuildImages(overnight);
-      }
-      const presentCards=(run.cardKeys||[]).filter(rec=>embedNodes(view).some(h=>cardKey(h)===rec.key&&genuineCard(h,rec.url)));
-      if(presentCards.length!==(run.cardKeys||[]).length){
-        run.cardKeys=presentCards;
-        run.savedCardCount=Math.min(Number(run.savedCardCount||0),presentCards.length);
-        run.pendingCard=null;
-        run.stage='cards_paused';
-        write(runKey(),run);
-      }
-      if(run.stage==='cards_ready'&&presentCards.length===data.count){
-        setStatus('全件そろっています｜極薄 '+data.count+'/'+data.count+'｜カード '+data.count+'/'+data.count+' ✅');
-        return true;
-      }
-      setStatus('再開確認：極薄 '+data.count+'/'+data.count+'｜カード '+presentCards.length+'/'+data.count+'｜不足から続けます');
-      return await buildCards();
+
+    const seed=(staged&&staged.datasetId===dataset.datasetId)
+      ? staged
+      : (run&&run.datasetId===dataset.datasetId?run:{});
+    const adopted=adoptSavedBodyImages(view,dataset,seed);
+    staged=adopted.run;stagedData=dataset;
+    write(stageDataKey(),dataset);write(stageRunKey(),staged);
+
+    if(adopted.count<dataset.count){
+      setStatus('保存済み極薄 '+adopted.count+'/'+dataset.count+' を本文から確認 ✅ 残り '+(dataset.count-adopted.count)+'件だけ続けます'+(adopted.duplicates?'｜重複候補 '+adopted.duplicates:''));
+      return await rebuildImages(manual?true:overnight);
     }
-    setStatus('旧記録または未開始状態です。最新327件の極薄から再構築して続けます');
-    return await rebuildImages(overnight);
+
+    // All thin thumbnails exist in the actual body. Promote that state and
+    // continue with cards; never rebuild thumbnails just because local records
+    // were lost or an update changed versions.
+    run={
+      ...staged,
+      stage:run?.stage&&run.datasetId===dataset.datasetId?run.stage:'images_ready',
+      cardKeys:Array.isArray(run?.cardKeys)?run.cardKeys:(Array.isArray(staged.cardKeys)?staged.cardKeys:[]),
+      savedCardCount:Number(run?.savedCardCount||staged.savedCardCount||0),
+      pendingCard:null,
+      cardBaselineKeys:Array.isArray(run?.cardBaselineKeys)?run.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)
+    };
+    data=dataset;
+    write(DATA_KEY,dataset);write(runKey(),run);
+    localStorage.removeItem(stageDataKey());localStorage.removeItem(stageRunKey());
+
+    const presentCards=(run.cardKeys||[]).filter(rec=>embedNodes(view).some(h=>cardKey(h)===rec.key&&genuineCard(h,rec.url)));
+    if(presentCards.length!==(run.cardKeys||[]).length){
+      run.cardKeys=presentCards;
+      run.savedCardCount=Math.min(Number(run.savedCardCount||0),presentCards.length);
+      run.pendingCard=null;
+      run.stage='cards_paused';
+      write(runKey(),run);
+    }
+    if(run.stage==='cards_ready'&&presentCards.length===dataset.count){
+      setStatus('全件そろっています｜極薄 '+dataset.count+'/'+dataset.count+'｜カード '+dataset.count+'/'+dataset.count+' ✅');
+      return true;
+    }
+    setStatus('極薄は保存済み '+dataset.count+'/'+dataset.count+' ✅｜カード '+presentCards.length+'/'+dataset.count+'｜カードの残りだけ続けます');
+    return await buildCards();
   }catch(error){
     setStatus('再開確認停止：'+(error?.message||String(error))+'｜本文は保持しています',true);
     return false;
@@ -658,6 +794,8 @@ function updateButtons(){
   const count=data?.count||0,cards=run?.cardKeys?.length||0,images=run?.images?Object.keys(run.images).length:0;
   p.querySelector('[data-a="overnight"]')?.removeAttribute('disabled');
   p.querySelector('[data-a="resume"]')?.toggleAttribute('disabled',busy);
+  const waitButton=p.querySelector('[data-a="waitresume"]');
+  if(waitButton){waitButton.textContent='通信解除＋再開';waitButton.toggleAttribute('disabled',busy);}
   p.querySelector('[data-a="bennett"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
@@ -673,7 +811,7 @@ function mount(){
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
+      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">保存位置から再開</button><button data-a="waitresume" type="button">通信解除＋再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">投稿後カード一括削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
       '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
@@ -718,7 +856,8 @@ function mount(){
     p.addEventListener('click',e=>{
       const a=e.target.closest('button[data-a]')?.dataset.a;if(!a||a==='min')return;
       if(a==='overnight')void startOvernight();
-      if(a==='resume')void resumeWork();
+      if(a==='resume')void resumeWork(true);
+      if(a==='waitresume')void armWaitResume();
       if(a==='bennett')void resumeAfterBennett();
       if(a==='fresh')void rebuildImages(false);
       if(a==='cards')void buildCards();
@@ -729,7 +868,9 @@ function mount(){
   }
   updateButtons();
 }
-page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett};
+page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett,armWaitResume,runWaitResumeCycle};
+// Kill any stale legacy auto-run flag immediately on load unless the user explicitly armed wait-resume.
+if(!waitResumeArmed()&&read(overnightKey(),false)===true)localStorage.removeItem(overnightKey());
 page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(read(overnightKey(),false)===true)void keepAwake();setTimeout(maybeResumeOvernight,1200)}});
 setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
