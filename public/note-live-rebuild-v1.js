@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.7';
+const VERSION='18.9.8';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -310,7 +310,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.7',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.8',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -354,7 +354,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.7',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.8',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -373,11 +373,11 @@ async function rebuildImages(autoCards=false){
       setStatus('極薄 '+Object.keys(run.images).length+'/'+dataset.count+'｜'+(i+1)+'番 '+row.creator+' をnoteへアップロード中…');
       await uploadOneThin(view,row,run,dataset);
       const done=Object.keys(run.images).length;
-      if(done%20===0||done===dataset.count){
+      if(done%40===0||done===dataset.count){
         await safety().save(view,'極薄 '+done+'/'+dataset.count+' 保存確認中…');
       }
-      setStatus('極薄 '+done+'/'+dataset.count+'｜note画像確認済み・連続処理中…');
-      await sleep(450);
+      setStatus('極薄 '+done+'/'+dataset.count+'｜note画像確認済み・高速連続処理中…');
+      await sleep(40);
     }
     const actual=reconcileStageImages(view,dataset,run);
     if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
@@ -562,7 +562,7 @@ async function resumeWork(){
       });
       if(missingImages.length){
         write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.7',stage:'images_building',pendingImage:null});
+        write(stageRunKey(),{...run,version:'18.9.8',stage:'images_building',pendingImage:null});
         setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
         return await rebuildImages(overnight);
       }
