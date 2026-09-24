@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.21
+// @version      18.8.22
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -25,7 +25,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.21' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.22' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -58,12 +58,7 @@
   let memoryHold = null;
   const networkHold = () => {
     const hold = memoryHold || read(networkKey);
-    if (hold && Number(hold.code) === 0) {
-      memoryHold = null;
-      try { localStorage.removeItem(networkKey); } catch (_) {}
-      return null;
-    }
-    if (hold && Number(hold.code) === 429 && Number(hold.until || 0) > 0 && Number(hold.until) <= Date.now()) {
+    if (hold && Number(hold.code) === 0 && hold.confirmed !== true) {
       memoryHold = null;
       try { localStorage.removeItem(networkKey); } catch (_) {}
       return null;
@@ -78,15 +73,7 @@
   function assertNetwork() { page.__MUMEI_CARD_RUNTIME__?.verify?.(); const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
   function observeHttp(code, retryAfter) {
     code = Number(code);
-    if (code === 0) {
-      const old = memoryHold || read(networkKey);
-      if (Number(old?.code) === 0) {
-        memoryHold = null;
-        try { localStorage.removeItem(networkKey); } catch (_) {}
-      }
-      return false;
-    }
-    if (![401, 403, 429].includes(code)) return false;
+    if (![0, 401, 403, 429].includes(code)) return false;
     const seconds = Number(retryAfter), date = Date.parse(String(retryAfter || ''));
     const until = retryAfter && Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Number.isFinite(date) ? date : 0;
     const hold = { code, at: Date.now(), until: Math.max(until, networkHold()?.until || 0), confirmed: true };
@@ -3182,7 +3169,7 @@
         }
         hit = positionCard(view, dataset, run, row, hit);
         recordCard(view, dataset, run, row, hit);
-        if (run.cardKeys.length - run.savedCardCount >= 25) await saveCards(run, dataset, '途中保存');
+        if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
         if (run.cardKeys.length < dataset.rows.length) await sleep(900);
       }
@@ -3216,7 +3203,7 @@
       const holdCode = Number(hold?.code || 0);
       const transient = !hold && /(?:通信|network|timeout|タイムアウト|failed to fetch|err_network|新規embカード確認タイムアウト)/i.test(message);
       const retry429 = holdCode === 429;
-      if (transient || retry429) {
+      if ((transient || retry429) && page.navigator?.userAgent) {
         const count = Number(run.autoRetryCount || 0) + 1;
         run.autoRetryCount = count;
         setJSON(runKey(), run);
