@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.8';
+const VERSION='18.9.9';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -310,7 +310,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.8',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.9',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -354,7 +354,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.8',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -540,6 +540,53 @@ async function buildCards(){
     busy=false;updateButtons();
   }
 }
+const BENNETT_URL='https://note.com/takashi104/n/nb384d24df554';
+async function resumeAfterBennett(){
+  if(busy){setStatus('現在の処理中です。終わってからベネットさん後再開を実行します');return false;}
+  busy=true;let token;
+  try{
+    const view=findView();if(!view)throw new FatalError('編集画面の準備ができていません');
+    token=safety().begin('ベネットさん後再開',view);
+    const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
+    validate(manifest,meta);
+    const dataset=makeLiveDataset(manifest,meta);
+    const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
+    if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
+    const run={version:'18.9.9',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+      likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
+    const currentImages=imageNodes(view);
+    const missingBefore=[];
+    for(let i=0;i<=checkpoint;i++){
+      const row=dataset.rows[i];
+      const matches=currentImages.filter(hit=>
+        remoteImage(hit.node)&&
+        normalize(hit.node.attrs?.link)===normalize(row.url)&&
+        String(hit.node.textContent||'').trim()===row.caption
+      );
+      if(matches.length===1){
+        const hit=matches[0];
+        run.images[row.url]={id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:row.url};
+      }else{
+        missingBefore.push({index:i+1,creator:row.creator,url:row.url,count:matches.length});
+      }
+    }
+    if(missingBefore.length){
+      throw new FatalError('ベネットさんまでに極薄不足 '+missingBefore.length+'件：'+missingBefore.slice(0,5).map(x=>x.index+' '+x.creator).join(' / '));
+    }
+    write(stageDataKey(),dataset);write(stageRunKey(),run);
+    write(overnightKey(),true);
+    const next=checkpoint+2;
+    setStatus('ベネットさん '+(checkpoint+1)+'番まで確認済み ✅ '+next+'番から夜間一括で再開します');
+    return await rebuildImages(true);
+  }catch(error){
+    setStatus('ベネットさん後再開停止：'+(error?.message||String(error))+'｜既存本文は変更していません',true);
+    return false;
+  }finally{
+    if(token)safety().end(token);
+    busy=false;updateButtons();
+  }
+}
+
 async function resumeWork(){
   if(busy){setStatus('現在の処理中です。終了後に不足位置から再開します');return false;}
   const view=findView();
@@ -562,7 +609,7 @@ async function resumeWork(){
       });
       if(missingImages.length){
         write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.8',stage:'images_building',pendingImage:null});
+        write(stageRunKey(),{...run,version:'18.9.9',stage:'images_building',pendingImage:null});
         setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
         return await rebuildImages(overnight);
       }
@@ -611,6 +658,7 @@ function updateButtons(){
   const count=data?.count||0,cards=run?.cardKeys?.length||0,images=run?.images?Object.keys(run.images).length:0;
   p.querySelector('[data-a="overnight"]')?.removeAttribute('disabled');
   p.querySelector('[data-a="resume"]')?.toggleAttribute('disabled',busy);
+  p.querySelector('[data-a="bennett"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
   p.querySelector('[data-a="delete"]')?.toggleAttribute('disabled',busy||!cards);
@@ -625,7 +673,7 @@ function mount(){
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:auto';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
       '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
-      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
+      '<button data-a="overnight" type="button">夜間一括</button><button data-a="resume" type="button">再開</button><button data-a="bennett" type="button">ベネット後再開</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
       '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
@@ -671,6 +719,7 @@ function mount(){
       const a=e.target.closest('button[data-a]')?.dataset.a;if(!a||a==='min')return;
       if(a==='overnight')void startOvernight();
       if(a==='resume')void resumeWork();
+      if(a==='bennett')void resumeAfterBennett();
       if(a==='fresh')void rebuildImages(false);
       if(a==='cards')void buildCards();
       if(a==='delete')void deleteOwnedCards();
@@ -680,7 +729,7 @@ function mount(){
   }
   updateButtons();
 }
-page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork};
+page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett};
 page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(read(overnightKey(),false)===true)void keepAwake();setTimeout(maybeResumeOvernight,1200)}});
 setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
