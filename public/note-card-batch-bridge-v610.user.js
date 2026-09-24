@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.10
+// @version      18.9.11
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.10' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.11' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -621,7 +621,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.10';
+const VERSION='18.9.11';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -928,7 +928,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.10',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.11',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -972,7 +972,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.10',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.11',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -1124,16 +1124,10 @@ async function armWaitResume(){
   scheduleWaitResume(1000);
 }
 function maybeResumeOvernight(){
+  // Never restart work merely because an old "overnight" flag survived a reload.
+  // Automatic resume is allowed only after the user explicitly arms "エラー解消待ち再開".
   if(waitResumeArmed()){scheduleWaitResume(1500);return;}
-  if(read(overnightKey(),false)!==true||busy||!enabled())return;
-  const run=currentRun(),stage=read(stageRunKey(),null);
-  if(stage?.stage==='images_building'||!run?.liveBatch){
-    setTimeout(()=>{if(!busy&&enabled())void rebuildImages(true)},1500);
-    return;
-  }
-  if(['images_ready','cards_building','cards_waiting','cards_paused'].includes(run.stage)){
-    setTimeout(()=>{if(!busy&&enabled())void buildCards()},1500);
-  }
+  if(read(overnightKey(),false)===true)localStorage.removeItem(overnightKey());
 }
 function insertWorkUrl(view,url){
   ensureEnd(view);
@@ -1264,7 +1258,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.10',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.11',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
@@ -1321,7 +1315,7 @@ async function resumeWork(){
       });
       if(missingImages.length){
         write(stageDataKey(),data);
-        write(stageRunKey(),{...run,version:'18.9.10',stage:'images_building',pendingImage:null});
+        write(stageRunKey(),{...run,version:'18.9.11',stage:'images_building',pendingImage:null});
         setStatus('再開確認：極薄不足 '+missingImages.length+'件を検出｜不足だけ復旧します');
         return await rebuildImages(overnight);
       }
@@ -1445,6 +1439,8 @@ function mount(){
   updateButtons();
 }
 page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight,resumeWork,resumeAfterBennett,armWaitResume,runWaitResumeCycle};
+// Kill any stale legacy auto-run flag immediately on load unless the user explicitly armed wait-resume.
+if(!waitResumeArmed()&&read(overnightKey(),false)===true)localStorage.removeItem(overnightKey());
 page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(read(overnightKey(),false)===true)void keepAwake();setTimeout(maybeResumeOvernight,1200)}});
 setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
