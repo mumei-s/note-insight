@@ -28,12 +28,7 @@
   let memoryHold = null;
   const networkHold = () => {
     const hold = memoryHold || read(networkKey);
-    if (hold && Number(hold.code) === 0) {
-      memoryHold = null;
-      try { localStorage.removeItem(networkKey); } catch (_) {}
-      return null;
-    }
-    if (hold && Number(hold.code) === 429 && Number(hold.until || 0) > 0 && Number(hold.until) <= Date.now()) {
+    if (hold && Number(hold.code) === 0 && hold.confirmed !== true) {
       memoryHold = null;
       try { localStorage.removeItem(networkKey); } catch (_) {}
       return null;
@@ -48,15 +43,7 @@
   function assertNetwork() { page.__MUMEI_CARD_RUNTIME__?.verify?.(); const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
   function observeHttp(code, retryAfter) {
     code = Number(code);
-    if (code === 0) {
-      const old = memoryHold || read(networkKey);
-      if (Number(old?.code) === 0) {
-        memoryHold = null;
-        try { localStorage.removeItem(networkKey); } catch (_) {}
-      }
-      return false;
-    }
-    if (![401, 403, 429].includes(code)) return false;
+    if (![0, 401, 403, 429].includes(code)) return false;
     const seconds = Number(retryAfter), date = Date.parse(String(retryAfter || ''));
     const until = retryAfter && Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Number.isFinite(date) ? date : 0;
     const hold = { code, at: Date.now(), until: Math.max(until, networkHold()?.until || 0), confirmed: true };
