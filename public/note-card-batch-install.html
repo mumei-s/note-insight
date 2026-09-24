@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
   <title>極薄＋通知ツール 更新</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(680px,calc(100% - 16px));margin:auto;padding:14px 0 28px}.card{border:1px solid #344b61;border-radius:16px;background:#0d1620;padding:14px}h1{margin:0 0 8px;font-size:23px}.ver{display:inline-flex;padding:4px 9px;border:1px solid #8b5cf6;border-radius:999px;color:#e9d5ff;background:#21183b;font-size:11px;font-weight:900}.note{margin-top:10px;padding:10px;border:1px solid #32495d;border-radius:10px;background:#09131c;font-size:12px;line-height:1.65;color:#c8d9e7}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin-top:9px;border:1px solid #b6ff38;border-radius:11px;background:#b6ff38;color:#091100;text-decoration:none;font-size:15px;font-weight:950}.sub{background:#122131;color:#e5f2ff;border-color:#405c74}.status{margin-top:9px;font-size:11px;color:#9fb4c6;line-height:1.55}.bad{color:#ffb6b6}.ok{color:#cfff64}</style>
+    *{box-sizing:border-box}body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(680px,calc(100% - 16px));margin:auto;padding:14px 0 28px}.card{border:1px solid #344b61;border-radius:16px;background:#0d1620;padding:14px}h1{margin:0 0 8px;font-size:23px}.ver{display:inline-flex;padding:4px 9px;border:1px solid #8b5cf6;border-radius:999px;color:#e9d5ff;background:#21183b;font-size:11px;font-weight:900}.note{margin-top:10px;padding:10px;border:1px solid #32495d;border-radius:10px;background:#09131c;font-size:12px;line-height:1.65;color:#c8d9e7}.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin-top:9px;border:1px solid #b6ff38;border-radius:11px;background:#b6ff38;color:#091100;text-decoration:none;font-size:15px;font-weight:950}.sub{background:#122131;color:#e5f2ff;border-color:#405c74}.status{margin-top:9px;font-size:11px;color:#9fb4c6;line-height:1.55}.copybox{display:flex;gap:7px;margin-top:9px}.copybox input{min-width:0;flex:1;border:1px solid #405c74;border-radius:9px;background:#071019;color:#dbeafe;padding:10px;font-size:11px}.copybox button{flex:0 0 auto;border:1px solid #60a5fa;border-radius:9px;background:#172554;color:#dbeafe;padding:0 12px;font-weight:900}.bad{color:#ffb6b6}.ok{color:#cfff64}</style>
 </head>
 <body>
 <main class="wrap"><section class="card">
@@ -23,19 +23,24 @@
   「旧版」「複数版が混在」と出る場合は、Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください。以前のスクリプトを削除する必要はありません。</div>
   <a id="install" class="btn" href="./note-card-batch-bridge-v610.user.js">インストール／更新</a>
   <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js">Raw直結で開く</a>
+  <div class="copybox"><input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js"><button id="copy" type="button">更新URLをコピー</button></div>
   <div id="status" class="status">Android Edge＋Tampermonkeyでは上の「インストール／更新」を押してください。</div>
 </section></main>
 <script>
 (() => {
   const status=document.getElementById('status');
   const install=document.getElementById('install');
+  const raw=document.getElementById('raw');
+  const copy=document.getElementById('copy');
+  const copyUrl=document.getElementById('copy-url');
   const ua=navigator.userAgent||'';
   const edge=/EdgA|Edg\//i.test(ua),firefox=/Firefox/i.test(ua),android=/Android/i.test(ua);
   if(android&&edge) status.innerHTML='✅ Android Edgeを確認。<b>Tampermonkeyを有効にした状態で「インストール／更新」</b>を押してください。';
   else if(android&&firefox) status.innerHTML='✅ Android Firefoxを確認。Userscript拡張を有効にして「インストール／更新」を押してください。';
-  else if(android) status.innerHTML='Androidブラウザを確認。Userscript拡張が反応しない場合はEdge＋Tampermonkeyでこのページを開いてください。';
+  else if(android) status.innerHTML='Androidブラウザを確認。Yahooアプリ等でUserscript拡張が反応しない場合は「更新URLをコピー」→Edgeのアドレス欄へ貼り付けて開いてください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptマネージャーの更新確認画面が開けば、そのまま更新してください。';});
-  window.addEventListener('pageshow',()=>{install.href='./note-card-batch-bridge-v610.user.js?ts='+Date.now();});
+  copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ 更新URLをコピーしました。Edgeのアドレス欄へ貼り付けて開いてください。':'コピーできませんでした。欄を長押ししてURLをコピーしてください。';});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.8.17&ts='+ts;});
 })();
 </script>
 </body>
