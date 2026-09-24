@@ -4,7 +4,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.2';
+const VERSION='18.9.3';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -20,6 +20,9 @@ class FatalError extends Error{}
 const safety=()=>{if(!page.__MUMEI_CARD_SAFETY__)throw new FatalError('本文保護機能を読み込めません');return page.__MUMEI_CARD_SAFETY__;};
 const articleKey=()=>location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1]||'';
 const runKey=()=>RUN_PREFIX+':'+articleKey();
+const stageDataKey=()=>`mumei_live_stage_dataset_v1:${articleKey()}`;
+const stageRunKey=()=>`mumei_live_stage_run_v1:${articleKey()}`;
+const overnightKey=()=>`mumei_live_overnight_v1:${articleKey()}`;
 const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_){return f}};
 const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const normalize=value=>{try{const u=new URL(String(value||''),location.href);u.search='';u.hash='';return u.href}catch(_){return String(value||'')}};
@@ -96,6 +99,51 @@ function requestJSON(url){
     ontimeout:()=>reject(new Error('通信タイムアウト'))
   }));
 }
+function requestBlob(url){
+  return new Promise((resolve,reject)=>GM_xmlhttpRequest({
+    method:'GET',url,responseType:'blob',timeout:120000,
+    onload:r=>{if(r.status===200&&r.response)resolve(r.response);else reject(new Error('画像取得 HTTP '+r.status))},
+    onerror:()=>reject(new Error('画像取得通信失敗')),
+    ontimeout:()=>reject(new Error('画像取得タイムアウト'))
+  }));
+}
+function remoteImage(node){
+  const src=String(node?.attrs?.src||'');
+  return /^https:\/\//i.test(src)&&!src.includes('raw.githubusercontent.com')&&!src.includes('/note-live-batch/cards/');
+}
+let imageCommandCache=null;
+function nativeImageCommand(){
+  if(imageCommandCache)return imageCommandCache;
+  const req=webpackRequire();let command;
+  try{command=req?.(94928)?.CwN}catch(_){}
+  const code=typeof command==='function'?Function.prototype.toString.call(command):'';
+  if(!(command?.length===4&&/Array\.from/.test(code)&&/imageUploading/.test(code)&&/entries/.test(code)))throw new FatalError('note正規画像処理が見つかりません');
+  return imageCommandCache=command;
+}
+async function waitNewNoteImage(view,beforeIds,timeout=150000){
+  const deadline=Date.now()+timeout;
+  while(Date.now()<deadline){
+    safety().check(view);
+    const fresh=imageNodes(view).filter(hit=>{
+      const id=String(hit.node.attrs?.id||'');
+      return id&&!beforeIds.has(id)&&remoteImage(hit.node);
+    }).sort((a,b)=>a.pos-b.pos);
+    if(fresh.length===1)return fresh[0];
+    if(fresh.length>1)throw new FatalError('新規画像が複数入りました。順序保護のため停止');
+    await sleep(400);
+  }
+  throw new FatalError('note画像アップロード待ちタイムアウト');
+}
+function relinkCaption(view,hit,row){
+  const fresh=safety().tracked(view,hit.node.attrs,row.url)||hit;
+  const node=fresh.node;
+  if(node.type?.name!=='image'||node.type.spec?.content!=='inline*')throw new FatalError('note画像形式が変わりました');
+  const replacement=node.type.create({...node.attrs,link:row.url},view.state.schema.text(row.caption),node.marks);
+  view.dispatch(view.state.tr.replaceWith(fresh.pos,fresh.pos+node.nodeSize,replacement));
+  const after=safety().index(view).images.find(x=>String(x.node.attrs?.id||'')===String(replacement.attrs?.id||''));
+  if(!after||normalize(after.node.attrs?.link)!==normalize(row.url)||after.node.textContent!==row.caption||!remoteImage(after.node))throw new FatalError('極薄の🔗・名前確認に失敗: '+row.index);
+  return after;
+}
 function validate(manifest,meta){
   if(!manifest||!Array.isArray(manifest.items)||!Number.isInteger(manifest.count)||manifest.items.length!==manifest.count)throw new FatalError('最新極薄データの件数が不正です');
   if(!meta||meta.format!=='mumei-live-batch-v2'||meta.count!==manifest.count||!Array.isArray(meta.rows)||meta.rows.length!==manifest.count)throw new FatalError('最新対象一覧の照合に失敗しました');
@@ -157,86 +205,136 @@ function currentData(){return read(DATA_KEY,null);}
 
 function oldOwnedHits(view,oldRun,oldData,newUrls){
   const images=[],cards=[];
-  const imageRecords=oldRun?.images||{};
-  for(const [url,rec] of Object.entries(imageRecords)){
+  for(const [url,rec] of Object.entries(oldRun?.images||{})){
     const hit=safety().tracked(view,rec,url);if(hit)images.push(hit);
   }
   const knownCardKeys=new Set((oldRun?.cardKeys||[]).map(x=>String(x.key||'')).filter(Boolean));
   for(const hit of embedNodes(view))if(knownCardKeys.has(cardKey(hit)))cards.push(hit);
-  // New architecture owns its raw-hosted images by src/id even if local progress was lost.
-  for(const hit of imageNodes(view)){
-    const src=String(hit.node.attrs?.src||''),id=String(hit.node.attrs?.id||'');
-    if((id.startsWith('mumei-live-')||src.includes('/note-live-batch/cards/'))&&!images.some(x=>x.pos===hit.pos))images.push(hit);
-  }
-  // If an old recorded dataset exists, exact target cards from that generated batch can be cleared on explicit rebuild.
   const oldUrls=new Set((oldData?.rows||[]).map(x=>normalize(x.url)).filter(Boolean));
   for(const hit of embedNodes(view)){
-    const u=cardUrl(hit);
-    if((oldUrls.has(u)||newUrls.has(u))&&!cards.some(x=>x.pos===hit.pos)){
-      const key=cardKey(hit);
-      if(knownCardKeys.has(key)||oldRun?.stage?.startsWith?.('cards'))cards.push(hit);
+    const u=cardUrl(hit),key=cardKey(hit);
+    if((oldUrls.has(u)||newUrls.has(u))&&knownCardKeys.has(key)&&!cards.some(x=>x.pos===hit.pos))cards.push(hit);
+  }
+  return {
+    images:[...new Map(images.map(x=>[x.pos,x])).values()],
+    cards:[...new Map(cards.map(x=>[x.pos,x])).values()]
+  };
+}
+function makeLiveDataset(manifest,meta){
+  const datasetId='live-current:'+meta.generatedAt;
+  const rows=manifest.items.map((item,i)=>({
+    index:i+1,url:item.url,creator:item.creator,title:item.title,key:item.key,
+    cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
+    urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
+  }));
+  return {version:'18.9.3',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+    extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
+    meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
+}
+function reconcileStageImages(view,dataset,run){
+  const next={};
+  for(const row of dataset.rows){
+    const rec=run.images?.[row.url];
+    const hit=rec&&safety().tracked(view,rec,row.url);
+    if(hit&&remoteImage(hit.node)&&normalize(hit.node.attrs?.link)===normalize(row.url)&&hit.node.textContent===row.caption){
+      next[row.url]={id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:row.url};
     }
   }
-  return {images:[...new Map(images.map(x=>[x.pos,x])).values()],cards:[...new Map(cards.map(x=>[x.pos,x])).values()]};
+  run.images=next;write(stageRunKey(),run);
+  return Object.keys(next).length;
 }
-
-async function rebuildImages(){
-  if(busy||!enabled())return;
-  busy=true;let token;
+async function uploadOneThin(view,row,run,dataset){
+  ensureEnd(view);
+  const before=new Set(imageNodes(view).map(hit=>String(hit.node.attrs?.id||'')).filter(Boolean));
+  const blob=await requestBlob(row.sourceImage);
+  const file=new page.File([blob],String(row.index).padStart(3,'0')+'_thin.png',{type:'image/png'});
+  const transfer=new page.DataTransfer();transfer.items.add(file);
+  const pos=view.state.selection.from;
+  if(nativeImageCommand()(view,transfer.files,pos-1,'image')!==true)throw new FatalError('note正規画像アップロードを開始できません');
+  const hit=await waitNewNoteImage(view,before,150000);
+  const linked=relinkCaption(view,hit,row);
+  run.images[row.url]={id:String(linked.node.attrs?.id||''),src:String(linked.node.attrs?.src||''),link:row.url};
+  run.pendingImage=null;
+  write(stageRunKey(),run);
+}
+async function rebuildImages(autoCards=false){
+  if(busy||!enabled())return false;
+  busy=true;let token,ok=false,continueCards=false;
   try{
     const view=findView();if(!view)throw new FatalError('編集画面の準備ができていません');
     try{if(safety().networkHold?.())safety().resumeNetwork()}catch(e){throw new FatalError(e.message)}
     token=safety().begin('最新から再構築',view);
-    setStatus('最新のスキ・記事・極薄データを取得中…');
+    setStatus('最新327件の極薄データを確認中…');
     const [manifest,meta]=await Promise.all([requestJSON(MANIFEST),requestJSON(META)]);
     validate(manifest,meta);
-    const newUrls=new Set(manifest.items.map(x=>normalize(x.url)));
+    const dataset=makeLiveDataset(manifest,meta);
+    let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
+    if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
+      stagedData=dataset;
+      run={version:'18.9.3',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      write(stageDataKey(),stagedData);write(stageRunKey(),run);
+    }
     const oldRun=currentRun(),oldData=currentData();
+    const newUrls=new Set(dataset.rows.map(x=>normalize(x.url)));
+    reconcileStageImages(view,dataset,run);
+    for(let i=0;i<dataset.rows.length;i++){
+      const row=dataset.rows[i];
+      if(run.images[row.url])continue;
+      run.pendingImage={url:row.url,index:i+1,at:Date.now()};write(stageRunKey(),run);
+      setStatus('極薄 '+Object.keys(run.images).length+'/'+dataset.count+'｜'+(i+1)+'番 '+row.creator+' をnoteへアップロード中…');
+      await uploadOneThin(view,row,run,dataset);
+      const done=Object.keys(run.images).length;
+      if(done%5===0||done===dataset.count){
+        await safety().save(view,'極薄 '+done+'/'+dataset.count+' 保存確認中…');
+      }
+      if(done%20===0&&done<dataset.count){
+        setStatus('極薄 '+done+'/'+dataset.count+' 保存済み｜30秒休止中…');
+        await sleep(30000);
+      }else{
+        await sleep(900);
+      }
+    }
+    const actual=reconcileStageImages(view,dataset,run);
+    if(actual!==dataset.count)throw new FatalError('極薄画像の実体不足 '+actual+'/'+dataset.count);
+    await safety().save(view,'新しい極薄 '+dataset.count+'/'+dataset.count+' 最終保存確認中…');
+
     const owned=oldOwnedHits(view,oldRun,oldData,newUrls);
     if(owned.cards.length||owned.images.length){
-      setStatus('旧ツールの生成物を整理中…');
+      setStatus('新しい極薄は保存済み。旧ツール生成物だけ整理中…');
       removeHits(view,[...owned.cards,...owned.images]);
+      await safety().save(view,'旧生成物を整理して保存確認中…');
     }
-    // Clear only old generated-progress state; user body outside tracked nodes stays intact.
-    localStorage.removeItem(runKey());localStorage.removeItem(DATA_KEY);
-    const datasetId='live-current:'+meta.generatedAt;
-    const rows=manifest.items.map((item,i)=>({
-      index:i+1,url:item.url,creator:item.creator,title:item.title,key:item.key,
-      cardPath:item.cardPath,src:imageSrc(item),caption:item.creator+'さん',
-      urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
-    }));
-    const dataset={version:'18.9.0',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
-      extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
-    const run={version:'18.9.0',articleKey:articleKey(),datasetId,stage:'images_building',images:{},cardKeys:[],savedCardCount:0,pendingCard:null,cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)};
+    run={...run,stage:'images_ready',cardKeys:[],savedCardCount:0,pendingCard:null,
+      cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean)};
     write(DATA_KEY,dataset);write(runKey(),run);
-
-    const imageType=view.state.schema.nodes.image;if(!imageType)throw new FatalError('note画像ノードを取得できません');
-    for(let start=0;start<rows.length;start+=30){
-      safety().check(view);
-      let tr=view.state.tr;
-      for(let i=start;i<Math.min(start+30,rows.length);i++){
-        const row=rows[i],id='mumei-live-'+String(i+1).padStart(3,'0')+'-'+String(row.key||'').replace(/[^a-z0-9_-]/gi,'');
-        const attrs={...(imageType.defaultAttrs||{}),id,src:row.src,link:row.url};
-        const node=imageType.create(attrs,view.state.schema.text(row.caption));
-        tr=tr.insert(tr.doc.content.size,node);
-        run.images[row.url]={id,src:row.src,link:row.url};
-      }
-      view.dispatch(tr);write(runKey(),run);
-      setStatus('極薄サムネイル '+Object.keys(run.images).length+'/'+rows.length+' を本文へ配置中…');
-      if(start+30<rows.length)await sleep(120);
-      if((start+30)%90===0||start+30>=rows.length){
-        await safety().save(view,'極薄 '+Object.keys(run.images).length+'/'+rows.length+' 保存確認中…');
-      }
-    }
-    const actual=rows.filter(row=>safety().tracked(view,run.images[row.url],row.url)).length;
-    if(actual!==rows.length)throw new FatalError('極薄画像の実体不足 '+actual+'/'+rows.length);
-    run.stage='images_ready';write(runKey(),run);
-    setStatus('極薄サムネイル '+rows.length+'/'+rows.length+' 保存済み ✅ 次は「カード開始」');
+    localStorage.removeItem(stageDataKey());localStorage.removeItem(stageRunKey());
+    setStatus('極薄 '+dataset.count+'/'+dataset.count+' 🔗・名前・保存確認済み ✅ '+(autoCards?'カードを自動開始します':'次は「カード開始」'));
+    ok=true;continueCards=autoCards||read(overnightKey(),false)===true;
+    return true;
   }catch(error){
-    setStatus('再構築停止：'+(error?.message||String(error)),true);
+    setStatus('再構築停止：'+(error?.message||String(error))+'｜成功済み極薄は保持しています',true);
+    return false;
   }finally{
     if(token)safety().end(token);
     busy=false;updateButtons();
+    if(ok&&continueCards)setTimeout(()=>{if(!busy&&enabled())void buildCards()},2500);
+  }
+}
+async function startOvernight(){
+  if(busy)return;
+  write(overnightKey(),true);
+  setStatus('夜間一括を開始：極薄→保存→通知カードまで自動で進めます');
+  await rebuildImages(true);
+}
+function maybeResumeOvernight(){
+  if(read(overnightKey(),false)!==true||busy||!enabled())return;
+  const run=currentRun(),stage=read(stageRunKey(),null);
+  if(stage?.stage==='images_building'||!run?.liveBatch){
+    setTimeout(()=>{if(!busy&&enabled())void rebuildImages(true)},1500);
+    return;
+  }
+  if(['images_ready','cards_building','cards_waiting','cards_paused'].includes(run.stage)){
+    setTimeout(()=>{if(!busy&&enabled())void buildCards()},1500);
   }
 }
 function insertWorkUrl(view,url){
@@ -353,7 +451,8 @@ async function buildCards(){
     const unique=new Set(run.cardKeys.map(x=>x.key));
     if(unique.size!==dataset.count)throw new FatalError('カードキー重複');
     run.stage='cards_ready';run.pendingCard=null;write(runKey(),run);
-    setStatus('極薄 '+dataset.count+'/'+dataset.count+'｜通知カード '+dataset.count+'/'+dataset.count+' 保存済み ✅');
+    localStorage.removeItem(overnightKey());
+    setStatus('極薄 '+dataset.count+'/'+dataset.count+'｜通知カード '+dataset.count+'/'+dataset.count+' 保存済み ✅ 夜間一括完了');
   }catch(error){
     const run=currentRun();if(run){run.stage='cards_paused';write(runKey(),run)}
     setStatus('カード停止：'+(error?.message||String(error))+'｜完成分は保持しています',true);
@@ -382,6 +481,7 @@ function updateButtons(){
   const p=document.getElementById(PANEL);if(!p)return;
   const run=currentRun(),data=currentData();
   const count=data?.count||0,cards=run?.cardKeys?.length||0,images=run?.images?Object.keys(run.images).length:0;
+  p.querySelector('[data-a="overnight"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="fresh"]')?.toggleAttribute('disabled',busy);
   p.querySelector('[data-a="cards"]')?.toggleAttribute('disabled',busy||images!==count||!count);
   p.querySelector('[data-a="delete"]')?.toggleAttribute('disabled',busy||!cards);
@@ -395,8 +495,8 @@ function mount(){
     p=document.createElement('div');p.id=PANEL;
     p.style.cssText='position:fixed;right:6px;top:86px;z-index:2147483646;width:min(330px,calc(100vw - 12px));background:#071018;color:#eef7ff;border:1px solid #2d526b;border-radius:12px;padding:7px;font:12px/1.35 system-ui;box-shadow:0 8px 30px #0008;touch-action:none';
     p.innerHTML='<div class="title" style="display:flex;align-items:center;gap:6px;font-weight:900;margin-bottom:6px;cursor:grab;user-select:none"><span style="flex:1">極薄＋通知 Fresh <span style="font-size:10px">v'+VERSION+'</span></span><button data-a="min" type="button" style="width:32px;min-height:28px;padding:2px 6px">−</button></div>'+
-      '<div data-body><div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:4px">'+
-      '<button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
+      '<div data-body><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+
+      '<button data-a="overnight" type="button">夜間一括</button><button data-a="fresh" type="button">最新から再構築</button><button data-a="cards" type="button">カード開始</button><button data-a="delete" type="button">カード削除</button></div>'+
       '<div data-progress style="margin-top:5px;font-size:10px;color:#9fdcff">極薄 0/0｜カード 0/0</div>'+
       '<div id="'+STATUS+'" style="margin-top:4px;font-size:10px">最新のスキ・記事で最初から作り直せます</div></div>';
     const body=p.querySelector('[data-body]'),min=p.querySelector('[data-a="min"]'),title=p.querySelector('.title');
@@ -440,7 +540,8 @@ function mount(){
     title.addEventListener('pointerup',finish);title.addEventListener('pointercancel',finish);
     p.addEventListener('click',e=>{
       const a=e.target.closest('button[data-a]')?.dataset.a;if(!a||a==='min')return;
-      if(a==='fresh')void rebuildImages();
+      if(a==='overnight')void startOvernight();
+      if(a==='fresh')void rebuildImages(false);
       if(a==='cards')void buildCards();
       if(a==='delete')void deleteOwnedCards();
     });
@@ -449,6 +550,8 @@ function mount(){
   }
   updateButtons();
 }
-page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards};
-setInterval(mount,800);mount();
+page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards,startOvernight};
+page.addEventListener('pageshow',()=>setTimeout(maybeResumeOvernight,1200));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(maybeResumeOvernight,1200)});
+setInterval(mount,800);mount();setTimeout(maybeResumeOvernight,1800);
 })();
