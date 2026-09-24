@@ -1479,6 +1479,38 @@ test('18.8.18: status-zero is provisional until the editor confirms image failur
   assert.equal(api.confirmUnknownNetworkFailure(failure),true);assert.equal(e.safety.networkHold().code,0);
 });
 
+test('18.8.20: prepared addition can recover from a confirmed status-zero hold using the hosted HTTPS copy', async () => {
+  const e=sending(3);
+  e.dataset.preparedBatch=true;
+  e.rows.forEach((row,i)=>{
+    row.urlname='user'; row.latestKey=row.url.split('/').at(-1); row.creator='作者'+i;
+    row.creatorVerified={articleKey:row.latestKey,urlname:'user',name:row.creator};
+    row.caption=row.creator+'さん';
+  });
+  e.rows[0].pngSha256='0e7521e07ef776dcb6254b458687d234612b12ec550208a6d67044cf8e148ee0';
+  const first=e.safety.tracked(e.view,e.run.images[e.rows[0].url],e.rows[0].url);
+  e.view.dispatch(e.view.state.tr.delete(first.pos,first.pos+first.node.nodeSize));
+  delete e.run.images[e.rows[0].url];
+  e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));
+  e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+  e.page.__MUMEI_PREPARED_BATCH__={sync:async()=>0};
+  e.loadModule('note-card-creator-v1883.js','caption,verifyRows,apply');
+  const api=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}}');
+  api.setView(e.view);
+  e.safety.observeHttp(0,'');
+  const protectedText=e.existing.textContent;
+  assert.equal(await api.insertThinImages(),true,e.statuses.get('mumei-likers-thin-status-v160').textContent);
+  const run=JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key));
+  assert.equal(Object.keys(run.images).length,3);
+  const restored=e.safety.tracked(e.view,run.images[e.rows[0].url],e.rows[0].url);
+  assert.match(restored.node.attrs.src,/card-fallback-18820\/0e7521e07ef776dcb6254b458687d234612b12ec550208a6d67044cf8e148ee0\.png$/);
+  assert.equal(restored.node.attrs.link,e.rows[0].url);
+  assert.equal(restored.node.textContent,e.rows[0].caption);
+  assert.equal(e.safety.networkHold(),null);
+  assert.ok(e.view.state.doc.nodes.some(n=>n.textContent===protectedText));
+  assert.equal(e.safety.index(e.view).images.length,3);
+});
+
 test('18.8.17: whole bundle initializes once and detects older components without erasing existing state', () => {
   const page={calls:0};page.window=page;const ctx=vm.createContext(page);
   const code=wrapModules('page.calls++;page.__MUMEI_CARD_VISIBLE__={};page.__MUMEI_THIN_IMAGES__={};');
