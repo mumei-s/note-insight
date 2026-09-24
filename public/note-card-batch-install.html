@@ -11,14 +11,13 @@
 <body>
 <main class="wrap"><section class="card">
   <h1>極薄＋通知ツール</h1>
-  <span class="ver">v18.9.18</span>
-  <div class="note"><b>v18.9.18：403の自動再試行ループと勝手な再開を停止しました。</b><br>
-  エラー後は本文・成功済み位置を保持し、ページを開き直しても自動では始まりません。<b>「保存位置から再開」</b>または<b>「通信解除＋再開」</b>を押した時だけ再開します。<br><br>
-  <b>再開</b>：現在の本文から保存済み極薄を記事リンク基準で照合します。途中に飛び地があっても最大番号ではなく<b>先頭から連続して保存できている位置</b>だけを確定し、その次から続けます。古い夜間一括フラグは手動再開時に破棄します。<br>
-  <b>極薄</b>：noteへの連続画像投入は安全間隔を入れ、20枚ごとに短く休止します。無関係なnote通信の403を極薄失敗として拾わないよう監視対象も絞りました。<br>
-  <b>カード</b>：403/429/通信失敗が出たら、その場で停止して完成分を保持します。数分後に勝手に再試行する処理は廃止しました。通信が戻った後に手動で1回だけ再開してください。<br>
-  <b>投稿後カード一括削除</b>：公開・通知後、今回作成した通知カードだけを削除し、極薄サムネイルは残します。<br><br>
-  INSIGHT本体には触れていません。</div>
+  <span class="ver">v18.9.19</span>
+  <div class="note"><b>v18.9.19：カードだけの緊急再開版です。</b><br>
+  <b>極薄サムネイルは完了済みとして一切触りません。</b><br>
+  るるちゃん💖🌙（166番）までの通知カードを完了済みとして固定し、167番以降だけ続けます。<br><br>
+  <b>るるちゃん後カード再開</b>：既存1〜166は再生成しません。前回エラー直前に1枚できている場合も本文から拾って重複を避けます。カードは約0.9秒間隔で連続作成し、1枚ごとの5.5秒保存待ち・15件ごとの長時間休止は廃止しました。残りが全部できた最後に1回だけ下書き保存します。<br>
+  note側がカード生成後に403を返しても、本文に本物カードが入っていればそのカードを採用して次へ進みます。<br>
+  <b>投稿後カード一括削除</b>：公開・通知後、今回の通知カードだけを削除します。極薄は残します。</div>
   <a id="install" class="btn" href="./note-card-batch-bridge-v610.user.js">インストール／更新</a>
   <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js">Raw直結で開く</a>
   <div class="copybox"><input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js"><button id="copy" type="button">更新URLをコピー</button></div>
@@ -38,7 +37,7 @@
   else if(android) status.innerHTML='Androidブラウザを確認。Yahooアプリ等でUserscript拡張が反応しない場合は「更新URLをコピー」→Edgeのアドレス欄へ貼り付けて開いてください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptマネージャーの更新確認画面が開けば、そのまま更新してください。';});
   copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ 更新URLをコピーしました。Edgeのアドレス欄へ貼り付けて開いてください。':'コピーできませんでした。欄を長押ししてURLをコピーしてください。';});
-  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.9.18&ts='+ts;});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.9.19&ts='+ts;});
 })();
 </script>
 </body>
