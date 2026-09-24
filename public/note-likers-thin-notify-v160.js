@@ -54,7 +54,9 @@
       const seconds = Number(retryAfter);
       const retryAt = retryAfter ? (Number.isFinite(seconds) ? Date.now() + Math.max(0, seconds) * 1000 : Date.parse(retryAfter)) : 0;
       recordNetFailure('image-upload', ticket.url, status, message, retryAt);
-      page.__MUMEI_CARD_SAFETY__?.observeHttp(status, retryAfter);
+      // status 0 can be a transient/opaque/aborted native upload on Android.
+      // Do not poison the whole batch until the editor also confirms that the image failed.
+      if ([401, 403, 429].includes(Number(status))) page.__MUMEI_CARD_SAFETY__?.observeHttp(status, retryAfter);
     }
   }
 
@@ -113,6 +115,13 @@
   }
   function recentNetFailure(since) {
     return [...uploadNetFailures].reverse().find((x) => x.at >= since) || null;
+  }
+  function confirmUnknownNetworkFailure(net, uiError = '') {
+    if ((net && Number(net.status) === 0) || (uiError && !net)) {
+      page.__MUMEI_CARD_SAFETY__?.observeHttp(0, '');
+      return true;
+    }
+    return false;
   }
   function uploadFailureText(net) {
     if (!net) return '';
@@ -719,6 +728,7 @@
       if ((uiError || net) && !firstErrorAt) firstErrorAt = Date.now();
       // Keep waiting while the native image queue is active; unrelated requests and old toasts do not stop it.
       if (firstErrorAt && !uploadRequests.size && Date.now() - Math.max(lastGrowthAt, lastUploadActivityAt, firstErrorAt) >= UPLOAD_QUIET_MS) {
+        confirmUnknownNetworkFailure(net, uiError);
         return { fresh, failed: true, reason: uiError || '画像アップロード通信エラー', net };
       }
       const completed = imageArm?.nativeCommand ? verifiedImageCount(view, imageArm.dataset, imageArm.run) : null;
@@ -726,7 +736,9 @@
       await sleep(500);
     }
     const fresh = imageNodes(view).filter(hit => hit.node.attrs?.id && !beforeIds.has(String(hit.node.attrs.id)) && remoteImage(hit.node)).sort((a,b) => a.pos-b.pos);
-    return { fresh, failed: true, reason: '画像アップロード完了待ちタイムアウト', net: recentNetFailure(startedAt) };
+    const net = recentNetFailure(startedAt);
+    confirmUnknownNetworkFailure(net);
+    return { fresh, failed: true, reason: '画像アップロード完了待ちタイムアウト', net };
   }
   function imageInput(input) {
     if (!input || input.tagName !== 'INPUT' || input.type !== 'file') return false;

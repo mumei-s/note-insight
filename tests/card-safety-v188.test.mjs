@@ -1436,11 +1436,12 @@ test('18.8.17: combined action awaits addition success, rejects target changes, 
   assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/対象が変わった/);
 });
 
-test('18.8.17: upload status-zero retains the failure phase without inventing HTTP 403 or exposing signed query data', () => {
-  const e=sending(1);const api=e.loadModule('note-likers-thin-notify-v160.js','uploadFailureText,beginUploadRequest,endUploadRequest,recentNetFailure,setArm(a){imageArm=a}');api.setArm({consumed:true});
+test('18.8.18: status-zero is provisional until the editor confirms image failure', () => {
+  const e=sending(1);const api=e.loadModule('note-likers-thin-notify-v160.js','uploadFailureText,beginUploadRequest,endUploadRequest,recentNetFailure,confirmUnknownNetworkFailure,setArm(a){imageArm=a}');api.setArm({consumed:true});
   const ticket=api.beginUploadRequest({type:'image/png'},'https://uploads.example.com/image?secret=must-not-show');api.endUploadRequest(ticket,0,'Failed to fetch');
   const failure=api.recentNetFailure(0),text=api.uploadFailureText(failure);
-  assert.equal(failure.url,'https://uploads.example.com/image');assert.equal(e.safety.networkHold().code,0);assert.match(text,/画像送信 uploads.example.com：応答なし/);assert.doesNotMatch(text,/403|secret|must-not-show/);
+  assert.equal(failure.url,'https://uploads.example.com/image');assert.equal(e.safety.networkHold(),null);assert.match(text,/画像送信 uploads.example.com：応答なし/);assert.doesNotMatch(text,/403|secret|must-not-show/);
+  assert.equal(api.confirmUnknownNetworkFailure(failure),true);assert.equal(e.safety.networkHold().code,0);
 });
 
 test('18.8.17: whole bundle initializes once and detects older components without erasing existing state', () => {
