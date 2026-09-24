@@ -30,9 +30,9 @@
   function networkMessage(hold) {
     const wait = Math.max(0, Math.ceil(((hold.until || 0) - Date.now()) / 1000));
     return (hold.code ? `noteが通信を拒否しました（HTTP ${hold.code}）。` : 'noteとの通信に失敗しました。HTTPの状態は確認できません。') + '本文と途中記録は保持しています。' +
-      (wait ? `${wait}秒以上待ち、` : '') + 'noteの通常表示が戻ってから「通信停止解除」→「送」で再開してください';
+      (wait ? `${wait}秒以上待ち、` : '') + '失敗していた操作が使える状態に戻ってから「通信停止解除」→「追加＋カード続き」で再開してください';
   }
-  function assertNetwork() { const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
+  function assertNetwork() { page.__MUMEI_CARD_RUNTIME__?.verify?.(); const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
   function observeHttp(code, retryAfter) {
     code = Number(code);
     if (![0, 401, 403, 429].includes(code)) return false;
@@ -51,7 +51,7 @@
     if (active) throw new Error('現在の処理が停止するまでお待ちください');
     if (hold?.until > Date.now()) throw new Error(networkMessage(hold));
     localStorage.removeItem(networkKey); memoryHold = null; stopped = true;
-    status('通信停止を解除しました。自動再送はしません。「送」で不足分から再開できます');
+    status('通信停止を解除しました。自動再送はしません。「追加＋カード続き」で不足分から再開できます');
   }
   const titleNode = () => document.querySelector('textarea[placeholder*="タイトル"],input[placeholder*="タイトル"]');
   const meaningful = doc => Boolean(doc?.content?.some(n => n.type !== 'paragraph' || n.content?.length));
@@ -491,7 +491,7 @@
     const existing = panel.querySelector('[data-card-safety]');
     if (existing) { const resume = existing.querySelector('[data-safe="resume"]'); if (resume) resume.hidden = !networkHold(); return; }
     const row = document.createElement('div'); row.dataset.cardSafety = '1';
-    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.16</span>';
+    row.innerHTML = '<button type="button" data-safe="stop">停止</button> <button type="button" data-safe="backup">本文の控え</button> <button type="button" data-safe="audit">全件確認</button> <button type="button" data-safe="resume">通信停止解除</button><span style="font-size:9px"> v18.8.17</span>';
     row.querySelector('[data-safe="resume"]').hidden = !networkHold();
     row.addEventListener('click', e => { const a = e.target.closest('[data-safe]')?.dataset.safe; if (a === 'stop') stop(); if (a === 'backup') showBackups(); if (a === 'audit') void page.__MUMEI_CARD_AUDIT__?.check(); if (a === 'resume') { try { resumeNetwork(); mount(); } catch (err) { status(err.message, true); } } }); panel.append(row);
     if (networkHold()) status(networkMessage(networkHold()), true);
