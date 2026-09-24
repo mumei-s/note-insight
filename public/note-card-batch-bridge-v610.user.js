@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.0
-// @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
+// @version      18.9.1
+// @description  投稿者照合・全件名前＋さんのキャプション。最新対象から極薄を再構築し、通知カードを安全な間隔で連続作成。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -21,12 +21,12 @@
   'use strict';
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   if (page.__MUMEI_CARD_RUNTIME__) return;
-  if (page.__MUMEI_CARD_SAFETY__ || page.__MUMEI_LIKERS_THIN_NOTIFY_160__ || page.__MUMEI_NOTE_SOURCE_PICKER_163__) {
+  if (page.__MUMEI_CARD_SAFETY__ || page.__MUMEI_LIVE_REBUILD_V1__) {
     page.__MUMEI_CARD_SAFETY__?.stop();
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.0' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.1' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -943,17 +943,19 @@ async function buildCards(){
       run.cardKeys.push({url:row.url,key:cardKey(hit)});
       run.pendingCard=null;run.stage='cards_building';write(runKey(),run);
 
-      if(run.cardKeys.length-run.savedCardCount>=8){
+      if(run.cardKeys.length-run.savedCardCount>=5){
         await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 保存確認中…');
         run.savedCardCount=run.cardKeys.length;write(runKey(),run);
       }
       setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜保存済み '+run.savedCardCount);
-      await sleep(2500);
-      if(run.cardKeys.length>0&&run.cardKeys.length%32===0&&run.cardKeys.length<dataset.count){
+      await sleep(3000);
+      if(run.cardKeys.length>0&&run.cardKeys.length%20===0&&run.cardKeys.length<dataset.count){
         await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 区切り保存…');
         run.savedCardCount=run.cardKeys.length;write(runKey(),run);
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜403予防の45秒休止中…');
-        await sleep(45000);
+        const longRest = run.cardKeys.length % 60 === 0;
+        const restMs = longRest ? 180000 : 60000;
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜403予防の'+Math.ceil(restMs/1000)+'秒休止中…');
+        await sleep(restMs);
       }
     }
     await safety().save(view,'通知カード最終保存…');
@@ -1022,7 +1024,7 @@ page.__MUMEI_LIVE_REBUILD__={rebuildImages,buildCards,deleteOwnedCards};
 setInterval(mount,800);mount();
 })();
 
-  const names = ['__MUMEI_CARD_VISIBLE__','__MUMEI_CARD_CREATOR__','__MUMEI_THIN_IMAGES__','__MUMEI_PREPARED_BATCH__','__MUMEI_YOIZORA_ADDITIONS__'];
+  const names = ['__MUMEI_LIVE_REBUILD__'];
   const owned = names.map(name => page[name]);
   runtime.verify = () => {
     if (names.some((name,i) => page[name] !== owned[i])) throw new Error('極薄ツールの複数版が混在しています。本文を保持し、Tampermonkeyで最新の1つだけ有効にしてください');
