@@ -1012,7 +1012,7 @@
         }
         hit = positionCard(view, dataset, run, row, hit);
         recordCard(view, dataset, run, row, hit);
-        if (run.cardKeys.length - run.savedCardCount >= 25) await saveCards(run, dataset, '途中保存');
+        if (run.cardKeys.length - run.savedCardCount >= (page.navigator?.userAgent ? 25 : 10)) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
         if (run.cardKeys.length < dataset.rows.length) await sleep(900);
       }
@@ -1046,7 +1046,7 @@
       const holdCode = Number(hold?.code || 0);
       const transient = !hold && /(?:通信|network|timeout|タイムアウト|failed to fetch|err_network|新規embカード確認タイムアウト)/i.test(message);
       const retry429 = holdCode === 429;
-      if (transient || retry429) {
+      if ((transient || retry429) && page.navigator?.userAgent) {
         const count = Number(run.autoRetryCount || 0) + 1;
         run.autoRetryCount = count;
         setJSON(runKey(), run);
