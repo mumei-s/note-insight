@@ -912,7 +912,7 @@
       return;
     }
     setPaused(false);
-    let operation, imagesComplete = false;
+    let operation, imagesComplete = false, currentRow = null;
     setBusy(true);
     try {
       const view = findView();
@@ -928,6 +928,9 @@
       const missing = reconcileCards(view, dataset, run);
       run.stage = 'cards_building';
       setJSON(runKey(), run);
+      // Persist recovered cards before a slow iframe display check can stop
+      // this run. Display proof remains mandatory before continuing/completing.
+      if (run.cardKeys.length) await saveCards(run, dataset, '再開前の保存確認');
       if (page.__MUMEI_CARD_VISIBLE__) {
         let displayed = 0;
         for (const entry of run.cardKeys) {
@@ -938,7 +941,6 @@
         }
       }
       setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count} 照合済み${missing ? `・未保存${missing}件を補完` : ''}`);
-      if (run.cardKeys.length) await saveCards(run, dataset, '保存確認');
 
       // Finish the outstanding native command first, even if an earlier unsaved
       // batch disappeared on reopen. Then fill missing rows in dataset order.
@@ -949,6 +951,7 @@
           if (run.pendingCard?.url === row.url) { run.pendingCard = null; setJSON(runKey(), run); }
           continue;
         }
+        currentRow = row;
         if (isPaused() || safety().stopped()) {
           run.stage = 'cards_paused';
           setJSON(runKey(), run);
@@ -976,15 +979,18 @@
           setJSON(runKey(), run);
           const progress = `${run.cardKeys.length + 1}/${dataset.count}`;
           const completed = `${run.cardKeys.length}/${dataset.count}`;
-          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード確認済み ${completed}｜処理中 ${progress}…`);
+          setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード確認済み ${completed}｜対象 ${dataset.rows.indexOf(row) + 1}番 ${row.creator || ''}・処理中 ${progress}…`);
           const attempt = activeConversion = { node: insertedUrlNode, error: null, progress, completed, images: imageCount };
           const command = noteUrlCommandFactory()(row.url, error => { attempt.error = error; });
-          const handled = command(view.state, (transaction) => {
+          const handled = command(view.state, (transaction, consumedNode = attempt.node) => {
             if (activeConversion !== attempt || attempt.error) return;
             const current = currentBaseRun();
             if (current?.datasetId !== run.datasetId || current.pendingCard?.url !== row.url || !['cards_building', 'cards_paused'].includes(current.stage)) return;
             if (safety().busy() && !busy) return;
-            try { safety().dispatch(view, transaction, [attempt.node]); } catch (e) { attempt.error = e; }
+            try {
+              if (!safety().sameContent(attempt.node, consumedNode)) throw new FatalError('作業用URLが変更されたためカード化を止めました');
+              safety().dispatch(view, transaction, [consumedNode]);
+            } catch (e) { attempt.error = e; }
           }, view);
           if (!handled) throw new FatalError(`${progress} note正規URLコマンド未処理`);
           hit = await waitForNewCard(view, row.url, beforeKeys, attempt);
@@ -995,7 +1001,7 @@
         }
         hit = positionCard(view, dataset, run, row, hit);
         if (page.__MUMEI_CARD_VISIBLE__) {
-          setStatus(`通知カード確認済み ${run.cardKeys.length}/${dataset.count}｜次の1件の本文表示を確認中…`);
+          setStatus(`通知カード確認済み ${run.cardKeys.length}/${dataset.count}｜対象 ${dataset.rows.indexOf(row) + 1}番 ${row.creator || ''} の本文表示を確認中…`);
           hit = await page.__MUMEI_CARD_VISIBLE__.wait(view, hit, row.url);
         }
         recordCard(view, dataset, run, row, hit);
@@ -1021,8 +1027,13 @@
       setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${dataset.count}/${dataset.count} 完成・保存 ✅ 全件照合済み・不足0・重複0 このまま公開/更新`);
       page.alert(`準備完了\n\n画像: ${imageCount}件（保持）\n通知カード: ${dataset.count}件（保存確認済み）\n\nそのまま公開/更新。通知後「削」。`);
     } catch (error) {
+      // An error ends this attempt. A late API reply must never keep editing
+      // after the user sees "stopped". Pending work remains for an explicit resume.
+      activeConversion = null;
+      page.__MUMEI_CARD_VISIBLE__?.cancel();
       if (operation) {
-        run.cardError = { at: Date.now(), url: run.pendingCard?.url || '', message: error?.message || String(error) };
+        run.stage = 'cards_paused';
+        run.cardError = { at: Date.now(), url: run.pendingCard?.url || currentRow?.url || '', message: error?.message || String(error) };
         setJSON(runKey(), run);
       }
       page.__MUMEI_CARD_SAFETY__?.stop();
@@ -1031,7 +1042,8 @@
         try { const view = findView(); confirmed = (run.cardKeys || []).filter(e => { const hit = embedNodes(view).find(h => cardKey(h) === e.key); return hit && page.__MUMEI_CARD_VISIBLE__.inspect(view, hit, e.url); }).length; }
         catch (_) { confirmed = 0; }
       }
-      setStatus(`${imagesComplete ? `画像 ${dataset.count}/${dataset.count} 完了｜` : ''}通知カード停止 ${confirmed}/${dataset.count}：${error?.message || String(error)}｜本文・画像は保持。「送」で続きから`, true);
+      const at = currentRow ? `｜対象 ${dataset.rows.indexOf(currentRow) + 1}番 ${currentRow.creator || ''}` : '';
+      setStatus(`${imagesComplete ? `画像 ${dataset.count}/${dataset.count} 完了｜` : ''}通知カード停止 ${confirmed}/${dataset.count}（保存確認 ${run.savedCardCount || 0}件）${at}：${error?.message || String(error)}｜本文・画像・途中記録を保持。自動再開はしません`, true);
     } finally { page.__MUMEI_CARD_SAFETY__?.end(operation); setBusy(false); }
   }
 
