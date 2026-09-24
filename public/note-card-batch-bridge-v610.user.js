@@ -2778,7 +2778,7 @@
     if (page.__MUMEI_CARD_VISIBLE__) return (noteUrlCommand = page.__MUMEI_CARD_VISIBLE__.factory(req));
     throw new FatalError('note正規URLコマンドが見つかりません');
   }
-  function embedNodes(view) {  function embedNodes(view) { return safety().index(view).embeds; }
+  function embedNodes(view) { return safety().index(view).embeds; }
   function imageNodes(view) { return safety().index(view).images; }
   function cardKey(hit) { return String(hit?.node?.attrs?.embeddedContentKey || ''); }
   function cardUrl(hit) { return normalizeUrl(hit?.node?.attrs?.src); }
@@ -4636,7 +4636,7 @@ page.__MUMEI_YOIZORA_ADDITIONS__={"format":"mumei-thin-additions-v1","batchId":"
     }
     return missing;
   }
-  function requireCurrent(dataset) {  function requireCurrent(dataset) {
+  function requireCurrent(dataset) {
     const missing = missingAdditions(dataset);
     if (missing.length) throw new Error(`追加${missing.length}名（${missing.map(r => r.creator).join('・')}）が未反映です。「追加分」で既存の画像・カードを保持して反映してください`);
   }
