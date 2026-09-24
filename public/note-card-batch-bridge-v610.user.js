@@ -604,6 +604,7 @@
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
   setInterval(() => { if (active && active.key === key() && read(leaseKey())?.owner === owner) localStorage.setItem(leaseKey(), JSON.stringify({ owner, until: Date.now() + 30000 })); }, 10000);
 })();
+
 // MODULE: note-card-visible-v18814.js
 (function () {
   'use strict';
@@ -2150,6 +2151,7 @@
   setInterval(mount, 600);
   mount();
 })();
+
 // MODULE: note-source-picker-v163.js
 (function () {
   'use strict';
@@ -3954,6 +3956,7 @@
   // Additions, recovery and link saves start only from an explicit action.
   // Reopening an old pending upload must not restart network work on a timer.
 })();
+
 // MODULE: note-tool-floating-ui-v164.js
 (function () {
   'use strict';
