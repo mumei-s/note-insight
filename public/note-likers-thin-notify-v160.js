@@ -679,12 +679,40 @@
     if (!row || !row.finalMarker) throw new FatalError('確認用サブ垢記事が最後にありません');
     return row;
   }
+  function cleanupFailedThinArtifacts(view, row) {
+    const caption = page.__MUMEI_CARD_CREATOR__?.caption(row) || row.caption || ((row.creator || 'noteクリエイター') + 'さん');
+    const stale = [];
+    for (const hit of imageNodes(view)) {
+      const src = String(hit.node.attrs?.src || '');
+      const link = normalizeUrl(hit.node.attrs?.link);
+      if (!remoteImage(hit.node) && hit.node.textContent === caption && (!link || link === normalizeUrl(row.url))) stale.push(hit);
+    }
+    let boundary = -1;
+    for (const hit of [...imageNodes(view), ...safety().index(view).embeds]) {
+      if (remoteImage(hit.node) || hit.node.type?.name === 'embed') boundary = Math.max(boundary, hit.pos);
+    }
+    view.state.doc.forEach((node, pos) => {
+      if (pos > boundary && node.type?.name === 'paragraph' && String(node.textContent || '').trim() === caption) stale.push({ node, pos });
+    });
+    if (stale.length) {
+      const unique = [...new Map(stale.map(hit => [hit.pos, hit])).values()].sort((a,b)=>b.pos-a.pos);
+      safety().remove(view, unique);
+    }
+    const rec = run.images?.[row.url];
+    if (rec) {
+      const hit = findImageByState(view, rec, row.url);
+      if (!hit || !remoteImage(hit.node)) delete run.images[row.url];
+    }
+    setRun(run);
+  }
+
   async function insertHostedPreparedImages(view, rows, dataset, run) {
     if (!rows.length) return 0;
     const template = safety().index(view).images.find(hit => remoteImage(hit.node))?.node;
     if (!template || template.type?.name !== 'image') throw new FatalError('外部復旧用の画像ひな形を確認できません');
     for (const row of rows) {
       safety().check(view);
+      cleanupFailedThinArtifacts(view, row);
       const src = preparedHostedUrl(row);
       if (!src) throw new FatalError('外部復旧画像がありません: ' + (row.index || row.creator || row.url));
       const last = confirmationRow(dataset);
