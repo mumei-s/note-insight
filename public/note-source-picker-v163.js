@@ -1012,7 +1012,7 @@
         }
         hit = positionCard(view, dataset, run, row, hit);
         recordCard(view, dataset, run, row, hit);
-        if (run.cardKeys.length - run.savedCardCount >= (page.navigator?.userAgent ? 25 : 10)) await saveCards(run, dataset, '途中保存');
+        if (run.cardKeys.length - run.savedCardCount >= 10) await saveCards(run, dataset, '途中保存');
         setStatus(`画像 ${imageCount}/${dataset.count} 完了｜通知カード ${run.cardKeys.length}/${dataset.count}（保存確認 ${run.savedCardCount}件）`);
         if (run.cardKeys.length < dataset.rows.length) await sleep(900);
       }
