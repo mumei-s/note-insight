@@ -20,7 +20,8 @@
     const tagKeys = [];
     for (let i = 0; i < data.rows.length; i++) {
       const row = data.rows[i];
-      if (row.index !== i + 1 || row.caption !== page.__MUMEI_CARD_CREATOR__.caption(row) || !/^[a-f0-9]{64}$/.test(row.pngSha256 || '')) throw new Error(`行${i + 1}の氏名・画像対応が不正です`);
+      const dynamic = row.dynamicAddition === true;
+      if (row.index !== i + 1 || row.caption !== page.__MUMEI_CARD_CREATOR__.caption(row) || (!dynamic && !/^[a-f0-9]{64}$/.test(row.pngSha256 || ''))) throw new Error(`行${i + 1}の氏名・画像対応が不正です`);
       const repeatedTagAuthor = allTagArticles && row.articleSource === 'hashtag' && people.get(row.urlname) === 'hashtag';
       if (urls.has(row.url) || (people.has(row.urlname) && !repeatedTagAuthor)) throw new Error('同じ人物・記事が重複しています');
       people.set(row.urlname, row.articleSource); urls.add(row.url);
@@ -49,6 +50,72 @@
     await cache.put(cacheKey(row), new page.Response(bytes, { headers: { 'content-type':'image/png', 'x-mumei-url':encodeURIComponent(row.url) } }));
     return row;
   }
+  function contentList(payload) {
+    const data = payload?.data && typeof payload.data === 'object' ? payload.data : {};
+    return Array.isArray(data.contents) ? data.contents : Array.isArray(data.notes) ? data.notes : [];
+  }
+  function requestJSON(url) {
+    return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,responseType:'text',timeout:45000,
+      headers:{Accept:'application/json,text/plain,*/*'},
+      onload:r=>{try{if(r.status!==200)throw new Error('HTTP '+r.status);resolve(JSON.parse(r.responseText||'{}'));}catch(e){reject(e);}},
+      onerror:()=>reject(new Error('通信失敗')),ontimeout:()=>reject(new Error('通信タイムアウト'))}));
+  }
+  function jstDay(value) {
+    const d = new Date(value);
+    if (!Number.isFinite(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
+    const pick = type => parts.find(p=>p.type===type)?.value || '';
+    return pick('year')+'-'+pick('month')+'-'+pick('day');
+  }
+  function noteRow(raw, urlname) {
+    const note = raw?.note && typeof raw.note === 'object' ? raw.note : raw;
+    if (!note || typeof note !== 'object') return null;
+    const key = String(note.key || '').trim();
+    if (!/^n[a-f0-9]{12}$/i.test(key)) return null;
+    const user = note.user || note.author || {};
+    const id = String(urlname || user.urlname || user.url_name || '').trim().replace(/^@/,'').toLowerCase();
+    if (!id) return null;
+    let thumb = String(note.eyecatch_url || note.image_url || note.thumbnail_url || note.eyecatch?.url || '').trim();
+    if (thumb.startsWith('//')) thumb='https:'+thumb;
+    let avatar = String(user.profileImageUrl || user.profile_image_url || user.user_profile_image_url || '').trim();
+    if (avatar.startsWith('//')) avatar='https:'+avatar;
+    return {
+      urlname:id, creator:String(user.nickname || user.name || id).trim(), actorUrl:'https://note.com/'+id,
+      actorImageUrl:avatar, url:'https://note.com/'+id+'/n/'+key, title:String(note.name || note.title || '無題の記事').trim(),
+      latestKey:key, thumbUrl:thumb, publishAt:String(note.publishAt || note.publish_at || note.published_at || note.publishedAt || note.created_at || '').trim() || null,
+      sourceKeys:[], sourceTags:[], manuallyAdded:true, dynamicAddition:true
+    };
+  }
+  async function resolveProfile(urlname) {
+    const id = String(urlname || '').trim().replace(/^https?:\/\/(?:www\.)?note\.com\//i,'').split(/[/?#]/)[0].replace(/^@/,'').toLowerCase();
+    if (!/^[a-z0-9_]+$/i.test(id)) throw new Error('追加プロフィールIDが不正です: '+urlname);
+    const plain = await requestJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)+'/contents?kind=note&page=1&disabled_pinned=true&with_notes=false');
+    const fixed = await requestJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)+'/contents?kind=note&page=1&disabled_pinned=false&with_notes=false');
+    const latest = noteRow(contentList(plain)[0], id);
+    const pinned = noteRow(contentList(fixed)[0], id);
+    const today = jstDay(Date.now()), yesterday = jstDay(Date.now()-86400000);
+    const recent = latest && [today,yesterday].includes(jstDay(latest.publishAt));
+    const row = recent ? latest : (pinned || latest);
+    if (!row) throw new Error('公開記事がありません: '+id);
+    row.articleSource = recent ? 'todayYesterday' : 'fixedFallback';
+    row.selectionCheckedAt = new Date().toISOString();
+    await page.__MUMEI_CARD_CREATOR__.verifyRows([row]);
+    row.caption = page.__MUMEI_CARD_CREATOR__.caption(row);
+    return row;
+  }
+  async function dynamicRows(patch, dataset) {
+    const people = new Set(dataset.rows.map(r=>String(r.urlname||'').toLowerCase()));
+    const out = [];
+    for (const raw of Array.isArray(patch?.profiles) ? patch.profiles : []) {
+      const id = String(raw || '').replace(/^https?:\/\/(?:www\.)?note\.com\//i,'').split(/[/?#]/)[0].replace(/^@/,'').toLowerCase();
+      if (!id || people.has(id)) continue;
+      status('追加プロフィールを確認中… '+id);
+      const row = await resolveProfile(id);
+      people.add(id); out.push(row);
+    }
+    return out;
+  }
+
   function withAdditions(data) {
     const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
     if (!patch || patch.batchId !== data.batchId) return data;
@@ -63,29 +130,39 @@
   }
   async function sync(dataset, run) {
     const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
-    if (!dataset.preparedBatch || !patch || !dataset.rows.every(r => r.preparedBatchId === patch.batchId)) return 0;
+    if (!dataset.preparedBatch || !patch || !dataset.rows.every(r => r.dynamicAddition || r.preparedBatchId === patch.batchId)) return 0;
     if (run.datasetId !== dataset.datasetId) throw new Error('この記事と対象一覧の記録が一致しません');
     const before = new Set(dataset.rows.map(r => r.url));
-    const combined = withAdditions({format:'mumei-thin-prepared-v1',batchId:patch.batchId,count:dataset.count,rows:dataset.rows,
+    let combined = withAdditions({format:'mumei-thin-prepared-v1',batchId:patch.batchId,count:dataset.count,rows:dataset.rows,
       hashtagArticleMode:'all',hashtagArticleKeys:dataset.rows.filter(r=>r.articleSource==='hashtag').map(r=>r.latestKey)});
+    const dynamic = await dynamicRows(patch, combined);
+    if (dynamic.length) {
+      const rows = [...combined.rows.slice(0,-1), ...dynamic, combined.rows.at(-1)].map((r,i)=>({...r,index:i+1}));
+      combined = {...combined,rows,count:rows.length};
+      validate(combined);
+    }
     const additions = combined.rows.filter(r => !before.has(r.url));
     if (!additions.length) return 0;
     const cache = await page.caches.open(CACHE), prepared = new Map();
-    for (const row of additions) prepared.set(row.url, await prepareOne(row, patch.batchId, cache));
+    for (const row of additions) prepared.set(row.url, row.dynamicAddition ? row : await prepareOne(row, patch.batchId, cache));
     const next = {...dataset, count:combined.count, rows:combined.rows.map(r => prepared.get(r.url) || r)};
-    // Keep the run identity, completed image records and pending upload intact.
     localStorage.setItem(DATA, JSON.stringify(next)); Object.assign(dataset, next);
-    if (run.cardKeys?.length) { run.stage = 'cards_paused'; run.cardAudit = null; run.savedCardCount = 0; localStorage.setItem(runKey(), JSON.stringify(run)); }
-    status(`追加${additions.length}件を反映｜全${next.count}件｜完成画像を保持して再開`);
+    if (run.cardKeys?.length) { run.stage = 'cards_paused'; run.cardAudit = null; localStorage.setItem(runKey(), JSON.stringify(run)); }
+    status(`追加${additions.length}件を反映｜全${next.count}件｜既存の画像・カードを保持して再開`);
     return additions.length;
   }
   function missingAdditions(dataset) {
     const patch = page.__MUMEI_YOIZORA_ADDITIONS__;
-    if (!dataset?.preparedBatch || !patch || !dataset.rows.every(r => r.preparedBatchId === patch.batchId)) return [];
-    const people = new Set(dataset.rows.map(r => r.urlname));
-    return patch.rows.filter(r => !people.has(r.urlname));
+    if (!dataset?.preparedBatch || !patch || !dataset.rows.every(r => r.dynamicAddition || r.preparedBatchId === patch.batchId)) return [];
+    const people = new Set(dataset.rows.map(r => String(r.urlname || '').toLowerCase()));
+    const missing = patch.rows.filter(r => !people.has(String(r.urlname || '').toLowerCase()));
+    for (const raw of Array.isArray(patch.profiles) ? patch.profiles : []) {
+      const id = String(raw || '').replace(/^https?:\/\/(?:www\.)?note\.com\//i,'').split(/[/?#]/)[0].replace(/^@/,'').toLowerCase();
+      if (id && !people.has(id)) missing.push({urlname:id,creator:id,dynamicAddition:true});
+    }
+    return missing;
   }
-  function requireCurrent(dataset) {
+  function requireCurrent(dataset) {  function requireCurrent(dataset) {
     const missing = missingAdditions(dataset);
     if (missing.length) throw new Error(`追加${missing.length}名（${missing.map(r => r.creator).join('・')}）が未反映です。「追加分」で既存の画像・カードを保持して反映してください`);
   }
@@ -107,9 +184,10 @@
       const next = { version:'16.0.0', articleKey:articleKey(), datasetId, stage:'extracted', images:{}, cardKeys:[], pending:null };
       // Store only verified metadata; PNGs stay outside localStorage/body backups.
       localStorage.setItem(DATA, JSON.stringify(dataset)); localStorage.setItem(runKey(), JSON.stringify(next));
-      status(`完成データ ${rows.length}件｜#${data.hashtagArticleKeys?.length || data.hashtagPeople || ''}件が先頭・最後は実績の算数｜画像を準備します`);
+      await sync(dataset, next);
+      status(`完成データ ${dataset.count}件｜#${data.hashtagArticleKeys?.length || data.hashtagPeople || ''}件が先頭・最後は実績の算数｜画像を準備します`);
       document.querySelector('#mumei-note-source-picker-v163 button[data-a="image"]')?.click();
-      return rows.length;
+      return dataset.count;
     } finally { busy = false; }
   }
   function download() { return new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url:URL_BATCH+'?v=1886&ts='+Date.now(),timeout:120000,responseType:'text',onload:r=>{try{if(r.status!==200)throw new Error('完成データ HTTP '+r.status);resolve(JSON.parse(r.responseText));}catch(e){reject(e);}},onerror:()=>reject(new Error('完成データの通信失敗')),ontimeout:()=>reject(new Error('完成データの時間切れ'))})); }
