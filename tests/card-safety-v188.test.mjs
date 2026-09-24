@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
+import { wrapModules } from '../scripts/build-card-userscript.mjs';
 
 const path = new URL('../public/', import.meta.url);
 const source = name => fs.readFileSync(new URL(name, path), 'utf8');
@@ -946,8 +947,9 @@ test('実機と同じ200枚済み・旧0/40記録から再開し、署名取得4
   assert.equal(e.safety.index(e.view).images.length,202);
   assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/HTTP 429/);
   let run=JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key));assert.equal(run.pending.stage,'failed');assert.ok(run.pending.retryAt>e.time());
-  await base.insertThinImages();assert.equal(attempted.length,3);assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/通信制限待ち/);
+  await base.insertThinImages();assert.equal(attempted.length,3);assert.match(e.statuses.get('mumei-likers-thin-status-v160').textContent,/HTTP 429/);
   await new Promise(resolve=>e.page.setTimeout(resolve,120000));
+  assert.equal(e.safety.networkHold().code,429);e.safety.resumeNetwork();
   await base.insertThinImages();
   assert.equal(e.safety.index(e.view).images.length,308);assert.equal(attempted.length,109);assert.equal(maxActive,1);
   run=JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key));assert.equal(Object.keys(run.images).length,308);assert.equal(run.pending,null);
@@ -1125,7 +1127,7 @@ test('18.8.16: completed-image controls show continuation/deletion without reset
   const dom = new JSDOM(`<body><div id="mumei-note-source-picker-v163"><div class="mumei-prince-special-v184"><div>設定</div><textarea data-source></textarea><div class="choices">選択</div><input data-count><button data-start>開始</button><div id="mumei-prepared-load"><button>宵空セット</button><button>データ読込</button><button data-prepared-additions>追加分</button></div></div><div class="actions"><button data-a="send">送</button><button data-a="delete">削</button></div><div data-card-safety><button data-safe="stop">停止</button><button data-safe="backup">本文の控え</button><button data-safe="audit">全件確認</button></div><div id="mumei-note-source-status-v163" data-bad="1">エラーの詳しい内容</div></div></body>`, {url:'https://editor.note.com/notes/'+key+'/edit',runScripts:'outside-only'});
   const w = dom.window, d = w.document;
   w.setInterval = () => 1; w.clearInterval = () => {};
-  w.localStorage.setItem('mumei_likers_thin_dataset_v160', JSON.stringify({datasetId:'test',count:2}));
+  w.localStorage.setItem('mumei_likers_thin_dataset_v160', JSON.stringify({datasetId:'test',count:2,preparedBatch:true}));
   w.localStorage.setItem('mumei_likers_thin_run_v160:'+key, JSON.stringify({datasetId:'test',images:{a:{},b:{}},cardKeys:[]}));
   w.__MUMEI_PREPARED_BATCH__={missingAdditions:()=>[]};
   try {
@@ -1141,7 +1143,7 @@ test('18.8.16: completed-image controls show continuation/deletion without reset
     w.__MUMEI_CARD_SAFETY__={networkHold:()=>({code:403})};w.__testControls(panel);assert.notEqual(display('[data-safe="backup"]'),'none');
     let sends=0,deletes=0;d.querySelector('[data-a="send"]').onclick=()=>sends++;d.querySelector('[data-a="delete"]').onclick=()=>deletes++;
     d.querySelector('[data-g="send"]').click();d.querySelector('[data-g="delete"]').click();assert.equal(sends,1);assert.equal(deletes,1);
-    w.__MUMEI_PREPARED_BATCH__.missingAdditions=()=>[{}];w.__testControls(panel);assert.notEqual(display('[data-prepared-additions]'),'none');
+    w.__MUMEI_PREPARED_BATCH__.missingAdditions=()=>[{}];w.__testControls(panel);assert.equal(display('[data-prepared-additions]'),'none');assert.equal(d.querySelector('[data-g="send"]').textContent,'追加＋カード続き');
     w.localStorage.removeItem('mumei_likers_thin_run_v160:'+key);w.__testControls(panel);
     assert.notEqual(display('[data-start]'),'none');assert.notEqual(display('[data-g="image"]'),'none');
   } finally {w.close();}
@@ -1390,4 +1392,62 @@ test('18.8.15: adding a card to a completed set preserves old keys, puts the add
     assert.deepEqual(Array.from(e.safety.index(e.view).embeds,h=>h.node.attrs.src),e.dataset.rows.map(r=>r.url));
     await e.module.deleteCardsOnly();assert.equal(e.safety.index(e.view).embeds.length,0);assert.equal(e.safety.index(e.view).images.length,3);assert.match(e.encode(),/消さない本文/);
   } finally {e.close();}
+});
+
+test('18.8.17: one action adds missing images, verifies saved links, then resumes cards; failure never enters card work', async () => {
+  for (const fail of [false,true]) {
+    const e=sending(3);
+    e.dataset.preparedBatch=true;
+    const keptCard=embed('embkept',e.rows[0].url);e.view.dispatch(e.view.state.tr.insert(e.view.state.doc.content.size,keptCard));
+    e.run.cardKeys=[{key:'embkept',url:e.rows[0].url}];
+    e.rows.forEach((r,i)=>Object.assign(r,{urlname:'user',latestKey:r.url.split('/').at(-1),creator:'作者'+i,preparedBatchId:'test',creatorVerified:{urlname:'user',articleKey:r.url.split('/').at(-1),name:'作者'+i}}));
+    const missing=e.safety.tracked(e.view,e.run.images[e.rows[2].url]);e.view.dispatch(e.view.state.tr.delete(missing.pos,missing.pos+missing.node.nodeSize));delete e.run.images[e.rows[2].url];
+    e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));e.storage.set('mumei_likers_thin_run_v160:'+key,JSON.stringify(e.run));
+    e.page.File=File;e.page.Blob=Blob;e.page.DataTransfer=class{constructor(){this.list=[];this.items={add:f=>this.list.push(f)}}get files(){return this.list}};
+    e.page.__MUMEI_PREPARED_BATCH__={image:async()=>new Blob(['png'],{type:'image/png'}),missingAdditions:()=>[]};
+    e.loadModule('note-card-creator-v1883.js','caption');
+    const images=e.loadModule('note-likers-thin-notify-v160.js','insertThinImages,beginUploadRequest,endUploadRequest,setView(v){viewCache=v;selectionCache={atEnd:()=>({})}},setNative(fn){preparedImageCommand=()=>fn}');images.setView(e.view);
+    let uploads=0;
+    images.setNative((view,files,pos)=>{
+      uploads++;assert.equal(files.length,1);
+      if(fail){const t=images.beginUploadRequest(files[0],'https://note.com/api/v3/images/upload/presigned_post');images.endUploadRequest(t,403,'Forbidden');}
+      else view.dispatch(view.state.tr.insert(pos+1,image('new3')));
+      return true;
+    });
+    const guard=e.loadModule('note-link-guard-v178.js','hardenAllBeforeSend,setView(v){viewCache=v},setUrls(fn){htmlLinkedUrls=fn}');guard.setView(e.view);
+    guard.setUrls(()=>new Set(e.safety.index(e.view).images.map(h=>h.node.attrs.link)));
+    e.safety.setSerializer(v=>JSON.stringify(v.state.doc.toJSON()));e.safety.setDraftParser(n=>e.view.state.schema.nodeFromJSON(JSON.parse(n.body)));
+    const beforeText=e.existing.textContent;
+    const ok=await guard.hardenAllBeforeSend();assert.equal(ok,!fail,e.statuses.get('mumei-note-source-status-v163').textContent);assert.equal(uploads,1);
+    if(ok){await e.module.resumableSend();assert.equal(e.calls(),2);assert.equal(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key)).stage,'cards_ready');}
+    else {assert.equal(e.calls(),0);assert.equal(e.safety.networkHold().code,403);assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/画像受付 note.com：HTTP 403/);assert.doesNotMatch(e.statuses.get('mumei-note-source-status-v163').textContent,/「画」/);assert.equal(await guard.hardenAllBeforeSend(),false);assert.equal(uploads,1);}
+    assert.equal(e.safety.index(e.view).images.length,fail?2:3);assert.ok(e.view.state.doc.nodes.some(n=>n.textContent===beforeText));
+    assert.ok(e.safety.index(e.view).embeds.some(h=>h.node===keptCard));assert.ok(JSON.parse(e.storage.get('mumei_likers_thin_run_v160:'+key)).cardKeys.some(r=>r.key==='embkept'));
+  }
+});
+
+test('18.8.17: combined action awaits addition success, rejects target changes, and serializes repeated clicks', async () => {
+  const e=sending(1);e.dataset.preparedBatch=true;e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify(e.dataset));
+  e.page.__MUMEI_PREPARED_BATCH__={missingAdditions:()=>[{}]};let resolve,calls=0,links=0;
+  e.page.__MUMEI_THIN_IMAGES__={run:()=>{calls++;return new Promise(r=>{resolve=r})}};
+  const guard=e.loadModule('note-link-guard-v178.js','hardenAllBeforeSend,setView(v){viewCache=v},countLinks(fn){forceRelink=fn}');guard.setView(e.view);guard.countLinks(async()=>{links++});
+  const job=guard.hardenAllBeforeSend();assert.equal(await guard.hardenAllBeforeSend(),false);assert.equal(calls,1);assert.equal(links,0);
+  e.storage.set('mumei_likers_thin_dataset_v160',JSON.stringify({...e.dataset,datasetId:'changed'}));resolve(true);assert.equal(await job,false);assert.equal(links,0);
+  assert.match(e.statuses.get('mumei-note-source-status-v163').textContent,/対象が変わった/);
+});
+
+test('18.8.17: upload status-zero retains the failure phase without inventing HTTP 403 or exposing signed query data', () => {
+  const e=sending(1);const api=e.loadModule('note-likers-thin-notify-v160.js','uploadFailureText,beginUploadRequest,endUploadRequest,recentNetFailure,setArm(a){imageArm=a}');api.setArm({consumed:true});
+  const ticket=api.beginUploadRequest({type:'image/png'},'https://uploads.example.com/image?secret=must-not-show');api.endUploadRequest(ticket,0,'Failed to fetch');
+  const failure=api.recentNetFailure(0),text=api.uploadFailureText(failure);
+  assert.equal(failure.url,'https://uploads.example.com/image');assert.equal(e.safety.networkHold().code,0);assert.match(text,/画像送信 uploads.example.com：応答なし/);assert.doesNotMatch(text,/403|secret|must-not-show/);
+});
+
+test('18.8.17: whole bundle initializes once and detects older components without erasing existing state', () => {
+  const page={calls:0};page.window=page;const ctx=vm.createContext(page);
+  const code=wrapModules('page.calls++;page.__MUMEI_CARD_VISIBLE__={};page.__MUMEI_THIN_IMAGES__={};');
+  vm.runInContext(code,ctx);vm.runInContext(code,ctx);assert.equal(page.calls,1);assert.doesNotThrow(()=>page.__MUMEI_CARD_RUNTIME__.verify());
+  page.__MUMEI_CARD_VISIBLE__={old:true};assert.throws(()=>page.__MUMEI_CARD_RUNTIME__.verify(),/複数版/);
+  let stopped=0,notice='';const old={window:null,calls:0,__MUMEI_CARD_SAFETY__:{stop(){stopped++},status(s){notice=s}},saved:'keep'};old.window=old;
+  vm.runInContext(code,vm.createContext(old));assert.equal(old.calls,0);assert.equal(old.saved,'keep');assert.equal(stopped,1);assert.match(notice,/旧版/);
 });
