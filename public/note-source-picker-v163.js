@@ -608,7 +608,7 @@
     if (page.__MUMEI_CARD_VISIBLE__) return (noteUrlCommand = page.__MUMEI_CARD_VISIBLE__.factory(req));
     throw new FatalError('note正規URLコマンドが見つかりません');
   }
-  function embedNodes(view) {  function embedNodes(view) { return safety().index(view).embeds; }
+  function embedNodes(view) { return safety().index(view).embeds; }
   function imageNodes(view) { return safety().index(view).images; }
   function cardKey(hit) { return String(hit?.node?.attrs?.embeddedContentKey || ''); }
   function cardUrl(hit) { return normalizeUrl(hit?.node?.attrs?.src); }
