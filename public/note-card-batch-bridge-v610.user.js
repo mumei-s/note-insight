@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.14
+// @version      18.9.15
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.14' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.15' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -379,11 +379,12 @@
       page.fetch = async function (...args) {
         const method = args[1]?.method || args[0]?.method || 'GET', url = args[0]?.url || args[0];
         const metadata = /^GET$/i.test(method) && metadataUrl(url);
+        const noteWrite = /^(POST|PUT|PATCH)$/i.test(method) && Boolean(apiUrl(url));
         const ticket = requestStart(method, url, args[1]?.body);
         let response;
         try { response = await fetch(...args); }
-        catch (e) { if (active && (ticket || metadata)) observeHttp(0); throw e; }
-        if (ticket || metadata) {
+        catch (e) { if (active && (ticket || metadata || noteWrite)) observeHttp(0); throw e; }
+        if (ticket || metadata || noteWrite) {
           if (active) observeHttp(response.status, response.headers?.get?.('retry-after'));
           try { const payload = await response.clone().json(); if (metadata) observeNoteResponse(url, response.status, payload); requestEnd(ticket, response.status, payload); } catch (_) { /* no proof */ }
         }
@@ -396,9 +397,10 @@
       proto.open = function (method, url, ...rest) { this.__mumeiSave = { method, url }; return open.call(this, method, url, ...rest); };
       proto.send = function (...args) {
         const info = this.__mumeiSave, metadata = /^GET$/i.test(info?.method || '') && metadataUrl(info?.url);
+        const noteWrite = /^(POST|PUT|PATCH)$/i.test(info?.method || '') && Boolean(apiUrl(info?.url));
         const t = requestStart(info?.method, info?.url, args[0]);
-        if (t || metadata) this.addEventListener('error', () => { if (active) observeHttp(0); }, { once: true });
-        if (t || metadata) this.addEventListener('load', () => {
+        if (t || metadata || noteWrite) this.addEventListener('error', () => { if (active) observeHttp(0); }, { once: true });
+        if (t || metadata || noteWrite) this.addEventListener('load', () => {
           if (active) observeHttp(this.status, this.getResponseHeader?.('retry-after'));
           try { const payload = this.responseType === 'json' ? this.response : JSON.parse(this.responseText); if (metadata) observeNoteResponse(info.url, this.status, payload); requestEnd(t, this.status, payload); } catch (_) { /* no proof */ }
         }, { once: true });
@@ -618,7 +620,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.14';
+const VERSION='18.9.15';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -752,6 +754,8 @@ async function waitNewNoteImage(view,beforeIds,timeout=150000){
   const deadline=Date.now()+timeout;
   while(Date.now()<deadline){
     safety().check(view);
+    safety().assertNetwork();
+    if(safety().stopped())throw new FatalError('停止しました');
     const fresh=imageNodes(view).filter(hit=>{
       const id=String(hit.node.attrs?.id||'');
       return id&&!beforeIds.has(id)&&remoteImage(hit.node);
@@ -925,7 +929,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.14',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.15',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -958,7 +962,7 @@ function adoptSavedBodyImages(view,dataset,seedRun={}){
   }
   const run={
     ...seedRun,
-    version:'18.9.14',
+    version:'18.9.15',
     articleKey:articleKey(),
     datasetId:dataset.datasetId,
     stage:'images_building',
@@ -1001,7 +1005,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.14',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.15',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -1063,6 +1067,8 @@ async function startOvernight(){
 }
 
 const WAIT_RETRY_MS=10*60*1000;
+const FIRST_RETRY_MS=2*60*1000;
+function retryDelay(state){return Number(state?.retryCount||0)<1?FIRST_RETRY_MS:WAIT_RETRY_MS;}
 function waitResumeState(){return read(waitResumeKey(),null)}
 function waitResumeArmed(){
   const state=waitResumeState();
@@ -1113,16 +1119,18 @@ async function runWaitResumeCycle(){
   if(!waitResumeArmed())return;
   const holdAfter=safety().networkHold?.();
   if(holdAfter||['cards_waiting','cards_paused'].includes(run?.stage)){
-    write(waitResumeKey(),{...waitResumeState(),armed:true,version:VERSION,notBefore:Date.now()+WAIT_RETRY_MS});
-    setStatus('まだ通信制限あり｜完成分を保持して10分休止 → 残りから再試行');
-    scheduleWaitResume(WAIT_RETRY_MS);
+    const current=waitResumeState()||{},delay=retryDelay(current),retryCount=Number(current.retryCount||0)+1;
+    write(waitResumeKey(),{...current,armed:true,version:VERSION,retryCount,notBefore:Date.now()+delay});
+    setStatus('通信制限を検出｜完成分を保持して'+Math.ceil(delay/60000)+'分休止 → 同じ残り位置から自動再試行');
+    scheduleWaitResume(delay);
     return;
   }
   // If an image operation stopped for a transient reason without an HTTP hold,
   // retry only after another cooldown, never immediately loop.
-  write(waitResumeKey(),{...waitResumeState(),armed:true,version:VERSION,notBefore:Date.now()+WAIT_RETRY_MS});
-  setStatus('処理停止を検出｜完成分を保持して10分休止 → 残りから再試行');
-  scheduleWaitResume(WAIT_RETRY_MS);
+  const current=waitResumeState()||{},delay=retryDelay(current),retryCount=Number(current.retryCount||0)+1;
+  write(waitResumeKey(),{...current,armed:true,version:VERSION,retryCount,notBefore:Date.now()+delay});
+  setStatus('処理停止を検出｜完成分を保持して'+Math.ceil(delay/60000)+'分休止 → 同じ残り位置から自動再試行');
+  scheduleWaitResume(delay);
 }
 
 async function armWaitResume(){
@@ -1132,7 +1140,7 @@ async function armWaitResume(){
     return;
   }
   const now=Date.now();
-  write(waitResumeKey(),{armed:true,version:VERSION,articleKey:articleKey(),armedAt:now,notBefore:now,lastProbe:0});
+  write(waitResumeKey(),{armed:true,version:VERSION,articleKey:articleKey(),armedAt:now,notBefore:now,lastProbe:0,retryCount:0});
   write(overnightKey(),true);
   const awake=await keepAwake();
   setStatus('再開開始 ✅ 保存済み位置を本文から照合 → 残りだけ今すぐ続行'+(awake?'｜画面スリープ抑止ON':''));
@@ -1274,7 +1282,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.14',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.15',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
