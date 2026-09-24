@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.13
+// @version      18.9.14
 // @description  最新対象から極薄を高速連続再構築し、ベネットさん後の正確な再開・指定見出し・仕切り線・通知カード夜間一括に対応。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -26,7 +26,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.13' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.14' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -618,7 +618,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_LIVE_REBUILD_V1__)return;
 page.__MUMEI_LIVE_REBUILD_V1__=true;
 
-const VERSION='18.9.13';
+const VERSION='18.9.14';
 const PANEL='mumei-note-source-picker-v163';
 const STATUS='mumei-note-source-status-v163';
 const DATA_KEY='mumei_likers_thin_dataset_v160';
@@ -925,7 +925,7 @@ function makeLiveDataset(manifest,meta){
     cardPath:item.cardPath,sourceImage:imageSrc(item),caption:item.creator+'さん',
     urlname:meta.rows[i]?.urlname||'',source:meta.rows[i]?.source||'',finalMarker:Boolean(meta.rows[i]?.finalMarker)
   }));
-  return {version:'18.9.13',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
+  return {version:'18.9.14',datasetId,count:rows.length,rows,preparedBatch:false,liveBatch:true,
     extractedAt:meta.generatedAt,sourceMode:'live-current',confirmationUrl:FINAL,
     meta:{tagArticles:meta.tagArticles,likeCounts:meta.likeCounts,rules:meta.rules}};
 }
@@ -958,7 +958,7 @@ function adoptSavedBodyImages(view,dataset,seedRun={}){
   }
   const run={
     ...seedRun,
-    version:'18.9.13',
+    version:'18.9.14',
     articleKey:articleKey(),
     datasetId:dataset.datasetId,
     stage:'images_building',
@@ -1001,7 +1001,7 @@ async function rebuildImages(autoCards=false){
     let stagedData=read(stageDataKey(),null),run=read(stageRunKey(),null);
     if(!stagedData||stagedData.datasetId!==dataset.datasetId||!run||run.datasetId!==dataset.datasetId){
       stagedData=dataset;
-      run={version:'18.9.13',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
+      run={version:'18.9.14',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0};
       write(stageDataKey(),stagedData);write(stageRunKey(),run);
     }
     const oldRun=currentRun(),oldData=currentData();
@@ -1102,7 +1102,7 @@ async function runWaitResumeCycle(){
   // real resume attempt. A fresh 401/403/429 will be caught by the safety layer.
   safety().confirmNetworkRecovered?.();
   write(waitResumeKey(),{...state,armed:true,version:VERSION,lastAttempt:Date.now(),notBefore:Date.now()});
-  setStatus('待機時間終了 ✅ 保存済み本文を照合し、残りだけ再開します');
+  setStatus('保存済み本文を照合中 ✅ 残りだけ再開します');
   await resumeWork();
 
   const run=currentRun();
@@ -1132,12 +1132,12 @@ async function armWaitResume(){
     return;
   }
   const now=Date.now();
-  write(waitResumeKey(),{armed:true,version:VERSION,articleKey:articleKey(),armedAt:now,notBefore:now+WAIT_RETRY_MS,lastProbe:0});
+  write(waitResumeKey(),{armed:true,version:VERSION,articleKey:articleKey(),armedAt:now,notBefore:now,lastProbe:0});
   write(overnightKey(),true);
   const awake=await keepAwake();
-  setStatus('待機再開ON ✅ 10分休止 → 保存済み位置を本文から照合 → 残りだけ自動再開'+(awake?'｜画面スリープ抑止ON':''));
+  setStatus('再開開始 ✅ 保存済み位置を本文から照合 → 残りだけ今すぐ続行'+(awake?'｜画面スリープ抑止ON':''));
   updateButtons();
-  scheduleWaitResume(1000);
+  scheduleWaitResume(300);
 }
 function maybeResumeOvernight(){
   // Never restart work merely because an old "overnight" flag survived a reload.
@@ -1274,7 +1274,7 @@ async function resumeAfterBennett(){
     const dataset=makeLiveDataset(manifest,meta);
     const checkpoint=dataset.rows.findIndex(row=>normalize(row.url)===normalize(BENNETT_URL));
     if(checkpoint<0)throw new FatalError('最新327件にベネットさんが見つかりません');
-    const run={version:'18.9.13',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
+    const run={version:'18.9.14',articleKey:articleKey(),datasetId:dataset.datasetId,stage:'images_building',images:{},pendingImage:null,cardKeys:[],savedCardCount:0,
       likeBoundaryInserted:checkpoint>=Number(dataset.meta?.tagArticles||0),finalBoundaryInserted:false};
     const currentImages=imageNodes(view);
     const missingBefore=[];
