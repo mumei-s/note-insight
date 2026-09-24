@@ -332,17 +332,19 @@ async function buildCards(){
       run.cardKeys.push({url:row.url,key:cardKey(hit)});
       run.pendingCard=null;run.stage='cards_building';write(runKey(),run);
 
-      if(run.cardKeys.length-run.savedCardCount>=8){
+      if(run.cardKeys.length-run.savedCardCount>=5){
         await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 保存確認中…');
         run.savedCardCount=run.cardKeys.length;write(runKey(),run);
       }
       setStatus('通知カード '+run.cardKeys.length+'/'+dataset.count+'｜保存済み '+run.savedCardCount);
-      await sleep(2500);
-      if(run.cardKeys.length>0&&run.cardKeys.length%32===0&&run.cardKeys.length<dataset.count){
+      await sleep(3000);
+      if(run.cardKeys.length>0&&run.cardKeys.length%20===0&&run.cardKeys.length<dataset.count){
         await safety().save(view,'カード '+run.cardKeys.length+'/'+dataset.count+' 区切り保存…');
         run.savedCardCount=run.cardKeys.length;write(runKey(),run);
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜403予防の45秒休止中…');
-        await sleep(45000);
+        const longRest = run.cardKeys.length % 60 === 0;
+        const restMs = longRest ? 180000 : 60000;
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+' 保存済み｜403予防の'+Math.ceil(restMs/1000)+'秒休止中…');
+        await sleep(restMs);
       }
     }
     await safety().save(view,'通知カード最終保存…');
