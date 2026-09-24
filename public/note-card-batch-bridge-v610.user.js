@@ -69,7 +69,7 @@
   function networkMessage(hold) {
     const wait = Math.max(0, Math.ceil(((hold.until || 0) - Date.now()) / 1000));
     return (hold.code ? `noteが通信を拒否しました（HTTP ${hold.code}）。` : 'noteとの通信に失敗しました。HTTPの状態は確認できません。') + '本文と途中記録は保持しています。' +
-      (wait ? `${wait}秒以上待ち、` : '') + '失敗していた操作が使える状態に戻ってから「通信停止解除」→「追加＋カード続き」で再開してください';
+      (wait ? `${wait}秒以上待ち、` : '') + '失敗していた操作が使える状態に戻ってから「通信解除＋再開」を1回だけ押してください';
   }
   function assertNetwork() { page.__MUMEI_CARD_RUNTIME__?.verify?.(); const hold = networkHold(); if (hold) throw new Error(networkMessage(hold)); }
   function observeHttp(code, retryAfter) {
@@ -90,7 +90,7 @@
     if (active) throw new Error('現在の処理が停止するまでお待ちください');
     if (hold?.until > Date.now()) throw new Error(networkMessage(hold));
     localStorage.removeItem(networkKey); memoryHold = null; stopped = true;
-    status('通信停止を解除しました。自動再送はしません。「追加＋カード続き」で不足分から再開できます');
+    status('通信停止を解除しました。自動再送はしません。「通信解除＋再開」または「保存位置から再開」で不足分から続けます');
   }
   function confirmNetworkRecovered() {
     if (active) return false;
@@ -1237,11 +1237,9 @@ async function buildCards(){
         run.stage='cards_waiting';write(runKey(),run);
         const attempts=run.pendingCard.attempts||1;
         const wait=code===429?600000:code===403?600000:180000;
-        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。連打せず '+Math.ceil(wait/60000)+'分休止 → 同じ1件から再開',true);
-        if(attempts<4){
-          clearTimeout(resumeTimer);
-          resumeTimer=setTimeout(()=>{if(!busy&&enabled())void buildCards()},wait);
-        }
+        setStatus('カード '+run.cardKeys.length+'/'+dataset.count+'｜'+row.creator+' は '+(code?'HTTP '+code:'通信待ち')+'。完成分を保持して停止しました。自動再試行はしません。通信が戻ったら「通信解除＋再開」を1回だけ押してください',true);
+        clearTimeout(resumeTimer);
+        resumeTimer=null;
         return;
       }
       // Remove any raw paragraph left after successful conversion.
@@ -1360,7 +1358,7 @@ async function resumeWork(manual=false){
 
     if(adopted.count<dataset.count){
       setStatus('保存済み極薄 '+adopted.count+'/'+dataset.count+' を本文から確認 ✅ 残り '+(dataset.count-adopted.count)+'件だけ続けます'+(adopted.duplicates?'｜重複候補 '+adopted.duplicates:''));
-      return await rebuildImages(overnight);
+      return await rebuildImages(manual?true:overnight);
     }
 
     // All thin thumbnails exist in the actual body. Promote that state and
