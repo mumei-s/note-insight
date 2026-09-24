@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.8.24
+// @version      18.8.25
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -25,7 +25,7 @@
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.24' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.8.25' };
 
 // MODULE: note-card-safety-v188.js
 (function () {
@@ -597,9 +597,10 @@
   installSaveProbe();
   document.addEventListener('input', () => { clearTimeout(captureTimer); captureTimer = setTimeout(() => { try { capture(); } catch (e) { status(e.message, true); } }, 400); }, true);
   page.addEventListener('pagehide', () => { stopped = true; try { capture(); } catch (_) {} });
-  page.addEventListener('beforeunload', e => {
+  page.addEventListener('beforeunload', () => {
+    // Never block note's own authentication/login redirect. Preserve a recovery
+    // snapshot, but allow the browser to leave the editor normally.
     try { capture(); } catch (_) {}
-    if (view && key() === viewKey && (active || read(runKey())) && (confirmedDoc !== view.state.doc || confirmedTitle !== (titleNode()?.value ?? null))) { e.preventDefault(); e.returnValue = ''; }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopped = true; try { capture(); } catch (_) {} } });
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
