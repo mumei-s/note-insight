@@ -679,7 +679,7 @@
     if (!row || !row.finalMarker) throw new FatalError('確認用サブ垢記事が最後にありません');
     return row;
   }
-  function cleanupFailedThinArtifacts(view, row) {
+  function cleanupFailedThinArtifacts(view, row, run) {
     const caption = page.__MUMEI_CARD_CREATOR__?.caption(row) || row.caption || ((row.creator || 'noteクリエイター') + 'さん');
     const stale = [];
     for (const hit of imageNodes(view)) {
@@ -706,13 +706,36 @@
     setRun(run);
   }
 
+  function cleanupOrphanCaptionParagraphs(view, dataset, run) {
+    const captions = new Set((dataset.rows || []).map(row => {
+      try { return page.__MUMEI_CARD_CREATOR__?.caption(row) || row.caption || ((row.creator || 'noteクリエイター') + 'さん'); }
+      catch (_) { return row.caption || ((row.creator || 'noteクリエイター') + 'さん'); }
+    }).filter(Boolean));
+    if (!captions.size) return 0;
+    let boundary = -1;
+    for (const hit of imageNodes(view)) {
+      if (remoteImage(hit.node)) boundary = Math.max(boundary, hit.pos);
+    }
+    for (const hit of safety().index(view).embeds) boundary = Math.max(boundary, hit.pos);
+    const stale = [];
+    view.state.doc.forEach((node, pos) => {
+      if (pos <= boundary || node.type?.name !== 'paragraph') return;
+      const text = String(node.textContent || '').trim();
+      if (captions.has(text)) stale.push({ node, pos });
+    });
+    if (!stale.length) return 0;
+    safety().remove(view, stale.sort((a,b)=>b.pos-a.pos));
+    setRun(run);
+    return stale.length;
+  }
+
   async function insertHostedPreparedImages(view, rows, dataset, run) {
     if (!rows.length) return 0;
     const template = safety().index(view).images.find(hit => remoteImage(hit.node))?.node;
     if (!template || template.type?.name !== 'image') throw new FatalError('外部復旧用の画像ひな形を確認できません');
     for (const row of rows) {
       safety().check(view);
-      cleanupFailedThinArtifacts(view, row);
+      cleanupFailedThinArtifacts(view, row, run);
       const src = preparedHostedUrl(row);
       if (!src) throw new FatalError('外部復旧画像がありません: ' + (row.index || row.creator || row.url));
       const last = confirmationRow(dataset);
@@ -1156,12 +1179,14 @@
       const nativeCommand = dataset.preparedBatch ? preparedImageCommand() : null;
       let reusableInput = null;
       for (;;) {
+      const cleaned = cleanupOrphanCaptionParagraphs(view, dataset, run);
+      if (cleaned) setStatus(`失敗時に残った名前だけの行を ${cleaned}件削除しました…`);
       const completedNow = verifiedImageCount(view, dataset, run);
       const missing = missingRows(view, dataset, run);
       if (!missing.length) {
         verifyConfirmationImage(view, dataset, run);
-        await saveOnce('極薄画像の保存状態を確認中…');
-        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 最後の実績の算数も確認済み`); return true;
+        await saveOnce(cleaned ? `名前だけの残骸 ${cleaned}件を削除して保存確認中…` : '極薄画像の保存状態を確認中…');
+        setStatus(`極薄画像🔗 ${dataset.count}/${dataset.count} 完成済み ✅ 名前だけの残骸0件｜最後の実績の算数も確認済み`); return true;
       }
       const hostedRows = dataset.preparedBatch ? missing.filter(row => preparedHostedUrl(row)).slice(0, 5) : [];
       if (hostedRows.length) {
