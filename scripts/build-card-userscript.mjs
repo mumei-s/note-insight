@@ -10,7 +10,7 @@ const output = new URL('note-card-batch-bridge-v610.user.js', publicDir);
 const header = `// ==UserScript==
 // @name         無名S note 極薄＋通知 URL/# 18.8.16
 // @namespace    https://github.com/mumei-s/note-insight/batch-bridge-610
-// @version      18.9.5
+// @version      18.9.6
 // @description  投稿者照合・全件名前＋さんのキャプション。作成済み画像を連続投入、#先頭、最後は実績の算数。極薄の初期化と通知カード一括削除。
 // @match        https://editor.note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js
@@ -39,7 +39,7 @@ export function wrapModules(body) {
     page.__MUMEI_CARD_SAFETY__?.status('極薄ツールの旧版が先に起動しています。本文を保持して停止しました。Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください', true);
     return;
   }
-  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.5' };
+  const runtime = page.__MUMEI_CARD_RUNTIME__ = { version: '18.9.6' };
 ${body}
   const names = ['__MUMEI_CARD_VISIBLE__','__MUMEI_CARD_CREATOR__','__MUMEI_THIN_IMAGES__','__MUMEI_PREPARED_BATCH__','__MUMEI_YOIZORA_ADDITIONS__'];
   const owned = names.map(name => page[name]);
@@ -57,6 +57,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log('Card userscript source/bundle: identical');
   } else {
     writeFileSync(output, build());
-    console.log('Built v18.9.5 standalone card userscript');
+    console.log('Built v18.9.6 standalone card userscript');
   }
 }
