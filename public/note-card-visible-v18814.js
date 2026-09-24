@@ -62,8 +62,15 @@
         if (generation !== ownGeneration || article() !== sourceKey || !view.dom?.isConnected) return;
         let hit = null;
         view.state.doc.forEach((node, pos) => { if (node === raw.node) hit = { node, pos }; });
-        if (!hit) return; // A stopped/older attempt cannot replace another node.
-        dispatch(view.state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, view.state.schema.nodes.embed.create(attrs)));
+        // note can assign block IDs during autosave while the API is pending.
+        // Accept the same document with ID-only changes, never an edited URL,
+        // moved block, changed image/link or another attempt's work paragraph.
+        if (!hit && page.__MUMEI_CARD_SAFETY__.sameContent(state.doc, view.state.doc)) {
+          const node = view.state.doc.nodeAt(raw.pos);
+          if (node?.type.name === 'paragraph' && node.textContent === url) hit = { node, pos: raw.pos };
+        }
+        if (!hit) throw new Error('カード登録中に作業用URLが変更されました。本文を保持して停止しました');
+        dispatch(view.state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, view.state.schema.nodes.embed.create(attrs)), hit.node);
       }).catch(onError);
       return true;
     };
