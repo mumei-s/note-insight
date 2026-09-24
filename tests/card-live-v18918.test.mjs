@@ -6,62 +6,57 @@ import { build } from "../scripts/build-card-userscript.mjs";
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("18.9.18 bundle is generated from the current two source modules", async () => {
+test("18.9.19 bundle is generated from the current source modules", async () => {
   const bundle = await read("public/note-card-batch-bridge-v610.user.js");
   assert.equal(bundle, build());
-  assert.match(bundle, /@version\s+18\.9\.18/);
-  assert.match(bundle, /const VERSION='18\.9\.18'/);
+  assert.match(bundle, /@version\s+18\.9\.19/);
+  assert.match(bundle, /const VERSION='18\.9\.19'/);
 });
 
-test("18.9.18 does not auto-retry after a card or recovery error", async () => {
+test("card-only emergency UI exposes only resume-after-Ruru and post-publish delete", async () => {
   const live = await read("public/note-live-rebuild-v1.js");
-  assert.doesNotMatch(live, /if\s*\(attempts\s*<\s*4\)/);
-  assert.doesNotMatch(live, /resumeTimer\s*=\s*setTimeout\([^\n]*buildCards/);
-  assert.match(live, /automatic recovery retries are intentionally disabled/);
-  assert.match(live, /自動再開は停止しました/);
-  assert.match(live, /自動再試行はしません/);
-});
-
-test("reload never arms or restarts a failed batch", async () => {
-  const live = await read("public/note-live-rebuild-v1.js");
-  assert.match(live, /function maybeResumeOvernight\(\)[\s\S]*localStorage\.removeItem\(waitResumeKey\(\)\)/);
-  assert.match(live, /function maybeResumeOvernight\(\)[\s\S]*localStorage\.removeItem\(overnightKey\(\)\)/);
-  assert.doesNotMatch(live, /function maybeResumeOvernight\(\)[\s\S]{0,500}scheduleWaitResume/);
-});
-
-test("manual resume discards stale auto flags and resumes only after body reconciliation", async () => {
-  const live = await read("public/note-live-rebuild-v1.js");
-  assert.match(live, /async function resumeWork\(manual=false\)/);
-  assert.match(live, /if\(manual\)[\s\S]{0,500}localStorage\.removeItem\(overnightKey\(\)\)/);
-  assert.match(live, /if\(manual\)[\s\S]{0,500}localStorage\.removeItem\(waitResumeKey\(\)\)/);
-  assert.match(live, /const adopted=adoptSavedBodyImages\(view,dataset,seed\)/);
-  assert.match(live, /if\(index!==resumeFloor\+1\|\|!run\.images\?\.\[row\.url\]\)break/);
-  assert.match(live, /return await rebuildImages\(manual\?true:overnight\)/);
-});
-
-test("HTTP hold only watches relevant upload writes instead of every note write", async () => {
-  const safety = await read("public/note-card-safety-v188.js");
-  assert.match(safety, /function monitoredWriteUrl\(rawUrl\)/);
-  assert.match(safety, /image\|images\|upload\|uploads\|asset\|assets\|photo\|media\|attach\|attachment\|file\|files/);
-  assert.doesNotMatch(safety, /const noteWrite = \/\^\(POST\|PUT\|PATCH\)\$\/i\.test\(method\) && Boolean\(apiUrl\(url\)\)/);
-  assert.match(safety, /Boolean\(monitoredWriteUrl\(url\)\)/);
-});
-
-test("thin upload uses safer pacing and keeps the post-publish card-only delete action", async () => {
-  const live = await read("public/note-live-rebuild-v1.js");
-  assert.match(live, /await sleep\(650\)/);
-  assert.match(live, /done%20===0/);
-  assert.match(live, /await sleep\(15000\)/);
-  assert.match(live, /保存位置から再開/);
-  assert.match(live, /通信解除＋再開/);
+  assert.match(live, /るるちゃん後カード再開/);
   assert.match(live, /投稿後カード一括削除/);
+  assert.doesNotMatch(live, /<button data-a="fresh"/);
+  assert.doesNotMatch(live, /<button data-a="overnight"/);
 });
 
-test("install page publishes the same recovery contract", async () => {
+test("rows 1 through Ruru 166 are hard-skipped and never regenerated", async () => {
+  const live = await read("public/note-live-rebuild-v1.js");
+  assert.match(live, /CARD_CHECKPOINT_URL='https:\/\/note\.com\/ruruchan_kawaii\/n\/n5423e36ce1e1'/);
+  assert.match(live, /CARD_CHECKPOINT_LABEL='るるちゃん💖🌙'/);
+  assert.match(live, /if\(i<adopted\.checkpoint\)continue/);
+  assert.match(live, /Missing detection[\s\S]*must never cause us to regenerate any of rows 1\.\.166/);
+});
+
+test("a genuine inserted card wins over a late 403 callback", async () => {
+  const live = await read("public/note-live-rebuild-v1.js");
+  const waitCard = live.match(/async function waitCard[\s\S]*?function statusCode/)?.[0] || "";
+  assert.ok(waitCard.indexOf("const hit=") < waitCard.indexOf("if(attempt.error)"));
+  assert.match(live, /One last reconciliation/);
+  assert.match(live, /表示済みカードを採用して続行/);
+});
+
+test("card-only tail runs at 0.9s cadence and saves once at the end", async () => {
+  const live = await read("public/note-live-rebuild-v1.js");
+  assert.match(live, /await sleep\(900\)/);
+  assert.match(live, /残り通知カードを最後に1回だけ保存/);
+  assert.doesNotMatch(live, /note自動保存待ち/);
+  assert.doesNotMatch(live, /await sleep\(5500\)/);
+  assert.doesNotMatch(live, /run\.cardKeys\.length%15===0/);
+});
+
+test("card button no longer depends on thin-image progress", async () => {
+  const live = await read("public/note-live-rebuild-v1.js");
+  assert.match(live, /\[data-a="cards"\][\s\S]*busy\|\|!count/);
+  assert.doesNotMatch(live, /\[data-a="cards"\][\s\S]{0,160}images!==count/);
+});
+
+test("install page publishes the Ruru checkpoint card-only contract", async () => {
   const install = await read("public/note-card-batch-install.html");
-  assert.match(install, /v18\.9\.18/);
-  assert.match(install, /403の自動再試行ループと勝手な再開を停止/);
-  assert.match(install, /保存位置から再開/);
-  assert.match(install, /通信解除＋再開/);
+  assert.match(install, /v18\.9\.19/);
+  assert.match(install, /極薄サムネイルは完了済みとして一切触りません/);
+  assert.match(install, /るるちゃん💖🌙（166番）/);
+  assert.match(install, /167番以降だけ続けます/);
   assert.match(install, /投稿後カード一括削除/);
 });
