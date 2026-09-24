@@ -11,12 +11,12 @@
 <body>
 <main class="wrap"><section class="card">
   <h1>極薄＋通知ツール</h1>
-  <span class="ver">v18.9.0</span>
-  <div class="note"><b>v18.9.0：極薄＋通知を新規構築し直しました。</b><br>
+  <span class="ver">v18.9.1</span>
+  <div class="note"><b>v18.9.1：極薄＋通知を新規構築し直しました。</b><br>
   旧v18.8系の「宵空セット」「追加＋カード続き」「画像アップロード復旧」などは今回の実行経路から外しています。古い仕様を継ぎ足さず、現在のスキ・現在の記事から新しい対象一覧を作ります。<br><br>
   <b>最新から再構築</b>：#イケメングランプリ宵空カップは現在の全記事を先頭に保持。指定2記事の現在のスキ一覧を再取得し、#投稿者との重複を除外。非#は「今日・昨日の最新 → 固定 → 最新」で現在の記事を選びます。最新の明示追加プロフィールも合流し、最後は「実績の算数」です。<br>
   極薄サムネイルは860×140をGitHub側で作成済みにして、note側で300枚以上を再アップロードしません。本文には完成済み極薄画像＋記事リンク＋名前さんを順番に配置し、区切り保存します。<br><br>
-  <b>カード開始</b>：note正規URLカード処理だけを使います。iframeの403表示は完成判定に使いません。8件ごとに下書き保存、32件ごとに45秒休止して連打を避けます。403/429/通信失敗が出た場合は完成分を保存して停止連打せず、長めの待機後に同じ1件から再開します。<br>
+  <b>カード開始</b>：note正規URLカード処理だけを使います。iframeの403表示は完成判定に使いません。5件ごとに下書き保存、20件ごとに60秒休止し、60件ごとに180秒休止して、実機で約80件付近に出たエラーを避ける方向へ抑えます。403/429/通信失敗が出た場合は完成分を保存して停止連打せず、長めの待機後に同じ1件から再開します。<br>
   <b>カード削除</b>：公開・通知後、今回作成した通知カードだけを削除し、極薄サムネイルは残します。<br><br>
   INSIGHT本体は変更しません。旧v18.8系の途中記録は最新再構築時に今回の管理記録へ切り替えます。</div>
   <a id="install" class="btn" href="./note-card-batch-bridge-v610.user.js">インストール／更新</a>
@@ -38,7 +38,7 @@
   else if(android) status.innerHTML='Androidブラウザを確認。Yahooアプリ等でUserscript拡張が反応しない場合は「更新URLをコピー」→Edgeのアドレス欄へ貼り付けて開いてください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptマネージャーの更新確認画面が開けば、そのまま更新してください。';});
   copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ 更新URLをコピーしました。Edgeのアドレス欄へ貼り付けて開いてください。':'コピーできませんでした。欄を長押ししてURLをコピーしてください。';});
-  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.9.0&ts='+ts;});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.9.1&ts='+ts;});
 })();
 </script>
 </body>
