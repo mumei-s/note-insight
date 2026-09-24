@@ -572,7 +572,7 @@
     // snapshot, but allow the browser to leave the editor normally.
     try { capture(); } catch (_) {}
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopped = true; try { capture(); } catch (_) {} } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { try { capture(); } catch (_) {} } });
   setInterval(() => { mount(); try { capture(); } catch (e) { status(e.message, true); } }, 1500);
   setInterval(() => { if (active && active.key === key() && read(leaseKey())?.owner === owner) localStorage.setItem(leaseKey(), JSON.stringify({ owner, until: Date.now() + 30000 })); }, 10000);
 })();
