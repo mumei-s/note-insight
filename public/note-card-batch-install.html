@@ -11,17 +11,17 @@
 <body>
 <main class="wrap"><section class="card">
   <h1>極薄＋通知ツール</h1>
-  <span class="ver">v18.8.22</span>
-  <div class="note"><b>「追加＋カード続き」にまとめました。</b><br>  <b>v18.8.22：前回300件で通った方式を維持し、旧版の403表示待ちループを外しました。</b>note正規URLカード処理を優先し、カードiframeの表示確認は完了条件にしません。正規カードノード＋保存済み下書きで判定し、HTTP状態不明は停止記録にせず、一時通信エラーは同じ位置から自動再開します。<br><b>追加3名（ぱぽこめ／ナラ／ルルトアヤコ）も現在の途中データへ自動追記します。</b>当日・前日の記事があれば最新、なければ固定記事を採用し、既存画像・カードは保持します。<br>
+  <span class="ver">v18.8.23</span>
+  <div class="note"><b>「追加＋カード続き」にまとめました。</b><br>  <b>v18.8.23：403になる1人で全体を止めない方式へ変更。</b>失敗した人はいったん保留して次の人へ進み、残りを保存したあと保留だけ自動再試行します。画像アップロード失敗で残った「名前だけ」の行も、用意済み極薄画像へ置き換えて掃除します。<br>note正規URLカード処理を優先し、カードiframeの表示確認は完了条件にしません。正規カードノード＋保存済み下書きで判定し、HTTP状態不明は停止記録にせず、一時通信エラーは同じ位置から自動再開します。<br><b>追加3名（ぱぽこめ／ナラ／ルルトアヤコ）も現在の途中データへ自動追記します。</b>当日・前日の記事があれば最新、なければ固定記事を採用し、既存画像・カードは保持します。<br>
 
-  <b>v18.8.22：画像が多い下書きで「本文の控え」の容量不足が出る問題を修正。</b>100枚以上では重複する「1つ前」の控えを持たず、容量不足時は古いprevious控えから整理します。本文・現在の最新控え・途中記録・対象データは消しません。<br>
+  <b>v18.8.23：画像が多い下書きで「本文の控え」の容量不足が出る問題を修正。</b>100枚以上では重複する「1つ前」の控えを持たず、容量不足時は古いprevious控えから整理します。本文・現在の最新控え・途中記録・対象データは消しません。<br>
   不足画像の追加 → リンクと保存の確認 → 通知カードの続きを、1つのボタンで進めます。「画」「不足画像のみ追加」「追加分」は個別に押す必要がありません。<br>
   追加に失敗した場合はカード作成に進まず、既存の本文・画像・カードを保持します。画像受付／画像送信のどちらで失敗したかと、取得できたHTTP状態を表示します。自動再送はしません。<br>
   <b>保存が確認できない編集タブは閉じたり再読み込みしたりせず、「本文の控え」から現在の本文を書き出してください。</b><br>
-  下書き保存と控えを確認 → 下のボタンで更新 → 編集画面を開き直し、v18.8.22を確認 →「全件確認」。<br>
+  下書き保存と控えを確認 → 下のボタンで更新 → 編集画面を開き直し、v18.8.23を確認 →「全件確認」。<br>
   通常時は「追加＋カード続き」で不足分から進めます。「削（一括）」は公開・通知後の操作です。<br>
   はなさん・しろのあるさん＋追加3名を反映して全316件、#の42記事が先頭、最後は「実績の算数」。完成は本文内のカードと保存済み下書きの全件照合で判定します。<br>
-  <b>v18.8.22では、Androidで一時的に出るHTTP状態不明（status 0）だけでは停止しません。</b>画像が実際に失敗したことまで確認してから停止します。v18.8.17で残ったstatus 0停止記録は新版で無効化します。401/403/429は従来どおり即停止します。<br><b>403が続いている間は「追加＋カード続き」「通信停止解除」を押さないでください。</b>この更新は403を解消するものではありません。失敗していた操作が通常どおり使える状態に戻った後に解除してください。端末上の全件完了・通知受信は未確認です。<br>
+  <b>v18.8.23では、Androidで一時的に出るHTTP状態不明（status 0）だけでは停止しません。</b>画像が実際に失敗したことまで確認してから停止します。v18.8.17で残ったstatus 0停止記録は新版で無効化します。401/403/429は従来どおり即停止します。<br><b>403が続いている間は「追加＋カード続き」「通信停止解除」を押さないでください。</b>この更新は403を解消するものではありません。失敗していた操作が通常どおり使える状態に戻った後に解除してください。端末上の全件完了・通知受信は未確認です。<br>
   「旧版」「複数版が混在」と出る場合は、Tampermonkeyで極薄ツールを最新の1つだけ有効にしてください。以前のスクリプトを削除する必要はありません。</div>
   <a id="install" class="btn" href="./note-card-batch-bridge-v610.user.js">インストール／更新</a>
   <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-batch-bridge-v610.user.js">Raw直結で開く</a>
@@ -42,7 +42,7 @@
   else if(android) status.innerHTML='Androidブラウザを確認。Yahooアプリ等でUserscript拡張が反応しない場合は「更新URLをコピー」→Edgeのアドレス欄へ貼り付けて開いてください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptマネージャーの更新確認画面が開けば、そのまま更新してください。';});
   copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ 更新URLをコピーしました。Edgeのアドレス欄へ貼り付けて開いてください。':'コピーできませんでした。欄を長押ししてURLをコピーしてください。';});
-  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.8.22&ts='+ts;});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-card-batch-bridge-v610.user.js?ts='+ts;raw.href=copyUrl.value+'?v=18.8.23&ts='+ts;});
 })();
 </script>
 </body>
