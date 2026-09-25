@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.22.12",
+  "appVersion": "2026.09.25.1",
   "notificationVersion": "3.6.9",
-  "dashboardVersion": "1.4.9",
+  "dashboardVersion": "1.5.0",
   "releasedAt": "2026-09-25T16:04:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "note記事編集・認証保護。フォロー/フォロワー照合はINSIGHTから明示実行したプロフィール上だけで動作し、通常記事・対象記事・ログイン/編集導線では再開しない。本人通知は通知API以外とidle account lookupを遮断、DMはDM通信以外を遮断。",
+  "note": "note編集/ログイン/下書き保存の安全境界を追加。Dashboard Coreは公式Dashboard画面以外では即終了。旧本人通知2.9系は@requireを完全撤去した停止版。フォロー照合はINSIGHTから明示実行したプロフィール上だけ。本人通知は通知API以外を監視せずidle account lookupなし、DMはDM通信以外を監視しない。",
   "dmVersion": "1.4.7",
   "dmLabel": "DM同期"
 }
