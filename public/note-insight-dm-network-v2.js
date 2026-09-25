@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.6';
+const VERSION='1.4.7';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -200,7 +200,7 @@ function installXHR(p=pageWindow()){
  proto.send=function(body){try{if(!this.__mumeiDmV2)return send.call(this,body);this.__mumeiDmV2.body=body??null;this.addEventListener('load',()=>{const m=this.__mumeiDmV2||{};let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>5000000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(m.url,m.body,json))return;const fake={text:async()=>txt};void inspect(m,fake,'xhr')},{once:true})}catch{}return send.call(this,body)};
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
-installFetch();installXHR();
-const retry=()=>{if(!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);setTimeout(retry,1200);
+const ensureDmHooks=()=>{if(!dmSurface())return;installFetch();installXHR()};
+const retry=()=>{if(!dmSurface())return;ensureDmHooks();saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);window.addEventListener('popstate',retry);setTimeout(retry,1200);
 window.__mumeiDmNetworkV2={version:VERSION,extract,snapshot,fromDocument,readRoom,readHistory,flightRows,observeWindow:p=>{installFetch(p);installXHR(p)},getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
