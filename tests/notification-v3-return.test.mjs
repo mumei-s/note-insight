@@ -16,14 +16,14 @@ test("installer entry redirects to isolated compact browser page",async()=>{
   assert.match(page,/data-browser="ios-safari"/);
   assert.match(page,/data-browser="android-edge"/);
   assert.match(page,/https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js/);
-  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.6\.6/);
+  assert.doesNotMatch(page,/script_installation\.php#url=|本人通知 V\d|V3\.6\.7/);
 });
 
-test("V3.6.6 preloads split runtime modules",async()=>{
+test("V3.6.7 preloads split runtime modules",async()=>{
   const v3=await read("public/note-insight-notification-v3.user.js"),network=await read("public/note-insight-notification-network-v3300.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js"),ret=await read("public/note-insight-notification-return-v1.js"),filterSettings=await read("public/notification-filter-settings.html");
-  assert.match(v3,/@version\s+3\.6\.6/);
+  assert.match(v3,/@version\s+3\.6\.7/);
   const meta=v3.split("// ==/UserScript==")[0];
-  for(const p of ["note-insight-notification-network-v3300.js?v=3630","note-insight-notification-reader-v4.js?v=3660","note-insight-notification-controls-v1.js?v=138","note-insight-notification-filter-v4.js?v=411","note-insight-notification-return-v1.js?v=120","note-insight-notification-status-bridge-v1.js?v=110","note-insight-notification-settings-bridge-v1.js?v=110","note-insight-notification-account-pair-v1.js?v=100"])assert.ok(meta.includes(p),p);
+  for(const p of ["note-insight-notification-network-v3300.js?v=3640","note-insight-notification-reader-v4.js?v=3660","note-insight-notification-controls-v1.js?v=138","note-insight-notification-filter-v4.js?v=411","note-insight-notification-return-v1.js?v=120","note-insight-notification-status-bridge-v1.js?v=110","note-insight-notification-settings-bridge-v1.js?v=110","note-insight-notification-account-pair-v1.js?v=100"])assert.ok(meta.includes(p),p);
   assert.doesNotMatch(meta,/notification-autoscan-v2970\.js\?v=|notification-bootstrap-v2966\.js\?v=|runtime-v2939-filter\.js\?v=|note-insight-dm-reader-v1\.js\?v=/);
   assert.match(network,/async function syncHistory/);assert.match(network,/ascending\(journal.rows\)/);assert.match(network,/MAX_NOTICES=300,MAX_PAGES=3/);assert.match(network,/direction:'bottom-up'/);assert.match(network,/writeJournal/);assert.match(reader,/function directPanel/);assert.match(reader,/function scheduleAuto/);assert.doesNotMatch(reader,/autoReadVisibleWindow|fastVisibleSync/);assert.match(reader,/net\.syncCurrent/);assert.match(reader,/actor_image_url:img/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
@@ -59,7 +59,7 @@ test("INSIGHT notifications keep one category selector",async()=>{
   assert.match(release,/insight-notification-ui-v18/);assert.match(ui,/mumei-notification-category-button/);assert.match(ui,/通知項目：/);assert.match(ui,/PUBLIC_DUPLICATE_LABELS/);
 });
 
-test("V3.6.6 supports checkpoint stop without losing partial progress",async()=>{
+test("V3.6.7 supports checkpoint stop without losing partial progress",async()=>{
   const network=await read("public/note-insight-notification-network-v3300.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
   assert.match(network,/stopRequested/);assert.match(network,/function stop\(\)/);assert.match(network,/停止・途中保存/);assert.match(network,/resume:/);
   assert.match(reader,/__mumeiNotificationNetwork3300\?\.stop\?\.\(\)/);assert.match(reader,/保存確認後に停止/);assert.match(network,/partial:!complete/);
