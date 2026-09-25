@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.3';
+const VERSION='3.6.4';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -61,6 +61,8 @@ function status(message,kind='info',extra={}){
 function pageWindow(){try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}}
 function absUrl(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
 function sameNoteOrGraphql(v){try{const u=new URL(v,location.href);return u.hostname==='note.com'||u.hostname==='graphql.note.com'}catch{return false}}
+function protectedNoteRoute(){return /^\/(?:login|signup|settings|sitesettings|account|notes?|new)(?:\/|$)/i.test(location.pathname)||/\/(?:edit|draft)(?:\/|$)/i.test(location.pathname)}
+function noticeApiRequest(v){try{const u=new URL(String(v||''),location.href);return u.hostname==='note.com'&&/^\/api\/v3\/notices\/?$/i.test(u.pathname)}catch{return false}}
 function compact(v,depth=0){if(depth>5)return'[depth]';if(v===null||typeof v==='number'||typeof v==='boolean')return v;if(typeof v==='string')return v.slice(0,1000);if(Array.isArray(v))return v.slice(0,25).map(x=>compact(x,depth+1));if(v&&typeof v==='object'){const o={};let n=0;for(const[k,x]of Object.entries(v)){if(n++>=50)break;o[String(k).slice(0,100)]=compact(x,depth+1)}return o}return String(v??'').slice(0,500)}
 function shape(v,depth=0){if(depth>5)return typeof v;if(Array.isArray(v))return{type:'array',length:v.length,item:v.length?shape(v[0],depth+1):null};if(v&&typeof v==='object'){const o={};let n=0;for(const[k,x]of Object.entries(v)){if(n++>=50)break;o[k]=shape(x,depth+1)}return o}return typeof v}
 function str(v){return typeof v==='string'?clean(v):''}
@@ -295,6 +297,7 @@ function installFetch(){
  const wrapped=function(input,init){
   const meta=requestMeta(input,init);meta.requestInit=init||null;
   const promise=original(input,init);
+  if(protectedNoteRoute()||!noticeApiRequest(meta.url))return promise;
   try{Promise.resolve(promise).then(res=>{if(captureActive())void inspectResponse(meta,res.clone(),'fetch')}).catch(()=>{})}catch{}
   return promise
  };
@@ -304,8 +307,8 @@ function installFetch(){
 function installXHR(){
  const p=pageWindow(),X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiNetwork3300)return;
  const proto=X.prototype,open=proto.open,send=proto.send;
- proto.open=function(method,url,...rest){try{this.__mumei3300={method:String(method||'GET').toUpperCase(),url:absUrl(url),body:null}}catch{}return open.call(this,method,url,...rest)};
- proto.send=function(body){try{if(this.__mumei3300)this.__mumei3300.body=body??null;this.addEventListener('load',()=>{if(!captureActive())return;const m=this.__mumei3300||{};if(!sameNoteOrGraphql(m.url)||m.url?.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>2500000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!candidateHint(m.url,m.body,json))return;const cap={url:m.url,method:m.method||'GET',body:m.body,transport:'xhr',status:Number(this.status||0),contentType:String(this.getResponseHeader?.('content-type')||''),json,requestInit:null};void processCapture(cap,{manual:false,probe:true}).catch(()=>{})},{once:true})}catch{}return send.call(this,body)};
+ proto.open=function(method,url,...rest){try{this.__mumei3300=!protectedNoteRoute()&&noticeApiRequest(url)?{method:String(method||'GET').toUpperCase(),url:absUrl(url),body:null}:null}catch{}return open.call(this,method,url,...rest)};
+ proto.send=function(body){try{if(!this.__mumei3300||protectedNoteRoute())return send.call(this,body);this.__mumei3300.body=body??null;this.addEventListener('load',()=>{if(!captureActive())return;const m=this.__mumei3300||{};if(!sameNoteOrGraphql(m.url)||m.url?.includes('xxhaerjvrgmnadxjqetz.supabase.co'))return;let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>2500000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!candidateHint(m.url,m.body,json))return;const cap={url:m.url,method:m.method||'GET',body:m.body,transport:'xhr',status:Number(this.status||0),contentType:String(this.getResponseHeader?.('content-type')||''),json,requestInit:null};void processCapture(cap,{manual:false,probe:true}).catch(()=>{})},{once:true})}catch{}return send.call(this,body)};
  try{Object.defineProperty(proto,'__mumeiNetwork3300',{value:true})}catch{}
 }
 async function waitCapture(ms=2500){
