@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.0
+// @version      1.5.1
 // @description  INSIGHTの読込ボタンから公式Dashboardを本人通知なしでも同期。直接遷移でもアカウント照合・読込・INSIGHT復帰まで自動実行します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/tool-setup.html*
@@ -24,7 +24,7 @@
 
 (() => {
   'use strict';
-  const VERSION='1.5.0';
+  const VERSION='1.5.1';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
@@ -80,10 +80,11 @@
   async function boot(){
     if(running)return;running=true;
     try{
-      const direct=directPayload(),pending=direct?null:await loadPending(),flow=sessionStorage.getItem(FLOW_KEY)==='1';
-      if(!direct&&!pending&&!flow&&!looksDashboard()){panel()?.remove();lastAutoKey='';return}
-      if(!looksDashboard()){
-        // Carry direct pairing parameters to the official screen; no credentials are exchanged on other pages.
+      const direct=directPayload(),pending=direct?null:await loadPending(),flow=sessionStorage.getItem(FLOW_KEY)==='1',dashboard=looksDashboard();
+      if(!direct&&!pending&&!dashboard){if(flow)sessionStorage.removeItem(FLOW_KEY);panel()?.remove();lastAutoKey='';return}
+      if(!dashboard){
+        // Only an explicit pairing handoff may leave the current page. A stale flow flag must never hijack normal note/edit navigation.
+        if(!direct&&!pending){sessionStorage.removeItem(FLOW_KEY);panel()?.remove();lastAutoKey='';return}
         const u=new URL('https://note.com/sitesettings/stats');if(direct)u.search=location.search;location.assign(u.href);return;
       }
       ensureCorePanel();
