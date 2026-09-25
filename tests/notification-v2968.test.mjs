@@ -109,7 +109,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
-  assert.match(dmUser,/@version\s+1\.4\.6/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=146/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=146/);
+  assert.match(dmUser,/@version\s+1\.4\.6/);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=146/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=145/);
   assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
@@ -163,4 +163,23 @@ test('summary deduplicates latest signatures, uses JST dates and denies client R
  await h.insert({meta:{client_signature:'same'},notification_type:'reply',target_url:'https://note.com/tester/n/n1',occurred_at:'2026-09-21T15:00:00Z'});
  const r=await h.summary();assert.equal(r.sample,1);assert.deepEqual(r.dailyCounts,[{date:'2026-09-22',count:1}]);assert.deepEqual(r.topTypes,[['reply_self',1]]);assert.equal(r.peakHour,0);assert.equal(r.weekName,'火');
  const permission=(await h.db.query("select has_function_privilege('anon','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as anon,has_function_privilege('authenticated','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as client,has_function_privilege('service_role','public.insight_notification_analysis_summary(text[],text,integer,timestamptz)','execute') as service")).rows[0];assert.deepEqual(permission,{anon:false,client:false,service:true});
+});
+
+
+test('ordinary note pages never start follower scans or inspect auth/editor traffic',()=>{
+  const social=read('public/note-insight-social-compare-v1.js');
+  const noticeNet=read('public/note-insight-notification-network-v3300.js');
+  const dmNet=read('public/note-insight-dm-network-v2.js');
+  const noticeUser=read('public/note-insight-notification-v3.user.js');
+  const dmUser=read('public/note-insight-dm.user.js');
+  assert.match(social,/__mumeiSocialCompareV1Loaded/);
+  assert.match(social,/sessionStorage\.getItem\(ACTIVE\)!=='1'/);
+  assert.match(social,/mumei_social_scan/);
+  assert.match(social,/sessionStorage\.setItem\(ACTIVE,'1'\)/);
+  assert.match(noticeNet,/function protectedNoteRoute/);
+  assert.match(noticeNet,/protectedNoteRoute\(\)\|\|!noticeApiRequest\(meta\.url\)/);
+  assert.match(dmNet,/const dmSurface=/);
+  assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
+  assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=101/);
+  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=101/);
 });
