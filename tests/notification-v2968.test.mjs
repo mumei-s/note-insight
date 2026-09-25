@@ -178,8 +178,19 @@ test('ordinary note pages never start follower scans or inspect auth/editor traf
   assert.match(social,/sessionStorage\.setItem\(ACTIVE,location\.pathname\)/);
   assert.match(noticeNet,/function protectedNoteRoute/);
   assert.match(noticeNet,/protectedNoteRoute\(\)\|\|!noticeApiRequest\(meta\.url\)/);
+  assert.doesNotMatch(noticeNet,/installFetch\(\);installXHR\(\);\s*window\.__mumeiNotificationNetwork3300/);
   assert.match(dmNet,/const dmSurface=/);
   assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
+  assert.match(dmNet,/const ensureDmHooks=\(\)=>\{if\(!dmSurface\(\)\)return;installFetch\(\);installXHR\(\)\}/);
   assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=102/);
   assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=102/);
+});
+
+
+test('legacy notification wrapper loads no old runtimes and Dashboard hooks are route scoped',()=>{
+  const legacy=read('public/note-insight-notification-sync.user.js');
+  const dash=read('public/note-insight-dashboard-sync-core-v1.1.0.js');
+  assert.doesNotMatch(legacy,/@require/);
+  assert.match(legacy,/旧本人通知ツール互換停止版/);
+  assert.match(dash,/if\(location\.origin!=='https:\/\/note\.com'\|\|!\/\^\\\/\(\?:sitesettings/);
 });
