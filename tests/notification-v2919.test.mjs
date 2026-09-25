@@ -36,10 +36,22 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.6.9 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.22.12");assert.equal(manifest.notificationVersion,"3.6.9");assert.equal(manifest.dmVersion,"1.4.7");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.4.9");
+  assert.equal(manifest.appVersion,"2026.09.25.1");assert.equal(manifest.notificationVersion,"3.6.9");assert.equal(manifest.dmVersion,"1.4.7");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.5.0");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.22\.12"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.9"/);assert.match(v3,/@version\s+3\.6\.9/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
 
 test("private notification categories stay dense while public duplicates are excluded",async()=>{const ui=await read("src/member-insight-notifications-final.tsx"),picker=await read("src/insight-notification-ui-v18.ts"),feed=await read("supabase/functions/insight-notification-feed-final/index.ts");has(ui,["reply_self","membership_join","purchase","tip","other"]);has(feed,["[\"like\",\"follow\",\"comment\",\"creator_article_posted\"]"]);has(picker,["スキ","人物フォロー","通常コメント","記事投稿"])});
+
+test("legacy notification sync is a true no-require stop wrapper and Dashboard core is route-scoped",async()=>{
+  const legacy=await read("public/note-insight-notification-sync.user.js"),dash=await read("public/note-insight-dashboard-sync-core-v1.1.0.js"),boot=await read("public/note-insight-dashboard-sync.user.js");
+  assert.match(legacy,/旧本人通知ツール互換停止版/);
+  assert.doesNotMatch(legacy,/@require/);
+  assert.match(legacy,/__mumeiLegacyNotificationSyncRetired/);
+  assert.match(dash,/location\.origin!=='https:\/\/note\.com'/);
+  assert.match(dash,/sitesettings\\\/stats\|dashboard/);
+  assert.match(dash,/VERSION='1\.5\.0'/);
+  assert.match(boot,/@version\s+1\.5\.0/);
+  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=150/);
+});
