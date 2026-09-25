@@ -7,9 +7,9 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('Current notification package is only a module loader and version reporter',()=>{
   const v3=read('public/note-insight-notification-v3.user.js');
   const meta=v3.split('// ==/UserScript==')[0];
-  assert.match(v3,/@version\s+3\.6\.6/);
+  assert.match(v3,/@version\s+3\.6\.10/);
   for(const p of [
-    'note-insight-notification-network-v3300.js?v=3630',
+    'note-insight-notification-network-v3300.js?v=3660',
     'note-insight-notification-reader-v4.js?v=3660',
     'note-insight-notification-controls-v1.js?v=138',
     'note-insight-notification-filter-v4.js?v=411',
