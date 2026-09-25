@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.25.1",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.0",
+  "dashboardVersion": "1.5.1",
   "releasedAt": "2026-09-25T16:04:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "note通常記事・認証・編集導線の安全境界を強化。本人通知は通常ページでfetch/XHRを差し替えず、通知読込時は専用APIを直接取得。DMはDM画面に入った時だけ通信フックを有効化。フォロー照合はINSIGHTから明示実行したプロフィール上のみ。旧本人通知2.9系は完全停止、Dashboard Coreも公式Dashboard画面以外では即終了。",
+  "note": "note編集/ログイン/下書き保存の安全境界。Dashboard同期の残留FLOWフラグは通常noteページで破棄し、自動遷移を禁止。Dashboard Coreは公式Dashboard画面以外で即終了。本人通知は通常ページでfetch/XHRを差し替えず、旧2.9系は停止。フォロー照合は明示実行したプロフィール上だけ、DMはDM画面だけで通信フックを有効化。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
