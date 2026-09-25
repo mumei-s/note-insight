@@ -173,13 +173,13 @@ test('ordinary note pages never start follower scans or inspect auth/editor traf
   const noticeUser=read('public/note-insight-notification-v3.user.js');
   const dmUser=read('public/note-insight-dm.user.js');
   assert.match(social,/__mumeiSocialCompareV1Loaded/);
-  assert.match(social,/sessionStorage\.getItem\(ACTIVE\)!=='1'/);
+  assert.match(social,/sessionStorage\.getItem\(ACTIVE\)!==location\.pathname/);
   assert.match(social,/mumei_social_scan/);
-  assert.match(social,/sessionStorage\.setItem\(ACTIVE,'1'\)/);
+  assert.match(social,/sessionStorage\.setItem\(ACTIVE,location\.pathname\)/);
   assert.match(noticeNet,/function protectedNoteRoute/);
   assert.match(noticeNet,/protectedNoteRoute\(\)\|\|!noticeApiRequest\(meta\.url\)/);
   assert.match(dmNet,/const dmSurface=/);
   assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
-  assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=101/);
-  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=101/);
+  assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=102/);
+  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=102/);
 });
