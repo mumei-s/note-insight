@@ -11,7 +11,8 @@
 
 (() => {
   'use strict';
-  const VERSION='1.4.9';
+  if(location.origin!=='https://note.com'||!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname))return;
+  const VERSION='1.5.0';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const DASH_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
