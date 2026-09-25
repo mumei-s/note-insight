@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.1',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.2',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -23,7 +23,7 @@ function person(row,direction,rank){
 }
 let running=false;
 async function run(force=false){
- if(!force&&sessionStorage.getItem(ACTIVE)!=='1')return;
+ if(!force&&sessionStorage.getItem(ACTIVE)!==location.pathname)return;
  if(running||document.visibilityState==='hidden')return;
  running=true;let id='',auth=null,state=null,lock=null;
  const w=pageWindow();
@@ -68,7 +68,7 @@ async function run(force=false){
   }
  }finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy;running=false}
 }
-function start(){const u=new URL(location.href),force=u.searchParams.get('mumei_social_scan')==='1';if(force){sessionStorage.setItem(ACTIVE,'1');u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!=='1')return;void run(force)}
+function start(){const u=new URL(location.href),force=u.searchParams.get('mumei_social_scan')==='1';if(force){sessionStorage.setItem(ACTIVE,location.pathname);u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!==location.pathname)return;void run(force)}
 window.addEventListener('pageshow',start);window.addEventListener('focus',start);document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')start()});
 setTimeout(start,2500);setInterval(start,60000);
 window.__mumeiSocialComparisonV1={version:VERSION,run,person};
