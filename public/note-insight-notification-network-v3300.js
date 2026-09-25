@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.5';
+const VERSION='3.6.6';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -495,6 +495,5 @@ async function restoreStatus(){
  const a=await account();if(!a)return;const s=await get(key(STATUS,a.id),null);
  if(s&&Date.now()-Number(s.at||0)<24*60*60*1000)lastResult=s
 }
-installFetch();installXHR();
 window.__mumeiNotificationNetwork3300={version:VERSION,arm,stop,syncCurrent,syncFull,syncHistory,hasCapture:()=>Boolean(lastCapture),getLastCapture:()=>lastCapture,getLastResult:()=>lastResult};
 })();
