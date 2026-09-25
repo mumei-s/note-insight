@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.22.12",
-  "notificationVersion": "3.6.6",
+  "notificationVersion": "3.6.7",
   "dashboardVersion": "1.4.9",
-  "releasedAt": "2026-09-22T13:35:37.822780+00:00",
+  "releasedAt": "2026-09-25T16:04:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "分析パネルの更新表示・導線を一本化。公式Dashboardに連携して読み込むボタンを設置し、設定と読込パネルを小型化。別料金の表記を有料拡張機能のリンクへ移動。",
-  "dmVersion": "1.4.5",
+  "note": "note通常記事・認証・編集導線の安全対策。フォロー照合はINSIGHTから明示実行した時だけ起動し、本人通知は認証/編集系通信を監視しない。DMはDM以外の通信を監視しない。公開記事→編集→下書き保存への常駐干渉を遮断。",
+  "dmVersion": "1.4.6",
   "dmLabel": "DM同期"
 }
