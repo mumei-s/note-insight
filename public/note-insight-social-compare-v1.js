@@ -1,8 +1,9 @@
 (function(){
 'use strict';
 if(location.hostname!=='note.com')return;
-const VERSION='1.0.0',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
-const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000;
+if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
+const VERSION='1.0.1',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function get(k,d){if(typeof gm().getValue==='function')return gm().getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
@@ -22,6 +23,7 @@ function person(row,direction,rank){
 }
 let running=false;
 async function run(force=false){
+ if(!force&&sessionStorage.getItem(ACTIVE)!=='1')return;
  if(running||document.visibilityState==='hidden')return;
  running=true;let id='',auth=null,state=null,lock=null;
  const w=pageWindow();
@@ -42,7 +44,7 @@ async function run(force=false){
    if(state.page<1){
     if(state.direction==='followings'){state={...state,direction:'followers',page:Math.ceil(Math.min(1000,state.followerTotal)/20)};await set(STATE+id,state);continue}
     const covered=state.followingKeys.length>=Math.min(1000,state.followingTotal)&&state.followerKeys.length>=Math.min(1000,state.followerTotal);
-    state={...state,complete:covered,finishedAt:Date.now(),error:covered?null:'SOCIAL_LIST_CHANGED',...(!covered?{startedAt:0}:{})};
+    state={...state,complete:covered,finishedAt:Date.now(),error:covered?null:'SOCIAL_LIST_CHANGED',...(!covered?{startedAt:0}:{})};if(covered)sessionStorage.removeItem(ACTIVE);
     if(await account()!==id)throw new Error('NOTE_ACCOUNT_CHANGED');
     await save({noteId:id,checkedAt:new Date().toISOString(),rows:[],status:status()},auth);await set(STATE+id,state);break;
    }
@@ -66,8 +68,8 @@ async function run(force=false){
   }
  }finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy;running=false}
 }
-function start(){const u=new URL(location.href),force=u.searchParams.get('mumei_social_scan')==='1';if(force){u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}void run(force)}
-window.addEventListener('pageshow',start);window.addEventListener('focus',()=>void run());document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')void run()});
-setTimeout(start,2500);setInterval(()=>void run(),60000);
+function start(){const u=new URL(location.href),force=u.searchParams.get('mumei_social_scan')==='1';if(force){sessionStorage.setItem(ACTIVE,'1');u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!=='1')return;void run(force)}
+window.addEventListener('pageshow',start);window.addEventListener('focus',start);document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')start()});
+setTimeout(start,2500);setInterval(start,60000);
 window.__mumeiSocialComparisonV1={version:VERSION,run,person};
 })();
