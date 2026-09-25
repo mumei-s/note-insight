@@ -445,3 +445,42 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 
 
 公開確認：機能main `7da75b6fe9a574332d75d0082a12ee1c21be117b`、Actions `35735241836` の245件回帰・build・Pages deploy成功。配信24ファイルのHTTP200・内容完全一致と、公開設定画面の料金表記移動・先頭の連携読込ボタンを確認。Dashboard1.4.9は端末更新が必要。本人の最新Dashboard保存を確認済みと説明しない。
+
+
+## 2026-09-25 note編集・下書き保存と403安全境界
+
+ユーザー実機で、極薄サムネイル記事を公開後に再編集しようとするとnoteログイン画面が点滅し、たどり着いても下書き保存失敗。INSIGHT系を全OFFにすると復旧したため、Boost/極薄以外を含むnote.com常駐処理を総点検。対象記事は `https://note.com/ss_yr/n/n4bf1fdab631e`。
+
+### 原因として確認した常駐処理
+- 旧本人通知2.9系はwrapper本体が空でも `@require` で旧Runtime/AutoScanを読み込んでいた。2.9.70で `@require` を完全撤去した互換停止版へ変更。
+- Social Readerは通常noteページでも自動で最大1000人照合を再開できた。現在はINSIGHTの「noteで照合」から `mumei_social_scan=1` を明示したプロフィールpathname上だけ実行・再開する。記事 `/ss_yr/n/n4bf1fdab631e` では再開しない。
+- Dashboard Coreはwrapperが `note.com/*` 対象のため、通常記事でもfetch/XHR hookを初期化できた。Core V1.5.0で `/sitesettings/stats` またはDashboard画面以外は冒頭で即終了。
+- Dashboard wrapperの `FLOW_KEY` が中断後に残ると通常noteページからDashboardへ自動遷移する可能性があった。V1.5.1で、direct/pending handoffが無い通常ページでは残留FLOWを削除し、自動遷移を禁止。
+- 本人通知はV3.6.10。通常noteページのglobal fetch/XHR hookを廃止し、通知読込時に専用通知APIを直接取得する方式へ限定。
+- DMはV1.4.8。DM routeに入った時だけnetwork hookを有効化し、通常記事・編集導線ではhookしない。
+- 旧Dashboard integrated互換コードにもDashboard画面限定guardを追加。
+
+### 403の切り分け
+- 極薄/通知カード300件処理は1件ごとにnote正規カード化通信を発生させるため、403の主負荷要因。
+- 現行カード処理には3秒間隔、10件ごと30秒休止、403/429 hold、手動再開が存在する。
+- ただし当時は上記INSIGHT旧AutoScan・Social照合・Dashboard hook等が同時にnote API通信を上乗せできたため、403を悪化させた可能性がある。
+- 「INSIGHT画面で403を見た」ことを前提にしない。403は極薄/カード側で確認されたものとして扱い、INSIGHTは通信競合の悪化要因として分離して記録する。
+
+### 見直し指示の維持確認
+- 本人通知：保存済みboard/local cacheを先に表示、カテゴリ切替で一覧を消さない。silent refreshを継続。
+- other/未分類：classifier action-v26-formats、noise除外、onlyPending再分類を本番Supabaseとmainで一致確認。
+- お気に入り：個別 `★ 解除` 維持。
+- 設定/更新状態：本人通知カードの独立導線を維持。
+- 詳細/精度：3列圧縮UIを維持。
+- Dashboard分析：保存済みcacheを即表示、最新はbackground refresh。公式Dashboardの日別系列がある場合はスキ/コメント比較も公式値を正本にし、public履歴はfallback。
+- Supabase本番の `insight-dashboard-data` はmainのFUNCTION_VERSION 9内容と一致。通知 ingest/reclassify/feedも action-v26-formats / noise除外を本番ソースで確認。
+
+### 現在の版
+- INSIGHT本体 `2026.09.25.1`
+- 本人通知 `3.6.10`
+- Dashboard `1.5.1`
+- DM `1.4.8`
+- 旧本人通知 `2.9.70` は完全停止版
+- PWA cache `mumei-note-insight-v58`
+
+GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火。GitHub connector上ではworkflow run/statusの取得結果が空のため、Pages実配信成功とAndroid実機の編集/保存成功は未確認のまま。実機成功まで「完全解消」と断定しない。
