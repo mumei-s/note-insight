@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.22.12",
-  "notificationVersion": "3.6.7",
+  "notificationVersion": "3.6.8",
   "dashboardVersion": "1.4.9",
   "releasedAt": "2026-09-25T16:04:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "note通常記事・認証・編集導線の安全対策。フォロー照合はINSIGHTから明示実行した時だけ起動し、本人通知は認証/編集系通信を監視しない。DMはDM以外の通信を監視しない。公開記事→編集→下書き保存への常駐干渉を遮断。",
+  "note": "note記事編集・認証保護。通常記事ではフォロー照合を自動起動せず、本人通知のnote API監視/idle account lookupを停止。通知APIだけを監視し、DMはDM通信だけを監視。公開記事→編集→下書き保存へのINSIGHT常駐干渉を遮断。",
   "dmVersion": "1.4.6",
   "dmLabel": "DM同期"
 }
