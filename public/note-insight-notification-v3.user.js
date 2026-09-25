@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.7
-// @description  本人通知V3.6.7。画面を動かさず最大300件を古い順に保存。停止地点から再開し、2回目から差分を反映します。
+// @version      3.6.8
+// @description  本人通知V3.6.8。画面を動かさず最大300件を古い順に保存。停止地点から再開し、2回目から差分を反映します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -22,7 +22,7 @@
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-feature-bridge-v1.js?v=110
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3640
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3650
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3660
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=138
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=362
@@ -38,7 +38,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.7',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.8',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function publish(){try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}}
