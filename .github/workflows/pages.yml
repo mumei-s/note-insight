@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-v5-card-18918-20260925
+  group: pages-v6-editor-safety-20260925
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +50,7 @@ jobs:
           node --check public/note-insight-dm-reader-v1.js
           node --check public/dashboard-setup.js
           node --check public/note-insight-dashboard-sync.user.js
+          node --check public/note-insight-dashboard-sync-core-v1.1.0.js
           node --check public/note-pon-editor-v6.user.js
       - name: Card tool 18.9.x safety and bundle verification
         run: |
