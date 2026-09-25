@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  if(location.origin!=='https://note.com'||!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname))return;
   if(document.documentElement?.dataset.mumeiDashboardCore318)return;
   if(document.documentElement)document.documentElement.dataset.mumeiDashboardCore318='1';
   const VERSION='1.1.0';
