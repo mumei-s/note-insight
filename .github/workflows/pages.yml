@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-v6-editor-safety-20260925
+  group: pages-v7-dashboard-flow-safety-20260925
   cancel-in-progress: true
 
 jobs:
