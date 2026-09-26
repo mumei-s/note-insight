@@ -29,4 +29,10 @@
 
 Supabase `insight-dashboard-data` の配備version 11（FUNCTION_VERSION 10）は公開済みで、取得した配備後ソースがローカルと完全一致。実HTTPでも認証なしのsync-statusを401 INGEST_TOKEN_REQUIREDとして拒否することを確認。DBスキーマと利用者データの変更なし。
 
-GitHub Pages公開結果は公開後に追記する。
+## 公開確認
+
+機能main `36adfc77d9ff031742e4e84f56f062c17666349b`、Actions `36242897132` のbuild・全264件検証・Pages deployが成功。Pagesのmanifest、wrapper、core、設定HTML/JS、index、本体bundleの7ファイルと、実際のraw GitHub installer／@require先 `?v=152` の2ファイル（計9ファイル）がHTTP200・検証済み内容と完全一致した。
+
+公開設定画面でも「ダッシュボード同期をインストール（v1.5.2）」と最新版v1.5.2を確認。設定URLは `https://mumei-s.github.io/note-insight/dashboard-setup.html`。この追記は公開確認の記録だけで製品コードの変更を含まないため、追加のCI実行を省略する。
+
+端末更新・本人の再連携・最新データ取得は引き続き必要。本人の実データを新規保存済みと報告しない。
