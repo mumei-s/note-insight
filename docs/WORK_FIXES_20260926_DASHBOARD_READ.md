@@ -57,3 +57,11 @@ Supabase `insight-dashboard-data` の配備version 11（FUNCTION_VERSION 10）�
 ローカル必須検証はカード4件・既存79件・Reader等190件の合計273件成功。build・構文・差分検査・機能境界も成功。機能コミットは `4234a84`。
 
 1.5.3のmainへの直接pushは、自動承認審査により「本番公開の方法・対象への明示的な承認がない」と却下された。承認を迂回しない。別ブランチ `fix/dashboard-handoff-20260926` にレビュー用に保存し、mainへの反映とPages公開はユーザー承認後に行う。現行本番は1.5.2のままであり、1.5.3を公開済みと案内しない。
+
+## 2026-09-27 08:15 JST 承認後の公開完了
+
+ユーザーの「公開して良い」を受け、最新mainとPR #13のheadが検証済み状態のままであることを確認。PR #13をmainへマージし、機能main `9f56908ce89e3cb24f42bb6c72d3f0d1cc68dc01` を公開した。tree `c3e01c55f9a9b3b160c8641f9c330037b0492fb1` は昨夜の273件検証済みtreeと一致。
+
+Actions `36278896190` はbuild・全回帰検証・Pages deployとも成功。Pagesのmanifest、設定HTML/JS、wrapper、coreの5ファイルがHTTP200かつmainとバイト単位で一致。raw GitHub installerと実際の@require先 `?v=153` の2ファイルも一致。公開indexが読み込む `index-B545uewd.js` はHTTP200・Dashboard 1.5.3を含むことを確認。
+
+更新URL：`https://mumei-s.github.io/note-insight/dashboard-setup.html?v=153`。端末でダッシュボード同期1.5.3へ更新後、設定画面の「連携して公式データを読み込む」から再連携する。本人端末での最新データ保存は未確認のため、公開・配信確認と実機での保存成功を混同しない。上記の公開承認待ち記録は解消済み。
