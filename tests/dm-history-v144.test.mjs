@@ -24,6 +24,8 @@ async function fixture(t){
  };
  w.GM={getValue:async(k,d)=>gm.has(k)?gm.get(k):d,setValue:async(k,v)=>{if(failStorage&&k.startsWith('mumei_insight_dm_history'))throw new Error('storage-full');gm.set(k,v)},xmlHttpRequest:o=>{const body=JSON.parse(o.data),keys=(body.messages||[]).map(m=>m.message_key).filter(k=>!k.endsWith(':'+omit));writes.push(body);for(const k of keys)saved.add(k);o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedMessageKeys:keys})})}};
  w.eval(source);
+ // The production reader installs hooks on a DM pageshow, not on ordinary note pages.
+ w.dispatchEvent(new w.Event('pageshow'));
  await w.fetch(endpoint,{headers:{Authorization:'fixture-secret'}});
  for(let i=0;i<12;i++)await settle();
  calls.length=0;writes.length=0;

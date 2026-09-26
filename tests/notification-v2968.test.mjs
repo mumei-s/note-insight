@@ -192,5 +192,6 @@ test('legacy notification wrapper loads no old runtimes and Dashboard hooks are 
   const dash=read('public/note-insight-dashboard-sync-core-v1.1.0.js');
   assert.doesNotMatch(legacy,/@require/);
   assert.match(legacy,/旧本人通知ツール互換停止版/);
-  assert.match(dash,/if\(location\.origin!=='https:\/\/note\.com'\|\|!\/\^\\\/\(\?:sitesettings/);
+  assert.ok(dash.includes("if(location.origin!=='https://note.com')return;"));
+  assert.ok(dash.indexOf("function enterDashboard()")<dash.indexOf("const originalFetch="),'SPA route guard remains before hooks');
 });

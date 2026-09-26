@@ -484,3 +484,8 @@ DMは実際のdm-api.note.comの取得形式に対応。会話ごとの保存確
 - PWA cache `mumei-note-insight-v58`
 
 GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火。GitHub connector上ではworkflow run/statusの取得結果が空のため、Pages実配信成功とAndroid実機の編集/保存成功は未確認のまま。実機成功まで「完全解消」と断定しない。
+
+
+## 2026-09-26 公式Dashboardの実保存停止・パネル読取
+
+ユーザー実機「画面は変わるが読まれない／反映されない。ボタンパネルも開いて読む」への修正。開始時mainは `0e96de4`。本番の本人保存は9/9で止まり、有効なDashboard連携は0件と確認。Dashboard1.5.2は読取前の連携確認、パネルを１つずつ開いて蓄積、保存後のDB件数・数値照合を実装。サーバーversion11（ソース版10）を配備済み。端末更新後の再連携が必要で、本人ログイン後の最新保存は未確認。詳細と検証は [WORK_FIXES_20260926_DASHBOARD_READ.md](WORK_FIXES_20260926_DASHBOARD_READ.md)。

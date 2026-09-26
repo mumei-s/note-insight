@@ -54,7 +54,7 @@ test('最新版の実ツールと共存し、本人通知なしでも操作不�
   assert.ok(h.observerCalls()<30,'wrapper DOM cleanup and panel observation must settle');assert.equal(h.nav.length,0);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0,'opening settings must not issue a pairing request');
 });
 test('ツールの遅い起動も自動反映し、最新版以上をダウングレードしない',async t=>{
-  const h=page(t);await settle();h.w.document.documentElement.setAttribute('data-mumei-dashboard-bridge','1.4.99');await settle();
+  const h=page(t);await settle();h.w.document.documentElement.setAttribute('data-mumei-dashboard-bridge','99.0.0');await settle();
   assert.equal(h.get('startRead').disabled,false);assert.equal(h.get('installDashboard').hidden,true);assert.equal(h.nav.length,0);
 });
 test('最新版照会に失敗した時は確認済みを捏造しない',async t=>{

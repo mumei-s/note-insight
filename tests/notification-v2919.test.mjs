@@ -36,7 +36,7 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.6.10 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.25.1");assert.equal(manifest.notificationVersion,"3.6.10");assert.equal(manifest.dmVersion,"1.4.8");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.5.1");
+  assert.equal(manifest.appVersion,"2026.09.25.1");assert.equal(manifest.notificationVersion,"3.6.10");assert.equal(manifest.dmVersion,"1.4.8");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.5.2");
   assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.25\.1"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.10"/);assert.match(v3,/@version\s+3\.6\.10/);
 });
 
@@ -51,9 +51,9 @@ test("legacy notification sync is a true no-require stop wrapper and Dashboard c
   assert.match(legacy,/__mumeiLegacyNotificationSyncRetired/);
   assert.match(dash,/location\.origin!=='https:\/\/note\.com'/);
   assert.match(dash,/sitesettings\\\/stats\|dashboard/);
-  assert.match(dash,/VERSION='1\.5\.0'/);
-  assert.match(boot,/@version\s+1\.5\.1/);
-  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=150/);
+  assert.match(dash,/VERSION='1\.5\.2'/);
+  assert.match(boot,/@version\s+1\.5\.2/);
+  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=152/);
 });
 
 
@@ -61,5 +61,5 @@ test("stale Dashboard flow never hijacks ordinary note navigation",async()=>{
   const boot=await read("public/note-insight-dashboard-sync.user.js");
   assert.match(boot,/if\(!direct&&!pending&&!dashboard\)\{if\(flow\)sessionStorage\.removeItem\(FLOW_KEY\)/);
   assert.match(boot,/A stale flow flag must never hijack normal note\/edit navigation/);
-  assert.match(boot,/@version\s+1\.5\.1/);
+  assert.match(boot,/@version\s+1\.5\.2/);
 });

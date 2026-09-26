@@ -17,9 +17,10 @@ test('本人の実関係フラグで範囲外の相手も照合し、初回の�
  assert.equal(r[0].relation,'following_only');assert.equal(r[0].identity_exact,true);assert.equal(r[0].lost_at,null);
  const lost=comparison()([row('older','followings')],[{person_key:'older',is_following:true,is_follower:false,checked_at:'2026-09-22T01:00:00Z',lost_at:'2026-09-22T01:00:00Z'}],{});assert.equal(lost[0].lost_at,'2026-09-22T01:00:00Z');
 });
-async function fixture(t,{legacy=false}={}){
+async function fixture(t,{legacy=false,authorized=true}={}){
  const dom=new JSDOM('<main></main>',{url:'https://note.com/tester',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,gm=new Map(),calls=[],writes=[];t.after(()=>dom.window.close());
  let account='tester',missing='',switchAt=0;
+ if(authorized)w.sessionStorage.setItem('mumei_social_explicit_scan_v1','/tester');
  gm.set('mumei_insight_notification_sync_token_v2:tester','private-test-token');
  w.setTimeout=()=>0;w.clearTimeout=()=>{};w.setInterval=()=>0;const listen=w.addEventListener.bind(w);w.addEventListener=(event,...args)=>{if(event!=='pageshow')listen(event,...args)};
  w.fetch=async path=>{const u=new URL(path,w.location.href);if(u.pathname==='/api/v2/current_user')return Response.json({data:{user:{urlname:account}}});if(u.pathname==='/api/v2/creators/tester')return Response.json({data:{key:'self-key',urlname:'tester',isMyself:true,followingCount:45,followerCount:1}});
@@ -45,3 +46,5 @@ test('相手の状態が存在しない応答をfalseにしない',async t=>{
  const h=await fixture(t),p=h.api.person({key:'p1',urlname:'p1'},'followings',900);assert.equal(p.is_following,true);assert.equal(p.is_follower,null);
  const nested=h.api.person({key:'p2',urlname:'p2',followings:{actively:true,passively:false}},'followings',901);assert.equal(nested.is_follower,false);assert.equal(nested.following_rank,901);
 });
+
+test('通常のプロフィール訪問では明示した照合がなければ通信しない',async t=>{const h=await fixture(t,{authorized:false});await h.api.run();assert.equal(h.calls.length,0);assert.equal(h.writes.length,0)});
