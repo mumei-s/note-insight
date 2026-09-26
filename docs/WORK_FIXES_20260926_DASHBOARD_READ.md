@@ -82,3 +82,5 @@ Actions `36278896190` はbuild・全回帰検証・Pages deployとも成功。Pa
 製品変更はDashboard core/wrapperと版数のみ。サーバーや利用者データは変更しない。公開前に必須回帰・ビルド・構文・機能境界を検証し、公開後に実配信を確認する。実コードを動かすDOM/通信/DBフィクスチャでの検証であり、参加者端末での実データ保存成功とは区別する。
 
 ローカル検証：必須回帰279件（カード4・既存79・Reader等196）成功。build・Dashboardの構文・差分検査成功。今回の新規6件には、クエリを変える内容タブ、同一応答／遅延更新、参加者切替と遅延応答の分離、参加者ごとの保存照合、途中の期間変更／画面移動を含む。
+
+公開完了：PR #14、main `26d64f96f6ede32bd84ef0f289e49a37f48db1ae`。Actions `36279903042` のbuild・必須回帰・Pages deployが成功。Pagesのmanifest/設定HTML/設定JS/wrapper/coreとraw GitHubのinstaller/@require先（計7ファイル）がHTTP200かつ検証済みmainと完全一致。公開indexが読む `index-BEnIDau-.js` もHTTP200・1.5.4を含むことを確認。更新URLは `https://mumei-s.github.io/note-insight/dashboard-setup.html?v=154`。端末ではダッシュボード同期を1.5.4に更新してから、本人のINSIGHT・noteアカウントで連携して読み込む。参加者端末での実データ保存は未確認。
