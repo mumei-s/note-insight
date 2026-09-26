@@ -28,10 +28,12 @@ function page(t,options={}){
   const Observer=w.MutationObserver;
   w.MutationObserver=class extends Observer{constructor(callback){let instance;super(records=>{observerCalls++;if(observerCalls>100){instance.disconnect();return}callback(records,instance)});instance=this;observers.push(this)}};
   w.fetch=async(url,init={})=>{calls.push({url:String(url),init});if(String(url).includes('insight-release.json')){if(options.manifestError)throw new Error('offline');return{ok:true,json:async()=>release}}if(options.pair)return options.pair(url,init,w);return{ok:true,json:async()=>({ok:true,noteId:'tester',pairingCode:'12345678'})}};
+  const gmStore=new Map();w.GM=options.gm||{getValue:async(k,d)=>gmStore.get(k)??d,setValue:async(k,v)=>gmStore.set(k,v),deleteValue:async k=>gmStore.delete(k)};
+  if(options.legacyStore){delete w.GM;w.GM_getValue=(k,d)=>gmStore.get(k)??d;w.GM_setValue=(k,v)=>gmStore.set(k,v);w.GM_deleteValue=k=>gmStore.delete(k)}
   if(options.wrapper)w.eval(wrapper);
   // Intercept browser navigation without replacing the production pairing, version or event logic.
   w.eval(script.replace("'use strict';","'use strict'; const location=window.__location;"));
-  return{w,calls,nav,get:id=>w.document.getElementById(id),observerCalls:()=>observerCalls};
+  return{w,calls,nav,gmStore,get:id=>w.document.getElementById(id),observerCalls:()=>observerCalls};
 }
 
 test('従来URLで更新パネルを表示し、TOPへ戻さず分析へ戻るURLを維持する',async t=>{
@@ -97,6 +99,33 @@ test('参加者本人のトークンだけで照合し、秘密情報を含め�
 });
 test('auto=1の明示的な読み込み依頼だけ一度実行し、再読込の無限再実行を防ぐ',async t=>{
   const h=page(t,{wrapper:true,query:'?account=tester&auto=1',storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.w.dispatchEvent(new h.w.Event('focus'));await settle();assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);assert.equal(new URL(h.w.location.href).searchParams.get('auto'),'0');assert.equal(h.nav.length,1);
+});
+
+test('noteへ移動する前に拡張機能へ一回限りの連携依頼を保存する',async t=>{
+ const h=page(t,{wrapper:true,storage:{[MEMBER]:'member-fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
+ assert.equal(h.nav.length,1);const pending=JSON.parse(h.gmStore.get('mumei-dashboard-handoff-v143')||'null');
+ assert.equal(pending?.code,'12345678');assert.equal(pending.noteId,'tester');assert.ok(pending.savedAt);assert.ok(pending.expiresAt);assert.ok(!JSON.stringify(pending).includes('member-fixture'));
+});
+test('GM_setValue形式のブラウザでも共有保存を確認してから移動する',async t=>{
+ const h=page(t,{wrapper:true,legacyStore:true,storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
+ assert.equal(h.nav.length,1);assert.equal(JSON.parse(h.gmStore.get('mumei-dashboard-handoff-v143')).noteId,'tester');
+});
+
+test('拡張機能の保存が遅い間は移動も二重の連携開始もしない',async t=>{
+ const storage=new Map();let finish;
+ const gm={getValue:async(k,d)=>storage.get(k)??d,setValue:(k,v)=>new Promise(resolve=>{finish=()=>{storage.set(k,v);resolve()}}),deleteValue:async k=>storage.delete(k)};
+ const h=page(t,{wrapper:true,gm,storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
+ assert.equal(h.nav.length,0);assert.ok(finish);h.get('startRead').click();await settle();assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
+ finish();await settle();assert.equal(h.nav.length,1);
+});
+test('拡張機能への保存失敗を移動成功と表示しない',async t=>{
+ const h=page(t,{wrapper:true,gm:{getValue:async(k,d)=>d,setValue:async()=>{throw Error('disk full')}},storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
+ assert.equal(h.nav.length,0);assert.match(h.get('readStatus').textContent,/連携情報を保存できません/);assert.equal(h.get('startRead').disabled,false);
+});
+test('連携情報の保存中に本人アカウントが変わった場合も移動しない',async t=>{
+ const storage=new Map();let finish;
+ const h=page(t,{wrapper:true,gm:{getValue:async(k,d)=>storage.get(k)??d,setValue:(k,v)=>new Promise(resolve=>{finish=()=>{storage.set(k,v);resolve()}})},storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();h.w.localStorage.setItem(ACTIVE,'another');finish();await settle();
+ assert.equal(h.nav.length,0);assert.match(h.get('readStatus').textContent,/アカウント/);
 });
 test('ログインなしなら読込を実行せず、エラーが版検出のDOM更新で消えない',async t=>{
   const h=page(t,{wrapper:true});await settle();h.get('startRead').click();await settle();h.w.document.documentElement.setAttribute('data-mumei-dashboard-bridge',release.dashboardVersion);await settle();assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);assert.equal(h.nav.length,0);assert.match(h.get('readStatus').textContent,/ログイン/);

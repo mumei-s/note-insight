@@ -8,7 +8,7 @@ import "./insight-update-guide-v18";
 
 export const CURRENT_INSIGHT_APP_VERSION = "2026.09.25.1";
 export const CURRENT_NOTIFICATION_VERSION = "3.6.10";
-export const CURRENT_DASHBOARD_VERSION = "1.5.2";
+export const CURRENT_DASHBOARD_VERSION = "1.5.3";
 export const CURRENT_DM_VERSION = "1.4.8";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";

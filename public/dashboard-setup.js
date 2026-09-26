@@ -73,6 +73,18 @@
   $('verifyDashboard').addEventListener('click',()=>void verify(true));
   $('browser').addEventListener('change',()=>{browserGuide();paint()});
   $('copyPage').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(self.href);text($('copyPage'),'コピーしました')}catch{text($('copyPage'),'アドレス欄からこのページのURLをコピーしてください')}});
+  function saveReadHandoff(payload){
+    return new Promise((resolve,reject)=>{
+      const root=document.documentElement,id='mumei-dashboard-handoff',requestId=crypto.randomUUID();
+      document.getElementById(id)?.remove();
+      const el=document.createElement('span');el.id=id;el.hidden=true;el.setAttribute('data-payload',JSON.stringify({...payload,requestId}));
+      root.removeAttribute('data-mumei-dashboard-handoff-saved');root.removeAttribute('data-mumei-dashboard-handoff-id');root.removeAttribute('data-mumei-dashboard-handoff-error');
+      const finish=error=>{clearTimeout(timer);document.removeEventListener('mumei-dashboard-handoff-saved',onSaved);el.remove();error?reject(new Error(error)):resolve()};
+      const onSaved=()=>{if(root.getAttribute('data-mumei-dashboard-handoff-id')!==requestId)return;finish(root.getAttribute('data-mumei-dashboard-handoff-saved')==='1'?'':'HANDOFF_SAVE_FAILED')};
+      const timer=setTimeout(()=>finish('HANDOFF_SAVE_TIMEOUT'),5000);
+      document.addEventListener('mumei-dashboard-handoff-saved',onSaved);document.body.append(el);document.dispatchEvent(new Event('mumei-dashboard-handoff'));
+    });
+  }
   async function startRead(){
     if(busy||$('startRead').disabled)return;
     const member=get(MEMBER),owner=expected==='ss_yr'?get(OWNER):'',accountAtStart=get(ACTIVE);
@@ -86,9 +98,12 @@
       const p=await r.json().catch(()=>({}));if(!r.ok||p.ok===false)throw new Error(p.error||'PAIR_START_FAILED');
       if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
       const id=accountId(p.noteId),code=String(p.pairingCode||'');if(!id||!/^\d{8}$/.test(code))throw new Error('PAIR_RESPONSE_INVALID');if(expected&&id!==expected)throw new Error('ACCOUNT_MISMATCH');
+      readStatus('noteへ渡す連携情報を保存しています…');
+      await saveReadHandoff({code,noteId:id,returnTo:back,createdAt:Date.now(),expiresAt:p.expiresAt||new Date(Date.now()+10*60*1000).toISOString()});
+      if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
       const url=new URL('https://note.com/sitesettings/stats');url.searchParams.set('mumei_dashboard_pair',code);url.searchParams.set('mumei_dashboard_sync','1');url.searchParams.set('mumei_dashboard_account',id);url.searchParams.set('mumei_dashboard_return',back);url.searchParams.set('mumei_dashboard_tool_version',current());
       readStatus('@'+id+' を確認しました。公式ダッシュボードへ移動します。','ok');location.assign(url.href);
-    }catch(e){const message=String(e?.message||'');readStatus(/ACCOUNT/.test(message)?'アカウントが一致しないか切り替わりました。INSIGHTへ戻り、利用するアカウントを確認してください。':/LOGIN|SESSION|401/.test(message)?'INSIGHTのログインを確認してください。ログイン後、この画面から再開できます。':e?.name==='AbortError'?'通信に時間がかかっています。もう一度読み込んでください。':'読み込みを開始できませんでした。通信とINSIGHTのログインを確認して再試行してください。','warn')}
+    }catch(e){const message=String(e?.message||'');readStatus(/ACCOUNT/.test(message)?'アカウントが一致しないか切り替わりました。INSIGHTへ戻り、利用するアカウントを確認してください。':/HANDOFF/.test(message)?'連携情報を保存できませんでした。この画面を再読込して、もう一度開始してください。':/LOGIN|SESSION|401/.test(message)?'INSIGHTのログインを確認してください。ログイン後、この画面から再開できます。':e?.name==='AbortError'?'通信に時間がかかっています。もう一度読み込んでください。':'読み込みを開始できませんでした。通信とINSIGHTのログインを確認して再試行してください。','warn')}
     finally{clearTimeout(timer);busy=false;$('startRead').disabled=!(release&&current()&&compare(current(),release.dashboardVersion)>=0&&supported())}
   }
   $('startRead').addEventListener('click',()=>void startRead());

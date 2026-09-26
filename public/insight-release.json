@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.25.1",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.2",
-  "releasedAt": "2026-09-26T22:00:00+09:00",
+  "dashboardVersion": "1.5.3",
+  "releasedAt": "2026-09-26T22:25:26+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "公式ダッシュボード：連携失効を読取前に検知。折りたたみと記事・マガジン・メンバーシップを順に開いて取得。保存後にDBの件数・数値を照合して表示。",
+  "note": "公式ダッシュボード：連携情報を拡張機能に保存してから移動。note側でURLが変わっても本人照合と読み込みを継続。保存失敗・別アカウント・期限切れでは停止。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
