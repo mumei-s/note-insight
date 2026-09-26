@@ -6,16 +6,16 @@ import {JSDOM} from 'jsdom';
 const core=readFileSync('public/note-insight-dashboard-sync-core-v1.1.0.js','utf8');
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-function page(t,markup,{paired=true,stats=async()=>({}),before,after,url='https://note.com/sitesettings/stats'}={}){
+function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),before,after,watchHref=false,url='https://note.com/sitesettings/stats'}={}){
   const dom=new JSDOM(`<main><h1>アクセス状況</h1>${markup}</main>`,{url,runScripts:'outside-only'}),w=dom.window,saves=[],nav=[];
   t.after(()=>w.close());
   Object.defineProperty(w.document.body,'innerText',{get(){return this.textContent}});
   w.performance.getEntriesByType=()=>[];
-  const timer=w.setTimeout.bind(w);w.setTimeout=(fn,ms,...args)=>timer(fn,ms<5000?Math.min(ms,15):ms,...args);w.setInterval=()=>1;
-  if(paired){w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture')}
-  w.fetch=async url=>Response.json(String(url).includes('current_user')?{data:{user:{urlname:'tester'}}}:await stats(String(url)));
+  const timer=w.setTimeout.bind(w),interval=w.setInterval.bind(w);w.setTimeout=(fn,ms,...args)=>timer(fn,ms<5000?Math.min(ms,15):ms,...args);w.setInterval=watchHref?(fn,ms,...args)=>interval(fn,Math.min(ms,20),...args):()=>1;
+  if(paired){w.localStorage.setItem('mumei-dashboard-note-id-v1',identity());w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture')}
+  w.fetch=async url=>Response.json(String(url).includes('current_user')?{data:{user:{urlname:identity()}}}:await stats(String(url)));
   w.GM_xmlhttpRequest=options=>{const body=JSON.parse(options.data);
-    if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:'tester',snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,totals:s.totals}:{ok:true,paired:true,noteId:'tester'})}));return}
+    if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:identity(),snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,totals:s.totals}:{ok:true,paired:true,noteId:identity()})}));return}
     saves.push(body);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify({ok:true,snapshotId:saves.length,articleCount:body.articles.length,dailyPvDays:body.metricSeries.filter(r=>r.pageViews!=null).length,capturedAt:'2026-09-22T12:00:00Z'})}))};
   w.__location={get href(){return w.location.href},get origin(){return w.location.origin},get pathname(){return w.location.pathname},get search(){return w.location.search},assign:href=>nav.push(href)};
   before?.(w);w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
@@ -78,10 +78,11 @@ test('複数の公式JSONを消さずに合わせ、日別未取得時は同期�
 });
 
 test('期間を変えた後の公式データを自動保存し、前の期間の取得値を混ぜない',async t=>{
-  const h=page(t,'<p id="range">2026年9月20日〜2026年9月20日</p><p>ページビュー 2</p>',{stats:async url=>({page_views:{[url.includes('2026-09-21')?'2026-09-21':'2026-09-20']:url.includes('2026-09-21')?9:2}}),before:w=>{w.performance.getEntriesByType=()=>[{name:'https://note.com/api/v1/stats/daily?date=2026-09-20'}]}});
+  const h=page(t,'<p id="range">2026/9/20〜2026/9/20</p><p>ページビュー 2</p>',{stats:async url=>({page_views:{[url.includes('2026-09-21')?'2026-09-21':'2026-09-20']:url.includes('2026-09-21')?9:2}}),before:w=>{w.performance.getEntriesByType=()=>[{name:'https://note.com/api/v1/stats/daily?date=2026-09-20'}]}});
   await h.w.fetch('/api/v1/stats/daily?date=2026-09-20');await saved(h);
-  h.w.document.getElementById('range').textContent='2026年9月21日〜2026年9月21日';
+  h.w.document.getElementById('range').textContent='2026/9/21〜2026/9/21';
   await h.w.fetch('/api/v1/stats/daily?date=2026-09-21');await saved(h,2);
+  assert.equal(h.saves[1].periodStart,'2026-09-21');assert.equal(h.saves[1].periodEnd,'2026-09-21');
   assert.deepEqual(JSON.parse(JSON.stringify(h.saves[1].metricSeries.map(r=>[r.date,r.pageViews]))),[['2026-09-21',9]]);
   h.w.document.getElementById('mumei-dash-read').click();await pause(250);assert.equal(h.saves.length,2,'同じデータを二重保存しない');
 });
@@ -157,6 +158,28 @@ test('記事・マガジン・メンバーシップを巡回し、期間ボタ�
  await saved(h);assert.deepEqual(h.saves[0].articles.map(r=>r.contentType),['article','magazine','membership']);
 });
 
+test('タブ切替でURLが変わっても記事とメンシプを往復せず全種類を一度で保存する',async t=>{
+ const clicks=[];
+ const h=page(t,'<p>全体ビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button><button role="tab" aria-selected="false">マガジン</button><section id="items"></section>',{watchHref:true,before:w=>{
+  const render=name=>w.document.getElementById('items').innerHTML=`<table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${name}</td><td>4</td></tr></tbody></table>`;render('記事');
+  for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));w.history.replaceState(null,'','?content='+encodeURIComponent(tab.textContent));render(tab.textContent);void w.fetch('/api/v1/stats/list?content='+encodeURIComponent(tab.textContent))};
+ }});
+ await saved(h);await pause(250);assert.deepEqual(clicks,['メンバーシップ','マガジン']);assert.equal(h.saves.length,1);assert.deepEqual(h.saves[0].articles.map(r=>r.contentType),['article','membership','magazine']);
+});
+
+test('同じ公式応答では再読込せず、遅れた更新もタブ再巡回なしで保存する',async t=>{
+ const clicks=[];let checks=0,pv=12;
+ const h=page(t,'<p id="pv">全体ビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button><section id="items"></section>',{stats:async()=>({page_views:{'2026-09-27':pv}}),before:w=>{
+  const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{if(JSON.parse(o.data).action==='sync-status')checks++;send(o)};
+  const render=name=>w.document.getElementById('items').innerHTML=`<table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${name}</td><td>4</td></tr></tbody></table>`;render('記事');
+  for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));render(tab.textContent);void w.fetch('/api/v1/stats/daily')};
+ }});
+ await saved(h);const initialChecks=checks;await h.w.fetch('/api/v1/stats/daily');await pause(350);
+ assert.equal(checks,initialChecks);assert.deepEqual(clicks,['メンバーシップ']);
+ pv=20;h.w.document.getElementById('pv').textContent='全体ビュー 20';await h.w.fetch('/api/v1/stats/daily');await saved(h,2);
+ assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.deepEqual(h.saves[1].articles.map(r=>r.contentType),['article','membership']);
+});
+
 test('失効をパネル操作の前に検知し、読取に見せかけた画面変更をしない',async t=>{
  const h=page(t,'<details><summary>記事アクセス</summary><p>ページビュー 12</p></details>',{before:w=>{
   w.GM_xmlhttpRequest=o=>{assert.equal(JSON.parse(o.data).action,'sync-status');queueMicrotask(()=>o.onload({status:401,responseText:'{"ok":false,"error":"INGEST_TOKEN_INVALID"}'}))};
@@ -194,4 +217,23 @@ test('保存中に遅い公式データが届いた時は追加保存するま�
  for(let i=0;i<100&&!release;i++)await pause(20);assert.ok(release);
  h.w.document.getElementById('pv').textContent='ページビュー 20';await h.w.fetch('/api/v1/stats/daily');await pause(20);release();
  await saved(h,2);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
+});
+
+test('参加者を切り替えたら前の参加者の収集結果や遅延応答を再利用しない',async t=>{
+ let account='participant_a',late;
+ const table=name=>`<p>ページビュー 3</p><table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${name}</td><td>3</td></tr></tbody></table>`;
+ const h=page(t,`<section id="items">${table('最初の参加者の記事')}</section>`,{identity:()=>account,stats:async url=>url.includes('late')?new Promise(resolve=>late=resolve):{page_views:{'2026-09-27':3}}});
+ await h.w.fetch('/api/v1/stats/daily');await saved(h);
+ const oldRequest=h.w.fetch('/api/v1/stats/late');account='participant_b';
+ h.w.localStorage.setItem('mumei-dashboard-note-id-v1',account);h.w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture-b');h.w.document.getElementById('items').innerHTML=table('次の参加者の記事');
+ late({page_views:{'2026-09-26':999}});await oldRequest;
+ await h.w.fetch('/api/v1/stats/daily');await saved(h,2);
+ assert.equal(h.saves[1].noteId,'participant_b');assert.deepEqual(h.saves[1].articles.map(r=>r.title),['次の参加者の記事']);assert.deepEqual(h.saves[1].metricSeries.map(r=>[r.date,r.pageViews]),[['2026-09-27',3]]);
+});
+
+for(const change of ['period','route'])test('読取途中の実際の画面変更は保存を止める: '+change,async t=>{
+ const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false" id="next">メンバーシップ</button>',{before:w=>{
+  w.document.getElementById('next').onclick=()=>{if(change==='period')w.document.getElementById('range').textContent='2026/8/2〜2026/8/29';else w.history.pushState(null,'','/tester/n/n123')};
+ }});
+ await pause(400);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/表示期間または画面が変わりました/);
 });

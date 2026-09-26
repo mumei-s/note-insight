@@ -32,3 +32,19 @@ test('保存後の照合は同じ本人の確定済み記録と実際の記事�
  assert.equal((await h.call({snapshotId:'8'})).status,409);assert.equal((await h.call({snapshotId:'9'})).status,409);assert.equal((await h.call({noteId:'another',snapshotId:'7'})).status,409);
  assert.equal(h.tables.insight_dashboard_snapshots.length,3,'照合はデータを作成しない');
 });
+
+test('一般参加者も本人通知なしで自分の保存を照合でき、他人の保存にはアクセスできない',async()=>{
+ const h=await backend();
+ h.tables.insight_access_applications=[{id:'member-a',note_id:'participant_a',status:'active',verified_at:'2026-09-26'},{id:'member-b',note_id:'participant_b',status:'active',verified_at:'2026-09-26'}];
+ for(const id of ['a','b']){
+  h.tables.insight_notification_ingest_tokens.push({member_id:'member-'+id,purpose:'note_dashboard_sync',token_hash:hash('fixture-'+id),revoked_at:null,expires_at:'2099-01-01'});
+  h.tables.insight_dashboard_snapshots.push({id:'snapshot-'+id,member_id:'member-'+id,confirmed:true,captured_at:'2026-09-27',metric_series:[{date:'2026-09-26',pageViews:5}],total_page_views:5});
+  h.tables.insight_dashboard_article_snapshots.push({snapshot_id:'snapshot-'+id});
+ }
+ for(const id of ['a','b']){
+  const self={noteId:'participant_'+id},token='fixture-'+id;
+  assert.equal((await h.call(self,token)).body.paired,true);
+  const saved=await h.call({...self,snapshotId:'snapshot-'+id},token);assert.equal(saved.status,200);assert.equal(saved.body.articleCount,1);assert.equal(saved.body.dailyPvDays,1);assert.equal(saved.body.totals.pageViews,5);
+  assert.equal((await h.call({...self,snapshotId:'snapshot-'+(id==='a'?'b':'a')},token)).status,409);assert.equal((await h.call({...self,snapshotId:'7'},token)).status,409);
+ }
+});

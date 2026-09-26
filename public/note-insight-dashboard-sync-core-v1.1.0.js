@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.3
+// @version      1.5.4
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -19,13 +19,13 @@
       document.removeEventListener('mumei-dashboard-mount',enterDashboard);startDashboardCore();
     });return;
   }
-  const VERSION='1.5.3';
+  const VERSION='1.5.4';
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const DASH_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
   const CAPTURE=[];
-  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='';
+  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null;
   const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const num=(v)=>{if(v==null)return 0;const s=String(v).replace(/[￥¥円,%\s]/g,'').replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
   const text=(v)=>String(v??'').replace(/\s+/g,' ').trim();
@@ -38,14 +38,19 @@
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(text(el.getAttribute('aria-label')||el.textContent));
   const periodKey=()=>{const p=detectPeriod();return JSON.stringify([p.periodStart,p.periodEnd,[...document.querySelectorAll('main [role="tab"][aria-selected="true"]')].filter(el=>!contentTab(el)).map(el=>text(el.textContent))])};
-  const captureScope=()=>({href:location.href,period:periodKey()});
+  // Content tabs change the query string within the same dashboard and period.
+  const dashboardLocation=()=>location.origin+location.pathname;
+  const connectionKey=()=>JSON.stringify([localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
+  const captureScope=()=>({href:dashboardLocation(),period:periodKey(),connection:connectionKey()});
+  const currentCapture=scope=>scope.href===dashboardLocation()&&scope.period===periodKey()&&scope.connection===connectionKey();
   function captureJson(url,payload,scope=captureScope()){
-    if(!isDashboard()||scope.href!==location.href||scope.period!==periodKey()||!payload||typeof payload!=='object'||(!statsUrl(url)&&!String(url).startsWith('hydration:')))return;
-    const idx=CAPTURE.findIndex(x=>x.url===String(url));if(idx>=0)CAPTURE.splice(idx,1);
+    if(!isDashboard()||!currentCapture(scope)||!payload||typeof payload!=='object'||(!statsUrl(url)&&!String(url).startsWith('hydration:')))return;
+    const idx=CAPTURE.findIndex(x=>x.url===String(url)&&currentCapture(x));
+    if(idx>=0){if(JSON.stringify(CAPTURE[idx].payload)===JSON.stringify(payload)){CAPTURE[idx].at=Date.now();return}CAPTURE.splice(idx,1)}
     CAPTURE.push({url:String(url),payload,...scope,at:Date.now()});captureRevision++;if(CAPTURE.length>40)CAPTURE.shift();
     // A period change or a manually opened lazy panel must also reach INSIGHT.
     if(!busy&&localStorage.getItem(TOKEN_KEY)&&localStorage.getItem(NOTE_KEY)){
-      clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow(),900);
+      clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);
     }
   }
 
@@ -98,13 +103,13 @@
   }
   function readHydration(){
     let index=0;
-   for(const script of document.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{const payload=JSON.parse(script.textContent||''),url='hydration:'+index++;if(!CAPTURE.some(c=>c.url===url&&c.href===location.href&&c.period===periodKey()&&JSON.stringify(c.payload)===JSON.stringify(payload)))captureJson(url,payload)}catch{}}
+   for(const script of document.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{const payload=JSON.parse(script.textContent||''),url='hydration:'+index++;if(!CAPTURE.some(c=>c.url===url&&currentCapture(c)&&JSON.stringify(c.payload)===JSON.stringify(payload)))captureJson(url,payload)}catch{}}
   }
   async function refreshChartSources(){
    readHydration();
    // Only the latest observed request for each endpoint belongs to the selected view.
    const latest=new Map();
-   const current=CAPTURE.filter(cap=>statsUrl(cap.url)&&cap.href===location.href&&cap.period===periodKey());
+   const current=CAPTURE.filter(cap=>statsUrl(cap.url)&&currentCapture(cap));
    const urls=current.length?current.filter(cap=>Date.now()-cap.at>10000).map(cap=>cap.url):CAPTURE.some(cap=>statsUrl(cap.url))?[]:(performance.getEntriesByType?.('resource')||[]).map(entry=>entry.name);
    for(const name of urls){if(statsUrl(name)){const url=new URL(name,location.href);latest.set(url.origin+url.pathname,url.href)}}
    await Promise.all([...latest.values()].slice(-8).map(async url=>{const scope=captureScope(),c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await originalFetch(url,{method:'GET',credentials:'include',cache:'no-store',signal:c.signal});if(r.ok)captureJson(url,await r.json(),scope)}catch{}finally{clearTimeout(timer)}}));
@@ -135,7 +140,7 @@
     const seen=new WeakSet(),visitedTabs=new Set([...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].filter(contentTab).map(el=>text(el.textContent)));let opened=0;
     collect();
     for(let pass=0;pass<60;pass++){
-      if(!isDashboard()||location.href!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
+      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
       // Re-query after each render. Read one panel before another accordion/tab can hide it.
       const candidates=panelControls().filter(el=>!seen.has(el)&&(!contentTab(el)||!visitedTabs.has(text(el.textContent))));
       const control=candidates.find(el=>!contentTab(el))||candidates[0];
@@ -151,7 +156,7 @@
   async function waitForDashboard(href,initialPeriod){
     let quiet=0,previous='';
     for(let tick=0;tick<60;tick++){
-      if(!isDashboard()||location.href!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
+      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
       const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(readable);
       const signature=JSON.stringify([captureRevision,tableArticles(),detectTotals(),text(dashboardRoot().innerText||dashboardRoot().textContent).replace(text(panel?.textContent),'')]);
       quiet=!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
@@ -162,7 +167,7 @@
     throw new Error('公式パネルの読込が完了していません。表示が落ち着いてから再読込してください');
   }
 
-  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(cap.href!==location.href||cap.period!==periodKey())continue;metricRows.push(...dailyMetrics(cap.payload));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
+  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;metricRows.push(...dailyMetrics(cap.payload));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
   function labelledNumber(label){
     const labelOnly=new RegExp('^(?:'+label+')$','i'),value='([￥¥]?[0-9][0-9,]*(?:\\.[0-9]+)?(?:円)?)';
     const before=new RegExp('^'+value+'\\s*(?:'+label+')$','i'),after=new RegExp('^(?:'+label+')[\\s：:]*'+value+'$','i');
@@ -180,7 +185,7 @@
   }
 
   function detectTotals(){const body=document.body?.innerText||'';return{impressions:labelledNumber('インプレッション',body),pageViews:labelledNumber('(?:ページビュー|全体ビュー|ビュー数)',body),likes:labelledNumber('スキ',body),comments:labelledNumber('コメント',body),salesYen:labelledNumber('売上',body)}}
-  function detectPeriod(){const body=document.body?.innerText||'',range=body.match(/(20\d{2})[\/.年](\d{1,2})[\/.月](\d{1,2})[^\d]{1,5}(?:〜|~|-)[^\d]*(?:(20\d{2})[\/.年])?(\d{1,2})[\/.月](\d{1,2})/);if(!range)return{periodType:'custom',periodStart:null,periodEnd:null};const year2=range[4]||range[1],pad=x=>String(x).padStart(2,'0');return{periodType:'custom',periodStart:`${range[1]}-${pad(range[2])}-${pad(range[3])}`,periodEnd:`${year2}-${pad(range[5])}-${pad(range[6])}`}}
+  function detectPeriod(){const body=document.body?.innerText||'',range=body.match(/(20\d{2})[\/.年-](\d{1,2})[\/.月-](\d{1,2})(?:日)?\s*(?:〜|～|~|-|–|—)\s*(?:(20\d{2})[\/.年-])?(\d{1,2})[\/.月-](\d{1,2})/);if(!range)return{periodType:'custom',periodStart:null,periodEnd:null};const year2=range[4]||range[1],pad=x=>String(x).padStart(2,'0');return{periodType:'custom',periodStart:`${range[1]}-${pad(range[2])}-${pad(range[3])}`,periodEnd:`${year2}-${pad(range[5])}-${pad(range[6])}`}}
   function detectCollected(){const m=(document.body?.innerText||'').match(/(20\d{2})[\/.年](\d{1,2})[\/.月](\d{1,2})[^\d]+(\d{1,2}):(\d{2})\s*集計/);if(!m)return null;const p=x=>String(x).padStart(2,'0');return`${m[1]}-${p(m[2])}-${p(m[3])}T${p(m[4])}:${p(m[5])}:00+09:00`}
   function detectTraffic(){const body=document.body?.innerText||'',rows=[];const rx=/(^|\n)\s*([A-Za-z0-9._-]+|X|Facebook|Instagram|no referrer|other)\s+([0-9.]+)%\s*\(([0-9,]+)PV\)/g;let m;while((m=rx.exec(body)))rows.push({source:text(m[2]),percent:num(m[3]),pv:num(m[4])});return uniq(rows,r=>r.source.toLowerCase())}
   function detectSummary(){const body=document.body?.innerText||'',a=body.match(/記事数\s*([0-9,]+)\s*本/),s=body.match(/シェアされた記事\s*([0-9,]+)\s*回/),r=body.match(/収益\s*[￥¥]?\s*([0-9,]+)/);return{articles:a?num(a[1]):0,sharedArticles:s?num(s[1]):0,revenueYen:r?num(r[1]):0}}
@@ -201,9 +206,9 @@
     return mergeMetrics(rows);
   }
   function currentContentType(){const label=text([...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].find(contentTab)?.textContent);return label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article'}
-  function collector(){
+  function collector(seed){
     let activeType=currentContentType();
-    const result={articles:[],sources:[],trafficSeries:[],metricSeries:[],totals:{},summary:{}};
+    const result=seed?JSON.parse(JSON.stringify(seed)):{articles:[],sources:[],trafficSeries:[],metricSeries:[],totals:{},summary:{}},freshTotals=new Set();
     return {result,collect(label=''){
       if(label)activeType=label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article';
       readHydration();const mined=mineNetwork();
@@ -211,16 +216,16 @@
       result.sources=uniq([...result.sources,...mined.sources,...detectTraffic()],r=>r.source.toLowerCase());
       result.trafficSeries=uniq([...result.trafficSeries,...mined.trafficSeries],r=>r.date+':'+r.source);
       result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries,...dailyTableMetrics()]);
-      for(const [key,value]of Object.entries(detectTotals()))if(value!==null&&result.totals[key]==null)result.totals[key]=value;
+      for(const [key,value]of Object.entries(detectTotals()))if(value!==null&&!freshTotals.has(key)){result.totals[key]=value;freshTotals.add(key)}
       for(const [key,value]of Object.entries(detectSummary()))if(value)result.summary[key]=value;
     }};
   }
-  async function syncNow(){
+  async function syncNow({automatic=false}={}){
     if(busy||!isDashboard())return;clearTimeout(autoTimer);busy=true;mount();setStatus('公式データを確認中…');
     const tokenAtStart=localStorage.getItem(TOKEN_KEY);
     const button=panel?.querySelector('#mumei-dash-read');if(button)button.disabled=true;
     try{
-      const startLocation=location.href,paired=(localStorage.getItem(NOTE_KEY)||'').toLowerCase(),current=await currentNoteId();
+      const startLocation=dashboardLocation(),paired=(localStorage.getItem(NOTE_KEY)||'').toLowerCase(),current=await currentNoteId();
       if(!paired)throw new Error('INSIGHTの分析からダッシュボードを連携してください');
       if(!current)throw new Error('noteへのログインを確認してください');
       if(current!==paired)throw new Error(`DASHBOARD_ACCOUNT_MISMATCH：note @${current} / INSIGHT @${paired}`);
@@ -229,13 +234,15 @@
       const connection=await xhr(DASH_API,{action:'sync-status',noteId:paired},{'X-Ingest-Token':token});
       if(connection.noteId!==paired||connection.paired!==true)throw new Error('保存先の確認ができませんでした');
       // Expand disclosure panels within the selected period; never switch period tabs.
-      for(let i=0;i<20;i++){if(!isDashboard()||location.href!==startLocation)return;if(dashboardRoot().querySelector('details,[aria-expanded],table')||detectTotals().pageViews!==null||mineNetwork().metricSeries.length)break;await sleep(250)}
+      for(let i=0;i<20;i++){if(!isDashboard()||dashboardLocation()!==startLocation)return;if(dashboardRoot().querySelector('details,[aria-expanded],table')||detectTotals().pageViews!==null||mineNetwork().metricSeries.length)break;await sleep(250)}
       await waitForDashboard(startLocation,null);
-      const selectedPeriod=periodKey(),read=collector();
-      const openedPanels=await expandDashboardPanels(startLocation,selectedPeriod,read.collect);
+      const selectedPeriod=periodKey(),scope=captureScope(),reuse=automatic&&lastCollection&&currentCapture(lastCollection.scope),read=collector(reuse?lastCollection.result:null);
+      // Late network data updates the collected snapshot without clicking tabs again.
+      const openedPanels=reuse?0:await expandDashboardPanels(startLocation,selectedPeriod,read.collect);
       await refreshChartSources();
       await waitForDashboard(startLocation,selectedPeriod);read.collect();
       const mined=read.result,articles=mined.articles,traffic=mined.sources;
+      lastCollection={scope,result:JSON.parse(JSON.stringify(mined))};
       const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals},period=detectPeriod(),collected=detectCollected(),summary=mined.summary;
       const dailyPvDays=mined.metricSeries.filter(r=>r.pageViews!==null).length;
       if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('公式データが見つかりません。グラフ表示後に「再読込」を押してください');
@@ -244,8 +251,8 @@
         trafficSources:traffic,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,summary,
         contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels},officialCollectedAt:collected,...period,pages:1};
       const readRevision=captureRevision;
-      if(!isDashboard()||location.href!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
-      const signature=JSON.stringify({...payload,contentSections:{article:payload.contentSections.article}});
+      if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
+      const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
       if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',dailyPvDays?'ok':'partial');return}
       const saved=await xhr(DASH_API,payload,{'X-Ingest-Token':token});
       if(!saved.snapshotId)throw new Error('保存結果を確認できませんでした。再読込してください');
@@ -253,8 +260,8 @@
       const verified=await xhr(DASH_API,{action:'sync-status',noteId:paired,snapshotId:saved.snapshotId},{'X-Ingest-Token':token});
       if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==mined.metricSeries.length)throw new Error('保存件数が一致しません。再読込してください');
       for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません。再読込してください');
-      if(!isDashboard()||location.href!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(TOKEN_KEY)!==token||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
-      if(captureRevision!==readRevision){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow(),900);return}
+      if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(TOKEN_KEY)!==token||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
+      if(captureRevision!==readRevision){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
       const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：公式の日別グラフを開いて再読込）`;
