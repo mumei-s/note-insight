@@ -6,7 +6,7 @@ import {JSDOM} from 'jsdom';
 const core=readFileSync('public/note-insight-dashboard-sync-core-v1.1.0.js','utf8');
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-function page(t,markup,{paired=true,stats=async()=>({}),before,url='https://note.com/sitesettings/stats'}={}){
+function page(t,markup,{paired=true,stats=async()=>({}),before,after,url='https://note.com/sitesettings/stats'}={}){
   const dom=new JSDOM(`<main><h1>アクセス状況</h1>${markup}</main>`,{url,runScripts:'outside-only'}),w=dom.window,saves=[],nav=[];
   t.after(()=>w.close());
   Object.defineProperty(w.document.body,'innerText',{get(){return this.textContent}});
@@ -19,9 +19,33 @@ function page(t,markup,{paired=true,stats=async()=>({}),before,url='https://note
     saves.push(body);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify({ok:true,snapshotId:saves.length,articleCount:body.articles.length,dailyPvDays:body.metricSeries.filter(r=>r.pageViews!=null).length,capturedAt:'2026-09-22T12:00:00Z'})}))};
   w.__location={get href(){return w.location.href},get origin(){return w.location.origin},get pathname(){return w.location.pathname},get search(){return w.location.search},assign:href=>nav.push(href)};
   before?.(w);w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
+  after?.(w);
   return {w,saves,nav};
 }
 async function saved(h,count=1){for(let i=0;i<100&&h.saves.length<count;i++)await pause(20);assert.equal(h.saves.length,count,h.w.document.querySelector('.status')?.textContent);await pause(20)}
+
+test('画面表示前にnoteがクエリを消しても到着時の連携依頼を失わない',async t=>{
+ const calls=[];
+ const h=page(t,'<p>ページビュー 8</p>',{paired:false,url:'https://note.com/sitesettings/stats?mumei_dashboard_pair=12345678&mumei_dashboard_sync=1&mumei_dashboard_account=tester',before:w=>{
+  w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);calls.push(b.action);queueMicrotask(()=>o.onload({status:200,responseText:JSON.stringify(b.action==='pair-exchange'?{ok:true,noteId:'tester',ingestToken:'fixture'}:{ok:true,paired:true,noteId:'tester'})}))};
+ },after:w=>w.history.replaceState(null,'','/sitesettings/stats')});
+ for(let i=0;i<30&&!calls.length;i++)await pause(20);
+ assert.equal(calls[0],'pair-exchange',h.w.document.querySelector('.status')?.textContent);
+ assert.equal(h.w.localStorage.getItem('mumei-dashboard-ingest-token-v1'),'fixture');
+});
+
+for(const condition of ['expired','wrong-account','normal-page'])test('保存した連携依頼の範囲を守る: '+condition,async t=>{
+ const pending=JSON.stringify({code:'12345678',noteId:condition==='wrong-account'?'another':'tester',savedAt:Date.now(),expiresAt:new Date(Date.now()+(condition==='expired'?-1:600000)).toISOString()});
+ const gmStore=new Map([['mumei-dashboard-handoff-v143',pending]]);let exchanges=0,reads=0;
+ const h=page(t,'<p>アクセス状況 ページビュー 8</p>',{paired:false,url:condition==='normal-page'?'https://note.com/tester/n/n123':'https://note.com/sitesettings/stats',before:w=>{
+  w.GM={getValue:async(k,d)=>gmStore.get(k)??d,setValue:async(k,v)=>gmStore.set(k,v),deleteValue:async k=>gmStore.delete(k)};
+  const fetch=w.fetch;w.fetch=(...args)=>{reads++;return fetch(...args)};w.GM_xmlhttpRequest=()=>{exchanges++};
+ }});await pause(100);
+ assert.equal(exchanges,0);assert.equal(h.saves.length,0);assert.equal(h.nav.length,0);
+ if(condition==='expired')assert.equal(gmStore.size,0);
+ if(condition==='wrong-account')assert.match(h.w.document.querySelector('.status').textContent,/アカウント不一致/);
+ if(condition==='normal-page'){assert.equal(reads,0);assert.equal(gmStore.size,1);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null)}
+});
 
 test('折りたたみを開いて遅い日別通信を待ち、記事と公式合計を一度で保存する',async t=>{
   let finish,requested=false;
@@ -86,13 +110,15 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  const setupUrl=new URL(entry.nav[0]);assert.equal(setupUrl.pathname,'/note-insight/dashboard-setup.html');assert.equal(setupUrl.searchParams.get('auto'),'1');assert.equal(setupUrl.searchParams.get('account'),'tester');
  const setup=new JSDOM(readFileSync('public/dashboard-setup.html','utf8'),{url:setupUrl.href,runScripts:'outside-only'}),w=setup.window,setupNav=[],pairCalls=[];
  const observers=[],Observer=w.MutationObserver;w.MutationObserver=class extends Observer{constructor(fn){super(fn);observers.push(this)}};t.after(()=>{observers.forEach(o=>o.disconnect());w.close()});w.localStorage.setItem('mumei-insight-access-token','member-fixture');w.localStorage.setItem('mumei-insight-active-account-v3','tester');
- w.__location={get href(){return w.location.href},get search(){return w.location.search},get origin(){return w.location.origin},assign:href=>setupNav.push(href)};
+ const handoffStore=new Map(),gm={getValue:async(k,d)=>handoffStore.get(k)??d,setValue:async(k,v)=>handoffStore.set(k,v),deleteValue:async k=>handoffStore.delete(k)};w.GM=gm;
+ w.__location={get href(){return w.location.href},get search(){return w.location.search},get origin(){return w.location.origin},assign:href=>{assert.ok(handoffStore.get('mumei-dashboard-handoff-v143'),'移動より先に共有保存を確認');setupNav.push(href)}};
  const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
  w.fetch=async(url,init={})=>{if(String(url).includes('insight-release.json'))return Response.json(release);pairCalls.push(init);assert.equal(JSON.parse(init.body).action,'pair-start');assert.equal(init.headers['X-Insight-Token'],'member-fixture');return Response.json({ok:true,noteId:'tester',pairingCode:'12345678'})};
  w.eval(wrapper);w.eval(readFileSync('public/dashboard-setup.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));await pause(50);
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
- const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:setupNav[0],before:w=>{
+ const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
+  w.GM=gm; // note has already stripped all query parameters before userscript startup.
   w.GM_xmlhttpRequest=opts=>{const body=JSON.parse(opts.data);requests.push(body);let result;
    if(body.action==='pair-exchange'){assert.equal(body.code,'12345678');result={ok:true,noteId:'tester',ingestToken:'ingest-fixture'}}
    else if(body.action==='sync-status'){result=body.snapshotId?{ok:true,paired:true,noteId:'tester',snapshotId:1,confirmed:true,articleCount:0,dailyPvDays:1,dailyMetricCount:1,totals:stored.totals}:{ok:true,paired:true,noteId:'tester'}}
@@ -104,6 +130,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  assert.deepEqual(requests.map(r=>r.action),['pair-exchange','sync-status','ingest','sync-status']);assert.equal(official.w.document.querySelector('details').open,true);assert.match(official.w.document.querySelector('.status').textContent,/同期完了.*日別PV 1日/);
  assert.equal(official.nav.length,1);const back=new URL(official.nav[0]);assert.equal(back.origin,'https://mumei-s.github.io');assert.equal(back.searchParams.get('dashboardSync'),'ok');assert.equal(back.searchParams.get('insightMode'),'analysis');
  assert.equal(official.w.document.getElementById('mumei-dash-read').dataset.action,'read');
+ assert.equal(handoffStore.has('mumei-dashboard-handoff-v143'),false,'使い終わった連携情報は残さない');
 });
 
 test('排他アコーディオンを順に開き、閉じられた先の数値も保存する',async t=>{
