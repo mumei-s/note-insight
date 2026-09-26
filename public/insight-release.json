@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.25.1",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.3",
-  "releasedAt": "2026-09-26T22:25:26+09:00",
+  "dashboardVersion": "1.5.4",
+  "releasedAt": "2026-09-27T08:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "公式ダッシュボード：連携情報を拡張機能に保存してから移動。note側でURLが変わっても本人照合と読み込みを継続。保存失敗・別アカウント・期限切れでは停止。",
+  "note": "公式ダッシュボード：記事・メンバーシップ・マガジンの往復読込を修正。遅れて届く数値はタブの再巡回なしで保存。参加者ごとの連携・保存照合に対応。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
