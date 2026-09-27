@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.28.1",
-  "notificationVersion": "3.6.14",
+  "appVersion": "2026.09.28.2",
+  "notificationVersion": "3.6.15",
   "dashboardVersion": "1.6.2",
-  "releasedAt": "2026-09-28T05:39:03+09:00",
+  "releasedAt": "2026-09-28T08:28:09+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知3.6.14：本数のない「記事を追加しました」もフィルター対象に修正。1人・1件の通知にも保存済み設定を適用。",
+  "note": "本人通知3.6.15：保存通信の無応答で固まる経路を修正。停止・続きから再開、通信失敗時の段階的再試行、保存待ちと失敗理由の表示に対応。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
