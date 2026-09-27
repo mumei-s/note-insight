@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.0
+// @version      1.6.1
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -20,7 +20,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.0';
+  const VERSION='1.6.1';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -432,8 +432,19 @@
       result.articles=uniq([...result.articles,...mined.articles,...(activeType==='magazine'?[]:tableArticles(activeType))],r=>r.url||r.key||r.title);
       result.sources=uniq([...result.sources,...mined.sources,...detectTraffic()],r=>r.source.toLowerCase());
       result.trafficSeries=uniq([...result.trafficSeries,...mined.trafficSeries],r=>r.date+':'+r.source);
-      result.chartSeries=mergeChartMetrics([...(result.chartSeries||[]),...mined.chartSeries,...chartDomMetrics(true)]);
+      // React may expose the previous period's chart props until its next metric render.
+      // Replace each metric's buckets as a set; never append stale DAY points to MONTH history.
+      let charts=result.chartSeries||[];const domCharts=chartDomMetrics(true);
+      for(const field of Object.keys(metricFields)){
+        const network=mined.chartSeries.filter(r=>r[field]!=null),current=network.length?network:domCharts.filter(r=>r[field]!=null);
+        if(!current.length)continue;
+        charts=charts.map(r=>({...r,[field]:null}));
+        charts.push(...current.map(r=>({granularity:r.granularity,startDate:r.startDate,endDate:r.endDate,[field]:r[field]})));
+      }
+      result.chartSeries=mergeChartMetrics(charts).filter(r=>Object.keys(metricFields).some(f=>r[f]!=null));
       result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries,...dailyTableMetrics(),...chartDomMetrics()]);
+      for(const field of Object.keys(metricFields))if(result.chartSeries.some(r=>r[field]!=null&&r.granularity!=='DAY'))result.metricSeries.forEach(r=>r[field]=null);
+      result.metricSeries=result.metricSeries.filter(r=>Object.keys(metricFields).some(f=>r[f]!=null));
       for(const [key,value]of Object.entries({...detectTotals(),...dashboardNetworkTotals()}))if(value!==null&&!freshTotals.has(key)){result.totals[key]=value;freshTotals.add(key)}
       for(const [key,value]of Object.entries(detectSummary()))if(value)result.summary[key]=value;
     }};
