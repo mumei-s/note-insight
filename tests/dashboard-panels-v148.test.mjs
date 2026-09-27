@@ -262,3 +262,11 @@ test('自動起動の通知が重なっても保存後に内容タブを再巡�
  const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" id="membership" aria-selected="false">メンバーシップ</button>',{before:w=>{for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks++;for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab))}}});
  await saved(h);assert.equal(clicks,1);h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(350);assert.equal(clicks,1);assert.equal(h.saves.length,1);
 });
+
+test('補助表示やAPI応答時刻が更新され続けても同じ公式数値の読取は完了する',async t=>{
+ let clock=0,poll;const clicks=[];t.after(()=>clearInterval(poll));
+ const h=page(t,'<p>ページビュー 12</p><span id="clock">補助表示</span><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>',{stats:async()=>({generatedAt:clock,page_views:{'2026-09-27':12}}),before:w=>{
+  for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));if(!poll)poll=setInterval(()=>{w.document.getElementById('clock').textContent='補助表示 '+(++clock);void w.fetch('/api/v1/stats/daily')},12)};
+ }});
+ await saved(h);clearInterval(poll);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves[0].metricSeries[0].pageViews,12);await pause(350);assert.equal(h.saves.length,1);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
+});

@@ -27,7 +27,7 @@
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
   const CAPTURE=[];
-  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null;
+  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='';
   const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const num=(v)=>{if(v==null)return 0;const s=String(v).replace(/[￥¥円,%\s]/g,'').replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
   const text=(v)=>String(v??'').replace(/\s+/g,' ').trim();
@@ -49,7 +49,10 @@
     if(!isDashboard()||!currentCapture(scope)||!payload||typeof payload!=='object'||(!statsUrl(url)&&!String(url).startsWith('hydration:')))return;
     const idx=CAPTURE.findIndex(x=>x.url===String(url)&&currentCapture(x));
     if(idx>=0){if(JSON.stringify(CAPTURE[idx].payload)===JSON.stringify(payload)){CAPTURE[idx].at=Date.now();return}CAPTURE.splice(idx,1)}
-    CAPTURE.push({url:String(url),payload,...scope,at:Date.now()});captureRevision++;if(CAPTURE.length>40)CAPTURE.shift();
+    CAPTURE.push({url:String(url),payload,...scope,at:Date.now()});if(CAPTURE.length>40)CAPTURE.shift();
+    const dataSignature=JSON.stringify([scope,Object.values(mineNetwork()).map(rows=>rows.map(row=>JSON.stringify(row)).sort()),officialDataSignature()]);
+    if(dataSignature===lastCaptureDataSignature)return;
+    lastCaptureDataSignature=dataSignature;captureRevision++;
     // A period change or a manually opened lazy panel must also reach INSIGHT.
     if(!busy&&localStorage.getItem(TOKEN_KEY)&&localStorage.getItem(NOTE_KEY)){
       clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);
@@ -155,12 +158,16 @@
     }
     throw new Error('公式パネルの読込が途中です。再読込してください');
   }
+  function officialDataSignature(){
+    // Live help text and response timestamps are not dashboard values.
+    return JSON.stringify([tableArticles(),dailyTableMetrics(),detectTotals(),detectSummary(),detectTraffic(),panelControls().map(el=>[panelLabel(el),el.getAttribute('aria-expanded')])]);
+  }
   async function waitForDashboard(href,initialPeriod){
     let quiet=0,previous='';
     for(let tick=0;tick<60;tick++){
       if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
       const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(readable);
-      const signature=JSON.stringify([captureRevision,tableArticles(),detectTotals(),text(dashboardRoot().innerText||dashboardRoot().textContent).replace(text(panel?.textContent),'')]);
+      const signature=JSON.stringify([captureRevision,officialDataSignature()]);
       quiet=!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
       if(quiet>=6)return;
       if(tick%4===0)setStatus(`公式データを読込中…${pendingStats?' 通信 '+pendingStats+'件':''}`);
@@ -255,7 +262,7 @@
       const payload={action:'ingest',schemaVersion:4,connectorVersion:VERSION,noteId:paired,articles,totals,
         trafficSources:traffic,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,summary,
         contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels},officialCollectedAt:collected,...period,pages:1};
-      const readRevision=captureRevision;
+      const readRevision=captureRevision,readSignature=officialDataSignature();
       if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
       const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
       if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',dailyPvDays?'ok':'partial');return}
@@ -266,7 +273,7 @@
       if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==mined.metricSeries.length)throw new Error('保存件数が一致しません。再読込してください');
       for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません。再読込してください');
       if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(TOKEN_KEY)!==token||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
-      if(captureRevision!==readRevision){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
+      if(captureRevision!==readRevision||officialDataSignature()!==readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
       const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：公式の日別グラフを開いて再読込）`;
