@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import {
   CURRENT_INSIGHT_APP_VERSION,
+  CURRENT_DASHBOARD_VERSION,
+  CURRENT_NOTIFICATION_VERSION,
   NOTIFICATION_VERSION_STORAGE_KEY,
   DASHBOARD_VERSION_STORAGE_KEY,
   fetchInsightRelease,
@@ -55,7 +57,8 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
-  const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
+  const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
+  const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&expected===CURRENT_INSIGHT_APP_VERSION){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}return""});
   const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
@@ -78,14 +81,19 @@ export function MemberInsightLiveV2(){
   }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function checkRelease(){
+    const request=++releaseRequest.current;
+    setNotificationInstalled(localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||"");
+    setDashboardInstalled(localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
     try{
       const next=await fetchInsightRelease();
+      if(request!==releaseRequest.current)return null;
       setRelease(next);
-      setNotificationInstalled(localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||"");
-      setDashboardInstalled(localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
+      setReleaseError(false);
       setReleaseChecked(true);
       return next;
     }catch{
+      if(request!==releaseRequest.current)return null;
+      setReleaseError(true);
       setReleaseChecked(true);
       return null;
     }
@@ -201,15 +209,15 @@ export function MemberInsightLiveV2(){
   },[]);
   const appLatest=release?.appVersion||"";
   const appUpdateAvailable=Boolean(appLatest&&versionDiffers(CURRENT_INSIGHT_APP_VERSION,appLatest));
-  const notificationLatest=release?.notificationVersion||"";
+  const notificationLatest=release?.notificationVersion||CURRENT_NOTIFICATION_VERSION;
   const notificationMissing=Boolean(releaseChecked&&notificationLatest&&!notificationInstalled);
   const notificationUpdateAvailable=Boolean(notificationLatest&&notificationInstalled&&versionDiffers(notificationInstalled,notificationLatest));
-  const dashboardLatest=release?.dashboardVersion||"";
+  const dashboardLatest=release?.dashboardVersion||CURRENT_DASHBOARD_VERSION;
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
-  const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`Dashboard同期 v${dashboardInstalled}`:"Dashboard同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>公式Dashboard＋INSIGHT</span>{dashboardUpdateAvailable?<em>更新あり</em>:dashboardMissing?<em>未導入</em>:null}</>;
+  const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span>{dashboardUpdateAvailable?<em>更新あり</em>:dashboardMissing?<em>未導入</em>:null}</>;
   return <div className={`miv5 mode-${mode}`}>
     {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
     <section className="miv5-update" aria-label="INSIGHT主要機能">
@@ -223,6 +231,7 @@ export function MemberInsightLiveV2(){
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           {dashboardUpdateAvailable||dashboardMissing?<a className="miv5-source-main" href={dashboardSetupHref} aria-label={dashboardUpdateAvailable?"分析：ダッシュボード同期を更新":"分析：ダッシュボード同期を導入"}>{dashboardCardContent}</a>:<button className="miv5-source-main" onClick={()=>openMode("analysis")}>{dashboardCardContent}</button>}
+          <a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"ダッシュボードを更新":"設定・更新を確認"}</a>
         </div>
         <div className="miv5-source-card detail">
           <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
