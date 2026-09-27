@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.7
-// @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
+// @version      1.5.8
+// @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.5.7';
+  const VERSION='1.5.8';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -28,7 +28,7 @@
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
   const CAPTURE=[];
-  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='',resumeLabel='',readStage='準備',cancelRequested=false,stickyStatus=null,lastPresentation=null,panelClosed=false,runStarted=0,viewLease=null,userViewChanged=false;
+  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='',resumeLabel='',readStage='準備',cancelRequested=false,stickyStatus=null,lastPresentation=null,runStarted=0,viewLease=null,userViewChanged=false;
   const CHECKPOINT_KEY='mumei-dashboard-read-checkpoint-v1',CHECKPOINT_AGE=10*60*1000;
   const HISTORY_KEY='mumei-dashboard-read-history-v1';
   let historyRows=[],historyAccount=localStorage.getItem(NOTE_KEY);
@@ -41,8 +41,21 @@
   function cleanUrl(){const u=new URL(location.href);for(const k of ['mumei_dashboard_pair','mumei_dashboard_sync','mumei_dashboard_return'])u.searchParams.delete(k);history.replaceState(history.state,'',u.href)}
   function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
   async function currentNoteId(){const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=text(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}finally{clearTimeout(timer)}}
-  const isDashboard=()=>location.origin==='https://note.com'&&/\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
+  let surfaceSuspended=false,surfaceActive=true;
+  function notificationSurface(){
+    for(const el of document.querySelectorAll('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"],[class*="navbarNotice"],[role="dialog"],[role="menu"],[popover]')){
+      if(el.closest('#mumei-dashboard-sync'))continue;
+      let visible=true;for(let node=el;node&&node!==document.documentElement;node=node.parentElement){if(node.hidden||node.getAttribute('aria-hidden')==='true'||getComputedStyle(node).display==='none'||getComputedStyle(node).visibility==='hidden'){visible=false;break}}
+      if(!visible||getComputedStyle(el).opacity==='0')continue;
+      if(el.matches('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"],[class*="navbarNotice"]')||/通知|お知らせ|notification/i.test(el.getAttribute('aria-label')||''))return true;
+      const labels=[...el.querySelectorAll('button,[role="tab"]')].map(x=>text(x.textContent));if(labels.some(x=>/^通知(?:\s*\d+)?$/.test(x))&&labels.some(x=>x==='お知らせ'))return true;
+    }
+    return false;
+  }
+  const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
+  const isDashboard=()=>isDashboardRoute()&&document.visibilityState!=='hidden'&&!notificationSurface();
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
+  const graphqlUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://graphql.note.com'&&u.pathname==='/graphql'}catch{return false}};
   const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(text(el.getAttribute('aria-label')||el.textContent));
   const connectionKey=()=>JSON.stringify([localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
   const dashboardRouteRoot=()=>location.pathname.match(/^\/(?:sitesettings\/stats|dashboard)(?=\/|$)/)?.[0]||'';
@@ -59,7 +72,7 @@
   const captureScope=()=>({href:dashboardLocation(),period:periodKey(),connection:connectionKey()});
   const currentCapture=scope=>scope.href===dashboardLocation()&&scope.period===periodKey()&&scope.connection===connectionKey();
   function captureJson(url,payload,scope=captureScope()){
-    if(!isDashboard()||!currentCapture(scope)||!payload||typeof payload!=='object'||(!statsUrl(url)&&!String(url).startsWith('hydration:')))return;
+    if(!isDashboardRoute()||!currentCapture(scope)||!payload||typeof payload!=='object'||(!statsUrl(url)&&!(graphqlUrl(url)&&scope.operation)&&!String(url).startsWith('hydration:')))return;
     const idx=CAPTURE.findIndex(x=>x.url===String(url)&&currentCapture(x));
     if(idx>=0){if(JSON.stringify(CAPTURE[idx].payload)===JSON.stringify(payload)){CAPTURE[idx].at=Date.now();return}CAPTURE.splice(idx,1)}
     CAPTURE.push({url:String(url),payload,...scope,at:Date.now()});if(CAPTURE.length>40)CAPTURE.shift();
@@ -67,29 +80,58 @@
     if(dataSignature===lastCaptureDataSignature)return;
     lastCaptureDataSignature=dataSignature;captureRevision++;
     // A period change or a manually opened lazy panel must also reach INSIGHT.
-    if(!busy&&!autoBlockedScope&&!cancelRequested&&localStorage.getItem(TOKEN_KEY)&&localStorage.getItem(NOTE_KEY)){
+    if(!busy&&!autoBlockedScope&&!cancelRequested&&isDashboard()&&localStorage.getItem(TOKEN_KEY)&&localStorage.getItem(NOTE_KEY)){
       clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);
     }
   }
 
   const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
   const originalFetch=window.fetch.bind(window);
+  function dashboardRequest(url,body){
+    if(!isDashboard())return null;
+    if(statsUrl(url))return {key:String(url),scope:captureScope()};
+    if(!graphqlUrl(url))return null;
+    try{const request=typeof body==='string'?JSON.parse(body):body;
+      if(!/^Dashboard_(?:MetricChart|StatPage|StatsLayoutSummary|ReferrerSection)Query$/.test(request?.operationName||''))return null;
+      const v=request.variables||{},safe={};for(const k of ['unit','date','endDate','metric','after'])if(v[k]!=null)safe[k]=v[k];
+      return {key:String(url)+'#dashboard='+encodeURIComponent(request.operationName+JSON.stringify(safe)),scope:{...captureScope(),operation:request.operationName,metric:metricName(v.metric)}};
+    }catch{return null}
+  }
+  function dashboardGraphPayload(payload){
+    // Keep only dashboard results, never unrelated GraphQL account or payment data.
+    const data=payload?.data||{},out={};
+    for(const key of ['dashboardMetricChart','dashboardNoteListConnection','dashboardSummary','dashboardNoteReferrersChart'])if(data[key]!=null)out[key]=data[key];
+    return Object.keys(out).length?{data:out}:null;
+  }
+  async function capturedResponse(res,request){
+    const raw=await res.text();let payload;
+    try{payload=JSON.parse(raw)}catch{
+      // Apollo can stream deferred GraphQL results as multipart JSON chunks.
+      const rows=raw.split(/\r?\n/).filter(line=>line.trim().startsWith('{'));for(const line of rows)try{const part=JSON.parse(line),filtered=dashboardGraphPayload(part);if(filtered)captureJson(request.key,filtered,request.scope);for(const item of part.incremental||[]){const key=item.path?.[0];if(key&&item.data)captureJson(request.key+':'+key,dashboardGraphPayload({data:{[key]:item.data}}),request.scope)}}catch{}return;
+    }
+    captureJson(request.key,request.scope.operation?dashboardGraphPayload(payload):payload,request.scope);
+  }
   function observe(p){
-   if(p?.fetch&&!p.fetch.__mumeiDashboardCapture){const original=p.fetch.bind(p),wrapped=async function(...args){const url=typeof args[0]==='string'?args[0]:args[0]?.url||'',tracked=statsUrl(url)&&isDashboard(),scope=captureScope();if(tracked)pendingStats++;try{const res=await original(...args);if(tracked){res.clone().json().then(data=>{if(res.ok)captureJson(url,data,scope)}).catch(()=>{}).finally(()=>pendingStats--)}return res}catch(e){if(tracked)pendingStats--;throw e}};wrapped.__mumeiDashboardCapture=true;try{p.fetch=wrapped}catch{}}
+   if(p?.fetch&&!p.fetch.__mumeiDashboardCapture){const original=p.fetch.bind(p),wrapped=async function(...args){
+    const url=typeof args[0]==='string'?args[0]:args[0]?.url||'';let body=args[1]?.body;
+    if(graphqlUrl(url)&&body==null&&args[0]?.clone)try{body=await args[0].clone().text()}catch{}
+    const request=dashboardRequest(url,body);if(request)pendingStats++;
+    try{const res=await original(...args);if(request){if(res.ok)capturedResponse(res.clone(),request).catch(()=>{}).finally(()=>pendingStats--);else pendingStats--}return res}catch(e){if(request)pendingStats--;throw e}
+   };wrapped.__mumeiDashboardCapture=true;try{p.fetch=wrapped}catch{}}
    const proto=p?.XMLHttpRequest?.prototype;if(!proto||proto.__mumeiDashboardCapture)return;
    const open=proto.open,send=proto.send;
    proto.open=function(method,url,...rest){this.__mumeiDashboardUrl=String(url||'');return open.call(this,method,url,...rest)};
-   proto.send=function(...args){const tracked=statsUrl(this.__mumeiDashboardUrl)&&isDashboard(),scope=captureScope();if(tracked)pendingStats++;this.addEventListener('loadend',()=>{try{if(tracked&&this.status>=200&&this.status<300)captureJson(this.__mumeiDashboardUrl,this.responseType==='json'?this.response:JSON.parse(this.responseText),scope)}catch{}finally{if(tracked)pendingStats--}},{once:true});try{return send.apply(this,args)}catch(e){if(tracked)pendingStats--;throw e}};
+   proto.send=function(...args){const request=dashboardRequest(this.__mumeiDashboardUrl,args[0]);if(request)pendingStats++;this.addEventListener('loadend',()=>{try{if(request&&this.status>=200&&this.status<300){const data=this.responseType==='json'?this.response:JSON.parse(this.responseText);captureJson(request.key,request.scope.operation?dashboardGraphPayload(data):data,request.scope)}}catch{}finally{if(request)pendingStats--}},{once:true});try{return send.apply(this,args)}catch(e){if(request)pendingStats--;throw e}};
    proto.__mumeiDashboardCapture=true;
   }
   observe(pageWindow());if(pageWindow()!==window)observe(window);
-  const aliases={impressions:['impressions','impression','impression_count','impressionCount'],pageViews:['page_views','pageViews','pageview','page_view','page_view_count','views','view_count','viewCount','pv','read_count','readCount'],likes:['likes','like_count','likeCount','like'],comments:['comments','comment_count','commentCount','comment'],sales:['sales_yen','salesYen','sales_amount','salesAmount','sales','amount','revenue'],shares:['shares','share_count','shareCount','shared_count']};
+  const aliases={impressions:['impressions','impression','impression_count','impressionCount'],pageViews:['page_views','pageViews','pageViewCount','pageview','page_view','page_view_count','views','view_count','viewCount','pv','read_count','readCount'],likes:['likes','like_count','likeCount','like'],comments:['comments','comment_count','commentCount','comment'],sales:['sales_yen','salesYen','sales_amount','salesAmount','sales','amount','revenue'],shares:['shares','share_count','shareCount','shared_count']};
   const pick=(o,keys)=>{for(const k of keys)if(o&&Object.prototype.hasOwnProperty.call(o,k)&&num(o[k])>=0)return num(o[k]);return 0};
   const titleOf=o=>text(o?.title||o?.name||o?.note_name||o?.noteName||o?.article_title||o?.articleTitle);
   const urlOf=o=>text(o?.url||o?.note_url||o?.noteUrl||o?.permalink);
   const keyOf=o=>text(o?.key||o?.note_key||o?.noteKey||o?.id||urlOf(o));
   const dateOf=o=>{
-    const value=o?.date??o?.day??o?.target_date??o?.targetDate??o?.aggregated_at??o?.aggregatedAt??o?.timestamp??o?.x;
+    const value=o?.startDate??o?.date??o?.day??o?.target_date??o?.targetDate??o?.aggregated_at??o?.aggregatedAt??o?.timestamp??o?.x;
     if(typeof value==='number'&&value>1e9){const d=new Date(value<1e12?value*1000:value);if(!Number.isNaN(+d))return new Date(+d+9*3600000).toISOString().slice(0,10)}
     const m=text(value).match(/^(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})(?:日|T|$|\s)/);if(!m)return'';
     const day=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;const parsed=new Date(day+'T00:00:00Z');return Number.isFinite(+parsed)&&parsed.toISOString().slice(0,10)===day?day:'';
@@ -97,33 +139,42 @@
   function walk(value,visit,depth=0){if(depth>10||value==null)return;if(Array.isArray(value)){for(const x of value.slice(0,6000))walk(x,visit,depth+1);return}if(typeof value!=='object')return;visit(value);for(const v of Object.values(value))if(v&&typeof v==='object')walk(v,visit,depth+1)}
   const metricFields={pageViews:aliases.pageViews,impressions:aliases.impressions,likes:aliases.likes,comments:aliases.comments,salesYen:aliases.sales};
   const optionalNumber=v=>v===null||v===undefined||v===''||typeof v==='boolean'||!['number','string'].includes(typeof v)||!Number.isFinite(Number(String(v).replace(/,/g,'')))?null:Number(String(v).replace(/,/g,''));
-  function metricName(v){const k=text(v).toLowerCase();for(const[field,names]of Object.entries(metricFields))if(field.toLowerCase()===k||names.some(x=>x.toLowerCase()===k))return field;return({'ページビュー':'pageViews','pv':'pageViews','インプレッション':'impressions','スキ':'likes','コメント':'comments','売上':'salesYen'})[k]||''}
+  function metricName(v){const k=text(v).toLowerCase();if(k==='page_view')return 'pageViews';for(const[field,names]of Object.entries(metricFields))if(field.toLowerCase()===k||names.some(x=>x.toLowerCase()===k))return field;return({'ページビュー':'pageViews','pv':'pageViews','インプレッション':'impressions','スキ':'likes','コメント':'comments','売上':'salesYen'})[k]||''}
   function mergeMetrics(rows){const m=new Map();for(const r of rows){if(!r.date)continue;const old=m.get(r.date)||{date:r.date,impressions:null,pageViews:null,likes:null,comments:null,salesYen:null};let found=false;for(const f of Object.keys(metricFields)){const v=optionalNumber(r[f]);if(v!==null&&v>=0){old[f]=v;found=true}}if(found)m.set(r.date,old)}return[...m.values()].sort((a,b)=>a.date.localeCompare(b.date))}
-  function dailyMetrics(payload){
+  function dailyMetrics(payload,context={}){
    const rows=[];
-   const add=(date,field,value)=>{const day=dateOf({date}),n=optionalNumber(value);if(day&&field&&n!==null&&n>=0)rows.push({date:day,[field]:n})};
+   const chartDate=value=>{
+    const full=dateOf({date:value});if(full)return full;
+    const m=text(value).match(/^(\d{1,2})[\/月-](\d{1,2})(?:日)?$/),p=context.period;
+    if(!m||!p?.periodStart||!p.periodEnd)return '';
+    const matches=[];for(let y=Number(p.periodStart.slice(0,4));y<=Number(p.periodEnd.slice(0,4))&&matches.length<2;y++){const d=dateOf({date:`${y}-${m[1]}-${m[2]}`});if(d&&d>=p.periodStart&&d<=p.periodEnd)matches.push(d)}
+    return matches.length===1?matches[0]:'';
+   };
+   const add=(date,field,value)=>{const day=chartDate(date),n=optionalNumber(value);if(day&&field&&n!==null&&n>=0)rows.push({date:day,[field]:n})};
    function visit(v,field='',depth=0){
-    if(depth>10||v==null)return;if(Array.isArray(v)){if(field&&v.length===2&&dateOf({date:v[0]})){add(v[0],field,v[1]);return}for(const x of v.slice(0,6000))visit(x,field,depth+1);return}if(typeof v!=='object')return;
+    if(depth>10||v==null)return;if(Array.isArray(v)){if(field&&v.length===2&&chartDate(v[0])){add(v[0],field,v[1]);return}for(const x of v.slice(0,6000))visit(x,field,depth+1);return}if(typeof v!=='object')return;
     if(/^(?:month|monthly|week|weekly|year|yearly)$/i.test(text(v.granularity||v.interval)))return;
     field=metricName(v.metric||v.type||v.label||v.name)||field;
-    const article=Boolean(titleOf(v)&&(v.note_key||v.noteKey||v.article_key||v.url||v.key)),referrer=Boolean(v.referrer||v.referrer_name||v.source||v.domain||v.host),day=dateOf(v);
-    if(!article&&!referrer){
+    const article=Boolean(titleOf(v)&&(v.note_key||v.noteKey||v.article_key||v.url||v.key)),referrer=Boolean(v.referrer||v.referrer_name||v.source||v.domain||v.host),day=dateOf(v)||chartDate(v.date??v.day??v.x??v.name??v.label);
+    if(!article&&!referrer&&!(v.startDate&&v.endDate&&v.startDate!==v.endDate)){
      if(day){for(const[f,names]of Object.entries(metricFields)){const key=names.find(k=>Object.prototype.hasOwnProperty.call(v,k));if(key)add(day,f,v[key])}if(field)add(day,field,v.value??v.count??v.y)}
      const dates=v.labels||v.dates||v.days;
      if(Array.isArray(dates)){
-      for(const dataset of (Array.isArray(v.datasets)?v.datasets:Array.isArray(v.series)?v.series:[])){const f=metricName(dataset.label||dataset.name||dataset.key);if(f&&Array.isArray(dataset.data))dates.forEach((d,i)=>add(d,f,dataset.data[i]))}
+      for(const dataset of (Array.isArray(v.datasets)?v.datasets:Array.isArray(v.series)?v.series:[])){const f=metricName(dataset.label||dataset.name||dataset.key)||field;if(f&&Array.isArray(dataset.data))dates.forEach((d,i)=>add(d,f,dataset.data[i]))}
+      if(field&&Array.isArray(v.data))dates.forEach((d,i)=>add(d,field,v.data[i]));
       for(const[k,x]of Object.entries(v)){const f=metricName(k);if(f&&Array.isArray(x))dates.forEach((d,i)=>add(d,f,x[i]))}
      }
      for(const[k,x]of Object.entries(v)){if(field&&/^20\d{2}[-/]\d{1,2}[-/]\d{1,2}$/.test(k))add(k,field,x);else if(x&&typeof x==='object')visit(x,metricName(k)||field,depth+1)}
     }
    }
-   visit(payload);return mergeMetrics(rows);
+   visit(payload,context.field||'');return mergeMetrics(rows);
   }
   function readHydration(){
     let index=0;
    for(const script of document.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{const payload=JSON.parse(script.textContent||''),url='hydration:'+index++;if(!CAPTURE.some(c=>c.url===url&&currentCapture(c)&&JSON.stringify(c.payload)===JSON.stringify(payload)))captureJson(url,payload)}catch{}}
   }
   async function refreshChartSources(){
+   ensureRunning();
    readHydration();
    // Only the latest observed request for each endpoint belongs to the selected view.
    const latest=new Map();
@@ -132,7 +183,7 @@
    for(const name of urls){if(statsUrl(name)){const url=new URL(name,location.href);latest.set(url.origin+url.pathname,url.href)}}
    await Promise.all([...latest.values()].slice(-8).map(async url=>{const scope=captureScope(),c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await originalFetch(url,{method:'GET',credentials:'include',cache:'no-store',signal:c.signal});if(r.ok)captureJson(url,await r.json(),scope)}catch{}finally{clearTimeout(timer)}}));
   }
-  function ensureRunning(){if(userViewChanged)throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');if(cancelRequested)throw new Error('停止しました [STOPPED]')}
+  function ensureRunning(){if(surfaceSuspended||!isDashboard()){surfaceSuspended=true;throw new Error('表示期間または画面が変わりました。ダッシュボードに戻るまで停止します [SURFACE_LEFT]')}if(userViewChanged)throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');if(cancelRequested)throw new Error('停止しました [STOPPED]')}
   function dashboardText(){const root=dashboardRoot();return root===document.body?[...root.children].filter(el=>el!==panel&&readable(el)).map(el=>el.innerText||el.textContent||'').join('\n'):(root.innerText||root.textContent||'')}
   function dashboardRoot(){return document.querySelector('main,[role="main"]')||document.body}
   function readable(el){
@@ -144,17 +195,17 @@
   function panelLabel(el){
     const controlled=document.getElementById(el.getAttribute('aria-controls')||'');
     let heading='';for(let p=el.parentElement,depth=0;p&&p!==dashboardRoot()&&depth<4;p=p.parentElement,depth++){
-      heading=text(p.querySelector('h2,h3,h4,caption,[role="heading"]')?.textContent);if(heading)break;
+      heading=text(p.querySelector('h2,h3,h4,caption,[role="heading"]')?.textContent)||text(p.querySelector('table thead')?.textContent);if(heading)break;
     }
     return text([el.getAttribute('aria-label'),el.textContent,controlled?.getAttribute('aria-label'),controlled?.querySelector('h2,h3,h4,caption')?.textContent,heading].filter(Boolean).join(' '));
   }
   function panelControls(){return [...dashboardRoot().querySelectorAll('details:not([open]) > summary,button,[role="button"],[role="tab"]')].filter(el=>{
     if(!readable(el)||el.disabled||el.getAttribute('aria-disabled')==='true'||el.hasAttribute('aria-haspopup')||el.matches('a,[type="submit"]'))return false;
-    if(contentTab(el))return el.getAttribute('aria-selected')!=='true'&&el.getAttribute('aria-pressed')!=='true';
+    if(contentTab(el))return text(el.getAttribute('aria-label')||el.textContent)!=='マガジン'&&el.getAttribute('aria-selected')!=='true'&&el.getAttribute('aria-pressed')!=='true';
     if(el.matches('[role="tab"]'))return false;
     if(/^(?:過去.*|.*日間|.*順|期間.*|並び替え.*)$/.test(text(el.getAttribute('aria-label')||el.textContent)))return false;
     const disclosure=el.matches('details:not([open]) > summary')||el.getAttribute('aria-expanded')==='false';
-    const named=!el.hasAttribute('aria-expanded')&&/^(?:グラフを(?:表示|開く)|詳細を表示|詳細を見る|もっと見る|さらに表示|続きを表示|開く|表示する)$/.test(text(el.getAttribute('aria-label')||el.textContent));
+    const named=!el.hasAttribute('aria-expanded')&&/^(?:グラフを(?:表示|開く)|詳細を表示|詳細を見る|もっと(?:見る|みる)|さらに表示|続きを表示|開く|表示する)$/.test(text(el.getAttribute('aria-label')||el.textContent));
     return (disclosure||named)&&metricPanel.test(panelLabel(el));
   })}
   function activeContentLabel(){return text([...dashboardRoot().querySelectorAll('[aria-selected="true"],[aria-pressed="true"]')].find(contentTab)?.textContent)}
@@ -162,7 +213,88 @@
     if(contentTab(el))return 'tab:'+text(el.getAttribute('aria-label')||el.textContent);
     const label=panelLabel(el),base=JSON.stringify([progress.activeLabel,el.id,el.getAttribute('aria-controls'),label]);
     // Pagination may reuse one button, but reopening a remounted accordion is not progress.
-    return /^(もっと見る|さらに表示|続きを表示)$/.test(text(el.textContent))?base+JSON.stringify([tableArticles(),dailyTableMetrics()]):base;
+    return /^(もっと(?:見る|みる)|さらに表示|続きを表示)$/.test(text(el.textContent))?base+JSON.stringify([tableArticles(),dailyTableMetrics()]):base;
+  }
+  const chartMetricLabels={pageViews:'ページビュー',impressions:'インプレッション',likes:'スキ',comments:'コメント',salesYen:'売上'};
+  function metricSelect(){
+    return [...dashboardRoot().querySelectorAll('select')].find(el=>{
+      if(el.disabled||!el.isConnected||el.closest('#mumei-dashboard-sync'))return false;
+      const fields=[...el.options].map(o=>metricName(o.textContent));if(fields.filter(Boolean).length<2||!fields.includes('pageViews'))return false;
+      if(readable(el))return true;
+      // note's custom select has a native select in its aria-hidden accessibility container.
+      const container=el.closest('[aria-hidden="true"]')?.parentElement;
+      return Boolean(container&&[...container.querySelectorAll('button,[role="combobox"]')].some(b=>readable(b)&&/グラフに表示する指標/.test(b.getAttribute('aria-label')||'')));
+    });
+  }
+  function metricTrigger(){return [...dashboardRoot().querySelectorAll('button,[role="combobox"]')].find(el=>readable(el)&&!el.disabled&&el.getAttribute('aria-disabled')!=='true'&&(/グラフに表示する指標/.test(el.getAttribute('aria-label')||'')||metricName(text(el.textContent))&&el.getAttribute('aria-haspopup')==='listbox'))}
+  function selectedChartMetric(){const select=metricSelect();if(select)return metricName(select.selectedOptions[0]?.textContent);const trigger=metricTrigger();return trigger?metricName(text(trigger.textContent)):''}
+  function chartDomMetrics(){
+    const rows=[],period=detectPeriod();
+    for(const figure of (pageWindow().document.querySelector('main,[role="main"]')||pageWindow().document.body).querySelectorAll('figure[data-name="StackedBarChart"]')){
+      if(!readable(figure))continue;
+      // Read only this official chart's data props, never the surrounding application's state.
+      const fiberKey=Object.getOwnPropertyNames(figure).find(k=>k.startsWith('__reactFiber$'));
+      const labelled=(figure.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)?.textContent||'').join(' ');
+      const visibleMetric=metricName(text(labelled)||text(figure.querySelector('figcaption')?.textContent))||selectedChartMetric();
+      let fallback=[];
+      chartParents: for(let fiber=fiberKey&&figure[fiberKey],depth=0;fiber&&depth<16;fiber=fiber.return,depth++){
+       // React keeps two trees; the DOM may still point at the previous render's fiber.
+       for(const candidate of [fiber,fiber.alternate]){
+        const props=candidate?.memoizedProps;
+        if(!props||typeof props!=='object')continue;
+        const field=metricName(props.seriesLabel||props.title);
+        if(!field||(visibleMetric&&field!==visibleMetric))continue;
+        if(field&&props.data?.granularity&&Array.isArray(props.data.points)){
+          rows.push(...dailyMetrics(props.data,{field,period}));fallback=[];break chartParents;
+        }
+        if(field&&props.xKey==='label'&&Array.isArray(props.data)&&period.periodStart&&period.periodEnd&&(Date.parse(period.periodEnd)-Date.parse(period.periodStart))/86400000<31){
+          fallback=dailyMetrics(props.data,{field,period});
+        }
+       }
+        if(fiber.stateNode===dashboardRoot())break;
+      }
+      rows.push(...fallback);
+    }
+    return mergeMetrics(rows);
+  }
+  async function selectChartMetric(field,href,period){
+    ensureRunning();if(!usableLease())viewLease={href,period,root:dashboardRouteRoot(),connection:connectionKey()};
+    const select=metricSelect();
+    if(select){
+      const option=[...select.options].find(o=>metricName(o.textContent)===field);if(!option)return false;
+      const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set;
+      if(setter)setter.call(select,option.value);else select.value=option.value;
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    }else{
+      const trigger=metricTrigger();if(!trigger)return false;trigger.click();
+      let option=null;
+      for(let tick=0;tick<20;tick++){
+        ensureRunning();const id=trigger.getAttribute('aria-controls'),list=id?document.getElementById(id):document.querySelector('[role="listbox"]');
+        option=list&&[...list.querySelectorAll('[role="option"]')].find(el=>metricName(text(el.textContent))===field&&el.getAttribute('aria-disabled')!=='true'&&!el.closest('[hidden],[aria-hidden="true"]'));
+        if(option)break;await sleep(100);
+      }
+      if(!option)throw new Error('公式グラフの指標を選択できませんでした [METRIC_OPTION]');
+      option.click();
+    }
+    await waitForDashboard(href,period);
+    if(selectedChartMetric()!==field)throw new Error('公式グラフの指標が切り替わりませんでした [METRIC_NOT_SELECTED]');
+    return true;
+  }
+  async function readDashboardCharts(href,period,read,checkpoint){
+    if(!metricSelect()&&!metricTrigger())return;
+    const progress=checkpoint.progress,graph=progress.graph||(progress.graph={done:[],original:selectedChartMetric(),complete:false});
+    if(graph.complete)return;
+    const collect=()=>{read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
+    collect();
+    // Finish on the initial metric; no endless switching on subsequent saves/retries.
+    const fields=[...Object.keys(chartMetricLabels).filter(f=>f!==graph.original),graph.original].filter(Boolean);
+    for(const field of fields){
+      if(graph.done.includes(field))continue;
+      readStage='日別グラフ：'+chartMetricLabels[field];setStatus(readStage+'を自動読込中…');
+      if(!await selectChartMetric(field,href,period))continue;
+      collect();graph.done.push(field);saveCheckpoint(checkpoint);
+    }
+    graph.complete=true;saveCheckpoint(checkpoint);
   }
   async function expandDashboardPanels(href,initialPeriod,read,checkpoint){
     const progress=checkpoint.progress;
@@ -178,9 +310,13 @@
     for(let pass=0;pass<60;pass++){
       ensureRunning();
       if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');
+      await readDashboardCharts(href,initialPeriod,read,checkpoint);
       const candidates=panelControls().filter(el=>!progress.done.includes(controlKey(el,progress)));
       const control=candidates.find(el=>!contentTab(el))||candidates[0];
-      if(!control){progress.complete=true;saveCheckpoint(checkpoint);return progress.opened}
+      if(!control){
+        if(!progress.scannedBottom){progress.scannedBottom=true;dashboardRoot().lastElementChild?.scrollIntoView?.({block:'end',behavior:'instant'});await waitForDashboard(href,initialPeriod);collect();continue}
+        progress.complete=true;saveCheckpoint(checkpoint);return progress.opened;
+      }
       const key=controlKey(control,progress),tab=contentTab(control),label=text(control.getAttribute('aria-label')||control.textContent);
       progress.pending={key,tab,label};readStage=label;saveCheckpoint(checkpoint);
       if(!usableLease())viewLease={href,period:initialPeriod,root:dashboardRouteRoot(),connection:connectionKey()};
@@ -196,7 +332,7 @@
   }
   function officialDataSignature(){
     // Live help text and response timestamps are not dashboard values.
-    return JSON.stringify([tableArticles(),dailyTableMetrics(),detectTotals(),detectSummary(),detectTraffic(),panelControls().map(el=>[panelLabel(el),el.getAttribute('aria-expanded')])]);
+    return JSON.stringify([tableArticles(),dailyTableMetrics(),chartDomMetrics(),detectTotals(),detectSummary(),detectTraffic(),panelControls().map(el=>[panelLabel(el),el.getAttribute('aria-expanded')])]);
   }
   async function waitForDashboard(href,initialPeriod){
     let quiet=0,previous='';
@@ -213,7 +349,18 @@
     throw new Error('公式データの待機が15秒を超えました [READ_WAIT]');
   }
 
-  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;metricRows.push(...dailyMetrics(cap.payload));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
+  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;
+    const official=cap.payload?.data||{};
+    for(const edge of official.dashboardNoteListConnection?.edges||[]){const o=edge.node,n=o?.note,m=o?.metrics;if(!n?.title||!m)continue;const url=text(n.link?.absoluteUrl),pv=pick(m,aliases.pageViews);articles.push({key:url||text(o.id),title:text(n.title),url,impressions:pick(m,aliases.impressions),pageViews:pv,views:pv,likes:pick(m,aliases.likes),comments:pick(m,aliases.comments),salesYen:pick(m,aliases.sales),contentType:'article',status:text(n.status).toLowerCase(),publishedAt:text(n.publishedAt)})}
+    const referrers=official.dashboardNoteReferrersChart;
+    for(const row of referrers?.legend||[]){const pv=optionalNumber(row.count);if(text(row.name)&&pv!==null)sources.push({source:text(row.name),pv})}
+    const chart=referrers?.timeSeriesBarChart;
+    if(chart&&Array.isArray(chart.labels))for(const series of chart.data||[])for(let i=0;i<chart.labels.length;i++){const date=dateOf({date:chart.labels[i]}),pv=optionalNumber(series.data?.[i]);if(date&&pv!==null)trafficSeries.push({date,source:text(series.label),pv})}
+    metricRows.push(...dailyMetrics(cap.payload,{field:cap.metric}));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
+  function dashboardNetworkTotals(){
+    const totals={};for(const cap of CAPTURE){if(!currentCapture(cap))continue;const values=cap.payload?.data?.dashboardSummary?.metrics;if(!values)continue;for(const [field,names]of Object.entries(metricFields)){const key=names.find(k=>Object.prototype.hasOwnProperty.call(values,k)),value=optionalNumber(values[key]);if(value!==null&&value>=0)totals[field]=value}}
+    return totals;
+  }
   function labelledNumber(label){
     const labelOnly=new RegExp('^(?:'+label+')$','i'),value='([￥¥]?[0-9][0-9,]*(?:\\.[0-9]+)?(?:円)?)';
     const before=new RegExp('^'+value+'\\s*(?:'+label+')$','i'),after=new RegExp('^(?:'+label+')[\\s：:]*'+value+'$','i');
@@ -258,11 +405,11 @@
     return {result,collect(label=''){
       if(label)activeType=label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article';
       readHydration();const mined=mineNetwork();
-      result.articles=uniq([...result.articles,...mined.articles,...tableArticles(activeType)],r=>r.url||r.key||r.title);
+      result.articles=uniq([...result.articles,...mined.articles,...(activeType==='magazine'?[]:tableArticles(activeType))],r=>r.url||r.key||r.title);
       result.sources=uniq([...result.sources,...mined.sources,...detectTraffic()],r=>r.source.toLowerCase());
       result.trafficSeries=uniq([...result.trafficSeries,...mined.trafficSeries],r=>r.date+':'+r.source);
-      result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries,...dailyTableMetrics()]);
-      for(const [key,value]of Object.entries(detectTotals()))if(value!==null&&!freshTotals.has(key)){result.totals[key]=value;freshTotals.add(key)}
+      result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries,...dailyTableMetrics(),...chartDomMetrics()]);
+      for(const [key,value]of Object.entries({...detectTotals(),...dashboardNetworkTotals()}))if(value!==null&&!freshTotals.has(key)){result.totals[key]=value;freshTotals.add(key)}
       for(const [key,value]of Object.entries(detectSummary()))if(value)result.summary[key]=value;
     }};
   }
@@ -342,20 +489,21 @@
       checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
-      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：公式の日別グラフを開くと追加読込）`;
+      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：自動取得で日別値を確認できませんでした。詳細に記録しています）`;
       lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
       localStorage.setItem('mumei-dashboard-last-result:'+paired,message);
       if(captureRevision!==pending.readRevision||officialDataSignature()!==pending.readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
       setStatus(message,count?'ok':'partial');
+      if(!count)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
     }catch(e){
       autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&currentCapture(checkpoint.scope);
       if(valid)saveCheckpoint(checkpoint);
       if(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)&&localStorage.getItem(TOKEN_KEY)===tokenAtStart)localStorage.removeItem(TOKEN_KEY);
       resumeLabel=valid?(checkpoint.pendingSave?(checkpoint.pendingSave.saved?'保存確認を再試行':'保存を再試行'):'続きから読込'):'';
-      if(connectionVerified)reportDiagnostic(message,checkpoint,runScope,tokenAtStart);
+      if(connectionVerified&&!message.includes('[SURFACE_LEFT]'))reportDiagnostic(message,checkpoint,runScope,tokenAtStart);
       const kept=valid&&checkpoint.result?`｜取得済み 記事${checkpoint.result.articles.length}件・日別${checkpoint.result.metricSeries.length}日を保持`:'';
       setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効｜接続し直してください':`${cancelRequested?'':'⚠ '}${readStage}：${message}${kept}`,cancelRequested?'paused':'warn',/INGEST_TOKEN|再連携|ACCOUNT_MISMATCH|からダッシュボードを連携/.test(message)?'connect':'read',true);
-    }finally{busy=false;panel?.querySelector('#mumei-dash-stop')?.setAttribute('hidden','');if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':resumeLabel||'再読込'}}
+    }finally{busy=false;panel?.querySelector('#mumei-dash-stop')?.setAttribute('hidden','');if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':resumeLabel||'再読込'}resumeSurfaceRead()}
   }
   let needsPair=false,connecting=false;
   function saveHistory(){try{sessionStorage.setItem(HISTORY_KEY,JSON.stringify({version:VERSION,noteId:localStorage.getItem(NOTE_KEY),rows:historyRows,sticky:stickyStatus}))}catch{}}
@@ -374,6 +522,7 @@
     if(busy&&!kind){const r=lastCollection&&currentCapture(lastCollection.scope)?lastCollection.result:null;message=`読み込み中｜取得 記事${r?.articles.length||0}件・日別PV ${r?.metricSeries.filter(x=>x.pageViews!==null).length||0}日`}
     lastPresentation={message,kind,action};
     if(kind==='warn'||kind==='paused'){stickyStatus=lastPresentation;autoBlockedScope=autoBlockedScope||{};clearTimeout(autoTimer);saveHistory()}
+    renderCompactStatus(message,kind);
     if(!status)return;
     if(status.textContent!==message)status.textContent=message;status.title=message;status.dataset.kind=kind;
     const stop=panel?.querySelector('#mumei-dash-stop');if(stop)stop.hidden=!busy||cancelRequested;
@@ -402,25 +551,65 @@
       location.assign(url.href);
     }catch(e){setStatus(String(e?.message||e),'warn','connect')}finally{connecting=false;if(button)button.disabled=false}
   }
-  function userNavigation(e){if(!e.isTrusted||e.target?.closest?.('#mumei-dashboard-sync'))return;if(e.type!=='popstate'&&!e.target?.closest?.('a,button,input,select,[role=tab],[role=button]'))return;viewLease=null;if(busy)userViewChanged=true;else{lastCollection=null;try{sessionStorage.removeItem(CHECKPOINT_KEY)}catch{}}}
+  function userNavigation(e){if(!e.isTrusted||e.target?.closest?.('#mumei-dashboard-sync'))return;if(e.type!=='popstate'&&(!dashboardRoot().contains(e.target)||!e.target?.closest?.('a,button,input,select,[role=tab],[role=button]')))return;viewLease=null;if(busy)userViewChanged=true;else{lastCollection=null;try{sessionStorage.removeItem(CHECKPOINT_KEY)}catch{}}}
   document.addEventListener('click',userNavigation,true);document.addEventListener('change',userNavigation,true);window.addEventListener('popstate',userNavigation);
   document.addEventListener('mumei-dashboard-connection-ready',()=>{stickyStatus=null;autoBlockedScope=null;cancelRequested=false;needsPair=false;saveHistory()});
   document.addEventListener('mumei-dashboard-status',e=>{const d=e.detail||{};setStatus(String(d.message||''),String(d.kind||''),String(d.action||''))});
   document.addEventListener('mumei-dashboard-read',()=>void syncNow({automatic:true}));
+  function resumeSurfaceRead(){
+    if(!surfaceSuspended||busy||cancelRequested||!isDashboard())return;
+    surfaceSuspended=false;stickyStatus=null;autoBlockedScope=null;userViewChanged=false;saveHistory();
+    clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow({automatic:true}),500);
+  }
+  function updateDashboardSurface(){
+    const active=isDashboard(),returned=active&&!surfaceActive;surfaceActive=active;
+    const surface=active?'dashboard':'other';if(document.documentElement.getAttribute('data-mumei-dashboard-surface')!==surface)document.documentElement.setAttribute('data-mumei-dashboard-surface',surface);
+    if(!active){clearTimeout(autoTimer);if(busy)surfaceSuspended=true;if(panel)panel.style.display='none';const clearance=document.getElementById('mumei-dashboard-clearance');if(clearance)clearance.hidden=true}
+    else{if(returned)mount();if(panel?.style.display==='none')panel.style.removeProperty('display');const clearance=document.getElementById('mumei-dashboard-clearance');if(clearance)clearance.hidden=false;resumeSurfaceRead()}
+    if(returned)document.dispatchEvent(new Event('mumei-dashboard-visible'));
+  }
+  function renderCompactStatus(message,kind){
+    const line=panel?.querySelector('#mumei-dash-brief');if(!line)return;
+    const counts=message.match(/記事\d+件・日別PV \d+日/)?.[0];
+    line.textContent=kind==='warn'?'読込が止まりました｜詳細を確認':kind==='paused'?'読込停止｜詳細から再開':kind==='partial'?'記事保存済み｜日別PV未取得':kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'自動読込中'+(counts?'｜'+counts:''):needsPair?'未連携｜詳細から連携':'ダッシュボード同期';
+    line.dataset.kind=kind;
+  }
   function mount(){
-    if(panelClosed||!isDashboard()||!document.body)return;
+    if(!isDashboard()||!document.body)return;
     if(panel?.isConnected)return;panel=document.createElement('div');panel.id='mumei-dashboard-sync';panel.dataset.coreVersion=VERSION;
-    panel.innerHTML=`<style>#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));font:11px/1.35 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:10px;padding:5px 6px;box-shadow:0 3px 12px #0006;box-sizing:border-box}#mumei-dashboard-sync .row{display:flex;gap:5px;align-items:center}#mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:7px;font:800 11px/1.2 system-ui;min-height:34px;margin:0;padding:0 8px;white-space:nowrap;touch-action:manipulation}#mumei-dashboard-sync button:disabled{opacity:.55}#mumei-dashboard-sync #mumei-dash-close{width:28px;padding:0;border-color:#466677}#mumei-dashboard-sync .status{min-width:0;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=paused]{display:block}#mumei-dashboard-sync .status[data-kind=ok]{color:#aaffcf}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=partial]{color:#ffd68a}#mumei-dashboard-sync .tools{display:flex;align-items:center;gap:8px;margin-top:4px;color:#b9cddd}#mumei-dashboard-sync .tools details{flex:1}#mumei-dashboard-sync summary{cursor:pointer;padding:4px}#mumei-dashboard-sync textarea{display:block;box-sizing:border-box;width:100%;height:26vh;min-height:100px;resize:none;color:#eaf6ff;background:#07131d;border:1px solid #466677;border-radius:6px;font:12px/1.5 system-ui;padding:6px}#mumei-dashboard-sync [hidden]{display:none!important}</style><div class="row"><div class="status" role="status" aria-live="polite"></div><button id="mumei-dash-read" type="button">再読込</button><button id="mumei-dash-close" type="button" aria-label="読込パネルを閉じる">×</button></div><div class="tools"><span>v${VERSION}</span><details id="mumei-dash-history"><summary>履歴</summary><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details><button type="button" id="mumei-dash-stop" hidden>停止</button></div>`;
+    panel.innerHTML=`<style>
+#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;bottom:max(6px,env(safe-area-inset-bottom));font:11px/1.4 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:8px;padding:3px 6px;box-shadow:0 3px 12px #0006;box-sizing:border-box}
+#mumei-dashboard-sync .row{display:flex;gap:6px;align-items:center}
+#mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:6px;font:700 11px/1.2 system-ui;min-height:30px;margin:0;padding:0 8px;white-space:nowrap;touch-action:manipulation}
+#mumei-dashboard-sync button:disabled{opacity:.55}
+#mumei-dashboard-sync #mumei-dash-brief{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mumei-dashboard-sync .status{white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 0;font-size:12px}
+#mumei-dashboard-sync [data-kind=ok]{color:#aaffcf}
+#mumei-dashboard-sync [data-kind=warn],#mumei-dashboard-sync [data-kind=partial]{color:#ffd68a}
+#mumei-dashboard-sync #mumei-dash-details{max-height:35vh;overflow:auto;overscroll-behavior:contain;border-top:1px solid #466677;margin-top:3px;padding-bottom:4px}
+#mumei-dashboard-sync .tools{display:flex;align-items:center;gap:8px;margin:4px 0;color:#b9cddd}
+#mumei-dashboard-sync summary{cursor:pointer;padding:6px 0}
+#mumei-dashboard-sync textarea{display:block;box-sizing:border-box;width:100%;height:16vh;min-height:70px;resize:none;color:#eaf6ff;background:#07131d;border:1px solid #466677;border-radius:6px;font:12px/1.5 system-ui;padding:6px}
+#mumei-dashboard-sync [hidden]{display:none!important}
+#mumei-dashboard-clearance{height:48px;pointer-events:none}
+</style><div class="row"><span id="mumei-dash-brief" role="status" aria-live="polite">自動読込を準備中</span><button id="mumei-dash-toggle" type="button" aria-controls="mumei-dash-details" aria-expanded="false">詳細</button></div><div id="mumei-dash-details" hidden><div class="status"></div><div class="tools"><button id="mumei-dash-read" type="button">再読込</button><button type="button" id="mumei-dash-stop" hidden>停止</button><span>v${VERSION}</span><button id="mumei-dash-close" type="button" aria-label="詳細を縮小する">縮小</button></div><details id="mumei-dash-history"><summary>履歴</summary><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details></div>`;
     document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
-    if(lastPresentation){status.textContent=lastPresentation.message;status.dataset.kind=lastPresentation.kind}else setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
+    if(lastPresentation){status.textContent=lastPresentation.message;status.dataset.kind=lastPresentation.kind;renderCompactStatus(lastPresentation.message,lastPresentation.kind)}else setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
     panel.querySelector('#mumei-dash-read').onclick=()=>needsPair?void connectAndRead():void syncNow();
-    panel.querySelector('#mumei-dash-close').onclick=()=>{stopReading();panelClosed=true;panel.remove();panel=null;status=null};
+    const toggle=panel.querySelector('#mumei-dash-toggle'),drawer=panel.querySelector('#mumei-dash-details');
+    const expand=open=>{drawer.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'縮小':'詳細'};
+    toggle.onclick=()=>expand(drawer.hidden);panel.querySelector('#mumei-dash-close').onclick=()=>expand(false);
     panel.querySelector('#mumei-dash-stop').onclick=stopReading;
     const details=panel.querySelector('#mumei-dash-history'),area=details.querySelector('textarea');
     details.addEventListener('toggle',()=>{if(details.open)area.value=historyText()});
     panel.querySelector('#mumei-dash-copy').onclick=async()=>{const button=panel.querySelector('#mumei-dash-copy');try{await navigator.clipboard.writeText(area.value||historyText());button.textContent='コピーしました'}catch{area.value=area.value||historyText();area.focus();area.select();button.textContent='選択した履歴をコピー'}};
+    let clearance=document.getElementById('mumei-dashboard-clearance');if(!clearance){clearance=document.createElement('div');clearance.id='mumei-dashboard-clearance';clearance.setAttribute('aria-hidden','true');document.body.append(clearance)}
+    if(typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>{clearance.style.height=(panel?.getBoundingClientRect().height+16)+'px'}).observe(panel)}
   }
   window.addEventListener('DOMContentLoaded',mount,{once:true});
   document.addEventListener('mumei-dashboard-mount',mount);
+  let surfaceTimer=0;
+  new MutationObserver(records=>{if(!document?.documentElement||document.visibilityState==='hidden'||records.every(r=>r.target?.closest?.('#mumei-dashboard-sync,#mumei-dashboard-clearance')))return;clearTimeout(surfaceTimer);surfaceTimer=setTimeout(updateDashboardSurface,50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3']});
+  window.addEventListener('popstate',updateDashboardSurface);document.addEventListener('visibilitychange',updateDashboardSurface);document.addEventListener('mumei-dashboard-surface',updateDashboardSurface);
   if(document.readyState!=='loading')mount();
 })();

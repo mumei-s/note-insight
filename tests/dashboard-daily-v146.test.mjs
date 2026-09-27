@@ -13,3 +13,11 @@ test('最新保存に日別値がなくても前の実績を残し、後日の�
 test('曜日の平均は取得済み日だけで計算し、未取得曜日は欠損にする',()=>{const s=readFileSync('src/member-insight-analytics-pro-v3.tsx','utf8'),start=s.indexOf('function weekdayMetrics('),end=s.indexOf('\nfunction ',start+10),ctx=vm.createContext({avg:xs=>xs.reduce((a,b)=>a+b,0)/xs.length,n:v=>String(v)});vm.runInContext(ts.transpileModule(s.slice(start,end)+'\nthis.weekday=weekdayMetrics;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,ctx);const rows=plain(ctx.weekday([{date:'2026-09-07',pageViews:10},{date:'2026-09-14',pageViews:0},{date:'2026-09-15',pageViews:null}]));assert.equal(rows.find(r=>r.label==='月曜').value,5);assert.equal(rows.find(r=>r.label==='火曜').value,null);assert.ok(rows.every(r=>r.label==='月曜'||r.value===null))});
 
 test('指標名つきの座標・日付値ペア・JST timestampを日別として読む',t=>{const p=parser(t),rows=plain(p.dailyMetrics({series:[{name:'pv',data:[{x:'2026-09-20',y:0},['2026-09-21',24],{timestamp:Date.parse('2026-09-21T15:00:00Z'),value:50}]}]}));assert.deepEqual(rows.map(r=>[r.date,r.pageViews]),[['2026-09-20',0],['2026-09-21',24],['2026-09-22',50]]);assert.deepEqual(plain(p.dailyMetrics({pv:[{date:'2026-99-01',value:20}]})),[])});
+
+test('note公式GraphQLの指標・日付形式を読み、WEEK/MONTHを日別に偽装しない',t=>{
+ const p=parser(t),points=[{label:'9/20',value:0,startDate:'2026-09-20',endDate:'2026-09-20'},{label:'9/21',value:8,startDate:'2026-09-21',endDate:'2026-09-21'}];
+ assert.deepEqual(plain(p.dailyMetrics({granularity:'DAY',points},{field:'pageViews'})).map(r=>r.pageViews),[0,8]);
+ assert.deepEqual(plain(p.dailyMetrics({granularity:'WEEK',points},{field:'pageViews'})),[]);
+ assert.deepEqual(plain(p.dailyMetrics({granularity:'MONTH',points},{field:'pageViews'})),[]);
+ assert.deepEqual(plain(p.dailyMetrics({points:[{startDate:'2026-09-01',endDate:'2026-09-30',value:88}]},{field:'pageViews'})),[]);
+});
