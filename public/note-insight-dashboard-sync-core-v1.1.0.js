@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.5
+// @version      1.5.6
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -19,7 +19,7 @@
       document.removeEventListener('mumei-dashboard-mount',enterDashboard);startDashboardCore();
     });return;
   }
-  const VERSION='1.5.5';
+  const VERSION='1.5.6';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -27,7 +27,8 @@
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
   const CAPTURE=[];
-  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='';
+  let panel=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='',resumeLabel='',readStage='準備';
+  const CHECKPOINT_KEY='mumei-dashboard-read-checkpoint-v1',CHECKPOINT_AGE=10*60*1000;
   const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const num=(v)=>{if(v==null)return 0;const s=String(v).replace(/[￥¥円,%\s]/g,'').replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
   const text=(v)=>String(v??'').replace(/\s+/g,' ').trim();
@@ -137,26 +138,45 @@
     if(!readable(el)||el.disabled||el.getAttribute('aria-disabled')==='true'||el.hasAttribute('aria-haspopup')||el.matches('a,[type="submit"]'))return false;
     if(contentTab(el))return el.getAttribute('aria-selected')!=='true'&&el.getAttribute('aria-pressed')!=='true';
     if(el.matches('[role="tab"]'))return false;
+    if(/^(?:過去.*|.*日間|.*順|期間.*|並び替え.*)$/.test(text(el.getAttribute('aria-label')||el.textContent)))return false;
     const disclosure=el.matches('details:not([open]) > summary')||el.getAttribute('aria-expanded')==='false';
     const named=!el.hasAttribute('aria-expanded')&&/^(?:グラフを(?:表示|開く)|詳細を表示|詳細を見る|もっと見る|さらに表示|続きを表示|開く|表示する)$/.test(text(el.getAttribute('aria-label')||el.textContent));
     return (disclosure||named)&&metricPanel.test(panelLabel(el));
   })}
-  async function expandDashboardPanels(href,initialPeriod,collect){
-    const seen=new WeakSet(),visitedTabs=new Set([...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].filter(contentTab).map(el=>text(el.textContent)));let opened=0;
-    collect();
-    for(let pass=0;pass<60;pass++){
-      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
-      // Re-query after each render. Read one panel before another accordion/tab can hide it.
-      const candidates=panelControls().filter(el=>!seen.has(el)&&(!contentTab(el)||!visitedTabs.has(text(el.textContent))));
-      const control=candidates.find(el=>!contentTab(el))||candidates[0];
-      if(!control)return opened;
-      seen.add(control);if(contentTab(control))visitedTabs.add(text(control.textContent));
-      control.scrollIntoView?.({block:'center',behavior:'instant'});control.click();opened++;
-      setStatus(`公式パネルを読込中… ${opened}項目`);
-      await waitForDashboard(href,initialPeriod);collect(contentTab(control)?text(control.textContent):'');
-      if(control.isConnected&&readable(control)&&control.getAttribute('aria-expanded')==='false')throw new Error('公式パネルを開けませんでした：'+text(control.textContent));
+  function activeContentLabel(){return text([...dashboardRoot().querySelectorAll('[aria-selected="true"],[aria-pressed="true"]')].find(contentTab)?.textContent)}
+  function controlKey(el,progress){
+    if(contentTab(el))return 'tab:'+text(el.getAttribute('aria-label')||el.textContent);
+    const label=panelLabel(el),base=JSON.stringify([progress.activeLabel,el.id,el.getAttribute('aria-controls'),label]);
+    // Pagination may reuse one button, but reopening a remounted accordion is not progress.
+    return /^(もっと見る|さらに表示|続きを表示)$/.test(text(el.textContent))?base+JSON.stringify([tableArticles(),dailyTableMetrics()]):base;
+  }
+  async function expandDashboardPanels(href,initialPeriod,read,checkpoint){
+    const progress=checkpoint.progress;
+    const collect=()=>{read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
+    if(progress.pending){
+      readStage=progress.pending.label;await waitForDashboard(href,initialPeriod);
+      const target=panelControls().find(el=>controlKey(el,progress)===progress.pending.key);
+      if(target&&(progress.pending.tab||target.getAttribute('aria-expanded')==='false'))progress.pending=null;
+      else{if(progress.pending.tab)progress.activeLabel=progress.pending.label;collect();progress.done.push(progress.pending.key);progress.pending=null;saveCheckpoint(checkpoint)}
     }
-    throw new Error('公式パネルの読込が途中です。再読込してください');
+    collect();
+    if(!progress.started){const active=activeContentLabel();progress.activeLabel=active||'記事';progress.done.push('tab:'+progress.activeLabel);progress.started=true;saveCheckpoint(checkpoint)}
+    for(let pass=0;pass<60;pass++){
+      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');
+      const candidates=panelControls().filter(el=>!progress.done.includes(controlKey(el,progress)));
+      const control=candidates.find(el=>!contentTab(el))||candidates[0];
+      if(!control){progress.complete=true;saveCheckpoint(checkpoint);return progress.opened}
+      const key=controlKey(control,progress),tab=contentTab(control),label=text(control.getAttribute('aria-label')||control.textContent);
+      progress.pending={key,tab,label};readStage=label;saveCheckpoint(checkpoint);
+      control.scrollIntoView?.({block:'center',behavior:'instant'});control.click();progress.opened++;
+      setStatus(`公式パネルを読込中… ${label}（取得済み ${read.result.articles.length}件）`);
+      await waitForDashboard(href,initialPeriod);
+      if(panelControls().some(el=>controlKey(el,progress)===key&&el.getAttribute('aria-expanded')==='false')){progress.pending=null;saveCheckpoint(checkpoint);throw new Error('公式パネルを開けませんでした：'+label+' [PANEL_NOT_OPEN]')}
+      if(tab&&activeContentLabel()&&activeContentLabel()!==label){progress.pending=null;saveCheckpoint(checkpoint);throw new Error('公式タブを切り替えられませんでした：'+label+' [TAB_NOT_OPEN]')}
+      if(tab)progress.activeLabel=label;
+      collect();progress.done.push(key);progress.pending=null;saveCheckpoint(checkpoint);
+    }
+    throw new Error('公式パネルが60回以上更新されました。取得済みの続きで停止しています [PANEL_LIMIT]');
   }
   function officialDataSignature(){
     // Live help text and response timestamps are not dashboard values.
@@ -165,15 +185,15 @@
   async function waitForDashboard(href,initialPeriod){
     let quiet=0,previous='';
     for(let tick=0;tick<60;tick++){
-      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。現在の画面で再読込してください');
-      const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(readable);
+      if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');
+      const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]:not([aria-valuenow])')].some(readable);
       const signature=JSON.stringify([captureRevision,officialDataSignature()]);
       quiet=!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
       if(quiet>=6)return;
       if(tick%4===0)setStatus(`公式データを読込中…${pendingStats?' 通信 '+pendingStats+'件':''}`);
       await sleep(250);
     }
-    throw new Error('公式パネルの読込が完了していません。表示が落ち着いてから再読込してください');
+    throw new Error('公式データの待機が15秒を超えました [READ_WAIT]');
   }
 
   function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;metricRows.push(...dailyMetrics(cap.payload));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
@@ -229,13 +249,31 @@
       for(const [key,value]of Object.entries(detectSummary()))if(value)result.summary[key]=value;
     }};
   }
+  async function checkpointHash(scope){
+    try{const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scope)));return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('')}catch{return ''}
+  }
+  function saveCheckpoint(checkpoint){
+    checkpoint.at=Date.now();lastCollection=checkpoint;
+    if(!checkpoint.hash)return;
+    // Store data and progress in this tab only; never copy the connection token.
+    const {scope,...safe}=checkpoint;
+    try{sessionStorage.setItem(CHECKPOINT_KEY,JSON.stringify({...safe,version:VERSION}))}catch{/* Memory checkpoint still permits retry if browser storage is full. */}
+  }
+  async function getCheckpoint(scope){
+    if(lastCollection&&currentCapture(lastCollection.scope)&&Date.now()-lastCollection.at<CHECKPOINT_AGE)return lastCollection;
+    const hash=await checkpointHash(scope);
+    if(hash)try{const cached=JSON.parse(sessionStorage.getItem(CHECKPOINT_KEY)||'null');if(cached?.version===VERSION&&cached.hash===hash&&Date.now()-cached.at<CHECKPOINT_AGE&&cached.result&&cached.progress){lastCollection={...cached,scope};return lastCollection}}catch{}
+    // A loading page may not expose its period yet; keep the last checkpoint until a new read is collected.
+    return {scope,hash,at:Date.now(),result:null,progress:{started:false,activeLabel:activeContentLabel()||'記事',done:[],opened:0,pending:null,complete:false},pendingSave:null};
+  }
   async function syncNow({automatic=false}={}){
     if(automatic&&autoBlockedScope&&currentCapture(autoBlockedScope))return;
     if(busy||!isDashboard())return;clearTimeout(autoTimer);busy=true;mount();setStatus('公式データを確認中…');
-    const tokenAtStart=localStorage.getItem(TOKEN_KEY);let runScope=captureScope();
+    const tokenAtStart=localStorage.getItem(TOKEN_KEY);let runScope=captureScope(),checkpoint=null;
     if(!automatic)autoBlockedScope=null;
     const button=panel?.querySelector('#mumei-dash-read');if(button)button.disabled=true;
     try{
+      readStage='保存先の本人確認';
       const startLocation=dashboardLocation(),paired=(localStorage.getItem(NOTE_KEY)||'').toLowerCase(),current=await currentNoteId();
       if(!paired)throw new Error('INSIGHTの分析からダッシュボードを連携してください');
       if(!current)throw new Error('noteへのログインを確認してください');
@@ -244,49 +282,66 @@
       setStatus('保存先の連携を確認中…');
       const connection=await xhr(DASH_API,{action:'sync-status',noteId:paired},{'X-Ingest-Token':token});
       if(connection.noteId!==paired||connection.paired!==true)throw new Error('保存先の確認ができませんでした');
-      // Expand disclosure panels within the selected period; never switch period tabs.
       for(let i=0;i<20;i++){if(!isDashboard()||dashboardLocation()!==startLocation)return;if(dashboardRoot().querySelector('details,[aria-expanded],table')||detectTotals().pageViews!==null||mineNetwork().metricSeries.length)break;await sleep(250)}
-      await waitForDashboard(startLocation,null);
-      const selectedPeriod=periodKey(),scope=captureScope(),reuse=automatic&&lastCollection&&currentCapture(lastCollection.scope),read=collector(reuse?lastCollection.result:null);
-      runScope=scope;
-      // Late network data updates the collected snapshot without clicking tabs again.
-      const openedPanels=reuse?0:await expandDashboardPanels(startLocation,selectedPeriod,read.collect);
-      await refreshChartSources();
-      await waitForDashboard(startLocation,selectedPeriod);read.collect();
-      const mined=read.result,articles=mined.articles,traffic=mined.sources;
-      lastCollection={scope,result:JSON.parse(JSON.stringify(mined))};
-      const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals},period=detectPeriod(),collected=detectCollected(),summary=mined.summary;
-      const dailyPvDays=mined.metricSeries.filter(r=>r.pageViews!==null).length;
-      if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('公式データが見つかりません。グラフ表示後に「再読込」を押してください');
-      setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存中…`);
-      const payload={action:'ingest',schemaVersion:4,connectorVersion:VERSION,noteId:paired,articles,totals,
-        trafficSources:traffic,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,summary,
-        contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels},officialCollectedAt:collected,...period,pages:1};
-      const readRevision=captureRevision,readSignature=officialDataSignature();
-      if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
-      const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
-      if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',dailyPvDays?'ok':'partial');return}
-      const saved=await xhr(DASH_API,payload,{'X-Ingest-Token':token});
-      if(!saved.snapshotId)throw new Error('保存結果を確認できませんでした。再読込してください');
+      let selectedPeriod=periodKey(),scope=captureScope();runScope=scope;
+      checkpoint=await getCheckpoint(scope);
+      if(!checkpoint.pendingSave){
+        readStage=checkpoint.progress.pending?.label||'表示中の公式データ';
+        await waitForDashboard(startLocation,checkpoint.progress.started?selectedPeriod:null);
+        if(periodKey()!==selectedPeriod){selectedPeriod=periodKey();scope=captureScope();runScope=scope;checkpoint=await getCheckpoint(scope)}
+        if(!checkpoint.pendingSave){
+        const read=collector(checkpoint.result);
+        if(!checkpoint.progress.complete)await expandDashboardPanels(startLocation,selectedPeriod,read,checkpoint);
+        await refreshChartSources();await waitForDashboard(startLocation,selectedPeriod);read.collect();
+        const mined=read.result,articles=mined.articles;
+        checkpoint.result=mined;saveCheckpoint(checkpoint);
+        const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals};
+        if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('表示中の公式データを取得できませんでした [NO_DATA]');
+        const payload={action:'ingest',schemaVersion:4,connectorVersion:VERSION,noteId:paired,articles,totals,
+          trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,summary:mined.summary,
+          contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels:checkpoint.progress.opened},officialCollectedAt:detectCollected(),...detectPeriod(),pages:1};
+        const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
+        if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',mined.metricSeries.some(r=>r.pageViews!==null)?'ok':'partial');return}
+        checkpoint.pendingSave={payload,readRevision:captureRevision,readSignature:officialDataSignature(),saved:null};saveCheckpoint(checkpoint);
+        }
+      }
+      const pending=checkpoint.pendingSave,{payload}=pending,{articles,totals}=payload,dailyPvDays=payload.metricSeries.filter(r=>r.pageViews!==null).length;
+      const checkAccount=async()=>{const actual=await currentNoteId();if(!currentCapture(scope)||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||localStorage.getItem(TOKEN_KEY)!==token||actual!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH')};
+      readStage='取得済みデータの保存';await checkAccount();
+      if(!pending.saved){
+        setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存中…`);
+        const saved=await xhr(DASH_API,payload,{'X-Ingest-Token':token});
+        if(!saved.snapshotId)throw new Error('保存応答に記録番号がありません [SAVE_RESPONSE]');
+        pending.saved=saved;saveCheckpoint(checkpoint);
+      }
+      const saved=pending.saved;readStage='保存結果の照合';
       setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存を照合中…`);
       const verified=await xhr(DASH_API,{action:'sync-status',noteId:paired,snapshotId:saved.snapshotId},{'X-Ingest-Token':token});
-      if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==mined.metricSeries.length)throw new Error('保存件数が一致しません。再読込してください');
-      for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません。再読込してください');
-      if(!isDashboard()||dashboardLocation()!==startLocation||periodKey()!==selectedPeriod||localStorage.getItem(TOKEN_KEY)!==token||await currentNoteId()!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH');
-      if(captureRevision!==readRevision||officialDataSignature()!==readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
+      if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==payload.metricSeries.length)throw new Error('保存件数が一致しません [SAVE_COUNT]');
+      for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません [SAVE_VALUE]');
+      await checkAccount();
+      checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
-      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：公式の日別グラフを開いて再読込）`;
-      lastSnapshotSignature=signature;
-      localStorage.setItem('mumei-dashboard-last-result:'+paired,message);setStatus(message,count?'ok':'partial');
-    }catch(e){autoBlockedScope=runScope;clearTimeout(autoTimer);const message=String(e?.message||e);if(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)&&localStorage.getItem(TOKEN_KEY)===tokenAtStart){localStorage.removeItem(TOKEN_KEY)}setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効｜接続し直してください':`⚠ ${message}`,'warn',/INGEST_TOKEN|再連携|ACCOUNT_MISMATCH|からダッシュボードを連携/.test(message)?'connect':'read')}
-    finally{busy=false;if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':'再読込'}}
+      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：公式の日別グラフを開くと追加読込）`;
+      lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
+      localStorage.setItem('mumei-dashboard-last-result:'+paired,message);
+      if(captureRevision!==pending.readRevision||officialDataSignature()!==pending.readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
+      setStatus(message,count?'ok':'partial');
+    }catch(e){
+      autoBlockedScope=runScope;clearTimeout(autoTimer);const message=String(e?.message||e),valid=checkpoint&&currentCapture(checkpoint.scope);
+      if(valid)saveCheckpoint(checkpoint);
+      if(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)&&localStorage.getItem(TOKEN_KEY)===tokenAtStart)localStorage.removeItem(TOKEN_KEY);
+      resumeLabel=valid?(checkpoint.pendingSave?(checkpoint.pendingSave.saved?'保存確認を再試行':'保存を再試行'):'続きから読込'):'';
+      const kept=valid&&checkpoint.result?`｜取得済み 記事${checkpoint.result.articles.length}件・日別${checkpoint.result.metricSeries.length}日を保持`:'';
+      setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効｜接続し直してください':`⚠ ${readStage}：${message}${kept}`,'warn',/INGEST_TOKEN|再連携|ACCOUNT_MISMATCH|からダッシュボードを連携/.test(message)?'connect':'read');
+    }finally{busy=false;if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':resumeLabel||'再読込'}}
   }
   let needsPair=false,connecting=false;
   function setStatus(message,kind='',action=''){
     if(action)needsPair=action==='connect';if(!status)return;
     status.textContent=message;status.title=message;status.dataset.kind=kind;
-    const button=panel?.querySelector('#mumei-dash-read');if(button){button.textContent=needsPair?'連携して読み込む':busy?'読込中…':'再読込';button.dataset.action=needsPair?'connect':'read'}
+    const button=panel?.querySelector('#mumei-dash-read');if(button){button.textContent=needsPair?'連携して読み込む':busy?'読込中…':resumeLabel||'再読込';button.dataset.action=needsPair?'connect':'read'}
   }
   async function connectAndRead(){
     if(connecting||busy)return;connecting=true;const button=panel?.querySelector('#mumei-dash-read');if(button)button.disabled=true;
@@ -301,7 +356,7 @@
   function mount(){
     if(!isDashboard()||!document.body)return;
     if(panel?.isConnected)return;panel=document.createElement('div');panel.id='mumei-dashboard-sync';panel.dataset.coreVersion=VERSION;
-    panel.innerHTML=`<style>#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));font:11px/1.35 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:10px;padding:5px 6px;box-shadow:0 3px 12px #0006;box-sizing:border-box}#mumei-dashboard-sync .row{display:flex;gap:5px;align-items:center}#mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:7px;font:800 11px/1.2 system-ui;min-height:34px;margin:0;padding:0 8px;white-space:nowrap;touch-action:manipulation}#mumei-dashboard-sync button:disabled{opacity:.55}#mumei-dashboard-sync #mumei-dash-close{width:28px;padding:0;border-color:#466677}#mumei-dashboard-sync .status{min-width:0;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}#mumei-dashboard-sync .status[data-kind=ok]{color:#aaffcf}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=partial]{color:#ffd68a}</style><div class="row"><div class="status" role="status" aria-live="polite"></div><button id="mumei-dash-read" type="button">再読込</button><button id="mumei-dash-close" type="button" aria-label="読込パネルを閉じる">×</button></div>`;
+    panel.innerHTML=`<style>#mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));font:11px/1.35 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:10px;padding:5px 6px;box-shadow:0 3px 12px #0006;box-sizing:border-box}#mumei-dashboard-sync .row{display:flex;gap:5px;align-items:center}#mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:7px;font:800 11px/1.2 system-ui;min-height:34px;margin:0;padding:0 8px;white-space:nowrap;touch-action:manipulation}#mumei-dashboard-sync button:disabled{opacity:.55}#mumei-dashboard-sync #mumei-dash-close{width:28px;padding:0;border-color:#466677}#mumei-dashboard-sync .status{min-width:0;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}#mumei-dashboard-sync .status[data-kind=warn]{display:block}#mumei-dashboard-sync .status[data-kind=ok]{color:#aaffcf}#mumei-dashboard-sync .status[data-kind=warn],#mumei-dashboard-sync .status[data-kind=partial]{color:#ffd68a}</style><div class="row"><div class="status" role="status" aria-live="polite"></div><button id="mumei-dash-read" type="button">再読込</button><button id="mumei-dash-close" type="button" aria-label="読込パネルを閉じる">×</button></div>`;
     document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
     setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
     panel.querySelector('#mumei-dash-read').onclick=()=>needsPair?void connectAndRead():void syncNow();
