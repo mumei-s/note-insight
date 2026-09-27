@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.2",
+  "appVersion": "2026.09.27.3",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.6",
-  "releasedAt": "2026-09-27T10:16:05+09:00",
+  "dashboardVersion": "1.5.7",
+  "releasedAt": "2026-09-27T10:48:08+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard：再描画されるパネルの再巡回を停止。途中の取得結果を同じタブに保持し、失敗した箇所から再開。保存失敗は保存だけ、照合失敗は照合だけを再試行。",
+  "note": "Dashboard：内容タブ切替時の日付欄の再描画・指標タブ・内部遷移を期間変更と誤認する停止を修正。エラーは手動再開まで固定し、履歴・コピー・停止操作を追加。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
