@@ -32,11 +32,12 @@ async function investigateUnknown(scope:string,key:string,page=1){
 async function investigate(scope:string,key:string,page=1){
  if(key.startsWith("unknown:"))return investigateUnknown(scope,key,page);
  if(!key||key.length>400||key.startsWith("unknown:"))throw new Error("PERSON_REQUIRED");
- const [relations,events]=await Promise.all([
+ const [relations,events,history]=await Promise.all([
   db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("person_key",key),
-  db.from("insight_relation_events").select("id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count").eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).limit(100)
- ]);if(relations.error)throw relations.error;if(events.error)throw events.error;
- return{ok:true,personKey:key,relations:relations.data||[],events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
+  db.from("insight_relation_events").select("id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
+  db.from("insight_social_comparison_history").select("id,previous_following,previous_follower,is_following,is_follower,observed_at,observation_kind",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("observed_at",{ascending:false}).range((page-1)*50,page*50-1)
+ ]);if(relations.error)throw relations.error;if(events.error)throw events.error;if(history.error)throw history.error;
+ return{ok:true,personKey:key,relations:relations.data||[],relationshipHistory:history.data||[],inspectionPage:page,inspectionPages:Math.max(1,Math.ceil(Math.max(history.count||0,events.count||0)/50)),events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
 }
 async function windowPeople(scope:string,direction:string,window:string){
  let q=db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction);
