@@ -106,3 +106,5 @@ Dashboard修正（1.5.5）：失敗した同じアカウント・連携・期間
 09:03 JSTのowner本人の新しい連携は本番に存在する。連携成功と数値保存成功は別であり、後者はまだ確認できていない。
 
 公開前検証：必須回帰286件（カード4・既存79・Reader等203）、build、Dashboard構文、差分検査が成功。4つの機能単位コミットごとに境界検証成功。新規再現の不成立を旧コードで確認したうえで修正版を検証している。参加者・owner双方の既存回帰を維持する。
+
+公開完了：PR #15を機能別4コミットのままrebase merge。main `6cf1d91b17e25901894fe1f6bdb239baa0a91bce` のtreeは検証済みtreeと一致。Actions `36282261848` のbuild・286件の回帰・Pages deployが成功。Pagesのmanifest/設定HTML/JS/wrapper/coreとraw installer/@require（7ファイル）はHTTP200・mainと完全一致。公開indexと実bundle `index-D0eXoJII.js` もHTTP200、bundleはローカルbuildと完全一致し、1.5.5・本体2026.09.27.1・常設の更新確認入口を含む。更新URLは `https://mumei-s.github.io/note-insight/dashboard-setup.html?v=155`。更新前から開いたnoteダッシュボードのタブには旧コードが残るため閉じ、更新画面から1.5.5へ更新して新しく連携読込する。端末での最新保存完了は未確認。
