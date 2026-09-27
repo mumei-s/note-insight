@@ -51,8 +51,23 @@ for(const name of ['ingest-v2','reclassify'])test(name+'：メンシプの記事
 });
 
 test('再分類APIは旧画面が全件を要求しても本人の未分類だけを取得する',async()=>{
- let handler;const calls=[];const db={from(table){const q={};for(const m of ['select','eq','in','or','order','limit','gt'])q[m]=(...args)=>{calls.push({table,m,args});return q};const result=()=>({data:table==='insight_member_sessions'?{application_id:'participant-id',expires_at:'2099-01-01'}:table==='insight_access_applications'?{id:'participant-id',note_id:'tester',status:'active'}:[]});q.maybeSingle=async()=>result();q.then=(yes,no)=>Promise.resolve(result()).then(yes,no);return q}};
+ let handler;const calls=[];const db={from(table){const q={};for(const m of ['select','eq','in','or','order','limit','gt','range'])q[m]=(...args)=>{calls.push({table,m,args});return q};const result=()=>({data:table==='insight_member_sessions'?{application_id:'participant-id',expires_at:'2099-01-01'}:table==='insight_access_applications'?{id:'participant-id',note_id:'tester',status:'active'}:[]});q.maybeSingle=async()=>result();q.then=(yes,no)=>Promise.resolve(result()).then(yes,no);return q}};
  const context=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},crypto:globalThis.crypto,TextEncoder,Response,Request,URL});const js=ts.transpileModule(read('supabase/functions/insight-notification-reclassify/index.ts'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText,mod=new vm.SourceTextModule(js,{context});await mod.link(()=>new vm.SyntheticModule(['createClient'],function(){this.setExport('createClient',()=>db)},{context}));await mod.evaluate();
  const r=await handler(new Request('https://example.test',{method:'POST',headers:{'X-Insight-Token':'fixture'},body:JSON.stringify({onlyPending:false})}));assert.equal(r.status,200);assert.equal((await r.json()).nextCursor,null);
  const rows=calls.filter(c=>c.table==='insight_notifications');assert.ok(rows.some(c=>c.m==='eq'&&c.args[0]==='notification_type'&&c.args[1]==='other'));assert.ok(rows.some(c=>c.m==='in'&&c.args[0]==='member_id'&&c.args[1].length===1&&c.args[1][0]==='participant-id'));
+});
+
+for(const name of ['ingest-v2','reclassify'])test(name+'：購読先の記事投稿を人物フォローに分類しない',()=>{
+ const f=classifier('supabase/functions/insight-notification-'+name+'/index.ts');
+ assert.equal(f('Aさんが記事を投稿しました',null,{kind:'super_follow'}),'creator_article_posted');
+ assert.equal(f('Aさんがあなたをフォローしました',null,{kind:'follow'}),'follow');
+});
+test('旧通知の復元は通知IDまたは一意な人物・秒単位の時刻だけを使う',()=>{
+ const source=read('supabase/functions/insight-notification-reclassify/index.ts'),part=source.slice(source.indexOf('function recoveryEvidence('),source.indexOf('async function unresolvedSummary('));const c=vm.createContext({});vm.runInContext(ts.transpileModule(part+'\nthis.recover=recoveryEvidence',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,c);
+ const row={actor_url:'https://note.com/a',occurred_at:'2026-09-20T00:00:00Z',meta:{}},notice={id:1,action_users:[{url:row.actor_url}],noticed_at:'2026-09-20T00:00:01Z'};
+ assert.equal(c.recover(row,[notice]).id,1);
+ assert.equal(c.recover(row,[notice,{...notice,id:2,noticed_at:'2026-09-20T00:00:20Z'}]),null);
+ assert.equal(c.recover({...row,meta:{time_estimated:true}},[notice]),null);
+ assert.equal(c.recover({...row,meta:{event_identity:'notice:1'}},[notice]).id,1);
+ assert.equal(c.recover({...row,actor_url:'https://note.com/b'},[notice]),null);
 });
