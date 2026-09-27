@@ -183,7 +183,7 @@ test('ordinary note pages never start follower scans or inspect auth/editor traf
   assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
   assert.match(dmNet,/const ensureDmHooks=\(\)=>\{if\(!dmSurface\(\)\)return;installFetch\(\);installXHR\(\)\}/);
   assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=103/);
-  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=102/);
+  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=103/);
 });
 
 

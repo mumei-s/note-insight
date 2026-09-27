@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.14",
+  "appVersion": "2026.09.27.15",
   "notificationVersion": "3.6.11",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T16:45:00+09:00",
+  "releasedAt": "2026-09-27T16:50:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "フォロー照合の途中経過を保持。停止・再開・進捗、過去の保存人物の関係確認、関係変化の履歴保存を追加。通知更新に照合モジュールを同梱。",
-  "dmVersion": "1.4.8",
+  "note": "通知3.6.11・DM1.4.9にフォロー照合1.0.3を同梱。途中再開・過去の保存人物の確認・関係変化履歴。通知とDM本体の取得処理は従来通り。",
+  "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
