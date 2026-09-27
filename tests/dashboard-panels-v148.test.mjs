@@ -118,11 +118,11 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  w.__location={get href(){return w.location.href},get search(){return w.location.search},get origin(){return w.location.origin},assign:href=>{assert.ok(handoffStore.get('mumei-dashboard-handoff-v143'),'移動より先に共有保存を確認');setupNav.push(href)}};
  const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
  w.fetch=async(url,init={})=>{if(String(url).includes('insight-release.json'))return Response.json(release);pairCalls.push(init);assert.equal(JSON.parse(init.body).action,'pair-start');assert.equal(init.headers['X-Insight-Token'],'member-fixture');return Response.json({ok:true,noteId:'tester',pairingCode:'12345678'})};
- w.eval(wrapper);w.eval(readFileSync('public/dashboard-setup.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));await pause(50);
+ w.eval(readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8'));w.eval(wrapper);w.eval(readFileSync('public/dashboard-setup.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));await pause(50);
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
  const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
-  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.1',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
+  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.2',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
   w.GM=gm; // note has already stripped all query parameters before userscript startup.
   w.GM_xmlhttpRequest=opts=>{const body=JSON.parse(opts.data);requests.push(body);let result;
    if(body.action==='pair-exchange'){assert.equal(body.code,'12345678');result={ok:true,noteId:'tester',ingestToken:'ingest-fixture'}}
@@ -363,7 +363,7 @@ test('期間変更で停止したエラーは新期間の通信や起動通知�
  assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.equal(h.diagnostics.length,1);assert.equal(h.diagnostics[0].code,'VIEW_CHANGED');assert.equal(h.diagnostics[0].periodChanged,true);
  assert.ok(!JSON.stringify(h.diagnostics).includes('fixture'));
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);const area=details.querySelector('textarea'),frozen=area.value;
- assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.6\.1/);
+ assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.6\.2/);
  h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'追加の状態'}}));await pause(20);assert.equal(area.value,frozen,'開いている履歴は読みながら書き換えない');
  let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>copied=value}});h.w.document.getElementById('mumei-dash-copy').click();await pause(10);assert.equal(copied,frozen);
 });
@@ -380,7 +380,7 @@ test('停止操作後に通信が終わっても保存やパネル巡回を続�
 
 test('ページを再表示しても最後のエラーと履歴を残し、自動再開しない',async t=>{
  const message='公式データの待機が15秒を超えました [READ_WAIT]';
- const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.1',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
+ const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.2',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
  await pause(150);assert.equal(h.saves.length,0);assert.equal(h.w.document.querySelector('.status').textContent,message);
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);assert.match(details.querySelector('textarea').value,/10:00:00.*READ_WAIT/);
  h.w.document.getElementById('mumei-dash-read').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
