@@ -41,3 +41,10 @@ for(const legacy of [false,true])test('本人フォロー一覧を下から保�
 test('本人と確認できない公開プロフィールでは照合を保存しない',async t=>{
  const h=reader(t,false);await h.run(true);assert.equal(h.calls.length,0);assert.equal(h.writes.length,0);
 });
+
+test('人数だけの減少に候補者を勝手に割り当てず、現在確認済みの人を候補から除く',()=>{
+ const source=readFileSync('supabase/functions/insight-social-events/index.ts','utf8'),part=source.slice(source.indexOf('function investigationCandidates('),source.indexOf('async function investigateUnknown(')),c=vm.createContext({});vm.runInContext(ts.transpileModule(part+'\nthis.candidates=investigationCandidates',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,c);
+ const people=['outside','present','absent','future'].map(key=>({person_key:key,first_seen_at:key==='future'?'2026-09-27T01:00:00Z':'2026-09-01T00:00:00Z',last_seen_at:'2026-09-20T00:00:00Z',active:false}));
+ const result=c.candidates(people,[{person_key:'present',is_follower:true,checked_at:'2026-09-26T00:00:00Z'},{person_key:'absent',is_follower:false,checked_at:'2026-09-26T00:00:00Z'}],{direction:'followers',detected_at:'2026-09-25T00:00:00Z'});
+ assert.deepEqual(Array.from(result,r=>r.person_key),['absent','outside']);assert.equal(result[0].assigned_to_event,false);assert.equal(result[1].current_relation,'unverified');
+});
