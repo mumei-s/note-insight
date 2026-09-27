@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.6',PROTOCOL='3.6.4';
+const VERSION='3.6.15',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -79,7 +79,7 @@ function eventIdentity(el,raw,tm){
  return 'label:'+clean(raw).match(TIME_RE)?.[0];
 }
 const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
-let scanning=false,stop=false,active=null;
+let scanning=false,stop=false,active=null,retryAt=0,retryFailures=0;
 const OUTBOX='mumei-notification-outbox-v318:';
 function readOutbox(id){try{const value=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(value)?value:[]}catch{throw new Error('未送信通知の保存データを確認できません')}}
 function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(rs))}
@@ -119,12 +119,19 @@ async function sendBatch(input,a,saved,force=false){
 }
 async function scan(opts={}){
  if(!featureOn()||isDmRoute())return 0;
- if(scanning){if(opts.automatic)return 0;stop=true;window.__mumeiNotificationNetwork3300?.stop?.();health('停止要求｜保存確認後に停止します','saving',{stopping:true});return 0}
+ if(scanning){if(opts.automatic)return 0;stop=true;window.__mumeiNotificationNetwork3300?.stop?.();health('停止中｜未確認分を残して停止します','saving',{stopping:true});return 0}
  const net=window.__mumeiNotificationNetwork3300;
  if(!net?.syncCurrent){health('通信Readerを起動できません','error');return 0}
  scanning=true;stop=false;pendingCapture=false;
- try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false||!featureOn())return 0;health('新着を確認中…','saving',{readCount:0,savedCount:0});const result=await net.syncCurrent(opts);return Number(result?.saved||0)}
- catch(e){health(`⚠ ${String(e?.message||e)}｜続きは保存地点から再開`,'error');return 0}
+ if(!opts.automatic){retryAt=0;retryFailures=0}
+ try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false||!featureOn())return 0;health('新着を確認中…','saving',{readCount:0,savedCount:0});const result=await net.syncCurrent(opts);retryAt=0;retryFailures=0;return Number(result?.saved||0)}
+ catch(e){
+  scanning=false;
+  if(e?.code==='READ_STOPPED'){health('読込を停止しました','done',{scanning:false,stopping:true,partial:true,...e.progress});return 0}
+  const delay=e?.retryable?Math.min(300000,30000*2**Math.min(retryFailures++,4)):0;
+  retryAt=delay?Date.now()+delay:Infinity;
+  health(`${String(e?.message||e)}｜${delay?Math.ceil(delay/1000)+'秒後に再試行':'再試行で続きから再開'}`,'error',{scanning:false,retryAt,...e.progress});return 0;
+ }
  finally{scanning=false;if(pendingCapture&&!stop)scheduleAuto(80)}
 }
 let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0;
@@ -138,9 +145,10 @@ function scheduleAuto(delay=150){
   window.__mumeiV3Checkpoint325?.mark?.();
   if(!panel){if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;if(!scanning)stop=false;return}
   if(scanning||document.visibilityState==='hidden')return;
-  if(panel!==autoPanel){stop=false;pausedPanel=null}
+  if(panel!==autoPanel){stop=false;pausedPanel=null;retryAt=0;retryFailures=0}
   if(stop){pausedPanel=panel;return}
   if(pausedPanel===panel)return;
+  if(Date.now()<retryAt)return;
   if(autoPanel===panel&&Date.now()-lastAutoAt<5000)return;
   autoPanel=panel;lastAutoAt=Date.now();void scan({automatic:true});
  },delay);
