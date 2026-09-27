@@ -28,12 +28,12 @@ test('アイコン通信が止まっても本文を表示し、カテゴリ切�
  await act(async()=>h.root.unmount());h.dom.window.close();assert.ok(feeds>=1);
 });
 test('再分類は同じカーソルが返れば停止する（無限ループしない）',async()=>{
- const h=setup();let reclass=0;
- globalThis.fetch=async(url)=>({ok:true,json:async()=>String(url).includes('reclassify')?(reclass++,{ok:true,checked:100,moved:0,nextCursor:'same'}):{ok:true,noteId:'tester',rows:[],total:0,categoryCounts:{},categoryPreview:{}}});
+ const h=setup();let reclass=0;const requests=[];
+ globalThis.fetch=async(url,init)=>({ok:true,json:async()=>String(url).includes('reclassify')?(requests.push(JSON.parse(init.body)),reclass++,{ok:true,checked:100,moved:0,nextCursor:'same'}):{ok:true,noteId:'tester',rows:[],total:0,categoryCounts:{},categoryPreview:{}}});
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
  await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,10))});
  await act(async()=>{document.querySelector('.minf-detail-body button').click();await new Promise(r=>setTimeout(r,100))});
- assert.equal(reclass,2);assert.match(document.body.textContent,/分類位置が進まないため停止/);assert.equal(document.querySelector('.minf-detail-body button').disabled,false);
+ assert.equal(reclass,2);assert.ok(requests.every(r=>r.onlyPending===true));assert.match(document.body.textContent,/分類位置が進まないため停止/);assert.equal(document.querySelector('.minf-detail-body button').disabled,false);
  await act(async()=>h.root.unmount());h.dom.window.close();
 });
 test('通知分類は既知kindを優先し、誤取得カウンターを隔離、未知本文はその他に保持',()=>{
@@ -124,4 +124,12 @@ test('前週比較グラフはタップした日の両方の値と差を示し�
   assert.match(document.body.textContent,/前週0のため率なし/);assert.equal(document.querySelectorAll('.mipro-growth-bars button').length,7);
   await act(async()=>document.querySelector('.mipro-growth-bars button').click());assert.match(document.querySelector('.mipro-growth-readout').textContent,/2026-09-20：7 PV.*2026-09-13：0 PV.*差：\+7 PV/);assert.doesNotMatch(document.body.innerHTML,/NaN|Infinity/);
  }finally{await act(async()=>h.root.unmount());h.dom.window.close()}
+});
+
+test('運営者の形式案内は詳細内に収納し、分類後に対象がなくなれば消える',async()=>{
+ const h=setup();let unresolved=true;const ownerStubs={...stubs,'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'ss_yr'})}};
+ globalThis.fetch=async(url)=>({ok:true,json:async()=>String(url).includes('format-reviews')?{ok:true,alerts:unresolved?[{kind:'future_kind',notification_count:1}]:[]}:{ok:true,noteId:'ss_yr',rows:[],total:0,categoryCounts:{}}});
+ const {MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,ownerStubs);await act(async()=>{h.root.render(React.createElement(C,{noteId:'ss_yr'}));await new Promise(r=>setTimeout(r,20))});
+ assert.ok(document.querySelector('.minf-detail .minf-owner-formats'));assert.equal(document.querySelector('.minf-owner-formats').open,false);assert.equal(document.querySelector('.minf-detail').open,false);
+ unresolved=false;await act(async()=>{window.dispatchEvent(new window.Event('mumei-notification-classified'));await new Promise(r=>setTimeout(r,10))});assert.equal(document.querySelector('.minf-owner-formats'),null);await act(async()=>h.root.unmount());h.dom.window.close();
 });
