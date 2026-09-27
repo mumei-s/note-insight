@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.25.1",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.4",
-  "releasedAt": "2026-09-27T08:32:00+09:00",
+  "dashboardVersion": "1.5.5",
+  "releasedAt": "2026-09-27T09:11:44+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "公式ダッシュボード：記事・メンバーシップ・マガジンの往復読込を修正。遅れて届く数値はタブの再巡回なしで保存。参加者ごとの連携・保存照合に対応。",
+  "note": "ダッシュボード：エラー後の自動巡回再開と二重起動を防止。起動部と読込本体の版を照合。分析パネルの更新確認入口・更新案内を維持。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
