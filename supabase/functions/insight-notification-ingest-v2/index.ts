@@ -42,6 +42,7 @@ function classify(text:string,targetUrl:string|null,meta:any={}){
   const action=[meta.body,astText(meta.body_ast),text].filter(Boolean).join(" ");
   // embed_note is also used by note for the explicit “話題です” notification.
   if((!known||known==="quote")&&/あなたの記事\s*が\s*話題(?:です|になりました)/u.test(action))return "buzz";
+  if(known==="follow"&&meta.kind==="super_follow"&&/記事を(?:投稿|更新)しました/u.test(action))return "creator_article_posted";
   if(known)return known;
   if(/(?:さん(?:他\d+名)?が)?記事であなたの画像を使用しました/u.test(action))return "image_used";
   // Observed non-notification counter/expiry cards, retained as capture evidence.
