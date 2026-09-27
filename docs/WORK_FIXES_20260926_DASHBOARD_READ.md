@@ -258,3 +258,11 @@ Backendはinsight-dashboard-dataの配備v13（ソースFUNCTION_VERSION12）、
 1.6.0はPR21・main8a49803・Actions36292008271で公開成功。最終確認で設定JSの固定キャッシュURLを検出し、HTMLのJS URLと分析から設定へのURLを版ごとに更新。Reactの古いchart propsが切替直後に残る場合にも、各指標の週/月/日別の座標を集合ごと更新し、古い日別を全期間の月別へ残さないよう補正。ネットワークの期間一致データがある場合はDOM propsより優先。表示中の公式テキストは新期間、React chart propsだけ旧期間の再現テストで検証する。通知・DM・バックエンドに追加変更なし。
 
 公開最終確認：PR22をrebase、機能main `0f5b0ace2d2b14dd01f125e861115f4a590dad99`。Actions `36292208740` の321件回帰・build・Pages deploy成功。Dashboard1.6.1／本体2026.09.27.7。Pages manifest・設定HTML/JS・wrapper/core、raw GitHubのwrapper/core（実際の `?v=161`）、公開index参照 `index-sd9gwknq.js` と `index-DmbU9HtD.css` はすべてHTTP200で検証対象とバイト一致。Supabase関数v13も配備ソース一致、未認証analysis/sync-statusは401を確認。更新・全期間取込の入口： https://mumei-s.github.io/note-insight/dashboard-setup.html?v=161&period=all&auto=1 。端末での導入と本人・参加者の全期間保存は未確認。ユーザーへは取得済みとは報告せず、公開完了と区別する。
+
+## 2026-09-27 追加修正（通知→分析の段階公開）
+
+- 2026.09.27.8: PR #23 / main 1b18157。Actions 36296297251成功、Pages本体JS/CSS/manifestをローカルと完全一致確認。再分類APIをotherだけへ限定。circle系の記事追加・更新・特典マガジンを分類。DB最終分類トリガーもv27へ対応。添付6件を保存し直して4形式の未対応案内0件を確認。運営者案内は詳細内、参加者はUI非表示かつサーバー403。関数 reclassify v15 / ingest v36 / feed v28。
+- 分析側: 全期間選択で日別履歴を参照しなくなる問題を修正。確定済み全スナップショットから日別実績をSQLで集約し、期間別公式集計・MONTH/WEEKグラフとは分離。0値を保持、未取得・当日は最高最低比較から除外。履歴7/28/365/全保存範囲を表示し、最多最少は期間切替と独立。
+- フォロワーは古いrelation_sync_runsを現在数として表示しない。独立した本人認証APIから公開プロフィールを取得し、確認時刻付きで表示。5分キャッシュ、タイムアウト5秒、失敗時は保存値＋更新待ち。日別保存はRLS有効・service_roleのみ。
+- 9/27の全期間保存には記事271件（published269/draft2）とメンシプ30行。公開プロフィールの記事269件と一致。メンシプ行を記事指標の母数から除外。分析APIの記事読取を1000件単位のページングへ変更。
+- 保存日別は8/31〜9/27の28日分をDBで確認。全期間合計や月別値を日別に推測分配しない。最高最低は保存履歴内の記録で、note利用開始以来の全日取得とは称さない。

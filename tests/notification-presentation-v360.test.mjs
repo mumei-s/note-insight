@@ -14,7 +14,7 @@ async function component(file,ctx,stubs={}){
  await mod.link(async name=>{const data=name==='react'?React:name==='react/jsx-runtime'?jsx:name.endsWith('.css')?{}:stubs[name];if(!data)throw new Error('Missing test stub '+name);const m=new vm.SyntheticModule(Object.keys(data),function(){for(const [k,v]of Object.entries(data))this.setExport(k,v)},{context:ctx});return m});await mod.evaluate();return mod.namespace;
 }
 function setup(){const dom=new JSDOM('<main id="root"></main>',{url:'https://mumei-s.github.io/note-insight/'});Object.defineProperty(dom.window.document,'visibilityState',{value:'visible'});for(const key of ['window','document','localStorage','HTMLElement','Element'])globalThis[key]=dom.window[key];globalThis.IS_REACT_ACT_ENVIRONMENT=true;const ctx=vm.createContext({window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,location:dom.window.location,URL,URLSearchParams,AbortController,DOMException,Event:dom.window.Event,requestAnimationFrame:fn=>fn(),console,fetch:(...a)=>globalThis.fetch(...a)});localStorage.setItem('token','test-only');return{dom,ctx,root:createRoot(document.getElementById('root'))}}
-const stubs={'./member-insight-analysis-growth':{GrowthAnalysis:()=>null},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
+const stubs={'./member-insight-analysis-history':{SavedHistory:()=>null},'./member-insight-analysis-growth':{GrowthAnalysis:()=>null},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
 test('アイコン通信が止まっても本文を表示し、カテゴリ切替時に保存済みプレビューを即表示',async()=>{
  const h=setup();let feeds=0,blockFeed=false;
  const make=(id,kind,text)=>({id,notification_type:kind,display_category:kind,raw_text:text,actor_name:'人物',actor_url:'https://note.com/person',occurred_at:'2026-09-21T09:00:00Z'}),a=make('a','rating','記事を高評価しました'),b=make('b','purchase','記事が購入されました');
@@ -98,7 +98,7 @@ test('分析全体を期間別に切替え、未取得の全期間に28日を流
  try{
   await act(async()=>{h.root.render(React.createElement(C));await new Promise(r=>setTimeout(r,20))});assert.match(document.querySelector('.mipro-coverage-count').textContent,/28 \/ 28日/);
   await act(async()=>{[...document.querySelectorAll('.mipro-period-picker button')].find(b=>b.textContent.startsWith('全期間')).click();await new Promise(r=>setTimeout(r,20))});assert.equal(requests.at(-1).body.period,'all');assert.equal(document.querySelector('.mipro-trend'),null);assert.match(document.querySelector('.mipro-empty-period').textContent,/まだ取り込まれていません/);
-  const link=new URL(document.querySelector('.mipro-empty-period a').href);assert.equal(link.searchParams.get('period'),'all');assert.equal(link.searchParams.get('auto'),'1');assert.equal(link.searchParams.get('account'),'tester');assert.ok(requests.every(r=>r.body.action==='analysis'));
+  const link=new URL(document.querySelector('.mipro-empty-period a').href);assert.equal(link.searchParams.get('period'),'all');assert.equal(link.searchParams.get('auto'),'1');assert.equal(link.searchParams.get('account'),'tester');assert.ok(requests.every(r=>['analysis','follower-count'].includes(r.body.action)));
   await act(async()=>{[...document.querySelectorAll('.mipro-period-picker button')].find(b=>b.textContent.startsWith('28日')).click();await new Promise(r=>setTimeout(r,20))});assert.match(document.querySelector('.mipro-coverage-count').textContent,/28 \/ 28日/);
  }finally{await act(async()=>h.root.unmount());h.dom.window.close()}
 });
@@ -132,4 +132,10 @@ test('運営者の形式案内は詳細内に収納し、分類後に対象が�
  const {MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,ownerStubs);await act(async()=>{h.root.render(React.createElement(C,{noteId:'ss_yr'}));await new Promise(r=>setTimeout(r,20))});
  assert.ok(document.querySelector('.minf-detail .minf-owner-formats'));assert.equal(document.querySelector('.minf-owner-formats').open,false);assert.equal(document.querySelector('.minf-detail').open,false);
  unresolved=false;await act(async()=>{window.dispatchEvent(new window.Event('mumei-notification-classified'));await new Promise(r=>setTimeout(r,10))});assert.equal(document.querySelector('.minf-owner-formats'),null);await act(async()=>h.root.unmount());h.dom.window.close();
+});
+
+test('最高・最低は表示期間と独立し、未取得と当日の途中値を記録に混ぜない',async()=>{
+ const c=await component('src/member-insight-analysis-history.tsx',vm.createContext({}),{'./member-insight-analysis-charts':{InsightColumns:()=>null}});
+ const data=[{date:'2025-01-01',pageViews:999},{date:'2026-09-01',pageViews:0},{date:'2026-09-02',pageViews:null},{date:'2026-09-25',pageViews:30},{date:'2026-09-26',pageViews:40},{date:'2026-09-27',pageViews:9999}];
+ const stats=c.historyStats(data,'pageViews','2026-09-27',7);assert.equal(stats.max,999);assert.equal(stats.min,0);assert.equal(stats.selected.length,2);assert.equal(stats.average,35);assert.equal(stats.all.length,4);assert.equal(c.historyStats(data,'pageViews','2026-09-27',0).selected.length,4);
 });

@@ -7,7 +7,7 @@ export function InsightColumns({items,label,unit='件'}:{items:{label:string;val
   {items.map((r,i)=><g key={r.label} role="button" tabIndex={0} aria-label={`${r.label} ${r.value==null?'未取得':r.value.toLocaleString()+unit}${r.sub?' '+r.sub:''}`} onClick={()=>setFocus(i)} onFocus={()=>setFocus(i)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setFocus(i)}}} className={focus===i?'selected':''}>
    <rect x={x(i)-step/2} y={top} width={step} height={bottom-top+24} fill="#ffffff" fillOpacity="0"/>
    {r.value==null?<text x={x(i)} y={bottom-8} textAnchor="middle" fill="#9eb5c3" fontSize="16">—</text>:r.value===0?<line x1={x(i)-width/2} x2={x(i)+width/2} y1={bottom} y2={bottom} stroke="#8bf0ff" strokeWidth="3"/>:<rect x={x(i)-width/2} y={y(r.value)} width={width} height={bottom-y(r.value)} rx="2" fill={r.value===max?"#b6cdb5":"#75a997"}/>}
-   {(items.length<=7||i%2===0||i===items.length-1)?<text x={x(i)} y="228" fill="#c2dbe5" textAnchor="middle" fontSize="12">{r.label}</text>:null}
+   {(items.length<=7||i%Math.ceil(items.length/5)===0||i===items.length-1)?<text x={x(i)} y="228" fill="#c2dbe5" textAnchor="middle" fontSize="12">{r.label}</text>:null}
    <title>{`${r.label}：${r.value==null?'未取得':r.value.toLocaleString()+unit}`}</title>
   </g>)}
  </svg><p className="insight-chart-readout" aria-live="polite">{active?<><span>{active.label} {active.sub||''}</span><b>{active.value==null?'未取得':active.value.toLocaleString(undefined,{maximumFractionDigits:1})+' '+unit}</b></>:<><span>取得済み {values.length} / {items.length}項目</span><b>{values.length?'ピーク '+max.toLocaleString(undefined,{maximumFractionDigits:1})+' '+unit:'未取得'}</b></>}</p></figure>

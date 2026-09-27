@@ -5,6 +5,7 @@ import { CURRENT_DASHBOARD_VERSION, CURRENT_INSIGHT_APP_VERSION, CURRENT_NOTIFIC
 import "./member-insight-analytics-pro-v3.css";
 import { loadNotificationSummary } from "./member-insight-analysis-summary-client";
 import { InsightDonut } from "./member-insight-analysis-donut";
+import { SavedHistory } from "./member-insight-analysis-history";
 import { GrowthAnalysis } from "./member-insight-analysis-growth";
 
 const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
@@ -91,39 +92,40 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
     const seq=++requestSeq.current,owner=cacheKey(period),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
     const current=()=>seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
     if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(true);setError("");
-    let dashboard:any=null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
-    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications};setData(next);setCachedAt(Date.now());writeCache(next,period)};
+    let dashboard:any=null,followerCount:any=data?.followerCount||null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
+    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications,followerCount};setData(next);setCachedAt(Date.now());writeCache(next,period)};
+    const followerTask=api(DASH,{action:"follower-count"}).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(()=>{if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
     const noticeTask=notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)});
     try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period});publish()}
     catch(e){if(current())setError(e instanceof Error?e.message:"分析データを取得できませんでした")}
     finally{if(current()){setLoading(false);setRefreshing(false);refreshState.current.busy=false}}
-    await noticeTask;
+    await Promise.all([noticeTask,followerTask]);
   }
   useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision,period]);
   useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[period]);
-  const articles=useMemo(()=>normalizeArticles(data?.topArticles||[]),[data]);
+  const articles=useMemo(()=>normalizeArticles((data?.topArticles||[]).filter((r:Row)=>!r.contentType||r.contentType==='article')),[data]);
 
 
-  const latest=data?.latestDashboard||{},noteId=String(data?.noteId||currentStoredInsightAccount()?.noteId||"").replace(/^@/,"").toLowerCase(),metrics=metricRows(data),followers:Row[]=data?.followers||[],latestFollower=followers.at(-1),trafficRows:Row[]=data?.traffic?.rows||[],trafficTotal=Math.max(0,num(data?.traffic?.total)||sum(trafficRows.map(r=>num(r.pv)))),notifications:Row[]=data?.notifications?.rows||[];
+  const latest=data?.latestDashboard||{},noteId=String(data?.noteId||currentStoredInsightAccount()?.noteId||"").replace(/^@/,"").toLowerCase(),selectedMetrics=metricRows(data),metrics=normalizeMetrics(data?.dailyHistory||selectedMetrics),followers:Row[]=data?.followers||[],latestFollower=data?.followerCount||null,trafficRows:Row[]=data?.traffic?.rows||[],trafficTotal=Math.max(0,num(data?.traffic?.total)||sum(trafficRows.map(r=>num(r.pv)))),notifications:Row[]=data?.notifications?.rows||[];
   const comparable=articles.filter(r=>r.conversion!=null),invalid=articles.filter(r=>r.impressions>0&&r.pageViews>r.impressions),convVals=comparable.map(r=>r.conversion as number),convMed=median(convVals),conv75=q75(convVals),pvVals=articles.map(r=>r.pageViews),pvMed=median(pvVals),reactVals=articles.filter(r=>r.reactionsPer1k!=null).map(r=>r.reactionsPer1k as number),reactMed=median(reactVals),react75=q75(reactVals);
   const improvementPv=comparable.length>=5?Math.round(sum(comparable.map(r=>Math.max(0,r.impressions*convMed/100-r.pageViews)))):null;
   const impMed=median(comparable.map(r=>r.impressions)),leaks=comparable.filter(r=>r.impressions>=impMed&&(r.conversion as number)<convMed).sort((a,b)=>(b.impressions*(convMed-(b.conversion as number)))-(a.impressions*(convMed-(a.conversion as number)))).slice(0,6),gems=articles.filter(r=>r.pageViews>0&&r.pageViews<=pvMed&&(r.reactionsPer1k??0)>=react75).sort((a,b)=>(b.reactionsPer1k??0)-(a.reactionsPer1k??0)).slice(0,6);
   const totalPv=sum(articles.map(r=>r.pageViews)),top5Pv=sum([...articles].sort((a,b)=>b.pageViews-a.pageViews).slice(0,5).map(r=>r.pageViews)),pvConcentration=totalPv?top5Pv/totalPv*100:0,totalSales=sum(articles.map(r=>r.salesYen)),top5Sales=sum([...articles].sort((a,b)=>b.salesYen-a.salesYen).slice(0,5).map(r=>r.salesYen)),salesConcentration=totalSales?top5Sales/totalSales*100:0;
   const last7=calendarWindow(metrics,7),prev7=calendarWindow(metrics,7,7),pv7=sum(last7.map(r=>r.pageViews)),pvPrev=sum(prev7.map(r=>r.pageViews)),sales7=sum(last7.map(r=>r.salesYen)),salesPrev=sum(prev7.map(r=>r.salesYen));
-  const weekdays=weekdayMetrics(metrics);
+  const completeMetrics=metrics.filter(r=>r.date<jstDay(new Date())),weekdays=weekdayMetrics(completeMetrics);
   const pvDays7=last7.filter(r=>r.pageViews!=null),previousPvDays=prev7.filter(r=>r.pageViews!=null),salesDays7=last7.filter(r=>r.salesYen!=null),previousSalesDays=prev7.filter(r=>r.salesYen!=null);
   const pvChange=pvDays7.length===7&&previousPvDays.length===7&&pvPrev>0?pct(deltaPct(pv7,pvPrev),0):"比較待ち";
   const salesChange=salesDays7.length===7&&previousSalesDays.length===7&&salesPrev>0?pct(deltaPct(sales7,salesPrev),0):"比較待ち";
   const groups:Record<string,number>=data?.traffic?.groups||{},shares=Object.entries(groups).map(([k,v])=>({k,value:num(v)})).filter(x=>x.value>0),hhi=trafficTotal?sum(shares.map(x=>Math.pow(x.value/trafficTotal,2))):1,diversity=shares.length>1?Math.max(0,Math.min(100,(1-hhi)/(1-1/shares.length)*100)):0,groupLabel:Record<string,string>={note:"note内",notification:"通知",search:"検索",social:"SNS",direct:"直接/不明",external:"外部"};
   const notifByDay=new Map<string,number>((data?.notifications?.dailyCounts||[]).map((r:Row)=>[String(r.date),num(r.count)]));for(const r of notifications){const d=jstDay(r.occurred_at||r.captured_at);if(d)notifByDay.set(d,(notifByDay.get(d)||0)+1)}const pairs=metrics.filter(r=>r.pageViews!=null).map(r=>({date:r.date,pv:r.pageViews,notif:notifByDay.get(r.date)||0})).filter(r=>notifByDay.has(r.date)),corr=pearson(pairs.map(x=>x.notif),pairs.map(x=>x.pv)),notifMedian=median(pairs.map(x=>x.notif)),highNotif=pairs.filter(x=>x.notif>notifMedian),lowNotif=pairs.filter(x=>x.notif<=notifMedian),highPv=avg(highNotif.map(x=>x.pv)),lowPv=avg(lowNotif.map(x=>x.pv));
   const hasOfficial=(key:string,value:any)=>latest.availableTotals?.[key]!==false&&metricValue(value)!==null;
-  const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7||(latest.chartSeries||[]).filter((r:Row)=>r.pageViews!=null).length>0,trafficRows.length>0,followers.length>0,num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
+  const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7,trafficRows.length>0,Boolean(latestFollower),num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
   const ranked=[...articles].sort((a,b)=>b.score-a.score);
   const syncHref=dashboardHref(noteId,period);
   function changePeriod(next:Period){if(next===period)return;requestSeq.current++;const saved=readCache(next);setData(saved?.data||null);setCachedAt(saved?.cachedAt||0);setLoading(!saved?.data);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
   const official=(key:string,value:any,currency=false)=>!hasOfficial(key,value)?"未取得":currency?money(value):n(value);
   const savedPeriod=latest.periodType==="all"?"全期間（note公式の集計）":latest.periodStart&&latest.periodEnd?`${latest.periodStart}〜${latest.periodEnd}`:'対象期間は未取得';
-  const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!followers.length?'フォロワー':null].filter(Boolean);
+  const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!latestFollower?'現在のフォロワー数':null].filter(Boolean);
   const openAll=(open:boolean)=>root.current?.querySelectorAll<HTMLDetailsElement>("details.mipro-fold").forEach(x=>x.open=open);
   const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);
   return <section className="mipro" ref={root}>
@@ -139,37 +141,37 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
 
     <Fold defaultOpen title="① 公式Dashboard 保存時点の値" sub={`${savedPeriod} ／ 保存 ${jtime(latest.capturedAt)}`}>
       <p className="mipro-note">対象：{savedPeriod}。以下は保存時点の公式集計です。noteで現在表示される値との差は、保存後の増加や選択期間の違いを含みます。</p>
-      <Kpis items={[{label:"ページビュー(PV)",value:official("pageViews",latest.pageViews??latest.views),sub:"note公式Dashboard"},{label:"インプレッション(Imp)",value:official("impressions",latest.impressions),sub:"note内表示回数"},{label:"スキ",value:official("likes",latest.likes),sub:"公式集計"},{label:"コメント",value:official("comments",latest.comments),sub:"公式集計"},{label:"売上",value:official("salesYen",latest.salesYen,true),sub:"公式集計"},{label:"フォロワー",value:latestFollower?`${n(latestFollower.count)}人`:"未取得",sub:"別途保存したフォロワー数"}]}/>
+      <Kpis items={[{label:"ページビュー(PV)",value:official("pageViews",latest.pageViews??latest.views),sub:"note公式Dashboard"},{label:"インプレッション(Imp)",value:official("impressions",latest.impressions),sub:"note内表示回数"},{label:"スキ",value:official("likes",latest.likes),sub:"公式集計"},{label:"コメント",value:official("comments",latest.comments),sub:"公式集計"},{label:"売上",value:official("salesYen",latest.salesYen,true),sub:"公式集計"},{label:"フォロワー",value:latestFollower?`${n(latestFollower.count)}人`:"未取得",sub:latestFollower?`${latestFollower.stale?"更新待ち・保存値":"公開プロフィール"} ${jtime(latestFollower.at)}`:"公開プロフィールを確認中／未取得"}]}/>
       <InsightDonut label="スキ・コメント構成比" items={[{label:"スキ",value:num(latest.likes)},{label:"コメント",value:num(latest.comments)}]}/>
       <div className="mipro-note">公式取得 {jtime(latest.officialCollectedAt||latest.capturedAt)} ／ INSIGHT保存 {jtime(latest.capturedAt)}</div>
     </Fold>
 
     <Fold defaultOpen={period!=="all"} title="INSIGHT分析：伸びの内訳" sub="一日の突出か、日々の底上げか。前週の同じ曜日で比較">
-      <GrowthAnalysis rows={metrics} today={jstDay(new Date())}/>
+      <p className="mipro-note">日別保存履歴 {metrics[0]?.date||"—"}〜{metrics.at(-1)?.date||"—"} を使用。上の公式集計期間とは別に蓄積しています。</p><GrowthAnalysis rows={metrics} today={jstDay(new Date())}/>
     </Fold>
 
-    <Fold title="② データ品質・数値の意味" sub={`充足 ${quality}/6 ・ PV化比較可能 ${comparable.length}/${articles.length}記事`}>
+    <Fold title="② データ品質・数値の意味" sub={`取得済みの分析材料 ${quality}/6 ・ PV化比較可能 ${comparable.length}/${articles.length}記事`}>
       <p className="mipro-note">{missingSources.length?`未取得：${missingSources.join('・')}。`:'記事別・流入元・フォロワーの保存データがあります。'} 日別は指標ごとに取得範囲が異なる場合があります。note公式グラフは31日以内なら日単位、32〜181日は週単位、182日以上は月単位です。週・月の値から日別値を推測しません。</p>
-      <Kpis items={[{label:"データ充足",value:`${quality}/6`,sub:"公式総計・記事別・時系列・流入・フォロワー・本人通知"},{label:"PV化比較可能",value:`${comparable.length}記事`,sub:"PVがImp以下で同一比較できる記事だけ"},{label:"比較除外",value:`${invalid.length}記事`,sub:"PV>Impは集計範囲不一致として率計算しない"},{label:"日別PV",value:`${metrics.filter(r=>r.pageViews!=null).length}日`,sub:"成長・曜日分析に使用"}]}/>
-      <p className="mipro-warning"><b>重要:</b> PVとImpは記事によって集計範囲が一致しない場合があります。<strong>PV÷Impが100%を超える行は「高性能」と解釈せず、PV化率・潜在PVの計算から除外</strong>します。以前の572%・1431.9%のような表示は出しません。</p>
+      <Kpis items={[{label:"分析材料の取得",value:`${quality}/6`,sub:"公式総計・記事別・日別PV7日以上・流入・現在のフォロワー・本人通知"},{label:"PV化比較可能",value:`${comparable.length}記事`,sub:"PVがImp以下で同一比較できる記事だけ"},{label:"比較除外",value:`${invalid.length}記事`,sub:"PV>Impは集計範囲不一致として率計算しない"},{label:"日別PV",value:`${metrics.filter(r=>r.pageViews!=null).length}日`,sub:"成長・曜日分析に使用"}]}/>
+      <p className="mipro-warning"><b>重要:</b> PVとImpは記事によって集計範囲が一致しない場合があります。<strong>PV÷Impが100%を超える行は「高性能」と解釈せず、PV化率・潜在PVの計算から除外</strong>します。対象外の記事は件数を上に示します。</p>
     </Fold>
 
     <Fold defaultOpen title="③ 成長推移" sub={`${PERIODS[period]}の公式グラフと記事別の分布`}>
       <Kpis items={[{label:PERIODS[period]+"のPV",value:official("pageViews",latest.pageViews),sub:"選択期間の公式合計"},{label:PERIODS[period]+"の売上",value:official("salesYen",latest.salesYen,true),sub:"選択期間の公式合計"},{label:"記事PV中央値",value:n(pvMed),sub:"外れ値に強い本人内基準"},{label:"上位5記事PV集中",value:pct(pvConcentration),sub:pvConcentration>=65?"上位依存が強い":"分散できている"}]}/>
-      <TrendChart key={period} rows={metrics} period={period} latest={latest}/>
+      <TrendChart key={period} rows={selectedMetrics} period={period} latest={latest}/>
     </Fold>
 
-    <Fold title="④ 記事ベンチマーク" sub="中央値・上位25%・反応効率を本人内で比較">
+    <Fold defaultOpen title="④ 記事ベンチマーク" sub="中央値・上位25%・反応効率を本人内で比較">
       <Kpis items={[{label:"記事PV中央値",value:n(pvMed),sub:"全記事の中央水準"},{label:"反応/1,000PV 中央値",value:n(reactMed),sub:"(スキ+コメント)÷PV×1,000"},{label:"PV化中央値",value:comparable.length>=5?pct(convMed):"算出停止",sub:"比較可能記事のみ"},{label:"PV化 上位25%境界",value:comparable.length>=5?pct(conv75):"算出停止",sub:"比較可能記事のみ"}]}/>
       <p className="mipro-note">「反応率」ではなく<strong>1,000PVあたり何件の反応があるか</strong>で表示。確率と誤解しない単位に変更しています。</p>
     </Fold>
 
-    <Fold title="⑤ 改善余地・隠れた強記事" sub={improvementPv==null?"PV化の比較可能記事が不足":`比較可能記事だけのPV改善余地 +${n(improvementPv)}`}>
-      <Kpis items={[{label:"PV改善余地",value:improvementPv==null?"算出停止":`+${n(improvementPv)}`,sub:improvementPv==null?"比較可能記事5件以上で算出":"PV化中央値まで改善した場合の差分"},{label:"取りこぼし候補",value:`${leaks.length}件`,sub:"Imp多・PV化が本人中央値未満"},{label:"隠れた強記事",value:`${gems.length}件`,sub:"PV少なめ・反応/1,000PVが上位25%"},{label:"分析母数",value:`${articles.length}記事`,sub:"公式記事別データ"}]}/>
-      <div className="mipro-twocol"><section><h4>⚠ 露出の取りこぼし</h4>{leaks.length?leaks.map(r=><a href={r.url||undefined} target="_blank" rel="noreferrer" key={r.article_key||r.url||r.title}><b>{short(r.title)}</b><span>Imp {n(r.impressions)} / PV {n(r.pageViews)} / PV化 {pct(r.conversion)}</span></a>):<p>比較可能データ内では大きな取りこぼしなし。</p>}</section><section><h4>💎 隠れた強記事</h4>{gems.length?gems.map(r=><a href={r.url||undefined} target="_blank" rel="noreferrer" key={r.article_key||r.url||r.title}><b>{short(r.title)}</b><span>PV {n(r.pageViews)} / 反応 {n(r.reactionsPer1k)}件/1,000PV</span></a>):<p>条件に合う記事はまだありません。</p>}</section></div>
+    <Fold defaultOpen title="⑤ 改善余地・隠れた強記事" sub={improvementPv==null?"PV化の比較可能記事が不足":`比較可能記事だけのPV改善余地 +${n(improvementPv)}`}>
+      <Kpis items={[{label:"PV改善余地",value:improvementPv==null?"算出停止":`+${n(improvementPv)}`,sub:improvementPv==null?"比較可能記事5件以上で算出":"PV化中央値まで改善した場合の差分"},{label:"読まれ方の改善候補",value:`${leaks.length}件`,sub:"Imp多・PV化が本人中央値未満"},{label:"隠れた強記事",value:`${gems.length}件`,sub:"PV少なめ・反応/1,000PVが上位25%"},{label:"分析母数",value:`${articles.length}記事`,sub:"公式記事別データ"}]}/>
+      <p className="mipro-note">取得済みの記事から、表示回数に対して読まれた回数が本人の中央値より少ない記事を抽出します。改善余地は中央値に届いた場合の仮定値で、将来のPVを保証するものではありません。</p><div className="mipro-twocol"><section><h4>閲覧につながる余地</h4>{leaks.length?leaks.map(r=><a href={r.url||undefined} target="_blank" rel="noreferrer" key={r.article_key||r.url||r.title}><b>{short(r.title)}</b><span>Imp {n(r.impressions)} / PV {n(r.pageViews)} / PV化 {pct(r.conversion)}</span></a>):<p>比較可能な記事に、この条件の候補はありません。</p>}</section><section><h4>💎 隠れた強記事</h4>{gems.length?gems.map(r=><a href={r.url||undefined} target="_blank" rel="noreferrer" key={r.article_key||r.url||r.title}><b>{short(r.title)}</b><span>PV {n(r.pageViews)} / 反応 {n(r.reactionsPer1k)}件/1,000PV</span></a>):<p>条件に合う記事はまだありません。</p>}</section></div>
     </Fold>
 
-    <Fold title="⑥ 流入分析" sub={trafficRows.length?`流入PV ${n(trafficTotal)} ・ 分散度 ${diversity.toFixed(0)}/100`:"流入データ未取得"}>
+    <Fold defaultOpen title="⑥ 流入分析" sub={trafficRows.length?`流入PV ${n(trafficTotal)} ・ 分散度 ${diversity.toFixed(0)}/100`:"流入データ未取得"}>
       {trafficRows.length?<>
       <Kpis items={[{label:"流入分散度",value:`${diversity.toFixed(0)}/100`,sub:"1媒体への偏りが少ないほど高い"},{label:"検索",value:pct(trafficTotal?num(groups.search)/trafficTotal*100:0),sub:`${n(groups.search)} PV`},{label:"通知",value:pct(trafficTotal?num(groups.notification)/trafficTotal*100:0),sub:`${n(groups.notification)} PV`},{label:"外部",value:pct(trafficTotal?num(groups.external)/trafficTotal*100:0),sub:`${n(groups.external)} PV`}]}/>
       <InsightDonut label="流入元の構成比" unit="PV" items={shares.map(x=>({label:groupLabel[x.k]||x.k,value:x.value}))}/>
@@ -182,8 +184,10 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
       <Bars title="記事別の売上（上位10記事）" unit="円" items={[...articles].filter(r=>r.salesYen>0).sort((a,b)=>b.salesYen-a.salesYen).slice(0,10).map(r=>({label:short(r.title,28),value:r.salesYen,sub:r.pageViews>0?`${money(r.revenuePer1k)}/1,000PV`:"PVなし"}))}/></>:<p className="mipro-note">公式売上をまだ取得できていないため、収益効率・売上集中度は算出できません。売上0円とは異なります。</p>}
     </Fold>
 
-    <Fold title="⑧ 曜日別パフォーマンス" sub="公式日別PVを曜日ごとの平均PVで比較">
-      <InsightColumns label="曜日ごとの平均ページビュー" unit="PV/日" items={weekdays}/>
+    <Fold defaultOpen title="保存履歴・最高と最低の記録" sub="PV・スキ・コメント・売上・1日の保存通知数"><SavedHistory rows={metrics} notifications={data?.notifications?.dailyCounts||[]} today={jstDay(new Date())}/></Fold>
+
+    <Fold title="⑧ 曜日別パフォーマンス" sub="保存済みの公式日別PV ÷ 取得日数で、曜日ごとの平均を計算">
+      {completeMetrics.some(r=>r.pageViews!=null)?<><p className="mipro-note">{completeMetrics[0]?.date}〜{completeMetrics.at(-1)?.date}。各曜日のPV合計を、その曜日の取得日数で割ります。当日の途中値を除きます。</p><InsightColumns label="曜日ごとの平均ページビュー" unit="PV/日" items={weekdays}/></>:null}
       {!metrics.some(r=>r.pageViews!=null)?<p className="mipro-note">公式の日別PVがまだ保存されていません。<a href={syncHref}>noteで数値を更新</a>すると、選択期間のグラフも自動で読み込みます。公式が週・月単位で返す長期の値から、日別や曜日の値は推測しません。</p>:null}
     </Fold>
 
