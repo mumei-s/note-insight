@@ -237,3 +237,28 @@ for(const change of ['period','route'])test('読取途中の実際の画面変�
  }});
  await pause(400);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/表示期間または画面が変わりました/);
 });
+
+test('パネル読取が失敗した後の通信で自動巡回を再開せず、手動でだけ再試行する',async t=>{
+ let clicks=0;
+ const h=page(t,'<p>ページビュー 12</p><button id="broken" aria-expanded="false">日別アクセスグラフ</button>',{before:w=>{
+  w.document.getElementById('broken').onclick=()=>{clicks++;setTimeout(()=>{if(!w.closed)void w.fetch('/api/v1/stats/daily?attempt='+clicks)},180)};
+ }});
+ await pause(750);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/パネルを開けません/);
+ h.w.document.getElementById('mumei-dash-read').click();await pause(400);assert.equal(clicks,2);
+});
+
+test('同じ読込ツールが二重起動してもパネルと読込処理を一つに保つ',async t=>{
+ const h=page(t,'<p>ページビュー 12</p>',{after:w=>{w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"))}});
+ await saved(h);assert.equal(h.w.document.querySelectorAll('#mumei-dashboard-sync').length,1);assert.equal(h.saves.length,1);
+});
+
+test('起動部だけ新しく読込本体が古い時はクリック巡回せず更新入口を表示する',async t=>{
+ const h=page(t,'<p>ページビュー 12</p><button id="content" role="tab">メンバーシップ</button>',{before:w=>{w.document.getElementById('content').onclick=()=>assert.fail('古い読込本体を動かさない')},after:w=>w.addEventListener('DOMContentLoaded',()=>{w.document.getElementById('mumei-dashboard-sync').dataset.coreVersion='1.5.3'})});
+ await pause(180);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/更新が揃っていません/);assert.ok(h.w.document.querySelector('a#mumei-dash-update[href*="dashboard-setup.html"]'));assert.equal(h.w.document.getElementById('mumei-dash-read').disabled,true);
+});
+
+test('自動起動の通知が重なっても保存後に内容タブを再巡回しない',async t=>{
+ let clicks=0;
+ const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" id="membership" aria-selected="false">メンバーシップ</button>',{before:w=>{for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks++;for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab))}}});
+ await saved(h);assert.equal(clicks,1);h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(350);assert.equal(clicks,1);assert.equal(h.saves.length,1);
+});
