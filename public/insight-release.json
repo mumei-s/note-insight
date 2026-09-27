@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.12",
+  "appVersion": "2026.09.27.13",
   "notificationVersion": "3.6.10",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T16:10:00+09:00",
+  "releasedAt": "2026-09-27T16:35:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知の再分類で未処理と未解決を分け、本文不足を明示。保存済み通信記録から一意に照合できる旧通知を復元し、購読先の記事投稿の誤分類を修正。",
+  "note": "フォロー履歴の人物不明の減少から保存人物を調査できるように改善。全保存人物、確認済みの関係と候補の区別を追加。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }

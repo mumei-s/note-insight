@@ -11,13 +11,32 @@ const PERSON_FIELDS="person_key,actor_name,actor_url,actor_image_url,active,last
 function searchText(v:any){return String(v||"").normalize("NFKC").replace(/[^\p{L}\p{N}_@ -]/gu,"").replace(/^@/,"").slice(0,100)}
 function evidence(row:any,run:any){const unknown=String(row.person_key||"").startsWith("unknown:");return{...row,evidence:unknown?"count_only":run?.complete===true?"complete_snapshot":"window_candidate",identity_exact:!unknown&&run?.complete===true,comparison_at:run?.created_at||null,comparison_complete:run?.complete===true}}
 async function annotate(scope:string,rows:any[]){const ids=[...new Set(rows.map(r=>r.run_id).filter(Boolean))];if(!ids.length)return rows.map(r=>evidence(r,null));const{data,error}=await db.from("insight_relation_sync_runs").select("id,complete,created_at").eq("member_id",scope).in("id",ids);if(error)throw error;const runs=new Map((data||[]).map(r=>[String(r.id),r]));return rows.map(r=>evidence(r,runs.get(String(r.run_id))))}
-async function investigate(scope:string,key:string){
+async function savedPeople(scope:string,direction:string){
+ const rows:any[]=[];for(let start=0;;start+=1000){const{data,error}=await db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction).order("person_key").range(start,start+999);if(error)throw error;rows.push(...(data||[]));if((data||[]).length<1000)break}return rows;
+}
+function investigationCandidates(people:any[],verified:any[],event:any){
+ const byKey=new Map(verified.map(r=>[r.person_key,r]));
+ return people.filter(r=>Date.parse(r.first_seen_at)<=Date.parse(event.detected_at)).map(r=>{
+  const v=byKey.get(r.person_key),checked=Date.parse(v?.checked_at||""),seen=Date.parse(r.last_seen_at||""),field=event.direction==='followers'?'is_follower':'is_following';
+  const known=typeof v?.[field]==='boolean'&&checked>=seen;
+  return{...r,current_relation:known?(v[field]?'present':'absent'):'unverified',verified_at:known?v.checked_at:null,evidence:known?'authenticated_relationship':'saved_window',assigned_to_event:false};
+ }).filter(r=>r.current_relation==='absent'||!r.active&&r.current_relation==='unverified').sort((a,b)=>Number(b.current_relation==='absent')-Number(a.current_relation==='absent')||String(b.last_seen_at).localeCompare(String(a.last_seen_at))||a.person_key.localeCompare(b.person_key));
+}
+async function investigateUnknown(scope:string,key:string,page=1){
+ const{data:event,error}=await db.from("insight_relation_events").select(EVENT_FIELDS).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).limit(1).maybeSingle();if(error)throw error;if(!event)throw new Error("EVENT_NOT_FOUND");
+ const people=await savedPeople(scope,event.direction),verified:any[]=[];
+ for(let start=0;;start+=1000){const r=await db.from("insight_social_comparisons").select("person_key,is_following,is_follower,checked_at").eq("member_id",scope).order("person_key").range(start,start+999);if(r.error)throw r.error;verified.push(...(r.data||[]));if((r.data||[]).length<1000)break}
+ const candidates=investigationCandidates(people,verified,event),size=50;
+ return{ok:true,personKey:key,event,relations:[],events:[],candidates:candidates.slice((page-1)*size,page*size),candidateTotal:candidates.length,candidatePage:page,candidatePages:Math.max(1,Math.ceil(candidates.length/size)),verifiedAbsent:candidates.filter(r=>r.current_relation==='absent').length,unverified:candidates.filter(r=>r.current_relation==='unverified').length,basis:"count_only_investigation",note:"この時点で総数が減ったことだけが確実です。過去に保存した人のうち現在の関係を確認する必要がある人を照合候補として表示します。候補をこの減少の本人と決めつけません。"};
+}
+async function investigate(scope:string,key:string,page=1){
+ if(key.startsWith("unknown:"))return investigateUnknown(scope,key,page);
  if(!key||key.length>400||key.startsWith("unknown:"))throw new Error("PERSON_REQUIRED");
  const [relations,events]=await Promise.all([
   db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("person_key",key),
   db.from("insight_relation_events").select("id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count").eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).limit(100)
  ]);if(relations.error)throw relations.error;if(events.error)throw events.error;
- return{ok:true,personKey:key,relations:relations.data||[],events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"全件照合の前後で確認できた関係の変化です。解除・退会・ブロックなどの原因は断定しません。"};
+ return{ok:true,personKey:key,relations:relations.data||[],events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
 }
 async function windowPeople(scope:string,direction:string,window:string){
  let q=db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction);
@@ -34,7 +53,7 @@ async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,
   const results=await Promise.all(chunks.slice(i,i+3).map(async chunk=>{
    let q=db.from("insight_relation_events").select(EVENT_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
    if(chunk)q=q.in("person_key",chunk);
-   if(b.action==="investigation")q=q.not("person_key","like","unknown:%");
+   
    if(direction==="followers"||direction==="followings")q=q.eq("direction",direction);
    if(change==="added"||change==="removed")q=q.eq("event_type",change);
    if(term)q=q.or(`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`);
@@ -99,12 +118,12 @@ Deno.serve(async req=>{
   if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
   const m=await auth(req),b=await req.json().catch(()=>({})),action=String(b.action||"events"),page=Math.max(1,Number(b.page||1)),pageSize=Math.min(100,Math.max(20,Number(b.pageSize||50))),offset=(page-1)*pageSize;
   if(action==="comparison")return out(await comparison(m.scope,m.noteId,b,page,pageSize));
-  if(action==="investigate")return out(await investigate(m.scope,String(b.personKey||"")));
-  const window=["latest","oldest"].includes(b.window)?String(b.window):action==="people"?"latest":"all",direction=b.direction==="followings"?"followings":"followers";
-  const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId),window==="all"?Promise.resolve(null):windowPeople(m.scope,direction,window)]);
+  if(action==="investigate")return out(await investigate(m.scope,String(b.personKey||""),page));
+  const window=["latest","oldest","all"].includes(b.window)?String(b.window):action==="people"?"latest":"all",direction=b.direction==="followings"?"followings":"followers";
+  const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId),window==="all"?(action==="people"?savedPeople(m.scope,direction):Promise.resolve(null)):windowPeople(m.scope,direction,window)]);
   if(action==="people"){
    const term=searchText(b.query).toLowerCase(),list=(people||[]).filter((r:any)=>!term||String(r.actor_name||"").normalize("NFKC").toLowerCase().includes(term)||String(r.actor_url||"").toLowerCase().includes(term));
-   return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="oldest"?"source_order_bottom":"latest_snapshot"});
+   return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="all"?"all_saved_people":window==="oldest"?"source_order_bottom":"latest_snapshot"});
   }
   const result=await windowEvents(m.scope,{...b,action,direction:window==="all"?String(b.direction||"all"):direction},people?.map((r:any)=>r.person_key)||null,offset,pageSize);
   return out({ok:true,...result,page,pageSize,latest,noteId:m.noteId,window,windowTotal:people?.length??null});
