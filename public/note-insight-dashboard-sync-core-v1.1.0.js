@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.8
+// @version      1.5.9
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -20,7 +20,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.5.8';
+  const VERSION='1.5.9';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -489,7 +489,9 @@
       checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
-      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：自動取得で日別値を確認できませんでした。詳細に記録しています）`;
+      const longPeriod=payload.periodStart&&payload.periodEnd&&Date.parse(payload.periodEnd)-Date.parse(payload.periodStart)>30*86400000;
+      const missingDaily=longPeriod?'選択期間が32日以上のため、公式グラフは週・月単位です。期間合計と記事別は保存済みですが、今回の日別PVはありません':'自動取得で日別値を確認できませんでした。日別の推移・曜日分析には今回の値を使えません';
+      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：${missingDaily}）`;
       lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
       localStorage.setItem('mumei-dashboard-last-result:'+paired,message);
       if(captureRevision!==pending.readRevision||officialDataSignature()!==pending.readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
@@ -571,7 +573,8 @@
   function renderCompactStatus(message,kind){
     const line=panel?.querySelector('#mumei-dash-brief');if(!line)return;
     const counts=message.match(/記事\d+件・日別PV \d+日/)?.[0];
-    line.textContent=kind==='warn'?'読込が止まりました｜詳細を確認':kind==='paused'?'読込停止｜詳細から再開':kind==='partial'?'記事保存済み｜日別PV未取得':kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'自動読込中'+(counts?'｜'+counts:''):needsPair?'未連携｜詳細から連携':'ダッシュボード同期';
+    const reason=/VIEW_CHANGED/.test(message)?'期間・画面変更で停止':/SURFACE_LEFT/.test(message)?'画面を離れたため一時停止':/READ_WAIT|TIMEOUT/.test(message)?'公式データの応答待ちで停止':/SAVE_COUNT|SAVE_VALUE|SAVE_RESPONSE/.test(message)?'保存を確認できません':/ACCOUNT_MISMATCH|アカウント不一致/.test(message)?'アカウント不一致':/連携/.test(message)?'保存先の連携を確認':/PANEL_NOT_OPEN|TAB_NOT_OPEN|METRIC_NOT_SELECTED/.test(message)?'公式表示を開けず停止':'読込が止まりました';
+    line.textContent=kind==='warn'?reason:kind==='paused'?'読込停止｜詳細から再開':kind==='partial'?(/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'自動読込中'+(counts?'｜'+counts:''):needsPair?'未連携｜詳細から連携':'ダッシュボード同期';
     line.dataset.kind=kind;
   }
   function mount(){
