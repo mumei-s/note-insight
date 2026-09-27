@@ -14,7 +14,7 @@ async function component(file,ctx,stubs={}){
  await mod.link(async name=>{const data=name==='react'?React:name==='react/jsx-runtime'?jsx:name.endsWith('.css')?{}:stubs[name];if(!data)throw new Error('Missing test stub '+name);const m=new vm.SyntheticModule(Object.keys(data),function(){for(const [k,v]of Object.entries(data))this.setExport(k,v)},{context:ctx});return m});await mod.evaluate();return mod.namespace;
 }
 function setup(){const dom=new JSDOM('<main id="root"></main>',{url:'https://mumei-s.github.io/note-insight/'});Object.defineProperty(dom.window.document,'visibilityState',{value:'visible'});for(const key of ['window','document','localStorage','HTMLElement','Element'])globalThis[key]=dom.window[key];globalThis.IS_REACT_ACT_ENVIRONMENT=true;const ctx=vm.createContext({window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,location:dom.window.location,URL,URLSearchParams,AbortController,DOMException,Event:dom.window.Event,requestAnimationFrame:fn=>fn(),console,fetch:(...a)=>globalThis.fetch(...a)});localStorage.setItem('token','test-only');return{dom,ctx,root:createRoot(document.getElementById('root'))}}
-const stubs={'./member-insight-analysis-history':{SavedHistory:()=>null},'./member-insight-analysis-growth':{GrowthAnalysis:()=>null},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
+const stubs={'./member-insight-analysis-ranking':{ArticleRanking:()=>null},'./member-insight-analysis-history':{SavedHistory:()=>null},'./member-insight-analysis-growth':{GrowthAnalysis:()=>null},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
 test('アイコン通信が止まっても本文を表示し、カテゴリ切替時に保存済みプレビューを即表示',async()=>{
  const h=setup();let feeds=0,blockFeed=false;
  const make=(id,kind,text)=>({id,notification_type:kind,display_category:kind,raw_text:text,actor_name:'人物',actor_url:'https://note.com/person',occurred_at:'2026-09-21T09:00:00Z'}),a=make('a','rating','記事を高評価しました'),b=make('b','purchase','記事が購入されました');
@@ -138,4 +138,18 @@ test('最高・最低は表示期間と独立し、未取得と当日の途中�
  const c=await component('src/member-insight-analysis-history.tsx',vm.createContext({}),{'./member-insight-analysis-charts':{InsightColumns:()=>null}});
  const data=[{date:'2025-01-01',pageViews:999},{date:'2026-09-01',pageViews:0},{date:'2026-09-02',pageViews:null},{date:'2026-09-25',pageViews:30},{date:'2026-09-26',pageViews:40},{date:'2026-09-27',pageViews:9999}];
  const stats=c.historyStats(data,'pageViews','2026-09-27',7);assert.equal(stats.max,999);assert.equal(stats.min,0);assert.equal(stats.selected.length,2);assert.equal(stats.average,35);assert.equal(stats.all.length,4);assert.equal(c.historyStats(data,'pageViews','2026-09-27',0).selected.length,4);
+});
+
+test('記事ランキングはスキとコメントを実数表示し、全記事へ続きを開ける',async()=>{
+ const h=setup(),articles=Array.from({length:15},(_,i)=>({article_key:String(i),title:'長いタイトルでも省略せず表示する記事 '+i,pageViews:100+i,likes:i,comments:i+1,salesYen:i*100,score:90-i,conversion:5,reactionsPer1k:30}));
+ const{ArticleRanking:C}=await component('src/member-insight-analysis-ranking.tsx',h.ctx);await act(async()=>h.root.render(React.createElement(C,{articles})));
+ assert.equal(document.querySelectorAll('.mipro-ranking li').length,12);assert.match(document.querySelector('.mipro-ranking li').textContent,/スキ0 件コメント1 件/);assert.equal(document.querySelector('.mipro-table'),null);
+ await act(async()=>{const s=document.querySelector('.mipro-ranking select');s.value='likes';s.dispatchEvent(new window.Event('change',{bubbles:true}))});assert.match(document.querySelector('.mipro-ranking li header').textContent,/記事 14/);
+ await act(async()=>document.querySelector('.mipro-ranking-more').click());assert.equal(document.querySelectorAll('.mipro-ranking li').length,15);assert.match(document.querySelector('.mipro-ranking li details').textContent,/1,000回読まれたときの反応数/);await act(async()=>h.root.unmount());h.dom.window.close();
+});
+
+test('構成比は横棒の正確な比率と実数を示し、値なしを0%と表示しない',async()=>{
+ const h=setup(),{InsightDonut:C}=await component('src/member-insight-analysis-donut.tsx',h.ctx);await act(async()=>h.root.render(React.createElement(C,{label:'構成比',items:[{label:'スキ',value:75},{label:'コメント',value:25}]})));
+ assert.equal(document.querySelector('.mipro-composition-strip i').style.width,'75%');assert.match(document.querySelector('.mipro-composition-legend').textContent,/75 件75.0%/);assert.equal(document.querySelector('svg circle'),null);
+ await act(async()=>h.root.render(React.createElement(C,{label:'構成比',items:[{label:'スキ',value:0}]})));assert.match(document.body.textContent,/計算できる値がありません/);assert.doesNotMatch(document.body.textContent,/0.0%/);await act(async()=>h.root.unmount());h.dom.window.close();
 });
