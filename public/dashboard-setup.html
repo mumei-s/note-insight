@@ -3,13 +3,15 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>ダッシュボードの更新・設定｜INSIGHT</title>
-<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><script src="./dashboard-setup.js?v=2026092707" defer></script>
+<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><script src="./dashboard-setup.js?v=2026092719" defer></script>
 </head><body><main class="wrap">
 <a id="back" class="back" href="./?insightMode=analysis#dashboard">← 分析へ戻る</a>
 <header><p class="eyebrow">INSIGHT / ツールの更新</p><h1>ダッシュボードの更新・設定</h1><p class="lead">連携と読み込みは、下のボタンから開始します。</p></header>
 <section class="card read-card" aria-labelledby="dashboardTitle">
 <div class="tool-head"><h2 id="dashboardTitle">ダッシュボード同期</h2><span id="dashBadge" class="badge">確認中</span></div>
 <p id="account" class="hint"></p>
+<button id="dashboardFeatureToggle" class="button" type="button" aria-pressed="true" disabled>ダッシュボード パネル 確認中</button>
+<p id="dashboardFeatureStatus" class="hint" role="status">OFFにするとパネルと自動読込が止まります。設定はこのブラウザに保存します。</p>
 <button id="startRead" class="button primary" type="button" disabled>連携して公式データを読み込む</button>
 <p id="readStatus" class="status" role="status" aria-live="polite">ツールの起動を確認しています。</p>
 <a id="loginInsight" class="text-link" href="./?insightMode=analysis#dashboard" hidden>INSIGHTにログインする</a>

@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.18",
+  "appVersion": "2026.09.27.19",
   "notificationVersion": "3.6.13",
-  "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T17:46:51+09:00",
+  "dashboardVersion": "1.6.2",
+  "releasedAt": "2026-09-27T19:39:55+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知3.6.13：通知文の空白・改行、リンク形式の通知一覧へのフィルター適用漏れを修正。一時的な本人確認失敗は回数を制限して自動再試行。",
+  "note": "ダッシュボード同期1.6.2：パネルON/OFFを追加。OFFを保存して自動読込を停止。通知画面でのパネル重なりを修正。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }

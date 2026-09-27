@@ -11,6 +11,15 @@
   const accountId=v=>/^[a-z0-9_-]+$/i.test(String(v||''))?String(v).toLowerCase():'';
   function compare(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return Math.sign(d)}return 0}
   const current=()=>version(document.documentElement.getAttribute('data-mumei-dashboard-bridge'));
+  let featureSeen=false,featureEnabled=true,featureBusy=false,featureError='',featureRevision=0;
+  const featureToggle=()=>$("dashboardFeatureToggle");
+  function readFeatureState(){const state=document.documentElement.getAttribute('data-mumei-dashboard-feature');if(state==='on'||state==='off'){const next=state==='on';if(featureSeen&&next!==featureEnabled)featureRevision++;featureSeen=true;featureEnabled=next}}
+  const canRead=()=>featureSeen&&featureEnabled;
+  function requestFeature(){window.postMessage({source:'mumei-dashboard-feature-ui-v1',type:'get'},location.origin)}
+  function paintFeature(){const button=featureToggle();if(!button)return;button.disabled=!featureSeen||featureBusy;button.setAttribute('aria-pressed',String(featureEnabled));text(button,featureBusy?'切替中…':featureSeen?'ダッシュボード パネル '+(featureEnabled?'ON':'OFF'):'ダッシュボード パネル 確認中');text($('dashboardFeatureStatus'),featureError||(!featureSeen?'同期ツールを更新すると、パネルと自動読込を切り替えられます。':featureEnabled?'ON：公式ダッシュボードで自動読み込みします。':'OFF：パネルと自動読込を停止しています。再読込・再訪後もOFFを保持します。'))}
+  window.addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!=='mumei-dashboard-feature-bridge-v1'||e.data.type!=='state')return;if(featureSeen&&featureEnabled!==Boolean(e.data.enabled))featureRevision++;featureSeen=true;featureEnabled=Boolean(e.data.enabled);featureBusy=false;featureError=String(e.data.error||'');paint()});
+  featureToggle()?.addEventListener('click',()=>{if(!featureSeen||featureBusy)return;featureBusy=true;featureError='';paintFeature();window.postMessage({source:'mumei-dashboard-feature-ui-v1',type:'set',enabled:!featureEnabled},location.origin)});
+
   const expected=accountId(q.get('account'))||accountId(get(ACTIVE));
   function safeBack(v){try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')&&!/\/dashboard-setup(?:-v2)?\.html$/.test(u.pathname)?u.href:''}catch{return''}}
   const backUrl=new URL(safeBack(q.get('return'))||'./?insightMode=analysis#dashboard',location.href);
@@ -40,6 +49,7 @@
   let release=null,releaseError='',loadingRelease=null,busy=false,checking=false,readFeedback=null,autoStarted=false;
   function readStatus(message,kind=''){readFeedback={message,kind};status('readStatus',message,kind)}
   function paint(){
+    readFeatureState();
     const active=current(),last=version(get(DASH_KEY)),latest=version(release?.dashboardVersion),notice=version(get(NOTICE_KEY)),noticeLatest=version(release?.notificationVersion);
     const ready=Boolean(latest&&active&&compare(active,latest)>=0),noticeReady=Boolean(noticeLatest&&notice&&compare(notice,noticeLatest)>=0);
     text($('dashCurrent'),active?'v'+active:last?'前回検出 v'+last:'起動確認待ち');text($('dashLatest'),latest?'v'+latest:'確認できません');
@@ -49,16 +59,18 @@
     $('installDashboard').hidden=ready;$('verifyDashboard').hidden=ready;$('installNotice').hidden=noticeReady;
     text($('installDashboard'),(active||last?'ダッシュボード同期を更新':'ダッシュボード同期をインストール')+(latest?'（v'+latest+'）':''));
     text($('installHint'),ready?'更新済みです。追加のインストール操作は不要です。':'確認画面で「更新／インストール」を押したら、このタブへ戻ってください。');
-    $('startRead').disabled=!ready||busy||!supported();
+    $('startRead').disabled=!ready||busy||!supported()||!canRead();paintFeature();
     if(ready){remove(PENDING);status('dashStatus','✓ ダッシュボード同期 v'+active+' の起動を確認しました。','ok')}
     else if(releaseError)status('dashStatus',releaseError,'warn');
     else if(active&&latest)status('dashStatus','導入済み v'+active+' → 最新 v'+latest+'。上の更新ボタンを押してください。','warn');
     else status('dashStatus','この画面でツールの起動をまだ確認できません。導入・更新後に「更新を確認」を押してください。','warn');
     if(readFeedback)status('readStatus',readFeedback.message,readFeedback.kind);
+    else if(!busy&&featureSeen&&!featureEnabled)status('readStatus','読み込みを始める場合は、ダッシュボード パネルをONにしてください。');
+    else if(!busy&&!featureSeen)status('readStatus','パネルの設定を確認しています…');
     else if(!busy)status('readStatus',ready?'準備できました。下の分析へ戻るか、最新の公式データを読み込んでください。':'ダッシュボード同期の起動確認後に読み込めます。',ready?'ok':'');
     text($('account'),expected?'対象：@'+expected+'（note側でも本人一致を確認します）':'読み込み開始時にINSIGHTのログインアカウントを確認します。');
     // auto=1 is set only by an explicit data-read link. Consume it before starting so a reload cannot repeat the request.
-    if(ready&&supported()&&q.get('auto')==='1'&&!autoStarted){autoStarted=true;const u=new URL(location.href);u.searchParams.set('auto','0');history.replaceState(history.state,'',u.href);void startRead()}
+    if(ready&&canRead()&&supported()&&q.get('auto')==='1'&&!autoStarted){autoStarted=true;const u=new URL(location.href);u.searchParams.set('auto','0');history.replaceState(history.state,'',u.href);void startRead()}
   }
   async function loadRelease(){
     if(loadingRelease)return loadingRelease;
@@ -86,7 +98,9 @@
     });
   }
   async function startRead(){
-    if(busy||$('startRead').disabled)return;
+    if(busy||$('startRead').disabled||!canRead())return;
+    const featureAtStart=featureRevision;
+    const ensureFeature=()=>{readFeatureState();if(!canRead()||featureRevision!==featureAtStart)throw new Error('FEATURE_OFF')};
     const member=get(MEMBER),owner=expected==='ss_yr'?get(OWNER):'',accountAtStart=get(ACTIVE);
     if(!member&&!owner){$('loginInsight').hidden=false;readStatus('INSIGHTへのログインが必要です。下のリンクからログインしてください。','warn');return}
     if(expected&&accountId(accountAtStart)&&accountId(accountAtStart)!==expected){readStatus('アカウントが切り替わっています。INSIGHTへ戻り、利用するアカウントを確認してください。','warn');return}
@@ -95,21 +109,22 @@
     try{
       const headers={'Content-Type':'application/json'};if(member)headers['X-Insight-Token']=member;if(owner)headers['X-Owner-Token']=owner;
       const r=await fetch(API,{method:'POST',headers,body:JSON.stringify({action:'pair-start',role:expected==='ss_yr'?'owner':'member'}),cache:'no-store',signal:c.signal});
-      const p=await r.json().catch(()=>({}));if(!r.ok||p.ok===false)throw new Error(p.error||'PAIR_START_FAILED');
+      const p=await r.json().catch(()=>({}));ensureFeature();if(!r.ok||p.ok===false)throw new Error(p.error||'PAIR_START_FAILED');
       if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
       const id=accountId(p.noteId),code=String(p.pairingCode||'');if(!id||!/^\d{8}$/.test(code))throw new Error('PAIR_RESPONSE_INVALID');if(expected&&id!==expected)throw new Error('ACCOUNT_MISMATCH');
       readStatus('noteへ渡す連携情報を保存しています…');
       const period=['week','month','all'].includes(q.get('period'))?q.get('period'):'';
       await saveReadHandoff({code,noteId:id,period,returnTo:back,createdAt:Date.now(),expiresAt:p.expiresAt||new Date(Date.now()+10*60*1000).toISOString()});
+      ensureFeature();
       if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
       const url=new URL('https://note.com/sitesettings/stats');url.searchParams.set('mumei_dashboard_pair',code);url.searchParams.set('mumei_dashboard_sync','1');url.searchParams.set('mumei_dashboard_account',id);url.searchParams.set('mumei_dashboard_return',back);url.searchParams.set('mumei_dashboard_tool_version',current());if(period)url.searchParams.set('mumei_dashboard_period',period);
       readStatus('@'+id+' を確認しました。公式ダッシュボードへ移動します。','ok');location.assign(url.href);
-    }catch(e){const message=String(e?.message||'');readStatus(/ACCOUNT/.test(message)?'アカウントが一致しないか切り替わりました。INSIGHTへ戻り、利用するアカウントを確認してください。':/HANDOFF/.test(message)?'連携情報を保存できませんでした。この画面を再読込して、もう一度開始してください。':/LOGIN|SESSION|401/.test(message)?'INSIGHTのログインを確認してください。ログイン後、この画面から再開できます。':e?.name==='AbortError'?'通信に時間がかかっています。もう一度読み込んでください。':'読み込みを開始できませんでした。通信とINSIGHTのログインを確認して再試行してください。','warn')}
-    finally{clearTimeout(timer);busy=false;$('startRead').disabled=!(release&&current()&&compare(current(),release.dashboardVersion)>=0&&supported())}
+    }catch(e){const message=String(e?.message||'');readStatus(/FEATURE_OFF/.test(message)?'パネルをOFFにしたため、読み込みを停止しました。':/ACCOUNT/.test(message)?'アカウントが一致しないか切り替わりました。INSIGHTへ戻り、利用するアカウントを確認してください。':/HANDOFF/.test(message)?'連携情報を保存できませんでした。この画面を再読込して、もう一度開始してください。':/LOGIN|SESSION|401/.test(message)?'INSIGHTのログインを確認してください。ログイン後、この画面から再開できます。':e?.name==='AbortError'?'通信に時間がかかっています。もう一度読み込んでください。':'読み込みを開始できませんでした。通信とINSIGHTのログインを確認して再試行してください。','warn')}
+    finally{clearTimeout(timer);busy=false;$('startRead').disabled=!(release&&current()&&compare(current(),release.dashboardVersion)>=0&&supported()&&canRead())}
   }
   $('startRead').addEventListener('click',()=>void startRead());
-  const observer=new MutationObserver(paint);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-dashboard-bridge']});
+  const observer=new MutationObserver(paint);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-dashboard-bridge','data-mumei-dashboard-feature']});
   addEventListener('storage',e=>{if([DASH_KEY,NOTICE_KEY].includes(e.key))paint()});addEventListener('mumei-notification-version-changed',paint);
-  const resume=()=>void verify(false);addEventListener('pageshow',resume);addEventListener('focus',resume);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resume()});
-  browserGuide();paint();void loadRelease();
+  const resume=()=>{requestFeature();void verify(false)};addEventListener('pageshow',resume);addEventListener('focus',resume);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resume()});
+  browserGuide();paint();requestFeature();void loadRelease();
 })();

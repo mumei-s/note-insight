@@ -8,6 +8,7 @@ const base='https://mumei-s.github.io/note-insight/';
 const html=readFileSync('public/dashboard-setup.html','utf8');
 const script=readFileSync('public/dashboard-setup.js','utf8');
 const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
+const featureBridge=readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8');
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
 const DASH='mumei-dashboard-tool-version',NOTICE='mumei-notification-tool-version',MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',ACTIVE='mumei-insight-active-account-v3',PENDING='mumei-dashboard-update-pending-v2';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -23,14 +24,15 @@ function page(t,options={}){
   if(options.touch)Object.defineProperty(w.navigator,'maxTouchPoints',{value:options.touch});
   for(const [key,value] of Object.entries(options.storage||{}))w.localStorage.setItem(key,value);
   for(const [key,value] of Object.entries(options.session||{}))w.sessionStorage.setItem(key,value);
-  if(options.active)w.document.documentElement.setAttribute('data-mumei-dashboard-bridge',options.active);
+  if(options.active){w.document.documentElement.setAttribute('data-mumei-dashboard-bridge',options.active);w.document.documentElement.setAttribute('data-mumei-dashboard-feature','on')}
   let observerCalls=0;
   const Observer=w.MutationObserver;
   w.MutationObserver=class extends Observer{constructor(callback){let instance;super(records=>{observerCalls++;if(observerCalls>100){instance.disconnect();return}callback(records,instance)});instance=this;observers.push(this)}};
   w.fetch=async(url,init={})=>{calls.push({url:String(url),init});if(String(url).includes('insight-release.json')){if(options.manifestError)throw new Error('offline');return{ok:true,json:async()=>release}}if(options.pair)return options.pair(url,init,w);return{ok:true,json:async()=>({ok:true,noteId:'tester',pairingCode:'12345678'})}};
   const gmStore=new Map();w.GM=options.gm||{getValue:async(k,d)=>gmStore.get(k)??d,setValue:async(k,v)=>gmStore.set(k,v),deleteValue:async k=>gmStore.delete(k)};
   if(options.legacyStore){delete w.GM;w.GM_getValue=(k,d)=>gmStore.get(k)??d;w.GM_setValue=(k,v)=>gmStore.set(k,v);w.GM_deleteValue=k=>gmStore.delete(k)}
-  if(options.wrapper)w.eval(wrapper);
+  w.postMessage=data=>queueMicrotask(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})));
+  if(options.wrapper){w.eval(featureBridge);w.eval(wrapper)}
   // Intercept browser navigation without replacing the production pairing, version or event logic.
   w.eval(script.replace("'use strict';","'use strict'; const location=window.__location;"));
   return{w,calls,nav,gmStore,get:id=>w.document.getElementById(id),observerCalls:()=>observerCalls};
@@ -56,7 +58,7 @@ test('最新版の実ツールと共存し、本人通知なしでも操作不�
   assert.ok(h.observerCalls()<30,'wrapper DOM cleanup and panel observation must settle');assert.equal(h.nav.length,0);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0,'opening settings must not issue a pairing request');
 });
 test('ツールの遅い起動も自動反映し、最新版以上をダウングレードしない',async t=>{
-  const h=page(t);await settle();h.w.document.documentElement.setAttribute('data-mumei-dashboard-bridge','99.0.0');await settle();
+  const h=page(t);await settle();h.w.document.documentElement.setAttribute('data-mumei-dashboard-bridge','99.0.0');h.w.document.documentElement.setAttribute('data-mumei-dashboard-feature','on');await settle();
   assert.equal(h.get('startRead').disabled,false);assert.equal(h.get('installDashboard').hidden,true);assert.equal(h.nav.length,0);
 });
 test('最新版照会に失敗した時は確認済みを捏造しない',async t=>{
@@ -144,4 +146,20 @@ test('分析の更新入口は準備済みでも残り、足りないツール�
   const mod=new vm.SourceTextModule(source,{context});
   await mod.link(specifier=>{let exports={};if(specifier==='react')exports=React;else if(specifier==='react/jsx-runtime')exports=jsx;else if(specifier.endsWith('/insight-donut'))exports={InsightDonut:()=>null};else if(specifier.endsWith('/member-insight-analysis-summary-client'))exports={loadNotificationSummary:async()=>({sample:0})};else if(specifier.endsWith('/member-insight-analysis-charts'))exports={InsightColumns:()=>null};else if(specifier.endsWith('/insight-account-store'))exports={INSIGHT_TOKEN_KEY:MEMBER};else if(specifier.endsWith('/insight-release'))exports={CURRENT_DASHBOARD_VERSION:release.dashboardVersion,CURRENT_NOTIFICATION_VERSION:release.notificationVersion,compareVersions:(a,b)=>a.localeCompare(b,undefined,{numeric:true})};else if(specifier.endsWith('/member-insight-analytics-pro-v3'))exports={MemberInsightAnalyticsProV3:()=>React.createElement('div',{'data-pro-analysis':true})};return new vm.SyntheticModule(Object.keys(exports),function(){for(const [key,value] of Object.entries(exports))this.setExport(key,value)},{context})});await mod.evaluate();
   for(const installed of ['', '1.5.8', release.dashboardVersion]){const ready=installed===release.dashboardVersion;const markup=renderToStaticMarkup(React.createElement(mod.namespace.MemberInsightAnalysisHub,{noteId:'tester',notificationInstalled:release.notificationVersion,dashboardInstalled:installed})),doc=new JSDOM(markup);try{assert.ok(doc.window.document.querySelector('.miah-tools-link[href*="dashboard-setup.html"]'));assert.equal(Boolean(doc.window.document.querySelector('[data-pro-analysis]')),true);assert.equal(doc.window.document.querySelectorAll('.miah-tool-statuses .update').length,ready?0:1)}finally{doc.window.close()}}
+});
+
+
+test('保存済みOFFの読み出しが遅れても、auto=1から勝手に連携を開始しない',async t=>{
+ let finish;const key='mumei_insight_dashboard_feature_enabled_v1',gm={getValue:(k,d)=>k===key?new Promise(r=>finish=r):Promise.resolve(d),setValue:async()=>{}};
+ const h=page(t,{wrapper:true,gm,query:'?account=tester&auto=1',storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();
+ assert.equal(h.get('startRead').disabled,true);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);assert.ok(finish);
+ finish(false);await settle();assert.equal(h.get('startRead').disabled,true);assert.match(h.get('dashboardFeatureToggle').textContent,/OFF/);assert.equal(h.nav.length,0);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);
+});
+
+test('連携開始の応答待ちにOFF→ONしても、古い依頼で画面移動しない',async t=>{
+ let finish;const h=page(t,{wrapper:true,storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'},pair:()=>new Promise(r=>finish=r)});await settle();
+ h.get('startRead').click();await settle();assert.ok(finish);
+ await h.w.__mumeiDashboardFeatureV1.setEnabled(false);await settle();await h.w.__mumeiDashboardFeatureV1.setEnabled(true);await settle();
+ finish({ok:true,json:async()=>({ok:true,noteId:'tester',pairingCode:'12345678'})});await settle();
+ assert.equal(h.nav.length,0);assert.equal(h.gmStore.has('mumei-dashboard-handoff-v143'),false);assert.match(h.get('readStatus').textContent,/停止しました/);assert.equal(h.get('startRead').disabled,false);
 });

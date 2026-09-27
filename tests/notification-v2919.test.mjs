@@ -37,8 +37,8 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.6.13 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.27.18");assert.equal(manifest.notificationVersion,"3.6.13");assert.equal(manifest.dmVersion,"1.4.9");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.6.1");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.27\.18"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.13"/);assert.match(v3,/@version\s+3\.6\.13/);
+  assert.equal(manifest.appVersion,"2026.09.27.19");assert.equal(manifest.notificationVersion,"3.6.13");assert.equal(manifest.dmVersion,"1.4.9");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.6.2");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.27\.19"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.13"/);assert.match(v3,/@version\s+3\.6\.13/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
@@ -52,9 +52,9 @@ test("legacy notification sync is a true no-require stop wrapper and Dashboard c
   assert.match(legacy,/__mumeiLegacyNotificationSyncRetired/);
   assert.match(dash,/location\.origin!=='https:\/\/note\.com'/);
   assert.match(dash,/sitesettings\\\/stats\|dashboard/);
-  assert.match(dash,/VERSION='1\.6\.1'/);
-  assert.match(boot,/@version\s+1\.6\.1/);
-  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=161/);
+  assert.match(dash,/VERSION='1\.6\.2'/);
+  assert.match(boot,/@version\s+1\.6\.2/);
+  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=162/);
 });
 
 
