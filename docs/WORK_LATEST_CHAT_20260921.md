@@ -506,3 +506,9 @@ GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火�
 - Supabase：notification reclassify v15 / ingest v36 / feed v28、dashboard-data deploy v14（ソース13）。本番ソース一致・未認証401・新RPC/表のanon/authenticated権限なしを確認。migrationファイルのversionは本番に一致。
 - 更新URL: https://mumei-s.github.io/note-insight/?insightMode=analysis&insightPeriod=all&v=2026092710#dashboard 。記事再読込やReader再インストールはこの表示更新には不要。
 - 詳細: WORK_FIXES_20260926_DASHBOARD_READ.md。旧完了報告より新しい実機報告を優先する。
+
+## 2026-09-27 白背景の眩しさを抑える表示修正
+
+- ユーザー「いきなり白い背景は眩しすぎてだめ」を受け、本体 2026.09.27.11。分析の広い白背景・カード・グラフ内側を青灰色に統一。本文・補助文字・操作状態・SVGも同じ配色へ。グラフは水色、スキは桃色、コメントは薄紫。数値、読取、保存、分類、期間、記事カードの構成には変更なし。
+- `npm run build`、既存リリース回帰8件成功。実コンポーネントをfixtureで描画し320/344/390pxを確認。横はみ出し・数値切れ・実行エラーなし。344pxの先頭・推移・ランキング画像を目視確認。補助文字のコントラストは最も明るい操作背景でも5.25:1。
+- 公開更新URL: https://mumei-s.github.io/note-insight/?insightMode=analysis&insightPeriod=all&v=2026092711#dashboard 。この表示更新で記事の再読込やツール再インストールは不要。
