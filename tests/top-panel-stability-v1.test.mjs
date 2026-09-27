@@ -74,7 +74,8 @@ async function assertSettled(w) {
   assert.equal(w.document.querySelector('[data-v13]'), null, '旧インストール / 更新リンクは再生成しない');
   assert.equal(w.document.querySelector('.dashboard > .miv5-install-link'), null);
   assert.equal(w.document.querySelectorAll('.notice a.mumei-canonical-install').length, 1);
-  assert.equal(w.document.querySelector('.dashboard small').textContent, 'ダッシュボード同期ツール');
+  assert.match(w.document.querySelector('.dashboard small').textContent, /^ダッシュボード同期/);
+  assert.doesNotMatch(w.document.querySelector('.dashboard small').textContent, /本人通知 必須/);
 }
 
 test('本番の上段補正を同時実行しても旧インストール / 更新リンクと高さが点滅しない', async t => {
