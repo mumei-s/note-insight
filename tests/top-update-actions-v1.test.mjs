@@ -80,6 +80,7 @@ test('最新版照会に失敗しても既知のダッシュボード更新と�
 });
 
 test('最新版でも分析パネルの更新確認入口を残し、表示中の版数を消さない',async t=>{
- const {w}=await page(t,{storage:{'dash-version':'1','notice-version':'1'},enhance:true});
- const card=w.document.querySelector('.dashboard');assert.ok(card.querySelector('a.miv5-dashboard-settings[href*="dashboard-setup.html"]'));assert.match(card.querySelector('small').textContent,/v1/);
+  const {w}=await page(t,{storage:{'dash-version':'1','notice-version':'1'},enhance:true});
+  const card=w.document.querySelector('.dashboard');assert.ok(card.querySelector('a.miv5-dashboard-settings[href*="dashboard-setup.html"]'));assert.match(card.querySelector('small').textContent,/v1/);
+  await pause();let changes=0;const observer=new w.MutationObserver(records=>changes+=records.length);observer.observe(card,{subtree:true,childList:true,characterData:true,attributes:true});await new Promise(r=>setTimeout(r,300));observer.disconnect();assert.equal(changes,0,'更新入口の表示補正を繰り返さない');
 });
