@@ -163,3 +163,40 @@ Supabase `insight-dashboard-data` に `client-status` を追加。既存の本�
 
 
 公開検証：PR #17、機能main `69234246139152f6c42ed93dd3d98d8703b8534f`、Actions `36286874654` の301件回帰・build・Pages deployが成功。Pagesのmanifest・設定HTML/JS・Dashboard wrapper/coreの5ファイルと、raw GitHubのwrapper/core（実際の `?v=157` を含む）の2ファイルがHTTP200・mainと完全一致。公開indexの本体JS `index-CiFmfFmW.js` もHTTP200・ローカルbuildと完全一致。Supabase `insight-dashboard-data` version12（ソース版11）を配備し、配備後のソース一致と、未認証のclient-statusが401 `INGEST_TOKEN_REQUIRED` になることを確認。利用端末ではDashboard1.5.7へ更新が必要。実アカウントでの最新保存成功は未確認のまま維持する。
+
+
+## 2026-09-27 追加：v1.5.8 日別の自動取得・小型表示・マガジン巡回の廃止
+
+最新指示：「パネルを自分でおすの？ 自動で全部」「×でパネルが消える」「パネルもでかすぎる」「マガジンは取り込まなくても」。公開承認は継続。v1.5.7 の本番保存 id35（記事37件、01:56:54Z）と id36（記事52件、01:57:52Z）は確認済みだが、どちらも metric_series=[]。日別の成功扱いにはしない。
+
+### 実際のnote配信コードで確認した不足
+
+認証不要で配信される `https://note.com/dashboard` の公開JSを確認（個人のDashboardデータ・認証情報は取得していない）。
+
+- `/dashboard/_next/static/chunks/app/(auth)/(stats)/layout-12bb9a3a2da4839d.js`：`Dashboard_MetricChartQuery`、`dashboardMetricChart { granularity points { label value startDate endDate } }`。指標は IMPRESSION / PAGE_VIEW / LIKE / COMMENT / SALES。従来Coreの `/api/vN/stats` のみの監視では取得できなかった。
+- `/dashboard/_next/static/chunks/app/layout-a473ee37904acd8e.js` と `2704-38f78faa00fed590.js`：本番GraphQLは `https://graphql.note.com/graphql`。公式が行う通信を監視する。新しい認証・APIリクエストの生成や認証情報の転記はしない。
+- `3824-dca30f0f7db91eaa.js`：指標ボタンのラベルは「グラフに表示する指標」。公式コンポーネント自身に、aria-hidden内のnative selectとそのchange handlerがある。これを操作し、画面と通信の安定後に次の指標へ進む。通常native selectとlistboxにも対応。
+- `7836-d1b7a9357aeebeef.js`：`figure[data-name="StackedBarChart"]` のReact親に公式の DAY points がある。キャッシュ済みでGraphQL通信が発生しない場合も、該当グラフのデータpropsだけを読み取る。アプリ全体の状態は探索しない。
+- `/dashboard/_next/static/chunks/app/(auth)/(stats)/page-6a7a8e03a127deb9.js`：ページ送りボタンは「もっとみる」。従来の「もっと見る」限定では続きを読めなかった。近接する記事テーブルを条件として両表記に対応。
+- 公式説明：<https://www.help-note.com/hc/ja/articles/61982979089305>。31日以内は日単位、長期は週/月単位。WEEK/MONTHやstartDate≠endDateの値を日別として保存しない。
+
+### 変更
+
+- 5指標を各1回自動で選択し、初期指標に戻して終了。checkpointに進捗を残し、保存再試行で再巡回しない。
+- GraphQLはDashboardの読み取り4操作に限定し、応答のDashboard結果だけを保持。日付・期間・本人・接続の一致確認と保存結果照合を継続。記事のnested note/metricsとsummaryの0値も対応。
+- 画面下端も一度表示し、IntersectionObserverで遅延表示される流入元を取得する。マガジンへ自動で移動せず、初期表示がマガジンの場合もその一覧を記事として取り込まない。
+- 通常表示は1行、詳細は最大35vhのスクロール枠。×の削除操作を「縮小」に変更し、読込は継続。「詳細」からいつでも復帰可能。停止は独立した「停止」操作。末尾にパネル分の余白を確保。
+- 日別未取得を「自分でグラフを開く」案内にしない。未取得を明記し、既存の本人確認付き診断に DAILY_NOT_FOUND を記録する。
+- Dashboard 1.5.8 / 本体 2026.09.27.4。通知3.6.10、DM1.4.8、サーバーは変更しない。参加者も同一Core、本人一致の境界を維持。
+
+### 確認範囲
+
+公式配信仕様に基づくGraphQL5指標（0含む）、native/aria-hidden select、キャッシュ済みグラフ、記事追加ボタン、マガジン非巡回、縮小中の自動保存を再現テスト。以前の停止・保存再試行・他人データ混入防止も回帰対象。実機で1.5.8による日別値が保存されるまでは「本人・参加者の実動作完了」と報告しない。
+
+追加指示（11:19 JST）「🔔画面でもDashboardパネルが残る」：URLが変わらない通知ポップアップも検知し、Dashboardパネルと末尾余白を隠して読込を中断。通知を閉じる／Dashboardへ戻ると同じcheckpointから自動継続。手動の停止は解除しない。wrapperのshowPanelからの復活もsurface属性で抑止。通常記事・通知URLへ移った場合は従来wrapperが除去し、Dashboard復帰時だけmountする。通知本体のコードは変更しない。
+
+スマホ表示：Chromiumで320/344/390 CSS px幅を描画し、通常パネル高さ38px、横にはみ出しなし、縮小後の再表示を確認。詳細は各178/161/161px（640px高の画面）。実機アプリ固有の表示は未確認。
+
+追加確認（バッテリー懸念）：電池消費の実測・端末使用量は取得しておらず、原因を断定しない。Coreの常時500ms DOM走査は採用せず、画面変更イベントとMutationObserverで更新。バックグラウンドでは新しい読込・保存を始めず、wrapperのURL監視タイマーも停止。表示復帰時だけcheckpointから継続。読み取り完了後の同値データで再同期しない既存回帰も維持する。
+
+公開前検証：構文チェック、git diff --check、310件（4+79+227）の全回帰、npm run build が成功。ビルドの既存chunkサイズ警告のみ。最終追加の通知同一URL／別URL遷移・背景休止／復帰を含む。

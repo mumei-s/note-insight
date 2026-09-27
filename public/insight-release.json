@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.3",
+  "appVersion": "2026.09.27.4",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.7",
-  "releasedAt": "2026-09-27T10:48:08+09:00",
+  "dashboardVersion": "1.5.8",
+  "releasedAt": "2026-09-27T11:13:46+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard：内容タブ切替時の日付欄の再描画・指標タブ・内部遷移を期間変更と誤認する停止を修正。エラーは手動再開まで固定し、履歴・コピー・停止操作を追加。",
+  "note": "Dashboard：公式GraphQLとキャッシュ済みグラフから日別5指標を自動取得。「もっとみる」で記事の続きまで読込。不要なマガジン巡回を廃止。通常は1行表示とし、詳細を縮小しても自動読込を継続。 🔔通知や通常画面ではDashboardパネルと読込を停止し、Dashboard復帰時だけ再表示。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
