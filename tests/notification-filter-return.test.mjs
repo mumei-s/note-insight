@@ -8,7 +8,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const hidden=el=>el.classList.contains('mumei-muted-v2939');
 const row=(id='muted',text='登録人物さん他35名が共同マガジンに新しい記事を44本追加しました')=>`<div class="m-navbarNoticeItem" id="${id}"><a href="/actor"><img></a>${text}</div>`;
 async function until(fn,message){for(let i=0;i<60;i++){if(fn())return;await wait(20)}assert.ok(fn(),message)}
-function setup(t,mode='modern'){
+function setup(t,mode='modern',realReader=false){
  const dom=new JSDOM('<button id="bell">🔔</button><main id="page"></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window;t.after(()=>w.close());
  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:300});
@@ -23,7 +23,8 @@ function setup(t,mode='modern'){
  const listen=(k,fn)=>listeners.push({k,fn});
  if(mode==='legacy'){w.GM_getValue=get;w.GM_setValue=set;w.GM_addValueChangeListener=listen}else w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a),addValueChangeListener:listen};
  w.fetch=async()=>{requests++;return Response.json({data:{urlname:user}})};
- w.__mumeiNotificationReaderV4={findPanel:()=>{const p=w.document.querySelector('#panel');return p&&!p.hidden&&p.style.display!=='none'?p:null}};
+ if(realReader)w.eval(readFileSync('public/note-insight-notification-reader-v4.js','utf8'));
+ else w.__mumeiNotificationReaderV4={findPanel:()=>{const p=w.document.querySelector('#panel');return p&&!p.hidden&&p.style.display!=='none'?p:null}};
  const mount=(body=row())=>{const p=w.document.createElement('section');p.id='panel';p.className='m-navbarNotice';p.innerHTML='<button>通知</button><button>お知らせ</button>'+body;w.document.querySelector('#page').append(p);return p};
  const panel=mount();w.eval(source);
  return {w,panel,mount,set,values,user:v=>user=v,requests:()=>requests};
@@ -72,4 +73,62 @@ test('🔔を開いていないDM画面で通知フィルターの本人取得�
  const e=setup(t);e.panel.remove();e.w.history.replaceState({},'', '/messages/rooms/room-one');
  e.w.document.querySelector('#page').innerHTML=row('message');await wait(250);
  assert.equal(e.requests(),0);assert.ok(!hidden(e.w.document.querySelector('#message')));
+});
+
+test('実Reader併用：再入場後に人物・人数・本数の間へ改行が入っても同じ通知を隠す',async t=>{
+ const e=setup(t,'modern',true);e.panel.querySelector('#muted').append(' 7秒前');
+ await until(()=>hidden(e.panel.querySelector('#muted')));
+ e.panel.remove();await wait(180);
+ const next=e.mount(row('spaced','登録人物 さん 他 35 名 が 【新規募集中】みんな…に新しい記事を\n44 本追加しました 7秒前'));
+ await until(()=>hidden(next.querySelector('#spaced')),'空白を含む通知にも保存設定を適用');
+});
+
+test('実Reader併用：リンク全体が通知行の一覧と既知クラスが混在しても全行を判定する',async t=>{
+ const e=setup(t,'modern',true);e.panel.innerHTML='<button>通知</button><button>お知らせ</button>'+row('like','登録人物さんがスキしました 1分前')+'<a href="/magazine/m123" id="linked"><span>登録人物さん他83名が</span><span>共同マガジンに新しい記事を102本追加しました</span><time>38秒前</time></a>';
+ await until(()=>hidden(e.panel.querySelector('#linked')),'Readerが認識するリンク通知もフィルター対象');
+ assert.ok(!hidden(e.panel.querySelector('#like')));
+});
+
+test('実Reader併用：全行が非表示になりリストの高さが0になっても解除・再適用を繰り返さない',async t=>{
+ const e=setup(t,'modern',true);e.panel.innerHTML='<div id="tabs"><button>通知</button><button>お知らせ</button></div><div class="notificationList" id="list">'+row('all','登録人物さんが共同マガジンに新しい記事を3本追加しました 1分前')+'</div>';
+ e.w.HTMLElement.prototype.getBoundingClientRect=function(){const zero=this.id==='list'&&hidden(e.w.document.querySelector('#all'));return {width:360,height:zero?0:300}};
+ await until(()=>hidden(e.panel.querySelector('#all')));
+ e.w.document.querySelector('#bell').click();await wait(350);
+ assert.ok(hidden(e.panel.querySelector('#all')),'0高さになっても判定済み行を復活させない');
+ const requests=e.requests();await wait(350);assert.equal(e.requests(),requests,'自分の非表示操作で本人APIを反復しない');
+});
+
+test('本人APIが一度失敗しても再入場のフィルターを自動回復し、待機中に取り続けない',async t=>{
+ const e=setup(t);let calls=0;e.w.fetch=async()=>{calls++;return calls===1?new Response('',{status:503}):Response.json({data:{urlname:'tester'}})};
+ await until(()=>hidden(e.panel.querySelector('#muted')),'一時エラー後に自動適用');
+ const done=calls;await wait(300);assert.equal(calls,done);
+});
+
+test('通信障害では自動再試行を2回で止め、通知を離れると予約を打ち切る',async t=>{
+ const e=setup(t);let calls=0;e.w.fetch=async()=>{calls++;return new Response('',{status:503})};
+ await wait(1600);assert.equal(calls,3);await wait(500);assert.equal(calls,3,'無限再試行しない');
+ e.panel.remove();await wait(120);e.mount();await until(()=>calls===4);e.w.document.querySelector('#panel').remove();
+ await wait(600);assert.equal(calls,4,'離脱後に予約した本人取得を始めない');
+});
+
+test('保存対象が先頭人物でない通知・スキ・コメントは、空白やリンク行でも隠さない',async t=>{
+ const e=setup(t,'modern',true);e.panel.innerHTML='<button>通知</button><button>お知らせ</button>'+row('like','登録人物 さん が あなたの記事にスキしました 3分前')+row('comment','登録人物 さん が コメントしました 4分前')+'<a href="/magazine/m123" id="other-lead">別の人物 さん 他 83 名 が共同マガジンに新しい記事を 102 本追加しました 38秒前</a>';
+ await wait(350);for(const id of ['like','comment','other-lead'])assert.ok(!hidden(e.panel.querySelector('#'+id)),id);
+});
+
+test('実Reader併用：🔔再入場で後から追加された名前付きクラスのない一覧も自動認識する',async t=>{
+ const e=setup(t,'modern',true);e.panel.querySelector('#muted').append(' 3分前');await until(()=>hidden(e.panel.querySelector('#muted')));
+ e.panel.remove();e.w.document.querySelector('#bell').click();await wait(220);
+ const next=e.w.document.createElement('aside');next.innerHTML='<header><button>通知</button><button>お知らせ</button></header><a href="/magazine/m123" id="late-link">登録人物さんが共同マガジンに新しい記事を3本追加しました 1分前</a>';e.w.document.querySelector('#page').append(next);
+ await until(()=>hidden(next.querySelector('#late-link')),'後着のリンク通知一覧を自動認識');
+});
+
+test('実操作パネル：ON/OFFを押した結果が保存され、戻った一覧でも表示と適用が一致する',async t=>{
+ const e=setup(t,'modern',true);e.panel.querySelector('#muted').append(' 3分前');e.w.eval(readFileSync('public/note-insight-notification-controls-v1.js','utf8'));
+ const button=()=>e.w.document.querySelector('[data-action="filter"]');
+ await until(()=>button()?.dataset.on==='1'&&hidden(e.panel.querySelector('#muted')));
+ button().click();await until(()=>button()?.dataset.on==='0'&&!hidden(e.panel.querySelector('#muted')));assert.equal(e.values.get('mumei_insight_magazine_filter_enabled_v3:tester'),false);
+ button().click();await until(()=>button()?.dataset.on==='1'&&hidden(e.panel.querySelector('#muted')));
+ e.panel.remove();await wait(250);const next=e.mount(row('returned','登録人物 さん 他 35 名 が共同マガジンに新しい記事を 44 本追加しました 7秒前'));
+ await until(()=>button()?.dataset.on==='1'&&hidden(next.querySelector('#returned')),'表示ONと実際の非表示が復帰後も一致');
 });

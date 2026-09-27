@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.17",
-  "notificationVersion": "3.6.12",
+  "appVersion": "2026.09.27.18",
+  "notificationVersion": "3.6.13",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T17:36:58+09:00",
+  "releasedAt": "2026-09-27T17:46:51+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知なし詳細分析のフォロー・フォロワー表示を修正。公開プロフィールの確認時刻、欠損と0人の区別、記事更新前の人数反映とアカウント別保存。",
+  "note": "本人通知3.6.13：通知文の空白・改行、リンク形式の通知一覧へのフィルター適用漏れを修正。一時的な本人確認失敗は回数を制限して自動再試行。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
