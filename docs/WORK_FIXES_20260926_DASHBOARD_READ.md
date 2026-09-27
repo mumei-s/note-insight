@@ -131,3 +131,6 @@ Dashboard修正（1.5.5）：失敗した同じアカウント・連携・期間
 - 本体2026.09.27.2 / Dashboard1.5.6。通知3.6.10 / DM1.4.8 / SW v58 / Supabase関数は据え置き。
 - 作業中の読取専用DB確認では、ownerの最新保存はまだ9/9の1.1.0、日別0日。直近24時間のDashboard関数ログは200が344件、401が1件だったが、これは端末での読取・保存成功を意味しない。
 - Android実機の認証済みDOMと今回のエラー全文は取得できていない。再現したコード上の不具合と実機の直接原因を同一と断定しない。公開成功と実アカウントの最新保存成功を区別し、後者は未確認として維持する。
+
+
+公開検証：PR #16、機能main `9f5f0038fb1567ebca3a4bbf3da68c204f054806`、Actions `36285229307` のbuild・293件回帰・Pages deployが成功。Pagesのmanifest・設定HTML/JS・Dashboard wrapper/coreの5ファイル、raw GitHubのwrapper/core（実際の `?v=156` 含む）の2ファイルがHTTP200でmainと完全一致。公開indexが参照する本体JS `index-SIKGAlZ0.js` もHTTP200・ローカルbuildと完全一致し、Dashboard1.5.6／本体2026.09.27.2／更新確認入口を含むことを確認。端末の旧userscriptは更新が必要。認証済みAndroidでの最新保存成功は未確認のまま維持する。
