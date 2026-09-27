@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.16",
+  "appVersion": "2026.09.27.17",
   "notificationVersion": "3.6.12",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T16:58:22+09:00",
+  "releasedAt": "2026-09-27T17:36:58+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知フィルターの再入場・後着通知への再適用を修正。通知一行全体を判定し、ON/OFFと参加者ごとの設定を維持。",
+  "note": "本人通知なし詳細分析のフォロー・フォロワー表示を修正。公開プロフィールの確認時刻、欠損と0人の区別、記事更新前の人数反映とアカウント別保存。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
