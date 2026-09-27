@@ -10,6 +10,7 @@ const actionText=(v:unknown)=>clean(v).replace(/(?:たった今|昨日|\d+\s*(?:
 const KIND_TYPES:Record<string,string>={
  like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
  board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
+ circle_note_add:"membership_article_added",circle_plan_note_add:"membership_article_added",circle_note_update:"membership_article_updated",circle_plan_note_update:"membership_article_updated",circle_plan_magazine_add:"membership_magazine_added",
  circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
  magazine_follow:"magazine_follow",magazine_note_add:"my_article_magazine_added",magazine_note_add_follow:"magazine_article_added",jm_magazine_add:"magazine_article_added",jm_magazine_joined:"magazine_join",
  stock_photo:"image_used",embed_note:"quote",purchase_note_update:"purchased_article_updated",qa_answer:"question_answer",note_publish:"creator_article_posted",purchase:"purchase",purchase_note:"purchase",note_purchase:"purchase",note_rating:"rating",note_recommend:"rating",support:"tip",tip:"tip"
@@ -69,20 +70,20 @@ function noise(text:string,targetUrl:string|null,actorName:string|null,source:st
 function jstDay(v:unknown){const ms=Date.parse(String(v||""));if(!Number.isFinite(ms))return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(ms))}
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
- const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),onlyPending=b.onlyPending===true,now=new Date().toISOString();
- let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).or("meta->>classifier.is.null,meta->>classifier.neq.action-v26-formats,meta->>reclassify_pending.eq.true").order("id").limit(100);if(onlyPending)q=q.in("notification_type",["other","quote"]);if(cursor)q=q.gt("id",cursor);
+ const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),now=new Date().toISOString();
+ let q=db.from("insight_notifications").select("id,notification_type,raw_text,target_url,occurred_at,captured_at,meta").in("member_id",ids).or("meta->>classifier.is.null,meta->>classifier.neq.action-v27-membership,meta->>reclassify_pending.eq.true").order("id").limit(100);q=q.eq("notification_type","other");if(cursor)q=q.gt("id",cursor);
  const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;const repairedRows:any[]=[];
  const evidence=new Map<string,any>();
  if((data||[]).some(r=>!r.meta?.kind&&String(r.meta?.event_identity||"").startsWith("notice:"))){
   const {data:probes}=await db.from("insight_notification_network_probes").select("response_sample").in("member_id",ids).order("captured_at",{ascending:false}).limit(200);
   for(const p of probes||[])for(const n of Array.isArray(p.response_sample?.data)?p.response_sample.data:[])if(n?.id&&n?.kind&&!evidence.has("notice:"+n.id))evidence.set("notice:"+n.id,n);
  }
- const processRow=async(r:any)=>{const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v26-formats"};
+ const processRow=async(r:any)=>{const type=String(r.notification_type||"other"),meta={...(r.meta&&typeof r.meta==="object"?r.meta:{}),...(evidence.get(String(r.meta?.event_identity||""))||{})},day=jstDay(r.occurred_at||r.captured_at),nextMeta={...meta,event_day_jst:day,last_reclassified_at:now,reclassify_version:"full-cursor-v4",classifier:"action-v27-membership"};
  const classified=meta.noise_reason==="non-notification-api-capture"?"capture_noise":classify(String(r.raw_text||""),r.target_url,meta),nextType=type==="capture_noise"&&!r.meta?.verified_shell?type:classified==="other"&&type!=="capture_noise"?type:classified,finalMeta={...nextMeta,classified_type:nextType,reclassify_pending:false,classification_status:nextType==="other"?"unmatched":"matched"};
  const actor=meta.action_users?.[0],repair:Record<string,unknown>={};
  if(actor&&/^https:\/\/note\.com\/[^/?#]+\/?$/.test(String(actor.url||""))){repair.actor_url=actor.url;if(typeof actor.name==="string")repair.actor_name=actor.name;if(/^https:\/\//.test(String(actor.user_profile_image_path||"")))repair.actor_image_url=actor.user_profile_image_path}
  if(meta.body)repair.raw_text=String(meta.body).replace(/<[^>]*>/g," ").slice(0,4000);
  const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,meta").single();if(up)throw up;repairedRows.push(saved);checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++};
  for(let i=0;i<(data||[]).length;i+=8)await Promise.all((data||[]).slice(i,i+8).map(processRow));
- return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,rows:repairedRows,classifierVersion:"action-v26-formats",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
+ return out({ok:true,noteId:m.noteId,checked,moved,dayStamped,pending,rows:repairedRows,classifierVersion:"action-v27-membership",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});
