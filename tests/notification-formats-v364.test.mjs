@@ -41,3 +41,18 @@ async function ownerBackend({noteId='tester',ownerToken=false,expired=false}={})
 test('参加者は他参加者の分類案内を取得・既読操作できない',async()=>{for(const action of ['list','read']){const h=await ownerBackend(),r=await h.request({action,kind:'future_kind'});assert.equal(r.status,403);assert.equal(h.calls(),0);assert.equal(h.writes.length,0)}});
 test('認証済み運営者だけに全参加者分の形式と件数を返し、既読を保存する',async()=>{for(const ownerToken of [false,true]){const h=await ownerBackend({noteId:'ss_yr',ownerToken}),r=await h.request({action:'read',kind:'future_kind'}),p=await r.json();assert.equal(r.status,200);assert.equal(p.alerts[0].notification_count,2);assert.ok(h.writes[0].read_at);assert.equal('raw_text' in p.alerts[0],false)}});
 test('運営者でも期限切れセッションは拒否する',async()=>{const h=await ownerBackend({noteId:'ss_yr',expired:true}),r=await h.request({});assert.equal(r.status,403);assert.equal(h.calls(),0)});
+
+for(const name of ['ingest-v2','reclassify'])test(name+'：メンシプの記事追加・更新・特典マガジンを分類する',()=>{
+ const f=classifier('supabase/functions/insight-notification-'+name+'/index.ts');
+ for(const [kind,category] of Object.entries({circle_note_add:'membership_article_added',circle_plan_note_add:'membership_article_added',circle_note_update:'membership_article_updated',circle_plan_note_update:'membership_article_updated',circle_plan_magazine_add:'membership_magazine_added'})){
+ assert.equal(f('人物さんからのお知らせ',null,{kind}),category);
+ assert.equal(f('人物さんからのお知らせ','https://note.com/person/n/n123?kind='+kind,{}),category);
+ }
+});
+
+test('再分類APIは旧画面が全件を要求しても本人の未分類だけを取得する',async()=>{
+ let handler;const calls=[];const db={from(table){const q={};for(const m of ['select','eq','in','or','order','limit','gt'])q[m]=(...args)=>{calls.push({table,m,args});return q};const result=()=>({data:table==='insight_member_sessions'?{application_id:'participant-id',expires_at:'2099-01-01'}:table==='insight_access_applications'?{id:'participant-id',note_id:'tester',status:'active'}:[]});q.maybeSingle=async()=>result();q.then=(yes,no)=>Promise.resolve(result()).then(yes,no);return q}};
+ const context=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},crypto:globalThis.crypto,TextEncoder,Response,Request,URL});const js=ts.transpileModule(read('supabase/functions/insight-notification-reclassify/index.ts'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText,mod=new vm.SourceTextModule(js,{context});await mod.link(()=>new vm.SyntheticModule(['createClient'],function(){this.setExport('createClient',()=>db)},{context}));await mod.evaluate();
+ const r=await handler(new Request('https://example.test',{method:'POST',headers:{'X-Insight-Token':'fixture'},body:JSON.stringify({onlyPending:false})}));assert.equal(r.status,200);assert.equal((await r.json()).nextCursor,null);
+ const rows=calls.filter(c=>c.table==='insight_notifications');assert.ok(rows.some(c=>c.m==='eq'&&c.args[0]==='notification_type'&&c.args[1]==='other'));assert.ok(rows.some(c=>c.m==='in'&&c.args[0]==='member_id'&&c.args[1].length===1&&c.args[1][0]==='participant-id'));
+});

@@ -140,10 +140,10 @@ test('notification-only network capture rejects unrelated note APIs and V24 rech
   assert.match(network,/direct-api-root-only-v357/);
   assert.match(network,/if\(!directNoticesCap\(cap\)\)throw new Error/);
   assert.match(network,/NO_NOTIFICATION_API_CAPTURE/);
-  assert.match(reclass,/action-v26-formats/);
+  assert.match(reclass,/action-v27-membership/);
   assert.doesNotMatch(reclass,/meta\?\.classifier==="action-v23-structured"[^\n]*continue/);
-  assert.match(ingest,/action-v26-formats/);
-  assert.match(ui,/action-v26-formats/);
+  assert.match(ingest,/action-v27-membership/);
+  assert.match(ui,/action-v27-membership/);
   assert.match(ui,/retainBoard/);
   assert.match(ui,/question_answer/);
 });
