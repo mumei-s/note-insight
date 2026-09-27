@@ -18,7 +18,7 @@ function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),be
   if(paired){w.localStorage.setItem('mumei-dashboard-note-id-v1',identity());w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture')}
   w.fetch=async url=>Response.json(String(url).includes('current_user')?{data:{user:{urlname:identity()}}}:await stats(String(url)));
   w.GM_xmlhttpRequest=options=>{const body=JSON.parse(options.data);
-    if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:identity(),snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,totals:s.totals}:{ok:true,paired:true,noteId:identity()})}));return}
+    if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:identity(),snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,chartMetricCount:s.chartSeries?.length||0,totals:s.totals}:{ok:true,paired:true,noteId:identity()})}));return}
     saves.push(body);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify({ok:true,snapshotId:saves.length,articleCount:body.articles.length,dailyPvDays:body.metricSeries.filter(r=>r.pageViews!=null).length,capturedAt:'2026-09-22T12:00:00Z'})}))};
   w.__location={get href(){return w.location.href},get origin(){return w.location.origin},get pathname(){return w.location.pathname},get search(){return w.location.search},assign:href=>nav.push(href)};
   before?.(w);const request=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='client-status'){diagnostics.push(b);queueMicrotask(()=>o.onload({status:200,responseText:'{"ok":true,"recorded":true}'}));return}request(o)};w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
@@ -122,7 +122,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
  const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
-  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.9',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
+  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.0',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
   w.GM=gm; // note has already stripped all query parameters before userscript startup.
   w.GM_xmlhttpRequest=opts=>{const body=JSON.parse(opts.data);requests.push(body);let result;
    if(body.action==='pair-exchange'){assert.equal(body.code,'12345678');result={ok:true,noteId:'tester',ingestToken:'ingest-fixture'}}
@@ -363,7 +363,7 @@ test('期間変更で停止したエラーは新期間の通信や起動通知�
  assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.equal(h.diagnostics.length,1);assert.equal(h.diagnostics[0].code,'VIEW_CHANGED');assert.equal(h.diagnostics[0].periodChanged,true);
  assert.ok(!JSON.stringify(h.diagnostics).includes('fixture'));
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);const area=details.querySelector('textarea'),frozen=area.value;
- assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.5\.9/);
+ assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.6\.0/);
  h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'追加の状態'}}));await pause(20);assert.equal(area.value,frozen,'開いている履歴は読みながら書き換えない');
  let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>copied=value}});h.w.document.getElementById('mumei-dash-copy').click();await pause(10);assert.equal(copied,frozen);
 });
@@ -380,7 +380,7 @@ test('停止操作後に通信が終わっても保存やパネル巡回を続�
 
 test('ページを再表示しても最後のエラーと履歴を残し、自動再開しない',async t=>{
  const message='公式データの待機が15秒を超えました [READ_WAIT]';
- const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.9',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
+ const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.6.0',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
  await pause(150);assert.equal(h.saves.length,0);assert.equal(h.w.document.querySelector('.status').textContent,message);
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);assert.match(details.querySelector('textarea').value,/10:00:00.*READ_WAIT/);
  h.w.document.getElementById('mumei-dash-read').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
@@ -460,4 +460,13 @@ test('コンパクト表示でも期間変更による停止理由が読める',
  const h=page(t,'<p>ページビュー 8</p>');await saved(h);
  const show=message=>h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message,kind:'warn'}}));
  show('表示期間または画面が変わりました [VIEW_CHANGED]');assert.equal(h.w.document.getElementById('mumei-dash-brief').textContent,'期間・画面変更で停止');
+});
+
+for(const requested of ['all','week'])test('指定期間を一度だけ自動選択し、日別と全期間の月別を混ぜず本人の保存を照合する: '+requested,async t=>{
+ const changed=[];const h=page(t,'<select id="period"><option value="LAST_28_DAYS">過去28日間</option><option value="LAST_7_DAYS">過去7日間</option><option value="ALL">全期間</option></select><p id="range">2026/8/31〜2026/9/27</p><p id="total">ページビュー 8</p>'+officialMetricSelect(false)+'<figure data-name="StackedBarChart"></figure>',{before:w=>{
+  w.sessionStorage.setItem('mumei-dashboard-requested-period',JSON.stringify({period:requested,noteId:'tester'}));
+  const render=()=>{const all=w.document.getElementById('period').value==='ALL',metric=w.document.getElementById('metric').selectedOptions[0].textContent;w.document.getElementById('range').textContent=all?'全期間':'2026/9/21〜2026/9/27';w.document.getElementById('total').textContent='ページビュー '+(all?1000:7);w.document.querySelector('figure').__reactFiber$fixture={memoizedProps:{seriesLabel:metric,data:{granularity:all?'MONTH':'DAY',points:all?[{startDate:'2025-01-01',endDate:'2025-01-31',value:600},{startDate:'2025-02-01',endDate:'2025-02-28',value:400}]:Array.from({length:7},(_,i)=>({startDate:'2026-09-'+(21+i),endDate:'2026-09-'+(21+i),value:1}))}}}};
+  w.document.getElementById('period').onchange=()=>{changed.push(w.document.getElementById('period').value);render()};w.document.getElementById('metric').onchange=render;
+ }});
+ await saved(h);assert.deepEqual(changed,[requested==='all'?'ALL':'LAST_7_DAYS']);assert.equal(h.saves[0].periodType,requested);assert.equal(h.saves[0].metricSeries.length,requested==='all'?0:7);assert.equal(h.saves[0].chartSeries.length,requested==='all'?2:7);assert.equal(h.saves[0].totals.pageViews,requested==='all'?1000:7);assert.equal(h.saves[0].chartSeries[0].likes,requested==='all'?600:1);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);assert.deepEqual(h.warnings,[]);assert.equal(h.w.sessionStorage.getItem('mumei-dashboard-requested-period'),null);
 });

@@ -102,9 +102,9 @@ test('auto=1の明示的な読み込み依頼だけ一度実行し、再読込�
 });
 
 test('noteへ移動する前に拡張機能へ一回限りの連携依頼を保存する',async t=>{
- const h=page(t,{wrapper:true,storage:{[MEMBER]:'member-fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
+ const h=page(t,{wrapper:true,query:'?account=tester&auto=0&period=all',storage:{[MEMBER]:'member-fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();
  assert.equal(h.nav.length,1);const pending=JSON.parse(h.gmStore.get('mumei-dashboard-handoff-v143')||'null');
- assert.equal(pending?.code,'12345678');assert.equal(pending.noteId,'tester');assert.ok(pending.savedAt);assert.ok(pending.expiresAt);assert.ok(!JSON.stringify(pending).includes('member-fixture'));
+ assert.equal(pending.period,'all');assert.equal(new URL(h.nav[0].href).searchParams.get('mumei_dashboard_period'),'all');assert.equal(pending?.code,'12345678');assert.equal(pending.noteId,'tester');assert.ok(pending.savedAt);assert.ok(pending.expiresAt);assert.ok(!JSON.stringify(pending).includes('member-fixture'));
 });
 test('GM_setValue形式のブラウザでも共有保存を確認してから移動する',async t=>{
  const h=page(t,{wrapper:true,legacyStore:true,storage:{[MEMBER]:'fixture',[ACTIVE]:'tester'}});await settle();h.get('startRead').click();await settle();

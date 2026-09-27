@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.5.9
+// @version      1.6.0
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -20,7 +20,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.5.9';
+  const VERSION='1.6.0';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -64,7 +64,7 @@
     const p=detectPeriod();
     // Selected navigation and chart-metric tabs are not date selectors.
     const tabs=[...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].map(el=>text(el.textContent)).filter(label=>/^(?:全期間|過去\d+日間|週間|月間|年間|週|月|年|日|今週|今月|今年)$/.test(label));
-    return JSON.stringify([p.periodStart,p.periodEnd,p.periodStart&&p.periodEnd?[]:tabs]);
+    return JSON.stringify([p.periodStart,p.periodEnd,p.periodStart&&p.periodEnd?[]:p.periodType==='all'?['全期間']:tabs]);
   }
   const periodKey=()=>{const raw=renderedPeriodKey();return raw==='[null,null,[]]'&&usableLease()?viewLease.period:raw};
   // A content tab controlled by this reader may remount its dates or change a subroute.
@@ -169,6 +169,14 @@
    }
    visit(payload,context.field||'');return mergeMetrics(rows);
   }
+  function mergeChartMetrics(rows){
+    const map=new Map();for(const row of rows){const key=row.granularity+row.startDate+row.endDate,old=map.get(key)||{...row};for(const f of Object.keys(metricFields)){const v=optionalNumber(row[f]);if(v!==null&&v>=0)old[f]=v}map.set(key,old)}return [...map.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  }
+  function chartMetrics(payload,context={}){
+    const rows=[];walk(payload,v=>{const granularity=text(v.granularity).toUpperCase(),field=context.field||metricName(v.metric);if(!['DAY','WEEK','MONTH'].includes(granularity)||!field||!Array.isArray(v.points))return;
+      for(const p of v.points){const startDate=dateOf({date:p.startDate}),endDate=dateOf({date:p.endDate}),value=optionalNumber(p.value);if(!startDate||!endDate||startDate>endDate||granularity==='DAY'&&startDate!==endDate||value===null||value<0)continue;rows.push({granularity,startDate,endDate,[field]:value})}
+    });return mergeChartMetrics(rows);
+  }
   function readHydration(){
     let index=0;
    for(const script of document.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__')){try{const payload=JSON.parse(script.textContent||''),url='hydration:'+index++;if(!CAPTURE.some(c=>c.url===url&&currentCapture(c)&&JSON.stringify(c.payload)===JSON.stringify(payload)))captureJson(url,payload)}catch{}}
@@ -228,7 +236,7 @@
   }
   function metricTrigger(){return [...dashboardRoot().querySelectorAll('button,[role="combobox"]')].find(el=>readable(el)&&!el.disabled&&el.getAttribute('aria-disabled')!=='true'&&(/グラフに表示する指標/.test(el.getAttribute('aria-label')||'')||metricName(text(el.textContent))&&el.getAttribute('aria-haspopup')==='listbox'))}
   function selectedChartMetric(){const select=metricSelect();if(select)return metricName(select.selectedOptions[0]?.textContent);const trigger=metricTrigger();return trigger?metricName(text(trigger.textContent)):''}
-  function chartDomMetrics(){
+  function chartDomMetrics(aggregate=false){
     const rows=[],period=detectPeriod();
     for(const figure of (pageWindow().document.querySelector('main,[role="main"]')||pageWindow().document.body).querySelectorAll('figure[data-name="StackedBarChart"]')){
       if(!readable(figure))continue;
@@ -245,9 +253,9 @@
         const field=metricName(props.seriesLabel||props.title);
         if(!field||(visibleMetric&&field!==visibleMetric))continue;
         if(field&&props.data?.granularity&&Array.isArray(props.data.points)){
-          rows.push(...dailyMetrics(props.data,{field,period}));fallback=[];break chartParents;
+          rows.push(...(aggregate?chartMetrics:dailyMetrics)(props.data,{field,period}));fallback=[];break chartParents;
         }
-        if(field&&props.xKey==='label'&&Array.isArray(props.data)&&period.periodStart&&period.periodEnd&&(Date.parse(period.periodEnd)-Date.parse(period.periodStart))/86400000<31){
+        if(!aggregate&&field&&props.xKey==='label'&&Array.isArray(props.data)&&period.periodStart&&period.periodEnd&&(Date.parse(period.periodEnd)-Date.parse(period.periodStart))/86400000<31){
           fallback=dailyMetrics(props.data,{field,period});
         }
        }
@@ -255,7 +263,7 @@
       }
       rows.push(...fallback);
     }
-    return mergeMetrics(rows);
+    return aggregate?mergeChartMetrics(rows):mergeMetrics(rows);
   }
   async function selectChartMetric(field,href,period){
     ensureRunning();if(!usableLease())viewLease={href,period,root:dashboardRouteRoot(),connection:connectionKey()};
@@ -290,7 +298,7 @@
     const fields=[...Object.keys(chartMetricLabels).filter(f=>f!==graph.original),graph.original].filter(Boolean);
     for(const field of fields){
       if(graph.done.includes(field))continue;
-      readStage='日別グラフ：'+chartMetricLabels[field];setStatus(readStage+'を自動読込中…');
+      readStage='公式グラフ：'+chartMetricLabels[field];setStatus(readStage+'を自動読込中…');
       if(!await selectChartMetric(field,href,period))continue;
       collect();graph.done.push(field);saveCheckpoint(checkpoint);
     }
@@ -349,14 +357,14 @@
     throw new Error('公式データの待機が15秒を超えました [READ_WAIT]');
   }
 
-  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;
+  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[],chartRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;
     const official=cap.payload?.data||{};
     for(const edge of official.dashboardNoteListConnection?.edges||[]){const o=edge.node,n=o?.note,m=o?.metrics;if(!n?.title||!m)continue;const url=text(n.link?.absoluteUrl),pv=pick(m,aliases.pageViews);articles.push({key:url||text(o.id),title:text(n.title),url,impressions:pick(m,aliases.impressions),pageViews:pv,views:pv,likes:pick(m,aliases.likes),comments:pick(m,aliases.comments),salesYen:pick(m,aliases.sales),contentType:'article',status:text(n.status).toLowerCase(),publishedAt:text(n.publishedAt)})}
     const referrers=official.dashboardNoteReferrersChart;
     for(const row of referrers?.legend||[]){const pv=optionalNumber(row.count);if(text(row.name)&&pv!==null)sources.push({source:text(row.name),pv})}
     const chart=referrers?.timeSeriesBarChart;
     if(chart&&Array.isArray(chart.labels))for(const series of chart.data||[])for(let i=0;i<chart.labels.length;i++){const date=dateOf({date:chart.labels[i]}),pv=optionalNumber(series.data?.[i]);if(date&&pv!==null)trafficSeries.push({date,source:text(series.label),pv})}
-    metricRows.push(...dailyMetrics(cap.payload,{field:cap.metric}));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows)}}
+    chartRows.push(...chartMetrics(cap.payload,{field:cap.metric}));metricRows.push(...dailyMetrics(cap.payload,{field:cap.metric}));walk(cap.payload,o=>{const title=titleOf(o),url=urlOf(o),key=keyOf(o),pv=pick(o,aliases.pageViews),imp=pick(o,aliases.impressions),likes=pick(o,aliases.likes),comments=pick(o,aliases.comments),sales=pick(o,aliases.sales),shares=pick(o,aliases.shares),date=dateOf(o);if(title&&(url||key)&&(pv||imp||likes||comments||sales||shares)){articles.push({key:key||url,title,url,impressions:imp,pageViews:pv,views:pv,likes,comments,salesYen:sales,shares,status:text(o.status),publishedAt:text(o.published_at||o.publishedAt||o.publish_at),contentType:text(o.content_type||o.contentType||'article')})}const source=text(o.referrer||o.referrer_name||o.source||o.domain||o.host);const spv=pick(o,['pv','page_views','pageViews','count','value']);if(source&&spv&&!/^https?:/i.test(source)&&source.length<100){if(date)trafficSeries.push({date,source,pv:spv});else sources.push({source,pv:spv})}})}return{articles:uniq(articles,r=>r.url||r.key||r.title),sources:uniq(sources,r=>r.source.toLowerCase()),trafficSeries,metricSeries:mergeMetrics(metricRows),chartSeries:mergeChartMetrics(chartRows)}}
   function dashboardNetworkTotals(){
     const totals={};for(const cap of CAPTURE){if(!currentCapture(cap))continue;const values=cap.payload?.data?.dashboardSummary?.metrics;if(!values)continue;for(const [field,names]of Object.entries(metricFields)){const key=names.find(k=>Object.prototype.hasOwnProperty.call(values,k)),value=optionalNumber(values[key]);if(value!==null&&value>=0)totals[field]=value}}
     return totals;
@@ -378,7 +386,23 @@
   }
 
   function detectTotals(){const body=dashboardText();return{impressions:labelledNumber('インプレッション',body),pageViews:labelledNumber('(?:ページビュー|全体ビュー|ビュー数)',body),likes:labelledNumber('スキ',body),comments:labelledNumber('コメント',body),salesYen:labelledNumber('売上',body)}}
-  function detectPeriod(){const body=dashboardText(),range=body.match(/(20\d{2})[\/.年-](\d{1,2})[\/.月-](\d{1,2})(?:日)?\s*(?:〜|～|~|-|–|—)\s*(?:(20\d{2})[\/.年-])?(\d{1,2})[\/.月-](\d{1,2})/);if(!range)return{periodType:'custom',periodStart:null,periodEnd:null};const year2=range[4]||range[1],pad=x=>String(x).padStart(2,'0');return{periodType:'custom',periodStart:`${range[1]}-${pad(range[2])}-${pad(range[3])}`,periodEnd:`${year2}-${pad(range[5])}-${pad(range[6])}`}}
+  const periodLabels={week:'過去7日間',month:'過去28日間',all:'全期間'};
+  function periodSelect(){return [...dashboardRoot().querySelectorAll('select')].find(el=>[...el.options].some(o=>text(o.textContent)==='全期間')&&[...el.options].some(o=>text(o.textContent)==='過去28日間'))}
+  function periodTrigger(){return [...dashboardRoot().querySelectorAll('button,[role="combobox"]')].find(el=>readable(el)&&el.getAttribute('aria-label')==='期間選択')}
+  function selectedPeriodType(){const select=periodSelect(),label=text(select?.selectedOptions[0]?.textContent||periodTrigger()?.textContent);return Object.keys(periodLabels).find(k=>periodLabels[k]===label)||'custom'}
+  async function selectRequestedPeriod(href){
+    let request;try{request=JSON.parse(sessionStorage.getItem('mumei-dashboard-requested-period')||'null')}catch{}if(!request||request.noteId!==localStorage.getItem(NOTE_KEY)||!periodLabels[request.period])return;
+    await waitForDashboard(href,null);
+    if(selectedPeriodType()!==request.period){
+      viewLease=null;const select=periodSelect();
+      if(select){const option=[...select.options].find(o=>text(o.textContent)===periodLabels[request.period]);if(!option||select.disabled)throw new Error('期間を選択できませんでした [PERIOD_SELECT]');const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set;if(setter)setter.call(select,option.value);else select.value=option.value;select.dispatchEvent(new Event('change',{bubbles:true}))}
+      else{const trigger=periodTrigger();if(!trigger)throw new Error('期間選択が見つかりません [PERIOD_SELECT]');trigger.click();let option;for(let i=0;i<20;i++){ensureRunning();option=[...document.querySelectorAll('[role="listbox"] [role="option"]')].find(el=>text(el.textContent)===periodLabels[request.period]&&el.getAttribute('aria-disabled')!=='true');if(option)break;await sleep(100)}if(!option)throw new Error('期間を選択できませんでした [PERIOD_SELECT]');option.click()}
+      await waitForDashboard(href,null);
+      if(selectedPeriodType()!==request.period)throw new Error('指定の期間へ切り替わりませんでした [PERIOD_SELECT]');
+    }
+    sessionStorage.removeItem('mumei-dashboard-requested-period');
+  }
+  function detectPeriod(){const periodType=selectedPeriodType();if(periodType==='all')return{periodType,periodStart:null,periodEnd:null};const body=dashboardText(),range=body.match(/(20\d{2})[\/.年-](\d{1,2})[\/.月-](\d{1,2})(?:日)?\s*(?:〜|～|~|-|–|—)\s*(?:(20\d{2})[\/.年-])?(\d{1,2})[\/.月-](\d{1,2})/);if(!range)return{periodType,periodStart:null,periodEnd:null};const year2=range[4]||range[1],pad=x=>String(x).padStart(2,'0');return{periodType,periodStart:`${range[1]}-${pad(range[2])}-${pad(range[3])}`,periodEnd:`${year2}-${pad(range[5])}-${pad(range[6])}`}}
   function detectCollected(){const m=(dashboardText()).match(/(20\d{2})[\/.年](\d{1,2})[\/.月](\d{1,2})[^\d]+(\d{1,2}):(\d{2})\s*集計/);if(!m)return null;const p=x=>String(x).padStart(2,'0');return`${m[1]}-${p(m[2])}-${p(m[3])}T${p(m[4])}:${p(m[5])}:00+09:00`}
   function detectTraffic(){const body=dashboardText(),rows=[];const rx=/(^|\n)\s*([A-Za-z0-9._-]+|X|Facebook|Instagram|no referrer|other)\s+([0-9.]+)%\s*\(([0-9,]+)PV\)/g;let m;while((m=rx.exec(body)))rows.push({source:text(m[2]),percent:num(m[3]),pv:num(m[4])});return uniq(rows,r=>r.source.toLowerCase())}
   function detectSummary(){const body=dashboardText(),a=body.match(/記事数\s*([0-9,]+)\s*本/),s=body.match(/シェアされた記事\s*([0-9,]+)\s*回/),r=body.match(/収益\s*[￥¥]?\s*([0-9,]+)/);return{articles:a?num(a[1]):0,sharedArticles:s?num(s[1]):0,revenueYen:r?num(r[1]):0}}
@@ -401,13 +425,14 @@
   function currentContentType(){const label=text([...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].find(contentTab)?.textContent);return label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article'}
   function collector(seed){
     let activeType=currentContentType();
-    const result=seed?JSON.parse(JSON.stringify(seed)):{articles:[],sources:[],trafficSeries:[],metricSeries:[],totals:{},summary:{}},freshTotals=new Set();
+    const result=seed?JSON.parse(JSON.stringify(seed)):{articles:[],sources:[],trafficSeries:[],metricSeries:[],chartSeries:[],totals:{},summary:{}},freshTotals=new Set();
     return {result,collect(label=''){
       if(label)activeType=label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article';
       readHydration();const mined=mineNetwork();
       result.articles=uniq([...result.articles,...mined.articles,...(activeType==='magazine'?[]:tableArticles(activeType))],r=>r.url||r.key||r.title);
       result.sources=uniq([...result.sources,...mined.sources,...detectTraffic()],r=>r.source.toLowerCase());
       result.trafficSeries=uniq([...result.trafficSeries,...mined.trafficSeries],r=>r.date+':'+r.source);
+      result.chartSeries=mergeChartMetrics([...(result.chartSeries||[]),...mined.chartSeries,...chartDomMetrics(true)]);
       result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries,...dailyTableMetrics(),...chartDomMetrics()]);
       for(const [key,value]of Object.entries({...detectTotals(),...dashboardNetworkTotals()}))if(value!==null&&!freshTotals.has(key)){result.totals[key]=value;freshTotals.add(key)}
       for(const [key,value]of Object.entries(detectSummary()))if(value)result.summary[key]=value;
@@ -449,6 +474,7 @@
       if(connection.noteId!==paired||connection.paired!==true)throw new Error('保存先の確認ができませんでした');
       connectionVerified=true;ensureRunning();
       for(let i=0;i<20;i++){if(!isDashboard()||dashboardLocation()!==startLocation)return;if(dashboardRoot().querySelector('details,[aria-expanded],table')||detectTotals().pageViews!==null||mineNetwork().metricSeries.length)break;await sleep(250)}
+      await selectRequestedPeriod(startLocation);
       let selectedPeriod=periodKey(),scope=captureScope();runScope=scope;
       checkpoint=await getCheckpoint(scope);
       if(!checkpoint.pendingSave){
@@ -463,15 +489,15 @@
         checkpoint.result=mined;saveCheckpoint(checkpoint);
         const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals};
         if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('表示中の公式データを取得できませんでした [NO_DATA]');
-        const payload={action:'ingest',schemaVersion:4,connectorVersion:VERSION,noteId:paired,articles,totals,
-          trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,summary:mined.summary,
+        const payload={action:'ingest',schemaVersion:5,connectorVersion:VERSION,noteId:paired,articles,totals,
+          trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,chartSeries:mined.chartSeries,summary:mined.summary,
           contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels:checkpoint.progress.opened},officialCollectedAt:detectCollected(),...checkpoint.period,pages:1};
         const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
         if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',mined.metricSeries.some(r=>r.pageViews!==null)?'ok':'partial');return}
         checkpoint.pendingSave={payload,readRevision:captureRevision,readSignature:officialDataSignature(),saved:null};saveCheckpoint(checkpoint);
         }
       }
-      const pending=checkpoint.pendingSave,{payload}=pending,{articles,totals}=payload,dailyPvDays=payload.metricSeries.filter(r=>r.pageViews!==null).length;
+      const pending=checkpoint.pendingSave,{payload}=pending,{articles,totals}=payload,dailyPvDays=payload.metricSeries.filter(r=>r.pageViews!==null).length,chartCount=payload.chartSeries?.length||0;
       const checkAccount=async()=>{ensureRunning();const actual=await currentNoteId();ensureRunning();if(!currentCapture(scope)||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||localStorage.getItem(TOKEN_KEY)!==token||actual!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH')};
       readStage='取得済みデータの保存';await checkAccount();
       if(!pending.saved){
@@ -484,6 +510,7 @@
       setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存を照合中…`);
       const verified=await xhr(DASH_API,{action:'sync-status',noteId:paired,snapshotId:saved.snapshotId},{'X-Ingest-Token':token});
       if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==payload.metricSeries.length)throw new Error('保存件数が一致しません [SAVE_COUNT]');
+      if(chartCount&&Number(verified.chartMetricCount)!==chartCount)throw new Error('保存したグラフ件数が一致しません [SAVE_COUNT]');
       for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません [SAVE_VALUE]');
       await checkAccount();
       checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
@@ -491,12 +518,13 @@
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
       const longPeriod=payload.periodStart&&payload.periodEnd&&Date.parse(payload.periodEnd)-Date.parse(payload.periodStart)>30*86400000;
       const missingDaily=longPeriod?'選択期間が32日以上のため、公式グラフは週・月単位です。期間合計と記事別は保存済みですが、今回の日別PVはありません':'自動取得で日別値を確認できませんでした。日別の推移・曜日分析には今回の値を使えません';
-      const message=count?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・日別PV ${count}日`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：${missingDaily}）`;
+      const graphSaved=payload.chartSeries?.some(r=>r.pageViews!=null),complete=count||graphSaved;
+      const message=complete?`✓ 同期完了 ${at}｜保存確認 記事${verified.articleCount}件・${count?'日別PV '+count+'日':'全期間グラフ '+chartCount+'点'}`:`保存済み ${at}｜記事${verified.articleCount}件・日別PV 0日（未取得：${missingDaily}）`;
       lastSnapshotSignature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
       localStorage.setItem('mumei-dashboard-last-result:'+paired,message);
       if(captureRevision!==pending.readRevision||officialDataSignature()!==pending.readSignature){setStatus('保存確認済み｜遅れて届いた公式データを追加読込中…');autoTimer=setTimeout(()=>void syncNow({automatic:true}),900);return}
-      setStatus(message,count?'ok':'partial');
-      if(!count)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
+      setStatus(message,complete?'ok':'partial');
+      if(!complete)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
     }catch(e){
       autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&currentCapture(checkpoint.scope);
       if(valid)saveCheckpoint(checkpoint);

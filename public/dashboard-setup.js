@@ -99,9 +99,10 @@
       if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
       const id=accountId(p.noteId),code=String(p.pairingCode||'');if(!id||!/^\d{8}$/.test(code))throw new Error('PAIR_RESPONSE_INVALID');if(expected&&id!==expected)throw new Error('ACCOUNT_MISMATCH');
       readStatus('noteへ渡す連携情報を保存しています…');
-      await saveReadHandoff({code,noteId:id,returnTo:back,createdAt:Date.now(),expiresAt:p.expiresAt||new Date(Date.now()+10*60*1000).toISOString()});
+      const period=['week','month','all'].includes(q.get('period'))?q.get('period'):'';
+      await saveReadHandoff({code,noteId:id,period,returnTo:back,createdAt:Date.now(),expiresAt:p.expiresAt||new Date(Date.now()+10*60*1000).toISOString()});
       if(get(MEMBER)!==member||get(ACTIVE)!==accountAtStart||(owner&&get(OWNER)!==owner))throw new Error('ACCOUNT_CHANGED');
-      const url=new URL('https://note.com/sitesettings/stats');url.searchParams.set('mumei_dashboard_pair',code);url.searchParams.set('mumei_dashboard_sync','1');url.searchParams.set('mumei_dashboard_account',id);url.searchParams.set('mumei_dashboard_return',back);url.searchParams.set('mumei_dashboard_tool_version',current());
+      const url=new URL('https://note.com/sitesettings/stats');url.searchParams.set('mumei_dashboard_pair',code);url.searchParams.set('mumei_dashboard_sync','1');url.searchParams.set('mumei_dashboard_account',id);url.searchParams.set('mumei_dashboard_return',back);url.searchParams.set('mumei_dashboard_tool_version',current());if(period)url.searchParams.set('mumei_dashboard_period',period);
       readStatus('@'+id+' を確認しました。公式ダッシュボードへ移動します。','ok');location.assign(url.href);
     }catch(e){const message=String(e?.message||'');readStatus(/ACCOUNT/.test(message)?'アカウントが一致しないか切り替わりました。INSIGHTへ戻り、利用するアカウントを確認してください。':/HANDOFF/.test(message)?'連携情報を保存できませんでした。この画面を再読込して、もう一度開始してください。':/LOGIN|SESSION|401/.test(message)?'INSIGHTのログインを確認してください。ログイン後、この画面から再開できます。':e?.name==='AbortError'?'通信に時間がかかっています。もう一度読み込んでください。':'読み込みを開始できませんでした。通信とINSIGHTのログインを確認して再試行してください。','warn')}
     finally{clearTimeout(timer);busy=false;$('startRead').disabled=!(release&&current()&&compare(current(),release.dashboardVersion)>=0&&supported())}
