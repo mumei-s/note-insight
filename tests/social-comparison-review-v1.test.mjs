@@ -31,7 +31,7 @@ function reader(t,myself=true,legacy=false){
   if(u.pathname==='/api/v2/creators/tester')return new Response(JSON.stringify({data:{isMyself:myself,urlname:'tester',key:'fixture-key',followingCount:45,followerCount:0}}));
   const page=Number(u.searchParams.get('page'));calls.push(page);return new Response(JSON.stringify({data:{follows:Array.from({length:Math.min(20,45-(page-1)*20)},(_,i)=>({key:'p'+((page-1)*20+i+1),urlname:'p'+((page-1)*20+i+1),is_following:true,is_followed:false}))}}));
  };
- const api={getValue:async(k,d)=>values.has(k)?values.get(k):d,setValue:async(k,v)=>values.set(k,v),xmlHttpRequest:o=>{const p=JSON.parse(o.data);writes.push(p);o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedPersonKeys:p.rows.map(r=>r.person_key)})})}};
+ const api={getValue:async(k,d)=>values.has(k)?values.get(k):d,setValue:async(k,v)=>values.set(k,v),xmlHttpRequest:o=>{const p=JSON.parse(o.data);if(p.action==='history_candidates'){o.onload({status:200,responseText:JSON.stringify({ok:true,rows:[],nextCursor:null,remaining:0})});return}writes.push(p);o.onload({status:200,responseText:JSON.stringify({ok:true,confirmedPersonKeys:p.rows.map(r=>r.person_key)})})}};
  if(legacy){w.GM_getValue=api.getValue;w.GM_setValue=api.setValue;w.GM_xmlhttpRequest=api.xmlHttpRequest}else w.GM=api;
  w.eval(readFileSync('public/note-insight-social-compare-v1.js','utf8'));return{run:w.__mumeiSocialComparisonV1.run,calls,writes,values};
 }
@@ -47,4 +47,17 @@ test('人数だけの減少に候補者を勝手に割り当てず、現在確�
  const people=['outside','present','absent','future'].map(key=>({person_key:key,first_seen_at:key==='future'?'2026-09-27T01:00:00Z':'2026-09-01T00:00:00Z',last_seen_at:'2026-09-20T00:00:00Z',active:false}));
  const result=c.candidates(people,[{person_key:'present',is_follower:true,checked_at:'2026-09-26T00:00:00Z'},{person_key:'absent',is_follower:false,checked_at:'2026-09-26T00:00:00Z'}],{direction:'followers',detected_at:'2026-09-25T00:00:00Z'});
  assert.deepEqual(Array.from(result,r=>r.person_key),['absent','outside']);assert.equal(result[0].assigned_to_event,false);assert.equal(result[1].current_relation,'unverified');
+});
+
+// Real Postgres execution verifies append-only history, unchanged observations and stale writes.
+test('関係の履歴は再フォロー後も残り、同じ状態と古い結果は増やさない',async()=>{
+ const {PGlite}=await import('@electric-sql/pglite');const db=new PGlite();
+ try{await db.exec('create role anon; create role authenticated; create role service_role;');await db.exec(readFileSync('supabase/migrations/20260922083444_social_mutual_comparison_v1.sql','utf8'));
+ const save=async(member,f,r,at)=>db.query('select public.save_insight_social_comparison($1,$2::jsonb,$3::timestamptz)',[member,JSON.stringify([{person_key:'same-person',actor_url:'https://note.com/same',is_following:f,is_follower:r}]),at]);
+ await save('member-a',true,true,'2026-09-20T00:00:00Z');
+ await db.exec(readFileSync('supabase/migrations/20260927072349_social_comparison_observation_history.sql','utf8'));
+ await save('member-a',false,false,'2026-09-21T00:00:00Z');await save('member-a',false,false,'2026-09-22T00:00:00Z');await save('member-a',true,true,'2026-09-23T00:00:00Z');await save('member-a',false,false,'2026-09-21T12:00:00Z');await save('member-b',false,true,'2026-09-24T00:00:00Z');
+ const rows=(await db.query("select observation_kind,previous_follower,is_follower from public.insight_social_comparison_history where member_id='member-a' order by observed_at")).rows;assert.deepEqual(rows,[{observation_kind:'baseline',previous_follower:null,is_follower:true},{observation_kind:'changed',previous_follower:true,is_follower:false},{observation_kind:'changed',previous_follower:false,is_follower:true}]);
+ const permissions=(await db.query("select has_table_privilege('anon','public.insight_social_comparison_history','SELECT') as anonymous,has_table_privilege('authenticated','public.insight_social_comparison_history','SELECT') as browser")).rows[0];assert.deepEqual(permissions,{anonymous:false,browser:false});
+ }finally{await db.close()}
 });
