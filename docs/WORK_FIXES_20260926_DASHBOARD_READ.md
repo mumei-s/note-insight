@@ -200,3 +200,5 @@ Supabase `insight-dashboard-data` に `client-status` を追加。既存の本�
 追加確認（バッテリー懸念）：電池消費の実測・端末使用量は取得しておらず、原因を断定しない。Coreの常時500ms DOM走査は採用せず、画面変更イベントとMutationObserverで更新。バックグラウンドでは新しい読込・保存を始めず、wrapperのURL監視タイマーも停止。表示復帰時だけcheckpointから継続。読み取り完了後の同値データで再同期しない既存回帰も維持する。
 
 公開前検証：構文チェック、git diff --check、310件（4+79+227）の全回帰、npm run build が成功。ビルドの既存chunkサイズ警告のみ。最終追加の通知同一URL／別URL遷移・背景休止／復帰を含む。
+
+公開確認（1.5.8）：PR #18 をsquash、機能main `7dab65e54c1732f1b4bdb26d937bccdcdd14fadd`。Actions `36288636188` の310件回帰・build・Pages deploy成功。公開manifest、設定HTML/JS、wrapper/core、raw GitHubのwrapper/core（実際の@require `?v=158`）、indexから参照される `/note-insight/assets/index-B8-qi4Cf.js` のHTTP200・ローカル配信予定内容との完全一致を確認。本体2026.09.27.4 / Dashboard1.5.8。利用端末の旧userscriptは更新・開き直しが必要。本人・参加者の1.5.8日別実保存と電池消費改善は実測未確認を維持。
