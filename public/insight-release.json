@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.15",
-  "notificationVersion": "3.6.11",
+  "appVersion": "2026.09.27.16",
+  "notificationVersion": "3.6.12",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T16:39:33+09:00",
+  "releasedAt": "2026-09-27T16:58:22+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知3.6.11・DM1.4.9にフォロー照合1.0.3を同梱。途中再開・過去の保存人物の確認・関係変化履歴。通知とDM本体の取得処理は従来通り。",
+  "note": "通知フィルターの再入場・後着通知への再適用を修正。通知一行全体を判定し、ON/OFFと参加者ごとの設定を維持。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
