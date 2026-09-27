@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.1",
+  "appVersion": "2026.09.27.2",
   "notificationVersion": "3.6.10",
-  "dashboardVersion": "1.5.5",
-  "releasedAt": "2026-09-27T09:11:44+09:00",
+  "dashboardVersion": "1.5.6",
+  "releasedAt": "2026-09-27T10:16:05+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "ダッシュボード：エラー後の自動巡回再開と二重起動を防止。起動部と読込本体の版を照合。分析パネルの更新確認入口・更新案内を維持。",
+  "note": "Dashboard：再描画されるパネルの再巡回を停止。途中の取得結果を同じタブに保持し、失敗した箇所から再開。保存失敗は保存だけ、照合失敗は照合だけを再試行。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }

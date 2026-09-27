@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
+import {webcrypto} from 'node:crypto';
 
 const core=readFileSync('public/note-insight-dashboard-sync-core-v1.1.0.js','utf8');
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
@@ -9,6 +10,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),before,after,watchHref=false,url='https://note.com/sitesettings/stats'}={}){
   const dom=new JSDOM(`<main><h1>アクセス状況</h1>${markup}</main>`,{url,runScripts:'outside-only'}),w=dom.window,saves=[],nav=[];
   t.after(()=>w.close());
+  Object.defineProperty(w.crypto,'subtle',{value:webcrypto.subtle});w.TextEncoder=TextEncoder;
   Object.defineProperty(w.document.body,'innerText',{get(){return this.textContent}});
   w.performance.getEntriesByType=()=>[];
   const timer=w.setTimeout.bind(w),interval=w.setInterval.bind(w);w.setTimeout=(fn,ms,...args)=>timer(fn,ms<5000?Math.min(ms,15):ms,...args);w.setInterval=watchHref?(fn,ms,...args)=>interval(fn,Math.min(ms,20),...args):()=>1;
@@ -269,4 +271,67 @@ test('補助表示やAPI応答時刻が更新され続けても同じ公式数�
   for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));if(!poll)poll=setInterval(()=>{w.document.getElementById('clock').textContent='補助表示 '+(++clock);void w.fetch('/api/v1/stats/daily')},12)};
  }});
  await saved(h);clearInterval(poll);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves[0].metricSeries[0].pageViews,12);await pause(350);assert.equal(h.saves.length,1);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
+});
+
+
+test('再描画で作り直される排他パネルを二度開かず、両方の記事を保存する',async t=>{
+ const clicks=[];
+ const h=page(t,'<p>ページビュー 12</p><section id="panels"></section>',{before:w=>{
+  function render(active=''){
+   w.document.getElementById('panels').innerHTML=['a','b'].map(id=>`<section><h2>記事アクセス ${id}</h2><button id="${id}" aria-expanded="${active===id}">開く</button>${active===id?`<table><thead><tr><th>記事</th><th>PV</th></tr></thead><tbody><tr><td>${id}</td><td>6</td></tr></tbody></table>`:''}</section>`).join('');
+   for(const el of w.document.querySelectorAll('#panels button'))el.onclick=()=>{clicks.push(el.id);render(el.id)};
+  }render();
+ }});
+ await saved(h);assert.deepEqual(clicks,['a','b']);assert.deepEqual(h.saves[0].articles.map(r=>r.title),['a','b']);
+});
+
+test('数値を表示する進捗グラフや並べ替えボタンを通信待ち・開く対象にしない',async t=>{
+ const h=page(t,'<p>ページビュー 12</p><div role="progressbar" aria-valuenow="70" aria-valuemax="100"></div><button aria-expanded="false" id="sort">記事数順</button><button aria-expanded="false" id="period-select">過去28日間</button>',{before:w=>{for(const id of ['sort','period-select'])w.document.getElementById(id).onclick=()=>assert.fail('表示条件を変更しない')}});
+ await saved(h);assert.equal(h.saves[0].totals.pageViews,12);
+});
+
+test('途中のパネル失敗から再開しても取得済みの記事タブへ戻らない',async t=>{
+ const clicks=[];let allow=false;
+ const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button><section id="items"></section>',{before:w=>{
+  const render=label=>{w.document.getElementById('items').innerHTML=`<table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${label}</td><td>6</td></tr></tbody></table>`+(label==='メンバーシップ'?'<button id="broken" aria-expanded="false">日別アクセスグラフ</button>':'');const broken=w.document.getElementById('broken');if(broken)broken.onclick=()=>{clicks.push('グラフ');if(allow){broken.setAttribute('aria-expanded','true');w.document.getElementById('items').insertAdjacentHTML('beforeend','<script type="application/json">{"page_views":{"2026-09-27":12}}</script>')}}};render('記事');
+  for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));render(tab.textContent)};
+ }});
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('PANEL_NOT_OPEN');i++)await pause(20);
+ assert.match(h.w.document.querySelector('.status').textContent,/取得済み 記事2件/);assert.equal(h.saves.length,0);assert.equal(h.w.document.getElementById('mumei-dash-read').textContent,'続きから読込');
+ allow=true;h.w.document.getElementById('mumei-dash-read').click();await saved(h);
+ assert.deepEqual(clicks,['メンバーシップ','グラフ','グラフ']);assert.deepEqual(h.saves[0].articles.map(r=>r.title),['記事','メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
+});
+
+for(const failure of ['ingest','confirmation'])test('保存の失敗はタブを再巡回せず必要な通信だけ再試行する: '+failure,async t=>{
+ const clicks=[];let fail=true,ingests=0;
+ const h=page(t,'<p>ページビュー 12</p><script type="application/json">{"page_views":{"2026-09-27":12}}</script><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>',{before:w=>{
+  for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab))};
+  const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='ingest')ingests++;if(fail&&(failure==='ingest'?b.action==='ingest':Boolean(b.snapshotId))){queueMicrotask(()=>o.onerror());return}send(o)};
+ }});
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('NETWORK_ERROR');i++)await pause(20);
+ assert.equal(ingests,1);assert.match(h.w.document.querySelector('.status').textContent,/取得済み/);assert.match(h.w.document.getElementById('mumei-dash-read').textContent,/保存.*再試行/);
+ fail=false;h.w.document.getElementById('mumei-dash-read').click();
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('同期完了');i++)await pause(20);
+ assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(ingests,failure==='ingest'?2:1);
+});
+
+test('ページを開き直した後も保存待ちデータを復元し、別参加者には再利用しない',async t=>{
+ const checkpointKey='mumei-dashboard-read-checkpoint-v1';
+ const first=page(t,'<p>2026/9/1〜2026/9/27</p><p>ページビュー 12</p><table><thead><tr><th>記事</th><th>PV</th></tr></thead><tbody><tr><td>保持する記事</td><td>12</td></tr></tbody></table>',{before:w=>{const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>JSON.parse(o.data).action==='ingest'?queueMicrotask(()=>o.onerror()):send(o)}});
+ for(let i=0;i<100&&!first.w.document.querySelector('.status')?.textContent.includes('NETWORK_ERROR');i++)await pause(20);
+ const cached=first.w.sessionStorage.getItem(checkpointKey);assert.ok(cached);assert.ok(!cached.includes('fixture'),'接続トークンを複製しない');
+ const restored=page(t,'<p>ページビュー 12</p><button role="tab">メンバーシップ</button>',{before:w=>{w.sessionStorage.setItem(checkpointKey,cached);w.document.querySelector('button').onclick=()=>assert.fail('保存再試行にタブ切替は不要');setTimeout(()=>w.document.querySelector('main').insertAdjacentHTML('afterbegin','<p>2026/9/1〜2026/9/27</p>'),70)}});
+ await saved(restored);assert.deepEqual(restored.saves[0].articles.map(r=>r.title),['保持する記事']);
+ const another=page(t,'<p>ページビュー 5</p>',{identity:()=>'participant_b',before:w=>w.sessionStorage.setItem(checkpointKey,cached)});
+ await saved(another);assert.equal(another.saves[0].noteId,'participant_b');assert.equal(another.saves[0].articles.length,0);assert.equal(another.saves[0].totals.pageViews,5);
+});
+
+
+test('開けないパネルが別のDOMに置き換わっても完了扱いにしない',async t=>{
+ let clicks=0;
+ const h=page(t,'<p>ページビュー 12</p><section id="container"></section>',{before:w=>{
+  const render=()=>{w.document.getElementById('container').innerHTML='<button id="closed" aria-expanded="false">日別アクセスグラフ</button>';w.document.getElementById('closed').onclick=()=>{clicks++;render()}};render();
+ }});
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('PANEL_NOT_OPEN');i++)await pause(20);
+ assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/PANEL_NOT_OPEN/);
 });
