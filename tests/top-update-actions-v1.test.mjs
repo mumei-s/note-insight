@@ -19,7 +19,7 @@ async function page(t,{release,fetcher,storage={},enhance=false}={}){
  const fetch=async(url,init={})=>{calls.push({url,body:JSON.parse(init.body||'{}')});if(fetcher)return fetcher(url,init);return Response.json({ok:true,member:{noteId:'tester'},scannedArticles:3,catalog:{stored:5}})};
  const ctx=vm.createContext({window:w,document:w.document,history:w.history,location:w.location,localStorage:w.localStorage,sessionStorage:w.sessionStorage,navigator:w.navigator,URL,URLSearchParams,AbortController,Event:w.Event,requestAnimationFrame:fn=>fn(),clearTimeout:w.clearTimeout.bind(w),fetch,console});
  const stub=()=>React.createElement('div');
- const deps={react:React,'react/jsx-runtime':jsx,'./insight-account-store':{INSIGHT_TOKEN_KEY:'token'},'./insight-release':{CURRENT_INSIGHT_APP_VERSION:'1',NOTIFICATION_VERSION_STORAGE_KEY:'notice-version',DASHBOARD_VERSION_STORAGE_KEY:'dash-version',versionDiffers:(a,b)=>Number(a)<Number(b),fetchInsightRelease:release||(async()=>({appVersion:'2',notificationVersion:'1',dashboardVersion:'1'}))}};
+ const deps={react:React,'react/jsx-runtime':jsx,'./insight-account-store':{INSIGHT_TOKEN_KEY:'token'},'./insight-release':{CURRENT_DASHBOARD_VERSION:'1',CURRENT_NOTIFICATION_VERSION:'1',CURRENT_INSIGHT_APP_VERSION:'1',NOTIFICATION_VERSION_STORAGE_KEY:'notice-version',DASHBOARD_VERSION_STORAGE_KEY:'dash-version',versionDiffers:(a,b)=>Number(a)<Number(b),fetchInsightRelease:release||(async()=>({appVersion:'2',notificationVersion:'1',dashboardVersion:'1'}))}};
  for(const [file,name]of [['unified-v4','UnifiedV4'],['social-v2','SocialV2'],['notifications-final','NotificationsFinal'],['analysis-hub','AnalysisHub'],['comments-final','CommentsFinal'],['favorites-final','FavoritesFinal'],['completeness','Completeness']])deps['./member-insight-'+file]={['MemberInsight'+name]:stub};
  const code=ts.transpileModule(readFileSync('src/member-insight-live-v2.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
  const m=new vm.SourceTextModule(code,{context:ctx,initializeImportMeta:meta=>meta.env={BASE_URL:'/note-insight/'}});
@@ -72,4 +72,14 @@ for(const [state,installed]of [['更新','0'],['未導入','']])test(`分析の$
 test('本人通知だけの更新では分析に更新ランプを付けない',async t=>{
  const {w}=await page(t,{storage:{'dash-version':'1','notice-version':'0'},enhance:true});
  assert.equal(w.document.querySelector('.notice').classList.contains('needs-update'),true);assert.equal(w.document.querySelector('.dashboard').classList.contains('needs-update'),false);assert.equal(w.document.querySelector('.dashboard .miv5-source-main').tagName,'BUTTON');assert.equal(w.document.getElementById('mumei-insight-update-guide-v18'),null);
+});
+
+test('最新版照会に失敗しても既知のダッシュボード更新と確認入口を消さない',async t=>{
+ const {w}=await page(t,{release:async()=>{throw Error('offline')},storage:{'dash-version':'0','notice-version':'1'},enhance:true});
+ const card=w.document.querySelector('.dashboard');assert.equal(card.classList.contains('needs-update'),true);assert.match(card.textContent,/更新あり/);assert.match(card.textContent,/更新確認に失敗/);assert.ok(card.querySelector('a.miv5-dashboard-settings[href*="dashboard-setup.html"]'));
+});
+
+test('最新版でも分析パネルの更新確認入口を残し、表示中の版数を消さない',async t=>{
+ const {w}=await page(t,{storage:{'dash-version':'1','notice-version':'1'},enhance:true});
+ const card=w.document.querySelector('.dashboard');assert.ok(card.querySelector('a.miv5-dashboard-settings[href*="dashboard-setup.html"]'));assert.match(card.querySelector('small').textContent,/v1/);
 });
