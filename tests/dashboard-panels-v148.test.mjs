@@ -122,7 +122,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
  const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
-  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.8',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
+  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.9',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
   w.GM=gm; // note has already stripped all query parameters before userscript startup.
   w.GM_xmlhttpRequest=opts=>{const body=JSON.parse(opts.data);requests.push(body);let result;
    if(body.action==='pair-exchange'){assert.equal(body.code,'12345678');result={ok:true,noteId:'tester',ingestToken:'ingest-fixture'}}
@@ -363,7 +363,7 @@ test('期間変更で停止したエラーは新期間の通信や起動通知�
  assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.equal(h.diagnostics.length,1);assert.equal(h.diagnostics[0].code,'VIEW_CHANGED');assert.equal(h.diagnostics[0].periodChanged,true);
  assert.ok(!JSON.stringify(h.diagnostics).includes('fixture'));
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);const area=details.querySelector('textarea'),frozen=area.value;
- assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.5\.8/);
+ assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.5\.9/);
  h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'追加の状態'}}));await pause(20);assert.equal(area.value,frozen,'開いている履歴は読みながら書き換えない');
  let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>copied=value}});h.w.document.getElementById('mumei-dash-copy').click();await pause(10);assert.equal(copied,frozen);
 });
@@ -380,7 +380,7 @@ test('停止操作後に通信が終わっても保存やパネル巡回を続�
 
 test('ページを再表示しても最後のエラーと履歴を残し、自動再開しない',async t=>{
  const message='公式データの待機が15秒を超えました [READ_WAIT]';
- const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.8',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
+ const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.9',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
  await pause(150);assert.equal(h.saves.length,0);assert.equal(h.w.document.querySelector('.status').textContent,message);
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);assert.match(details.querySelector('textarea').value,/10:00:00.*READ_WAIT/);
  h.w.document.getElementById('mumei-dash-read').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
@@ -448,4 +448,16 @@ test('バックグラウンドでは新しい読込・保存を止め、表示�
  finish({page_views:{'2026-09-20':8}});await pause(120);assert.equal(h.saves.length,0);assert.equal(identityCalls,before);
  h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(100);assert.equal(identityCalls,before);
  visibility='visible';h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await saved(h);assert.equal(h.saves[0].metricSeries[0].pageViews,8);
+});
+
+test('365日の週月グラフを日別未取得の原因として示し、合計の保存は区別する',async t=>{
+ const h=page(t,'<p>2025/9/28〜2026/9/27</p><p>ページビュー 120236</p>');await saved(h);
+ assert.match(h.w.document.querySelector('.status').textContent,/32日以上.*週・月単位.*記事別は保存済み/);
+ assert.match(h.w.document.getElementById('mumei-dash-brief').textContent,/グラフは週・月単位/);
+ assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/同期完了/);assert.equal(h.saves[0].metricSeries.length,0);
+});
+test('コンパクト表示でも期間変更による停止理由が読める',async t=>{
+ const h=page(t,'<p>ページビュー 8</p>');await saved(h);
+ const show=message=>h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message,kind:'warn'}}));
+ show('表示期間または画面が変わりました [VIEW_CHANGED]');assert.equal(h.w.document.getElementById('mumei-dash-brief').textContent,'期間・画面変更で停止');
 });
