@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {createHash,webcrypto} from 'node:crypto';
 const hash=v=>createHash('sha256').update(v).digest('hex');
 async function backend(){
- let handle;
+ let handle;const logs=[];
  const tables={
   insight_notification_ingest_tokens:[{member_id:'owner',purpose:'note_dashboard_sync',token_hash:hash('fixture'),revoked_at:null,expires_at:'2099-01-01'}],
   insight_dashboard_snapshots:[{id:'7',member_id:'owner',confirmed:true,captured_at:'2026-09-26',metric_series:[{date:'2026-09-25',pageViews:12,likes:0}],total_page_views:12,total_likes:0},{id:'8',member_id:'another',confirmed:true},{id:'9',member_id:'owner',confirmed:false}],
@@ -16,10 +16,10 @@ async function backend(){
   const execute=()=>{const rows=(tables[name]||[]).filter(r=>filters.every(f=>f(r)));return {data:rows,count:counted?rows.length:null,error:null}};
   q.maybeSingle=async()=>{const r=execute();return {...r,data:r.data[0]||null}};q.then=(a,b)=>Promise.resolve(execute()).then(a,b);return q;
  }};
- const ctx=vm.createContext({Request,Response,TextEncoder,crypto:webcrypto,console:{error(){}},Deno:{env:{get:()=>''},serve:fn=>handle=fn}});
+ const ctx=vm.createContext({Request,Response,TextEncoder,crypto:webcrypto,console:{error(){},info:message=>logs.push(message)},Deno:{env:{get:()=>''},serve:fn=>handle=fn}});
  const code=ts.transpileModule(readFileSync('supabase/functions/insight-dashboard-data/index.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
  const mod=new vm.SourceTextModule(code,{context:ctx});await mod.link(()=>new vm.SyntheticModule(['createClient'],function(){this.setExport('createClient',()=>db)},{context:ctx}));await mod.evaluate();
- return {tables,async call(body={},token='fixture'){const r=await handle(new Request('https://example.test',{method:'POST',headers:{'X-Ingest-Token':token},body:JSON.stringify({action:'sync-status',noteId:'ss_yr',...body})}));return {status:r.status,body:await r.json()}}};
+ return {tables,logs,async call(body={},token='fixture'){const r=await handle(new Request('https://example.test',{method:'POST',headers:{'X-Ingest-Token':token},body:JSON.stringify({action:'sync-status',noteId:'ss_yr',...body})}));return {status:r.status,body:await r.json()}}};
 }
 test('保存前の照合は有効な本人用Dashboardトークンだけを認める',async()=>{
  const h=await backend();assert.equal((await h.call()).body.paired,true);
@@ -47,4 +47,13 @@ test('一般参加者も本人通知なしで自分の保存を照合でき、�
   const saved=await h.call({...self,snapshotId:'snapshot-'+id},token);assert.equal(saved.status,200);assert.equal(saved.body.articleCount,1);assert.equal(saved.body.dailyPvDays,1);assert.equal(saved.body.totals.pageViews,5);
   assert.equal((await h.call({...self,snapshotId:'snapshot-'+(id==='a'?'b':'a')},token)).status,409);assert.equal((await h.call({...self,snapshotId:'7'},token)).status,409);
  }
+});
+
+
+test('端末の停止理由は本人認証後だけ記録し、本文や接続情報をログへ転送しない',async()=>{
+ const h=await backend(),body={action:'client-status',connectorVersion:'1.5.7',code:'VIEW_CHANGED',stage:'panel',readArticles:12,readDaily:2,waitingRequests:1,loadingElements:0,elapsedMs:1234,panelsOpened:1,activeTab:'メンバーシップ',periodKnown:false,periodChanged:true,routeChanged:false,token:'secret',message:'private article',html:'<body>private</body>'};
+ assert.equal((await h.call(body,'')).status,401);assert.equal((await h.call({...body,noteId:'another'})).status,409);assert.equal(h.logs.length,0);
+ assert.equal((await h.call(body)).body.recorded,true);assert.equal(h.logs.length,1);const logged=JSON.parse(h.logs[0].replace('DASHBOARD_CLIENT_STATUS ',''));
+ assert.equal(logged.noteId,'ss_yr');assert.equal(logged.code,'VIEW_CHANGED');assert.equal(logged.readArticles,12);assert.equal(logged.periodChanged,true);assert.doesNotMatch(h.logs[0],/secret|private|<body>/);
+ assert.equal(h.tables.insight_dashboard_snapshots.length,3,'診断を読込成功の記録として保存しない');
 });

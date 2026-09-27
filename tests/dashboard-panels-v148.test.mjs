@@ -8,11 +8,12 @@ const core=readFileSync('public/note-insight-dashboard-sync-core-v1.1.0.js','utf
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),before,after,watchHref=false,url='https://note.com/sitesettings/stats'}={}){
-  const dom=new JSDOM(`<main><h1>アクセス状況</h1>${markup}</main>`,{url,runScripts:'outside-only'}),w=dom.window,saves=[],nav=[];
+  const dom=new JSDOM(`<main><h1>アクセス状況</h1>${markup}</main>`,{url,runScripts:'outside-only'}),w=dom.window,saves=[],nav=[],diagnostics=[],warnings=[];
   t.after(()=>w.close());
   Object.defineProperty(w.crypto,'subtle',{value:webcrypto.subtle});w.TextEncoder=TextEncoder;
   Object.defineProperty(w.document.body,'innerText',{get(){return this.textContent}});
   w.performance.getEntriesByType=()=>[];
+  const statusObserver=new w.MutationObserver(()=>{const status=w.document?.querySelector('#mumei-dashboard-sync .status');if(status?.dataset.kind==='warn'&&warnings.at(-1)!==status.textContent)warnings.push(status.textContent)});statusObserver.observe(w.document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['data-kind']});t.after(()=>statusObserver.disconnect());
   const timer=w.setTimeout.bind(w),interval=w.setInterval.bind(w);w.setTimeout=(fn,ms,...args)=>timer(fn,ms<5000?Math.min(ms,15):ms,...args);w.setInterval=watchHref?(fn,ms,...args)=>interval(fn,Math.min(ms,20),...args):()=>1;
   if(paired){w.localStorage.setItem('mumei-dashboard-note-id-v1',identity());w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture')}
   w.fetch=async url=>Response.json(String(url).includes('current_user')?{data:{user:{urlname:identity()}}}:await stats(String(url)));
@@ -20,9 +21,9 @@ function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),be
     if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:identity(),snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,totals:s.totals}:{ok:true,paired:true,noteId:identity()})}));return}
     saves.push(body);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify({ok:true,snapshotId:saves.length,articleCount:body.articles.length,dailyPvDays:body.metricSeries.filter(r=>r.pageViews!=null).length,capturedAt:'2026-09-22T12:00:00Z'})}))};
   w.__location={get href(){return w.location.href},get origin(){return w.location.origin},get pathname(){return w.location.pathname},get search(){return w.location.search},assign:href=>nav.push(href)};
-  before?.(w);w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
+  before?.(w);const request=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='client-status'){diagnostics.push(b);queueMicrotask(()=>o.onload({status:200,responseText:'{"ok":true,"recorded":true}'}));return}request(o)};w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
   after?.(w);
-  return {w,saves,nav};
+  return {w,saves,nav,diagnostics,warnings};
 }
 async function saved(h,count=1){for(let i=0;i<100&&h.saves.length<count;i++)await pause(20);assert.equal(h.saves.length,count,h.w.document.querySelector('.status')?.textContent);await pause(20)}
 
@@ -121,6 +122,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
  const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
+  w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','expired-fixture');w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.7',noteId:'tester',rows:[],sticky:{message:'前回の連携失効',kind:'warn',action:'connect'}}));
   w.GM=gm; // note has already stripped all query parameters before userscript startup.
   w.GM_xmlhttpRequest=opts=>{const body=JSON.parse(opts.data);requests.push(body);let result;
    if(body.action==='pair-exchange'){assert.equal(body.code,'12345678');result={ok:true,noteId:'tester',ingestToken:'ingest-fixture'}}
@@ -334,4 +336,52 @@ test('開けないパネルが別のDOMに置き換わっても完了扱いに�
  }});
  for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('PANEL_NOT_OPEN');i++)await pause(20);
  assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/PANEL_NOT_OPEN/);
+});
+
+
+for(const mode of ['date-remount','hidden-date','metric-tab','content-route'])test('ツール自身の内容切替を期間変更と誤判定しない: '+mode,async t=>{
+ const clicks=[];
+ const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true" id="metric">インプレッション</button><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button><section id="items"></section>',{stats:async()=>({page_views:{'2026-09-26':12}}),before:w=>{
+  const render=label=>w.document.getElementById('items').innerHTML=`<table><thead><tr><th>記事</th><th>PV</th></tr></thead><tbody><tr><td>${label}</td><td>6</td></tr></tbody></table>`;render('記事');
+  for(const tab of [...w.document.querySelectorAll('[role=tab]')].filter(el=>el.id!=='metric'))tab.onclick=()=>{
+   clicks.push(tab.textContent);for(const el of [...w.document.querySelectorAll('[role=tab]')].filter(el=>el.id!=='metric'))el.setAttribute('aria-selected',String(el===tab));render(tab.textContent);
+   if(mode==='date-remount'||mode==='hidden-date'){w.document.getElementById('range').textContent='';if(mode==='date-remount')setTimeout(()=>w.document.getElementById('range').textContent='2026/8/30〜2026/9/26',50)}
+   if(mode==='metric-tab')w.document.getElementById('metric')?.remove();
+   if(mode==='content-route')w.history.pushState(null,'','/sitesettings/stats/membership');
+   void w.fetch('/api/v1/stats/daily');
+  };
+ }});
+ await saved(h);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves[0].periodStart,'2026-08-30');assert.equal(h.saves[0].periodEnd,'2026-09-26');assert.equal(h.saves[0].articles.length,2);assert.equal(h.diagnostics.length,0);assert.deepEqual(h.warnings,[],'自動切替中に停止エラーを一瞬でも出さない');
+});
+
+test('期間変更で停止したエラーは新期間の通信や起動通知で上書き・自動再開しない',async t=>{
+ let clicks=0;
+ const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button id="next" role="tab" aria-selected="false">メンバーシップ</button>',{stats:async()=>({page_views:{'2026-09-25':12}}),before:w=>{w.document.getElementById('next').onclick=()=>{clicks++;w.document.getElementById('range').textContent='2026/8/2〜2026/8/29'}}});
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('VIEW_CHANGED');i++)await pause(20);
+ const status=h.w.document.querySelector('.status'),error=status.textContent;assert.match(error,/VIEW_CHANGED/);
+ await h.w.fetch('/api/v1/stats/daily');h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'もう一度読み込みます'}}));await pause(300);
+ assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.equal(h.diagnostics.length,1);assert.equal(h.diagnostics[0].code,'VIEW_CHANGED');assert.equal(h.diagnostics[0].periodChanged,true);
+ assert.ok(!JSON.stringify(h.diagnostics).includes('fixture'));
+ const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);const area=details.querySelector('textarea'),frozen=area.value;
+ assert.match(frozen,/VIEW_CHANGED/);assert.match(frozen,/v1\.5\.7/);
+ h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'追加の状態'}}));await pause(20);assert.equal(area.value,frozen,'開いている履歴は読みながら書き換えない');
+ let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>copied=value}});h.w.document.getElementById('mumei-dash-copy').click();await pause(10);assert.equal(copied,frozen);
+});
+
+test('停止操作後に通信が終わっても保存やパネル巡回を続けない',async t=>{
+ let release;const clicks=[];
+ const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>',{stats:()=>new Promise(resolve=>release=resolve),before:w=>{for(const el of w.document.querySelectorAll('[role=tab]'))el.onclick=()=>{clicks.push(el.textContent);void w.fetch('/api/v1/stats/daily')}}});
+ for(let i=0;i<100&&!release;i++)await pause(20);assert.ok(release);
+ h.w.document.getElementById('mumei-dash-stop').click();release({page_views:{'2026-09-26':12}});await pause(250);
+ assert.equal(h.saves.length,0);assert.deepEqual(clicks,['メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/停止しました/);assert.equal(h.w.document.querySelector('.status').dataset.kind,'paused');assert.equal(h.w.document.getElementById('mumei-dash-read').disabled,false);
+ h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(150);assert.equal(h.saves.length,0);assert.deepEqual(clicks,['メンバーシップ']);
+});
+
+
+test('ページを再表示しても最後のエラーと履歴を残し、自動再開しない',async t=>{
+ const message='公式データの待機が15秒を超えました [READ_WAIT]';
+ const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:'1.5.7',noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
+ await pause(150);assert.equal(h.saves.length,0);assert.equal(h.w.document.querySelector('.status').textContent,message);
+ const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);assert.match(details.querySelector('textarea').value,/10:00:00.*READ_WAIT/);
+ h.w.document.getElementById('mumei-dash-read').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
 });
