@@ -41,3 +41,12 @@ test('DM画面内に配置した不可視フレームと停止による破棄を
  const pending=w.__test.syncFrame({id:'tester'},'https://note.com/messages/rooms/11111111-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111');
  const frame=w.document.querySelector('iframe');assert.equal(frame.style.left,'0px');assert.equal(frame.style.opacity,'0');assert.equal(frame.style.pointerEvents,'none');w.__test.stop();const r=await pending;assert.equal(r.error,'途中保存');assert.equal(w.document.querySelector('iframe'),null);dom.window.close();
 });
+
+test('保存待ちと失敗理由を隠さず、再試行ボタンを押して続行できる',async()=>{
+ const dom=new JSDOM('<main id="panel">通知</main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;let scans=0;
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.fetch=async()=>({ok:true,json:async()=>({data:{urlname:'tester'}})});w.GM={getValue:async(k,d)=>d};
+ w.__mumeiNotificationReaderV4={findPanel:()=>w.document.querySelector('main'),scan:async()=>{scans++}};w.eval(source);w.__mumeiNotificationControlsV1.mount();await wait();
+ const emit=detail=>w.dispatchEvent(new w.CustomEvent('mumei-notification-reader-status',{detail})),bar=w.document.getElementById('mumei-inline-notification-controls-v1'),line=bar.querySelector('.read-status'),button=bar.querySelector('[data-action=read]');
+ emit({state:'saving',scanning:true,phase:'saving',readCount:69,savedCount:0,totalCount:69});assert.match(line.textContent,/保存先を確認中.*0 \/ 69件/);
+ emit({state:'error',scanning:false,message:'保存先の応答がありません｜30秒後に再試行',readCount:69,savedCount:0,totalCount:69});assert.equal(button.textContent,'再試行');assert.match(line.textContent,/保存先の応答がありません/);assert.equal(w.getComputedStyle(line).whiteSpace,'normal');button.click();await wait();assert.equal(scans,1);w.close();
+});
