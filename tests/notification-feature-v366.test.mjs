@@ -37,3 +37,15 @@ for(const mode of ['modern','legacy','focus'])test(`別タブでOFFにすると�
  const revisited=create('https://note.com/',markup);revisited.__mumeiNotificationReaderV4={findPanel:()=>revisited.document.querySelector('#native')};revisited.eval(read('controls-v1.js'));await revisited.__mumeiNotificationFeatureV1.ready;revisited.__mumeiNotificationControlsV1.mount();assert.equal(revisited.document.getElementById('mumei-inline-notification-controls-v1'),null);
  toggle().click();await until(()=>toggle().textContent==='note公式🔔パネル ON');if(mode==='focus')note.dispatchEvent(new note.Event('focus'));await until(()=>bar()&&starts>before);
 });
+
+for(const retryable of [true,false])test(`保存エラー後は読込中を解除し、自動再試行を間引く（再試行可能=${retryable}）`,async t=>{
+ const dom=new JSDOM('<main class="m-navbarNotice"><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};
+ let calls=0,now=Date.now(),states=[];w.Date.now=()=>now;
+ w.__mumeiNotificationNetwork3300={syncCurrent:async()=>{calls++;throw Object.assign(new Error('保存先の応答がありません'),{retryable,progress:{readCount:69,savedCount:0,totalCount:69}})},stop(){}};
+ w.addEventListener('mumei-notification-reader-status',e=>states.push(e.detail));w.eval(read('reader-v4.js'));
+ await until(()=>states.at(-1)?.state==='error');assert.equal(states.at(-1).scanning,false);assert.equal(states.at(-1).readCount,69);assert.equal(calls,1);
+ now+=10000;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30);assert.equal(calls,1,'5秒ごとに再開して表示を消さない');
+ now+=21000;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30);assert.equal(calls,retryable?2:1);
+ await w.__mumeiNotificationReaderV4.scan();assert.equal(calls,retryable?3:2,'手動は待ち時間を置かず再開');
+});
