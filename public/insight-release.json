@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.11",
+  "appVersion": "2026.09.27.12",
   "notificationVersion": "3.6.10",
   "dashboardVersion": "1.6.1",
-  "releasedAt": "2026-09-27T15:41:59+09:00",
+  "releasedAt": "2026-09-27T16:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "分析画面の白い背景とカードを、眩しさを抑えた青灰色に変更。グラフ・文字・選択ボタンの配色を揃え、数値と配置は維持。",
+  "note": "通知の再分類で未処理と未解決を分け、本文不足を明示。保存済み通信記録から一意に照合できる旧通知を復元し、購読先の記事投稿の誤分類を修正。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }
