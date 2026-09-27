@@ -266,3 +266,6 @@ Backendはinsight-dashboard-dataの配備v13（ソースFUNCTION_VERSION12）、
 - フォロワーは古いrelation_sync_runsを現在数として表示しない。独立した本人認証APIから公開プロフィールを取得し、確認時刻付きで表示。5分キャッシュ、タイムアウト5秒、失敗時は保存値＋更新待ち。日別保存はRLS有効・service_roleのみ。
 - 9/27の全期間保存には記事271件（published269/draft2）とメンシプ30行。公開プロフィールの記事269件と一致。メンシプ行を記事指標の母数から除外。分析APIの記事読取を1000件単位のページングへ変更。
 - 保存日別は8/31〜9/27の28日分をDBで確認。全期間合計や月別値を日別に推測分配しない。最高最低は保存履歴内の記録で、note利用開始以来の全日取得とは称さない。
+- 2026.09.27.9: PR #24 / main 745d430。Actions 36296821964成功、Pages bundle `index-7MkBa7P2.js` / CSS `index-KtgZ-Iy5.css` とmanifestの完全一致確認。Dashboard関数はdeploy v14 / FUNCTION_VERSION13。本人認証なしfollower-countは401。Supabase本番ソース一致確認。新テーブルはRLS有効、anon/authenticatedアクセスなし（service_role専用のためRLS policyなしは意図的）。
+- 2026.09.27.10: 分析のみの明るい配色、構成比の横棒、記事カード（PV/スキ/コメント/売上・指標別並べ替え・全件続き表示）、日付前後操作を実装。記事順位の計算を二分探索へ変更し、全記事再走査の計算負荷を削減。320/344/390pxの横はみ出し・実行エラー・数値切れなし、実画像確認。全回帰330件成功（4+79+247）、本体ビルド成功。実機タップ操作は未確認。
+- migrationファイル名は本番schema_migrationsが発行したversionに一致させた。SQL内容は変更なし。
