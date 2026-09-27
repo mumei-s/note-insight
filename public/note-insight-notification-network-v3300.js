@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.6';
+const VERSION='3.6.15';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -51,8 +51,41 @@ async function writeDurable(k,value){
  try{localStorage.setItem(k,JSON.stringify(record));return}catch{}
  throw new Error(STORAGE_ERROR);
 }
-function request(url,body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
-async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+const pendingRequests=new Set();
+function transportError(message,code='NETWORK_ERROR',retryable=true){return Object.assign(new Error(message),{code,retryable})}
+// Extension callbacks (including ontimeout) are not guaranteed to fire on mobile.
+// Own the deadline, consume both Promise and callback APIs, and ignore late replies.
+function networkWait(start,ms,message){return new Promise((resolve,reject)=>{
+ let settled=false,abort=()=>{};
+ const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);pendingRequests.delete(cancel);error?reject(error):resolve(value)};
+ const cancel=(error=transportError('読込を停止しました','READ_STOPPED',false))=>{if(settled)return;finish(error);try{abort()}catch{}};
+ const timer=setTimeout(()=>cancel(transportError(message,'NETWORK_TIMEOUT')),ms);
+ pendingRequests.add(cancel);
+ if(stopRequested){cancel();return}
+ try{abort=start(value=>finish(null,value),error=>finish(error))||abort}catch(error){finish(error)}
+})}
+function request(url,body,token){return networkWait((resolve,reject)=>{
+ const owner=modern()&&typeof GM.xmlHttpRequest==='function'?GM:null;
+ const fn=owner?owner.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;
+ if(!fn){reject(transportError('拡張機能の通信権限を確認してください','USERSCRIPT_REQUEST_UNAVAILABLE',false));return}
+ const onload=r=>{let p;try{p=JSON.parse(r.responseText||'{}')}catch{reject(transportError('保存先の応答を確認できません','INVALID_RESPONSE'));return}
+  if(r.status>=200&&r.status<300&&p?.ok!==false){resolve(p);return}
+  const auth=r.status===401||r.status===403;
+  reject(transportError(auth?'本人通知の連携を確認してください':`通知を保存できませんでした（HTTP ${r.status}）`,auth?'PAIR_REQUIRED':'SAVE_HTTP_ERROR',r.status===0||r.status===429||r.status>=500));
+ };
+ const handle=fn.call(owner,{method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload,onerror:()=>reject(transportError('保存先に接続できません')),ontimeout:()=>reject(transportError('保存先の応答がありません','NETWORK_TIMEOUT')),onabort:()=>reject(transportError('保存通信が中断されました'))});
+ if(handle&&typeof handle.then==='function')Promise.resolve(handle).then(onload,()=>reject(transportError('保存先に接続できません'))).catch(reject);
+ return()=>handle?.abort?.();
+},45000,'保存先の応答がありません')}
+function fetchContent(url,init,format,message,original=fetch){return networkWait((resolve,reject)=>{
+ const controller=new AbortController();
+ Promise.resolve().then(()=>original(url,{...init,signal:controller.signal})).then(async res=>{
+  if(!res.ok)throw transportError(`noteの通信に失敗しました（HTTP ${res.status}）`,'NOTE_HTTP_ERROR',res.status===429||res.status>=500);
+  return{res,body:await res[format]()};
+ }).then(resolve,error=>reject(error?.code?error:transportError(message)));
+ return()=>controller.abort();
+},15000,message)}
+async function account(){const {body:j}=await fetchContent('/api/v2/current_user',{credentials:'include',cache:'no-store'},'json','noteの本人確認が時間切れになりました');const u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}
 function status(message,kind='info',extra={}){
  const detail={message:String(message||''),kind,label:kind==='done'?'✓通信保存':kind==='error'?'通信再試行':'通信読込',state:kind==='done'?'done':kind==='error'?'error':kind==='saving'?'saving':'info',scanning:kind==='saving',network:true,version:VERSION,...extra};
  document.dispatchEvent(new CustomEvent('mumei-v3-reader-status',{detail}));
@@ -348,9 +381,7 @@ async function replay(cap){
  const original=window.__mumeiNetworkOriginalFetch3300||pageWindow().fetch.bind(pageWindow());
  const init={...(cap.requestInit||{}),method:cap.method||'GET',credentials:cap.requestInit?.credentials||'include',cache:'no-store'};
  if(cap.body!=null&&init.method!=='GET'&&init.method!=='HEAD')init.body=cap.body;
- const res=await original(cap.url,init);
- if(!res.ok)throw new Error('HTTP_'+res.status);
- const txt=await res.text();
+ const {res,body:txt}=await fetchContent(cap.url,init,'text','通知の取得が時間切れになりました',original);
  let json;try{json=JSON.parse(txt)}catch{throw new Error('通知履歴APIの応答をJSONとして読めませんでした')}
  return{...cap,status:res.status,contentType:String(res.headers.get('content-type')||''),json,at:Date.now()}
 }
@@ -368,8 +399,8 @@ async function directNoticeCapture(){
  // an empty/error response even while the visible bell contains new notices.
  const u=new URL('/api/v3/notices',location.origin);u.searchParams.set('page','1');u.searchParams.set('per',String(Number(lastCapture&&new URL(lastCapture.url).searchParams.get('per'))||12));u.searchParams.set('body_ast','1');
  const init={method:'GET',credentials:'include',cache:'no-store',headers:{'Accept':'application/json'}};
- const res=await original(u.href,init);if(!res.ok)throw new Error('NOTICE_API_HTTP_'+res.status);
- const json=await res.json();if(!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
+ const {res,body:json}=await fetchContent(u.href,init,'json','通知の取得が時間切れになりました',original);
+ if(!Array.isArray(json?.data))throw new Error('NOTICE_API_UNEXPECTED');
  if(!json.data.length&&(window.__mumeiNotificationReaderV4?.visibleRows?.().length||(lastCapture?.rows?.length&&Date.now()-lastCapture.at<15000)))throw new Error('通知画面とAPIの件数が一致しません。再試行してください');
  const cap={url:u.href,method:'GET',body:null,transport:'direct',status:res.status,contentType:String(res.headers.get('content-type')||''),json,requestInit:init,at:Date.now()};
  cap.rows=extractDirectNotices(json,u.href);lastCapture=cap;return cap
@@ -416,7 +447,7 @@ async function syncHistory(opts={}){
  }
  const publish=async(complete=false)=>{
   const cp=await get(key(CHECK,a.id),{});
-  const extra={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,checkedCount:Number(journal.checked||0),boundaryAt:cp.boundaryAt||0,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
+  const extra={phase:journal.phase==='save'?'saving':'collecting',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,checkedCount:Number(journal.checked||0),boundaryAt:cp.boundaryAt||0,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:complete,lastRunMode:complete?(journal.frontier?'delta':'window'):'partial',lastRunReadCount:journal.read,lastRunSavedCount:journal.saved,lastRunTotalCount:journal.total,lastError:'',direction:'bottom-up',historyComplete:complete});
   status(`${complete?(journal.saved?'✓ 保存確認':'新着なし'):stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
  };
@@ -455,6 +486,7 @@ async function syncHistory(opts={}){
    status(`取得 ${journal.rows.length}件｜古い通知から保存準備`,'saving',{readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up'});
   }
   while(journal.phase==='save'&&journal.rows.length&&!stopRequested){
+   status(`保存先の確認待ち｜保存確認 ${journal.saved} / ${journal.total}件`,'saving',{phase:'saving',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total});
    const current=await account();if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
    const part=journal.rows.slice(0,20);
    // Journal already contains the entire unsaved window before transmission.
@@ -478,11 +510,16 @@ async function syncHistory(opts={}){
   return{handled:true,saved:journal.saved,received:journal.read,totalCount:journal.total,partial:!complete,historyComplete:complete,delta:complete&&Boolean(journal.frontier),full:complete&&!journal.frontier,direction:'bottom-up'};
  }catch(e){
   await writeJournal(a.id,journal);
+  if(e?.code==='READ_STOPPED'){
+   await publish(false);
+   return{handled:true,saved:journal.saved,received:journal.read,totalCount:journal.total,partial:true,historyComplete:false};
+  }
+  e.progress={readCount:journal.read,savedCount:journal.saved,totalCount:journal.total};
   await writeUnifiedStatus(a.id,{lastError:String(e?.message||e),lastRunComplete:false,lastRunMode:'error',lastRunAt:Date.now(),lastRunReadCount:journal.read,lastRunSavedCount:journal.saved});
   throw e;
  }
 }
-function stop(){stopRequested=true;return true}
+function stop(){stopRequested=true;const waiting=[...pendingRequests];Promise.resolve().then(()=>{for(const cancel of waiting)cancel()});return true}
 function syncCurrent(opts={}){
  if(activeSync)return activeSync;
  activeSync=syncHistory(opts).finally(()=>{activeSync=null});return activeSync;
