@@ -4,11 +4,14 @@ import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-accoun
 import { CURRENT_DASHBOARD_VERSION, CURRENT_INSIGHT_APP_VERSION, CURRENT_NOTIFICATION_VERSION } from "./insight-release";
 import "./member-insight-analytics-pro-v3.css";
 import { loadNotificationSummary } from "./member-insight-analysis-summary-client";
-import { InsightDonut } from "./insight-donut";
+import { InsightDonut } from "./member-insight-analysis-donut";
 import { GrowthAnalysis } from "./member-insight-analysis-growth";
 
 const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
 const CACHE_PREFIX="mumei-insight-pro-cache-v3:";
+type Period="week"|"month"|"all";
+const PERIODS:Record<Period,string>={week:"7日",month:"28日",all:"全期間"};
+function preferredPeriod():Period{try{const q=new URL(location.href).searchParams.get("insightPeriod")||localStorage.getItem("mumei-analysis-period:"+currentStoredInsightAccount()?.noteId);return q==="all"||q==="week"?q:"month"}catch{return"month"}}
 const CACHE_MAX_AGE=7*24*60*60*1000;
 type Row=Record<string,any>;
 type Article=Row&{pageViews:number;impressions:number;likes:number;comments:number;salesYen:number;conversion:number|null;reactionsPer1k:number|null;revenuePer1k:number|null;score:number};
@@ -34,12 +37,12 @@ async function notificationSample(onPartial:(data:any)=>void){
  const result={rows:[],dailyCounts:summary.dailyCounts||[],total:summary.total,truncated:false};
  onPartial(result);return result;
 }
-function cacheKey(){const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();return id?CACHE_PREFIX+id:""}
-function readCache(){const key=cacheKey();if(!key)return null;try{const raw=localStorage.getItem(key);if(!raw)return null;const x=JSON.parse(raw);if(!x?.data||!Number.isFinite(Number(x?.cachedAt)))return null;if(Date.now()-Number(x.cachedAt)>CACHE_MAX_AGE)return null;return x}catch{return null}}
+function cacheKey(period:Period="month"){const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();return id?CACHE_PREFIX+id+(period==="month"?"":":"+period):""}
+function readCache(period:Period="month"){const key=cacheKey(period);if(!key)return null;try{const raw=localStorage.getItem(key);if(!raw)return null;const x=JSON.parse(raw);if(!x?.data||!Number.isFinite(Number(x?.cachedAt)))return null;const latest=x.data.latestDashboard,span=latest?.periodStart&&latest?.periodEnd?Math.round((Date.parse(latest.periodEnd)-Date.parse(latest.periodStart))/86400000)+1:0,actual=x.data.selectedPeriod||(latest?.periodType==="all"?"all":span===7?"week":span===28?"month":null);if(actual&&actual!==period)return null;if(Date.now()-Number(x.cachedAt)>CACHE_MAX_AGE)return null;return x}catch{return null}}
 function cachePayload(data:any){const notices=data?.notifications||{};return{...data,notifications:{...notices,rows:(notices.rows||[]).slice(0,1000).map((r:Row)=>({occurred_at:r.occurred_at||null,captured_at:r.captured_at||null}))}}}
-function writeCache(data:any){const key=cacheKey();if(!key)return;try{localStorage.setItem(key,JSON.stringify({cachedAt:Date.now(),data:cachePayload(data)}))}catch{}}
+function writeCache(data:any,period:Period="month"){const key=cacheKey(period);if(!key)return;try{localStorage.setItem(key,JSON.stringify({cachedAt:Date.now(),data:cachePayload(data)}))}catch{}}
 
-function dashboardHref(noteId:string){const role=String(noteId||"").toLowerCase()==="ss_yr"?"owner":"member",u=new URL(`${import.meta.env.BASE_URL}dashboard-setup.html`,window.location.origin);u.searchParams.set("role",role);u.searchParams.set("auto","1");if(noteId)u.searchParams.set("account",noteId.toLowerCase());u.searchParams.set("return",window.location.href);return u.href}
+function dashboardHref(noteId:string,period:Period="month"){const role=String(noteId||"").toLowerCase()==="ss_yr"?"owner":"member",u=new URL(`${import.meta.env.BASE_URL}dashboard-setup.html`,window.location.origin);u.searchParams.set("role",role);u.searchParams.set("auto","1");if(noteId)u.searchParams.set("account",noteId.toLowerCase());u.searchParams.set("period",period);const back=new URL(window.location.href);back.searchParams.set("insightPeriod",period);u.searchParams.set("return",back.href);return u.href}
 function normalizeArticles(rows:Row[]):Article[]{const raw=(rows||[]).map(r=>{const pageViews=num(r.pageViews??r.views),impressions=num(r.impressions),likes=num(r.likes),comments=num(r.comments),salesYen=num(r.salesYen??r.sales_yen),comparable=impressions>0&&pageViews>=0&&pageViews<=impressions,conversion=comparable?pageViews/impressions*100:null,reactionsPer1k=pageViews>0?(likes+comments)/pageViews*1000:null,revenuePer1k=pageViews>0?salesYen/pageViews*1000:null;return{...r,pageViews,impressions,likes,comments,salesYen,conversion,reactionsPer1k,revenuePer1k,score:0} as Article});const pv=raw.map(r=>r.pageViews),react=raw.map(r=>r.reactionsPer1k??0),rev=raw.map(r=>r.revenuePer1k??0),sales=raw.map(r=>r.salesYen),conv=raw.filter(r=>r.conversion!=null).map(r=>r.conversion as number);return raw.map(r=>{const c=r.conversion==null?50:percentile(conv,r.conversion);const score=Math.round(percentile(pv,r.pageViews)*.35+percentile(react,r.reactionsPer1k??0)*.25+percentile(rev,r.revenuePer1k??0)*.20+percentile(sales,r.salesYen)*.10+c*.10);return{...r,score}})}
 const metricValue=(v:any)=>v==null||v===""||!Number.isFinite(Number(v))?null:Number(v);
 function normalizeMetrics(src:Row[]){const byDay=new Map<string,Row&{date:string}>();for(const r of src){const date=String(r.date||r.day||r.at||"").slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;byDay.set(date,{date,pageViews:metricValue(r.pageViews??r.pv??r.views),impressions:metricValue(r.impressions),likes:metricValue(r.likes),comments:metricValue(r.comments),salesYen:metricValue(r.salesYen??r.sales_yen??r.sales)})}return[...byDay.values()].sort((a,b)=>a.date.localeCompare(b.date))}
@@ -47,33 +50,30 @@ function metricRows(data:any){return normalizeMetrics(data?.dailyMetrics||data?.
 function weekdayMetrics(metrics:Row[]){return ["日","月","火","水","木","金","土"].map((label,idx)=>{const rows=metrics.filter(r=>r.pageViews!=null&&Number.isFinite(Number(r.pageViews))&&new Date(r.date+"T00:00:00Z").getUTCDay()===idx);return{label:`${label}曜`,value:rows.length?avg(rows.map(r=>Number(r.pageViews))):null,sub:rows.length?`${rows.length}日分`:"未取得"}})}
 function snapshotRows(data:any){return normalizeMetrics(data?.dashboard||[])}
 function calendarWindow(rows:Row[],days:number,offset=0){const end=rows.at(-1)?.date;if(!end)return[];const max=Date.parse(end+'T00:00:00Z')-offset*86400000,min=max-(days-1)*86400000;return rows.filter(r=>{const t=Date.parse(r.date+'T00:00:00Z');return t>=min&&t<=max})}
-function TrendChart({rows,cumulative=false}:{rows:Row[];cumulative?:boolean}){
- const[metric,setMetric]=useState<"pageViews"|"salesYen"|"likes"|"comments">("pageViews"),[range,setRange]=useState<7|28|"all">(28),[focus,setFocus]=useState<number|null>(null),uid=useId().replace(/:/g,"");
- const days=range==="all"&&rows.length?Math.max(1,Math.round((Date.parse(rows.at(-1)!.date)-Date.parse(rows[0].date))/86400000)+1):range==="all"?1:range;
- const labels={pageViews:"ページビュー",salesYen:"売上",likes:"スキ",comments:"コメント"},units={pageViews:"PV",salesYen:"円",likes:"件",comments:"件"},label=labels[metric],unit=units[metric],view=calendarWindow(rows,days),vals=view.map(r=>r[metric]).filter(v=>v!=null),max=Math.max(1,...vals),ceil=Math.pow(10,Math.floor(Math.log10(max))),high=Math.ceil(max/ceil/2)*ceil*2;
- const W=440,H=244,left=64,right=420,top=32,bottom=204,last=view.at(-1),lastTime=Date.parse((last?.date||'2000-01-01')+'T00:00:00Z'),firstTime=lastTime-(days-1)*86400000,first=new Date(firstTime).toISOString().slice(0,10),span=Math.max(1,days-1)*86400000,x=(r:Row)=>days===1?(left+right)/2:left+(Date.parse(r.date+'T00:00:00Z')-firstTime)/span*(right-left),y=(v:number)=>bottom-Math.max(0,v)/high*(bottom-top);
- const fmt=(v:any)=>v==null?'未取得':metric==='salesYen'?money(v):n(v),date=(v:string)=>v?.slice(5).replace('-','/')||'—';
- const segments:Row[][]=[];for(const r of view){if(r[metric]==null){segments.push([]);continue}let segment=segments.at(-1);if(!segment||segment.length&&Date.parse(r.date)-Date.parse(segment.at(-1)!.date)>86400000){segment=[];segments.push(segment)}segment.push(r)}
- const focused=view[focus==null?view.length-1:Math.min(focus,view.length-1)],sumValue=vals.length?vals.reduce((a,b)=>a+Number(b),0):null,previous=view.at(-2),difference=last?.[metric]!=null&&previous?.[metric]!=null?last[metric]-previous[metric]:null,missing=days-vals.length;
- if(!view.length)return <div className="mipro-note">日別データ・保存時点の集計値がまだありません。</div>;
+function TrendChart({rows,period="month",latest={}}:{rows:Row[];period?:Period;latest?:Row}){
+ const[metric,setMetric]=useState<"pageViews"|"salesYen"|"likes"|"comments">("pageViews"),[focus,setFocus]=useState<number|null>(null),uid=useId().replace(/:/g,"");
+ const labels={pageViews:"ページビュー",salesYen:"売上",likes:"スキ",comments:"コメント"},units={pageViews:"PV",salesYen:"円",likes:"件",comments:"件"},label=labels[metric],unit=units[metric];
+ const buckets:Row[]=latest.chartSeries?.length?latest.chartSeries:rows.map(r=>({...r,startDate:r.date,endDate:r.date,granularity:"DAY"}));
+ const view=[...buckets].sort((a,b)=>a.startDate.localeCompare(b.startDate)),granularity=view[0]?.granularity||"DAY",stepLabel=granularity==="MONTH"?"月別":granularity==="WEEK"?"週別":"日別";
+ const vals=view.filter(r=>r[metric]!=null),max=Math.max(1,...vals.map(r=>Number(r[metric]))),power=10**Math.floor(Math.log10(max)),high=Math.ceil(max/power/2)*power*2;
+ const W=480,H=252,left=57,right=459,top=26,bottom=213,first=latest.periodStart||view[0]?.startDate,last=latest.periodEnd||view.at(-1)?.endDate,firstTime=Date.parse(first),span=Math.max(86400000,Date.parse(last)-firstTime),x=(r:Row)=>left+(Date.parse(r.startDate)-firstTime)/span*(right-left),y=(v:number)=>bottom-v/high*(bottom-top);
+ const fmt=(v:any)=>v==null?'未取得':metric==='salesYen'?money(v):n(v),picked=view[focus==null?view.length-1:Math.min(focus,view.length-1)],selectedTotal=latest.availableTotals?.[metric]===false?null:latest[metric],expected=first&&last?granularity==="MONTH"?(Number(last.slice(0,4))-Number(first.slice(0,4)))*12+Number(last.slice(5,7))-Number(first.slice(5,7))+1:granularity==="WEEK"?Math.ceil((Date.parse(last)-Date.parse(first)+86400000)/(7*86400000)):Math.round((Date.parse(last)-Date.parse(first))/86400000)+1:0;
+ const segments:Row[][]=[];for(const row of view){if(row[metric]==null){segments.push([]);continue}let segment=segments.at(-1);if(!segment||segment.length&&Date.parse(row.startDate)>Date.parse(segment.at(-1)!.endDate)+86400000){segment=[];segments.push(segment)}segment.push(row)}
+ const rangeLabel=(r:Row)=>r.startDate===r.endDate?r.startDate:`${r.startDate}〜${r.endDate}`;
  return <div className="mipro-trend">
-  <div className="mipro-trend-head"><div><b>{label}の推移 <em>単位：{unit}</em></b><small>{cumulative?'保存時点の集計値（日別の増加数ではありません）':'公式の日別実績'} · 表示範囲 {first}〜{last?.date}</small></div></div>
+  <div className="mipro-trend-head"><div><small>{PERIODS[period]} · 公式{stepLabel}実績</small><b>{label}の推移</b></div><span>{unit}</span></div>
   <div className="mipro-trend-toggle">{(Object.keys(labels) as Array<keyof typeof labels>).map(k=><button key={k} className={metric===k?'active':''} aria-pressed={metric===k} onClick={()=>{setMetric(k);setFocus(null)}}>{labels[k]}</button>)}</div>
-  <div className="mipro-trend-range"><span>期間</span>{([7,28,"all"] as const).map(d=><button key={d} className={range===d?'active':''} aria-pressed={range===d} onClick={()=>{setRange(d);setFocus(null)}}>{d==="all"?"全期間":`${d}日`}</button>)}</div>
-  <div className="mipro-trend-kpis"><span><small>保存データ末日 {date(last?.date)}</small><b>{fmt(last?.[metric])}</b></span><span><small>{cumulative?'前回保存との差':missing?'取得分だけの合計':'取得済み日別の合計'}</small><b>{fmt(cumulative?difference:sumValue)}</b></span><span className="mipro-coverage-count"><small>{cumulative?'保存記録がある日':'日別の取得状況'}</small><b>{vals.length} / {days}日</b></span></div>
-  <p className={missing?'mipro-warning mipro-coverage':'mipro-note mipro-coverage'} role="status">{cumulative?'日別実績は未取得です。表示している値は保存時点の期間合計です。':missing?`${label}は${days}日中${vals.length}日分を取得、${missing}日分が未取得です。合計は取得分のみで、未取得を0とは扱いません。`:`${label}は${days}日分を取得済みです。`}{' '}{range==='all'?'全期間は保存済み日別の範囲です。noteの全期間合計とは異なります。 ':''}期間切替で追加取得はしません。{last?.date===jstDay(new Date())?' 当日分は保存時点の途中値です。':''}</p>
-  <div className="mipro-chart mipro-chart-pro"><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}の推移、縦軸${unit}、横軸日付`}>
-   <defs><linearGradient id={uid+'line'} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#d4fdff"/><stop offset="1" stopColor="#22b9e8"/></linearGradient><linearGradient id={uid+'area'} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#39cce9" stopOpacity=".3"/><stop offset="1" stopColor="#39cce9" stopOpacity="0"/></linearGradient></defs>
-   {[0,.25,.5,.75,1].map(t=><g key={t}><line x1={left} x2={right} y1={y(high*t)} y2={y(high*t)} className="grid"/><text x={left-8} y={y(high*t)+4} textAnchor="end" className="ylabel">{n(high*t)}</text></g>)}
-   <text x={left} y="18" className="ylabel">{label}（{unit}）</text>
-   {segments.filter(a=>a.length>1).map((segment,i)=>{const points=segment.map(r=>`${x(r)},${y(r[metric])}`).join(' ');return <g key={i}><polygon points={`${x(segment[0])},${bottom} ${points} ${x(segment.at(-1)!)},${bottom}`} fill={`url(#${uid}area)`}/><polyline points={points} className="line-depth"/><polyline points={points} className="line" style={{stroke:`url(#${uid}line)`}}/><polyline points={points} className="line-glint"/></g>})}
-   {focused?.[metric]!=null?<line x1={x(focused)} x2={x(focused)} y1={top} y2={bottom} className="selected-guide"/>:null}
-   {view.filter(r=>r[metric]!=null).map(r=><g key={r.date} role="button" aria-label={`${r.date} ${label} ${fmt(r[metric])}${unit}`} tabIndex={0} onClick={()=>setFocus(view.indexOf(r))} onFocus={()=>setFocus(view.indexOf(r))} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setFocus(view.indexOf(r))}}}><circle cx={x(r)} cy={y(r[metric])} r="14" className="point-hit"/><circle cx={x(r)} cy={y(r[metric])} r={focused===r?6:3.5} className="point"/><title>{`${r.date} ${label} ${fmt(r[metric])}${unit}`}</title></g>)}
-   {[...new Set([first,new Date(firstTime+Math.floor((days-1)/2)*86400000).toISOString().slice(0,10),last!.date])].map((d,i)=><text key={d} x={x({date:d})} y="228" textAnchor={i===0?'start':i===2?'end':'middle'} className="xlabel">{date(d)}</text>)}
-  </svg></div>
-  <div className="mipro-chart-tip" aria-live="polite"><b>{focused?.date}</b><span>{label} <strong>{fmt(focused?.[metric])}{focused?.[metric]!=null?' '+unit:''}</strong></span></div>
-  <label className="mipro-date-slider">日付を選択<input aria-label="グラフの日付" type="range" min="0" max={Math.max(0,view.length-1)} value={focus==null?view.length-1:Math.min(focus,view.length-1)} onChange={e=>setFocus(Number(e.target.value))}/></label>
-  <small className="mipro-chart-source">出典：note公式ダッシュボードの保存データ。欠損日は線を切り、取得済みの0件は0として表示します。</small>
+  <div className="mipro-trend-kpis"><span><small>{PERIODS[period]}の公式合計</small><b>{fmt(selectedTotal)}<em>{unit}</em></b></span><span className="mipro-coverage-count"><small>{stepLabel}グラフの取得状況</small><b>{vals.length} / {expected || '—'}<em>{granularity==='DAY'?'日':'点'}</em></b></span></div>
+  {view.length?<><p className="mipro-chart-period">{first} — {last}</p><div className="mipro-chart mipro-chart-pro"><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}の${stepLabel}推移、縦軸${unit}、横軸日付`}>
+   <defs><linearGradient id={uid+'area'} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#72c6b8" stopOpacity=".16"/><stop offset="1" stopColor="#72c6b8" stopOpacity="0"/></linearGradient></defs>
+   {[0,.25,.5,.75,1].map(t=><g key={t}><line x1={left} x2={right} y1={y(high*t)} y2={y(high*t)} className="grid"/><text x={left-10} y={y(high*t)+4} textAnchor="end" className="ylabel">{n(high*t)}</text></g>)}
+   {segments.filter(a=>a.length>1).map((segment,i)=>{const points=segment.map(r=>`${x(r)},${y(r[metric])}`).join(' ');return <g key={i}><polygon points={`${x(segment[0])},${bottom} ${points} ${x(segment.at(-1)!)},${bottom}`} fill={`url(#${uid}area)`}/><polyline points={points} className="line"/></g>})}
+   {picked?.[metric]!=null?<line x1={x(picked)} x2={x(picked)} y1={top} y2={bottom} className="selected-guide"/>:null}
+   {vals.map(r=><g key={r.startDate} role="button" aria-label={`${rangeLabel(r)} ${label} ${fmt(r[metric])}${unit}`} tabIndex={0} onClick={()=>setFocus(view.indexOf(r))} onFocus={()=>setFocus(view.indexOf(r))} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setFocus(view.indexOf(r))}}}><circle cx={x(r)} cy={y(r[metric])} r="14" className="point-hit"/><circle cx={x(r)} cy={y(r[metric])} r={picked===r?4:vals.length<3?3:0} className="point"/><title>{`${rangeLabel(r)} ${fmt(r[metric])}${unit}`}</title></g>)}
+   {[...new Set([0,Math.floor((view.length-1)/2),view.length-1])].map((idx,i)=><text key={idx} x={x(view[idx])} y="241" textAnchor={i===0?'start':i===2?'end':'middle'} className="xlabel">{granularity==='DAY'?view[idx].startDate.slice(5).replace('-','/'):view[idx].startDate.slice(0,7).replace('-','/')}</text>)}
+  </svg></div><div className="mipro-chart-tip" aria-live="polite"><span>{picked?rangeLabel(picked):'—'}</span><b>{fmt(picked?.[metric])} <small>{unit}</small></b></div>
+  <label className="mipro-date-slider">日付を選択<input aria-label="グラフの日付" type="range" min="0" max={Math.max(0,view.length-1)} value={focus==null?view.length-1:Math.min(focus,view.length-1)} onChange={e=>setFocus(Number(e.target.value))}/></label></>:null}
+  <p className={vals.length<expected||!view.length?'mipro-warning mipro-coverage':'mipro-note mipro-coverage'}>{!view.length?'この期間の推移は未取得です。期間合計があっても、推移は補完しません。':`${stepLabel} ${vals.length} / ${expected} ${granularity==='DAY'?'日':'点'}を保存済み。`}{vals.length<expected?' 未取得を0とは扱いません。':''}{granularity!=='DAY'?' 公式が返した週・月の集計を表示しています。日別や曜日の数値には分解しません。':''}{last&&last>=jstDay(new Date())?' 末尾の期間は保存時点の途中値です。':''}</p>
  </div>
 }
 function Bars({items,title,unit}:{items:{label:string;value:number|null;sub?:string}[];title:string;unit:string}){const mx=Math.max(1,...items.map(x=>x.value??0));return <figure className="mipro-bars"><figcaption><b>{title}</b><small>横の長さ＝{unit}・最大 {n(mx)}{unit}</small></figcaption>{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i aria-hidden="true"><b style={{width:`${Math.max(0,(x.value??0)/mx*100)}%`}}/></i><strong>{x.value==null?"—":n(x.value)+" "+unit}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</figure>}
@@ -81,29 +81,30 @@ function Fold({title,sub,children,defaultOpen=false}:{title:string;sub:string;ch
 function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <div className="mipro-kpis">{items.map(x=><article key={x.label}><small>{x.label}</small><b>{x.value}</b><span>{x.sub}</span></article>)}</div>}
 
 export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:number;onBack?:()=>void}){
-  const initial=useMemo(()=>readCache(),[]);
+  const[period,setPeriod]=useState<Period>(preferredPeriod);
+  const initial=useMemo(()=>readCache(period),[]);
   const[data,setData]=useState<any>(initial?.data||null),[loading,setLoading]=useState(!initial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(initial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
   const requestSeq=useRef(0),refreshState=useRef({busy:false,at:0}),[noticesLoading,setNoticesLoading]=useState(false);
   async function refresh(background=Boolean(data),passive=false){
     if(passive&&(refreshState.current.busy||Date.now()-refreshState.current.at<60000))return;
     refreshState.current={busy:true,at:Date.now()};
-    const seq=++requestSeq.current,owner=cacheKey(),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
-    const current=()=>seq===requestSeq.current&&owner===cacheKey()&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
+    const seq=++requestSeq.current,owner=cacheKey(period),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
+    const current=()=>seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
     if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(true);setError("");
     let dashboard:any=null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
-    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications};setData(next);setCachedAt(Date.now());writeCache(next)};
+    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications};setData(next);setCachedAt(Date.now());writeCache(next,period)};
     const noticeTask=notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)});
-    try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true});publish()}
+    try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period});publish()}
     catch(e){if(current())setError(e instanceof Error?e.message:"分析データを取得できませんでした")}
     finally{if(current()){setLoading(false);setRefreshing(false);refreshState.current.busy=false}}
     await noticeTask;
   }
-  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision]);
-  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[]);
+  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision,period]);
+  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[period]);
   const articles=useMemo(()=>normalizeArticles(data?.topArticles||[]),[data]);
-  if(loading)return <section className="mipro-state">保存済みダッシュボードを取得中…</section>;
-  if(error&&!data)return <section className="mipro-state error">⚠ {error}<button onClick={()=>void refresh()}>再試行</button></section>;
-  const latest=data?.latestDashboard||{},noteId=String(data?.noteId||"").replace(/^@/,"").toLowerCase(),metrics=metricRows(data),followers:Row[]=data?.followers||[],latestFollower=followers.at(-1),trafficRows:Row[]=data?.traffic?.rows||[],trafficTotal=Math.max(0,num(data?.traffic?.total)||sum(trafficRows.map(r=>num(r.pv)))),notifications:Row[]=data?.notifications?.rows||[];
+
+
+  const latest=data?.latestDashboard||{},noteId=String(data?.noteId||currentStoredInsightAccount()?.noteId||"").replace(/^@/,"").toLowerCase(),metrics=metricRows(data),followers:Row[]=data?.followers||[],latestFollower=followers.at(-1),trafficRows:Row[]=data?.traffic?.rows||[],trafficTotal=Math.max(0,num(data?.traffic?.total)||sum(trafficRows.map(r=>num(r.pv)))),notifications:Row[]=data?.notifications?.rows||[];
   const comparable=articles.filter(r=>r.conversion!=null),invalid=articles.filter(r=>r.impressions>0&&r.pageViews>r.impressions),convVals=comparable.map(r=>r.conversion as number),convMed=median(convVals),conv75=q75(convVals),pvVals=articles.map(r=>r.pageViews),pvMed=median(pvVals),reactVals=articles.filter(r=>r.reactionsPer1k!=null).map(r=>r.reactionsPer1k as number),reactMed=median(reactVals),react75=q75(reactVals);
   const improvementPv=comparable.length>=5?Math.round(sum(comparable.map(r=>Math.max(0,r.impressions*convMed/100-r.pageViews)))):null;
   const impMed=median(comparable.map(r=>r.impressions)),leaks=comparable.filter(r=>r.impressions>=impMed&&(r.conversion as number)<convMed).sort((a,b)=>(b.impressions*(convMed-(b.conversion as number)))-(a.impressions*(convMed-(a.conversion as number)))).slice(0,6),gems=articles.filter(r=>r.pageViews>0&&r.pageViews<=pvMed&&(r.reactionsPer1k??0)>=react75).sort((a,b)=>(b.reactionsPer1k??0)-(a.reactionsPer1k??0)).slice(0,6);
@@ -116,16 +117,20 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
   const groups:Record<string,number>=data?.traffic?.groups||{},shares=Object.entries(groups).map(([k,v])=>({k,value:num(v)})).filter(x=>x.value>0),hhi=trafficTotal?sum(shares.map(x=>Math.pow(x.value/trafficTotal,2))):1,diversity=shares.length>1?Math.max(0,Math.min(100,(1-hhi)/(1-1/shares.length)*100)):0,groupLabel:Record<string,string>={note:"note内",notification:"通知",search:"検索",social:"SNS",direct:"直接/不明",external:"外部"};
   const notifByDay=new Map<string,number>((data?.notifications?.dailyCounts||[]).map((r:Row)=>[String(r.date),num(r.count)]));for(const r of notifications){const d=jstDay(r.occurred_at||r.captured_at);if(d)notifByDay.set(d,(notifByDay.get(d)||0)+1)}const pairs=metrics.filter(r=>r.pageViews!=null).map(r=>({date:r.date,pv:r.pageViews,notif:notifByDay.get(r.date)||0})).filter(r=>notifByDay.has(r.date)),corr=pearson(pairs.map(x=>x.notif),pairs.map(x=>x.pv)),notifMedian=median(pairs.map(x=>x.notif)),highNotif=pairs.filter(x=>x.notif>notifMedian),lowNotif=pairs.filter(x=>x.notif<=notifMedian),highPv=avg(highNotif.map(x=>x.pv)),lowPv=avg(lowNotif.map(x=>x.pv));
   const hasOfficial=(key:string,value:any)=>latest.availableTotals?.[key]!==false&&metricValue(value)!==null;
-  const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7,trafficRows.length>0,followers.length>0,num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
+  const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7||(latest.chartSeries||[]).filter((r:Row)=>r.pageViews!=null).length>0,trafficRows.length>0,followers.length>0,num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
   const ranked=[...articles].sort((a,b)=>b.score-a.score);
-  const syncHref=dashboardHref(noteId);
+  const syncHref=dashboardHref(noteId,period);
+  function changePeriod(next:Period){if(next===period)return;requestSeq.current++;const saved=readCache(next);setData(saved?.data||null);setCachedAt(saved?.cachedAt||0);setLoading(!saved?.data);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
   const official=(key:string,value:any,currency=false)=>!hasOfficial(key,value)?"未取得":currency?money(value):n(value);
-  const savedPeriod=latest.periodStart&&latest.periodEnd?`${latest.periodStart}〜${latest.periodEnd}`:'対象期間は未取得';
+  const savedPeriod=latest.periodType==="all"?"全期間（note公式の集計）":latest.periodStart&&latest.periodEnd?`${latest.periodStart}〜${latest.periodEnd}`:'対象期間は未取得';
   const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!followers.length?'フォロワー':null].filter(Boolean);
   const openAll=(open:boolean)=>root.current?.querySelectorAll<HTMLDetailsElement>("details.mipro-fold").forEach(x=>x.open=open);
   const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);
   return <section className="mipro" ref={root}>
-    <header className="mipro-head"><div><small>INSIGHT PRO ANALYTICS V3</small><h2>公式Dashboardを超えて「意味のある判断」まで</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>noteで全記事の数値を更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"確認中…":"保存済みデータを再表示"}</button></div></header>
+    <header className="mipro-head"><div><small>YOUR NOTE / INSIGHT</small><h2>数字から、次の一手へ。</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>noteで全記事の数値を更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"確認中…":"保存済みデータを再表示"}</button></div></header>
+    <div className="mipro-period-picker" role="group" aria-label="分析全体の期間"><div><span>分析する期間</span><small>集計・記事・グラフを一緒に切替</small></div><div>{(Object.keys(PERIODS) as Period[]).map(p=><button key={p} aria-pressed={period===p} onClick={()=>changePeriod(p)}>{PERIODS[p]}{data?.availablePeriods&&!data.availablePeriods.includes(p)?<small>未取得</small>:null}</button>)}</div></div>
+    {loading?<p className="mipro-note" role="status">{PERIODS[period]}の保存済みデータを確認中…</p>:!data?.latestDashboard?<div className="mipro-empty-period"><small>{PERIODS[period]}</small><h3>この期間は、まだ取り込まれていません。</h3><p>{error||"期間を混ぜず、この期間の公式集計・記事別数値・推移を取得します。"}</p><a href={syncHref}>{PERIODS[period]}を自動で取り込む</a></div>:null}
+    {data?.latestDashboard?<>
     <div className="mipro-note mipro-saved-scope"><b>保存済み：{articles.length}件 ／ {jtime(latest.capturedAt)}</b><span>集計対象：{savedPeriod}</span><span>全記事を最新にする時は、過去記事に増えたビューも含めて全件取得します。記事数とnoteの応答によって時間がかかります。分析を見るだけなら再取得は不要です。</span></div>
     {error?<p className="mipro-warning">更新失敗・保存済みの分析を表示中：{error}</p>:null}
     {noticesLoading?<p className="mipro-note" role="status">通知との照合を更新中… ダッシュボードは操作できます。</p>:null}
@@ -139,7 +144,7 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
       <div className="mipro-note">公式取得 {jtime(latest.officialCollectedAt||latest.capturedAt)} ／ INSIGHT保存 {jtime(latest.capturedAt)}</div>
     </Fold>
 
-    <Fold defaultOpen title="INSIGHT分析：伸びの内訳" sub="一日の突出か、日々の底上げか。前週の同じ曜日で比較">
+    <Fold defaultOpen={period!=="all"} title="INSIGHT分析：伸びの内訳" sub="一日の突出か、日々の底上げか。前週の同じ曜日で比較">
       <GrowthAnalysis rows={metrics} today={jstDay(new Date())}/>
     </Fold>
 
@@ -149,9 +154,9 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
       <p className="mipro-warning"><b>重要:</b> PVとImpは記事によって集計範囲が一致しない場合があります。<strong>PV÷Impが100%を超える行は「高性能」と解釈せず、PV化率・潜在PVの計算から除外</strong>します。以前の572%・1431.9%のような表示は出しません。</p>
     </Fold>
 
-    <Fold defaultOpen title="③ 成長推移" sub={`直近7日PV ${pvDays7.length?n(pv7):"未取得"} / 前7日比 ${pvChange}`}>
-      <Kpis items={[{label:"直近7日PV",value:pvDays7.length?n(pv7):"日別未取得",sub:`取得 ${pvDays7.length}/7日・前7日比 ${pvChange}`},{label:"直近7日売上",value:salesDays7.length?money(sales7):"日別未取得",sub:`取得 ${salesDays7.length}/7日・前7日比 ${salesChange}`},{label:"記事PV中央値",value:n(pvMed),sub:"外れ値に強い本人内基準"},{label:"上位5記事PV集中",value:pct(pvConcentration),sub:pvConcentration>=65?"上位依存が強い":"分散できている"}]}/>
-      <TrendChart rows={metrics.length?metrics:snapshotRows(data)} cumulative={!metrics.length}/>
+    <Fold defaultOpen title="③ 成長推移" sub={`${PERIODS[period]}の公式グラフと記事別の分布`}>
+      <Kpis items={[{label:PERIODS[period]+"のPV",value:official("pageViews",latest.pageViews),sub:"選択期間の公式合計"},{label:PERIODS[period]+"の売上",value:official("salesYen",latest.salesYen,true),sub:"選択期間の公式合計"},{label:"記事PV中央値",value:n(pvMed),sub:"外れ値に強い本人内基準"},{label:"上位5記事PV集中",value:pct(pvConcentration),sub:pvConcentration>=65?"上位依存が強い":"分散できている"}]}/>
+      <TrendChart key={period} rows={metrics} period={period} latest={latest}/>
     </Fold>
 
     <Fold title="④ 記事ベンチマーク" sub="中央値・上位25%・反応効率を本人内で比較">
@@ -192,5 +197,6 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
       <div className="mipro-table"><div className="head"><span>記事</span><span>指数</span><span>PV</span><span>PV化</span><span>反応/1kPV</span><span>売上</span></div>{ranked.slice(0,40).map(r=><a href={r.url||undefined} target="_blank" rel="noreferrer" key={r.article_key||r.url||r.title}><span>{short(r.title,34)}</span><b>{r.score}</b><em>{n(r.pageViews)}</em><em>{pct(r.conversion)}</em><em>{r.reactionsPer1k==null?"—":n(r.reactionsPer1k)}</em><em>{money(r.salesYen)}</em></a>)}</div>
       <p className="mipro-note">INSIGHT指数はPV 35%・反応効率25%・1,000PV売上20%・売上10%・比較可能なPV化10%を<strong>本人内順位</strong>で合成。1本の極端な記事に全体評価を引っ張られにくくしています。</p>
     </Fold>
+    </>:null}
   </section>
 }
