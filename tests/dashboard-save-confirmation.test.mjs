@@ -14,14 +14,14 @@ async function backend(){
   insight_dashboard_snapshots:[{id:'7',member_id:'owner',confirmed:true,captured_at:'2026-09-26',metric_series:[{date:'2026-09-25',pageViews:12,likes:0}],total_page_views:12,total_likes:0},{id:'8',member_id:'another',confirmed:true},{id:'9',member_id:'owner',confirmed:false}],
   insight_dashboard_article_snapshots:[{snapshot_id:'7'},{snapshot_id:'7'}],
  };
- const db={from(name){const filters=[];let counted=false,sortKey=null,ascending=true,rowLimit=Infinity,start=0,end=Infinity;const q={select(_s,options){counted=options?.count==='exact';return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>r[k]===v);return q},gt(k,v){filters.push(r=>r[k]>v);return q},gte(k,v){filters.push(r=>r[k]>=v);return q},order(k,opts){sortKey=k;ascending=opts?.ascending!==false;return q},limit(v){rowLimit=v;return q},range(a,z){start=a;end=z;return q}};
+ const db={rpc:async(name,args)=>({data:tables.insight_dashboard_snapshots.filter(r=>r.member_id===args.p_member_id&&r.confirmed).sort((a,b)=>String(a.captured_at).localeCompare(String(b.captured_at))).flatMap(r=>r.metric_series||[])}),from(name){const filters=[];let counted=false,sortKey=null,ascending=true,rowLimit=Infinity,start=0,end=Infinity;const q={select(_s,options){counted=options?.count==='exact';return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>r[k]===v);return q},gt(k,v){filters.push(r=>r[k]>v);return q},gte(k,v){filters.push(r=>r[k]>=v);return q},order(k,opts){sortKey=k;ascending=opts?.ascending!==false;return q},limit(v){rowLimit=v;return q},range(a,z){start=a;end=z;return q},upsert(row){tables[name]=[row];return Promise.resolve({error:null})}};
   const execute=()=>{let rows=(tables[name]||[]).filter(r=>filters.every(f=>f(r)));if(sortKey)rows.sort((a,b)=>String(a[sortKey]).localeCompare(String(b[sortKey]))*(ascending?1:-1));rows=rows.slice(start,Math.min(end+1,start+rowLimit));return {data:rows,count:counted?rows.length:null,error:null}};
   q.maybeSingle=async()=>{const r=execute();return {...r,data:r.data[0]||null}};q.then=(a,b)=>Promise.resolve(execute()).then(a,b);return q;
  }};
- const ctx=vm.createContext({Request,Response,TextEncoder,crypto:webcrypto,console:{error(){},info:message=>logs.push(message)},Deno:{env:{get:()=>''},serve:fn=>handle=fn}});
+ const profile={data:{urlname:"ss_yr",followerCount:2132}};let profileCalls=0;const ctx=vm.createContext({Request,Response,TextEncoder,setTimeout,clearTimeout,AbortController,fetch:async()=>{profileCalls++;return Response.json(profile)},crypto:webcrypto,console:{error(){},info:message=>logs.push(message)},Deno:{env:{get:()=>''},serve:fn=>handle=fn}});
  const code=ts.transpileModule(readFileSync('supabase/functions/insight-dashboard-data/index.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
  const mod=new vm.SourceTextModule(code,{context:ctx});await mod.link(()=>new vm.SyntheticModule(['createClient'],function(){this.setExport('createClient',()=>db)},{context:ctx}));await mod.evaluate();
- return {tables,logs,async call(body={},token='fixture'){const r=await handle(new Request('https://example.test',{method:'POST',headers:{'X-Ingest-Token':token,'X-Insight-Token':token},body:JSON.stringify({action:'sync-status',noteId:'ss_yr',...body})}));return {status:r.status,body:await r.json()}}};
+ return {tables,logs,profile,profileCalls:()=>profileCalls,async call(body={},token='fixture'){const r=await handle(new Request('https://example.test',{method:'POST',headers:{'X-Ingest-Token':token,'X-Insight-Token':token},body:JSON.stringify({action:'sync-status',noteId:'ss_yr',...body})}));return {status:r.status,body:await r.json()}}};
 }
 test('保存前の照合は有効な本人用Dashboardトークンだけを認める',async()=>{
  const h=await backend();assert.equal((await h.call()).body.paired,true);
@@ -76,7 +76,20 @@ test('分析APIは選択期間の集計と記事を揃え、未取得・別参�
   {id:'all',member_id:'owner',confirmed:true,captured_at:'2026-09-26T03:00:00Z',dashboard_schema_version:5,period_type:'all',total_page_views:1000,metric_series:[],raw_data:{chartSeries:[{granularity:'MONTH',startDate:'2025-01-01',endDate:'2025-01-31',pageViews:1000}]}},
   {id:'foreign',member_id:'another',confirmed:true,captured_at:'2026-09-28T03:00:00Z',dashboard_schema_version:5,period_type:'all',total_page_views:999999}
  ];h.tables.insight_dashboard_article_snapshots=[{snapshot_id:'all',article_key:'lifetime',page_views:1000},{snapshot_id:'month',article_key:'28days',page_views:28},{snapshot_id:'foreign',article_key:'private',page_views:999999}];
- const all=await h.call({action:'analysis',period:'all',dashboardOnly:true});assert.equal(all.status,200);assert.equal(all.body.latestDashboard.pageViews,1000);assert.equal(all.body.topArticles[0].article_key,'lifetime');assert.equal(all.body.dailyMetrics.length,0);assert.equal(all.body.latestDashboard.chartSeries[0].pageViews,1000);assert.equal(all.body.periodAvailable,true);assert.doesNotMatch(JSON.stringify(all.body),/private|999999/);
+ const all=await h.call({action:'analysis',period:'all',dashboardOnly:true});assert.equal(all.status,200);assert.equal(all.body.latestDashboard.pageViews,1000);assert.equal(all.body.topArticles[0].article_key,'lifetime');assert.equal(all.body.dailyMetrics.length,0);assert.equal(all.body.dailyHistory.length,1);assert.equal(all.body.dailyHistory[0].pageViews,1);assert.equal(all.body.latestDashboard.chartSeries[0].pageViews,1000);assert.equal(all.body.periodAvailable,true);assert.doesNotMatch(JSON.stringify(all.body),/private|999999/);
  const month=await h.call({action:'analysis',period:'month',dashboardOnly:true});assert.equal(month.body.latestDashboard.pageViews,28);assert.equal(month.body.topArticles[0].article_key,'28days');assert.equal(month.body.dailyMetrics.length,1);
  const week=await h.call({action:'analysis',period:'week',dashboardOnly:true});assert.equal(week.body.periodAvailable,false);assert.equal(week.body.latestDashboard,null);assert.deepEqual(week.body.topArticles,[]);assert.deepEqual(week.body.dailyMetrics,[]);
+});
+
+test('フォロワーは本人の公開プロフィールで確認し、5分以内は保存値を使う',async()=>{
+ const h=await backend();assert.equal((await h.call({action:'follower-count'},'')).status,401);assert.equal(h.profileCalls(),0);
+ const r=await h.call({action:'follower-count',noteId:'another'});assert.equal(r.status,200);assert.equal(r.body.noteId,'ss_yr');assert.equal(r.body.followerCount.count,2132);assert.equal(r.body.followerCount.stale,false);assert.equal(h.tables.insight_dashboard_follower_counts[0].member_id,'owner');
+ await h.call({action:'follower-count'});assert.equal(h.profileCalls(),1);
+ h.tables.insight_dashboard_follower_counts[0].measured_at='2020-01-01';h.profile.data.urlname='another';const stale=await h.call({action:'follower-count'});assert.equal(stale.body.followerCount.count,2132);assert.equal(stale.body.followerCount.stale,true);
+ h.tables.insight_dashboard_follower_counts=[];h.profile.data.urlname='ss_yr';h.profile.data.followerCount=0;assert.equal((await h.call({action:'follower-count'})).body.followerCount.count,0);
+});
+
+test('記事別データが1000件を超えてもページングして全件を表示する',async()=>{
+ const h=await backend();h.tables.insight_dashboard_snapshots[0].period_type='all';h.tables.insight_dashboard_article_snapshots=Array.from({length:1301},(_,i)=>({snapshot_id:'7',article_key:String(i).padStart(4,'0'),page_views:i}));
+ const result=await h.call({action:'analysis',period:'all',dashboardOnly:true});assert.equal(result.status,200);assert.equal(result.body.topArticles.length,1301);
 });
