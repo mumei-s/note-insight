@@ -236,3 +236,5 @@ Supabase `insight-dashboard-data` に `client-status` を追加。既存の本�
 検証：必須回帰316件（カード4・統合79・動作233）成功。TypeScript・production build・Dashboard構文・差分検査成功。分析表示でnote側の全件取得が走らないこと、focus重複照会の抑制、7/28/全期間の切替、欠損と0、単日突出/底上げ/前週0/当日除外を検証。Chromiumの320/344/390 CSS px幅で新しい取得日数欄・全期間・前週比較棒グラフを描画し、横はみ出し・数値省略・実行時例外がないこととタップ表示を確認。これはテストデータでの表示確認であり、ユーザー端末の1.5.9適用は未確認。
 
 公開前の導線確認で、ツールの最新版が出るたびに保存済み分析まで非表示にする既存ゲートを確認。分析は本人の認証済み保存データを表示するため、ツール未確認・1.5.8・最新版のいずれでも表示するよう補正する。更新案内は残し、新しい数値の取得にはツールが必要であることを維持。アカウント認証や保存先の権限は変更しない。
+
+公開完了：PR #19（分析・Dashboardを別コミット）と #20（保存済み分析の表示ゲート修正）、機能main `057b39db21c8c64486ae754237d11f9fadcb0b16`。Actions `36290875220` の316件回帰・build・Pages deploy成功。Pagesのmanifest/設定HTML/設定JS/wrapper/core、raw GitHub wrapper/core（実際の ?v=159）、公開indexが参照する `index-CNbDk-M1.js` と `index-DxPTyzvs.css` はHTTP200で検証済み内容と完全一致。本体2026.09.27.5、Dashboard1.5.9。分析は画面の再読込で保存済みデータから利用でき、ツール更新やnote全件再読込を表示の条件にしない。note側パネルの新しい文言は1.5.9の適用が必要。更新先： https://mumei-s.github.io/note-insight/dashboard-setup.html?v=159&auto=0 。Android実機での新UIの動作と参加者の実保存は未確認。
