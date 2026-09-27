@@ -122,10 +122,26 @@ async function sync(req:Request){
   return{ok:true,baseline,catalog,scannedArticles:seenArticles.size,refreshedCommentThreads:refreshComments.size,newNotifications:added,lastWatchAt:now,dataScope:dataMember,historyPage};
 }
 
+// Keep legacy numeric fields for existing clients, and expose validated counts
+// separately so the public analysis can distinguish missing counts from zero.
+async function dashboardCreator(noteId:string){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const response=await fetch(`https://note.com/api/v2/creators/${encodeURIComponent(noteId)}`,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/3.6"},cache:"no-store",signal:controller.signal});
+    if(!response.ok)throw new Error(`NOTE_PUBLIC_${response.status}`);
+    const payload=await response.json(),d=payload?.data||{},id=String(d.urlname||"").toLowerCase();
+    if(id!==String(noteId).toLowerCase())throw new Error("NOTE_PUBLIC_PROFILE_MISMATCH");
+    const count=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>=0?v:null;
+    const followers=count(d.followerCount??d.follower_count),following=count(d.followingCount??d.following_count);
+    return{noteId:id,name:typeof d.nickname==="string"?d.nickname:noteId,image:d.profileImageUrl??d.profile_image_url??null,followers:followers??0,following:following??0,notes:count(d.noteCount??d.note_count)??0,
+      publicCounts:{followers,following,checkedAt:new Date().toISOString(),source:"note-profile"}};
+  }finally{clearTimeout(timer)}
+}
+
 async function dashboard(req:Request){
   const m=await member(req),dataMember=scope(m),watchMember=dataMember;
   const [profile,{data:arts},{data:watch}]=await Promise.all([
-    creator(m.noteId),
+    dashboardCreator(m.noteId),
     db.from("insight_public_articles").select("article_key,title,url,publish_at,like_count,comment_count,last_seen_at").eq("member_id",dataMember).order("publish_at",{ascending:false}).limit(1000),
     db.from("insight_notification_profiles").select("last_watch_at,public_watch_initialized_at,watch_error,watch_cursor").eq("member_id",watchMember).maybeSingle(),
   ]);
