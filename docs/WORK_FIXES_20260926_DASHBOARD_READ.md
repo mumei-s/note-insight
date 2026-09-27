@@ -160,3 +160,6 @@ Supabase `insight-dashboard-data` に `client-status` を追加。既存の本�
 - 全体の既存テスト300件とbuildが成功し、追加の再表示テストを含めた検証数は301件。公開CIでも検証する。
 - 本体2026.09.27.3 / Dashboard1.5.7 / Dashboardサーバーのソース版11。通知3.6.10、DM1.4.8、SW v58を変更しない。
 - 本人の最新保存は作業開始時点で依然9/9・1.1.0・日別0日。実端末で上記条件のどれが起きたか、および1.5.7の実保存成功は未確認。再現テストの成功を実機成功と報告しない。
+
+
+公開検証：PR #17、機能main `69234246139152f6c42ed93dd3d98d8703b8534f`、Actions `36286874654` の301件回帰・build・Pages deployが成功。Pagesのmanifest・設定HTML/JS・Dashboard wrapper/coreの5ファイルと、raw GitHubのwrapper/core（実際の `?v=157` を含む）の2ファイルがHTTP200・mainと完全一致。公開indexの本体JS `index-CiFmfFmW.js` もHTTP200・ローカルbuildと完全一致。Supabase `insight-dashboard-data` version12（ソース版11）を配備し、配備後のソース一致と、未認証のclient-statusが401 `INGEST_TOKEN_REQUIRED` になることを確認。利用端末ではDashboard1.5.7へ更新が必要。実アカウントでの最新保存成功は未確認のまま維持する。
