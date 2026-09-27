@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.19",
-  "notificationVersion": "3.6.13",
+  "appVersion": "2026.09.28.1",
+  "notificationVersion": "3.6.14",
   "dashboardVersion": "1.6.2",
-  "releasedAt": "2026-09-27T19:39:55+09:00",
+  "releasedAt": "2026-09-28T05:39:03+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "ダッシュボード同期1.6.2：パネルON/OFFを追加。OFFを保存して自動読込を停止。通知画面でのパネル重なりを修正。",
+  "note": "本人通知3.6.14：本数のない「記事を追加しました」もフィルター対象に修正。1人・1件の通知にも保存済み設定を適用。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }

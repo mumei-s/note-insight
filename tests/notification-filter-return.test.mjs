@@ -132,3 +132,30 @@ test('実操作パネル：ON/OFFを押した結果が保存され、戻った�
  e.panel.remove();await wait(250);const next=e.mount(row('returned','登録人物 さん 他 35 名 が共同マガジンに新しい記事を 44 本追加しました 7秒前'));
  await until(()=>button()?.dataset.on==='1'&&hidden(next.querySelector('#returned')),'表示ONと実際の非表示が復帰後も一致');
 });
+
+for(const mode of ['modern','legacy'])for(const count of [1,3])test(`実Reader併用：単独人物の本数なし記事追加を全件隠す (${mode}, 通知${count}件)`,async t=>{
+ const e=setup(t,mode,true);
+ e.set('mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor',name:'ぱぐぱぱん 絵本作家×作詞家'}]);
+ const notice=(id,title)=>`<a href="/magazine/m${id}" id="single-${id}"><img alt="マガジン"><img alt=""><span>ぱぐぱぱん　絵本作家×... さんが</span><span>${title}に記事を追加し\nました</span><p>カロリーファーム②｜600g減！やってき…</p><time>31分前</time></a>`;
+ e.panel.innerHTML='<header><a href="#notices">通知</a><a href="#news">お知らせ</a></header>'+Array.from({length:count},(_,i)=>notice(i,i===0?'「書きたい」気持ちをそ...':'【参加者募集中】NOT...')).join('');
+ const rows=()=>[...e.panel.querySelectorAll('[id^="single-"]')];
+ await until(()=>rows().every(hidden),'1人・1件でも、複数マガジンでも全対象を非表示');
+ for(const el of rows())assert.equal(e.w.getComputedStyle(el).display,'none');
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await until(()=>rows().every(el=>!hidden(el)),'OFFで全行を戻す');
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',true);await until(()=>rows().every(hidden),'ONで全行に再適用');
+ e.panel.hidden=true;await wait(120);e.panel.hidden=false;await until(()=>rows().every(hidden),'🔔再表示でも単独通知を隠す');
+});
+
+test('単独通知の対応後も、スキ・返信・自分の記事追加・未登録人物を表示する',async t=>{
+ const e=setup(t,'modern',true);
+ e.panel.innerHTML='<button>通知</button><button>お知らせ</button>'+[
+  row('own','登録人物さんがあなたの記事をマガジン「作品集」に追加しました 31分前'),
+  row('like','登録人物さんがあなたの記事にスキしました 31分前'),
+  row('reply','登録人物さんがあなたのコメントに返信しました 31分前'),
+  row('unlisted','別の人物さんが作品集に記事を追加しました 31分前'),
+  row('quoted','登録人物さんが「作品集に記事を追加しました」という記事にスキしました 31分前'),
+  row('target','登録人物さんが作品集に新しい記事を追加しました 31分前'),
+ ].join('');
+ await until(()=>hidden(e.panel.querySelector('#target')));
+ for(const id of ['own','like','reply','unlisted','quoted'])assert.ok(!hidden(e.panel.querySelector('#'+id)),id);
+});
