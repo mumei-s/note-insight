@@ -256,3 +256,5 @@ Backendはinsight-dashboard-dataの配備v13（ソースFUNCTION_VERSION12）、
 ### 公開直前の更新経路補強（1.6.1 / 本体2026.09.27.7）
 
 1.6.0はPR21・main8a49803・Actions36292008271で公開成功。最終確認で設定JSの固定キャッシュURLを検出し、HTMLのJS URLと分析から設定へのURLを版ごとに更新。Reactの古いchart propsが切替直後に残る場合にも、各指標の週/月/日別の座標を集合ごと更新し、古い日別を全期間の月別へ残さないよう補正。ネットワークの期間一致データがある場合はDOM propsより優先。表示中の公式テキストは新期間、React chart propsだけ旧期間の再現テストで検証する。通知・DM・バックエンドに追加変更なし。
+
+公開最終確認：PR22をrebase、機能main `0f5b0ace2d2b14dd01f125e861115f4a590dad99`。Actions `36292208740` の321件回帰・build・Pages deploy成功。Dashboard1.6.1／本体2026.09.27.7。Pages manifest・設定HTML/JS・wrapper/core、raw GitHubのwrapper/core（実際の `?v=161`）、公開index参照 `index-sd9gwknq.js` と `index-DmbU9HtD.css` はすべてHTTP200で検証対象とバイト一致。Supabase関数v13も配備ソース一致、未認証analysis/sync-statusは401を確認。更新・全期間取込の入口： https://mumei-s.github.io/note-insight/dashboard-setup.html?v=161&period=all&auto=1 。端末での導入と本人・参加者の全期間保存は未確認。ユーザーへは取得済みとは報告せず、公開完了と区別する。
