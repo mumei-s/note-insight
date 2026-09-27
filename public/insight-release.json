@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.27.4",
+  "appVersion": "2026.09.27.5",
   "notificationVersion": "3.6.10",
   "dashboardVersion": "1.5.8",
-  "releasedAt": "2026-09-27T11:13:46+09:00",
+  "releasedAt": "2026-09-27T12:06:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard：公式GraphQLとキャッシュ済みグラフから日別5指標を自動取得。「もっとみる」で記事の続きまで読込。不要なマガジン巡回を廃止。通常は1行表示とし、詳細を縮小しても自動読込を継続。 🔔通知や通常画面ではDashboardパネルと読込を停止し、Dashboard復帰時だけ再表示。",
+  "note": "分析期間を7日・28日・全期間（保存済み）へ整理。保存時点・集計期間・指標別の未取得を明記。表示するだけでnote全記事を読み直さず、保存データの再表示と全記事の数値更新を分離。",
   "dmVersion": "1.4.8",
   "dmLabel": "DM同期"
 }

@@ -14,7 +14,7 @@ async function component(file,ctx,stubs={}){
  await mod.link(async name=>{const data=name==='react'?React:name==='react/jsx-runtime'?jsx:name.endsWith('.css')?{}:stubs[name];if(!data)throw new Error('Missing test stub '+name);const m=new vm.SyntheticModule(Object.keys(data),function(){for(const [k,v]of Object.entries(data))this.setExport(k,v)},{context:ctx});return m});await mod.evaluate();return mod.namespace;
 }
 function setup(){const dom=new JSDOM('<main id="root"></main>',{url:'https://mumei-s.github.io/note-insight/'});Object.defineProperty(dom.window.document,'visibilityState',{value:'visible'});for(const key of ['window','document','localStorage','HTMLElement','Element'])globalThis[key]=dom.window[key];globalThis.IS_REACT_ACT_ENVIRONMENT=true;const ctx=vm.createContext({window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage,location:dom.window.location,URL,URLSearchParams,AbortController,DOMException,Event:dom.window.Event,requestAnimationFrame:fn=>fn(),console,fetch:(...a)=>globalThis.fetch(...a)});localStorage.setItem('token','test-only');return{dom,ctx,root:createRoot(document.getElementById('root'))}}
-const stubs={'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
+const stubs={'./member-insight-analysis-growth':{GrowthAnalysis:()=>null},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token',currentStoredInsightAccount:()=>({noteId:'tester'})}};
 test('アイコン通信が止まっても本文を表示し、カテゴリ切替時に保存済みプレビューを即表示',async()=>{
  const h=setup();let feeds=0,blockFeed=false;
  const make=(id,kind,text)=>({id,notification_type:kind,display_category:kind,raw_text:text,actor_name:'人物',actor_url:'https://note.com/person',occurred_at:'2026-09-21T09:00:00Z'}),a=make('a','rating','記事を高評価しました'),b=make('b','purchase','記事が購入されました');
@@ -88,4 +88,54 @@ test('新着のアイコン補完を行い、次の差分応答に画像がな�
 test('画像の読込に失敗しても通知のアイコン欄を空にしない',async()=>{
  const h=setup();globalThis.fetch=async()=>({ok:true,json:async()=>({ok:true,noteId:'tester',rows:[{id:'broken',notification_type:'image_used',raw_text:'画像を使用しました',actor_name:'人物',actor_image_url:'https://example.test/broken.jpg',captured_at:'2026-09-22T02:00:00Z'}],total:1})});
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,10))});const avatar=document.querySelector('.minf-avatar');assert.equal(avatar.tagName,'IMG');await act(async()=>avatar.dispatchEvent(new window.Event('error')));assert.ok(document.querySelector('.minf-avatar.fallback'));assert.match(document.body.textContent,/画像の使用/);await act(async()=>h.root.unmount());h.dom.window.close();
+});
+
+const analysisStubs={...stubs,'./insight-release':{CURRENT_DASHBOARD_VERSION:'test',CURRENT_INSIGHT_APP_VERSION:'test',CURRENT_NOTIFICATION_VERSION:'test'},'./insight-donut':{InsightDonut:()=>null},'./member-insight-analysis-charts':{InsightColumns:()=>null,InsightScatter:()=>null},'./member-insight-analysis-summary-client':{loadNotificationSummary:async()=>({dailyCounts:[],total:0})}};
+test('保存済み分析を先に表示し、7日/28日の切替と連続focusで全記事を再取得しない',async()=>{
+ const h=setup(),requests=[];let finish;
+ const data={noteId:'tester',latestDashboard:{pageViews:280,likes:0,comments:0,salesYen:0,capturedAt:'2026-09-27T02:38:00Z',periodStart:'2026-08-31',periodEnd:'2026-09-27'},topArticles:[],followers:[],dailyMetrics:Array.from({length:28},(_,i)=>({date:new Date(Date.UTC(2026,7,31+i)).toISOString().slice(0,10),pageViews:10,likes:0,comments:0,salesYen:null}))};
+ localStorage.setItem('mumei-insight-pro-cache-v3:tester',JSON.stringify({cachedAt:Date.now(),data}));
+ globalThis.fetch=(url,init)=>{requests.push({url,body:JSON.parse(init.body)});return new Promise(resolve=>finish=()=>resolve({ok:true,json:async()=>data}))};
+ const{MemberInsightAnalyticsProV3:C}=await component('src/member-insight-analytics-pro-v3.tsx',h.ctx,analysisStubs);
+ try{
+  await act(async()=>{h.root.render(React.createElement(C));await new Promise(r=>setTimeout(r,20))});
+  assert.match(document.body.textContent,/保存時点の値/);assert.match(document.body.textContent,/2026-08-31〜2026-09-27/);
+  assert.deepEqual([...document.querySelectorAll('.mipro-trend-range button')].map(b=>b.textContent),['7日','28日','全期間']);
+  assert.match(document.querySelector('.mipro-coverage-count').textContent,/28 \/ 28日/);assert.doesNotMatch(document.querySelector('.mipro-coverage').textContent,/未取得です/);
+  await act(async()=>{document.querySelector('.mipro-trend-range button').click();window.dispatchEvent(new window.Event('focus'));window.dispatchEvent(new window.Event('focus'))});
+  assert.match(document.querySelector('.mipro-coverage-count').textContent,/7 \/ 7日/);assert.equal(requests.length,1);await act(async()=>{[...document.querySelectorAll('.mipro-trend-range button')].find(b=>b.textContent==='全期間').click()});assert.match(document.querySelector('.mipro-coverage-count').textContent,/28 \/ 28日/);assert.match(document.querySelector('.mipro-coverage').textContent,/noteの全期間合計とは異なります/);assert.equal(requests.length,1);assert.equal(requests[0].body.action,'analysis');assert.equal(requests[0].body.dashboardOnly,true);
+  await act(async()=>{finish();await new Promise(r=>setTimeout(r,20));window.dispatchEvent(new window.Event('focus'))});assert.equal(requests.length,1);
+  await act(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent==='保存済みデータを再表示').click();await new Promise(r=>setTimeout(r,10))});assert.equal(requests.length,2);assert.ok(requests.every(r=>r.url.includes('insight-dashboard-data')&&r.body.action==='analysis'));
+  await act(async()=>{finish();await new Promise(r=>setTimeout(r,10))});
+ }finally{await act(async()=>h.root.unmount());h.dom.window.close()}
+});
+test('不足日数の分母は選択期間と一致し、売上・流入・フォロワー未取得を0と表示しない',async()=>{
+ const h=setup(),data={noteId:'tester',latestDashboard:{pageViews:0,capturedAt:'2026-09-27T02:38:00Z',availableTotals:{pageViews:true,salesYen:false}},topArticles:[],followers:[],dailyMetrics:[{date:'2026-09-27',pageViews:0,salesYen:null}]};
+ globalThis.fetch=async()=>({ok:true,json:async()=>data});const{MemberInsightAnalyticsProV3:C}=await component('src/member-insight-analytics-pro-v3.tsx',h.ctx,analysisStubs);
+ try{
+  await act(async()=>{h.root.render(React.createElement(C));await new Promise(r=>setTimeout(r,20))});
+  assert.match(document.querySelector('.mipro-coverage').textContent,/28日中1日分を取得、27日分が未取得/);assert.match(document.body.textContent,/流入データ未取得/);assert.match(document.body.textContent,/売上0円とは異なります/);
+  const cards=[...document.querySelectorAll('.mipro-fold')[0].querySelectorAll('.mipro-kpis article')];assert.equal(cards[0].querySelector('b').textContent,'0');assert.equal(cards.at(-1).querySelector('b').textContent,'未取得');
+  await act(async()=>{[...document.querySelectorAll('.mipro-trend-toggle button')].find(b=>b.textContent==='売上').click()});
+  assert.match(document.querySelector('.mipro-coverage').textContent,/28日中0日分を取得、28日分が未取得/);assert.equal(document.querySelectorAll('.mipro-trend-kpis b')[1].textContent,'未取得');assert.doesNotMatch(document.body.innerHTML,/NaN|Infinity/);
+ }finally{await act(async()=>h.root.unmount());h.dom.window.close()}
+});
+
+test('INSIGHT成長分析は単日の突出と継続した底上げを分け、当日・欠損・前週0を誤判定しない',async()=>{
+ const ctx=vm.createContext({}),c=await component('src/member-insight-analysis-growth.tsx',ctx);
+ const rows=(now,before=Array(7).fill(10))=>[...before,...now].map((pageViews,i)=>({date:new Date(Date.UTC(2026,8,13+i)).toISOString().slice(0,10),pageViews}));
+ const spike=c.growthPerspective([...rows([9,9,9,9,9,9,110]),{date:'2026-09-27',pageViews:99999}],'2026-09-27');
+ assert.equal(spike.complete,true);assert.equal(spike.current,164);assert.equal(spike.previous,70);assert.equal(spike.currentMedian,9);assert.equal(spike.improved,1);assert.equal(spike.end,'2026-09-26');assert.equal(spike.title,'増加は一部の日に集中');
+ const broad=c.growthPerspective(rows(Array(7).fill(20)),'2026-09-27');assert.match(broad.title,/日々のPVも底上げ/);assert.equal(broad.improved,7);assert.equal(broad.currentMedian,20);
+ const missingRows=rows(Array(7).fill(20));missingRows[3].pageViews=null;const missing=c.growthPerspective(missingRows,'2026-09-27');assert.equal(missing.complete,false);assert.equal(missing.known,13);assert.equal(missing.title,undefined);
+ const zero=c.growthPerspective(rows(Array(7).fill(0),Array(7).fill(0)),'2026-09-27');assert.equal(zero.complete,true);assert.equal(zero.current,0);assert.equal(zero.topShare,0);assert.match(zero.title,/横ばい/);
+ assert.equal(c.growthPerspective([{date:'2026-09-27',pageViews:8}],'2026-09-27'),null);
+});
+test('前週比較グラフはタップした日の両方の値と差を示し、0始まりでも無限の成長率を出さない',async()=>{
+ const h=setup(),c=await component('src/member-insight-analysis-growth.tsx',h.ctx),rows=Array.from({length:14},(_,i)=>({date:new Date(Date.UTC(2026,8,13+i)).toISOString().slice(0,10),pageViews:i<7?0:i}));
+ try{
+  await act(async()=>h.root.render(React.createElement(c.GrowthAnalysis,{rows,today:'2026-09-27'})));
+  assert.match(document.body.textContent,/前週0のため率なし/);assert.equal(document.querySelectorAll('.mipro-growth-bars button').length,7);
+  await act(async()=>document.querySelector('.mipro-growth-bars button').click());assert.match(document.querySelector('.mipro-growth-readout').textContent,/2026-09-20：7 PV.*2026-09-13：0 PV.*差：\+7 PV/);assert.doesNotMatch(document.body.innerHTML,/NaN|Infinity/);
+ }finally{await act(async()=>h.root.unmount());h.dom.window.close()}
 });
