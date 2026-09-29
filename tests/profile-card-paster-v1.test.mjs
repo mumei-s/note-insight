@@ -54,3 +54,17 @@ test("installer describes combined workflow",async()=>{
   assert.match(h,/〇〇さん/);
   assert.match(h,/INSIGHTとは完全に別ツール/);
 });
+
+
+test("performance math article is always last and deduped from sources",async()=>{
+  const s=await read("public/note-profile-card-paster-v1.user.js");
+  assert.match(s,/FINAL_URL='https:\/\/note\.com\/fuku444\/n\/nb4f6934381e9'/);
+  assert.match(s,/u===norm\(FINAL_URL\)/);
+  assert.match(s,/raw\.push\(\{[\s\S]*finalMarker:true/);
+  assert.match(s,/最後は実績の算数/);
+});
+
+test("installer states performance math is appended last",async()=>{
+  const h=await read("public/note-profile-card-paster-install.html");
+  assert.match(h,/最後は必ず「実績の算数」/);
+});
