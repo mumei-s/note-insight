@@ -359,8 +359,19 @@ function setCollapsed(on){
 }
 function setTiny(on){
  const p=document.getElementById(PANEL),mini=document.getElementById(PANEL+'-mini');if(!p||!mini)return;
- p.classList.toggle('tiny',Boolean(on));mini.style.display=on?'flex':'none';
- if(!on)p.classList.remove('collapsed');
+ if(on){
+  const r=p.getBoundingClientRect();
+  mini.style.left=Math.max(4,Math.min(innerWidth-46,r.left))+'px';
+  mini.style.top=Math.max(4,Math.min(innerHeight-46,r.top))+'px';
+  mini.style.right='auto';
+  p.classList.add('tiny');mini.style.display='flex'
+ }else{
+  const r=mini.getBoundingClientRect();
+  p.style.left=Math.max(4,Math.min(innerWidth-p.offsetWidth-4,r.left))+'px';
+  p.style.top=Math.max(4,Math.min(innerHeight-p.offsetHeight-4,r.top))+'px';
+  p.style.right='auto';
+  p.classList.remove('tiny','collapsed');mini.style.display='none';savePos(p)
+ }
  saveUiState({tiny:Boolean(on),collapsed:false})
 }
 function restorePos(el){
