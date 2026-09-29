@@ -24,6 +24,8 @@ const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
 const W=860,H=140;
+const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
+const FINAL_KEY='nb4f6934381e9';
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null;
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -166,10 +168,29 @@ async function enrich(row){
 async function buildRows(input){
  const [likeRows,magRows]=await Promise.all([collectLikers(input.likesUrl,input.likesCount,input.choice),collectMagazine(input.magazineUrl,input.magazineCount)]);
  const seen=new Set(),raw=[];
- for(const row of [...likeRows,...magRows]){const u=norm(row?.url);if(!u||seen.has(u))continue;seen.add(u);raw.push({...row,url:u})}
+ for(const row of [...likeRows,...magRows]){
+  const u=norm(row?.url);
+  if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
+  seen.add(u);raw.push({...row,url:u});
+ }
+ // 「実績の算数」は件数指定とは別枠。途中に含まれていても除外し、
+ // 必ず最後の1件として固定する。
+ raw.push({
+  likerKey:'final-performance-math',
+  urlname:'fuku444',
+  creator:'実績の算数',
+  actorUrl:'https://note.com/fuku444',
+  actorImageUrl:'',
+  url:FINAL_URL,
+  title:'実績の算数│3日半で0→1達成',
+  key:FINAL_KEY,
+  publishAt:null,
+  thumbUrl:'',
+  finalMarker:true
+ });
  const out=[];
  for(let i=0;i<raw.length;i+=5){if(stopRequested)throw new Error('停止しました');setStatus('アイコン・サムネ情報 '+out.length+'/'+raw.length+'…');out.push(...await Promise.all(raw.slice(i,i+5).map(enrich)))}
- return out.map((x,i)=>({...x,index:i+1}))
+ return out.map((x,i)=>({...x,index:i+1,finalMarker:Boolean(x.finalMarker||norm(x.url)===norm(FINAL_URL))}))
 }
 
 async function bitmapFromUrl(url){
@@ -224,7 +245,7 @@ async function run(){
   const input=inputValues();if((!input.likesUrl||input.likesCount<=0)&&(!input.magazineUrl||input.magazineCount<=0))throw new Error('記事URLかマガジンURLを1つ以上指定してください');
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();
-  setStatus('取得開始｜スキ '+input.likesCount+'件＋マガジン '+input.magazineCount+'件｜'+choiceLabel(input.choice));
+  setStatus('取得開始｜スキ '+input.likesCount+'件＋マガジン '+input.magazineCount+'件｜'+choiceLabel(input.choice)+'｜最後は実績の算数');
   const rows=await buildRows(input);if(!rows.length)throw new Error('貼り付け対象が0件です');
   if(!page.confirm('取得 '+rows.length+'件\n\nこのまま現在のカーソル位置から画像を貼り付けますか？')){setStatus('取得 '+rows.length+'件まで完了｜貼り付けはキャンセル');return}
   for(let i=0;i<rows.length;i++){
@@ -235,7 +256,7 @@ async function run(){
    await sleep(1200);
    if((i+1)%10===0&&i+1<rows.length){setStatus('貼り付け '+(i+1)+'/'+rows.length+'｜10件区切り10秒休止');await sleep(10000)}
   }
-  await saveOnce();setStatus('完了 ✅ '+rows.length+'件｜アイコン＋キャプション＋記事サムネ＋URLリンク');
+  await saveOnce();setStatus('完了 ✅ '+rows.length+'件｜最後：実績の算数｜アイコン＋キャプション＋記事サムネ＋URLリンク');
  }catch(e){setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)}
  finally{busy=false;update()}
 }
