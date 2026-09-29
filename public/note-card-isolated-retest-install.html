@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+<title>通知カード 再検証 ISOLATED</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071019;color:#eef7ff;font-family:system-ui,-apple-system,sans-serif}.w{width:min(680px,calc(100% - 16px));margin:auto;padding:16px 0}.c{padding:15px;border:1px solid #3b6076;border-radius:15px;background:#0d1923}h1{font-size:21px;margin:0 0 8px}.v{display:inline-block;padding:4px 9px;border-radius:999px;background:#123047;border:1px solid #56c5ef;font-size:11px;font-weight:900}.n{margin-top:10px;padding:10px;border-radius:10px;background:#08141d;border:1px solid #29485b;font-size:12px;line-height:1.7}.btn{display:flex;align-items:center;justify-content:center;min-height:50px;margin-top:10px;border-radius:10px;background:#b6ff38;color:#081000;text-decoration:none;font-size:15px;font-weight:950}.sub{background:#13283a;color:#eef7ff;border:1px solid #42677d}.copy{width:100%;margin-top:10px;padding:11px;border:1px solid #42677d;border-radius:9px;background:#071019;color:#dbeafe;font-size:11px}</style>
+</head>
+<body><main class="w"><section class="c">
+<h1>通知カード 再検証 ISOLATED</h1>
+<span class="v">v1.0.0</span>
+<div class="n"><b>前回と同じカード生成方式を、INSIGHTから完全分離して再検証する専用版です。</b><br>
+・editor.note.comだけで動作<br>
+・INSIGHTのAPI/変数/保存領域を参照しない<br>
+・fetch / XMLHttpRequestを差し替えない<br>
+・自動開始なし。押した時だけ動作<br>
+・既存カードを本文から拾い、未作成だけ続行<br>
+・3秒間隔、10件ごと30秒休止<br>
+・403/429などで止まったら自動再試行しない<br>
+・全件完了後に下書き保存を1回だけ押す<br>
+・投稿後は今回カードだけ一括削除可能<br><br>
+<b>正本18.9.21停止版とINSIGHTは変更しません。</b></div>
+<a id="install" class="btn" href="./note-card-isolated-retest-v1.user.js">再検証版をインストール</a>
+<a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-isolated-retest-v1.user.js">Raw直結</a>
+<input class="copy" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-isolated-retest-v1.user.js">
+</section></main>
+<script>(()=>{const q='?v=1.0.0&ts='+Date.now();document.getElementById('install').href='./note-card-isolated-retest-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-card-isolated-retest-v1.user.js'+q})()</script>
+</body></html>
