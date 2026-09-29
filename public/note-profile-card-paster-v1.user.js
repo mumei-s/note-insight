@@ -27,7 +27,7 @@ const POS='mumei_profile_card_paster_pos_v1';
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,selectionCache=null,dragging=false,longTimer=0;
+let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const norm=v=>{try{const u=new URL(String(v||''),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
@@ -393,7 +393,7 @@ function bindLongDrag(handle,panel){
   const t=Math.max(4,Math.min(innerHeight-panel.offsetHeight-4,baseT+e.clientY-startY));
   panel.style.left=l+'px';panel.style.top=t+'px';panel.style.right='auto'
  });
- const end=e=>{clear();if(dragging){e.preventDefault();savePos(panel)}dragging=false;pid=null};
+ const end=e=>{clear();if(dragging){e.preventDefault();savePos(panel);suppressClickUntil=Date.now()+650}dragging=false;pid=null};
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
 function escAttr(v){return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
@@ -451,7 +451,7 @@ function mount(){
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="run"]').addEventListener('click',e=>{e.preventDefault();void run()});
  p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
- mini.addEventListener('click',e=>{if(dragging)return;e.preventDefault();setTiny(false)});
+ mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
  bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);
  restorePos(p);
  if(g.collapsed)p.classList.add('collapsed');
