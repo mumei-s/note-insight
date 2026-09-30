@@ -20,7 +20,7 @@
   if(!/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname)){
     // SPA navigation from a normal note page must start the reader only on the dashboard.
     document.addEventListener('mumei-dashboard-mount',function enterDashboard(){
-      if(!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname))return;
+      if(!/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname))return;
       document.removeEventListener('mumei-dashboard-mount',enterDashboard);startDashboardCore();
     });return;
   }
