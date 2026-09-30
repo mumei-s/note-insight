@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.2.0
+// @version      1.2.1
 // @description  記事URL・マガジンURL・#タグを1欄で上から優先して合算。件数/全数、画像取得強化、全自動貼付、今回カード一括削除、最初に戻るに対応。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.2.0';
+const VERSION='1.2.1';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -521,7 +521,7 @@ function mount(){
  <div class="body">
   <label>記事URL / マガジンURL / #タグ（1欄・上から優先）</label>
   <textarea data-sources placeholder="https://note.com/.../n/...&#10;https://note.com/.../m/...&#10;#はじめてのnote">${escAttr(g.sources||g.likesSources||g.magSources||'')}</textarea>
-  <div class="amount"><select data-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-count type="number" min="1" max="5000" value="${Number(g.count??g.likesCount??10)}"></div>
+  <div class="amount"><select data-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-count type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" value="${Number(g.count??g.likesCount??10)}"></div>
   <label>記事URLのスキした人 → 使用記事</label>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
   <div class="hint">記事URL＝スキした人 / マガジン＝掲載記事 / #＝検索記事。すべて上から合算。最後は実績の算数。</div>
@@ -539,7 +539,21 @@ function mount(){
   p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.remove('on'));btn.classList.add('on');saveUiState({choice:btn.dataset.choice})
  }));
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
- p.querySelectorAll('textarea,input').forEach(x=>x.addEventListener('change',()=>saveUiState()));
+ const formControls=p.querySelectorAll('textarea,input,select,button');
+ formControls.forEach(x=>{
+  x.addEventListener('pointerdown',e=>{e.stopPropagation()});
+  x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true});
+ });
+ p.querySelectorAll('textarea,input').forEach(x=>{
+  x.addEventListener('focus',e=>{e.stopPropagation()});
+  x.addEventListener('click',e=>{e.stopPropagation()});
+  x.addEventListener('change',()=>saveUiState());
+ });
+ const countInput=p.querySelector('[data-count]');
+ countInput?.addEventListener('input',()=>{
+  const digits=String(countInput.value||'').replace(/\D+/g,'').slice(0,4);
+  if(countInput.value!==digits)countInput.value=digits;
+ });
  p.querySelector('[data-ui="collapse"]').addEventListener('click',e=>{e.preventDefault();setCollapsed(!p.classList.contains('collapsed'))});
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="run"]').addEventListener('click',e=>{e.preventDefault();void run()});
