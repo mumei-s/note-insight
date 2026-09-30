@@ -1,0 +1,26 @@
+{
+  "maintenance": false,
+  "release": "pro-recovery-20260930",
+  "checkedAt": "2026-09-30T08:52:30.883Z",
+  "checks": [
+    {
+      "slug": "insight-access",
+      "action": "session",
+      "status": 401,
+      "error": "INSIGHT_LOGIN_REQUIRED"
+    },
+    {
+      "slug": "insight-access-reactivate",
+      "action": "resume",
+      "status": 401,
+      "error": "APPLICANT_TOKEN_REQUIRED"
+    },
+    {
+      "slug": "insight-notifications",
+      "action": "list",
+      "status": 401,
+      "error": "INSIGHT_LOGIN_REQUIRED"
+    }
+  ],
+  "scope": "Gateway and anonymous login UI; real participant credentials are not used."
+}

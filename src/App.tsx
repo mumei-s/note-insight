@@ -18,6 +18,8 @@ import {
 } from "./insight-account-store";
 import "./insight-polish-v1.css";
 
+// Pro gateway recovery verified on 2026-09-30. Authentication is unchanged.
+const PARTICIPANT_MAINTENANCE = false;
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
@@ -313,7 +315,7 @@ export function App() {
 
   const admin = isAdminRoute(route) || ownerView;
   const maintenanceBypass = route === "owner" || route === "manage" || route.startsWith("owner-features/") || ownerView;
-  if (!maintenanceBypass) return <MaintenanceScreen />;
+  if (PARTICIPANT_MAINTENANCE && !maintenanceBypass) return <MaintenanceScreen />;
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
     <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
