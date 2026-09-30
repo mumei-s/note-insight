@@ -46,23 +46,31 @@ s=once(s,"await page.screenshot({path:out+'/'+name+'-'+width+'-update.png',fullP
      await page.goBack();
      await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);""")
 s=once(s,"} catch(e) { await page.screenshot(","} catch(e) { await fs.writeFile(out+'/'+name+'-'+width+'-failure.json',JSON.stringify({error:String(e),stack:e.stack,assertions:results.assertions,completed:results.engines},null,2)); await page.screenshot(")
-# Browser-context offline emulation does not consistently cover the SW's network.
-# Drop actual origin connections instead; keep every cache/storage assertion intact.
-s=once(s,'let sawNoCache = false;','let sawNoCache = false;\nlet originOffline = false, droppedOriginRequests = 0;\nresults.offlineSimulation = "origin socket disconnect; genuine SW cache fallback; not a physical radio test";')
-s=once(s,"const server = http.createServer((req, res) => {","const server = http.createServer((req, res) => {\n if (originOffline) { droppedOriginRequests++; req.socket.destroy(); return; }")
-s=once(s,'await context.setOffline(true);','originOffline = true;\n     const droppedBefore = droppedOriginRequests;')
+# Drop real connections, not just page-owned requests in offline emulation.
+s=once(s,'let sawNoCache = false;','let sawNoCache = false;\nlet originOffline = false, droppedOriginRequests = 0, droppedSwRequests = 0;\nresults.offlineSimulation = "origin socket disconnect; genuine SW cache fallback; not a physical radio test";')
+s=once(s,"const server = http.createServer((req, res) => {","const server = http.createServer((req, res) => {\n if (originOffline) { droppedOriginRequests++; if(new URL(req.url, \'http://127.0.0.1\').pathname.endsWith(\'/sw.js\'))droppedSwRequests++; req.socket.destroy(); return; }")
+s=once(s,'await context.setOffline(true);','check(errors, [], name+\' no application errors before injected outage\');\n     originOffline = true;\n     const droppedBefore = droppedOriginRequests;')
 s=once(s,'await context.setOffline(false);','ok(droppedOriginRequests > droppedBefore, name+\' origin outage actually reached the network\');\n     await page.waitForTimeout(100);\n     originOffline = false;')
 s=once(s,'finally { await context.close(); }','finally { originOffline = false; await context.close(); }')
-# WebKit reports failed SW network requests as pageerror during the deliberately
-# injected outage. Record only these exact known network diagnostics separately;
-# every other error, including all errors outside the outage, must still fail.
+# WebKit can deliver failed SW-load diagnostics after connectivity is restored.
+# Correlate only that exact error with an actual SW socket dropped in this test.
+# Record it; do not ignore other errors. A fresh reg.update() must also succeed.
 s=once(s,"const errors=[];page.on('pageerror', e=>errors.push(e.message));","""const errors=[], outageNetworkErrors=[];
+    const swDropsAtStart=droppedSwRequests;
     page.on('pageerror', e=>{
      const message=e.message;
-     const expectedNetworkFailure=message==='TypeError: Load failed'||message.endsWith('/note-insight/sw.js due to access control checks.')||message.endsWith('/note-insight/insight-release.json?offline=1.');
-     if(originOffline&&expectedNetworkFailure)outageNetworkErrors.push(message);
+     const swAccessFailure=message.endsWith('/note-insight/sw.js due to access control checks.');
+     const expectedNetworkFailure=message==='TypeError: Load failed'||swAccessFailure||message.endsWith('/note-insight/insight-release.json?offline=1.');
+     const correlatedLateSwFailure=swAccessFailure&&droppedSwRequests>swDropsAtStart;
+     if((originOffline&&expectedNetworkFailure)||correlatedLateSwFailure)outageNetworkErrors.push({message,delayed:!originOffline});
      else errors.push(message);
     });""")
-s=once(s,"results.engines.push({name,version:browser.version(),width,status:'passed'});","results.engines.push({name,version:browser.version(),width,status:'passed',outageNetworkErrors});")
+s=once(s,"check(errors,[],name+' no JavaScript errors');","""check(await page.evaluate(async()=>{
+      const reg=await navigator.serviceWorker.getRegistration();
+      if(!reg)return 'missing';
+      return Promise.race([reg.update().then(()=>Boolean(reg.active)),new Promise(resolve=>setTimeout(()=>resolve('timeout'),5000))]);
+     }),true,name+' fresh SW update succeeds after network restoration');
+     check(errors,[],name+' no unexpected JavaScript errors');""")
+s=once(s,"results.engines.push({name,version:browser.version(),width,status:'passed'});","results.engines.push({name,version:browser.version(),width,status:'passed',outageNetworkErrors,droppedSwRequests:droppedSwRequests-swDropsAtStart});")
 p.write_text(s)
 print('Finished card badge removal and stricter browser tests; participant data untouched.')
