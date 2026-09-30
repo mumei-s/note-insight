@@ -78,10 +78,13 @@ function installStyle(){
 .miv5-update .miv5-source-card.dashboard>.mumei-dashboard-feature-toggle:disabled{border-color:#516777!important;background:#101c24!important;color:#9fb4c1!important}
 .miv5-update .miv5-source-card.needs-update .${CANONICAL}{border-color:#9a7b31!important;background:#2a2108!important;color:#ffe49a!important;box-shadow:0 0 0 1px rgba(255,214,103,.18) inset!important}
 .miv5-update .miv5-source-card.needs-install .${CANONICAL}{border-color:#4f8b68!important;background:#10261b!important;color:#caffdc!important}
-/* The analysis card itself is the update action; keep the indicator steady. */
+/* Feature cards open their feature. Only the round settings link announces a tool update. */
 .miv5-update .miv5-source-card.dashboard>.miv5-source-main{display:grid!important;text-decoration:none!important;text-align:left!important;animation:none!important;transition:none!important}
-.miv5-update .miv5-source-card.dashboard.needs-update>.miv5-source-main{border:2px solid #b6ff38!important;background:linear-gradient(145deg,#173324,#0a2025)!important;box-shadow:0 0 13px #b6ff3860,inset 0 0 12px #b6ff381c!important}
-.miv5-update .miv5-source-card.dashboard.needs-install>.miv5-source-main{border-color:#dfb664!important;background:#231e10!important;box-shadow:0 0 0 1px #dfb66445!important}
+.miv5-update .miv5-source-card.dashboard.needs-update>.miv5-source-main,.miv5-update .miv5-source-card.dashboard.needs-install>.miv5-source-main{border:1px solid #416a83!important;background:#0a1823!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)!important}
+.miv5-update .miv5-source-card.notice.needs-update>.miv5-source-main,.miv5-update .miv5-source-card.notice.needs-install>.miv5-source-main{border:1px solid #77633a!important;background:#241b0c!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)!important}
+.miv5-update .miv5-source-card.dashboard>.miv5-source-main em,.miv5-update .miv5-source-card.notice>.miv5-source-main em{display:none!important}
+body .miv5-update .miv5-source-card.needs-update a.miv5-install-link.${CANONICAL}[data-update-state="available"]{border:2px solid #b6ff38!important;background:#b6ff38!important;color:#101700!important;box-shadow:0 0 0 2px rgba(182,255,56,.18),0 0 12px rgba(182,255,56,.6)!important;animation:none!important;transition:none!important;font-weight:950!important}
+.miv5-update a.${CANONICAL}:focus-visible{outline:2px solid #ffffff!important;outline-offset:2px!important}
 .miv5-update .miv5-source-card.dashboard>.miv5-source-main em{position:static!important;display:block!important;width:fit-content!important;margin:4px 0 0!important;padding:3px 5px!important;border-radius:5px!important;font:800 7px/1.2 system-ui!important;background:#b6ff38!important;color:#0c1c12!important;animation:none!important}
 .miv5-update .miv5-source-card.dashboard.needs-install>.miv5-source-main em{background:#dfb664!important}
 .miv5-update+.micmp{margin-top:3px!important}.miu-topactions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;align-items:stretch!important}.miu-topactions .${DETAIL_CLASS}{display:grid!important;place-items:center!important;align-content:center!important;gap:2px!important;min-width:0!important;min-height:48px!important;border:1px solid #6a4a91!important;background:#171126!important;color:#eadcff!important;border-radius:11px!important;padding:7px 8px!important;font-weight:950!important}.miu-topactions .${DETAIL_CLASS} span{font-size:10px!important;line-height:1.15!important}.miu-topactions .${DETAIL_CLASS} small{font-size:7px!important;color:#bca9d1!important;line-height:1.2!important}
@@ -90,6 +93,13 @@ function installStyle(){
   textIfChanged(s,css);
 }
 
+function paintSettings(link:HTMLElement,card:HTMLElement,kind:"dashboard"|"notice"){
+  const pending=card.classList.contains("needs-update"),missing=card.classList.contains("needs-install");
+  const label=kind==="dashboard"?"分析":"本人通知";
+  textIfChanged(link,pending?"更新":"設定");
+  const description=pending?`${label}の設定・更新：更新があります。押して更新画面へ`:missing?`${label}の設定：このブラウザへツールを導入`:`${label}の設定・更新`;
+  for(const [name,value]of[["title",description],["aria-label",description],["data-update-state",pending?"available":missing?"missing":"current"]]){if(link.getAttribute(name)!==value)link.setAttribute(name,value)}
+}
 function ensureNoticeControls(){
   const card=document.querySelector<HTMLElement>(".miv5-source-card.notice");if(!card)return;
   let controls=card.querySelector<HTMLElement>(`:scope > .${NOTICE_CONTROLS}`);
@@ -107,7 +117,7 @@ function ensureNoticeControls(){
 
   let link=controls.querySelector<HTMLAnchorElement>(`a.${CANONICAL}`);
   if(!link){link=document.createElement("a");controls.appendChild(link)}
-  classIfChanged(link,`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`);link.href=hrefFor("notice");textIfChanged(link,card.classList.contains("needs-update")?"更新あり":card.classList.contains("needs-install")?"＋ インストール":"設定");link.title=card.classList.contains("needs-update")?"本人通知の更新があります":card.classList.contains("needs-install")?"本人通知をこの端末へインストール":"本人通知の設定・更新";link.onclick=e=>e.stopPropagation();
+  classIfChanged(link,`miv5-install-link ${TOOL_CLASS} ${CANONICAL}`);link.href=hrefFor("notice");paintSettings(link,card,"notice");link.onclick=e=>e.stopPropagation();
 
   for(const el of [...card.querySelectorAll<HTMLElement>(":scope > a,:scope > button")]){if(el.classList.contains("miv5-source-main"))continue;el.remove()}
   card.classList.toggle("mumei-notification-feature-off",featureEnabled===false);
@@ -125,7 +135,7 @@ function ensureOne(kind:"dashboard"|"notice"){
   classIfChanged(toggle,`mumei-dashboard-feature-toggle ${dashEnabled===false?"off":"on"}`);
   if(toggle.getAttribute("aria-pressed")!==String(dashEnabled===true))toggle.setAttribute("aria-pressed",String(dashEnabled===true));
   const title=dashError||(!dashSeen?"ダッシュボード同期ツールの更新後に切り替えられます":dashEnabled?"ダッシュボードのパネルと自動読込をOFFにする":"ダッシュボードのパネルと自動読込をONにする");if(toggle.title!==title)toggle.title=title;
-  if(settings){textIfChanged(settings,card.classList.contains("needs-update")?"更新":"設定");if(settings.title!=="ダッシュボードの設定・更新")settings.title="ダッシュボードの設定・更新"}
+  if(settings)paintSettings(settings,card,"dashboard");
 }
 function ensureDetailProxy(){const actions=document.querySelector<HTMLElement>(".miu-topactions"),source=document.querySelector<HTMLButtonElement>(".miv5-source-card.detail .miv5-source-main");if(!actions||!source)return;actions.querySelectorAll(".mumei-public-refresh-proxy").forEach(el=>el.remove());let proxy=actions.querySelector<HTMLButtonElement>(`.${DETAIL_CLASS}`);if(!proxy){proxy=document.createElement("button");proxy.type="button";proxy.className=DETAIL_CLASS;proxy.innerHTML="<span>🔎 詳細分析</span><small>インストール不要</small>";proxy.addEventListener("click",()=>source.click());actions.appendChild(proxy)}}
 function normalizeCopy(){const dash=document.querySelector<HTMLElement>(".miv5-source-card.dashboard .miv5-source-main small");if(dash&&!/v\d|未導入/.test(dash.textContent||""))textIfChanged(dash,"ダッシュボード同期ツール");const span=document.querySelector<HTMLElement>(".miv5-source-card.dashboard .miv5-source-main span");if(span&&!/更新確認に失敗/.test(span.textContent||""))textIfChanged(span,"公式ダッシュボード＋INSIGHT Pro");const notice=document.querySelector<HTMLElement>(".miv5-source-card.notice .miv5-source-main small");if(notice)textIfChanged(notice,"本人通知ツール")}
