@@ -63,5 +63,5 @@ test("V3.6.16 supports checkpoint stop without losing partial progress",async()=
   const network=await read("public/note-insight-notification-network-v3300.js"),reader=await read("public/note-insight-notification-reader-v4.js"),controls=await read("public/note-insight-notification-controls-v1.js");
   assert.match(network,/stopRequested/);assert.match(network,/function stop\(\)/);assert.match(network,/停止・途中保存/);assert.match(network,/resume:/);
   assert.match(reader,/__mumeiNotificationNetwork3300\?\.stop\?\.\(\)/);assert.match(reader,/未確認分を残して停止/);assert.match(network,/partial:!complete/);
-  assert.match(controls,/読込 \$\{read\}/);assert.match(controls,/保存確認 \$\{saved\}/);assert.match(controls,/VERSION='1\.3\.9'/);
+  assert.match(controls,/読込 \$\{read\}/);assert.match(controls,/保存確認 \$\{saved\}/);assert.match(controls,/VERSION='1\.4\.0'/);
 });
