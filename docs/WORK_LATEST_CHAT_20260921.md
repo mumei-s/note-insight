@@ -512,3 +512,46 @@ GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火�
 - ユーザー「いきなり白い背景は眩しすぎてだめ」を受け、本体 2026.09.27.11。分析の広い白背景・カード・グラフ内側を青灰色に統一。本文・補助文字・操作状態・SVGも同じ配色へ。グラフは水色、スキは桃色、コメントは薄紫。数値、読取、保存、分類、期間、記事カードの構成には変更なし。
 - `npm run build`、既存リリース回帰8件成功。実コンポーネントをfixtureで描画し320/344/390pxを確認。横はみ出し・数値切れ・実行エラーなし。344pxの先頭・推移・ランキング画像を目視確認。補助文字のコントラストは最も明るい操作背景でも5.25:1。
 - 公開更新URL: https://mumei-s.github.io/note-insight/?insightMode=analysis&insightPeriod=all&v=2026092711#dashboard 。この表示更新で記事の再読込やツール再インストールは不要。
+
+
+## 2026-09-30 HTTP 402・複数フィルター・Dashboard残留
+
+実機画像で本人通知Readerが「HTTP 402 / 保存確認 0 / 127件」。同時に、複数人フィルター、設定を連続で開くと本人ID未確認、🔔内スクロール端で背後ページが動く、Dashboard常時読込・他画面へのパネル残留を報告。
+
+### HTTP 402
+- Supabase unified logsを実時刻帯で確認。
+- `insight-notification-ingest-v2` だけでなく `insight-notifications` / `insight-avatar-refresh` / `insight-comment-refresh` / `insight-like-backfill` / `insight-relations` も同時帯に402。
+- 直前までは同プロジェクトのEdge Functionsが200を返しており、その後複数関数が一斉に402へ切替。
+- ingest関数本体に402返却コードはない。Supabase Fair Use / billing / quota側のservice restrictionとして扱う。
+- クライアントV3.6.16では402を `BACKEND_RESTRICTED` として非retryable化。未保存outbox/window journalを保持し、自動再試行を連打しない。制限解除後の手動再試行で保存を続行する。
+- 402自体はアプリコードで解除できない。Supabase組織のUsage/Billing/Spend Cap/支払状態の確認が必要。
+
+### フィルター
+- 有効グループの全IDをSetへ統合する既存仕様を維持。
+- 旧 `hydrateProfiles` は1件のprofileJob実行中に後続IDの補完要求を捨てる経路があった。
+- Filter V4.1.5で `profileQueue` を導入し、後続IDを4件ずつ最後まで処理。2人目以降も補完対象から落とさない。
+- 2ID同時フィルターの回帰テストを追加。
+- 🔔パネルにoverscroll containmentとtouch/wheel境界ガードを追加し、一覧端で背後のnote本文へスクロールを渡さない。
+
+### 設定を連続で開く時の本人ID
+- Controls V1.4.0。
+- pageshow/focusで `knownAccount` を空にしない。
+- 設定を開く直前に `knownAccount || await account()` を必ず通し、`notificationAccount` を付与できない場合は遷移しない。
+- 1人追加→🔔へ戻る→🔔を閉じずに再度設定、の経路を対象。
+
+### Dashboard
+- Dashboard V1.6.3。
+- 公式同期面は `/sitesettings/stats` 配下だけ。汎用 `/dashboard` は対象外。
+- pushState / replaceState / popstate / hashchangeで即時surface判定。
+- 公式Stats面を離れたら固定パネルとclearanceをdisplay:noneで残さずDOMから削除する。
+- Statsへ戻った時だけ新しくmountし、保持checkpointから再開。
+- 402時は `保存先が利用制限中` と表示し、通常の「読込中」を残さない。
+
+### 公開版
+- INSIGHT本体 `2026.09.30.1`
+- 本人通知 `3.6.16`
+- Dashboard `1.6.3`
+- DM `1.4.9`
+- PWA cache `mumei-note-insight-v59`
+
+実機での最終確認項目：402制限解除後に127件の未保存通知が続きから保存されること、2人目以降のフィルター、連続設定、🔔端スクロール、Dashboard他画面残留ゼロ。Pages Deploy成功とAndroid実機成功は別々に確認し、ソース修正のみで完成扱いしない。
