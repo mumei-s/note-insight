@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.1.6';
+const VERSION='4.1.7';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -72,7 +72,7 @@ function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='attributes'&&m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN);return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard');r.style.removeProperty('overscroll-behavior-y')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false);releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface)for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false);releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 let lastTouchY=null;
 function scrollConsumer(target,dy){for(let el=target instanceof Element?target:null;el&&root?.contains(el);el=el.parentElement){const max=el.scrollHeight-el.clientHeight;if(max>2){if(dy>0&&el.scrollTop<max-1)return el;if(dy<0&&el.scrollTop>1)return el}if(el===root)break}return null}
 window.addEventListener('touchstart',e=>{if(root&&shown(root)&&e.touches?.length===1&&root.contains(e.target))lastTouchY=e.touches[0].clientY;else lastTouchY=null},{capture:true,passive:true});
