@@ -1,9 +1,15 @@
 export {};
-const STYLE_ID="mumei-inline-updates-v1-style";
+// This layer only explains feature actions. The canonical top controls own update styling.
 let timer=0;
-function installStyle(){if(document.getElementById(STYLE_ID))return;const s=document.createElement("style");s.id=STYLE_ID;s.textContent=`
-.miv5-source-card.needs-update .miv5-source-main,.miv5-source-card.needs-install .miv5-source-main{cursor:pointer!important}.miv5-source-card.needs-update>.miv5-install-link,.miv5-source-card.needs-install>.miv5-install-link{box-shadow:0 0 0 1px rgba(182,255,56,.2)!important}
-`;document.head.appendChild(s)}
-function paint(){installStyle();for(const cls of ["normal","notice","dashboard"]){const card=document.querySelector<HTMLElement>(`.miv5-source-card.${cls}`);if(!card)continue;const main=card.querySelector<HTMLElement>(".miv5-source-main"),action=card.querySelector<HTMLElement>(":scope > .miv5-install-link");if(card.classList.contains("needs-update")){if(main)main.title=cls==="normal"?"公開データを更新。INSIGHT本体更新は下の別ボタンです":cls==="dashboard"?"更新があります。タップして更新画面へ":"更新があります。下の更新ボタンから上書きできます";if(action)action.title=cls==="normal"?"INSIGHT本体を更新":"このツールを更新"}else if(card.classList.contains("needs-install")){if(main)main.title=cls==="dashboard"?"タップしてダッシュボード同期の導入画面へ":"この端末にはまだ導入されていません";if(action)action.title="このツールをインストール"}else if(main){main.removeAttribute("title")}}}
-function schedule(ms=160){clearTimeout(timer);timer=window.setTimeout(paint,ms)}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>schedule(0),{once:true});else schedule(0);new MutationObserver(()=>schedule()).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class","aria-busy"]});window.addEventListener("pageshow",()=>schedule(20));window.addEventListener("focus",()=>schedule(20));
+function paint(){
+  for(const kind of ["normal","notice","dashboard"]){
+    const card=document.querySelector<HTMLElement>(`.miv5-source-card.${kind}`);
+    const main=card?.querySelector<HTMLElement>(".miv5-source-main");if(!main)continue;
+    const title=kind==="normal"?"公開データを再取得。INSIGHT本体の更新とは別です":kind==="dashboard"?"分析を開く。設定・更新は下の丸いボタンです":"本人通知を開く。設定・更新は下の丸いボタンです";
+    if(main.title!==title)main.title=title;
+  }
+}
+function schedule(ms=160){window.clearTimeout(timer);timer=window.setTimeout(paint,ms)}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>schedule(0),{once:true});else schedule(0);
+new MutationObserver(()=>schedule()).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class","aria-busy"]});
+window.addEventListener("pageshow",()=>schedule(20));window.addEventListener("focus",()=>schedule(20));
