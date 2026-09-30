@@ -122,6 +122,26 @@ function BottomNav({ route }: { route: string }) {
   </>;
 }
 
+function MaintenanceScreen() {
+  return <main className="insight-maintenance" role="status" aria-live="polite">
+    <section>
+      <small>INSIGHT / SYSTEM MAINTENANCE</small>
+      <h1>システムメンテナンス中</h1>
+      <p>現在、データ基盤の緊急メンテナンスを行っています。</p>
+      <p>参加者情報・保存済み履歴は保持されています。復旧までしばらくお待ちください。</p>
+      <strong>ご利用中の皆さまにはご不便をおかけします。</strong>
+    </section>
+    <style>{`
+      .insight-maintenance{min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 18%,#173142 0,#0a1722 38%,#050a10 100%);color:#eef8ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+      .insight-maintenance section{width:min(620px,100%);padding:28px 22px;border:1px solid #38566d;border-radius:18px;background:rgba(7,17,26,.94);box-shadow:0 18px 48px rgba(0,0,0,.36);text-align:center}
+      .insight-maintenance small{display:block;color:#79d8ef;font-weight:900;letter-spacing:.12em;font-size:10px}
+      .insight-maintenance h1{margin:10px 0 16px;font-size:clamp(28px,8vw,46px);line-height:1.08}
+      .insight-maintenance p{margin:8px 0;color:#b8c9d8;font-size:14px;line-height:1.75}
+      .insight-maintenance strong{display:block;margin-top:20px;padding-top:16px;border-top:1px solid #253a4a;color:#dff8ff;font-size:13px}
+    `}</style>
+  </main>;
+}
+
 export function App() {
   const [route, setRoute] = useState(currentRoute);
   const [memberToken, setMemberToken] = useState(initialMemberToken);
@@ -292,6 +312,8 @@ export function App() {
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;
+  const maintenanceBypass = route === "owner" || route === "manage" || route.startsWith("owner-features/") || ownerView;
+  if (!maintenanceBypass) return <MaintenanceScreen />;
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
     <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
