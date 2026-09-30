@@ -24,7 +24,9 @@ ok(live.includes('onClick={()=>openMode("notifications")}'), 'notification featu
 for (const [file, expected] of [['note-insight-notification-v3.user.js', release.notificationVersion], ['note-insight-dashboard-sync.user.js', release.dashboardVersion], ['note-insight-dm.user.js', release.dmVersion]]) {
  const text = await read('public/' + file);
  check(text.match(/@version\s+([^\s]+)/)?.[1], expected, file + ' metadata version');
- ok(/@(?:download|update)URL\s+https:\/\/mumei-s.github.io\/note-insight\//.test(text), file + ' update source');
+ const origin = file === 'note-insight-dashboard-sync.user.js' ? 'https://mumei-s.github.io/note-insight/' : 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/';
+ check(text.match(/@updateURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical update source');
+ check(text.match(/@downloadURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical download source');
 }
 
 if (process.argv.includes('--live')) {
@@ -74,6 +76,7 @@ if (process.argv.includes('--live')) {
 const compile = code => ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace(/export\s*\{\s*\};?/g, '');
 const topJs = compile(await read('src/insight-top-install-v16.ts'));
 const inlineJs = compile(await read('src/insight-inline-updates-v1.ts'));
+const noticeRouteJs = compile(await read('src/insight-notification-update-route-v1.ts'));
 const baseCss = await read('src/member-insight-live-v2.css');
 const updateStart = live.indexOf('  async function updateInsightApp(){');
 const updateAction = live.slice(updateStart, live.indexOf('  useEffect(()=>{', updateStart)).replaceAll('import.meta.env.BASE_URL', '"/note-insight/"');
@@ -81,17 +84,19 @@ ok(updateStart > 0 && updateAction.includes('insightAppVersion'), 'exercise actu
 const registration = compile(api.slice(api.indexOf('export function registerServiceWorker()')).replace('export ', '').replaceAll('import.meta.env.BASE_URL', '"/note-insight/"'));
 const swSource = await read('public/sw.js');
 let sawNoCache = false;
+let originOffline = false, droppedOriginRequests = 0, droppedSwRequests = 0;
+results.offlineSimulation = "origin socket disconnect; genuine SW cache fallback; not a physical radio test";
 const inline = code => code.replace(/<\/script/gi, '<\\/script');
 const fixture = `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#101b28;color:white;font-family:system-ui}button,a{box-sizing:border-box}${baseCss}</style><body>
 <section class="miv5-update"><div class="miv5-source-grid">
 <div class="miv5-source-card normal"><button class="miv5-source-main"><strong>通常データ</strong><small>公開記事・スキを再取得</small></button></div>
-<div class="miv5-source-card dashboard needs-update"><button class="miv5-source-main" onclick="window.testMode='analysis'"><strong>📊 分析</strong><small>ダッシュボード v1.6.3</small><span>公式ダッシュボード＋INSIGHT</span><em>更新あり</em></button><a class="miv5-install-link miv5-dashboard-settings" href="./dashboard-setup.html?from=analysis">設定</a></div>
-<div class="miv5-source-card notice needs-update"><button class="miv5-source-main" onclick="window.testMode='notifications'"><strong>🔔 本人通知</strong><small>この端末 v3.6.19</small><span>通知履歴・追加分析</span><em>更新あり</em></button><a class="miv5-install-link" href="./tool-setup.html">設定</a></div>
+<div class="miv5-source-card dashboard needs-update"><button class="miv5-source-main" onclick="window.testMode='analysis'"><strong>📊 分析</strong><small>ダッシュボード v1.6.3</small><span>公式ダッシュボード＋INSIGHT</span></button><a class="miv5-install-link miv5-dashboard-settings" href="./dashboard-setup.html?from=analysis">設定</a></div>
+<div class="miv5-source-card notice needs-update"><button class="miv5-source-main" onclick="window.testMode='notifications'"><strong>🔔 本人通知</strong><small>この端末 v3.6.19</small><span>通知履歴・追加分析</span></button><a class="miv5-install-link" href="./tool-setup.html">設定</a></div>
 </div></section><div class="miu"><a href="https://note.com/test_fixture">@test_fixture</a></div>
 <button id="app-update" onclick="updateInsightApp()">本体更新テスト</button><p id="feedback"></p>
-<script>window.testMode='normal';localStorage.setItem('test-preserved-history','do-not-delete');localStorage.setItem('mumei-insight-access-token','synthetic-token-only');sessionStorage.setItem('test-preserved-session','keep');
+<script>window.testMode='normal';
 window.addEventListener('message',e=>{const d=e.data;if(e.origin!==location.origin)return;for(const [source,bridge]of [['mumei-notification-feature-ui-v1','mumei-notification-feature-bridge-v1'],['mumei-dashboard-feature-ui-v1','mumei-dashboard-feature-bridge-v1']]){if(d?.source===source){const enabled=d.type==='set'?d.enabled:true;window.postMessage({source:bridge,type:'state',enabled},location.origin)}}});</script>
-<script>${inline(topJs)}</script><script>${inline(inlineJs)}</script>
+<script type="module">${inline(topJs)}</script><script type="module">${inline(inlineJs)}</script><script type="module">${inline(noticeRouteJs)}</script>
 <script>${inline(registration)}registerServiceWorker();
 let appBusy=false;const CURRENT_INSIGHT_APP_VERSION='2026.09.30.7';const APP_UPDATE_RESULT_KEY='mumei-insight-app-update-result';
 function setAppBusy(v){appBusy=v}function showAppFeedback(v){document.getElementById('feedback').textContent=v}
@@ -100,6 +105,7 @@ function versionDiffers(a,b){return a!==b}const sleep=ms=>new Promise(r=>setTime
 ${inline(updateAction)}</script></body></html>`;
 
 const server = http.createServer((req, res) => {
+ if (originOffline) { droppedOriginRequests++; if(new URL(req.url, 'http://127.0.0.1').pathname.endsWith('/sw.js'))droppedSwRequests++; req.socket.destroy(); return; }
  const url = new URL(req.url, 'http://127.0.0.1');
  const relative = url.pathname.replace(/^\/note-insight\//, '');
  res.setHeader('Cache-Control', 'public, max-age=600');
@@ -122,16 +128,27 @@ try {
    for (const width of [360, 1280]) {
     const context = await browser.newContext({ viewport: { width, height: 840 } });
     const page = await context.newPage();
-    const errors=[];page.on('pageerror', e=>errors.push(e.message));
+    const errors=[], outageNetworkErrors=[];
+    const swDropsAtStart=droppedSwRequests;
+    page.on('pageerror', e=>{
+     const message=e.message;
+     const swAccessFailure=message.endsWith('/note-insight/sw.js due to access control checks.');
+     const expectedNetworkFailure=message==='TypeError: Load failed'||swAccessFailure||message.endsWith('/note-insight/insight-release.json?offline=1.');
+     const correlatedLateSwFailure=swAccessFailure&&droppedSwRequests>swDropsAtStart;
+     if((originOffline&&expectedNetworkFailure)||correlatedLateSwFailure)outageNetworkErrors.push({message,delayed:!originOffline});
+     else errors.push(message);
+    });
     try {
      await page.goto(origin + '/note-insight/index.html#dashboard');
      await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);
      await page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller));
+     // Seed once in the test, never from the reloaded app document.
+     await page.evaluate(()=>{localStorage.setItem('test-preserved-history','do-not-delete');localStorage.setItem('mumei-insight-access-token','synthetic-token-only');sessionStorage.setItem('test-preserved-session','keep')});
      const settings = page.locator('.miv5-update a.mumei-canonical-install');
      check(await settings.count(),2,name+' exactly two settings controls');
      check(await settings.allTextContents(),['更新','更新'],name+' equal labels');
      const visual=await settings.evaluateAll(nodes=>nodes.map(n=>({color:getComputedStyle(n).backgroundColor,shadow:getComputedStyle(n).boxShadow,label:n.getAttribute('aria-label'),fits:n.scrollWidth<=n.clientWidth+1})));
-     ok(visual.every(v=>v.color==='rgb(182, 255, 56)'&&v.shadow!=='none'),name+' settings steady glow');
+     ok(visual.every(v=>v.color==='rgb(182, 255, 56)'&&v.shadow!=='none'),name+' settings steady glow '+JSON.stringify(visual));
      ok(visual.every(v=>v.label.includes('更新があります')&&v.fits),name+' accessible label and fit '+width);
      const mainColors=await page.locator('.dashboard>.miv5-source-main,.notice>.miv5-source-main').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).borderTopColor));
      check(mainColors,['rgb(65, 106, 131)','rgb(119, 99, 58)'],name+' large cards not glowing');
@@ -141,6 +158,18 @@ try {
      check(await page.evaluate(()=>window.testMode),'notifications',name+' notice feature remains usable');
      check(new URL(await page.locator('.dashboard a.mumei-canonical-install').getAttribute('href'),page.url()).pathname,'/note-insight/dashboard-setup.html',name+' dashboard setup destination');
      await page.screenshot({path:out+'/'+name+'-'+width+'-update.png',fullPage:true});
+     const entryURL=page.url();
+     await page.locator('.notice a.mumei-canonical-install').click();
+     await page.waitForURL(u=>u.pathname==='/note-insight/notification-update.html');
+     check(new URL(page.url()).searchParams.get('account'),'test_fixture',name+' notice setup preserves account');
+     check(new URL(page.url()).searchParams.get('return'),entryURL,name+' notice setup preserves return');
+     await page.goBack();
+     await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);
+     await page.locator('.dashboard a.mumei-canonical-install').click();
+     await page.waitForURL(u=>u.pathname==='/note-insight/dashboard-setup.html');
+     check(new URL(page.url()).searchParams.get('from'),'analysis',name+' actual dashboard settings click');
+     await page.goBack();
+     await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);
      await page.evaluate(()=>document.querySelectorAll('.needs-update').forEach(n=>n.classList.remove('needs-update')));
      await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="current"]').length===2);
      check(await settings.allTextContents(),['設定','設定'],name+' labels reset on confirmed current versions');
@@ -153,12 +182,16 @@ try {
      const cacheURLs=await page.evaluate(async()=>{const names=(await caches.keys()).filter(n=>n.startsWith('mumei-note-insight-'));return(await Promise.all(names.map(async n=>(await(await caches.open(n)).keys()).map(r=>r.url)))).flat()});
      ok(cacheURLs.every(u=>!u.includes('insight-release.json')),name+' manifests never cached');
      check(await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();return r.updateViaCache}),'none',name+' SW bypasses HTTP cache');
-     await context.setOffline(true);
+     check(errors, [], name+' no application errors before injected outage');
+     originOffline = true;
+     const droppedBefore = droppedOriginRequests;
      check(await page.evaluate(()=>fetch('./insight-release.json?offline=1',{cache:'no-store'}).then(()=>false,()=>true)),true,name+' offline cannot fake fresh release');
      await page.reload();
      ok((await page.locator('body').innerText()).includes('通常データ'),name+' cached app shell survives offline');
      check(await page.evaluate(()=>localStorage.getItem('test-preserved-history')),'do-not-delete',name+' history preserved');
-     await context.setOffline(false);
+     ok(droppedOriginRequests > droppedBefore, name+' origin outage actually reached the network');
+     await page.waitForTimeout(100);
+     originOffline = false;
      await page.evaluate(()=>window.dispatchEvent(new Event('online')));
      await page.locator('#app-update').click();
      await page.waitForURL(u=>u.searchParams.get('insightAppVersion')===release.appVersion);
@@ -166,10 +199,15 @@ try {
      check(await page.evaluate(()=>localStorage.getItem('mumei-insight-access-token')),'synthetic-token-only',name+' login token untouched');
      check(await page.evaluate(()=>sessionStorage.getItem('test-preserved-session')),'keep',name+' session untouched');
      check(await page.evaluate(()=>sessionStorage.getItem('mumei-insight-app-update-result')),release.appVersion,name+' expected version checkpoint');
-     check(errors,[],name+' no JavaScript errors');
-     results.engines.push({name,version:browser.version(),width,status:'passed'});
-    } catch(e) { await page.screenshot({path:out+'/'+name+'-'+width+'-failure.png',fullPage:true}).catch(()=>{}); throw e; }
-    finally { await context.close(); }
+     check(await page.evaluate(async()=>{
+      const reg=await navigator.serviceWorker.getRegistration();
+      if(!reg)return 'missing';
+      return Promise.race([reg.update().then(()=>Boolean(reg.active)),new Promise(resolve=>setTimeout(()=>resolve('timeout'),5000))]);
+     }),true,name+' fresh SW update succeeds after network restoration');
+     check(errors,[],name+' no unexpected JavaScript errors');
+     results.engines.push({name,version:browser.version(),width,status:'passed',outageNetworkErrors,droppedSwRequests:droppedSwRequests-swDropsAtStart});
+    } catch(e) { await fs.writeFile(out+'/'+name+'-'+width+'-failure.json',JSON.stringify({error:String(e),stack:e.stack,assertions:results.assertions,completed:results.engines},null,2)); await page.screenshot({path:out+'/'+name+'-'+width+'-failure.png',fullPage:true}).catch(()=>{}); throw e; }
+    finally { originOffline = false; await context.close(); }
    }
   } finally { await browser.close(); }
  }
