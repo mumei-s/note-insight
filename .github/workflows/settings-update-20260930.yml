@@ -29,14 +29,7 @@ jobs:
         run: |
           git rev-parse HEAD > /tmp/settings-update-base
           python3 scripts/repair-settings-update-20260930.py
-          # Each fixture module has its own lexical scope, as in the real ESM bundle.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('tests/settings-update-20260930.mjs')
-          s = p.read_text()
-          s = s.replace('<script>${inline(topJs)}</script><script>${inline(inlineJs)}</script>', '<script type="module">${inline(topJs)}</script><script type="module">${inline(inlineJs)}</script>')
-          p.write_text(s)
-          PY
+          python3 scripts/finish-settings-controls-20260930.py
       - name: Install, compile and compare existing static checks
         run: |
           npm ci --prefer-offline --no-audit --no-fund
@@ -63,7 +56,7 @@ jobs:
           for item in p['engines']:
               text+=f'- {item["name"]} {item["version"]}, viewport {item["width"]}: {item["status"]}\n'
           text+='\nThe UI suite uses synthetic account/version state. It does not authenticate as a participant, contact note APIs, or install userscripts into real participant extension managers. Engine tests are not real Android Edge/Yahoo or iOS Safari device tests.\n'
-          text+='\nChecked: matching round-button labels, steady glow without a large-card glow, feature routes, current/missing/update transitions, per-browser settings, network-only release metadata, offline shell, reconnection update, hash preservation, and synthetic login/history/session preservation.\n'
+          text+='\nChecked: matching round-button labels, steady glow without a large-card glow, actual feature and setup clicks, current/missing/update transitions, per-browser settings, network-only release metadata, offline shell, reconnection update, hash preservation, and synthetic login/history/session preservation.\n'
           text+=f'\nLegacy static suite: {b["total"]} checks, {len(b["unchangedFailures"])} identical failures on the exact pre-change baseline and candidate; zero new failures. Original failing tests were not removed or claimed to pass.\n'
           text+='\nCode commits are separated by feature boundary. No Supabase, scheduler, MUUMEI, participant data, or userscript-body changes.\n'
           Path('docs/SETTINGS_UPDATE_20260930.md').write_text(text)
@@ -75,7 +68,7 @@ jobs:
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$(cat /tmp/settings-update-base)" || { echo 'MAIN_CHANGED: reconcile, no force push'; exit 1; }
           git add tests/settings-update-20260930.mjs
-          if ! git diff --cached --quiet; then git commit -m 'test: isolate browser fixture module scopes'; fi
+          if ! git diff --cached --quiet; then git commit -m 'test: exercise setup clicks and preserve storage only once'; fi
           for file in src/insight-top-install-v16.ts src/member-insight-live-v2.tsx src/insight-inline-updates-v1.ts src/api.ts public/sw.js; do
             git add "$file"
             git commit -m "fix: settings/update recovery in $file"
