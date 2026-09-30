@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.3.9';
+const VERSION='1.4.0';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
@@ -43,8 +43,8 @@ async function act(action,bar){
   try{await reader.scan({forceNetwork:true})}catch{if(b){b.textContent='再読込';b.dataset.state='error'}}return
  }
  if(action==='filter'){const a=await account();if(!a){renderStatus({state:'error',message:'noteログインの確認に失敗しました'});return}const next=!Boolean(await get(key(FIL,a.id),false));await set(key(FIL,a.id),next);window.dispatchEvent(new Event('mumei-insight-filter-refresh-v2939'));await sync(bar);return}
- if(action==='settings'){const u=new URL(SETTINGS);if(knownAccount)u.searchParams.set('notificationAccount',knownAccount.id);leave(u.href,'設定を開いています…');return}
- if(action==='insight'){const u=new URL(INSIGHT);u.searchParams.set('insightMode','notifications');if(knownAccount)u.searchParams.set('notificationAccount',knownAccount.id);u.hash='dashboard';leave(u.href,'INSIGHT【通知】を開いています…');return}
+ if(action==='settings'){const a=knownAccount||await account();if(!a){renderStatus({state:'error',message:'note本人IDを確認できません。もう一度設定を押してください'});return}const u=new URL(SETTINGS);u.searchParams.set('notificationAccount',a.id);leave(u.href,'設定を開いています…');return}
+ if(action==='insight'){const a=knownAccount||await account();const u=new URL(INSIGHT);u.searchParams.set('insightMode','notifications');if(a)u.searchParams.set('notificationAccount',a.id);u.hash='dashboard';leave(u.href,'INSIGHT【通知】を開いています…');return}
 }
 function makeBar(){
  const bar=document.createElement('div');bar.id=TOOLBAR;bar.setAttribute('data-mumei-notification-controls','1');
@@ -81,7 +81,7 @@ const owned=node=>node instanceof Element&&Boolean(node.closest('#'+TOOLBAR+',#'
 const schedule=(ms=180)=>{if(timer)return;timer=setTimeout(()=>{timer=0;mount()},ms)};
 function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!owned(r.target)))schedule()}).observe(document.documentElement,{subtree:true,childList:true});schedule(150)}
 observe();
-window.addEventListener('pageshow',()=>{knownAccount=null;schedule(150)});window.addEventListener('focus',()=>{knownAccount=null;schedule(150);const bar=dedupe();if(bar)void sync(bar)});
+window.addEventListener('pageshow',()=>{schedule(150);const bar=dedupe();if(bar)void sync(bar)});window.addEventListener('focus',()=>{schedule(150);const bar=dedupe();if(bar)void sync(bar)});
 function renderStatus(d){
  lastStatus=d;const bar=dedupe();if(!bar?.isConnected)return;
  const b=bar.querySelector('[data-action="read"]'),line=bar.querySelector('.read-status');if(!b)return;
