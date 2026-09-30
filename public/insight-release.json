@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.30.6",
-  "notificationVersion": "3.6.19",
+  "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-09-30T12:15:00+09:00",
+  "releasedAt": "2026-09-30T12:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHT本体2026.09.30.6のPostgres読取fallbackを維持。本人通知3.6.19でFilter4.1.8を配信。全行が非表示で通知一覧の高さが0になりReaderが一時的にRootを見失っても、Filter自身が隠したRootを保持して解除・再適用ループを防止。",
+  "note": "INSIGHT本体2026.09.30.6のPostgres読取fallbackを維持。本人通知3.6.20でFilter4.1.9を配信。全行がフィルターで非表示になり通知一覧の高さが0になっても、通知/お知らせタブだけを新Rootと誤認せず、非表示済み一覧を保持する。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
