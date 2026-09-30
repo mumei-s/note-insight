@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.30.5",
-  "notificationVersion": "3.6.17",
+  "notificationVersion": "3.6.18",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-09-30T11:58:00+09:00",
+  "releasedAt": "2026-09-30T12:08:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Supabase Edge FunctionsのHTTP 402中でも通常データを表示する緊急DB直読を拡張。スキ履歴・順位・コメント全履歴・コメント順位・お気に入り＋グループ・フォロー/フォロワー照合・増減履歴・共同マガジン・記事一覧など保存済みデータをmemberToken再照合後にPostgresから読取。書き込み系は迂回しない。",
+  "note": "INSIGHT本体2026.09.30.5のDB直読fallbackを維持。本人通知3.6.18でFilter V4.1.7を配信し、全通知が非表示になってリスト高さ0になった場合でも同じ🔔面の親子DOM切替でフィルターを解除・再適用しない。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
