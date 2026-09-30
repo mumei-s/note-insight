@@ -12,7 +12,9 @@ s=once(s,'{notificationUpdateAvailable?<em>更新あり</em>:notificationMissing
 s=once(s,'if(expected&&expected===CURRENT_INSIGHT_APP_VERSION)','if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected))')
 p.write_text(s)
 p=Path('src/insight-top-install-v16.ts')
-s=once(p.read_text(),'.miv5-update .miv5-source-card.needs-update a.${CANONICAL}{','body .miv5-update .miv5-source-card.needs-update a.${CANONICAL}[data-update-state="available"]{')
+# Match the install-link class too: the nested notice default has six class selectors.
+# Equal class specificity plus body/a wins without inline styles or a global override.
+s=once(p.read_text(),'.miv5-update .miv5-source-card.needs-update a.${CANONICAL}{','body .miv5-update .miv5-source-card.needs-update a.miv5-install-link.${CANONICAL}[data-update-state="available"]{')
 p.write_text(s)
 
 p=Path('tests/settings-update-20260930.mjs')
