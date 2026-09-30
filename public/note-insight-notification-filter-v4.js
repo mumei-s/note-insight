@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.1.4';
+const VERSION='4.1.5';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -21,8 +21,21 @@ const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM);
 async function put(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
-let profileJob=null;const profileAttempt=new Map();
-function hydrateProfiles(id,ids,profiles){const missing=ids.filter(x=>!profiles.some(p=>p.id===x&&p.name)&&Date.now()-(profileAttempt.get(x)||0)>60000);if(!missing.length||profileJob)return;profileJob=(async()=>{const next=new Map(profiles.map(p=>[p.id,p]));for(let i=0;i<missing.length;i+=4){await Promise.all(missing.slice(i,i+4).map(async who=>{profileAttempt.set(who,Date.now());try{const r=await fetch('/api/v2/creators/'+encodeURIComponent(who),{credentials:'include'});if(!r.ok)return;const j=await r.json(),d=j.data||j,name=clean(d.nickname||d.name);if(name)next.set(who,{id:who,name,image:d.profileImageUrl||''})}catch{}}))}await put(key(PROFILE,id),[...next.values()]);cache=null;cacheAt=0;schedule(0,true)})().catch(()=>{}).finally(()=>{profileJob=null})}
+let profileJob=null;const profileAttempt=new Map(),profileQueue=new Set();
+function hydrateProfiles(id,ids,profiles){
+ const now=Date.now();
+ for(const who of ids)if(!profiles.some(p=>p.id===who&&p.name)&&now-(profileAttempt.get(who)||0)>15000)profileQueue.add(who);
+ if(profileJob||!profileQueue.size)return;
+ profileJob=(async()=>{
+  while(profileQueue.size){
+   const batch=[...profileQueue].slice(0,4);for(const who of batch)profileQueue.delete(who);
+   const saved=await get(key(PROFILE,id),[]),next=new Map((Array.isArray(saved)?saved:[]).map(p=>[String(p.id||'').toLowerCase(),p]));
+   await Promise.all(batch.map(async who=>{profileAttempt.set(who,Date.now());try{const r=await fetch('/api/v2/creators/'+encodeURIComponent(who),{credentials:'include',cache:'no-store'});if(!r.ok)return;const j=await r.json(),d=j.data||j,name=clean(d.nickname||d.name);if(name)next.set(who,{id:who,name,image:d.profileImageUrl||d.profile_image_url||''})}catch{}}));
+   await put(key(PROFILE,id),[...next.values()]);
+  }
+  cache=null;cacheAt=0;if(accountId===id)schedule(0,true)
+ })().catch(()=>{}).finally(()=>{profileJob=null;if(profileQueue.size&&accountId===id)hydrateProfiles(id,[...profileQueue],[])})
+}
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
 let accountId='',accountJob=null,cache=null,cacheAt=0,root=null,watchedPanel=null,obs=null,timer=0,pendingForce=false,revision=0,run=0,retries=0;
 const listened=new Set();
@@ -58,7 +71,14 @@ function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)r
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='attributes'&&m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN);return true}
-function attach(r){if(root===r)return;obs?.disconnect();obs=null;if(root)for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false);root=r;accountId='';accountJob=null;retries=0;invalidate();if(!r)return;watchedPanel=r;obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard');r.style.removeProperty('overscroll-behavior-y')}
+function attach(r){if(root===r)return;obs?.disconnect();obs=null;if(root){for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false);releaseScrollGuard(root)}root=r;accountId='';accountJob=null;retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+let lastTouchY=null;
+function scrollConsumer(target,dy){for(let el=target instanceof Element?target:null;el&&root?.contains(el);el=el.parentElement){const max=el.scrollHeight-el.clientHeight;if(max>2){if(dy>0&&el.scrollTop<max-1)return el;if(dy<0&&el.scrollTop>1)return el}if(el===root)break}return null}
+window.addEventListener('touchstart',e=>{if(root&&shown(root)&&e.touches?.length===1&&root.contains(e.target))lastTouchY=e.touches[0].clientY;else lastTouchY=null},{capture:true,passive:true});
+window.addEventListener('touchmove',e=>{if(lastTouchY==null||!root||!shown(root)||!root.contains(e.target)||e.touches?.length!==1)return;const y=e.touches[0].clientY,dy=lastTouchY-y;lastTouchY=y;if(!scrollConsumer(e.target,dy)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
+window.addEventListener('touchend',()=>{lastTouchY=null},{capture:true,passive:true});
+window.addEventListener('wheel',e=>{if(!root||!shown(root)||!root.contains(e.target))return;if(!scrollConsumer(e.target,e.deltaY)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
 function discover(){retries=0;schedule(40,true)}
 window.addEventListener(EVT,()=>{invalidate();schedule(0,true)});
 window.addEventListener('mumei-notification-feature-changed',()=>{invalidate();clearTimeout(timer);timer=0;pendingForce=false;if(featureOn())schedule(0,true);else{attach(null);clearHides()}});
