@@ -1,14 +1,15 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.1.0
-// @description  複数の記事URL・#タグ・マガジンURLを上から優先して合算し、件数/全数を指定。アイコン＋画像内キャプション＋記事サムネを記事リンク付きで全自動貼付。
+// @version      1.2.0
+// @description  記事URL・マガジンURL・#タグを1欄で上から優先して合算。件数/全数、画像取得強化、全自動貼付、今回カード一括削除、最初に戻るに対応。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      note.com
 // @connect      assets.st-note.com
+// @connect      *
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js
 // ==/UserScript==
@@ -19,11 +20,12 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.1.0';
+const VERSION='1.2.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
 const POS='mumei_profile_card_paster_pos_v1';
+const RUN_PREFIX='mumei_profile_card_paster_run_v12:';
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
@@ -33,6 +35,21 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const norm=v=>{try{const u=new URL(String(v||''),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
 const noteKey=url=>String(url||'').match(/\/n\/(n[a-f0-9]{12})(?:[/?#]|$)/i)?.[1]||'';
 const magazineKey=url=>String(url||'').match(/\/(?:m|magazines)\/(m[a-z0-9]+)(?:[/?#]|$)/i)?.[1]||'';
+const editorArticleKey=()=>location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1]||'';
+const runKey=()=>RUN_PREFIX+(editorArticleKey()||'unknown');
+function readRun(){try{return JSON.parse(localStorage.getItem(runKey())||'null')}catch{return null}}
+function writeRun(v){try{if(v==null)localStorage.removeItem(runKey());else localStorage.setItem(runKey(),JSON.stringify(v))}catch{}}
+function mediaUrl(v){
+ let raw='';
+ if(typeof v==='string')raw=v;
+ else if(v&&typeof v==='object')raw=v.url||v.src||v.path||v.image_url||v.imageUrl||'';
+ raw=String(raw||'').trim();if(!raw)return'';
+ if(raw.startsWith('//'))return'https:'+raw;
+ if(/^https?:\/\//i.test(raw))return raw;
+ if(raw.startsWith('/'))return'https://assets.st-note.com'+raw;
+ if(/^production\//i.test(raw))return'https://assets.st-note.com/'+raw;
+ return raw
+}
 function getPrefs(){try{return JSON.parse(localStorage.getItem(PREF)||'{}')||{}}catch{return{}}}
 function setPrefs(v){try{localStorage.setItem(PREF,JSON.stringify(v))}catch{}}
 function setStatus(t,bad=false){const e=document.getElementById(STATUS);if(e){e.textContent=t;e.dataset.bad=bad?'1':'0'}}
@@ -103,7 +120,7 @@ function setImageLink(view,hit,row){
 function parseLiker(item){
  const u=item?.user||{},urlname=String(u.urlname||'').trim(),id=String(u.key??u.id??urlname).trim();
  if(!id||!urlname)return null;
- return{likerKey:id,urlname,creator:String(u.nickname||u.name||urlname).trim(),actorUrl:'https://note.com/'+urlname,actorImageUrl:String(u.user_profile_image_url||u.profileImageUrl||u.profile_image_url||'').trim()}
+ return{likerKey:id,urlname,creator:String(u.nickname||u.name||urlname).trim(),actorUrl:'https://note.com/'+urlname,actorImageUrl:mediaUrl(u.user_profile_image_url||u.profileImageUrl||u.profile_image_url||u.user_profile_image_path||u.profile_image_path||u.profileImagePath||u.icon_url||u.image_url||'')}
 }
 function contentList(p){const d=p?.data&&typeof p.data==='object'?p.data:{};return Array.isArray(d.contents)?d.contents:Array.isArray(d.notes)?d.notes:[]}
 function articleFromRaw(raw,creator={}){
@@ -116,10 +133,10 @@ function articleFromRaw(raw,creator={}){
   likerKey:String(creator.likerKey||user.key||user.id||urlname||key),urlname,
   creator:String(creator.creator||user.nickname||user.name||urlname||'noteクリエイター').trim(),
   actorUrl:String(creator.actorUrl||(urlname?'https://note.com/'+urlname:'')),
-  actorImageUrl:String(creator.actorImageUrl||user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||'').trim(),
+  actorImageUrl:mediaUrl(creator.actorImageUrl||user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||user.icon_url||user.image_url||''),
   url,title:String(note.name||note.title||'無題の記事').trim(),key,
   publishAt:String(note.publishAt||note.publish_at||note.published_at||note.created_at||'').trim()||null,
-  thumbUrl:String(note.eyecatch_url||note.image_url||note.thumbnail_url||note.eyecatch?.url||'').trim()
+  thumbUrl:mediaUrl(note.eyecatch_url||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch?.url||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url||'')
  }
 }
 async function creatorContents(id,pageNo=1,disabledPinned=true){return xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)+'/contents?kind=note&page='+pageNo+'&disabled_pinned='+(disabledPinned?'true':'false')+'&with_notes=false')}
@@ -140,19 +157,20 @@ async function chooseCreatorArticle(creator,choice){
   return articleFromRaw(contentList(p)[0],creator)
  }catch{return null}
 }
-function parseSourceLines(raw,kind){
+function parseUnifiedSources(raw){
  const out=[];
  for(const line0 of String(raw||'').split(/\r?\n/)){
   const line=line0.trim();if(!line)continue;
-  if(kind==='likes'){
-   const urls=line.match(/https?:\/\/[^\s,、]+/g)||[];
-   for(const url of urls){if(noteKey(url))out.push({type:'note',value:norm(url),label:norm(url)})}
-   const tags=[...line.matchAll(/#([^#\s,、]+)/g)].map(m=>m[1].trim()).filter(Boolean);
-   for(const tag of tags)out.push({type:'tag',value:tag,label:'#'+tag});
-   if(!urls.length&&!tags.length){const tag=line.replace(/^#+/,'').trim();if(tag)out.push({type:'tag',value:tag,label:'#'+tag})}
-  }else{
-   const urls=line.match(/https?:\/\/[^\s,、]+/g)||[];
-   for(const url of urls){if(magazineKey(url))out.push({type:'mag',value:norm(url),label:norm(url)})}
+  const urls=line.match(/https?:\/\/[^\s,、]+/g)||[];
+  for(const url of urls){
+   if(noteKey(url))out.push({type:'note',value:norm(url),label:norm(url)});
+   else if(magazineKey(url))out.push({type:'mag',value:norm(url),label:norm(url)})
+  }
+  const tags=[...line.matchAll(/#([^#\s,、]+)/g)].map(m=>m[1].trim()).filter(Boolean);
+  for(const tag of tags)out.push({type:'tag',value:tag,label:'#'+tag});
+  if(!urls.length&&!tags.length){
+   const tag=line.replace(/^#+/,'').trim();
+   if(tag)out.push({type:'tag',value:tag,label:'#'+tag})
   }
  }
  const seen=new Set();
@@ -163,36 +181,49 @@ function normalizeSearch(j){
  return{arr:Array.isArray(arr)?arr:[],cursor:d?.cursor?.note??d.note_cursor??notes.next_cursor??notes.cursor??null,last:notes.is_last_page===true||notes.isLastPage===true}
 }
 function targetLimit(mode,count){return mode==='all'?Infinity:Math.max(0,Number(count||0))}
-async function collectLikesAndTags(raw,mode,count,choice){
- const sources=parseSourceLines(raw,'likes'),limit=targetLimit(mode,count);
+async function collectUnified(raw,mode,count,choice){
+ const sources=parseUnifiedSources(raw),limit=targetLimit(mode,count);
  if(!sources.length||limit===0)return[];
  const out=[],seenUrls=new Set(),seenCreators=new Set();
- const add=row=>{if(!row)return false;const u=norm(row.url);if(!u||u===norm(FINAL_URL)||seenUrls.has(u))return false;seenUrls.add(u);out.push({...row,url:u});return true};
+ const add=row=>{
+  if(!row)return false;
+  const u=norm(row.url);
+  if(!u||u===norm(FINAL_URL)||seenUrls.has(u))return false;
+  seenUrls.add(u);out.push({...row,url:u});return true
+ };
  for(let si=0;si<sources.length&&out.length<limit;si++){
   const src=sources[si];
   if(stopRequested)throw new Error('停止しました');
   if(src.type==='note'){
    const key=noteKey(src.value);if(!key)continue;
    for(let pageNo=1;pageNo<=200&&out.length<limit;pageNo++){
-    setStatus('① '+(si+1)+'/'+sources.length+' '+src.label+'｜スキ '+out.length+(mode==='all'?' / 全数':' / '+limit));
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜記事URLのスキ '+out.length+(mode==='all'?' / 全数':' / '+limit));
     const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(key)+'/likes?page='+pageNo+'&per=50');
-    const list=Array.isArray(p?.data?.likes)?p.data.likes:[];
-    const creators=[];
+    const list=Array.isArray(p?.data?.likes)?p.data.likes:[],creators=[];
     for(const item of list){
      const c=parseLiker(item);if(!c||seenCreators.has(c.likerKey))continue;
      seenCreators.add(c.likerKey);creators.push(c)
     }
     for(let i=0;i<creators.length&&out.length<limit;i+=5){
-     if(stopRequested)throw new Error('停止しました');
      const chosen=await Promise.all(creators.slice(i,i+5).map(c=>chooseCreatorArticle(c,choice)));
      for(const row of chosen){add(row);if(out.length>=limit)break}
     }
     if(list.length<50)break
    }
+  }else if(src.type==='mag'){
+   const key=magazineKey(src.value);if(!key)continue;
+   let start=0;
+   while(out.length<limit&&start<10000){
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜マガジン '+out.length+(mode==='all'?' / 全数':' / '+limit));
+    const p=await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?start='+start+'&limit=100');
+    const d=p?.data&&typeof p.data==='object'?p.data:{},list=Array.isArray(d.notes)?d.notes:[];
+    for(const rawNote of list){add(articleFromRaw(rawNote,{}));if(out.length>=limit)break}
+    start+=list.length;if(!list.length||list.length<100)break
+   }
   }else if(src.type==='tag'){
    let cursor='0';
    for(let pageNo=1;pageNo<=250&&out.length<limit;pageNo++){
-    setStatus('① '+(si+1)+'/'+sources.length+' #'+src.value+'｜記事 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜#'+src.value+' '+out.length+(mode==='all'?' / 全数':' / '+limit));
     const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(src.value)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
     const q=normalizeSearch(p);if(!q.arr.length)break;
     for(const rawNote of q.arr){add(articleFromRaw(rawNote,{}));if(out.length>=limit)break}
@@ -203,52 +234,57 @@ async function collectLikesAndTags(raw,mode,count,choice){
  }
  return out
 }
-async function collectMagazines(raw,mode,count){
- const sources=parseSourceLines(raw,'mag'),limit=targetLimit(mode,count);
- if(!sources.length||limit===0)return[];
- const out=[],seen=new Set();
- const add=row=>{if(!row)return;const u=norm(row.url);if(!u||u===norm(FINAL_URL)||seen.has(u))return;seen.add(u);out.push({...row,url:u})};
- for(let si=0;si<sources.length&&out.length<limit;si++){
-  const key=magazineKey(sources[si].value);if(!key)continue;
-  let start=0;
-  while(out.length<limit&&start<10000){
-   if(stopRequested)throw new Error('停止しました');
-   setStatus('② '+(si+1)+'/'+sources.length+' マガジン｜'+out.length+(mode==='all'?' / 全数':' / '+limit));
-   const p=await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?start='+start+'&limit=100');
-   const d=p?.data&&typeof p.data==='object'?p.data:{},list=Array.isArray(d.notes)?d.notes:[];
-   for(const rawNote of list){add(articleFromRaw(rawNote,{}));if(out.length>=limit)break}
-   start+=list.length;if(!list.length||list.length<100)break
+async function articleMetaImage(url){
+ try{
+  const html=await xhr(url,'text',45000),doc=new DOMParser().parseFromString(String(html||''),'text/html');
+  return mediaUrl(doc.querySelector('meta[property="og:image"]')?.content||doc.querySelector('meta[name="twitter:image"]')?.content||'')
+ }catch{return''}
+}
+async function creatorProfile(id){
+ if(!id)return null;
+ try{
+  const p=await xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)),d=p?.data??p??{},u=d.creator||d.user||d;
+  return{
+   creator:String(u.nickname||u.name||id).trim(),
+   avatar:mediaUrl(u.user_profile_image_url||u.profile_image_url||u.profileImageUrl||u.user_profile_image_path||u.profile_image_path||u.profileImagePath||u.icon_url||u.image_url||'')
   }
- }
- return out
+ }catch{return null}
 }
 async function enrich(row){
+ let note={},user={},profile=null;
  try{
-  const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key)),n=p?.data||p||{},u=n.user||n.author||{};
-  let thumb=String(n.eyecatch_url||n.image_url||n.thumbnail_url||n.eyecatch?.url||row.thumbUrl||'').trim();if(thumb.startsWith('//'))thumb='https:'+thumb;
-  let avatar=String(u.user_profile_image_url||u.profileImageUrl||u.profile_image_url||row.actorImageUrl||'').trim();if(avatar.startsWith('//'))avatar='https:'+avatar;
-  return{...row,creator:String(u.nickname||u.name||row.creator||row.urlname||'noteクリエイター').trim(),actorImageUrl:avatar,thumbUrl:thumb,title:String(n.name||n.title||row.title||'無題の記事').trim()}
- }catch{return row}
+  const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));
+  note=p?.data||p||{};user=note.user||note.author||{}
+ }catch{}
+ profile=await creatorProfile(row.urlname||String(user.urlname||'')).catch(()=>null);
+ let thumb=mediaUrl(note.eyecatch_url||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch?.url||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url||row.thumbUrl||'');
+ if(!thumb)thumb=await articleMetaImage(row.url);
+ let avatar=mediaUrl(user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||profile?.avatar||row.actorImageUrl||'');
+ return{
+  ...row,
+  creator:String(profile?.creator||user.nickname||user.name||row.creator||row.urlname||'noteクリエイター').trim(),
+  actorImageUrl:avatar,
+  thumbUrl:thumb,
+  title:String(note.name||note.title||row.title||'無題の記事').trim()
+ }
 }
 async function buildRows(input){
- const likeRows=await collectLikesAndTags(input.likesSources,input.likesMode,input.likesCount,input.choice);
- const magRows=await collectMagazines(input.magSources,input.magMode,input.magCount);
- const seen=new Set(),raw=[];
- for(const row of [...likeRows,...magRows]){
-  const u=norm(row?.url);
-  if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
-  seen.add(u);raw.push({...row,url:u})
+ const raw=await collectUnified(input.sources,input.mode,input.count,input.choice);
+ const seen=new Set(),rows=[];
+ for(const row of raw){
+  const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
+  seen.add(u);rows.push({...row,url:u})
  }
- raw.push({
+ rows.push({
   likerKey:'final-performance-math',urlname:'fuku444',creator:'実績の算数',
   actorUrl:'https://note.com/fuku444',actorImageUrl:'',url:FINAL_URL,
   title:'実績の算数│3日半で0→1達成',key:FINAL_KEY,publishAt:null,thumbUrl:'',finalMarker:true
  });
  const out=[];
- for(let i=0;i<raw.length;i+=5){
+ for(let i=0;i<rows.length;i+=5){
   if(stopRequested)throw new Error('停止しました');
-  setStatus('アイコン・サムネ情報 '+out.length+'/'+raw.length+'…');
-  out.push(...await Promise.all(raw.slice(i,i+5).map(enrich)))
+  setStatus('画像情報 '+out.length+'/'+rows.length+'…');
+  out.push(...await Promise.all(rows.slice(i,i+5).map(enrich)))
  }
  return out.map((x,i)=>({...x,index:i+1,finalMarker:Boolean(x.finalMarker||norm(x.url)===norm(FINAL_URL))}))
 }
@@ -277,7 +313,7 @@ async function makeFile(row){
  else{ctx.fillStyle='#64748b';ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('note',ix+iw/2,55);ctx.textAlign='start'}
  try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));
- return new page.File([blob],String(row.index).padStart(3,'0')+'_profile_note.png',{type:'image/png'})
+ return new page.File([blob],'mumei_profile_note_v12_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
 }
 async function uploadOne(view,row,file){
  ensureEndSelection(view);
@@ -285,71 +321,135 @@ async function uploadOne(view,row,file){
  const dt=new page.DataTransfer();dt.items.add(file);const pos=view.state.selection.from;
  if(nativeImageCommand()(view,dt.files,Math.max(0,pos-1),'image')!==true)throw new Error(row.index+'番 画像アップロードを開始できません');
  const hit=await waitNewNoteImage(view,before,150000);
- setImageLink(view,hit,row);
- ensureEndSelection(view)
+ const linked=setImageLink(view,hit,row);
+ ensureEndSelection(view);
+ return linked
 }
-async function saveOnce(){
- setStatus('貼り付け完了｜下書き保存を1回だけ実行中…');await sleep(1500);
+function recordCreated(hit,row){
+ const run=readRun()||{version:VERSION,articleKey:editorArticleKey(),items:[],createdAt:Date.now()};
+ const rec={id:String(hit?.node?.attrs?.id||''),src:String(hit?.node?.attrs?.src||''),url:norm(row.url),creator:String(row.creator||''),at:Date.now()};
+ const items=Array.isArray(run.items)?run.items:[];
+ const key=(x)=>String(x.id||'')+'|'+String(x.src||'')+'|'+norm(x.url);
+ if(!items.some(x=>key(x)===key(rec)))items.push(rec);
+ writeRun({...run,version:VERSION,articleKey:editorArticleKey(),items,updatedAt:Date.now()})
+}
+function legacyOwnedMarker(node){
+ return Object.values(node?.attrs||{}).some(v=>/mumei_profile_note_v1/i.test(String(v||'')))
+}
+function resolveOwnedHits(view){
+ const run=readRun(),records=Array.isArray(run?.items)?run.items:[],all=imageNodes(view),owned=new Map();
+ for(const rec of records){
+  const byId=rec.id?all.find(h=>String(h.node.attrs?.id||'')===String(rec.id)):null;
+  if(byId&&norm(byId.node.attrs?.link)===norm(rec.url)){owned.set(byId.pos,byId);continue}
+  if(rec.src){
+   const matches=all.filter(h=>String(h.node.attrs?.src||'')===String(rec.src)&&norm(h.node.attrs?.link)===norm(rec.url));
+   if(matches.length===1)owned.set(matches[0].pos,matches[0])
+  }
+ }
+ for(const h of all)if(legacyOwnedMarker(h.node))owned.set(h.pos,h);
+ return[...owned.values()]
+}
+function deleteHits(view,hits){
+ const uniq=[...new Map((hits||[]).map(h=>[h.pos,h])).values()].sort((a,b)=>b.pos-a.pos);
+ if(!uniq.length)return 0;
+ let tr=view.state.tr;
+ for(const h of uniq){
+  const node=view.state.doc.nodeAt(h.pos);
+  if(!node||!node.eq(h.node))throw new Error('本文位置が変わったため削除を停止しました');
+  tr=tr.delete(h.pos,h.pos+h.node.nodeSize)
+ }
+ view.dispatch(tr);ensureEndSelection(view);return uniq.length
+}
+async function saveOnce(label='貼り付け完了｜下書き保存を1回だけ実行中…'){
+ setStatus(label);await sleep(1500);
  const b=[...document.querySelectorAll('button')].find(x=>/^(一時保存|下書き保存)$/.test(x.textContent?.trim())&&x.getClientRects().length&&!x.disabled);
  if(b){b.click();await sleep(6000)}
 }
-
-function modeValue(name){
- const p=document.getElementById(PANEL);
- return p?.querySelector('[data-'+name+'-mode]')?.value==='all'?'all':'number'
+async function deleteOwnedCards({confirm=true,save=true}={}){
+ const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+ const hits=resolveOwnedHits(view);
+ if(confirm&&!page.confirm('この装置が今回貼ったカード '+hits.length+'件を削除します。元本文・元画像は残します。実行しますか？'))return null;
+ const removed=deleteHits(view,hits);
+ writeRun(null);
+ if(save&&removed)await saveOnce('今回カード '+removed+'件を削除｜下書き保存中…');
+ return removed
 }
+
 function inputValues(save=true){
- const p=document.getElementById(PANEL),g=getPrefs();
- if(!p)return g;
- const likesSources=String(p.querySelector('[data-likes-sources]')?.value||'').trim();
- const magSources=String(p.querySelector('[data-mag-sources]')?.value||'').trim();
- const likesMode=modeValue('likes'),magMode=modeValue('mag');
- const likesCount=Math.max(0,Math.min(5000,Number(p.querySelector('[data-likes-count]')?.value||0)));
- const magCount=Math.max(0,Math.min(5000,Number(p.querySelector('[data-mag-count]')?.value||0)));
+ const p=document.getElementById(PANEL),g=getPrefs();if(!p)return g;
+ const sources=String(p.querySelector('[data-sources]')?.value||'').trim();
+ const mode=p.querySelector('[data-mode]')?.value==='all'?'all':'number';
+ const count=Math.max(0,Math.min(5000,Number(p.querySelector('[data-count]')?.value||0)));
  const choice=p.querySelector('button[data-choice].on')?.dataset.choice||g.choice||'latest';
- const v={likesSources,magSources,likesMode,magMode,likesCount,magCount,choice,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
- if(save)setPrefs(v);
- return v
+ const v={sources,mode,count,choice,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
 function amountLabel(mode,count){return mode==='all'?'全数':String(count)+'件'}
 async function run(){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
-  const input=inputValues();
-  const likesSources=parseSourceLines(input.likesSources,'likes'),magSources=parseSourceLines(input.magSources,'mag');
-  if(!likesSources.length&&!magSources.length)throw new Error('記事URL・#タグ・マガジンURLを1つ以上入れてください');
-  if(input.likesMode==='number'&&likesSources.length&&input.likesCount<=0)throw new Error('①の件数を1以上にするか「全数」を選んでください');
-  if(input.magMode==='number'&&magSources.length&&input.magCount<=0)throw new Error('②の件数を1以上にするか「全数」を選んでください');
+  const input=inputValues(),sources=parseUnifiedSources(input.sources);
+  if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
+  if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();selectionApi();
-  setStatus('読み込み開始｜① '+amountLabel(input.likesMode,input.likesCount)+'｜② '+amountLabel(input.magMode,input.magCount)+'｜'+choiceLabel(input.choice));
+  writeRun({version:VERSION,articleKey:editorArticleKey(),items:[],createdAt:Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice});
+  setStatus('読み込み開始｜'+sources.length+'ソース｜'+amountLabel(input.mode,input.count)+'｜'+choiceLabel(input.choice));
   const rows=await buildRows(input);if(!rows.length)throw new Error('貼り付け対象が0件です');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
-   const row=rows[i];
-   setStatus('全自動 '+(i+1)+'/'+rows.length+'｜画像生成 '+row.creator);
+   const row=rows[i];setStatus('全自動 '+(i+1)+'/'+rows.length+'｜カード生成 '+row.creator);
    const file=await makeFile(row);
    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜noteへ貼付 '+row.creator);
-   await uploadOne(view,row,file);
+   const hit=await uploadOne(view,row,file);recordCreated(hit,row);
    await sleep(1200);
    if((i+1)%10===0&&i+1<rows.length){setStatus('全自動 '+(i+1)+'/'+rows.length+'｜10秒休止');await sleep(10000)}
   }
   await saveOnce();
-  setStatus('完了 ✅ '+rows.length+'件｜＋操作不要｜最後：実績の算数')
+  setStatus('完了 ✅ '+rows.length+'件｜＋操作不要｜最後：実績の算数｜「今回カード一括削除」で後処理')
  }catch(e){setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)}
  finally{busy=false;update()}
+}
+async function bulkDelete(){
+ if(busy)return;busy=true;stopRequested=true;update();
+ try{
+  const removed=await deleteOwnedCards({confirm:true,save:true});
+  if(removed!==null)setStatus('今回カード '+removed+'件を一括削除しました ✅')
+ }catch(e){setStatus('一括削除停止：'+(e?.message||String(e)),true)}
+ finally{busy=false;stopRequested=false;update()}
+}
+function resetFields(){
+ const p=document.getElementById(PANEL);if(!p)return;
+ p.querySelector('[data-sources]').value='';
+ p.querySelector('[data-mode]').value='number';
+ p.querySelector('[data-count]').value='10';
+ p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
+ applyAmountMode()
+}
+async function resetAll(){
+ if(busy)return;
+ if(!page.confirm('この装置の今回カードを削除し、入力・件数・途中記録を最初に戻します。元本文・元画像は残します。実行しますか？'))return;
+ busy=true;stopRequested=true;update();
+ try{
+  const removed=await deleteOwnedCards({confirm:false,save:false});
+  localStorage.removeItem(PREF);writeRun(null);resetFields();
+  if(removed)await saveOnce('最初に戻る｜今回カード '+removed+'件を削除して保存中…');
+  setStatus('最初に戻しました ✅ 元本文・元画像は保持')
+ }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
+ finally{busy=false;stopRequested=false;update()}
 }
 function stop(){stopRequested=true;setStatus('停止要求済み｜現在処理中の1件が終わったら停止')}
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
- p.querySelectorAll('textarea,input,select,button').forEach(x=>{if(x.dataset.a==='stop'||x.dataset.ui)return;x.disabled=busy})
+ p.querySelectorAll('textarea,input,select,button').forEach(x=>{
+  if(x.dataset.a==='stop'||x.dataset.ui)return;
+  x.disabled=busy
+ })
 }
-function saveUiState(extra={}){
- const cur=inputValues(false),old=getPrefs();setPrefs({...old,...cur,...extra})
-}
-function applyAmountMode(kind){
- const p=document.getElementById(PANEL),sel=p?.querySelector('[data-'+kind+'-mode]'),num=p?.querySelector('[data-'+kind+'-count]');
+function saveUiState(extra={}){const cur=inputValues(false),old=getPrefs();setPrefs({...old,...cur,...extra})}
+function applyAmountMode(){
+ const p=document.getElementById(PANEL),sel=p?.querySelector('[data-mode]'),num=p?.querySelector('[data-count]');
  if(num)num.style.display=sel?.value==='all'?'none':'block'
 }
 function setCollapsed(on){
@@ -362,14 +462,12 @@ function setTiny(on){
  if(on){
   const r=p.getBoundingClientRect();
   mini.style.left=Math.max(4,Math.min(innerWidth-46,r.left))+'px';
-  mini.style.top=Math.max(4,Math.min(innerHeight-46,r.top))+'px';
-  mini.style.right='auto';
+  mini.style.top=Math.max(4,Math.min(innerHeight-46,r.top))+'px';mini.style.right='auto';
   p.classList.add('tiny');mini.style.display='flex'
  }else{
   const r=mini.getBoundingClientRect();
   p.style.left=Math.max(4,Math.min(innerWidth-p.offsetWidth-4,r.left))+'px';
-  p.style.top=Math.max(4,Math.min(innerHeight-p.offsetHeight-4,r.top))+'px';
-  p.style.right='auto';
+  p.style.top=Math.max(4,Math.min(innerHeight-p.offsetHeight-4,r.top))+'px';p.style.right='auto';
   p.classList.remove('tiny','collapsed');mini.style.display='none';savePos(p)
  }
  saveUiState({tiny:Boolean(on),collapsed:false})
@@ -402,61 +500,55 @@ function mount(){
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
  p.innerHTML=`
  <style>
- #${PANEL}{position:fixed;right:6px;top:70px;z-index:2147483647;width:min(276px,calc(100vw - 12px));padding:7px;border:1px solid #3d6178;border-radius:11px;background:#07131d;color:#edf8ff;box-shadow:0 8px 24px #0008;font:10px/1.3 system-ui;max-height:68vh}
+ #${PANEL}{position:fixed;right:6px;top:70px;z-index:2147483647;width:min(268px,calc(100vw - 12px));padding:7px;border:1px solid #3d6178;border-radius:11px;background:#07131d;color:#edf8ff;box-shadow:0 8px 24px #0008;font:10px/1.3 system-ui;max-height:56vh}
  #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:176px;padding:5px}
  #${PANEL} .head{display:grid;grid-template-columns:1fr 28px 28px;gap:3px;align-items:center;touch-action:none;user-select:none}
  #${PANEL} .title{font-weight:950;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
- #${PANEL} .body{max-height:calc(68vh - 36px);overflow:auto;padding-right:1px}
+ #${PANEL} .body{max-height:calc(56vh - 36px);overflow:auto;padding-right:1px}
  #${PANEL} label{display:block;margin-top:5px;font-size:9px;color:#b9d8e8}
- #${PANEL} textarea{width:100%;height:44px;resize:vertical;margin-top:2px;padding:5px;border:1px solid #395970;border-radius:7px;background:#0b1d28;color:#fff;font:9px/1.3 system-ui}
+ #${PANEL} textarea{width:100%;height:72px;resize:vertical;margin-top:2px;padding:5px;border:1px solid #395970;border-radius:7px;background:#0b1d28;color:#fff;font:9px/1.3 system-ui}
  #${PANEL} input,#${PANEL} select{width:100%;height:30px;padding:3px 5px;border:1px solid #395970;border-radius:7px;background:#0b1d28;color:#fff;font-size:10px}
  #${PANEL} .amount{display:grid;grid-template-columns:74px 1fr;gap:4px;margin-top:3px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:3px}
  #${PANEL} button{min-height:29px;border:1px solid #416a82;border-radius:7px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:9px;touch-action:manipulation;pointer-events:auto}
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
  #${PANEL} .hint{margin-top:3px;font-size:8px;color:#91b5c8;line-height:1.3}
- #${PANEL} .runrow{display:grid;grid-template-columns:1fr 54px;gap:4px;margin-top:6px}#${PANEL} [data-a="run"]{background:#0b6176;border-color:#64d8ef;color:#fff}
+ #${PANEL} .runrow{display:grid;grid-template-columns:1fr 48px;gap:4px;margin-top:6px}#${PANEL} [data-a="run"]{background:#0b6176;border-color:#64d8ef;color:#fff}
+ #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
  #${STATUS}{margin-top:5px;padding-top:5px;border-top:1px solid #284555;font-size:8.5px;color:#bfe8ff;word-break:break-word}#${STATUS}[data-bad="1"]{color:#ffb8b8}
  #${PANEL}-mini{position:fixed;right:8px;top:84px;z-index:2147483647;width:42px;height:42px;border:1px solid #5fd4ee;border-radius:50%;background:#082333;color:#fff;font:950 11px system-ui;display:none;align-items:center;justify-content:center;box-shadow:0 6px 20px #0008;touch-action:none;user-select:none}
  </style>
  <div class="head"><div class="title">紹介貼付 v${VERSION}｜長押し移動</div><button data-ui="collapse">－</button><button data-ui="tiny">×</button></div>
  <div class="body">
-  <label>① 記事URL / #タグ（複数行・上から優先）</label>
-  <textarea data-likes-sources placeholder="https://note.com/.../n/...&#10;#タグ&#10;https://note.com/.../n/...">${escAttr(g.likesSources||g.likesUrl||'')}</textarea>
-  <div class="amount"><select data-likes-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-likes-count type="number" min="1" max="5000" value="${Number(g.likesCount??10)}"></div>
-  <label>スキした人の使用記事</label>
+  <label>記事URL / マガジンURL / #タグ（1欄・上から優先）</label>
+  <textarea data-sources placeholder="https://note.com/.../n/...&#10;https://note.com/.../m/...&#10;#はじめてのnote">${escAttr(g.sources||g.likesSources||g.magSources||'')}</textarea>
+  <div class="amount"><select data-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-count type="number" min="1" max="5000" value="${Number(g.count??g.likesCount??10)}"></div>
+  <label>記事URLのスキした人 → 使用記事</label>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
-  <div class="hint">#タグは検索結果の記事をそのまま採用。URL＋#は上から合算。</div>
-  <label>② マガジンURL（複数行・上から優先）</label>
-  <textarea data-mag-sources placeholder="https://note.com/.../m/...&#10;https://note.com/.../m/...">${escAttr(g.magSources||g.magazineUrl||'')}</textarea>
-  <div class="amount"><select data-mag-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-mag-count type="number" min="1" max="5000" value="${Number(g.magCount??g.magazineCount??10)}"></div>
-  <div class="hint">数字＝合計件数。全数＝並べた全ソースを最後まで。最後は実績の算数。</div>
+  <div class="hint">記事URL＝スキした人 / マガジン＝掲載記事 / #＝検索記事。すべて上から合算。最後は実績の算数。</div>
   <div class="runrow"><button data-a="run">▶ 読み込み→全自動貼付</button><button data-a="stop">停止</button></div>
-  <div id="${STATUS}">＋操作不要。1回押すと、読込→画像生成→アップロード→記事URL設定→保存まで全自動。</div>
+  <div class="tools"><button data-a="delete">今回カード一括削除</button><button data-a="reset">最初に戻る</button></div>
+  <div id="${STATUS}">＋操作不要。アイコン＋記事サムネ取得 → カード生成 → アップロード → URL設定 → 保存まで全自動。</div>
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
  const choice=['oldest','fixed','latest'].includes(g.choice)?g.choice:'latest';
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
- p.querySelector('[data-likes-mode]').value=g.likesMode==='all'?'all':'number';
- p.querySelector('[data-mag-mode]').value=g.magMode==='all'?'all':'number';
- applyAmountMode('likes');applyAmountMode('mag');
+ p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';applyAmountMode();
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
   p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.remove('on'));btn.classList.add('on');saveUiState({choice:btn.dataset.choice})
  }));
- p.querySelector('[data-likes-mode]').addEventListener('change',()=>{applyAmountMode('likes');saveUiState()});
- p.querySelector('[data-mag-mode]').addEventListener('change',()=>{applyAmountMode('mag');saveUiState()});
+ p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
  p.querySelectorAll('textarea,input').forEach(x=>x.addEventListener('change',()=>saveUiState()));
  p.querySelector('[data-ui="collapse"]').addEventListener('click',e=>{e.preventDefault();setCollapsed(!p.classList.contains('collapsed'))});
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="run"]').addEventListener('click',e=>{e.preventDefault();void run()});
  p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
+ p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
+ p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
  mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
- bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);
- restorePos(p);
- if(g.collapsed)p.classList.add('collapsed');
- if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}
- update()
+ bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
+ if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
