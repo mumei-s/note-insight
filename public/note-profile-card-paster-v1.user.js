@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.3.0
-// @description  画像（名前キャプション＋記事リンク）とnote正規通知カードを別々に全自動作成。カードのみ一括削除、最初に戻るで今回画像＋カードを削除。
+// @version      1.4.0
+// @description  毎回新規実行。まず画像リンク＋名前キャプション一覧を全件作成し、その後にnote正規通知カード一覧を全件作成。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.3.0';
+const VERSION='1.4.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -476,6 +476,10 @@ function resolveOwnedCardHits(view){
  }
  return hits
 }
+function trackedContentCount(view){
+ if(!readRun())return{images:0,cards:0};
+ return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length}
+}
 async function deleteNotificationCards({confirm=true,save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
  const hits=resolveOwnedCardHits(view);
@@ -515,36 +519,55 @@ async function run(){
   if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
-  const old=readRun()||{},baseline=Array.isArray(old.cardBaselineKeys)?old.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean);
-  writeRun({...old,version:VERSION,articleKey:editorArticleKey(),items:Array.isArray(old.items)?old.items:[],cardKeys:Array.isArray(old.cardKeys)?old.cardKeys:[],cardBaselineKeys:baseline,createdAt:old.createdAt||Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice});
+
+  const leftover=trackedContentCount(view);
+  if(leftover.images||leftover.cards){
+   throw new Error('このページに前回作成分が残っています。続きからは行いません。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
+  }
+
+  // 毎回ここから新規セッション。以前の進捗・途中位置は継承しない。
+  writeRun({
+   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],
+   cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
+   createdAt:Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice
+  });
+
   setStatus('読み込み開始｜'+sources.length+'ソース｜'+amountLabel(input.mode,input.count)+'｜'+choiceLabel(input.choice));
   const rows=await buildRows(input);if(!rows.length)throw new Error('貼り付け対象が0件です');
+
+  // Phase 1: 紹介画像を全件まとめて作る。
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
-   const row=rows[i],runNow=readRun()||{},rec=(runNow.items||[]).find(x=>norm(x.url)===norm(row.url));
-   let imageHit=null;
-   if(rec){
-    imageHit=imageNodes(view).find(h=>(rec.id&&String(h.node.attrs?.id||'')===String(rec.id))||(rec.src&&String(h.node.attrs?.src||'')===String(rec.src)&&norm(h.node.attrs?.link)===norm(row.url)));
-   }
-   if(imageHit){
-    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜既存画像へ名前キャプション修復 '+row.creator);
-    imageHit=relinkCaption(view,imageHit,row);recordImage(imageHit,row)
-   }else{
-    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜紹介画像生成 '+row.creator);
-    const file=await makeFile(row);
-    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜画像アップロード '+row.creator);
-    imageHit=await uploadOne(view,row,file);recordImage(imageHit,row)
-   }
-   setStatus('全自動 '+(i+1)+'/'+rows.length+'｜正規通知カード作成 '+row.creator);
+   const row=rows[i];
+   setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜生成 '+row.creator);
+   const file=await makeFile(row);
+   setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜noteへ貼付 '+row.creator);
+   const imageHit=await uploadOne(view,row,file);
+   recordImage(imageHit,row);
+   await sleep(1200)
+  }
+
+  await saveOnce('① 画像🔗＋名前キャプション '+rows.length+'/'+rows.length+' 完了｜途中保存中…');
+
+  // Phase 2: 画像一覧の後ろへ、正規通知カード一覧を全件まとめて作る。
+  for(let i=0;i<rows.length;i++){
+   if(stopRequested)throw new Error('手動停止');
+   const row=rows[i];
+   setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator);
    await createNativeCard(view,row);
    await sleep(3000);
-   if((i+1)%10===0&&i+1<rows.length){setStatus('全自動 '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');await sleep(30000)}
+   if((i+1)%10===0&&i+1<rows.length){
+    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');
+    await sleep(30000)
+   }
   }
-  await saveOnce('画像＋正規通知カード 完了｜下書き保存中…');
+
+  await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
   const runDone=readRun()||{};
-  setStatus('完了 ✅ 画像 '+(runDone.items?.length||0)+'件＋正規通知カード '+(runDone.cardKeys?.length||0)+'件｜最後：実績の算数')
- }catch(e){setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)}
- finally{busy=false;update()}
+  setStatus('完了 ✅ 画像一覧 '+(runDone.items?.length||0)+'件 → 通知カード一覧 '+(runDone.cardKeys?.length||0)+'件｜最後：実績の算数')
+ }catch(e){
+  setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開・前回続きはしません',true)
+ }finally{busy=false;update()}
 }
 async function bulkDelete(){
  if(busy)return;busy=true;stopRequested=true;update();
@@ -660,9 +683,9 @@ function mount(){
   <label>記事URLのスキした人 → 使用記事</label>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
   <div class="hint">記事URL＝スキした人 / マガジン＝掲載記事 / #＝検索記事。すべて上から合算。最後は実績の算数。</div>
-  <div class="runrow"><button data-a="run">▶ 画像＋通知カード 全自動</button><button data-a="stop">停止</button></div>
+  <div class="runrow"><button data-a="run">▶ 画像一覧 → 通知カード一覧</button><button data-a="stop">停止</button></div>
   <div class="tools"><button data-a="delete">正規通知カード一括削除</button><button data-a="reset">最初に戻る</button></div>
-  <div id="${STATUS}">＋操作不要。紹介画像（名前キャプション＋記事🔗）→ note正規通知カード → 保存まで全自動。</div>
+  <div id="${STATUS}">＋操作不要。①画像🔗＋名前キャプションを全件 → ②その後ろに正規通知カードを全件。毎回新規開始。</div>
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
