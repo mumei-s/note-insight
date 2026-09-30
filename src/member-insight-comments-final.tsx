@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import "./member-insight-comments-final.css";
 
 const HISTORY="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-history";
@@ -13,7 +14,7 @@ const EVENT_PAGE=500;
 const EVENT_GROUP=3;
 type Row=Record<string,any>;type Heart=Record<string,any>;
 const COMMENT_CACHE=new Map<string,{rows:Row[];total:number;at:number}>();
-async function post(endpoint:string,body:Record<string,unknown>){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal});const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");return p}finally{window.clearTimeout(timer)}}
+async function post(endpoint:string,body:Record<string,unknown>){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),45000);try{try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:controller.signal});const p=await r.json().catch(()=>({}));if(r.status===401||r.status===403)throw new Error(p?.error||`HTTP_${r.status}`);if(r.status===402)throw new Error("BACKEND_RESTRICTED_402");if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");return p}catch(e){const msg=e instanceof Error?e.message:String(e);if(!memberReadAuthFailure(msg))try{return await memberDbReadFallback(endpoint,body)}catch{}throw e}}finally{window.clearTimeout(timer)}}
 const hist=(action:string,extra:Record<string,unknown>={})=>post(HISTORY,{action,...extra});const extra=(action:string,extra:Record<string,unknown>={})=>post(EXTRAS,{action,...extra});
 const n=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 const date=(v:any,withTime=true)=>{if(!v)return"—";const d=new Date(String(v));if(Number.isNaN(d.getTime()))return"—";return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",...(withTime?{year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}:{year:"numeric",month:"numeric",day:"numeric"})}).format(d)};
