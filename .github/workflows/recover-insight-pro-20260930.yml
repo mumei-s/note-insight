@@ -1,0 +1,160 @@
+name: Recover INSIGHT after Pro 20260930
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/recover-insight-pro-20260930.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: insight-pro-recovery-20260930
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Check production gateway and authentication rejection
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const results=[];
+          for (const [slug,action] of [['insight-access','session'],['insight-access-reactivate','resume'],['insight-notifications','list']]) {
+            const response=await fetch(`https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/${slug}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action}),signal:AbortSignal.timeout(30000)});
+            const body=await response.json();
+            const result={slug,action,status:response.status,error:typeof body.error==='string'?body.error:null};
+            console.log(JSON.stringify(result)); results.push(result);
+            assert.notEqual(response.status,402,'quota restriction must be cleared');
+            assert.ok(response.status>=400 && response.status<500,'anonymous private requests must remain rejected');
+          }
+          fs.writeFileSync('/tmp/insight-pro-gateway.json',JSON.stringify(results,null,2));
+          JS
+      - name: Check optimized backend regressions
+        run: node tests/egress-runtime-20260930.test.mjs
+      - name: Prepare the minimal maintenance-only patch
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const path='src/App.tsx'; let source=fs.readFileSync(path,'utf8');
+          const before='  if (!maintenanceBypass) return <MaintenanceScreen />;';
+          const after='  if (PARTICIPANT_MAINTENANCE && !maintenanceBypass) return <MaintenanceScreen />;';
+          if (!source.includes('const PARTICIPANT_MAINTENANCE = false;')) {
+            assert.equal(source.split(before).length-1,1,'unexpected maintenance source; do not rewrite');
+            const anchor='const OWNER_KEY = "mumei-unified-owner-token";';
+            assert.equal(source.split(anchor).length-1,1);
+            source=source.replace(anchor,'// Pro gateway recovery verified on 2026-09-30. Authentication is unchanged.\nconst PARTICIPANT_MAINTENANCE = false;\n'+anchor).replace(before,after);
+            fs.writeFileSync(path,source);
+          } else assert.ok(source.includes(after));
+          const sw='public/sw.js'; let worker=fs.readFileSync(sw,'utf8');
+          const old='const CACHE_NAME = "mumei-note-insight-v65";';
+          const next='const CACHE_NAME = "mumei-note-insight-v66-pro-recovery-20260930";';
+          if (worker.includes(old)) fs.writeFileSync(sw,worker.replace(old,next));
+          else assert.ok(worker.includes(next),'unexpected service worker version');
+          fs.writeFileSync('public/pro-recovery-20260930.json',JSON.stringify({maintenance:false,release:'pro-recovery-20260930',checkedAt:new Date().toISOString(),checks:JSON.parse(fs.readFileSync('/tmp/insight-pro-gateway.json','utf8')),scope:'Gateway and anonymous login UI; real participant credentials are not used.'},null,2)+'\n');
+          JS
+      - name: Build and run the frontend regression suite
+        run: npm test
+      - name: Install a temporary browser test dependency without changing manifests
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+      - name: Prepare mobile browser smoke checks
+        run: |
+          cat > recovery-smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const base=process.env.SMOKE_URL;
+          assert.ok(base);
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+          const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+          fs.mkdirSync('recovery-screens',{recursive:true});
+          try {
+            for (const [name,hash] of [['home',''],['login','#access/insight'],['dashboard-anonymous','#dashboard'],['owner','#owner']]) {
+              await page.goto(base+hash,{waitUntil:'domcontentloaded',timeout:60000});
+              await page.waitForSelector('#root > *',{timeout:30000});
+              await page.waitForTimeout(1500);
+              assert.equal(await page.locator('.insight-maintenance').count(),0,`${name}: maintenance still visible`);
+              assert.ok((await page.locator('#root').innerText()).trim().length>15,`${name}: blank page`);
+              if (name==='login' || name==='dashboard-anonymous') assert.ok(await page.locator('input').count()>0,`${name}: login inputs missing`);
+              await page.screenshot({path:`recovery-screens/${process.env.SMOKE_PHASE}-${name}.png`,fullPage:true});
+              console.log(JSON.stringify({phase:process.env.SMOKE_PHASE,route:name,maintenance:false,inputCount:await page.locator('input').count()}));
+            }
+            assert.deepEqual(errors,[],'uncaught browser errors');
+          } finally { await browser.close(); }
+          JS
+      - name: Verify local mobile pages before publishing
+        run: |
+          npm run preview -- --port 4173 > /tmp/insight-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:4173/note-insight/ >/dev/null && break || sleep 1; done
+          SMOKE_URL=http://127.0.0.1:4173/note-insight/ SMOKE_PHASE=local node recovery-smoke.mjs
+      - name: Commit only recovery files after all checks
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || { echo 'main changed; stop instead of overwriting'; exit 1; }
+          git config user.name 'INSIGHT recovery automation'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.tsx public/sw.js public/pro-recovery-20260930.json
+          git diff --cached --stat
+          git diff --cached --quiet || git commit -m 'fix: restore participant access after verified Pro quota recovery'
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          gh workflow run pages.yml --ref main
+      - name: Wait for the exact new Pages deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          RUN_ID=''
+          for i in $(seq 1 24); do
+            RUN_ID=$(gh run list --workflow pages.yml --event workflow_dispatch --limit 15 --json databaseId,headSha --jq ".[] | select(.headSha == \"$EXPECTED_SHA\") | .databaseId" | head -1)
+            test -n "$RUN_ID" && break
+            sleep 5
+          done
+          test -n "$RUN_ID" || { echo 'Pages run not found'; exit 1; }
+          echo "PAGES_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          gh run watch "$RUN_ID" --exit-status --interval 10
+      - name: Verify the published release and real mobile entry pages
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const url='https://mumei-s.github.io/note-insight/pro-recovery-20260930.json';
+          let verified=false;
+          for(let i=0;i<12;i++) {
+            const response=await fetch(url+'?check='+Date.now(),{signal:AbortSignal.timeout(20000),cache:'no-store'});
+            if(response.ok) { const data=await response.json(); if(data.release==='pro-recovery-20260930'&&data.maintenance===false) {verified=true;break;} }
+            await new Promise(r=>setTimeout(r,5000));
+          }
+          assert.ok(verified,'published recovery marker not found');
+          JS
+          SMOKE_URL=https://mumei-s.github.io/note-insight/ SMOKE_PHASE=production node recovery-smoke.mjs
+          echo 'Production mobile entry pages verified. Real participant account login has not been impersonated or tested.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Pages run: $PAGES_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: insight-pro-recovery-mobile-screens
+          path: recovery-screens/
+          retention-days: 3
