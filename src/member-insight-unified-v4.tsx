@@ -14,6 +14,8 @@ const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashbo
 const PAGE=100;
 const SELF_THUMB_CACHE="mumei-insight-self-thumbs-v1";
 const SUMMARY_CACHE_PREFIX="mumei-insight-summary-cache-v1:";
+const DB_FALLBACK="https://xxhaerjvrgmnadxjqetz.supabase.co/rest/v1/rpc/insight_member_read_fallback";
+const DB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4aGFlcmp2cmdtbmFkeGpxZXR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNTMxMTQsImV4cCI6MjEwMTYyOTExNH0.DtoUvuMTrW7rA3jLThLD4zijvluuTB_LmEBIjWJs-jA";
 type Row=Record<string,any>;
 type Tab="likes"|"supporters"|"comments"|"commentRanking"|"magazines"|"favorites"|"social"|"notifications"|"dm"|"articles";
 type Summary={member:{noteId:string;displayName:string;imageUrl:string|null};summary:Record<string,any>;analysis:Record<string,any>;counts:{comments:number;followers:number;followings:number;notifications:number};articles:Row[]};
@@ -31,7 +33,14 @@ function dataCacheKey(endpoint:string,action:string,extra:Record<string,unknown>
 function cacheableAction(action:string){return !/(?:toggle|set|create|delete|rename|assign|update|sync|mark|remove|write|save)$/i.test(action)}
 function readDataCache(endpoint:string,action:string,extra:Record<string,unknown>){if(!cacheableAction(action))return null;try{const x=JSON.parse(localStorage.getItem(dataCacheKey(endpoint,action,extra))||"null");return x?.payload&&Date.now()-Number(x.cachedAt||0)<1000*60*60*24*30?x.payload:null}catch{return null}}
 function writeDataCache(endpoint:string,action:string,extra:Record<string,unknown>,payload:any){if(!cacheableAction(action)||!payload)return;try{localStorage.setItem(dataCacheKey(endpoint,action,extra),JSON.stringify({cachedAt:Date.now(),payload}))}catch{}}
-async function post(endpoint:string,action:string,extra:Record<string,unknown>={}){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30000);try{try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({action,...extra}),cache:"no-store",signal:controller.signal});const p=await r.json().catch(()=>({}));if(r.status===401||r.status===403)throw new Error(p?.error||"INSIGHT_SESSION_INVALID");if(r.status===402)throw new Error("BACKEND_RESTRICTED_402");if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");writeDataCache(endpoint,action,extra,p);return p}catch(e){const msg=e instanceof Error?e.message:String(e);if(!/INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED/i.test(msg)){const cached=readDataCache(endpoint,action,extra);if(cached)return{...cached,__offlineCache:true}}throw e}}finally{clearTimeout(timer)}}
+async function dbFallback(endpoint:string,action:string,extra:Record<string,unknown>,token:string){
+  const source=(()=>{try{return new URL(endpoint).pathname.split("/").filter(Boolean).at(-1)||""}catch{return""}})();
+  const r=await fetch(DB_FALLBACK,{method:"POST",headers:{"Content-Type":"application/json","apikey":DB_ANON,"Authorization":`Bearer ${DB_ANON}`},body:JSON.stringify({p_token:token,p_source:source,p_action:action,p_extra:extra}),cache:"no-store"});
+  const p=await r.json().catch(()=>null);
+  if(!r.ok||!p||p?.ok===false)throw new Error(String(p?.message||p?.error||`DB_FALLBACK_${r.status}`));
+  return{...p,__dbFallback:true};
+}
+async function post(endpoint:string,action:string,extra:Record<string,unknown>={}){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30000);try{try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({action,...extra}),cache:"no-store",signal:controller.signal});const p=await r.json().catch(()=>({}));if(r.status===401||r.status===403)throw new Error(p?.error||"INSIGHT_SESSION_INVALID");if(r.status===402)throw new Error("BACKEND_RESTRICTED_402");if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");writeDataCache(endpoint,action,extra,p);return p}catch(e){const msg=e instanceof Error?e.message:String(e);if(!/INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED/i.test(msg)){try{const db=await dbFallback(endpoint,action,extra,token);writeDataCache(endpoint,action,extra,db);return db}catch{}const cached=readDataCache(endpoint,action,extra);if(cached)return{...cached,__offlineCache:true}}throw e}}finally{clearTimeout(timer)}}
 const hist=(action:string,extra:Record<string,unknown>={})=>post(HISTORY,action,extra);
 const extra=(action:string,extra:Record<string,unknown>={})=>post(EXTRAS,action,extra);
 const notify=(extra:Record<string,unknown>={})=>post(NOTIFY,"list",extra);
