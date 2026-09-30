@@ -108,7 +108,7 @@ test("performance math article is always appended last",async()=>{
 
 test("installer describes unified v1.2.1 workflow",async()=>{
   const h=await read("public/note-profile-card-paster-install.html");
-  assert.match(h,/v1\.2\.0/);
+  assert.match(h,/v1\.2\.1/);
   assert.match(h,/記事URL \/ マガジンURL \/ #タグを1つの欄へ/);
   assert.match(h,/上から優先して合算/);
   assert.match(h,/画像取得を強化/);
