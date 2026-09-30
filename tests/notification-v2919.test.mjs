@@ -37,8 +37,8 @@ test("installer is isolated, versionless and browser-specific",async()=>{
 
 test("release tracks V3.6.17 without putting the version in the user-facing label",async()=>{
   const manifest=JSON.parse(await read("public/insight-release.json")),release=await read("src/insight-release.ts"),v3=await read("public/note-insight-notification-v3.user.js");
-  assert.equal(manifest.appVersion,"2026.09.30.3");assert.equal(manifest.notificationVersion,"3.6.17");assert.equal(manifest.dmVersion,"1.4.9");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.6.4");
-  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.30\.3"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.17"/);assert.match(v3,/@version\s+3\.6\.17/);
+  assert.equal(manifest.appVersion,"2026.09.30.4");assert.equal(manifest.notificationVersion,"3.6.17");assert.equal(manifest.dmVersion,"1.4.9");assert.equal(manifest.notificationLabel,"本人通知");assert.equal(manifest.dashboardVersion,"1.6.4");
+  assert.match(release,/CURRENT_INSIGHT_APP_VERSION = "2026\.09\.30\.4"/);assert.match(release,/CURRENT_NOTIFICATION_VERSION = "3\.6\.17"/);assert.match(v3,/@version\s+3\.6\.17/);
 });
 
 test("Dashboard and notification auth prefer explicit owner before stale member session",async()=>{const dash=await read("supabase/functions/insight-dashboard-import-token/index.ts"),notice=await read("supabase/functions/insight-notification-import-token/index.ts");for(const src of [dash,notice])assert.match(src,/if\(preferred==="owner"&&await owner\(req\)\)return ownerIdentity\(\);const p=await participant\(req\)/)});
@@ -54,7 +54,7 @@ test("legacy notification sync is a true no-require stop wrapper and Dashboard c
   assert.match(dash,/sitesettings\\\/stats/);assert.doesNotMatch(dash,/sitesettings\\\/stats\|dashboard/);
   assert.match(dash,/VERSION='1\.6\.4'/);
   assert.match(boot,/@version\s+1\.6\.4/);
-  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=163/);
+  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=164/);
 });
 
 
@@ -66,4 +66,15 @@ test("stale Dashboard flow never hijacks ordinary note navigation",async t=>{
   w.__location={href:w.location.href,origin:w.location.origin,search:w.location.search,pathname:w.location.pathname,assign:()=>calls.push('navigate')};
   w.eval(boot.replace("'use strict';","'use strict'; const location=window.__location;"));await new Promise(resolve=>setImmediate(resolve));
   assert.equal(w.sessionStorage.getItem('mumei-dashboard-flow-v143'),null);assert.deepEqual(calls,[]);assert.equal(w.document.querySelector('#mumei-dashboard-sync'),null);
+});
+
+
+test("Postgres fallback keeps saved normal history visible during Edge 402",async()=>{
+  const ui=await read("src/member-insight-unified-v4.tsx");
+  assert.match(ui,/insight_member_read_fallback/);
+  assert.match(ui,/BACKEND_RESTRICTED_402/);
+  assert.match(ui,/await dbFallback\(endpoint,action,extra,token\)/);
+  assert.match(ui,/__dbFallback:true/);
+  assert.match(ui,/SUMMARY_CACHE_PREFIX/);
+  assert.match(ui,/DATA_CACHE_PREFIX/);
 });
