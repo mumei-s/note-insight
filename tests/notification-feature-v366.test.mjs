@@ -49,3 +49,26 @@ for(const retryable of [true,false])test(`保存エラー後は読込中を解�
  now+=21000;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30);assert.equal(calls,retryable?2:1);
  await w.__mumeiNotificationReaderV4.scan();assert.equal(calls,retryable?3:2,'手動は待ち時間を置かず再開');
 });
+
+
+test('複数フィルターIDを同時に全件判定し、ベル内スクロールを閉じ込める',async t=>{
+ const html='<main id="panel"><button>通知</button><button>お知らせ</button>'+
+  '<div class="m-navbarNoticeItem"><span>人物Aさんが共同マガジンに新しい記事を1本追加しました 1分前</span></div>'+
+  '<div class="m-navbarNoticeItem"><span>人物Bさんが共同マガジンに新しい記事を2本追加しました 2分前</span></div></main>';
+ const dom=new JSDOM(html,{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:120,top:0,left:0,right:360,bottom:120});
+ const values=new Map([
+  ['mumei_insight_magazine_filter_enabled_v3:tester',true],
+  ['mumei_insight_notification_groups_v1:tester',[{name:'G',enabled:true,ids:['actor_a','actor_b']}]],
+  ['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor_a',name:'人物A'},{id:'actor_b',name:'人物B'}]]
+ ]);
+ w.GM={getValue:async(k,d)=>values.has(k)?values.get(k):d,setValue:async(k,v)=>values.set(k,v),addValueChangeListener:()=>1};
+ w.fetch=async url=>Response.json(String(url).includes('current_user')?{data:{user:{urlname:'tester'}}}:{data:{}});
+ w.__mumeiNotificationReaderV4={findPanel:()=>w.document.getElementById('panel')};
+ w.eval(read('filter-v4.js'));
+ await w.__mumeiNotificationFilterV4.refresh(true);await pause(30);
+ const rows=[...w.document.querySelectorAll('.m-navbarNoticeItem')];
+ assert.equal(rows.length,2);assert.ok(rows.every(el=>el.classList.contains('mumei-muted-v2939')),'2人目以降も含め全IDを判定');
+ assert.equal(w.document.getElementById('panel').getAttribute('data-mumei-filter-scroll-guard'),'1');
+ assert.equal(w.document.getElementById('panel').style.getPropertyValue('overscroll-behavior-y'),'contain');
+});
