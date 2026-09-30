@@ -5,9 +5,9 @@ import { readFile } from "node:fs/promises";
 const root=new URL("../",import.meta.url);
 const read=p=>readFile(new URL(p,root),"utf8");
 
-test("profile paste tool v1.2 is editor-only and INSIGHT-independent",async()=>{
+test("profile paste tool v1.2.1 is editor-only and INSIGHT-independent",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
-  assert.match(s,/@version\s+1\.2\.0/);
+  assert.match(s,/@version\\s+1\\.2\\.1/);
   assert.match(s,/@match\s+https:\/\/editor\.note\.com\/\*/);
   assert.doesNotMatch(s,/@match\s+https:\/\/note\.com\/\*/);
   assert.doesNotMatch(s,/mumei_insight|current_user/);
@@ -106,7 +106,7 @@ test("performance math article is always appended last",async()=>{
   assert.match(s,/最後：実績の算数/);
 });
 
-test("installer describes unified v1.2 workflow",async()=>{
+test("installer describes unified v1.2.1 workflow",async()=>{
   const h=await read("public/note-profile-card-paster-install.html");
   assert.match(h,/v1\.2\.0/);
   assert.match(h,/記事URL \/ マガジンURL \/ #タグを1つの欄へ/);
@@ -116,4 +116,14 @@ test("installer describes unified v1.2 workflow",async()=>{
   assert.match(h,/最初に戻る/);
   assert.match(h,/＋ボタンや「画像」は押しません/);
   assert.match(h,/最後は必ず「実績の算数」/);
+});
+
+
+test("count input is Android-focusable numeric text field",async()=>{
+  const s=await read("public/note-profile-card-paster-v1.user.js");
+  assert.match(s,/data-count type="text" inputmode="numeric"/);
+  assert.match(s,/pattern="\[0-9\]\*"/);
+  assert.match(s,/addEventListener\('pointerdown',e=>\{e\.stopPropagation\(\)\}\)/);
+  assert.match(s,/addEventListener\('touchstart',e=>\{e\.stopPropagation\(\)\}/);
+  assert.match(s,/replace\(\/\\D\+\/g,''\)/);
 });
