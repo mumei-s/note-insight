@@ -548,10 +548,23 @@ GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火�
 - 402時は `保存先が利用制限中` と表示し、通常の「読込中」を残さない。
 
 ### 公開版
-- INSIGHT本体 `2026.09.30.1`
+- INSIGHT本体 `2026.09.30.2`
 - 本人通知 `3.6.16`
 - Dashboard `1.6.3`
 - DM `1.4.9`
 - PWA cache `mumei-note-insight-v59`
 
 実機での最終確認項目：402制限解除後に127件の未保存通知が続きから保存されること、2人目以降のフィルター、連続設定、🔔端スクロール、Dashboard他画面残留ゼロ。Pages Deploy成功とAndroid実機成功は別々に確認し、ソース修正のみで完成扱いしない。
+
+
+### INSIGHT【通知】初期表示の古い固定
+- 実機でINSIGHT本体【通知】を開くと、最初だけ古い保存一覧が固定表示され、直後に最新へ切り替わる現象を確認。
+- 原因は `MemberInsightNotificationsFinal` の初期stateが `readBoard()` を無条件で描画していたこと。前回保存が古くても先に画面へ出ていた。
+- INSIGHT本体 `2026.09.30.2` で修正。
+- `mumei-notification-board-meta:<account>` に最後にサーバー確認できた時刻を保存。
+- 15秒以内にサーバー確認済みのboardだけ初期即表示する。同一セッションのView Cacheは即表示を維持。
+- 15秒より古いboardは最初から表示せず「通知を読み込み中…」のまま最新Feedを待つ。
+- Feed取得失敗時に限り前回boardへfallbackし、「最新確認に失敗したため前回保存分を表示しています」と明示。
+- Feed / recent取得成功時だけ `serverCheckedAt` を更新し、アイコン補完や再分類だけで古いboardを新鮮扱いしない。
+- HTTP 402時も前回保存分へ安全fallbackし、最新と誤認させない。
+- PWA cache `mumei-note-insight-v60`。
