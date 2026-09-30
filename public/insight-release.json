@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.1",
+  "appVersion": "2026.09.30.2",
   "notificationVersion": "3.6.16",
   "dashboardVersion": "1.6.3",
   "releasedAt": "2026-09-30T10:34:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知3.6.16：HTTP 402をSupabase利用制限として識別し未保存通知を保持、自動再試行を停止。フィルターは全IDのプロフィール補完をキュー化し、連続設定でも本人IDを再確認。🔔スクロール端で背後ページへスクロールを渡さない。Dashboard1.6.3：公式/sitesettings/statsだけで動作し、他画面ではパネルDOMを削除。",
+  "note": "INSIGHT通知の初期表示を修正。15秒より古い保存一覧は開いた瞬間に表示せず、最新取得後に描画。取得失敗時だけ前回保存分と明示して表示。本人通知3.6.16の402保持・複数フィルター・連続設定・🔔スクロール修正、Dashboard1.6.3のStats限定と他画面パネル削除も維持。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
