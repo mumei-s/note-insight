@@ -81,7 +81,7 @@ function resumeCandidates() {
 }
 
 function transientStatus(status: number) {
-  return status >= 500 || status === 408 || status === 425 || status === 429;
+  return status === 402 || status >= 500 || status === 408 || status === 425 || status === 429;
 }
 
 async function validateCurrentMemberToken() {
