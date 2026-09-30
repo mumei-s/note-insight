@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.2
+// @version      1.6.3
 // @description  INSIGHTの読込ボタンから公式Dashboardを本人通知なしでも同期。直接遷移でもアカウント照合・読込・INSIGHT復帰まで自動実行します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -19,7 +19,7 @@
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-feature-bridge-v1.js?v=100
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=162
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=163
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
@@ -27,7 +27,7 @@
 (function startDashboardWrapper() {
   'use strict';
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardWrapper()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.2';
+  const VERSION='1.6.3';
   let featureEpoch=0,resumeBoot=false;
   const featureOn=()=>window.__mumeiDashboardFeatureV1?.isEnabled?.()!==false;
   if(document.documentElement?.getAttribute('data-mumei-dashboard-wrapper'))return;
@@ -81,7 +81,7 @@
   function showPanel(){if(!featureOn())return;if(document.documentElement.getAttribute('data-mumei-dashboard-surface')==='other')return;const p=panel();if(p){p.setAttribute('data-mumei-recovery','1');p.style.setProperty('display','block','important');p.removeAttribute('aria-hidden')}}
   function setCoreStatus(message,kind='',action=''){document.dispatchEvent(new CustomEvent('mumei-dashboard-status',{detail:{message,kind,action}}))}
   function ensureCorePanel(){document.dispatchEvent(new Event('mumei-dashboard-mount'));return !!panel()}
-  function looksDashboard(){return /^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname)}
+  function looksDashboard(){return /^\/sitesettings\/stats(?:\/|$)/.test(location.pathname)}
   function directPayload(){const q=new URLSearchParams(location.search),code=String(q.get('mumei_dashboard_pair')||'').replace(/\D/g,'').slice(0,8),noteId=String(q.get('mumei_dashboard_account')||'').replace(/^@/,'').toLowerCase(),returnTo=safeReturn(q.get('mumei_dashboard_return'));if(q.get('mumei_dashboard_sync')!=='1'||!/^\d{8}$/.test(code)||!/^[a-z0-9_-]+$/.test(noteId))return null;return{code,noteId,returnTo,period:q.get('mumei_dashboard_period')}}
   // note may normalize the URL before DOMContentLoaded. Keep the arrival request,
   // and also accept the handoff saved by the extension before the navigation.
@@ -151,7 +151,8 @@
     finally{running=false;if(resumeBoot&&featureOn()){resumeBoot=false;run()}}
   }
   const run=()=>{document.dispatchEvent(new Event('mumei-dashboard-surface'));if(document.visibilityState!=='hidden')void boot()};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
-  window.addEventListener('pageshow',run);window.addEventListener('popstate',run);
+  window.addEventListener('pageshow',run);window.addEventListener('popstate',run);window.addEventListener('hashchange',run);
+  for(const name of ['pushState','replaceState']){const original=history[name];if(!original.__mumeiDashboardRoute163){const wrapped=function(...args){const result=original.apply(this,args);queueMicrotask(run);return result};Object.defineProperty(wrapped,'__mumeiDashboardRoute163',{value:true});history[name]=wrapped}}
   document.addEventListener('mumei-dashboard-visible',run);
   let previousHref=location.href,routeWatch=0;
   function watchRoute(){if(!featureOn()||document.visibilityState==='hidden'){clearInterval(routeWatch);routeWatch=0;return}if(!routeWatch)routeWatch=setInterval(()=>{if(location.href!==previousHref){previousHref=location.href;run()}},750)}
