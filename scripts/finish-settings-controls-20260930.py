@@ -16,6 +16,16 @@ p=Path('src/insight-top-install-v16.ts')
 # Equal class specificity plus body/a wins without inline styles or a global override.
 s=once(p.read_text(),'.miv5-update .miv5-source-card.needs-update a.${CANONICAL}{','body .miv5-update .miv5-source-card.needs-update a.miv5-install-link.${CANONICAL}[data-update-state="available"]{')
 p.write_text(s)
+p=Path('src/api.ts')
+s=once(p.read_text(),'.then((value) => { registration = value; })','.then((value) => { registration = value; lastCheck = Date.now(); })')
+s=once(s,'try { await start(); if (registration) await registration.update(); }','''try {
+      const alreadyRegistered = Boolean(registration);
+      await start();
+      // register() already checks the worker. Do not race it with a second
+      // update on the same load/pageshow or while another worker is installing.
+      if (alreadyRegistered && registration && document.visibilityState === "visible" && !registration.installing && !registration.waiting) await registration.update();
+    }''')
+p.write_text(s)
 
 p=Path('tests/settings-update-20260930.mjs')
 s=p.read_text()
