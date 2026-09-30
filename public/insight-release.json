@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.09.30.3",
-  "notificationVersion": "3.6.16",
-  "dashboardVersion": "1.6.3",
-  "releasedAt": "2026-09-30T11:10:00+09:00",
+  "notificationVersion": "3.6.17",
+  "dashboardVersion": "1.6.4",
+  "releasedAt": "2026-09-30T11:43:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "緊急継続モード。Supabase HTTP 402/通信断でも、保存済みmemberToken＋active状態の既存参加者はログイン状態を維持。アクセス画面に戻った場合も保存済みactiveアカウントをローカル復帰。INSIGHT中央は前回サマリー、無ければ保存済み参加者名/note IDから最低限UIを表示し、Failed to fetchだけの画面にしない。401/403・失効・明示ログアウトは従来通り通さない。",
+  "note": "参加者ログイン継続版2026.09.30.3を維持。本人通知3.6.17でFilter V4.1.6を確実に再取得し、複数フィルター・連続設定・🔔スクロール境界を反映。Dashboard1.6.4でStats限定・他画面DOM削除の修正版Coreを確実に再取得。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
