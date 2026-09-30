@@ -48,11 +48,11 @@ test('公式パネルのOFFを押すと即消え、次回起動でもOFFを維�
 });
 
 test('ダッシュボードから汎用🔔シートを開くと、URLが同じでもパネルを隠す',async t=>{
- const h=harness(t),w=h.note();await until(()=>h.calls.some(x=>x.action==='ingest'));const panel=w.document.querySelector('#mumei-dashboard-sync');panel.setAttribute('data-mumei-recovery','1');panel.style.setProperty('display','block','important');
+ const h=harness(t),w=h.note();await until(()=>h.calls.some(x=>x.action==='ingest'));
  const sheet=w.document.createElement('section');sheet.innerHTML='<nav><a href="#notices">通知</a><a href="#news">お知らせ</a></nav><article>人物さんがマガジンに記事を追加しました 1分前</article>';w.document.body.append(sheet);
- await until(()=>w.document.documentElement.getAttribute('data-mumei-dashboard-surface')==='other');assert.equal(w.getComputedStyle(panel).display,'none','wrapperの表示指定にも勝って隠す');
+ await until(()=>w.document.documentElement.getAttribute('data-mumei-dashboard-surface')==='other');assert.equal(w.document.querySelector('#mumei-dashboard-sync'),null,'通知中はパネルDOM自体を残さない');
  const count=h.calls.length;w.document.dispatchEvent(new w.Event('mumei-dashboard-read'));await pause(100);assert.equal(h.calls.length,count,'通知中に読み込まない');
- sheet.hidden=true;await until(()=>w.document.documentElement.getAttribute('data-mumei-dashboard-surface')==='dashboard');assert.notEqual(w.getComputedStyle(panel).display,'none');
+ sheet.hidden=true;await until(()=>w.document.documentElement.getAttribute('data-mumei-dashboard-surface')==='dashboard'&&w.document.querySelector('#mumei-dashboard-sync'));assert.ok(w.document.querySelector('#mumei-dashboard-sync'));
 });
 
 test('本人確認待ちにOFFにした場合、遅れた応答から保存・パネル復活を起こさない',async t=>{
