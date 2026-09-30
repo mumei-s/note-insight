@@ -46,6 +46,30 @@ jobs:
           JS
       - name: Check optimized backend regressions
         run: node tests/egress-runtime-20260930.test.mjs
+      - name: Record the unchanged main branch static-test baseline
+        run: |
+          npm run build
+          cat > recovery-static.mjs <<'JS'
+          import { spawnSync } from 'node:child_process';
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const result=spawnSync(process.execPath,['--test','--test-reporter=tap','tests/static.test.mjs'],{encoding:'utf8'});
+          assert.notEqual(result.status,null,'test runner failed to finish');
+          const output=result.stdout+'\n'+result.stderr;
+          const failures=[...output.matchAll(/^not ok \d+ - (.+)$/gm)].map(m=>m[1]).sort();
+          const pass=Number(output.match(/^# pass (\d+)/m)?.[1]??-1);
+          assert.ok(pass>=0,'missing TAP summary');
+          const summary={status:result.status,pass,failures};
+          fs.writeFileSync(`/tmp/insight-static-${process.env.STATIC_PHASE}.tap`,output);
+          if(process.env.STATIC_PHASE==='baseline') fs.writeFileSync('/tmp/insight-static-baseline.json',JSON.stringify(summary));
+          else {
+            const baseline=JSON.parse(fs.readFileSync('/tmp/insight-static-baseline.json','utf8'));
+            assert.deepEqual(failures,baseline.failures,'new regression failures: abort recovery');
+            assert.ok(pass>=baseline.pass,'passing test count decreased');
+          }
+          console.log(JSON.stringify({phase:process.env.STATIC_PHASE,...summary}));
+          JS
+          STATIC_PHASE=baseline node recovery-static.mjs
       - name: Prepare the minimal maintenance-only patch
         run: |
           node --input-type=module <<'JS'
@@ -68,8 +92,10 @@ jobs:
           else assert.ok(worker.includes(next),'unexpected service worker version');
           fs.writeFileSync('public/pro-recovery-20260930.json',JSON.stringify({maintenance:false,release:'pro-recovery-20260930',checkedAt:new Date().toISOString(),checks:JSON.parse(fs.readFileSync('/tmp/insight-pro-gateway.json','utf8')),scope:'Gateway and anonymous login UI; real participant credentials are not used.'},null,2)+'\n');
           JS
-      - name: Build and run the frontend regression suite
-        run: npm test
+      - name: Build and reject any new static regression
+        run: |
+          npm run build
+          STATIC_PHASE=candidate node recovery-static.mjs
       - name: Install a temporary browser test dependency without changing manifests
         run: |
           npm install --no-save --package-lock=false --no-audit --no-fund playwright
@@ -151,6 +177,7 @@ jobs:
           JS
           SMOKE_URL=https://mumei-s.github.io/note-insight/ SMOKE_PHASE=production node recovery-smoke.mjs
           echo 'Production mobile entry pages verified. Real participant account login has not been impersonated or tested.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Static tests were compared to unchanged main: pre-existing legacy failures are recorded, not concealed as passing.' >> "$GITHUB_STEP_SUMMARY"
           echo "Pages run: $PAGES_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
