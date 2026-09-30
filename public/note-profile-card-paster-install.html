@@ -10,24 +10,26 @@
 </head>
 <body><main class="w"><section class="c">
 <h1>アイコン＋キャプション 貼り付け装置</h1>
-<span class="v">v1.1.0</span>
+<span class="v">v1.2.0</span>
 <div class="n">
-<b>① 記事URL / #タグ → スキした人・タグ記事</b><br>
-複数行で入力できます。記事URLはスキした人を取得し、「最初の記事」「固定→最新」「最新記事」から使用記事を選択。#タグは検索結果の記事を直接取得します。<br>
-<b>上に並べた入力から優先</b>し、数字指定なら合計件数に達した時点で終了。「全数」なら並べた全ソースを最後まで読みます。<br><br>
-<b>② マガジンURL → 掲載記事</b><br>
-マガジンURLも複数行対応。上から優先して合算し、数字指定 / 全数を選べます。<br><br>
+<b>記事URL / マガジンURL / #タグを1つの欄へ</b><br>
+全部同じ入力欄に上から並べます。種類は自動判定。記事URL＝その記事のスキした人、マガジンURL＝掲載記事、#タグ＝検索記事です。<br>
+<b>上から優先して合算</b>し、「件数指定」なら合計件数に達した時点で終了。「全数」なら並べた全ソースを最後まで読みます。<br><br>
+<b>画像取得を強化</b><br>
+アイコンはスキ一覧・記事API・クリエイターAPIから補完。記事サムネは記事APIに加えてOG画像まで補完します。<br><br>
 <b>貼り付けは全自動</b><br>
-「読み込み→全自動貼付」を1回押すだけで、取得 → 対象決定 → 画像生成 → note画像アップロード → 記事URLリンク設定 → 下書き保存まで進みます。<b>＋ボタンや「画像」は押しません。</b><br>
-生成画像は丸アイコン＋「〇〇さん」＋記事タイトル＋記事サムネ。重複記事URLは除外します。<br>
-<b>最後は必ず「実績の算数」</b>を1件追加し、途中に含まれていても最後へ移動します。<br><br>
-<b>パネルは小型化。－で収納、×で極小化、タイトル長押しで移動できます。</b><br>
+「読み込み→全自動貼付」を1回押すだけで、取得 → 対象決定 → アイコン/サムネ取得 → カード生成 → note画像アップロード → 記事URLリンク設定 → 下書き保存まで進みます。<b>＋ボタンや「画像」は押しません。</b><br><br>
+<b>後処理</b><br>
+「今回カード一括削除」＝この装置が貼ったカードだけ削除。<br>
+「最初に戻る」＝今回カード削除＋入力/件数/記事選択/途中記録を初期化。元本文・元画像は残します。<br><br>
+<b>最後は必ず「実績の算数」</b>を1件追加します。<br>
+<b>－で収納、×で極小化、タイトル長押しで移動できます。</b><br>
 <b>INSIGHTとは完全に別ツールです。</b>
 </div>
 <a id="install" class="btn" href="./note-profile-card-paster-v1.user.js">貼り付け装置をインストール／更新</a>
 <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">Raw直結</a>
 <input class="copy" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">
 </section></main>
-<script>(()=>{const q='?v=1.1.0&ts='+Date.now();document.getElementById('install').href='./note-profile-card-paster-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js'+q})()</script>
+<script>(()=>{const q='?v=1.2.0&ts='+Date.now();document.getElementById('install').href='./note-profile-card-paster-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js'+q})()</script>
 <!-- profile-card-paster-release-v1 -->
 </body></html>
