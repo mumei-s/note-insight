@@ -568,3 +568,33 @@ GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火�
 - Feed / recent取得成功時だけ `serverCheckedAt` を更新し、アイコン補完や再分類だけで古いboardを新鮮扱いしない。
 - HTTP 402時も前回保存分へ安全fallbackし、最新と誤認させない。
 - PWA cache `mumei-note-insight-v60`。
+
+
+## 2026-09-30 Supabase 402中の参加者ログイン継続
+
+実機でINSIGHT本体は開くが中央が「Failed to fetch」。ユーザーから「参加者みんなはいれなくなってないか」「全員ログインにさせろ」と指示。
+
+### DB確認
+- access applications: active 7 / approved 1 / revoked 1
+- member sessions: 有効23 / 期限切れ0
+- active 7名のうち、有効sessionを1本以上持つ人数 7 / session無し 0
+- 一斉ログアウトやactive権限消失ではない。
+- 原因はSupabase組織のHTTP 402 service restrictionにより、ログイン後のEdge Function取得が失敗していたこと。
+
+### 緊急継続モード
+- INSIGHT本体 2026.09.30.3。
+- `main.tsx` / `App.tsx` でHTTP 402を一時障害として扱い、既存memberTokenを失効扱いにしない。
+- `AccessPortalV6` は保存済みmemberToken + status=active のアカウントだけ、402/通信断時にローカル復帰してDashboardへ戻す。
+- 401/403、明示的session invalid、inactive、明示ログアウトは従来通り通さない。
+- 新規端末で保存済みmemberTokenが無い場合は緊急復帰の対象外。Supabase復旧後に通常の本人確認を行う。
+
+### Failed to fetch対策
+- `MemberInsightUnifiedV4` にアカウント別summary cacheを追加。
+- API成功時に最新summaryを保存。
+- 402/通信断時は前回summaryを表示。
+- 前回summaryが無い既存active参加者でも、保存済みアカウントのnoteId/displayName/imageUrlから最低限のSummaryを構成し、INSIGHT画面自体を開く。
+- 生の「Failed to fetch」だけの画面にはしない。
+- 更新操作は「INSIGHT保存先が一時停止中。ログイン状態を維持」と表示。
+- PWA cache v61。
+
+Supabase 402自体はサービス制限なのでコードから解除できないが、既存active参加者7名のログイン状態とINSIGHT画面は継続利用できるようにする。
