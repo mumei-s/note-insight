@@ -215,3 +215,15 @@ test('filter and backend restriction fixes stay isolated',()=>{
   assert.match(network,/Supabaseの利用制限中/);
   assert.match(network,/r\.status===402/);
 });
+
+
+test('stale persisted notification board never flashes before the latest feed',()=>{
+  const ui=read('src/member-insight-notifications-final.tsx');
+  assert.match(ui,/INITIAL_CACHE_MAX_AGE=15_000/);
+  assert.match(ui,/function freshBoard\(account:string\)/);
+  assert.match(ui,/serverCheckedAt/);
+  assert.match(ui,/useState<Row\[\]>\(\(\)=>freshBoard\(accountKey\(memberNoteId\)\)/);
+  assert.match(ui,/markBoardFresh\(cacheAccount/);
+  assert.match(ui,/markBoardFresh\(account/);
+  assert.match(ui,/最新確認に失敗したため前回保存分を表示しています/);
+});
