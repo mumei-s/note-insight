@@ -239,7 +239,7 @@ for(const change of ['period','route'])test('読取途中の実際の画面変�
  const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false" id="next">メンバーシップ</button>',{before:w=>{
   w.document.getElementById('next').onclick=()=>{if(change==='period')w.document.getElementById('range').textContent='2026/8/2〜2026/8/29';else w.history.pushState(null,'','/tester/n/n123')};
  }});
- await pause(400);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/表示期間または画面が変わりました/);
+ await pause(400);assert.equal(h.saves.length,0);if(change==='route')assert.equal(h.w.document.querySelector('#mumei-dashboard-sync'),null);else assert.match(h.w.document.querySelector('.status').textContent,/表示期間または画面が変わりました/);
 });
 
 test('パネル読取が失敗した後の通信で自動巡回を再開せず、手動でだけ再試行する',async t=>{
