@@ -43,6 +43,7 @@ async function post(endpoint:string,action:string,extra:Record<string,unknown>={
     const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({action,...extra}),cache:"no-store",signal:c.signal});
     const p=await r.json().catch(()=>({}));
     if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("INSIGHT_ACCOUNT_CHANGED");
+    if(r.status===402)throw new Error("INSIGHT保存先が一時停止中です（HTTP 402）");
     if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");
     return p;
   }finally{
