@@ -7,7 +7,7 @@ const read=p=>readFile(new URL(p,root),"utf8");
 
 test("profile paste tool v1.2.1 is editor-only and INSIGHT-independent",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
-  assert.match(s,/@version\\s+1\\.2\\.1/);
+  assert.match(s,/@version\s+1\.2\.1/);
   assert.match(s,/@match\s+https:\/\/editor\.note\.com\/\*/);
   assert.doesNotMatch(s,/@match\s+https:\/\/note\.com\/\*/);
   assert.doesNotMatch(s,/mumei_insight|current_user/);
