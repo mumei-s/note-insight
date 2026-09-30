@@ -7,10 +7,15 @@ const support = (p) =>
   /^\.github\//.test(p) ||
   /^(package|tsconfig|vite\.)/.test(p) ||
   p === 'public/insight-release.json' ||
+  // Data-only evidence for the 2026-09-30 recovery, not a second feature.
+  p === 'public/pro-recovery-20260930.json' ||
   p === 'src/insight-release.ts' ||
   p === 'public/note-insight-notification-v3.user.js';
 
 const rules = [
+  // The route shell and its cache lifecycle are one deployment surface.
+  // Other feature bodies remain separate; do not exempt all public/src files.
+  ['app-shell', (p) => p === 'src/App.tsx' || p === 'public/sw.js'],
   ['notification-installer', (p) => p === 'public/notification-browser-install.html' || p === 'public/tool-setup.html' || /^public\/notification-(?:install|update|entry).*\.html$/.test(p)],
   ['notification-filter-settings', (p) => p === 'public/notification-filter-settings.html' || p === 'public/notification-filter.html'],
   ['notification-reader', (p) => /^public\/note-insight-notification-(?:reader|autoscan)/.test(p)],
