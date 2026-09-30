@@ -51,7 +51,18 @@ s=once(s,"} catch(e) { await page.screenshot(","} catch(e) { await fs.writeFile(
 s=once(s,'let sawNoCache = false;','let sawNoCache = false;\nlet originOffline = false, droppedOriginRequests = 0;\nresults.offlineSimulation = "origin socket disconnect; genuine SW cache fallback; not a physical radio test";')
 s=once(s,"const server = http.createServer((req, res) => {","const server = http.createServer((req, res) => {\n if (originOffline) { droppedOriginRequests++; req.socket.destroy(); return; }")
 s=once(s,'await context.setOffline(true);','originOffline = true;\n     const droppedBefore = droppedOriginRequests;')
-s=once(s,'await context.setOffline(false);','ok(droppedOriginRequests > droppedBefore, name+\' origin outage actually reached the network\');\n     originOffline = false;')
+s=once(s,'await context.setOffline(false);','ok(droppedOriginRequests > droppedBefore, name+\' origin outage actually reached the network\');\n     await page.waitForTimeout(100);\n     originOffline = false;')
 s=once(s,'finally { await context.close(); }','finally { originOffline = false; await context.close(); }')
+# WebKit reports failed SW network requests as pageerror during the deliberately
+# injected outage. Record only these exact known network diagnostics separately;
+# every other error, including all errors outside the outage, must still fail.
+s=once(s,"const errors=[];page.on('pageerror', e=>errors.push(e.message));","""const errors=[], outageNetworkErrors=[];
+    page.on('pageerror', e=>{
+     const message=e.message;
+     const expectedNetworkFailure=message==='TypeError: Load failed'||message.endsWith('/note-insight/sw.js due to access control checks.')||message.endsWith('/note-insight/insight-release.json?offline=1.');
+     if(originOffline&&expectedNetworkFailure)outageNetworkErrors.push(message);
+     else errors.push(message);
+    });""")
+s=once(s,"results.engines.push({name,version:browser.version(),width,status:'passed'});","results.engines.push({name,version:browser.version(),width,status:'passed',outageNetworkErrors});")
 p.write_text(s)
 print('Finished card badge removal and stricter browser tests; participant data untouched.')
