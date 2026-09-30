@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.2",
+  "appVersion": "2026.09.30.3",
   "notificationVersion": "3.6.16",
   "dashboardVersion": "1.6.3",
-  "releasedAt": "2026-09-30T10:34:00+09:00",
+  "releasedAt": "2026-09-30T11:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHT通知の初期表示を修正。15秒より古い保存一覧は開いた瞬間に表示せず、最新取得後に描画。取得失敗時だけ前回保存分と明示して表示。本人通知3.6.16の402保持・複数フィルター・連続設定・🔔スクロール修正、Dashboard1.6.3のStats限定と他画面パネル削除も維持。",
+  "note": "緊急継続モード。Supabase HTTP 402/通信断でも、保存済みmemberToken＋active状態の既存参加者はログイン状態を維持。アクセス画面に戻った場合も保存済みactiveアカウントをローカル復帰。INSIGHT中央は前回サマリー、無ければ保存済み参加者名/note IDから最低限UIを表示し、Failed to fetchだけの画面にしない。401/403・失効・明示ログアウトは従来通り通さない。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
