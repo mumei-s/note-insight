@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-v8-notification-filter-dashboard-20260930
+  group: pages-v10-emergency-member-access-20260930
   cancel-in-progress: true
 
 jobs:
