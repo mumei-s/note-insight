@@ -1,0 +1,55 @@
+name: INSIGHT egress optimization 20260930
+on:
+  push:
+    branches: [main]
+    paths: [scripts/optimize-egress-20260930.mjs]
+permissions:
+  contents: write
+concurrency:
+  group: insight-egress-optimization-20260930
+  cancel-in-progress: false
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Apply exact, fail-closed backend patches
+        run: node scripts/optimize-egress-20260930.mjs
+      - name: Type-check only the modified Edge functions
+        run: |
+          deno check --no-lock supabase/functions/insight-like-backfill/index.ts
+          deno check --no-lock supabase/functions/insight-comment-refresh/index.ts
+          deno check --no-lock supabase/functions/insight-avatar-refresh/index.ts
+          deno check --no-lock supabase/functions/insight-relations/index.ts
+      - name: Build unchanged frontend
+        run: npm ci --prefer-offline --no-audit --no-fund && npm run build
+      - name: Commit one backend feature at a time without force-push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for name in insight-like-backfill insight-comment-refresh insight-avatar-refresh insight-relations; do
+            git add "supabase/functions/$name/index.ts"
+            if ! git diff --cached --quiet; then git commit -m "fix($name): reduce background egress and respect maintenance"; fi
+          done
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insight-egress-tested-sources
+          path: |
+            supabase/functions/_shared/egress-20260930.ts
+            supabase/functions/insight-like-backfill/index.ts
+            supabase/functions/insight-comment-refresh/index.ts
+            supabase/functions/insight-avatar-refresh/index.ts
+            supabase/functions/insight-relations/index.ts
+          retention-days: 7
