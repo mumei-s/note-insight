@@ -299,7 +299,35 @@ export function installApiBridge() {
 
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
-    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
-  });
+  let registration: ServiceWorkerRegistration | null = null;
+  let registering: Promise<void> | null = null;
+  let checking = false, lastCheck = 0;
+  const start = () => {
+    if (registration) return Promise.resolve();
+    if (registering) return registering;
+    registering = navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: "none" })
+      .then((value) => { registration = value; lastCheck = Date.now(); })
+      .catch(() => { /* Offline/blocked SW must not block the app or erase sessions. */ })
+      .finally(() => { registering = null; });
+    return registering;
+  };
+  const refresh = async () => {
+    if (document.visibilityState !== "visible" || navigator.onLine === false || checking || Date.now() - lastCheck < 60_000) return;
+    checking = true; lastCheck = Date.now();
+    try {
+      const alreadyRegistered = Boolean(registration);
+      await start();
+      // register() already checks the worker. Do not race it with a second
+      // update on the same load/pageshow or while another worker is installing.
+      if (alreadyRegistered && registration && document.visibilityState === "visible" && !registration.installing && !registration.waiting) await registration.update();
+    }
+    catch { /* A later foreground/online event retries. Never force-reload active work. */ }
+    finally { checking = false; }
+  };
+  if (document.readyState === "complete") void start();
+  else window.addEventListener("load", () => { void start(); }, { once: true });
+  window.addEventListener("pageshow", () => { void refresh(); });
+  window.addEventListener("focus", () => { void refresh(); });
+  window.addEventListener("online", () => { lastCheck = 0; void refresh(); });
+  document.addEventListener("visibilitychange", () => { void refresh(); });
 }
