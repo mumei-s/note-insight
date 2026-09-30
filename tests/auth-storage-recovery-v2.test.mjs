@@ -68,3 +68,20 @@ test('startup recovery validates a current token and then iterates every saved i
   assert.match(mainSource,/continue;/);
   assert.match(mainSource,/EXPLICIT_LOGOUT_KEY_PREFIX \+ account\.noteId/);
 });
+
+
+test('HTTP 402 keeps approved saved participants logged in',()=>{
+  const app=fs.readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
+  const access=fs.readFileSync(new URL('../src/access-portal-v6.tsx',import.meta.url),'utf8');
+  const unified=fs.readFileSync(new URL('../src/member-insight-unified-v4.tsx',import.meta.url),'utf8');
+  assert.match(mainSource,/status === 402/);
+  assert.match(app,/status === 402/);
+  assert.match(access,/BACKEND_RESTRICTED_402/);
+  assert.match(access,/localActive\(stored\)/);
+  assert.match(access,/activateStoredInsightAccount\(stored!\.noteId\)/);
+  assert.match(access,/localActive\(account\)/);
+  assert.match(unified,/SUMMARY_CACHE_PREFIX/);
+  assert.match(unified,/emergencySummary\(\)/);
+  assert.match(unified,/ログイン状態と保存済み参加者画面を維持しています/);
+  assert.doesNotMatch(unified,/localStorage\.removeItem\(INSIGHT_TOKEN_KEY\);location\.hash="access\/insight";return}setError\(msg\)/);
+});
