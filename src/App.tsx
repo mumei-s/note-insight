@@ -45,7 +45,7 @@ function initialMemberToken() {
   return restoreStoredMemberSession()?.memberToken || "";
 }
 function isTransientSessionError(code: string, status: number) {
-  if (status >= 500 || status === 408 || status === 425 || status === 429) return true;
+  if (status === 402 || status >= 500 || status === 408 || status === 425 || status === 429) return true;
   return /NETWORK|TIMEOUT|TEMPORARY|FETCH|ACCESS_ERROR|INTERNAL/i.test(code);
 }
 function isSessionInvalid(code: string) {
