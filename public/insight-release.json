@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.3",
+  "appVersion": "2026.09.30.4",
   "notificationVersion": "3.6.17",
   "dashboardVersion": "1.6.4",
   "releasedAt": "2026-09-30T11:43:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "参加者ログイン継続版2026.09.30.3を維持。本人通知3.6.17でFilter V4.1.6を確実に再取得し、複数フィルター・連続設定・🔔スクロール境界を反映。Dashboard1.6.4でStats限定・他画面DOM削除の修正版Coreを確実に再取得。",
+  "note": "Supabase Edge FunctionsがHTTP 402でも通常履歴を表示できる緊急DB直読fallbackを追加。memberTokenをPostgres側で再照合し、summary・スキ履歴・スキ順位・コメント・コメント順位・フォロー・共同マガジン・お気に入り・記事一覧・通知履歴など保存済みデータを直接読取。401/403や失効sessionは通さない。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
