@@ -10,6 +10,12 @@ type Row=Record<string,any>;
 type CachedView={rows:Row[];total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number};
 const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
 const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
+const INITIAL_CACHE_MAX_AGE=15_000;
+type BoardMeta={serverCheckedAt:number;serverUpdatedAt:string;serverSyncAt:string};
+function boardMetaKey(account:string){return `mumei-notification-board-meta:${account}`}
+function readBoardMeta(account:string):BoardMeta|null{if(!account)return null;try{const x=JSON.parse(localStorage.getItem(boardMetaKey(account))||"null");return x&&Number.isFinite(Number(x.serverCheckedAt))?{serverCheckedAt:Number(x.serverCheckedAt),serverUpdatedAt:String(x.serverUpdatedAt||""),serverSyncAt:String(x.serverSyncAt||"")}:null}catch{return null}}
+function markBoardFresh(account:string,updatedAt="",syncAt=""){if(!account)return;try{localStorage.setItem(boardMetaKey(account),JSON.stringify({serverCheckedAt:Date.now(),serverUpdatedAt:String(updatedAt||""),serverSyncAt:String(syncAt||"")}))}catch{}}
+function freshBoard(account:string){const meta=readBoardMeta(account);return meta&&Date.now()-meta.serverCheckedAt<=INITIAL_CACHE_MAX_AGE?readBoard(account):[]}
 function accountKey(memberId=""){return (requestedNotificationAccount()||memberId||currentStoredInsightAccount()?.noteId||"").toLowerCase()}
 function boardRow(r:Row){return r.meta?.noise_reason!=="non-notification-api-capture"&&r.notification_type!=="capture_noise"&&!(!r.target_url&&!r.meta?.kind&&/^(?:[\d,.万]+件){1,2}\d{1,2}月\d{1,2}日まで$/u.test(String(r.raw_text||"").replace(/\s+/g,"")))}
 function readBoard(account:string):Row[]{if(!account)return[];const cached=NOTIFICATION_RECENT_ALL.get(account);if(cached)return cached.filter(boardRow);try{const rows=JSON.parse(localStorage.getItem(`mumei-notification-board:${account}`)||"[]");if(Array.isArray(rows)){NOTIFICATION_RECENT_ALL.set(account,rows.filter(boardRow));return rows.filter(boardRow)}}catch{}return[]}
@@ -70,7 +76,7 @@ export function NotificationFormatAlerts({ownerSession=false}:{ownerSession?:boo
 
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
-  const[rows,setRows]=useState<Row[]>(()=>readBoard(accountKey(memberNoteId)).slice(0,PAGE)),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
+  const[rows,setRows]=useState<Row[]>(()=>freshBoard(accountKey(memberNoteId)).slice(0,PAGE)),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
   const[serverSync,setServerSync]=useState({received:0,confirmed:0,source:""});
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:""});
@@ -92,7 +98,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
       setRows(list);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
       NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
-      retainBoard(cacheAccount,list);
+      retainBoard(cacheAccount,list);markBoardFresh(cacheAccount,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
       for(const [category,preview] of Object.entries(x.categoryPreview||{})){
         const entries=mergeMagazineJoinRows(repairActorRows(preview as Row[]));retainBoard(cacheAccount,entries);
         NOTIFICATION_VIEW_CACHE.set(`${cacheAccount}|${category}|${day||""}|1`,{rows:entries,total:Number(nextCounts[category]||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
@@ -100,7 +106,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(Number(x.reclassifyPending)>0&&!repairRunning.current&&lastRepairSync.current!==String(x.lastSyncAt||"initial")){lastRepairSync.current=String(x.lastSyncAt||"initial");void reclassify(true)}
       // Identity enrichment never delays the notification text.
       void enrich(list).then(enriched=>{if(!valid())return;setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))));retainBoard(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:enriched})});
-    }catch(e){if(valid())setError(e instanceof Error?e.message:"通知履歴の読込に失敗しました")}
+    }catch(e){if(valid()){const fallback=filterBoard(accountKey(memberNoteId),k,day);if(!rows.length&&fallback.length)setRows(fallback);setError((e instanceof Error?e.message:"通知履歴の読込に失敗しました")+(fallback.length?"｜最新確認に失敗したため前回保存分を表示しています":""))}}
     finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
   async function refreshRecent(){
@@ -110,6 +116,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
       if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||String(x.noteId||"").toLowerCase()!==account)return;
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);
+      markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
       const incoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow);retainBoard(account,incoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
@@ -157,8 +164,8 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   useEffect(()=>()=>{repairStop.current=true},[]);
   useEffect(()=>{
     const account=accountKey(memberNoteId),cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|1`);
-    const instant=cached?.rows||filterBoard(account,kind,selectedDay);
-    setRows(instant);setPage(1);setLoading(!instant.length&&!readBoard(account).length);
+    const fresh=freshBoard(account),instant=cached?.rows||(fresh.length?fresh.filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).slice(0,PAGE):[]);
+    setRows(instant);setPage(1);setLoading(!instant.length);
     if(cached){setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
     recentRequest.current.watermark="";void refreshRecent();void load(1,kind,true,selectedDay);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
