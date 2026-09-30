@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.7",
+  "appVersion": "2026.09.30.8",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-09-30T12:53:00+09:00",
+  "releasedAt": "2026-09-30T09:56:45.371904+00:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "緊急メンテナンス表示。一般TOP・参加者ログイン・INSIGHT参加者画面をシステムメンテナンス中へ切替。参加者情報・保存済み履歴は保持。OWNER管理画面は維持。",
+  "note": "Pro復旧後の更新。分析・本人通知の更新表示を丸い設定ボタンへ統一。本体更新URL・Service Worker・再接続時の更新確認を改善。通知3.6.20／Dashboard1.6.4／DM1.4.9は変更なし。ログインと保存履歴は保持。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
