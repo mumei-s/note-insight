@@ -59,7 +59,7 @@ test('複数フィルターIDを同時に全件判定し、ベル内スクロー
  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:120,top:0,left:0,right:360,bottom:120});
  const values=new Map([
   ['mumei_insight_magazine_filter_enabled_v3:tester',true],
-  ['mumei_insight_notification_groups_v1:tester',[{name:'G',enabled:true,ids:['actor_a','actor_b']}]],
+  ['mumei_insight_notification_groups_v1:tester',[{name:'G1',enabled:true,ids:['actor_a']},{name:'G2',enabled:true,ids:['actor_b']}]],
   ['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor_a',name:'人物A'},{id:'actor_b',name:'人物B'}]]
  ]);
  w.GM={getValue:async(k,d)=>values.has(k)?values.get(k):d,setValue:async(k,v)=>values.set(k,v),addValueChangeListener:()=>1};
@@ -68,7 +68,7 @@ test('複数フィルターIDを同時に全件判定し、ベル内スクロー
  w.eval(read('filter-v4.js'));
  await w.__mumeiNotificationFilterV4.refresh(true);await pause(30);
  const rows=[...w.document.querySelectorAll('.m-navbarNoticeItem')];
- assert.equal(rows.length,2);assert.ok(rows.every(el=>el.classList.contains('mumei-muted-v2939')),'2人目以降も含め全IDを判定');
+ assert.equal(rows.length,2);assert.ok(rows.every(el=>el.classList.contains('mumei-muted-v2939')),'グループ1以外も含め全有効グループのIDを判定');
  assert.equal(w.document.getElementById('panel').getAttribute('data-mumei-filter-scroll-guard'),'1');
  assert.equal(w.document.getElementById('panel').style.getPropertyValue('overscroll-behavior-y'),'contain');
 });
