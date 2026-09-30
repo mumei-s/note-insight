@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.15';
+const VERSION='3.6.16';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -71,6 +71,7 @@ function request(url,body,token){return networkWait((resolve,reject)=>{
  const onload=r=>{let p;try{p=JSON.parse(r.responseText||'{}')}catch{reject(transportError('保存先の応答を確認できません','INVALID_RESPONSE'));return}
   if(r.status>=200&&r.status<300&&p?.ok!==false){resolve(p);return}
   const auth=r.status===401||r.status===403;
+  if(r.status===402){reject(transportError('INSIGHT保存先がSupabaseの利用制限中です（HTTP 402）。未保存通知は端末に保持しています','BACKEND_RESTRICTED',false));return}
   reject(transportError(auth?'本人通知の連携を確認してください':`通知を保存できませんでした（HTTP ${r.status}）`,auth?'PAIR_REQUIRED':'SAVE_HTTP_ERROR',r.status===0||r.status===429||r.status>=500));
  };
  const handle=fn.call(owner,{method:'POST',url,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload,onerror:()=>reject(transportError('保存先に接続できません')),ontimeout:()=>reject(transportError('保存先の応答がありません','NETWORK_TIMEOUT')),onabort:()=>reject(transportError('保存通信が中断されました'))});
