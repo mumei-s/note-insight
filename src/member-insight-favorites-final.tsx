@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import "./member-insight-favorites-final.css";
 
 const HISTORY="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-history";
@@ -11,13 +12,13 @@ const date=(v:any)=>{const d=new Date(String(v||""));return Number.isNaN(d.getTi
 async function post(endpoint:string,body:Record<string,unknown>){
  const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");
  const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30000);
- try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:controller.signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");return p}
+ try{try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:controller.signal}),p=await r.json().catch(()=>({}));if(r.status===401||r.status===403)throw new Error(p?.error||`HTTP_${r.status}`);if(r.status===402)throw new Error("BACKEND_RESTRICTED_402");if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");return p}catch(e){const msg=e instanceof Error?e.message:String(e);if(!memberReadAuthFailure(msg))try{return await memberDbReadFallback(endpoint,body)}catch{}throw e}}
  catch(e){if(e instanceof Error&&e.name==='AbortError')throw new Error('お気に入りの通信が30秒以内に完了しませんでした');throw e}finally{window.clearTimeout(timer)}
 }
 function Avatar({row}:{row:Row}){const name=String(row.actor_name||"noteユーザー"),img=String(row.actor_image_url||"");return img?<img src={img} alt="" referrerPolicy="no-referrer" loading="lazy" decoding="async"/>:<span>{[...name][0]||"n"}</span>}
 export function MemberInsightFavoritesFinal({revision=0}:{revision?:number}){
   const[rows,setRows]=useState<Row[]>([]),[groups,setGroups]=useState<string[]>([]),[assigned,setAssigned]=useState<Record<string,string>>({}),[filter,setFilter]=useState("all"),[newGroup,setNewGroup]=useState(""),[busy,setBusy]=useState(""),[error,setError]=useState(""),[loading,setLoading]=useState(true),[open,setOpen]=useState<string|null>(null),[articles,setArticles]=useState<Record<string,Row[]>>({}),[articleLoading,setArticleLoading]=useState(false),[query,setQuery]=useState("");
-  async function load(){setLoading(true);setError("");try{const[f,g]=await Promise.all([post(HISTORY,{action:"favorites",page:1,pageSize:100}),post(GROUPS,{action:"list"})]);setRows(Array.isArray(f?.rows)?f.rows:[]);setGroups((Array.isArray(g?.definitions)?g.definitions:[]).map((x:any)=>clean(x?.name)).filter(Boolean));setAssigned(Object.fromEntries((Array.isArray(g?.assignments)?g.assignments:[]).map((x:any)=>[String(x?.creatorKey||""),clean(x?.groupName)]).filter((x:any)=>x[0]&&x[1])))}catch(e){setError(e instanceof Error?e.message:"お気に入りを取得できませんでした")}finally{setLoading(false)}}
+  async function load(){setLoading(true);setError("");try{const f=await post(HISTORY,{action:"favorites",page:1,pageSize:100});setRows(Array.isArray(f?.rows)?f.rows:[]);try{const g=await post(GROUPS,{action:"list"});setGroups((Array.isArray(g?.definitions)?g.definitions:[]).map((x:any)=>clean(x?.name)).filter(Boolean));setAssigned(Object.fromEntries((Array.isArray(g?.assignments)?g.assignments:[]).map((x:any)=>[String(x?.creatorKey||""),clean(x?.groupName)]).filter((x:any)=>x[0]&&x[1])))}catch{/* お気に入り本体は表示を継続 */}}catch(e){setError(e instanceof Error?e.message:"お気に入りを取得できませんでした")}finally{setLoading(false)}}
   useEffect(()=>{void load()},[revision]);
   const counts=useMemo(()=>Object.fromEntries(groups.map(g=>[g,rows.filter(r=>assigned[String(r.creator_key)]===g).length])),[groups,rows,assigned]);
   const visible=useMemo(()=>rows.filter(r=>filter==="all"||(filter==="ungrouped"?!assigned[String(r.creator_key)]:assigned[String(r.creator_key)]===filter)),[rows,filter,assigned]);
