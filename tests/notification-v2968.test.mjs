@@ -204,7 +204,7 @@ test('filter and backend restriction fixes stay isolated',()=>{
   assert.match(controls,/VERSION='1\.4\.0'/);
   assert.match(controls,/knownAccount\|\|await account\(\)/);
   assert.match(controls,/searchParams\.set\('notificationAccount',a\.id\)/);
-  assert.match(filter,/VERSION='4\.1\.5'/);
+  assert.match(filter,/VERSION='4\.1\.6'/);
   assert.match(filter,/profileQueue=new Set\(\)/);
   assert.match(filter,/while\(profileQueue\.size\)/);
   assert.match(filter,/flatMap\(g=>Array\.isArray\(g\?\.ids\)\?g\.ids:\[\]\)/);
