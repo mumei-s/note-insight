@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.3
+// @version      1.6.4
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -25,7 +25,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.3';
+  const VERSION='1.6.4';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
