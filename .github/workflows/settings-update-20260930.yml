@@ -1,0 +1,117 @@
+name: Settings controls and browser update verification
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/settings-update-20260930.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: settings-update-20260930
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Save base and apply guarded source changes
+        run: |
+          git rev-parse HEAD > /tmp/settings-update-base
+          python3 scripts/repair-settings-update-20260930.py
+          # Each fixture module has its own lexical scope, as in the real ESM bundle.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/settings-update-20260930.mjs')
+          s = p.read_text()
+          s = s.replace('<script>${inline(topJs)}</script><script>${inline(inlineJs)}</script>', '<script type="module">${inline(topJs)}</script><script type="module">${inline(inlineJs)}</script>')
+          p.write_text(s)
+          PY
+      - name: Install and compile
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run build
+          node --check public/sw.js
+          node --test tests/static.test.mjs
+      - name: Install test-only browser engines
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium firefox webkit
+      - name: Test UI states, routes, offline recovery and storage preservation
+        run: node tests/settings-update-20260930.mjs
+      - name: Record local test evidence
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=json.loads(Path('test-results/settings-update-20260930/local.json').read_text())
+          text='# Settings update verification — 2026-09-30\n\n'
+          text+='App: 2026.09.30.8. Notification 3.6.20, Dashboard 1.6.4 and DM 1.4.9 unchanged.\n\n'
+          text+='Only round settings links show steady update highlighting. Feature cards continue to open their features.\n\n'
+          text+=f'Local browser assertions: {p["assertions"]}.\n\n'
+          for item in p['engines']:
+              text+=f'- {item["name"]} {item["version"]}, viewport {item["width"]}: {item["status"]}\n'
+          text+='\nThe UI suite uses synthetic account/version state. It does not authenticate as a participant, contact note APIs, or install userscripts into real participant extension managers. Engine tests are not real Android Edge/Yahoo or iOS Safari device tests.\n'
+          text+='\nChecked: matching round-button labels, steady glow without a large-card glow, feature routes, current/missing/update transitions, per-browser settings, network-only release metadata, offline shell, reconnection update, hash preservation, and synthetic login/history/session preservation.\n'
+          text+='\nCode commits are separated by feature boundary. No Supabase, scheduler, MUUMEI, participant data, or userscript-body changes.\n'
+          Path('docs/SETTINGS_UPDATE_20260930.md').write_text(text)
+          PY
+      - name: Commit each feature separately and fast-forward only
+        run: |
+          git config user.name 'INSIGHT update verification'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$(cat /tmp/settings-update-base)" || { echo 'MAIN_CHANGED: reconcile, no force push'; exit 1; }
+          git add tests/settings-update-20260930.mjs
+          if ! git diff --cached --quiet; then git commit -m 'test: isolate browser fixture module scopes'; fi
+          for file in src/insight-top-install-v16.ts src/member-insight-live-v2.tsx src/insight-inline-updates-v1.ts src/api.ts public/sw.js; do
+            git add "$file"
+            git commit -m "fix: settings/update recovery in $file"
+            node scripts/check-feature-boundaries.mjs
+          done
+          git add src/insight-release.ts public/insight-release.json docs/SETTINGS_UPDATE_20260930.md
+          git commit -m 'release: INSIGHT 2026.09.30.8 settings and cache verification'
+          node scripts/check-feature-boundaries.mjs
+          git push origin HEAD:main
+          git rev-parse HEAD > /tmp/settings-update-published-sha
+          echo "SOURCE_PUSHED=$(cat /tmp/settings-update-published-sha)"
+      - name: Dispatch Pages and wait for matching commit
+        run: |
+          gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+          RUN=''
+          for attempt in $(seq 1 30); do
+            RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow pages.yml --event workflow_dispatch --limit 10 --json databaseId,headSha --jq '.[] | select(.headSha == "'"$(cat /tmp/settings-update-published-sha)"'") | .databaseId' | head -1)
+            test -n "$RUN" && break
+            sleep 4
+          done
+          test -n "$RUN" || { echo 'PAGES_RUN_NOT_FOUND'; exit 1; }
+          echo "PAGES_RUN=$RUN"
+          gh run watch "$RUN" --repo "$GITHUB_REPOSITORY" --exit-status --interval 10
+      - name: Verify actual published versions and bundle bytes
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if node tests/settings-update-20260930.mjs --live; then exit 0; fi
+            sleep 15
+          done
+          exit 1
+      - name: Summarize verification
+        if: always()
+        run: |
+          test ! -f test-results/settings-update-20260930/local.json || cat test-results/settings-update-20260930/local.json >> "$GITHUB_STEP_SUMMARY"
+          test ! -f test-results/settings-update-20260930/live.json || cat test-results/settings-update-20260930/live.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settings-update-20260930-verification
+          path: test-results/settings-update-20260930
+          if-no-files-found: warn
