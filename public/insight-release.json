@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.6",
+  "appVersion": "2026.09.30.7",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-09-30T12:20:00+09:00",
+  "releasedAt": "2026-09-30T12:53:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "INSIGHT本体2026.09.30.6のPostgres読取fallbackを維持。本人通知3.6.20でFilter4.1.9を配信。全行がフィルターで非表示になり通知一覧の高さが0になっても、通知/お知らせタブだけを新Rootと誤認せず、非表示済み一覧を保持する。",
+  "note": "緊急メンテナンス表示。一般TOP・参加者ログイン・INSIGHT参加者画面をシステムメンテナンス中へ切替。参加者情報・保存済み履歴は保持。OWNER管理画面は維持。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
