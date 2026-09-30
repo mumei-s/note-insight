@@ -46,5 +46,12 @@ s=once(s,"await page.screenshot({path:out+'/'+name+'-'+width+'-update.png',fullP
      await page.goBack();
      await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);""")
 s=once(s,"} catch(e) { await page.screenshot(","} catch(e) { await fs.writeFile(out+'/'+name+'-'+width+'-failure.json',JSON.stringify({error:String(e),stack:e.stack,assertions:results.assertions,completed:results.engines},null,2)); await page.screenshot(")
+# Browser-context offline emulation does not consistently cover the SW's network.
+# Drop actual origin connections instead; keep every cache/storage assertion intact.
+s=once(s,'let sawNoCache = false;','let sawNoCache = false;\nlet originOffline = false, droppedOriginRequests = 0;\nresults.offlineSimulation = "origin socket disconnect; genuine SW cache fallback; not a physical radio test";')
+s=once(s,"const server = http.createServer((req, res) => {","const server = http.createServer((req, res) => {\n if (originOffline) { droppedOriginRequests++; req.socket.destroy(); return; }")
+s=once(s,'await context.setOffline(true);','originOffline = true;\n     const droppedBefore = droppedOriginRequests;')
+s=once(s,'await context.setOffline(false);','ok(droppedOriginRequests > droppedBefore, name+\' origin outage actually reached the network\');\n     originOffline = false;')
+s=once(s,'finally { await context.close(); }','finally { originOffline = false; await context.close(); }')
 p.write_text(s)
 print('Finished card badge removal and stricter browser tests; participant data untouched.')
