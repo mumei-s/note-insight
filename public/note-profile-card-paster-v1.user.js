@@ -489,8 +489,8 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
 async function deleteAllGenerated({save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
  const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view);
- const removedCards=deleteHits(view,cards);
- const removedImages=deleteHits(view,images);
+ const removedCards=cards.length,removedImages=images.length;
+ deleteHits(view,[...cards,...images]);
  writeRun(null);
  if(save&&(removedCards||removedImages))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'を削除して保存中…');
  return{removedCards,removedImages}
