@@ -53,6 +53,8 @@ function errorText(code: string) {
   return messages[code] ?? code ?? "処理できませんでした。";
 }
 function authFailure(code: string) { return /INSIGHT_SESSION_INVALID|INSIGHT_MEMBER_INACTIVE|INSIGHT_LOGIN_REQUIRED/.test(code); }
+function backendUnavailable(code: string) { return /BACKEND_RESTRICTED_402|HTTP_402|ACCESS_ERROR|Failed to fetch|NetworkError|NETWORK|TIMEOUT/i.test(code); }
+function localActive(account: StoredInsightAccount | undefined | null) { return Boolean(account?.memberToken && account.status === "active"); }
 
 async function post(endpoint: string, action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
   const response = await fetch(endpoint, {
@@ -62,7 +64,8 @@ async function post(endpoint: string, action: string, extra: Record<string, unkn
     cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "ACCESS_ERROR");
+  if (response.status === 402) throw new Error("BACKEND_RESTRICTED_402");
+  if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP_${response.status}`);
   return payload;
 }
 
@@ -142,8 +145,17 @@ export function AccessPortalV6() {
       return true;
     } catch (reason) {
       const code = reason instanceof Error ? reason.message : "ACCESS_ERROR";
+      const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
+      if (backendUnavailable(code) && localActive(stored)) {
+        const active = activateStoredInsightAccount(stored!.noteId);
+        if (active?.memberToken) {
+          clearRecoveryState();
+          setMessage("保存済み参加者ログインで復帰しました。サーバー復旧後に最新状態を再確認します。");
+          refresh();
+          return true;
+        }
+      }
       if (authFailure(code)) {
-        const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
         if (stored) forgetMemberSession(stored.noteId);
         else localStorage.removeItem(INSIGHT_TOKEN_KEY);
         refresh();
@@ -221,6 +233,16 @@ export function AccessPortalV6() {
       goDashboard();
     } catch (reason) {
       const code = reason instanceof Error ? reason.message : "ACCESS_ERROR";
+      if (backendUnavailable(code) && localActive(account)) {
+        const active = activateStoredInsightAccount(account.noteId);
+        if (active?.memberToken) {
+          setMessage("保存済み参加者ログインで切り替えました。サーバー復旧後に最新状態を再確認します。");
+          clearRecoveryState();
+          refresh();
+          goDashboard();
+          return;
+        }
+      }
       if (authFailure(code)) {
         forgetMemberSession(account.noteId);
         setNoteInput(account.noteId);
