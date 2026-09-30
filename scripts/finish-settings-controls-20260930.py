@@ -14,6 +14,11 @@ p.write_text(s)
 
 p=Path('tests/settings-update-20260930.mjs')
 s=p.read_text()
+lines=[line for line in s.splitlines() if "file + ' update source'" in line]
+if len(lines)!=1: raise SystemExit('UPDATE_SOURCE_ASSERTION_ANCHOR')
+s=once(s,lines[0],r''' const origin = file === 'note-insight-dashboard-sync.user.js' ? 'https://mumei-s.github.io/note-insight/' : 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/';
+ check(text.match(/@updateURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical update source');
+ check(text.match(/@downloadURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical download source');''')
 s=once(s,"const inlineJs = compile(await read('src/insight-inline-updates-v1.ts'));","const inlineJs = compile(await read('src/insight-inline-updates-v1.ts'));\nconst noticeRouteJs = compile(await read('src/insight-notification-update-route-v1.ts'));")
 s=once(s,'<script>${inline(topJs)}</script><script>${inline(inlineJs)}</script>','<script type="module">${inline(topJs)}</script><script type="module">${inline(inlineJs)}</script><script type="module">${inline(noticeRouteJs)}</script>')
 s=once(s,"window.testMode='normal';localStorage.setItem('test-preserved-history','do-not-delete');localStorage.setItem('mumei-insight-access-token','synthetic-token-only');sessionStorage.setItem('test-preserved-session','keep');","window.testMode='normal';")
