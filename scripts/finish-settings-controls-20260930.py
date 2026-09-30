@@ -11,6 +11,9 @@ s=once(s,'{dashboardUpdateAvailable?<em>更新あり</em>:dashboardMissing?<em>�
 s=once(s,'{notificationUpdateAvailable?<em>更新あり</em>:notificationMissing?<em>＋ 未導入</em>:null}','')
 s=once(s,'if(expected&&expected===CURRENT_INSIGHT_APP_VERSION)','if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected))')
 p.write_text(s)
+p=Path('src/insight-top-install-v16.ts')
+s=once(p.read_text(),'.miv5-update .miv5-source-card.needs-update a.${CANONICAL}{','body .miv5-update .miv5-source-card.needs-update a.${CANONICAL}[data-update-state="available"]{')
+p.write_text(s)
 
 p=Path('tests/settings-update-20260930.mjs')
 s=p.read_text()
@@ -19,6 +22,7 @@ if len(lines)!=1: raise SystemExit('UPDATE_SOURCE_ASSERTION_ANCHOR')
 s=once(s,lines[0],r''' const origin = file === 'note-insight-dashboard-sync.user.js' ? 'https://mumei-s.github.io/note-insight/' : 'https://raw.githubusercontent.com/mumei-s/note-insight/main/public/';
  check(text.match(/@updateURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical update source');
  check(text.match(/@downloadURL\s+([^\s]+)/)?.[1], origin + file, file + ' canonical download source');''')
+s=once(s,"name+' settings steady glow'","name+' settings steady glow '+JSON.stringify(visual)")
 s=once(s,"const inlineJs = compile(await read('src/insight-inline-updates-v1.ts'));","const inlineJs = compile(await read('src/insight-inline-updates-v1.ts'));\nconst noticeRouteJs = compile(await read('src/insight-notification-update-route-v1.ts'));")
 s=once(s,'<script>${inline(topJs)}</script><script>${inline(inlineJs)}</script>','<script type="module">${inline(topJs)}</script><script type="module">${inline(inlineJs)}</script><script type="module">${inline(noticeRouteJs)}</script>')
 s=once(s,"window.testMode='normal';localStorage.setItem('test-preserved-history','do-not-delete');localStorage.setItem('mumei-insight-access-token','synthetic-token-only');sessionStorage.setItem('test-preserved-session','keep');","window.testMode='normal';")
@@ -39,5 +43,6 @@ s=once(s,"await page.screenshot({path:out+'/'+name+'-'+width+'-update.png',fullP
      check(new URL(page.url()).searchParams.get('from'),'analysis',name+' actual dashboard settings click');
      await page.goBack();
      await page.waitForFunction(()=>document.querySelectorAll('[data-update-state="available"]').length===2);""")
+s=once(s,"} catch(e) { await page.screenshot(","} catch(e) { await fs.writeFile(out+'/'+name+'-'+width+'-failure.json',JSON.stringify({error:String(e),stack:e.stack,assertions:results.assertions,completed:results.engines},null,2)); await page.screenshot(")
 p.write_text(s)
 print('Finished card badge removal and stricter browser tests; participant data untouched.')
