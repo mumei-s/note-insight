@@ -10,18 +10,19 @@
 </head>
 <body><main class="w"><section class="c">
 <h1>アイコン＋キャプション 貼り付け装置</h1>
-<span class="v">v1.2.1</span>
+<span class="v">v1.3.0</span>
 <div class="n">
 <b>記事URL / マガジンURL / #タグを1つの欄へ</b><br>
 全部同じ入力欄に上から並べます。種類は自動判定。記事URL＝その記事のスキした人、マガジンURL＝掲載記事、#タグ＝検索記事です。<br>
 <b>上から優先して合算</b>し、「件数指定」なら合計件数に達した時点で終了。「全数」なら並べた全ソースを最後まで読みます。<br><br>
 <b>画像取得を強化</b><br>
 アイコンはスキ一覧・記事API・クリエイターAPIから補完。記事サムネは記事APIに加えてOG画像まで補完します。<br><br>
-<b>貼り付けは全自動</b><br>
-「読み込み→全自動貼付」を1回押すだけで、取得 → 対象決定 → アイコン/サムネ取得 → カード生成 → note画像アップロード → 記事URLリンク設定 → 下書き保存まで進みます。<b>＋ボタンや「画像」は押しません。</b><br><br>
+<b>貼り付けは全自動・2段構成</b><br>
+「画像＋通知カード 全自動」を1回押すだけで、取得 → 対象決定 → アイコン/サムネ取得 → <b>紹介画像（名前キャプション＋記事リンク）</b> → <b>note正規通知カード</b> → 下書き保存まで進みます。<b>画像リンクと通知カードは別物です。</b><br>
+v1.2で既に貼った紹介画像が残っている場合は、同じ画像を重複追加せず、名前キャプションを修復して正規通知カードだけ追加します。<br><br>
 <b>後処理</b><br>
-「今回カード一括削除」＝この装置が貼ったカードだけ削除。<br>
-「最初に戻る」＝今回カード削除＋入力/件数/記事選択/途中記録を初期化。元本文・元画像は残します。<br><br>
+「正規通知カード一括削除」＝今回作ったnote正規通知カードだけ削除。紹介画像は残します。<br>
+「最初に戻る」＝今回作った紹介画像＋正規通知カードの両方を削除し、入力/件数/記事選択/途中記録を初期化。元本文・元画像・元カードは残します。<br><br>
 <b>最後は必ず「実績の算数」</b>を1件追加します。<br>
 <b>件数欄はAndroid向け数字入力に修正済み。</b> タップでカーソルが入り、数字キーボードから直接変更できます。<br>
 <b>－で収納、×で極小化、タイトル長押しで移動できます。</b><br>
@@ -31,6 +32,6 @@
 <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">Raw直結</a>
 <input class="copy" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">
 </section></main>
-<script>(()=>{const q='?v=1.2.1&ts='+Date.now();document.getElementById('install').href='./note-profile-card-paster-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js'+q})()</script>
+<script>(()=>{const q='?v=1.3.0&ts='+Date.now();document.getElementById('install').href='./note-profile-card-paster-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js'+q})()</script>
 <!-- profile-card-paster-release-v1 -->
 </body></html>
