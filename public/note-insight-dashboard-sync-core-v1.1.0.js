@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.2
+// @version      1.6.3
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @run-at       document-start
@@ -17,7 +17,7 @@
     const resume=()=>{if(featureOn()){window.removeEventListener('mumei-dashboard-feature-changed',resume);startDashboardCore()}};
     window.addEventListener('mumei-dashboard-feature-changed',resume);return;
   }
-  if(!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname)){
+  if(!/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname)){
     // SPA navigation from a normal note page must start the reader only on the dashboard.
     document.addEventListener('mumei-dashboard-mount',function enterDashboard(){
       if(!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname))return;
@@ -25,7 +25,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.2';
+  const VERSION='1.6.3';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -42,7 +42,7 @@
   const num=(v)=>{if(v==null)return 0;const s=String(v).replace(/[￥¥円,%\s]/g,'').replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
   const text=(v)=>String(v??'').replace(/\s+/g,' ').trim();
   const uniq=(rows,keyFn)=>{const m=new Map();for(const r of rows){const k=keyFn(r);if(k&&!m.has(k))m.set(k,r);else if(k)m.set(k,{...m.get(k),...r})}return [...m.values()]};
-  function xhr(url,body,headers={},timeout=60000){return new Promise((resolve,reject)=>(typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:typeof GM!=='undefined'&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest.bind(GM):()=>reject(new Error('DASHBOARD_REQUEST_UNAVAILABLE')))({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300&&p?.ok!==false)resolve(p);else reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}))}
+  function xhr(url,body,headers={},timeout=60000){return new Promise((resolve,reject)=>(typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:typeof GM!=='undefined'&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest.bind(GM):()=>reject(new Error('DASHBOARD_REQUEST_UNAVAILABLE')))({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300&&p?.ok!==false){resolve(p);return}if(r.status===402){reject(new Error('INSIGHT保存先がSupabaseの利用制限中です [HTTP_402]'));return}reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}))}
   function cleanUrl(){const u=new URL(location.href);for(const k of ['mumei_dashboard_pair','mumei_dashboard_sync','mumei_dashboard_return'])u.searchParams.delete(k);history.replaceState(history.state,'',u.href)}
   function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
   async function currentNoteId(){const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=text(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}finally{clearTimeout(timer)}}
@@ -62,13 +62,13 @@
     for(const n of notices)for(const o of news){let p=n.parentElement;for(let i=0;i<6&&p&&p!==document.body;i++,p=p.parentElement)if(p.contains(o))return true}
     return false;
   }
-  const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
+  const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname);
   const isDashboard=()=>featureOn()&&isDashboardRoute()&&document.visibilityState!=='hidden'&&!notificationSurface();
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const graphqlUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://graphql.note.com'&&u.pathname==='/graphql'}catch{return false}};
   const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(text(el.getAttribute('aria-label')||el.textContent));
   const connectionKey=()=>JSON.stringify([localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
-  const dashboardRouteRoot=()=>location.pathname.match(/^\/(?:sitesettings\/stats|dashboard)(?=\/|$)/)?.[0]||'';
+  const dashboardRouteRoot=()=>location.pathname.match(/^\/sitesettings\/stats(?=\/|$)/)?.[0]||'';
   const usableLease=()=>viewLease&&viewLease.root===dashboardRouteRoot()&&viewLease.connection===connectionKey();
   function renderedPeriodKey(){
     const p=detectPeriod();
@@ -617,14 +617,14 @@
   function updateDashboardSurface(){
     const active=isDashboard(),returned=active&&!surfaceActive;surfaceActive=active;
     const surface=active?'dashboard':'other';if(document.documentElement.getAttribute('data-mumei-dashboard-surface')!==surface)document.documentElement.setAttribute('data-mumei-dashboard-surface',surface);
-    if(!active){clearTimeout(autoTimer);if(busy)surfaceSuspended=true;if(panel){panel.style.setProperty('display','none','important');panel.setAttribute('aria-hidden','true')};const clearance=document.getElementById('mumei-dashboard-clearance');if(clearance)clearance.hidden=true}
-    else{if(returned)mount();if(panel?.style.display==='none'){panel.style.removeProperty('display');panel.removeAttribute('aria-hidden')};const clearance=document.getElementById('mumei-dashboard-clearance');if(clearance)clearance.hidden=false;resumeSurfaceRead()}
+    if(!active){clearTimeout(autoTimer);if(busy)surfaceSuspended=true;panelResizeObserver?.disconnect();panelResizeObserver=null;panel?.remove();document.getElementById('mumei-dashboard-clearance')?.remove();panel=null;status=null}
+    else{if(returned||!panel?.isConnected)mount();resumeSurfaceRead()}
     if(returned)document.dispatchEvent(new Event('mumei-dashboard-visible'));
   }
   function renderCompactStatus(message,kind){
     const line=panel?.querySelector('#mumei-dash-brief');if(!line)return;
     const counts=message.match(/記事\d+件・日別PV \d+日/)?.[0];
-    const reason=/VIEW_CHANGED/.test(message)?'期間・画面変更で停止':/SURFACE_LEFT/.test(message)?'画面を離れたため一時停止':/READ_WAIT|TIMEOUT/.test(message)?'公式データの応答待ちで停止':/SAVE_COUNT|SAVE_VALUE|SAVE_RESPONSE/.test(message)?'保存を確認できません':/ACCOUNT_MISMATCH|アカウント不一致/.test(message)?'アカウント不一致':/連携/.test(message)?'保存先の連携を確認':/PANEL_NOT_OPEN|TAB_NOT_OPEN|METRIC_NOT_SELECTED/.test(message)?'公式表示を開けず停止':'読込が止まりました';
+    const reason=/HTTP_402/.test(message)?'保存先が利用制限中':/VIEW_CHANGED/.test(message)?'期間・画面変更で停止':/SURFACE_LEFT/.test(message)?'画面を離れたため一時停止':/READ_WAIT|TIMEOUT/.test(message)?'公式データの応答待ちで停止':/SAVE_COUNT|SAVE_VALUE|SAVE_RESPONSE/.test(message)?'保存を確認できません':/ACCOUNT_MISMATCH|アカウント不一致/.test(message)?'アカウント不一致':/連携/.test(message)?'保存先の連携を確認':/PANEL_NOT_OPEN|TAB_NOT_OPEN|METRIC_NOT_SELECTED/.test(message)?'公式表示を開けず停止':'読込が止まりました';
     line.textContent=kind==='warn'?reason:kind==='paused'?'読込停止｜詳細から再開':kind==='partial'?(/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'自動読込中'+(counts?'｜'+counts:''):needsPair?'未連携｜詳細から連携':'ダッシュボード同期';
     line.dataset.kind=kind;
   }
