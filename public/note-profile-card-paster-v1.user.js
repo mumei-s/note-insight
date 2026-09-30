@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.2.1
-// @description  記事URL・マガジンURL・#タグを1欄で上から優先して合算。件数/全数、画像取得強化、全自動貼付、今回カード一括削除、最初に戻るに対応。
+// @version      1.3.0
+// @description  画像（名前キャプション＋記事リンク）とnote正規通知カードを別々に全自動作成。カードのみ一括削除、最初に戻るで今回画像＋カードを削除。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.2.1';
+const VERSION='1.3.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -29,7 +29,7 @@ const RUN_PREFIX='mumei_profile_card_paster_run_v12:';
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
+let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const norm=v=>{try{const u=new URL(String(v||''),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
@@ -107,14 +107,116 @@ async function waitNewNoteImage(view,beforeIds,timeout=150000){
  }
  throw new Error('note画像アップロード待ちタイムアウト')
 }
-function setImageLink(view,hit,row){
+function relinkCaption(view,hit,row){
  const node=view.state.doc.nodeAt(hit.pos)||hit.node;
  if(node?.type?.name!=='image')throw new Error('画像ノードを確認できません');
- view.dispatch(view.state.tr.setNodeMarkup(hit.pos,node.type,{...node.attrs,link:row.url},node.marks));
- const id=String(node.attrs?.id||'');
+ const caption=row.creator+'さん';
+ const replacement=node.type.create({...node.attrs,link:row.url},view.state.schema.text(caption),node.marks);
+ view.dispatch(view.state.tr.replaceWith(hit.pos,hit.pos+node.nodeSize,replacement));
+ const id=String(replacement.attrs?.id||'');
  const after=imageNodes(view).find(h=>id&&String(h.node.attrs?.id||'')===id)||imageNodes(view).find(h=>h.pos===hit.pos);
- if(!after||norm(after.node.attrs?.link)!==norm(row.url))throw new Error('画像リンク設定に失敗しました');
+ if(!after||norm(after.node.attrs?.link)!==norm(row.url)||String(after.node.textContent||'').trim()!==caption)throw new Error('画像リンク・名前キャプション設定に失敗しました');
  return after
+}
+function noteUrlCommandFactory(){
+ if(noteUrlCommandCache)return noteUrlCommandCache;
+ const req=webpackRequire();if(!req)throw new Error('note内部URL処理を取得できません');
+ let candidate=null;try{candidate=req?.(94928)?.fjT}catch{}
+ const right=v=>{
+  if(typeof v!=='function')return false;
+  let src='';try{src=Function.prototype.toString.call(v)}catch{}
+  return src.includes('state.selection')&&src.includes('nodeBefore')&&src.includes('replaceRangeWith')&&src.includes('.then')
+ };
+ if(!right(candidate)){
+  const loaded=Object.values(req.c||{}).flatMap(e=>{
+   const x=e?.exports;
+   if(typeof x==='function')return[x];
+   return x&&typeof x==='object'?Object.values(x):[]
+  });
+  candidate=loaded.find(right)||null
+ }
+ if(!right(candidate))throw new Error('note正規URLカード処理が見つかりません');
+ return noteUrlCommandCache=candidate
+}
+function embedNodes(view){const out=[];view.state.doc.descendants((node,pos)=>{if(node.type?.name==='embed')out.push({node,pos})});return out}
+function cardKey(hit){return String(hit?.node?.attrs?.embeddedContentKey||'')}
+function cardUrl(hit){return norm(hit?.node?.attrs?.src)}
+function genuineCard(hit,url){
+ const key=cardKey(hit),html=String(hit?.node?.attrs?.htmlForEmbed||'');
+ if(!/^emb[a-z0-9]+$/i.test(key)||!html.includes('note-embed'))return false;
+ if(cardUrl(hit)===norm(url))return true;
+ try{
+  const src=new URL(cardUrl(hit)),wanted=noteKey(url),embedded=src.pathname.match(/^\/embed\/notes\/(n[a-f0-9]{12})\/?$/i)?.[1];
+  return src.origin==='https://note.com'&&Boolean(embedded)&&embedded===wanted
+ }catch{return false}
+}
+function exactUrlParagraphs(view,url){
+ const wanted=norm(url),out=[];
+ view.state.doc.forEach((node,pos)=>{
+  if(node.type===view.state.schema.nodes.paragraph&&norm((node.textContent||'').trim())===wanted)out.push({node,pos})
+ });
+ return out
+}
+function insertWorkUrl(view,url){
+ ensureEndSelection(view);
+ const p=view.state.schema.nodes.paragraph,pos=view.state.doc.content.size;
+ view.dispatch(view.state.tr.insert(pos,p.create(null,view.state.schema.text(url))));
+ const node=view.state.doc.nodeAt(pos);
+ if(node?.type!==p||node.textContent!==url)throw new Error('通知カード用URLを配置できません');
+ view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());
+ view.focus();
+ return node
+}
+async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000){
+ const end=Date.now()+timeout,errorGrace=2500;let errorAt=0;
+ while(Date.now()<end){
+  const hit=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,url)});
+  if(hit)return hit;
+  if(attempt.error){if(!errorAt)errorAt=Date.now();if(Date.now()-errorAt>=errorGrace)throw attempt.error}
+  if(stopRequested)throw new Error('停止しました');
+  await sleep(140)
+ }
+ throw attempt.error||new Error('正規通知カード生成タイムアウト')
+}
+function deleteExtraWorkUrl(view,url,beforeCount){
+ const list=exactUrlParagraphs(view,url);
+ if(list.length<=beforeCount)return 0;
+ const extra=list.slice(beforeCount).sort((a,b)=>b.pos-a.pos);
+ return deleteHits(view,extra)
+}
+async function createNativeCard(view,row){
+ let run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],baseline=new Set(run.cardBaselineKeys||[]);
+ const tracked=cards.find(x=>norm(x.url)===norm(row.url));
+ if(tracked&&embedNodes(view).some(h=>cardKey(h)===tracked.key&&genuineCard(h,row.url)))return tracked;
+ const existing=embedNodes(view).find(h=>genuineCard(h,row.url)&&!baseline.has(cardKey(h)));
+ if(existing){
+  const rec={url:row.url,key:cardKey(existing),creator:row.creator};
+  cards.push(rec);writeRun({...run,cardKeys:cards,updatedAt:Date.now()});return rec
+ }
+ const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
+ const workNode=insertWorkUrl(view,row.url),attempt={error:null};
+ const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});
+ const handled=command(view.state,(tr,consumedNode=workNode)=>{
+  try{
+   if(consumedNode!==workNode&&!consumedNode?.eq?.(workNode))throw new Error('通知カード用URLが変更されました');
+   view.dispatch(tr)
+  }catch(e){attempt.error=e}
+ },view);
+ if(!handled)throw new Error('note正規URLカード処理が未処理です');
+ let hit;
+ try{hit=await waitNewCard(view,row.url,beforeKeys,attempt,45000)}
+ catch(e){
+  const recovered=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,row.url)});
+  if(recovered)hit=recovered;else{deleteExtraWorkUrl(view,row.url,rawBefore);throw e}
+ }
+ deleteExtraWorkUrl(view,row.url,rawBefore);
+ hit=embedNodes(view).find(h=>cardKey(h)===cardKey(hit))||hit;
+ if(!genuineCard(hit,row.url))throw new Error('正規通知カードの照合に失敗しました');
+ run=readRun()||run;cards=Array.isArray(run.cardKeys)?run.cardKeys:[];
+ const rec={url:row.url,key:cardKey(hit),creator:row.creator};
+ if(!cards.some(x=>x.key===rec.key))cards.push(rec);
+ writeRun({...run,cardKeys:cards,pendingCard:null,updatedAt:Date.now()});
+ return rec
 }
 
 function parseLiker(item){
@@ -313,7 +415,7 @@ async function makeFile(row){
  else{ctx.fillStyle='#64748b';ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('note',ix+iw/2,55);ctx.textAlign='start'}
  try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));
- return new page.File([blob],'mumei_profile_note_v12_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
+ return new page.File([blob],'mumei_profile_note_v13_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
 }
 async function uploadOne(view,row,file){
  ensureEndSelection(view);
@@ -321,11 +423,11 @@ async function uploadOne(view,row,file){
  const dt=new page.DataTransfer();dt.items.add(file);const pos=view.state.selection.from;
  if(nativeImageCommand()(view,dt.files,Math.max(0,pos-1),'image')!==true)throw new Error(row.index+'番 画像アップロードを開始できません');
  const hit=await waitNewNoteImage(view,before,150000);
- const linked=setImageLink(view,hit,row);
+ const linked=relinkCaption(view,hit,row);
  ensureEndSelection(view);
  return linked
 }
-function recordCreated(hit,row){
+function recordImage(hit,row){
  const run=readRun()||{version:VERSION,articleKey:editorArticleKey(),items:[],createdAt:Date.now()};
  const rec={id:String(hit?.node?.attrs?.id||''),src:String(hit?.node?.attrs?.src||''),url:norm(row.url),creator:String(row.creator||''),at:Date.now()};
  const items=Array.isArray(run.items)?run.items:[];
@@ -336,7 +438,7 @@ function recordCreated(hit,row){
 function legacyOwnedMarker(node){
  return Object.values(node?.attrs||{}).some(v=>/mumei_profile_note_v1/i.test(String(v||'')))
 }
-function resolveOwnedHits(view){
+function resolveOwnedImageHits(view){
  const run=readRun(),records=Array.isArray(run?.items)?run.items:[],all=imageNodes(view),owned=new Map();
  for(const rec of records){
   const byId=rec.id?all.find(h=>String(h.node.attrs?.id||'')===String(rec.id)):null;
@@ -365,14 +467,33 @@ async function saveOnce(label='貼り付け完了｜下書き保存を1回だけ
  const b=[...document.querySelectorAll('button')].find(x=>/^(一時保存|下書き保存)$/.test(x.textContent?.trim())&&x.getClientRects().length&&!x.disabled);
  if(b){b.click();await sleep(6000)}
 }
-async function deleteOwnedCards({confirm=true,save=true}={}){
+function resolveOwnedCardHits(view){
+ const run=readRun(),cards=Array.isArray(run?.cardKeys)?run.cardKeys:[],baseline=new Set(run?.cardBaselineKeys||[]),hits=[];
+ for(const rec of cards){
+  if(baseline.has(String(rec.key||'')))continue;
+  const hit=embedNodes(view).find(h=>cardKey(h)===String(rec.key||'')&&genuineCard(h,rec.url));
+  if(hit)hits.push(hit)
+ }
+ return hits
+}
+async function deleteNotificationCards({confirm=true,save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
- const hits=resolveOwnedHits(view);
- if(confirm&&!page.confirm('この装置が今回貼ったカード '+hits.length+'件を削除します。元本文・元画像は残します。実行しますか？'))return null;
+ const hits=resolveOwnedCardHits(view);
+ if(confirm&&!page.confirm('今回作った正規通知カード '+hits.length+'件だけ削除します。紹介画像は残します。実行しますか？'))return null;
  const removed=deleteHits(view,hits);
- writeRun(null);
- if(save&&removed)await saveOnce('今回カード '+removed+'件を削除｜下書き保存中…');
+ const run=readRun();
+ if(run)writeRun({...run,cardKeys:[],pendingCard:null,updatedAt:Date.now()});
+ if(save&&removed)await saveOnce('正規通知カード '+removed+'件を一括削除｜下書き保存中…');
  return removed
+}
+async function deleteAllGenerated({save=true}={}){
+ const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+ const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view);
+ const removedCards=deleteHits(view,cards);
+ const removedImages=deleteHits(view,images);
+ writeRun(null);
+ if(save&&(removedCards||removedImages))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'を削除して保存中…');
+ return{removedCards,removedImages}
 }
 
 function inputValues(save=true){
@@ -393,30 +514,44 @@ async function run(){
   if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
   if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
-  nativeImageCommand();selectionApi();
-  writeRun({version:VERSION,articleKey:editorArticleKey(),items:[],createdAt:Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice});
+  nativeImageCommand();noteUrlCommandFactory();selectionApi();
+  const old=readRun()||{},baseline=Array.isArray(old.cardBaselineKeys)?old.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean);
+  writeRun({...old,version:VERSION,articleKey:editorArticleKey(),items:Array.isArray(old.items)?old.items:[],cardKeys:Array.isArray(old.cardKeys)?old.cardKeys:[],cardBaselineKeys:baseline,createdAt:old.createdAt||Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice});
   setStatus('読み込み開始｜'+sources.length+'ソース｜'+amountLabel(input.mode,input.count)+'｜'+choiceLabel(input.choice));
   const rows=await buildRows(input);if(!rows.length)throw new Error('貼り付け対象が0件です');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
-   const row=rows[i];setStatus('全自動 '+(i+1)+'/'+rows.length+'｜カード生成 '+row.creator);
-   const file=await makeFile(row);
-   setStatus('全自動 '+(i+1)+'/'+rows.length+'｜noteへ貼付 '+row.creator);
-   const hit=await uploadOne(view,row,file);recordCreated(hit,row);
-   await sleep(1200);
-   if((i+1)%10===0&&i+1<rows.length){setStatus('全自動 '+(i+1)+'/'+rows.length+'｜10秒休止');await sleep(10000)}
+   const row=rows[i],runNow=readRun()||{},rec=(runNow.items||[]).find(x=>norm(x.url)===norm(row.url));
+   let imageHit=null;
+   if(rec){
+    imageHit=imageNodes(view).find(h=>(rec.id&&String(h.node.attrs?.id||'')===String(rec.id))||(rec.src&&String(h.node.attrs?.src||'')===String(rec.src)&&norm(h.node.attrs?.link)===norm(row.url)));
+   }
+   if(imageHit){
+    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜既存画像へ名前キャプション修復 '+row.creator);
+    imageHit=relinkCaption(view,imageHit,row);recordImage(imageHit,row)
+   }else{
+    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜紹介画像生成 '+row.creator);
+    const file=await makeFile(row);
+    setStatus('全自動 '+(i+1)+'/'+rows.length+'｜画像アップロード '+row.creator);
+    imageHit=await uploadOne(view,row,file);recordImage(imageHit,row)
+   }
+   setStatus('全自動 '+(i+1)+'/'+rows.length+'｜正規通知カード作成 '+row.creator);
+   await createNativeCard(view,row);
+   await sleep(3000);
+   if((i+1)%10===0&&i+1<rows.length){setStatus('全自動 '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');await sleep(30000)}
   }
-  await saveOnce();
-  setStatus('完了 ✅ '+rows.length+'件｜＋操作不要｜最後：実績の算数｜「今回カード一括削除」で後処理')
+  await saveOnce('画像＋正規通知カード 完了｜下書き保存中…');
+  const runDone=readRun()||{};
+  setStatus('完了 ✅ 画像 '+(runDone.items?.length||0)+'件＋正規通知カード '+(runDone.cardKeys?.length||0)+'件｜最後：実績の算数')
  }catch(e){setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)}
  finally{busy=false;update()}
 }
 async function bulkDelete(){
  if(busy)return;busy=true;stopRequested=true;update();
  try{
-  const removed=await deleteOwnedCards({confirm:true,save:true});
-  if(removed!==null)setStatus('今回カード '+removed+'件を一括削除しました ✅')
- }catch(e){setStatus('一括削除停止：'+(e?.message||String(e)),true)}
+  const removed=await deleteNotificationCards({confirm:true,save:true});
+  if(removed!==null)setStatus('正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持')
+ }catch(e){setStatus('通知カード一括削除停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
 function resetFields(){
@@ -429,13 +564,13 @@ function resetFields(){
 }
 async function resetAll(){
  if(busy)return;
- if(!page.confirm('この装置の今回カードを削除し、入力・件数・途中記録を最初に戻します。元本文・元画像は残します。実行しますか？'))return;
+ if(!page.confirm('今回作った紹介画像＋正規通知カードを削除し、入力・件数・途中記録を最初に戻します。元本文・元画像・元カードは残します。実行しますか？'))return;
  busy=true;stopRequested=true;update();
  try{
-  const removed=await deleteOwnedCards({confirm:false,save:false});
+  const result=await deleteAllGenerated({save:false});
   localStorage.removeItem(PREF);writeRun(null);resetFields();
-  if(removed)await saveOnce('最初に戻る｜今回カード '+removed+'件を削除して保存中…');
-  setStatus('最初に戻しました ✅ 元本文・元画像は保持')
+  if(result.removedCards||result.removedImages)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'を削除して保存中…');
+  setStatus('最初に戻しました ✅ 今回画像 '+result.removedImages+' / 通知カード '+result.removedCards+' を削除｜元本文は保持')
  }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
@@ -525,9 +660,9 @@ function mount(){
   <label>記事URLのスキした人 → 使用記事</label>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
   <div class="hint">記事URL＝スキした人 / マガジン＝掲載記事 / #＝検索記事。すべて上から合算。最後は実績の算数。</div>
-  <div class="runrow"><button data-a="run">▶ 読み込み→全自動貼付</button><button data-a="stop">停止</button></div>
-  <div class="tools"><button data-a="delete">今回カード一括削除</button><button data-a="reset">最初に戻る</button></div>
-  <div id="${STATUS}">＋操作不要。アイコン＋記事サムネ取得 → カード生成 → アップロード → URL設定 → 保存まで全自動。</div>
+  <div class="runrow"><button data-a="run">▶ 画像＋通知カード 全自動</button><button data-a="stop">停止</button></div>
+  <div class="tools"><button data-a="delete">正規通知カード一括削除</button><button data-a="reset">最初に戻る</button></div>
+  <div id="${STATUS}">＋操作不要。紹介画像（名前キャプション＋記事🔗）→ note正規通知カード → 保存まで全自動。</div>
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
