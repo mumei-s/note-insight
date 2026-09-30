@@ -51,10 +51,10 @@ test("legacy notification sync is a true no-require stop wrapper and Dashboard c
   assert.doesNotMatch(legacy,/@require/);
   assert.match(legacy,/__mumeiLegacyNotificationSyncRetired/);
   assert.match(dash,/location\.origin!=='https:\/\/note\.com'/);
-  assert.match(dash,/sitesettings\\\/stats\|dashboard/);
+  assert.match(dash,/sitesettings\\\/stats/);assert.doesNotMatch(dash,/sitesettings\\\/stats\|dashboard/);
   assert.match(dash,/VERSION='1\.6\.3'/);
   assert.match(boot,/@version\s+1\.6\.3/);
-  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=162/);
+  assert.match(boot,/dashboard-sync-core-v1\.1\.0\.js\?v=163/);
 });
 
 
