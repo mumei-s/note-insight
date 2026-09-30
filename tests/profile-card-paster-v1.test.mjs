@@ -5,9 +5,9 @@ import { readFile } from "node:fs/promises";
 const root=new URL("../",import.meta.url);
 const read=p=>readFile(new URL(p,root),"utf8");
 
-test("profile paste tool v1.3 is editor-only and INSIGHT-independent",async()=>{
+test("profile paste tool v1.4 is editor-only and INSIGHT-independent",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
-  assert.match(s,/@version\s+1\.3\.0/);
+  assert.match(s,/@version\s+1\.4\.0/);
   assert.match(s,/@match\s+https:\/\/editor\.note\.com\/\*/);
   assert.doesNotMatch(s,/@match\s+https:\/\/note\.com\/\*/);
   assert.doesNotMatch(s,/mumei_insight|current_user/);
@@ -39,14 +39,12 @@ test("image data uses creator and article metadata fallbacks",async()=>{
   assert.match(s,/@connect\s+\*/);
 });
 
-test("introduced image carries visible creator caption and article link",async()=>{
+test("introduced image carries note caption and article link",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
   assert.match(s,/function relinkCaption/);
   assert.match(s,/const caption=row\.creator\+'さん'/);
   assert.match(s,/node\.type\.create\(\{\.\.\.node\.attrs,link:row\.url\},view\.state\.schema\.text\(caption\)/);
   assert.match(s,/after\.node\.textContent/);
-  assert.match(s,/row\.creator\+'さん'/);
-  assert.match(s,/ctx\.drawImage/);
 });
 
 test("native notification card is a separate note embed",async()=>{
@@ -58,26 +56,34 @@ test("native notification card is a separate note embed",async()=>{
   assert.match(s,/htmlForEmbed/);
   assert.match(s,/note-embed/);
   assert.match(s,/async function createNativeCard/);
-  assert.match(s,/正規通知カード作成/);
 });
 
-test("each row does image first then native notification card",async()=>{
+test("run is fresh every time and never adopts previous progress",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
   const run=s.match(/async function run\(\)[\s\S]*?finally\{busy=false;update\(\)\}/)?.[0]||"";
-  assert.ok(run.indexOf("uploadOne")>=0);
-  assert.ok(run.indexOf("createNativeCard")>run.indexOf("uploadOne"));
-  assert.match(run,/recordImage/);
+  assert.match(run,/毎回ここから新規セッション/);
+  assert.match(run,/items:\[\],cardKeys:\[\]/);
+  assert.match(run,/前回作成分が残っています/);
+  assert.doesNotMatch(run,/既存画像へ名前キャプション修復/);
+  assert.doesNotMatch(run,/runNow=readRun/);
 });
 
-test("v1.2 images are reused and caption repaired instead of duplicated",async()=>{
+test("all images are created before any native notification card",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
-  assert.match(s,/const old=readRun\(\)\|\|\{\}/);
-  assert.match(s,/const row=rows\[i\],runNow=readRun\(\)\|\|\{\},rec=/);
-  assert.match(s,/既存画像へ名前キャプション修復/);
-  assert.match(s,/imageHit=relinkCaption/);
+  const run=s.match(/async function run\(\)[\s\S]*?finally\{busy=false;update\(\)\}/)?.[0]||"";
+  const imagePhase=run.indexOf("// Phase 1:");
+  const cardPhase=run.indexOf("// Phase 2:");
+  const uploadPos=run.indexOf("uploadOne");
+  const nativePos=run.indexOf("createNativeCard");
+  assert.ok(imagePhase>=0);
+  assert.ok(cardPhase>imagePhase);
+  assert.ok(uploadPos>imagePhase && uploadPos<cardPhase);
+  assert.ok(nativePos>cardPhase);
+  assert.match(run,/① 画像🔗＋名前キャプション/);
+  assert.match(run,/② 正規通知カード/);
 });
 
-test("bulk delete removes only native notification cards and keeps images",async()=>{
+test("bulk delete removes only native notification cards and keeps image list",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
   assert.match(s,/async function deleteNotificationCards/);
   assert.match(s,/resolveOwnedCardHits/);
@@ -87,13 +93,12 @@ test("bulk delete removes only native notification cards and keeps images",async
   assert.doesNotMatch(fn,/resolveOwnedImageHits/);
 });
 
-test("reset removes generated images and notification cards together",async()=>{
+test("reset removes current image list and notification-card list together",async()=>{
   const s=await read("public/note-profile-card-paster-v1.user.js");
   assert.match(s,/async function deleteAllGenerated/);
   assert.match(s,/const cards=resolveOwnedCardHits\(view\),images=resolveOwnedImageHits\(view\)/);
   assert.match(s,/deleteHits\(view,\[\.\.\.cards,\.\.\.images\]\)/);
   assert.match(s,/async function resetAll/);
-  assert.match(s,/今回作った紹介画像＋正規通知カード/);
 });
 
 test("panel is compact movable collapsible and Android count input is focusable",async()=>{
@@ -113,13 +118,13 @@ test("performance math remains final",async()=>{
   assert.match(s,/最後：実績の算数/);
 });
 
-test("installer clearly distinguishes image link and native notification card",async()=>{
+test("installer documents fresh image-list then card-list workflow",async()=>{
   const h=await read("public/note-profile-card-paster-install.html");
-  assert.match(h,/v1\.3\.0/);
-  assert.match(h,/画像リンクと通知カードは別物です/);
-  assert.match(h,/名前キャプション＋記事リンク/);
-  assert.match(h,/note正規通知カード/);
+  assert.match(h,/v1\.4\.0/);
+  assert.match(h,/今回の入力から新規開始/);
+  assert.match(h,/① 画像🔗＋名前キャプションを全件まとめて作成/);
+  assert.match(h,/② その後ろにnote正規通知カードを全件まとめて作成/);
+  assert.match(h,/交互には並べません/);
   assert.match(h,/正規通知カード一括削除/);
-  assert.match(h,/紹介画像は残します/);
   assert.match(h,/最初に戻る/);
 });
