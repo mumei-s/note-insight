@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.09.30.4",
+  "appVersion": "2026.09.30.5",
   "notificationVersion": "3.6.17",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-09-30T11:43:00+09:00",
+  "releasedAt": "2026-09-30T11:58:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Supabase Edge FunctionsがHTTP 402でも通常履歴を表示できる緊急DB直読fallbackを追加。memberTokenをPostgres側で再照合し、summary・スキ履歴・スキ順位・コメント・コメント順位・フォロー・共同マガジン・お気に入り・記事一覧・通知履歴など保存済みデータを直接読取。401/403や失効sessionは通さない。",
+  "note": "Supabase Edge FunctionsのHTTP 402中でも通常データを表示する緊急DB直読を拡張。スキ履歴・順位・コメント全履歴・コメント順位・お気に入り＋グループ・フォロー/フォロワー照合・増減履歴・共同マガジン・記事一覧など保存済みデータをmemberToken再照合後にPostgresから読取。書き込み系は迂回しない。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
