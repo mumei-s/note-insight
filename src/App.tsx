@@ -18,8 +18,8 @@ import {
 } from "./insight-account-store";
 import "./insight-polish-v1.css";
 
-// Emergency maintenance mode: participant routes show the maintenance screen; owner/admin routes remain available.
-const PARTICIPANT_MAINTENANCE = true;
+// Maintenance is reserved for login/main-wide participant outages only.
+const PARTICIPANT_MAINTENANCE = false;
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
