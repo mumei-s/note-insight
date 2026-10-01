@@ -208,7 +208,6 @@ function deleteExtraWorkUrl(view,url,beforeCount){
 }
 async function createNativeCard(view,row,insertPos){
  let run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],baseline=new Set(run.cardBaselineKeys||[]);
- if(cards.length)throw new Error('今回の通知カードが既にあります。続きからは作りません。カード一括削除後に新しく作成してください');
  const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
  const work=insertWorkUrlAt(view,row.url,insertPos),workNode=work.node,attempt={error:null};
  const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});
@@ -648,67 +647,100 @@ function inputValues(save=true){
  const mode=p.querySelector('[data-mode]')?.value==='all'?'all':'number';
  const count=Math.max(0,Math.min(5000,Number(p.querySelector('[data-count]')?.value||0)));
  const choice=p.querySelector('button[data-choice].on')?.dataset.choice||g.choice||'latest';
- const v={sources,mode,count,choice,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ const specialMode=p.querySelector('[data-special-mode]')?.value==='all'?'all':'number';
+ const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||100)));
+ const v={sources,mode,count,choice,specialMode,specialCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
 function amountLabel(mode,count){return mode==='all'?'全数':String(count)+'件'}
-async function run(){
+async function createImageList({special=false}={}){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
-  const input=inputValues(),sources=parseUnifiedSources(input.sources);
-  if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
-  if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
+  const input=inputValues();
+  if(!special){
+   const sources=parseUnifiedSources(input.sources);
+   if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
+   if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
+  }
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
 
   const leftover=trackedContentCount(view);
   if(leftover.images||leftover.cards){
-   throw new Error('このページに前回作成分が残っています。続きからは行いません。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
+   throw new Error('このページに今回作成分が残っています。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
   }
 
-  // 毎回ここから新規セッション。以前の進捗・途中位置は継承しない。
+  const effective=special
+   ?{...input,mode:input.specialMode,count:input.specialCount}
+   :input;
+
+  const rows=await buildRows(effective,special);
+  if(!rows.length)throw new Error('貼り付け対象が0件です');
+
+  // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
+  const requestedCount=special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
   writeRun({
-   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],
+   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],rows,
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
-   createdAt:Date.now(),sources:input.sources,mode:input.mode,count:input.count,choice:input.choice
+   createdAt:Date.now(),stage:'images_building',special:Boolean(special),
+   sources:special?FIRST_TAGS.map(x=>'#'+x).join(' '):input.sources,
+   mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
-  setStatus('読み込み開始｜'+sources.length+'ソース｜'+amountLabel(input.mode,input.count)+'｜'+choiceLabel(input.choice));
-  const rows=await buildRows(input);if(!rows.length)throw new Error('貼り付け対象が0件です');
-
-  // Phase 1: 紹介画像を全件まとめて作る。
+  setStatus((special?'特別案件':'通常')+'｜①画像一覧 '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）を作成');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
-   setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜生成 '+row.creator);
+   setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜'+row.creator);
    const file=await makeFile(row);
-   setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜noteへ貼付 '+row.creator);
    const imageHit=await uploadOne(view,row,file);
    recordImage(imageHit,row);
    await sleep(1200)
   }
 
-  await saveOnce('① 画像🔗＋名前キャプション '+rows.length+'/'+rows.length+' 完了｜途中保存中…');
+  const runNow=readRun()||{};
+  writeRun({...runNow,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+  if(special)saveSpecialLast(rows);
+  await saveOnce('① 画像🔗＋名前キャプション '+rows.length+'/'+rows.length+' 完了｜保存中…');
+  setStatus('①画像一覧 完了 ✅ '+rows.length+'件｜カードを置く位置を本文でタップ →「②ここから通知カード」')
+ }catch(e){
+  setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true)
+ }finally{busy=false;update()}
+}
+async function createCardsAtTap(){
+ if(busy)return;busy=true;stopRequested=false;update();
+ try{
+  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  const run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
+  if(!run||run.stage!=='images_ready'||!rows.length)throw new Error('先に①画像一覧を完成させてください');
+  if((run.cardKeys||[]).length)throw new Error('今回の通知カードが既にあります。続き作成はしません。通知カード一括削除後に新しく作成してください');
+  const imageCount=resolveOwnedImageHits(view).length;
+  if(imageCount!==rows.length)throw new Error('今回画像が '+imageCount+'/'+rows.length+' 件です。画像一覧を確認してください');
 
-  // Phase 2: 画像一覧の後ろへ、正規通知カード一覧を全件まとめて作る。
+  // ユーザーが本文をタップした位置を、ボタンを押した瞬間のselectionから取得。
+  let insertPos=cardAnchorFromSelection(view);
+  writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:[],updatedAt:Date.now()});
+  setStatus('② 正規通知カード開始｜タップ位置から '+rows.length+'件');
+
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator);
-   await createNativeCard(view,row);
+   const made=await createNativeCard(view,row,insertPos);
+   insertPos=made.nextPos;
    await sleep(3000);
    if((i+1)%10===0&&i+1<rows.length){
     setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');
     await sleep(30000)
    }
   }
-
+  const done=readRun()||{};
+  writeRun({...done,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
   await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
-  const runDone=readRun()||{};
-  setStatus('完了 ✅ 画像一覧 '+(runDone.items?.length||0)+'件 → 通知カード一覧 '+(runDone.cardKeys?.length||0)+'件｜最後：実績の算数')
+  setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 指定位置から通知カード一覧 '+rows.length+'件')
  }catch(e){
-  setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開・前回続きはしません',true)
+  setStatus('通知カード停止：'+(e?.message||String(e))+'｜完成分は本文に保持。続き作成はしません',true)
  }finally{busy=false;update()}
 }
 async function bulkDelete(){
