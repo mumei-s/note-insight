@@ -627,7 +627,7 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
  if(confirm&&!page.confirm('今回作った正規通知カード '+hits.length+'件だけ削除します。紹介画像は残します。実行しますか？'))return null;
  const removed=deleteHits(view,hits);
  const run=readRun();
- if(run)writeRun({...run,cardKeys:[],pendingCard:null,updatedAt:Date.now()});
+ if(run)writeRun({...run,cardKeys:[],pendingCard:null,stage:'images_ready',updatedAt:Date.now()});
  if(save&&removed)await saveOnce('正規通知カード '+removed+'件を一括削除｜下書き保存中…');
  return removed
 }
@@ -756,8 +756,10 @@ function resetFields(){
  p.querySelector('[data-sources]').value='';
  p.querySelector('[data-mode]').value='number';
  p.querySelector('[data-count]').value='10';
+ const sm=p.querySelector('[data-special-mode]'),sc=p.querySelector('[data-special-count]');
+ if(sm)sm.value='number';if(sc)sc.value='100';
  p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
- applyAmountMode()
+ applyAmountMode();applySpecialAmountMode()
 }
 async function resetAll(){
  if(busy)return;
@@ -782,6 +784,10 @@ function update(){
 function saveUiState(extra={}){const cur=inputValues(false),old=getPrefs();setPrefs({...old,...cur,...extra})}
 function applyAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-mode]'),num=p?.querySelector('[data-count]');
+ if(num)num.style.display=sel?.value==='all'?'none':'block'
+}
+function applySpecialAmountMode(){
+ const p=document.getElementById(PANEL),sel=p?.querySelector('[data-special-mode]'),num=p?.querySelector('[data-special-count]');
  if(num)num.style.display=sel?.value==='all'?'none':'block'
 }
 function setCollapsed(on){
@@ -832,66 +838,92 @@ function mount(){
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
  p.innerHTML=`
  <style>
- #${PANEL}{position:fixed;right:6px;top:70px;z-index:2147483647;width:min(268px,calc(100vw - 12px));padding:7px;border:1px solid #3d6178;border-radius:11px;background:#07131d;color:#edf8ff;box-shadow:0 8px 24px #0008;font:10px/1.3 system-ui;max-height:56vh}
- #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:176px;padding:5px}
- #${PANEL} .head{display:grid;grid-template-columns:1fr 28px 28px;gap:3px;align-items:center;touch-action:none;user-select:none}
- #${PANEL} .title{font-weight:950;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
- #${PANEL} .body{max-height:calc(56vh - 36px);overflow:auto;padding-right:1px}
- #${PANEL} label{display:block;margin-top:5px;font-size:9px;color:#b9d8e8}
- #${PANEL} textarea{width:100%;height:72px;resize:vertical;margin-top:2px;padding:5px;border:1px solid #395970;border-radius:7px;background:#0b1d28;color:#fff;font:9px/1.3 system-ui}
- #${PANEL} input,#${PANEL} select{width:100%;height:30px;padding:3px 5px;border:1px solid #395970;border-radius:7px;background:#0b1d28;color:#fff;font-size:10px}
- #${PANEL} .amount{display:grid;grid-template-columns:74px 1fr;gap:4px;margin-top:3px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:3px}
- #${PANEL} button{min-height:29px;border:1px solid #416a82;border-radius:7px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:9px;touch-action:manipulation;pointer-events:auto}
+ #${PANEL}{position:fixed;right:5px;top:66px;z-index:2147483647;width:min(228px,calc(100vw - 10px));padding:5px;border:1px solid #365b70;border-radius:10px;background:#07131d;color:#edf8ff;box-shadow:0 7px 20px #0008;font:9px/1.25 system-ui;max-height:48vh}
+ #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:154px;padding:4px}
+ #${PANEL} .head{display:grid;grid-template-columns:1fr 25px 25px;gap:2px;align-items:center;touch-action:none;user-select:none}
+ #${PANEL} .title{font-weight:950;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
+ #${PANEL} .body{max-height:calc(48vh - 30px);overflow:auto;padding-right:1px}
+ #${PANEL} label{display:block;margin-top:4px;font-size:8px;color:#b9d8e8}
+ #${PANEL} textarea{width:100%;height:48px;resize:vertical;margin-top:2px;padding:4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font:8.5px/1.25 system-ui}
+ #${PANEL} input,#${PANEL} select{width:100%;height:26px;padding:2px 4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font-size:9px}
+ #${PANEL} .amount{display:grid;grid-template-columns:67px 1fr;gap:3px;margin-top:2px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:2px}
+ #${PANEL} button{min-height:25px;border:1px solid #3b6378;border-radius:6px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:8.5px;touch-action:manipulation;pointer-events:auto;padding:2px 3px}
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
- #${PANEL} .hint{margin-top:3px;font-size:8px;color:#91b5c8;line-height:1.3}
- #${PANEL} .runrow{display:grid;grid-template-columns:1fr 48px;gap:4px;margin-top:6px}#${PANEL} [data-a="run"]{background:#0b6176;border-color:#64d8ef;color:#fff}
- #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
- #${STATUS}{margin-top:5px;padding-top:5px;border-top:1px solid #284555;font-size:8.5px;color:#bfe8ff;word-break:break-word}#${STATUS}[data-bad="1"]{color:#ffb8b8}
- #${PANEL}-mini{position:fixed;right:8px;top:84px;z-index:2147483647;width:42px;height:42px;border:1px solid #5fd4ee;border-radius:50%;background:#082333;color:#fff;font:950 11px system-ui;display:none;align-items:center;justify-content:center;box-shadow:0 6px 20px #0008;touch-action:none;user-select:none}
+ #${PANEL} .hint{margin-top:2px;font-size:7.5px;color:#91b5c8;line-height:1.25}
+ #${PANEL} .phase{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
+ #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"]{background:#0b6176;border-color:#64d8ef}
+ #${PANEL} [data-a="cards"]{background:#34518a;border-color:#7897df}
+ #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
+ #${PANEL} details{margin-top:4px;border:1px solid #29485b;border-radius:6px;background:#091923;padding:3px}
+ #${PANEL} summary{cursor:pointer;font-weight:900;font-size:8.5px;color:#dff6ff;list-style:none}#${PANEL} summary::-webkit-details-marker{display:none}
+ #${PANEL} .special-actions{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}
+ #${STATUS}{margin-top:4px;padding-top:4px;border-top:1px solid #284555;font-size:7.8px;color:#bfe8ff;word-break:break-word}#${STATUS}[data-bad="1"]{color:#ffb8b8}
+ #${PANEL}-mini{position:fixed;right:7px;top:80px;z-index:2147483647;width:36px;height:36px;border:1px solid #5fd4ee;border-radius:50%;background:#082333;color:#fff;font:950 9px system-ui;display:none;align-items:center;justify-content:center;box-shadow:0 5px 16px #0008;touch-action:none;user-select:none}
  </style>
- <div class="head"><div class="title">紹介貼付 v${VERSION}｜長押し移動</div><button data-ui="collapse">－</button><button data-ui="tiny">×</button></div>
+ <div class="head"><div class="title">紹介貼付 v${VERSION}</div><button data-ui="collapse">－</button><button data-ui="tiny">×</button></div>
  <div class="body">
-  <label>記事URL / マガジンURL / #タグ（1欄・上から優先）</label>
-  <textarea data-sources placeholder="https://note.com/.../n/...&#10;https://note.com/.../m/...&#10;#はじめてのnote">${escAttr(g.sources||g.likesSources||g.magSources||'')}</textarea>
-  <div class="amount"><select data-mode><option value="number">件数指定</option><option value="all">全数</option></select><input data-count type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" value="${Number(g.count??g.likesCount??10)}"></div>
-  <label>記事URLのスキした人 → 使用記事</label>
+  <label>URL / マガジン / #（上から優先）</label>
+  <textarea data-sources placeholder="記事URL&#10;マガジンURL&#10;#タグ">${escAttr(g.sources||'')}</textarea>
+  <div class="amount"><select data-mode><option value="number">件数</option><option value="all">全数</option></select><input data-count type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${Number(g.count??10)}"></div>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
-  <div class="hint">記事URL＝スキした人 / マガジン＝掲載記事 / #＝検索記事。すべて上から合算。最後は実績の算数。</div>
-  <div class="runrow"><button data-a="run">▶ 画像一覧 → 通知カード一覧</button><button data-a="stop">停止</button></div>
-  <div class="tools"><button data-a="delete">正規通知カード一括削除</button><button data-a="reset">最初に戻る</button></div>
-  <div id="${STATUS}">＋操作不要。①画像🔗＋名前キャプションを全件 → ②その後ろに正規通知カードを全件。毎回新規開始。</div>
+  <div class="hint">指定件数＋最後に「実績の算数」1件（件数外）</div>
+
+  <div class="phase"><button data-a="images">①画像一覧</button><button data-a="cards">②ここからカード</button></div>
+
+  <details data-special>
+   <summary>＋ 特別案件：初投稿者</summary>
+   <div class="hint">#はじめてのnote / #初めてのnote の新着 → 公開記事1件のみ → NG記事除外</div>
+   <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??100)}"></div>
+   <button data-a="special-images" style="width:100%;margin-top:3px">① 初投稿者画像一覧</button>
+   <div class="special-actions"><button data-a="commit-excluded">前回成功→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
+  </details>
+
+  <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
+  <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
+  <div id="${STATUS}">①画像一覧は自動。②は本文で置く場所をタップしてから押す。</div>
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
+
  const choice=['oldest','fixed','latest'].includes(g.choice)?g.choice:'latest';
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
- p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';applyAmountMode();
+ p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';
+ p.querySelector('[data-special-mode]').value=g.specialMode==='all'?'all':'number';
+ applyAmountMode();applySpecialAmountMode();updateExcludedCount();
+
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
   p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.remove('on'));btn.classList.add('on');saveUiState({choice:btn.dataset.choice})
  }));
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
- const formControls=p.querySelectorAll('textarea,input,select,button');
+ p.querySelector('[data-special-mode]').addEventListener('change',()=>{applySpecialAmountMode();saveUiState()});
+
+ const formControls=p.querySelectorAll('textarea,input,select,button,summary');
  formControls.forEach(x=>{
   x.addEventListener('pointerdown',e=>{e.stopPropagation()});
-  x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true});
+  x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true})
  });
  p.querySelectorAll('textarea,input').forEach(x=>{
-  x.addEventListener('focus',e=>{e.stopPropagation()});
-  x.addEventListener('click',e=>{e.stopPropagation()});
-  x.addEventListener('change',()=>saveUiState());
+  x.addEventListener('focus',e=>e.stopPropagation());
+  x.addEventListener('click',e=>e.stopPropagation());
+  x.addEventListener('change',()=>saveUiState())
  });
- const countInput=p.querySelector('[data-count]');
- countInput?.addEventListener('input',()=>{
-  const digits=String(countInput.value||'').replace(/\D+/g,'').slice(0,4);
-  if(countInput.value!==digits)countInput.value=digits;
- });
+ for(const sel of ['[data-count]','[data-special-count]']){
+  const el=p.querySelector(sel);
+  el?.addEventListener('input',()=>{const d=String(el.value||'').replace(/\D+/g,'').slice(0,4);if(el.value!==d)el.value=d})
+ }
+
  p.querySelector('[data-ui="collapse"]').addEventListener('click',e=>{e.preventDefault();setCollapsed(!p.classList.contains('collapsed'))});
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
- p.querySelector('[data-a="run"]').addEventListener('click',e=>{e.preventDefault();void run()});
- p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
+ p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false})});
+ p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true})});
+ p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
+ p.querySelector('[data-a="commit-excluded"]').addEventListener('click',e=>{e.preventDefault();commitSpecialLast()});
+ p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
  p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
  p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
+ p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
+
  mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
  bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
  if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
