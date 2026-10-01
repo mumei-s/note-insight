@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
+  <title>こあく まこ調査 更新</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#070a10;color:#f5f8fc;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    .wrap{width:min(680px,calc(100% - 16px));margin:auto;padding:14px 0 28px}
+    .card{border:1px solid #344b61;border-radius:16px;background:#0d1620;padding:14px}
+    h1{margin:0 0 8px;font-size:22px}
+    .ver{display:inline-flex;padding:4px 9px;border:1px solid #22d3ee;border-radius:999px;color:#cffafe;background:#083344;font-size:11px;font-weight:900}
+    .note{margin-top:10px;padding:10px;border:1px solid #32495d;border-radius:10px;background:#09131c;font-size:12px;line-height:1.65;color:#c8d9e7}
+    .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;margin-top:10px;border:1px solid #b6ff38;border-radius:11px;background:#b6ff38;color:#091100;text-decoration:none;font-size:16px;font-weight:950}
+    .sub{background:#122131;color:#e5f2ff;border-color:#405c74}
+    .status{margin-top:10px;font-size:11px;color:#9fb4c6;line-height:1.55}
+    .copybox{display:flex;gap:7px;margin-top:9px}
+    .copybox input{min-width:0;flex:1;border:1px solid #405c74;border-radius:9px;background:#071019;color:#dbeafe;padding:10px;font-size:11px}
+    .copybox button{flex:0 0 auto;border:1px solid #60a5fa;border-radius:9px;background:#172554;color:#dbeafe;padding:0 12px;font-weight:900}
+    .ok{color:#cfff64}.bad{color:#ffb6b6}
+  </style>
+</head>
+<body>
+<main class="wrap"><section class="card">
+  <h1>🔎 こあく まこ調査</h1>
+  <span class="ver">v3.1.0</span>
+  <div class="note">
+    <b>対照群比較まで入った最新版です。</b><br>
+    既存の途中データ・1000人走査結果はそのまま引き継ぎます。<br>
+    INSIGHT本体には触れません。<br><br>
+    Android Edge＋Tampermonkeyでは、下の<b>「インストール／更新」</b>を押してください。
+  </div>
+  <a id="install" class="btn" href="./note-account-audit-force-310.user.js">インストール／更新</a>
+  <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-310.user.js">Raw直結</a>
+  <div class="copybox">
+    <input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-310.user.js">
+    <button id="copy" type="button">URLコピー</button>
+  </div>
+  <div id="status" class="status">上の「インストール／更新」から開いてください。</div>
+</section></main>
+<script>
+(() => {
+  const status=document.getElementById('status');
+  const install=document.getElementById('install');
+  const raw=document.getElementById('raw');
+  const copy=document.getElementById('copy');
+  const copyUrl=document.getElementById('copy-url');
+  const ua=navigator.userAgent||'';
+  const edge=/EdgA|Edg\//i.test(ua),firefox=/Firefox/i.test(ua),android=/Android/i.test(ua);
+  if(android&&edge) status.innerHTML='✅ Android Edgeを確認。<b>Tampermonkeyを有効にして「インストール／更新」</b>を押してください。';
+  else if(android&&firefox) status.innerHTML='✅ Android Firefoxを確認。Userscript拡張を有効にして「インストール／更新」を押してください。';
+  else if(android) status.innerHTML='Androidブラウザを確認。まず「インストール／更新」を押してください。反応しない場合だけURLコピーを使ってください。';
+  install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptの更新画面が出たら、そのまま更新してください。';});
+  copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ URLをコピーしました。':'コピーできませんでした。欄を長押ししてください。';});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-account-audit-force-310.user.js?ts='+ts;raw.href=copyUrl.value+'?v=3.1.0&ts='+ts;});
+})();
+</script>
+</body>
+</html>
