@@ -23,13 +23,15 @@ import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
-const AUTO_MS=120_000;
-const RELATION_MS=180_000;
-const QUIET_MS=2_500;
+const AUTO_MS=15*60_000;
+const RELATION_MS=30*60_000;
+const QUIET_MS=5_000;
 const PUBLIC_SYNC_TIMEOUT=60_000;
 const MANUAL_UI_TIMEOUT=32_000;
 const ENTRY_MODE_KEY="mumei-insight-entry-mode";
 const APP_UPDATE_RESULT_KEY="mumei-insight-app-update-result";
+const AUTO_SYNC_KEY="mumei-insight-last-auto-public-sync";
+const RELATION_SYNC_KEY="mumei-insight-last-auto-relation-sync";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
 function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
@@ -61,7 +63,7 @@ export function MemberInsightLiveV2(){
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(0),lastRelationRun=useRef(0),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
     if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
@@ -101,7 +103,7 @@ export function MemberInsightLiveV2(){
   }
   async function relationSync(force=false){
     const now=Date.now();if(relationRunning.current||(!force&&now-lastRelationRun.current<RELATION_MS))return false;
-    relationRunning.current=true;lastRelationRun.current=now;
+    relationRunning.current=true;lastRelationRun.current=now;try{localStorage.setItem(RELATION_SYNC_KEY,String(now))}catch{}
     try{
       const results=await Promise.allSettled([
         post(RELATIONS,"sync",{direction:"followers"},120_000),
@@ -118,7 +120,7 @@ export function MemberInsightLiveV2(){
     if(!force&&(document.visibilityState!=="visible"||now-lastInteraction.current<QUIET_MS||now-lastRun.current<AUTO_MS))return false;
     if(force&&running.current)publicSyncController.current?.abort();
     const run=++publicSyncRun.current,controller=new AbortController();
-    publicSyncController.current=controller;running.current=true;lastRun.current=now;
+    publicSyncController.current=controller;running.current=true;lastRun.current=now;try{localStorage.setItem(AUTO_SYNC_KEY,String(now))}catch{}
     setStatus(force?"公開データを更新中…（保存済みデータは表示中）":"公開データを確認中…（保存済みデータは表示中）");
     try{
       const p=await post(MEMBER,"sync",{},PUBLIC_SYNC_TIMEOUT,controller.signal);
@@ -200,13 +202,13 @@ export function MemberInsightLiveV2(){
   useEffect(()=>{
     void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
-    const relationFirst=window.setTimeout(()=>void relationSync(true),900),first=window.setTimeout(()=>void publicSync(true),3000),timer=window.setInterval(()=>void publicSync(false),15_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>{void publicSync(false);void relationSync(false)},QUIET_MS)};
+    const relationFirst=window.setTimeout(()=>void relationSync(false),5000),first=window.setTimeout(()=>void publicSync(false),8000),timer=window.setInterval(()=>void publicSync(false),5*60_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},10*60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>{void publicSync(false);void relationSync(false)},QUIET_MS)};
     document.addEventListener("visibilitychange",visible);
     return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible);publicSyncRun.current++;publicSyncController.current?.abort();publicSyncController.current=null;running.current=false}
   },[]);
-  useEffect(()=>{if(mode==="social")void relationSync(true)},[mode]);
+  useEffect(()=>{if(mode==="social")void relationSync(false)},[mode]);
   useEffect(()=>{
-    void checkRelease();const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},60_000);const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
+    void checkRelease();const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},15*60_000);const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
     const storageRefresh=(event:StorageEvent)=>{if(event.key===NOTIFICATION_VERSION_STORAGE_KEY||event.key===DASHBOARD_VERSION_STORAGE_KEY)refresh()};
     window.addEventListener("online",refresh);window.addEventListener("storage",storageRefresh);
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);window.addEventListener("mumei-notification-version-changed",refresh);document.addEventListener("visibilitychange",refresh);
