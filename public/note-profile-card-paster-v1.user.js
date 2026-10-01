@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.5.3
-// @description  常用版。①画像🔗も本文タップ位置から挿入。初投稿者は公開記事1件を厳密確認。通知カードは5秒待機から開始し、エラー時のみ10秒へ昇格。実績の算数カードも最終保証。
+// @version      1.5.4
+// @description  常用版。初投稿2タグを個別ON/OFF・両方ONで混合最新順。①画像🔗は本文タップ位置から挿入。上端ドラッグバーで移動可能。公開記事1件を厳密確認。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.5.3';
+const VERSION='1.5.4';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -412,49 +412,57 @@ async function specialArticleText(row){
  }catch{}
  return parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim()
 }
-async function collectFirstNoteSpecial(mode,count){
+async function collectFirstNoteSpecial(mode,count,selectedTags){
  const limit=targetLimit(mode,count);
  if(limit===0)return[];
+ const tags=(Array.isArray(selectedTags)?selectedTags:[]).filter(x=>FIRST_TAGS.includes(x));
+ if(!tags.length)throw new Error('初投稿タグを1つ以上選んでください');
  const excluded=specialExcludedSets();
- const states=FIRST_TAGS.map(tag=>({tag,cursor:'0',done:false,page:0}));
- const candidates=new Map(),tested=new Set(),out=[];
- let rounds=0;
- while(out.length<limit&&states.some(x=>!x.done)&&rounds++<250){
-  for(const st of states){
-   if(st.done)continue;
+ // 各タグの「新着」列を別ストリームとして保持し、先頭日時を比較して1件ずつ取り出す。
+ // 両方ONでもタグA→タグBの順にはせず、2タグを混ぜた本当の最新順で判定する。
+ const states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
+ const tested=new Set(),out=[];
+ async function fill(st){
+  while(!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
-   setStatus('特別案件｜#'+st.tag+' 新着 '+st.page+'ページ｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+   setStatus('特別案件｜#'+st.tag+' 新着 '+st.page+'ページ取得｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
    const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.tag)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
    const q=normalizeSearch(p);
-   if(!q.arr.length){st.done=true;continue}
+   const rows=[];
    for(const raw of q.arr){
     const row=articleFromRaw(raw,{});
-    if(!row)continue;
-    const u=norm(row.url);
-    if(!u||u===norm(FINAL_URL))continue;
-    const prev=candidates.get(u);
-    if(!prev)candidates.set(u,row)
+    const u=norm(row?.url);
+    if(row&&u&&u!==norm(FINAL_URL))rows.push({...row,url:u})
    }
-   if(q.last||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;
+   rows.sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
+   st.buffer=rows;
+   if(q.last||!q.arr.length||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;
    else st.cursor=String(q.cursor);
-   await sleep(80)
+   if(!st.buffer.length&&!st.done)await sleep(60)
   }
-  const ordered=[...candidates.values()]
-    .filter(row=>!tested.has(norm(row.url)))
-    .sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
-  for(const row of ordered){
-   if(out.length>=limit)break;
-   const u=norm(row.url),creator=String(row.urlname||'').toLowerCase();
-   tested.add(u);
-   if(excluded.urls.has(u)||excluded.creators.has(creator))continue;
-   setStatus('特別案件｜初投稿確認 '+(tested.size)+'件目｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
-   if(!(await creatorSinglePublicArticle(row)))continue;
-   const text=await specialArticleText(row);
-   const reason=specialBlockedReason(text);
-   if(reason)continue;
-   out.push({...row,specialFirstNote:true});
-   await sleep(120)
+ }
+ for(const st of states)await fill(st);
+ let scanned=0;
+ while(out.length<limit&&states.some(st=>st.buffer.length||!st.done)&&scanned<10000){
+  for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
+  let chosenState=null,chosenRow=null,chosenTime=-Infinity;
+  for(const st of states){
+   const row=st.buffer[0];if(!row)continue;
+   const t=new Date(row.publishAt||0).getTime();
+   if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}
   }
+  if(!chosenRow)break;
+  chosenState.buffer.shift();scanned++;
+  const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase();
+  if(tested.has(u))continue;
+  tested.add(u);
+  if(excluded.urls.has(u)||excluded.creators.has(creator))continue;
+  setStatus('特別案件｜'+tags.map(x=>'#'+x).join('＋')+' 混合最新順｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+  if(!(await creatorSinglePublicArticle(chosenRow)))continue;
+  const text=await specialArticleText(chosenRow);
+  if(specialBlockedReason(text))continue;
+  out.push({...chosenRow,specialFirstNote:true});
+  await sleep(100)
  }
  return out
 }
@@ -523,7 +531,7 @@ async function enrich(row){
  }
 }
 async function buildRows(input,special=false){
- const raw=special?await collectFirstNoteSpecial(input.mode,input.count):await collectUnified(input.sources,input.mode,input.count,input.choice);
+ const raw=special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice);
  const seen=new Set(),rows=[];
  for(const row of raw){
   const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
@@ -673,7 +681,8 @@ function inputValues(save=true){
  const choice=p.querySelector('button[data-choice].on')?.dataset.choice||g.choice||'latest';
  const specialMode=p.querySelector('[data-special-mode]')?.value==='all'?'all':'number';
  const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||100)));
- const v={sources,mode,count,choice,specialMode,specialCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ const specialTags=[...p.querySelectorAll('button[data-special-tag].on')].map(x=>String(x.dataset.specialTag||'')).filter(Boolean);
+ const v={sources,mode,count,choice,specialMode,specialCount,specialTags,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
@@ -699,8 +708,9 @@ async function createImageList({special=false}={}){
    throw new Error('このページに今回作成分が残っています。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
   }
 
+  if(special&&(!Array.isArray(input.specialTags)||!input.specialTags.length))throw new Error('初投稿タグを1つ以上選んでください');
   const effective=special
-   ?{...input,mode:input.specialMode,count:input.specialCount}
+   ?{...input,mode:input.specialMode,count:input.specialCount,specialTags:input.specialTags}
    :input;
 
   const rows=await buildRows(effective,special);
@@ -713,7 +723,7 @@ async function createImageList({special=false}={}){
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
    createdAt:Date.now(),stage:'images_building',special:Boolean(special),
    imageAnchorPos:imageInsertPos,
-   sources:special?FIRST_TAGS.map(x=>'#'+x).join(' '):input.sources,
+   sources:special?input.specialTags.map(x=>'#'+x).join(' '):input.sources,
    mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
@@ -828,6 +838,7 @@ function resetFields(){
  p.querySelector('[data-count]').value='10';
  const sm=p.querySelector('[data-special-mode]'),sc=p.querySelector('[data-special-count]');
  if(sm)sm.value='number';if(sc)sc.value='100';
+ p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.add('on'));
  p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
  applyAmountMode();applySpecialAmountMode()
 }
@@ -881,7 +892,7 @@ function setTiny(on){
  saveUiState({tiny:Boolean(on),collapsed:false})
 }
 function restorePos(el){
- try{const v=JSON.parse(localStorage.getItem(POS)||'null');if(!v)return;const left=Math.max(4,Math.min(innerWidth-el.offsetWidth-4,Number(v.left)||4)),top=Math.max(4,Math.min(innerHeight-el.offsetHeight-4,Number(v.top)||70));el.style.left=left+'px';el.style.top=top+'px';el.style.right='auto'}catch{}
+ try{const v=JSON.parse(localStorage.getItem(POS)||'null');if(!v)return;const left=Math.max(4,Math.min(innerWidth-el.offsetWidth-4,Number(v.left)||4)),top=Math.max(24,Math.min(innerHeight-el.offsetHeight-4,Number(v.top)||84));el.style.left=left+'px';el.style.top=top+'px';el.style.right='auto'}catch{}
 }
 function savePos(el){try{const r=el.getBoundingClientRect();localStorage.setItem(POS,JSON.stringify({left:Math.round(r.left),top:Math.round(r.top)}))}catch{}}
 function bindLongDrag(handle,panel){
@@ -902,21 +913,46 @@ function bindLongDrag(handle,panel){
  const end=e=>{clear();if(dragging){e.preventDefault();savePos(panel);suppressClickUntil=Date.now()+650}dragging=false;pid=null};
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
+function bindDirectDrag(handle,panel){
+ let pid=null,startX=0,startY=0,baseL=0,baseT=0,moved=false;
+ handle.addEventListener('pointerdown',e=>{
+  if(e.button!==undefined&&e.button!==0)return;
+  e.preventDefault();e.stopPropagation();
+  pid=e.pointerId;startX=e.clientX;startY=e.clientY;moved=false;
+  const r=panel.getBoundingClientRect();baseL=r.left;baseT=r.top;
+  try{handle.setPointerCapture(pid)}catch{}
+ });
+ handle.addEventListener('pointermove',e=>{
+  if(pid==null||e.pointerId!==pid)return;
+  const dx=e.clientX-startX,dy=e.clientY-startY;
+  if(!moved&&Math.hypot(dx,dy)<3)return;
+  moved=true;e.preventDefault();e.stopPropagation();
+  const l=Math.max(4,Math.min(innerWidth-panel.offsetWidth-4,baseL+dx));
+  const t=Math.max(24,Math.min(innerHeight-panel.offsetHeight-4,baseT+dy));
+  panel.style.left=l+'px';panel.style.top=t+'px';panel.style.right='auto'
+ });
+ const end=e=>{
+  if(pid==null||e.pointerId!==pid)return;
+  if(moved){e.preventDefault();e.stopPropagation();savePos(panel);suppressClickUntil=Date.now()+300}
+  pid=null;moved=false
+ };
+ handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
+}
 function escAttr(v){return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 function mount(){
  if(!document.body||document.getElementById(PANEL))return;
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
  p.innerHTML=`
  <style>
- #${PANEL}{position:fixed;right:5px;top:66px;z-index:2147483647;width:min(228px,calc(100vw - 10px));padding:5px;border:1px solid #365b70;border-radius:10px;background:#07131d;color:#edf8ff;box-shadow:0 7px 20px #0008;font:9px/1.25 system-ui;max-height:48vh}
+ #${PANEL}{position:fixed;right:5px;top:84px;z-index:2147483647;width:min(228px,calc(100vw - 10px));padding:5px;border:1px solid #365b70;border-radius:10px;background:#07131d;color:#edf8ff;box-shadow:0 7px 20px #0008;font:9px/1.25 system-ui;max-height:48vh}
  #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:154px;padding:4px}
- #${PANEL} .head{display:grid;grid-template-columns:1fr 25px 25px;gap:2px;align-items:center;touch-action:none;user-select:none}
+ #${PANEL} .dragbar{position:absolute;left:0;right:0;top:-19px;height:19px;border:1px solid #365b70;border-bottom:0;border-radius:8px 8px 0 0;background:#0a2938;color:#c9f4ff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:8px;letter-spacing:.08em;touch-action:none;user-select:none;cursor:grab;z-index:2}\n #${PANEL} .head{display:grid;grid-template-columns:1fr 25px 25px;gap:2px;align-items:center;touch-action:none;user-select:none}
  #${PANEL} .title{font-weight:950;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
  #${PANEL} .body{max-height:calc(48vh - 30px);overflow:auto;padding-right:1px}
  #${PANEL} label{display:block;margin-top:4px;font-size:8px;color:#b9d8e8}
  #${PANEL} textarea{width:100%;height:48px;resize:vertical;margin-top:2px;padding:4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font:8.5px/1.25 system-ui}
  #${PANEL} input,#${PANEL} select{width:100%;height:26px;padding:2px 4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font-size:9px}
- #${PANEL} .amount{display:grid;grid-template-columns:67px 1fr;gap:3px;margin-top:2px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:2px}
+ #${PANEL} .amount{display:grid;grid-template-columns:67px 1fr;gap:3px;margin-top:2px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:2px}#${PANEL} .special-tags{grid-template-columns:1fr 1fr}#${PANEL} .special-tags button{font-size:7.6px}
  #${PANEL} button{min-height:25px;border:1px solid #3b6378;border-radius:6px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:8.5px;touch-action:manipulation;pointer-events:auto;padding:2px 3px}
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
  #${PANEL} .hint{margin-top:2px;font-size:7.5px;color:#91b5c8;line-height:1.25}
@@ -942,7 +978,8 @@ function mount(){
 
   <details data-special>
    <summary>＋ 特別案件：初投稿者</summary>
-   <div class="hint">#はじめてのnote / #初めてのnote の新着 → 公開記事1件のみ → NG記事除外</div>
+   <div class="hint">タグは個別ON/OFF。両方ON＝2タグを混ぜて公開日時の最新順 → 公開記事1件のみ → NG記事除外</div>
+   <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめてのnote</button><button data-special-tag="初めてのnote">#初めてのnote</button></div>
    <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??100)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:3px">① 初投稿者画像一覧</button>
    <div class="special-actions"><button data-a="commit-excluded">前回成功→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
@@ -959,6 +996,8 @@ function mount(){
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
  p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';
  p.querySelector('[data-special-mode]').value=g.specialMode==='all'?'all':'number';
+ const savedSpecialTags=Array.isArray(g.specialTags)?g.specialTags:FIRST_TAGS;
+ p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.toggle('on',savedSpecialTags.includes(x.dataset.specialTag)));
  applyAmountMode();applySpecialAmountMode();updateExcludedCount();
 
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
@@ -967,6 +1006,13 @@ function mount(){
  }));
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
  p.querySelector('[data-special-mode]').addEventListener('change',()=>{applySpecialAmountMode();saveUiState()});
+ p.querySelectorAll('button[data-special-tag]').forEach(btn=>btn.addEventListener('click',e=>{
+  e.preventDefault();e.stopPropagation();
+  btn.classList.toggle('on');
+  const on=[...p.querySelectorAll('button[data-special-tag].on')];
+  if(!on.length){btn.classList.add('on');setStatus('初投稿タグは最低1つ選んでください',true);return}
+  saveUiState({specialTags:on.map(x=>x.dataset.specialTag)})
+ }));
 
  const formControls=p.querySelectorAll('textarea,input,select,button,summary');
  formControls.forEach(x=>{
@@ -995,7 +1041,7 @@ function mount(){
  p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
 
  mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
- bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
+ bindDirectDrag(p.querySelector('[data-dragbar]'),p);bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
  if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
