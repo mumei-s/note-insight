@@ -346,6 +346,132 @@ async function collectUnified(raw,mode,count,choice){
  }
  return out
 }
+function readJSONKey(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
+function writeJSONKey(key,value){try{if(value==null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(value))}catch{}}
+function specialExcluded(){
+ const raw=readJSONKey(SPECIAL_EXCLUDED,[]);
+ return Array.isArray(raw)?raw:[]
+}
+function specialExcludedSets(){
+ const arr=specialExcluded();
+ return{
+  urls:new Set(arr.map(x=>norm(x?.url)).filter(Boolean)),
+  creators:new Set(arr.map(x=>String(x?.urlname||'').toLowerCase()).filter(Boolean))
+ }
+}
+function specialBlockedReason(text){
+ const t=String(text||'');
+ for(const rule of SPECIAL_NG)if(rule.re.test(t))return rule.label;
+ return''
+}
+async function creatorSinglePublicArticle(row){
+ if(!row?.urlname)return false;
+ try{
+  const p=await creatorContents(row.urlname,1,true);
+  const d=p?.data&&typeof p.data==='object'?p.data:{};
+  const list=contentList(p);
+  const totalRaw=d.totalCount??d.total_count??d.count??d.noteCount??d.note_count;
+  if(totalRaw!==undefined&&totalRaw!==null&&String(totalRaw)!==''){
+   const total=Number(totalRaw);
+   if(Number.isFinite(total)&&total!==1)return false
+  }else{
+   if(list.length!==1)return false;
+   const p2=await creatorContents(row.urlname,2,true);
+   if(contentList(p2).length)return false
+  }
+  const only=articleFromRaw(list[0],{});
+  return Boolean(only&&noteKey(only.url)===noteKey(row.url))
+ }catch{return false}
+}
+async function specialArticleText(row){
+ let note={};
+ try{const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));note=p?.data||p||{}}catch{}
+ const parts=[
+  row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,
+  JSON.stringify(note.hashtags||note.tags||note.hashtag_names||[])
+ ];
+ try{
+  const html=await xhr(row.url,'text',45000),doc=new DOMParser().parseFromString(String(html||''),'text/html');
+  parts.push(doc.querySelector('article')?.textContent||doc.querySelector('main')?.textContent||'')
+ }catch{}
+ return parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim()
+}
+async function collectFirstNoteSpecial(mode,count){
+ const limit=targetLimit(mode,count);
+ if(limit===0)return[];
+ const excluded=specialExcludedSets();
+ const states=FIRST_TAGS.map(tag=>({tag,cursor:'0',done:false,page:0}));
+ const candidates=new Map(),tested=new Set(),out=[];
+ let rounds=0;
+ while(out.length<limit&&states.some(x=>!x.done)&&rounds++<250){
+  for(const st of states){
+   if(st.done)continue;
+   st.page++;
+   setStatus('特別案件｜#'+st.tag+' 新着 '+st.page+'ページ｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+   const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.tag)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
+   const q=normalizeSearch(p);
+   if(!q.arr.length){st.done=true;continue}
+   for(const raw of q.arr){
+    const row=articleFromRaw(raw,{});
+    if(!row)continue;
+    const u=norm(row.url);
+    if(!u||u===norm(FINAL_URL))continue;
+    const prev=candidates.get(u);
+    if(!prev)candidates.set(u,row)
+   }
+   if(q.last||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;
+   else st.cursor=String(q.cursor);
+   await sleep(80)
+  }
+  const ordered=[...candidates.values()]
+    .filter(row=>!tested.has(norm(row.url)))
+    .sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
+  for(const row of ordered){
+   if(out.length>=limit)break;
+   const u=norm(row.url),creator=String(row.urlname||'').toLowerCase();
+   tested.add(u);
+   if(excluded.urls.has(u)||excluded.creators.has(creator))continue;
+   setStatus('特別案件｜初投稿確認 '+(tested.size)+'件目｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+   if(!(await creatorSinglePublicArticle(row)))continue;
+   const text=await specialArticleText(row);
+   const reason=specialBlockedReason(text);
+   if(reason)continue;
+   out.push({...row,specialFirstNote:true});
+   await sleep(120)
+  }
+ }
+ return out
+}
+function saveSpecialLast(rows){
+ const list=(rows||[]).filter(x=>x?.specialFirstNote).map(x=>({url:norm(x.url),urlname:String(x.urlname||''),creator:String(x.creator||''),key:String(x.key||''),at:Date.now()}));
+ writeJSONKey(SPECIAL_LAST,{at:Date.now(),count:list.length,items:list,committed:false})
+}
+function commitSpecialLast(){
+ const last=readJSONKey(SPECIAL_LAST,null);
+ const items=Array.isArray(last?.items)?last.items:[];
+ if(!items.length){setStatus('前回の特別案件成功候補がありません',true);return}
+ const current=specialExcluded(),seen=new Set(current.map(x=>norm(x.url)+'|'+String(x.urlname||'').toLowerCase()));
+ let added=0;
+ for(const item of items){
+  const k=norm(item.url)+'|'+String(item.urlname||'').toLowerCase();
+  if(seen.has(k))continue;
+  seen.add(k);current.push({...item,confirmedAt:Date.now()});added++
+ }
+ writeJSONKey(SPECIAL_EXCLUDED,current);
+ writeJSONKey(SPECIAL_LAST,{...last,committed:true,committedAt:Date.now()});
+ updateExcludedCount();
+ setStatus('前回成功分 '+added+'件を次回以降の除外対象へ登録しました ✅')
+}
+function clearSpecialExcluded(){
+ const n=specialExcluded().length;
+ if(!n){setStatus('除外登録は0件です');return}
+ if(!page.confirm('初投稿者の除外登録 '+n+'件をすべて解除しますか？'))return;
+ writeJSONKey(SPECIAL_EXCLUDED,[]);updateExcludedCount();setStatus('初投稿者の除外登録をクリアしました')
+}
+function updateExcludedCount(){
+ const e=document.querySelector('[data-excluded-count]');if(e)e.textContent='除外 '+specialExcluded().length+'件'
+}
+
 async function articleMetaImage(url){
  try{
   const html=await xhr(url,'text',45000),doc=new DOMParser().parseFromString(String(html||''),'text/html');
@@ -380,8 +506,8 @@ async function enrich(row){
   title:String(note.name||note.title||row.title||'無題の記事').trim()
  }
 }
-async function buildRows(input){
- const raw=await collectUnified(input.sources,input.mode,input.count,input.choice);
+async function buildRows(input,special=false){
+ const raw=special?await collectFirstNoteSpecial(input.mode,input.count):await collectUnified(input.sources,input.mode,input.count,input.choice);
  const seen=new Set(),rows=[];
  for(const row of raw){
   const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
