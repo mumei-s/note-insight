@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.4.0
-// @description  毎回新規実行。まず画像リンク＋名前キャプション一覧を全件作成し、その後にnote正規通知カード一覧を全件作成。
+// @version      1.5.0
+// @description  常用版。画像一覧を自動作成後、任意位置から正規通知カード一覧を作成。初投稿者特別案件・成功確定式重複除外に対応。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,12 +20,22 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.4.0';
+const VERSION='1.5.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
 const POS='mumei_profile_card_paster_pos_v1';
-const RUN_PREFIX='mumei_profile_card_paster_run_v12:';
+const RUN_PREFIX='mumei_profile_card_paster_run_v15:';
+const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
+const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
+const FIRST_TAGS=['はじめてのnote','初めてのnote'];
+const SPECIAL_NG=[
+  {label:'ポルノ',re:/(?:ポルノ|アダルト|18禁|R-?18|エロ|性的|セックス|風俗|AV女優|ヌード|自慰|性行為|援助交際)/i},
+  {label:'ギャンブル',re:/(?:ギャンブル|パチンコ|パチスロ|競馬|競艇|競輪|カジノ|賭け|ブックメーカー)/i},
+  {label:'暴力',re:/(?:暴力|殺害|殺人|殴る|刺す|虐待|リンチ|銃撃|テロ|自傷|自殺)/i},
+  {label:'投資',re:/(?:投資|株式|株価|FX|仮想通貨|暗号資産|NISA|iDeCo|資産運用|デイトレ|トレード|配当|証券)/i},
+  {label:'その他NG',re:/(?:違法|詐欺|闇バイト|覚醒剤|大麻|薬物|ドラッグ|マルチ商法|ネットワークビジネス|宗教勧誘|ヘイト|差別煽動)/i}
+];
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
