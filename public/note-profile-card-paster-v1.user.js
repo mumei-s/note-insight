@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.5.2
-// @description  常用版。初投稿者は公開記事1件を厳密確認。通知カードは5秒待機から開始し、エラー時のみ10秒へ昇格。最後の「実績の算数」カードは実体確認＋不足時再生成。
+// @version      1.5.3
+// @description  常用版。①画像🔗も本文タップ位置から挿入。初投稿者は公開記事1件を厳密確認。通知カードは5秒待機から開始し、エラー時のみ10秒へ昇格。実績の算数カードも最終保証。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.5.2';
+const VERSION='1.5.3';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -569,15 +569,28 @@ async function makeFile(row){
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));
  return new page.File([blob],'mumei_profile_note_v13_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
 }
-async function uploadOne(view,row,file){
- ensureEndSelection(view);
+function setSelectionForInsert(view,pos){
+ const max=view.state.doc.content.size;
+ const at=Math.max(0,Math.min(max,Number(pos)||0));
+ const Selection=selectionApi();
+ const resolved=view.state.doc.resolve(at);
+ const sel=typeof Selection.near==='function'?Selection.near(resolved):Selection.atEnd(view.state.doc);
+ view.dispatch(view.state.tr.setSelection(sel).scrollIntoView());
+ view.focus();
+ return view.state.selection.from
+}
+async function uploadOne(view,row,file,insertPos){
  const before=new Set(imageNodes(view).map(h=>String(h.node.attrs?.id||'')).filter(Boolean));
- const dt=new page.DataTransfer();dt.items.add(file);const pos=view.state.selection.from;
- if(nativeImageCommand()(view,dt.files,Math.max(0,pos-1),'image')!==true)throw new Error(row.index+'番 画像アップロードを開始できません');
+ const selected=setSelectionForInsert(view,insertPos);
+ const dt=new page.DataTransfer();dt.items.add(file);
+ if(nativeImageCommand()(view,dt.files,Math.max(0,selected-1),'image')!==true)throw new Error(row.index+'番 画像アップロードを開始できません');
  const hit=await waitNewNoteImage(view,before,150000);
  const linked=relinkCaption(view,hit,row);
- ensureEndSelection(view);
- return linked
+ const actual=imageNodes(view).find(h=>{
+  const id=String(linked?.node?.attrs?.id||'');
+  return (id&&String(h.node.attrs?.id||'')===id)||h.pos===linked.pos
+ })||linked;
+ return{hit:actual,nextPos:actual.pos+actual.node.nodeSize}
 }
 function recordImage(hit,row){
  const run=readRun()||{version:VERSION,articleKey:editorArticleKey(),items:[],createdAt:Date.now()};
@@ -677,6 +690,10 @@ async function createImageList({special=false}={}){
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
 
+  // ①画像一覧も、開始ボタンを押した瞬間の本文タップ位置を固定して使う。
+  // 以後の通信・画像生成中に選択位置が変わっても、最下部へ飛ばさない。
+  let imageInsertPos=cardAnchorFromSelection(view);
+
   const leftover=trackedContentCount(view);
   if(leftover.images||leftover.cards){
    throw new Error('このページに今回作成分が残っています。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
@@ -695,18 +712,20 @@ async function createImageList({special=false}={}){
    version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],rows,
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
    createdAt:Date.now(),stage:'images_building',special:Boolean(special),
+   imageAnchorPos:imageInsertPos,
    sources:special?FIRST_TAGS.map(x=>'#'+x).join(' '):input.sources,
    mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
-  setStatus((special?'特別案件':'通常')+'｜①画像一覧 '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）を作成');
+  setStatus((special?'特別案件':'通常')+'｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
    setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜'+row.creator);
    const file=await makeFile(row);
-   const imageHit=await uploadOne(view,row,file);
-   recordImage(imageHit,row);
+   const made=await uploadOne(view,row,file,imageInsertPos);
+   imageInsertPos=made.nextPos;
+   recordImage(made.hit,row);
    await sleep(1200)
   }
 
