@@ -107,10 +107,22 @@ function render(){
 
     const members=document.createElement('div');members.className='members';
     g.ids.forEach((id,mi)=>members.appendChild(memberNode(id,gi,mi)));
-    const add=document.createElement('div');add.className='add';
-    const inp=document.createElement('input');inp.placeholder='note URL / @ID / ID';
-    const btn=document.createElement('button');btn.textContent='＋追加';
-    const run=()=>{const id=parseId(inp.value);if(!id){setStatus('URL / @ID / IDを確認してください','err',0);return}if(!g.ids.includes(id))g.ids.push(id);inp.value='';opened.add(gi);render();queueSave();requestProfiles([id])};
+    const add=document.createElement('div');add.className='add';add.setAttribute('data-mumei-filter-add','1');
+    const inp=document.createElement('input');inp.type='text';inp.placeholder='note URL / @ID / ID';
+    inp.autocomplete='off';inp.autocapitalize='none';inp.spellcheck=false;inp.name='mumei-note-profile-'+gi;
+    inp.setAttribute('data-form-type','other');inp.setAttribute('data-lpignore','true');
+    const clearWrongAutofill=()=>{const v=clean(inp.value);if(/^https?:\/\/mumei-s\.github\.io\/note-insight\/?/i.test(v))inp.value=''};
+    inp.addEventListener('focus',clearWrongAutofill);inp.addEventListener('input',clearWrongAutofill);
+    setTimeout(clearWrongAutofill,0);
+    const btn=document.createElement('button');btn.type='button';btn.textContent='＋追加';
+    const run=()=>{
+      clearWrongAutofill();
+      const id=parseId(inp.value);
+      if(!id){setStatus('noteのクリエイターURL / @ID / IDを入力してください','err',0);inp.focus();return}
+      if(g.ids.includes(id)){setStatus('@'+id+' はこのグループに登録済みです','ok');inp.value='';return}
+      g.ids.push(id);inp.value='';opened.add(gi);render();queueSave();requestProfiles([id]);
+      setStatus('@'+id+' を追加しました・保存中…','ok',0)
+    };
     btn.onclick=run;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();run()}};
     add.append(inp,btn);body.append(manage,members,add);
     card.append(summary,body);groupsEl.appendChild(card)
