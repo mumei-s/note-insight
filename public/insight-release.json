@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.01.1",
+  "appVersion": "2026.10.01.2",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-01T08:52:00+09:00",
+  "releasedAt": "2026-10-01T09:30:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "緊急メンテナンス表示。参加者向けTOP・INSIGHT・本人通知・通常履歴を一時停止し、システムメンテナンス中のみ表示。OWNER管理画面は保守作業のため継続利用可能。参加者情報・保存済み履歴は保持。",
+  "note": "Supabase Pro復旧後の通常運転版。参加者メンテナンス表示を解除。active7名の保存履歴を維持し、通常データ・コメント・お気に入り・フォロー等のPostgres fallbackを継続。自動同期を大幅に低頻度化し、通常データ15分・関係30分のクールダウン、ページ再訪時のクールダウン保持、ログイン再確認の5秒ポーリング廃止、OWNER確認を2分間隔へ変更。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
