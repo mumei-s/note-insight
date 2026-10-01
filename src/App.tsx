@@ -18,8 +18,8 @@ import {
 } from "./insight-account-store";
 import "./insight-polish-v1.css";
 
-// Pro gateway recovery verified on 2026-09-30. Authentication is unchanged.
-const PARTICIPANT_MAINTENANCE = false;
+// Emergency maintenance mode: participant routes show the maintenance screen; owner/admin routes remain available.
+const PARTICIPANT_MAINTENANCE = true;
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
