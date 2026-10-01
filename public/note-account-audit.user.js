@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name note こあく まこ調査
 // @namespace https://github.com/mumei-s/note-insight
-// @version 3.1.0
+// @version 3.1.1
 // @description 公開コメント・返信・スキ・フォロー関係とフォロワー構成を確認。本人同定は公開明示だけを根拠にします。
 // @match https://note.com/*
 // @updateURL https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit.user.js
@@ -10,7 +10,7 @@
 // @run-at document-start
 // ==/UserScript==
 (function(){
-'use strict';window.__noteAccountAuditV1=1;window.__noteAccountAuditCanonical='3.1.0';
+'use strict';window.__noteAccountAuditV1=1;window.__noteAccountAuditCanonical='3.1.1';
 var P=['本垢','本アカ','メイン垢','メインアカ','サブ垢','サブアカ','別垢','別アカ','前垢','旧垢','前のアカウント','以前のアカウント','アカウント作り直','転生','複垢'];
 var SNAP='note-account-audit:snapshots',OLD_NET='note-account-audit:all-followers:v18:koakumako',DBN='note-account-audit-v19-koakumako',last=null;
 var PRESET_TARGET='koakumako',AUTO_KEY='note-account-audit:auto:koakumako:canonical:v221';
@@ -259,8 +259,14 @@ third.forEach(function(x){noteIdsInText(x.body).forEach(function(id){put(id,'第
 return Array.from(m.values()).sort(function(a,b){return b.score-a.score}).slice(0,20)}
 
 var LIKED_KEY='note-account-audit:liked:v271:koakumako',ACTIVITY_KEY='note-account-audit:activity:v31:koakumako',CONTROL_KEY='note-account-audit:control:v31:koakumako';
+function savedLikesBest(){
+ var keys=['note-account-audit:liked:v271:koakumako','note-account-audit:liked:v27:koakumako','note-account-audit:liked:v20:koakumako'],best=null;
+ keys.forEach(function(k){try{var x=JSON.parse(localStorage.getItem(k)||'null');if(!x||!x.items)return;var count=Number.isFinite(Number(x.count))?Number(x.count):Object.keys(x.items).length;if(!best||count>best.count)best={key:k,state:x,count:count}}catch(e){}});
+ return best
+}
 async function targetLikedArticles(id,set){
- set('☁ まこの公開スキ全件を取得中…');
+ var saved=savedLikesBest(),savedCount=saved?saved.count:0;
+ set(savedCount?'☁ 公開スキ再取得中…｜保存済み '+savedCount+'件':'☁ まこの公開スキ全件を取得中…');
  var lastErr='';
  for(var attempt=1;attempt<=3;attempt++){
   try{
@@ -270,8 +276,14 @@ async function targetLikedArticles(id,set){
     var k=c(x.key)||('gql-'+i);
     map[k]={key:k,creator:c(x.creator).toLowerCase(),noteKey:c(x.noteKey),publishedAt:x.publishedAt||null,rank:n(x.rank),cursor:c(x.cursor)};
    });
-   var state={items:map,pages:n(j.pages),at:Date.now(),complete:j.complete===true,source:c(j.source||'note-graphql'),count:Number.isFinite(Number(j.count))?Number(j.count):Object.keys(map).length};
-   localStorage.setItem(LIKED_KEY,JSON.stringify(state));
+   var liveCount=Number.isFinite(Number(j.count))?Number(j.count):Object.keys(map).length;
+   if(saved&&savedCount>=100&&liveCount<savedCount*0.8){
+    var old=saved.state,oldItems=old.items||{};
+    set('📦 公開スキ閉鎖/縮小を検知｜閉鎖前保存 '+savedCount+'件を使用');
+    return{items:Object.values(oldItems),count:savedCount,pages:n(old.pages),at:old.at||0,complete:true,source:'saved-before-closure',archived:true};
+   }
+   var state={items:map,pages:n(j.pages),at:Date.now(),complete:j.complete===true,source:c(j.source||'note-graphql'),count:liveCount};
+   if(liveCount>0)localStorage.setItem(LIKED_KEY,JSON.stringify(state));
    set('❤️ まこの公開スキ '+state.count+'件｜GraphQL全件');
    return{items:Object.values(map),count:state.count,pages:state.pages,at:state.at,complete:state.complete,source:state.source};
   }catch(e){
@@ -279,6 +291,11 @@ async function targetLikedArticles(id,set){
    set('↻ スキ全件取得 再試行 '+attempt+'/3｜'+lastErr);
    if(attempt<3)await wait(1200*attempt);
   }
+ }
+ if(saved){
+  var old=saved.state,oldItems=old.items||{};
+  set('📦 ライブ取得不可｜閉鎖前保存 '+savedCount+'件を使用');
+  return{items:Object.values(oldItems),count:savedCount,pages:n(old.pages),at:old.at||0,complete:true,source:'saved-before-closure',archived:true,error:lastErr};
  }
  return{items:[],count:0,pages:0,at:Date.now(),complete:false,source:'graphql-error',error:lastErr};
 }
@@ -500,7 +517,7 @@ function render(r){
  '</div>'+
  '<div class="naa-cards">'+
  card('公開根拠候補',pc.length+'件',lead?('@'+lead.id+'｜'+leadNote):'明示根拠なし')+
- card('まこ→スキ',lg.complete?(lg.articles+'件'):'取得再試行中',lg.complete?('GraphQL全件｜'+lg.creators+'人へ'):(lg.error||'GraphQL未完了'))+
+ card('まこ→スキ',lg.complete?(lg.articles+'件'):'取得再試行中',lg.complete?((lg.source==='saved-before-closure'?'閉鎖前保存｜':'GraphQL全件｜')+lg.creators+'人へ'):(lg.error||'GraphQL未完了'))+
  card('フォロワーへスキ',lg.followerArticles+'件',lg.followerCreators+'人')+
  card('全記事相互',(lg.incomingComplete?'':'>=')+lg.followerMutualCreators+'人',lg.incomingComplete?'まこの全'+lg.incomingArticles+'記事で照合':'全記事照合は未完了')+
  card('全員走査',network.scanned+'/'+network.total,network.backend==='server'?'専用サーバー':'端末フォールバック')+
