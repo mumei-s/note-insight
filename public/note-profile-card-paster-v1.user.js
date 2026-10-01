@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.5.1
-// @description  常用版。画像一覧を自動作成後、任意位置から正規通知カード一覧を作成。初投稿者特別案件は公開記事1件を固定有無まで二重確認。成功確定式重複除外に対応。
+// @version      1.5.2
+// @description  常用版。初投稿者は公開記事1件を厳密確認。通知カードは5秒待機から開始し、エラー時のみ10秒へ昇格。最後の「実績の算数」カードは実体確認＋不足時再生成。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.5.1';
+const VERSION='1.5.2';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -39,6 +39,7 @@ const SPECIAL_NG=[
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
+const CARD_GAP_FAST=5000,CARD_GAP_SLOW=10000;
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -730,22 +731,62 @@ async function createCardsAtTap(){
 
   // ユーザーが本文をタップした位置を、ボタンを押した瞬間のselectionから取得。
   let insertPos=cardAnchorFromSelection(view);
+  let cardGapMs=CARD_GAP_FAST;
   writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:[],updatedAt:Date.now()});
-  setStatus('② 正規通知カード開始｜タップ位置から '+rows.length+'件');
+  setStatus('② 正規通知カード開始｜5秒待機から開始｜'+rows.length+'件');
 
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
-   setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator);
-   const made=await createNativeCard(view,row,insertPos);
+   let made=null;
+   setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator+'｜待機 '+(cardGapMs/1000)+'秒');
+   try{
+    made=await createNativeCard(view,row,insertPos)
+   }catch(firstError){
+    // まず5秒運用。1件でも生成エラーが出たら、その1件だけ10秒待って1回再試行し、
+    // 以降の間隔も10秒へ昇格する。成功中は5秒のまま。
+    cardGapMs=CARD_GAP_SLOW;
+    setStatus('② '+row.creator+'｜一時エラー → 10秒待って1回再試行',true);
+    await sleep(CARD_GAP_SLOW);
+    if(stopRequested)throw new Error('手動停止');
+    try{
+     made=await createNativeCard(view,row,Math.min(insertPos,view.state.doc.content.size))
+    }catch(secondError){
+     throw new Error(row.creator+' カード生成失敗（再試行済み）：'+(secondError?.message||firstError?.message||String(secondError)))
+    }
+   }
    insertPos=made.nextPos;
-   await sleep(3000);
+
+   // note側の非同期エラーが遅れて出ることがあるため、成功後も最初は5秒だけ観察。
+   // 途中で失敗が出た場合のみ以後10秒になる。
+   await sleep(cardGapMs);
+
    if((i+1)%10===0&&i+1<rows.length){
     setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');
     await sleep(30000)
    }
   }
+
+  // +1件の「実績の算数」は最後にカード実体まで必ず再確認する。
+  const finalRow=rows.find(x=>x?.finalMarker||norm(x?.url)===norm(FINAL_URL));
+  if(finalRow){
+   let finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
+   if(!finalHit){
+    setStatus('② 実績の算数｜カード未確認 → 5秒待って再生成');
+    await sleep(CARD_GAP_FAST);
+    const tracked=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
+    const retryPos=tracked.length?tracked[tracked.length-1].pos+tracked[tracked.length-1].node.nodeSize:Math.min(insertPos,view.state.doc.content.size);
+    const made=await createNativeCard(view,finalRow,retryPos);
+    insertPos=made.nextPos;
+    await sleep(CARD_GAP_FAST);
+    finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
+    if(!finalHit)throw new Error('実績の算数カードだけ最終確認できませんでした')
+   }
+  }
+
   const done=readRun()||{};
+  const actualCards=resolveOwnedCardHits(view).length;
+  if(actualCards!==rows.length)throw new Error('通知カード実数 '+actualCards+'/'+rows.length+'｜不足を検出したため完了にしません');
   writeRun({...done,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
   await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
   setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 指定位置から通知カード一覧 '+rows.length+'件')
