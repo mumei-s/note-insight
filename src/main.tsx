@@ -227,8 +227,8 @@ window.addEventListener("hashchange", () => {
 
 void tryReturningMemberResume();
 void pollOwnerPendingApplications();
-window.setInterval(() => { void tryReturningMemberResume(); }, 5000);
-window.setInterval(() => { if (document.visibilityState === "visible") void pollOwnerPendingApplications(); }, 15000);
+window.setInterval(() => { if (document.visibilityState === "visible" && window.location.hash.includes("access/insight")) void tryReturningMemberResume(); }, 60_000);
+window.setInterval(() => { if (document.visibilityState === "visible") void pollOwnerPendingApplications(); }, 120_000);
 window.addEventListener("focus", () => { void tryReturningMemberResume(); void pollOwnerPendingApplications(); });
 window.addEventListener("pageshow", () => { void tryReturningMemberResume(); void pollOwnerPendingApplications(); });
 
