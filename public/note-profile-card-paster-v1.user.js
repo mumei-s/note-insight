@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.5.0
-// @description  常用版。画像一覧を自動作成後、任意位置から正規通知カード一覧を作成。初投稿者特別案件・成功確定式重複除外に対応。
+// @version      1.5.1
+// @description  常用版。画像一覧を自動作成後、任意位置から正規通知カード一覧を作成。初投稿者特別案件は公開記事1件を固定有無まで二重確認。成功確定式重複除外に対応。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.5.0';
+const VERSION='1.5.1';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -372,20 +372,30 @@ function specialBlockedReason(text){
 async function creatorSinglePublicArticle(row){
  if(!row?.urlname)return false;
  try{
-  const p=await creatorContents(row.urlname,1,true);
-  const d=p?.data&&typeof p.data==='object'?p.data:{};
-  const list=contentList(p);
+  // 「1記事だけ」は公開note記事で厳密確認する。
+  // 固定表示の有無で同一記事が重複して見えるケースもあるため、両方の一覧を照合する。
+  const [plain,pinned,page2]=await Promise.all([
+   creatorContents(row.urlname,1,true),
+   creatorContents(row.urlname,1,false),
+   creatorContents(row.urlname,2,true)
+  ]);
+  const d=plain?.data&&typeof plain.data==='object'?plain.data:{};
+  const plainList=contentList(plain),pinnedList=contentList(pinned),secondList=contentList(page2);
   const totalRaw=d.totalCount??d.total_count??d.count??d.noteCount??d.note_count;
   if(totalRaw!==undefined&&totalRaw!==null&&String(totalRaw)!==''){
    const total=Number(totalRaw);
-   if(Number.isFinite(total)&&total!==1)return false
-  }else{
-   if(list.length!==1)return false;
-   const p2=await creatorContents(row.urlname,2,true);
-   if(contentList(p2).length)return false
+   if(!Number.isFinite(total)||total!==1)return false
   }
-  const only=articleFromRaw(list[0],{});
-  return Boolean(only&&noteKey(only.url)===noteKey(row.url))
+  if(plainList.length!==1||secondList.length!==0)return false;
+  const keys=new Set(
+   [...plainList,...pinnedList]
+    .map(x=>articleFromRaw(x,{}))
+    .filter(Boolean)
+    .map(x=>noteKey(x.url))
+    .filter(Boolean)
+  );
+  const wanted=noteKey(row.url);
+  return Boolean(wanted&&keys.size===1&&keys.has(wanted))
  }catch{return false}
 }
 async function specialArticleText(row){
