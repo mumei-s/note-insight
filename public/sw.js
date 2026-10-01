@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v65-maintenance-filter-fix-20261001";
+const CACHE_NAME = "mumei-note-insight-v66-filter-fix-20261001";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
