@@ -167,15 +167,27 @@ function exactUrlParagraphs(view,url){
  });
  return out
 }
-function insertWorkUrl(view,url){
- ensureEndSelection(view);
- const p=view.state.schema.nodes.paragraph,pos=view.state.doc.content.size;
- view.dispatch(view.state.tr.insert(pos,p.create(null,view.state.schema.text(url))));
- const node=view.state.doc.nodeAt(pos);
- if(node?.type!==p||node.textContent!==url)throw new Error('通知カード用URLを配置できません');
- view.dispatch(view.state.tr.setSelection(selectionApi().atEnd(view.state.doc)).scrollIntoView());
- view.focus();
- return node
+function cardAnchorFromSelection(view){
+ const sel=view.state.selection,$from=sel.$from;
+ if(!$from)return view.state.doc.content.size;
+ try{
+  if($from.depth>=1){
+   const node=$from.node(1),before=$from.before(1);
+   if(node?.type===view.state.schema.nodes.paragraph&&!String(node.textContent||''))return before;
+   return before+node.nodeSize
+  }
+ }catch{}
+ return Math.max(0,Math.min(view.state.doc.content.size,Number(sel.from)||view.state.doc.content.size))
+}
+function insertWorkUrlAt(view,url,pos){
+ const p=view.state.schema.nodes.paragraph;
+ const at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)));
+ view.dispatch(view.state.tr.insert(at,p.create(null,view.state.schema.text(url))));
+ const node=view.state.doc.nodeAt(at);
+ if(node?.type!==p||node.textContent!==url)throw new Error('通知カード用URLを指定位置へ配置できません');
+ const Selection=selectionApi(),near=typeof Selection.near==='function'?Selection.near(view.state.doc.resolve(Math.max(0,Math.min(view.state.doc.content.size,at+node.nodeSize-1)))):Selection.atEnd(view.state.doc);
+ view.dispatch(view.state.tr.setSelection(near).scrollIntoView());view.focus();
+ return{node,pos:at}
 }
 async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000){
  const end=Date.now()+timeout,errorGrace=2500;let errorAt=0;
@@ -194,17 +206,11 @@ function deleteExtraWorkUrl(view,url,beforeCount){
  const extra=list.slice(beforeCount).sort((a,b)=>b.pos-a.pos);
  return deleteHits(view,extra)
 }
-async function createNativeCard(view,row){
+async function createNativeCard(view,row,insertPos){
  let run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],baseline=new Set(run.cardBaselineKeys||[]);
- const tracked=cards.find(x=>norm(x.url)===norm(row.url));
- if(tracked&&embedNodes(view).some(h=>cardKey(h)===tracked.key&&genuineCard(h,row.url)))return tracked;
- const existing=embedNodes(view).find(h=>genuineCard(h,row.url)&&!baseline.has(cardKey(h)));
- if(existing){
-  const rec={url:row.url,key:cardKey(existing),creator:row.creator};
-  cards.push(rec);writeRun({...run,cardKeys:cards,updatedAt:Date.now()});return rec
- }
+ if(cards.length)throw new Error('今回の通知カードが既にあります。続きからは作りません。カード一括削除後に新しく作成してください');
  const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
- const workNode=insertWorkUrl(view,row.url),attempt={error:null};
+ const work=insertWorkUrlAt(view,row.url,insertPos),workNode=work.node,attempt={error:null};
  const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});
  const handled=command(view.state,(tr,consumedNode=workNode)=>{
   try{
@@ -224,9 +230,9 @@ async function createNativeCard(view,row){
  if(!genuineCard(hit,row.url))throw new Error('正規通知カードの照合に失敗しました');
  run=readRun()||run;cards=Array.isArray(run.cardKeys)?run.cardKeys:[];
  const rec={url:row.url,key:cardKey(hit),creator:row.creator};
- if(!cards.some(x=>x.key===rec.key))cards.push(rec);
- writeRun({...run,cardKeys:cards,pendingCard:null,updatedAt:Date.now()});
- return rec
+ cards.push(rec);
+ writeRun({...run,cardKeys:cards,updatedAt:Date.now()});
+ return{rec,nextPos:hit.pos+hit.node.nodeSize}
 }
 
 function parseLiker(item){
