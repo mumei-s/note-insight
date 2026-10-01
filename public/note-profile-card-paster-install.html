@@ -2,42 +2,15 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
-<title>アイコン＋キャプション 貼り付け装置</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#071019;color:#eef7ff;font-family:system-ui,-apple-system,sans-serif}.w{width:min(700px,calc(100% - 16px));margin:auto;padding:16px 0}.c{padding:15px;border:1px solid #3b6076;border-radius:15px;background:#0d1923}h1{font-size:21px;margin:0 0 8px}.v{display:inline-block;padding:4px 9px;border-radius:999px;background:#123047;border:1px solid #56c5ef;font-size:11px;font-weight:900}.n{margin-top:10px;padding:10px;border-radius:10px;background:#08141d;border:1px solid #29485b;font-size:12px;line-height:1.75}.btn{display:flex;align-items:center;justify-content:center;min-height:50px;margin-top:10px;border-radius:10px;background:#b6ff38;color:#081000;text-decoration:none;font-size:15px;font-weight:950}.sub{background:#13283a;color:#eef7ff;border:1px solid #42677d}.copy{width:100%;margin-top:10px;padding:11px;border:1px solid #42677d;border-radius:9px;background:#071019;color:#dbeafe;font-size:11px}</style>
+<title>貼り付け装置 更新</title>
+<meta http-equiv="refresh" content="0;url=https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js?v=1.5.1">
 </head>
-<body><main class="w"><section class="c">
-<h1>アイコン＋キャプション 貼り付け装置</h1>
-<span class="v">v1.5.0</span>
-<div class="n">
-<b>記事URL / マガジンURL / #タグを1つの欄へ</b><br>
-全部同じ入力欄に上から並べます。種類は自動判定。記事URL＝その記事のスキした人、マガジンURL＝掲載記事、#タグ＝検索記事です。<br>
-<b>上から優先して合算</b>し、「件数指定」なら合計件数に達した時点で終了。「全数」なら並べた全ソースを最後まで読みます。<br><br>
-<b>画像取得を強化</b><br>
-アイコンはスキ一覧・記事API・クリエイターAPIから補完。記事サムネは記事APIに加えてOG画像まで補完します。<br><br>
-<b>常用フロー</b><br>
-毎回、今回の入力から新規開始。<b>①画像🔗＋名前キャプション一覧</b>は全自動で作成します。<br>
-その後、本文で通知カードを置きたい場所をタップしてから<b>「②ここからカード」</b>を押すと、その位置からnote正規通知カード一覧を作成します。画像とカードは交互にしません。<br><br>
-<b>特別案件（パネル内に格納）</b><br>
-固定対象は <b>#はじめてのnote / #初めてのnote</b>。新着から取得し、各クリエイターの公開記事一覧まで確認して<b>公開記事が1件だけ</b>の人に限定します。<br>
-ポルノ・ギャンブル・暴力・投資・違法/詐欺等を除外します。<b>副業という語だけでは除外しません。</b><br>
-前回の特別案件結果は自動では除外しません。成功を確認した後に<b>「前回成功→除外」</b>を押した分だけ、次回以降の対象から除外します。<br><br>
-<b>件数ルール</b><br>
-指定件数は通常対象/初投稿者だけを数え、<b>「実績の算数」は件数に含めず最後に+1件</b>です。100件指定なら合計101件作成します。<br><br>
-<b>後処理</b><br>
-「正規通知カード一括削除」＝今回作ったnote正規通知カードだけ削除。画像🔗＋名前キャプション一覧は残します。<br>
-「最初に戻る」＝今回作った画像一覧＋正規通知カード一覧の両方を削除し、入力/件数/記事選択/今回記録を初期化。元本文・元画像・元カードは残します。<br><br>
-<b>最後は必ず「実績の算数」</b>を1件追加します。<br>
-<b>件数欄はAndroid向け数字入力に修正済み。</b> タップでカーソルが入り、数字キーボードから直接変更できます。<br>
-<b>パネルはさらに小型化。</b> 特別案件は内部に格納。－で収納、×で極小化、タイトル長押しで移動できます。<br>
-<b>INSIGHTとは完全に別ツールです。</b>
-</div>
-<a id="install" class="btn" href="./note-profile-card-paster-v1.user.js">貼り付け装置をインストール／更新</a>
-<a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">Raw直結</a>
-<input class="copy" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js">
-</section></main>
-<script>(()=>{const q='?v=1.5.0&ts='+Date.now();document.getElementById('install').href='./note-profile-card-paster-v1.user.js'+q;document.getElementById('raw').href='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js'+q})()</script>
-<!-- profile-card-paster-release-v1 -->
-</body></html>
+<body>
+<script>
+location.replace('https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js?v=1.5.1&ts='+Date.now());
+</script>
+<a href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v1.user.js?v=1.5.1">更新画面を開く</a>
+</body>
+</html>
