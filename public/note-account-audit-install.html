@@ -25,17 +25,17 @@
 <body>
 <main class="wrap"><section class="card">
   <h1>🔎 こあく まこ調査</h1>
-  <span class="ver">v3.1.1</span>
+  <span class="ver">v3.1.2</span>
   <div class="note">
     <b>対照群比較まで入った最新版です。</b><br>
     既存の途中データ・1000人走査結果はそのまま引き継ぎます。<br>
     INSIGHT本体には触れません。<br><br>
     Android Edge＋Tampermonkeyでは、下の<b>「インストール／更新」</b>を押してください。
   </div>
-  <a id="install" class="btn" href="./note-account-audit-force-310.user.js">インストール／更新</a>
-  <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-310.user.js">Raw直結</a>
+  <a id="install" class="btn" href="./note-account-audit-force-312.user.js">インストール／更新</a>
+  <a id="raw" class="btn sub" href="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-312.user.js">Raw直結</a>
   <div class="copybox">
-    <input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-310.user.js">
+    <input id="copy-url" readonly value="https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-account-audit-force-312.user.js">
     <button id="copy" type="button">URLコピー</button>
   </div>
   <div id="status" class="status">上の「インストール／更新」から開いてください。</div>
@@ -54,7 +54,7 @@
   else if(android) status.innerHTML='Androidブラウザを確認。まず「インストール／更新」を押してください。反応しない場合だけURLコピーを使ってください。';
   install.addEventListener('click',()=>{status.className='status ok';status.textContent='Userscriptの更新画面が出たら、そのまま更新してください。';});
   copy.addEventListener('click',async()=>{const value=copyUrl.value;let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(_){copyUrl.focus();copyUrl.select();try{ok=document.execCommand('copy')}catch(__){ok=false}}status.className='status '+(ok?'ok':'bad');status.textContent=ok?'✅ URLをコピーしました。':'コピーできませんでした。欄を長押ししてください。';});
-  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-account-audit-force-310.user.js?ts='+ts;raw.href=copyUrl.value+'?v=3.1.0&ts='+ts;});
+  window.addEventListener('pageshow',()=>{const ts=Date.now();install.href='./note-account-audit-force-312.user.js?ts='+ts;raw.href=copyUrl.value+'?v=3.1.2&ts='+ts;});
 })();
 </script>
 </body>
