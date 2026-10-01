@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.01.3",
+  "appVersion": "2026.10.01.4",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-01T18:07:00+09:00",
+  "releasedAt": "2026-10-01T18:09:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "緊急メンテナンス表示。参加者側はシステムメンテナンス中を表示し、OWNER/管理系のみ利用可能。通知フィルター設定は各グループ最下部のnote URL / @ID / ID入力欄を正本として固定し、ブラウザのURL自動入力を抑止して＋追加を復旧。",
+  "note": "単独機能修正ではメンテナンス画面を出さない運用へ戻した。通知フィルター設定は各グループ最下部のnote URL / @ID / ID入力欄を正本として固定し、ブラウザの誤自動入力を抑止して＋追加を復旧。メンテナンス表示はログイン障害・INSIGHT本体全体障害・参加者全体障害時のみ使用。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
