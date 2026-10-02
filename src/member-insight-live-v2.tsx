@@ -319,11 +319,11 @@ export function MemberInsightLiveV2(){
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
       <nav className="miv5-launcher" aria-label="INSIGHTランチャー">
         <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b><small>精度・取得元</small></a>
-        <div className={`miv5-launcher-item analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+        <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b><small>公式＋INSIGHT</small></button>
           <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
         </div>
-        <div className="miv5-launcher-item notification">
+        <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
           <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b><small>通知履歴</small></button>
           <a className="gear" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
         </div>
