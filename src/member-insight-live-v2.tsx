@@ -27,6 +27,7 @@ import "./insight-cinematic-overdrive-v7.css";
 import "./insight-motion-discipline-v8.css";
 import "./insight-creator-first-v9.css";
 import "./insight-launcher-v10.css";
+import "./insight-thumb-dock-v11.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -70,7 +71,7 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
   const initialNavTab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(initialMode)?initialMode:"likes"));
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[itemDockOpen,setItemDockOpen]=useState(false),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
@@ -96,7 +97,7 @@ export function MemberInsightLiveV2(){
     if(mode===next&&current.insightTab===tab){setNavTab(tab);return}
     window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
     window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
-    setNavTab(tab);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
+    setNavTab(tab);setItemDockOpen(false);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
   }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function checkRelease(){
@@ -305,7 +306,7 @@ export function MemberInsightLiveV2(){
     analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
-    <section className="miv5-creator-first" aria-label="現在のクリエイター">
+    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div className="miv5-hero-signature" aria-hidden="true"><strong>INSIGHT</strong><i/><em/></div>
       <div className="miv5-creator-avatar">{creatorImage?<img src={creatorImage} alt="" referrerPolicy="no-referrer"/>:<span>{[...creatorName][0]||"人"}</span>}</div>
       <div className="miv5-creator-copy">
         <h1>{creatorName}</h1>
@@ -330,9 +331,14 @@ export function MemberInsightLiveV2(){
         </div>
       </nav>
     </section>
-    <nav className="miv5-global-nav" aria-label="INSIGHT各項目">
-      {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>handleUnifiedTab(key)}>{label}</button>)}
-    </nav>
+    <div className={`miv5-item-dock ${itemDockOpen?"open":""}`} aria-label="INSIGHT項目ランチャー">
+      <button type="button" className="miv5-item-dock-toggle" aria-expanded={itemDockOpen} onClick={()=>setItemDockOpen(v=>!v)}>
+        <span>⌘</span><b>{INSIGHT_NAV_ITEMS.find(([key])=>key===navTab)?.[1]||"項目"}</b><small>{itemDockOpen?"閉じる":"項目"}</small>
+      </button>
+      {itemDockOpen?<nav className="miv5-item-sheet" aria-label="INSIGHT各項目">
+        {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>{handleUnifiedTab(key);setItemDockOpen(false)}}>{label}</button>)}
+      </nav>:null}
+    </div>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={true} onTabChange={handleUnifiedTab}/></div>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision} noteId={noteId}/></div>:null}
