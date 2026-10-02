@@ -295,35 +295,27 @@ export function MemberInsightLiveV2(){
     analysis:{eyebrow:"無名S note INSIGHT",title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
-    <section className="ic2-masthead" aria-label="INSIGHT現在画面">
+    <section className="ic2-masthead ic6-integrated-head" aria-label="INSIGHT現在画面">
       <div className="ic2-atmosphere" aria-hidden="true"><i/><i/><i/></div>
-      <div className="ic2-brandmark" aria-hidden="true"><span>INSIGHT</span><b>◈</b></div>
+      <div className="ic2-brandmark" aria-hidden="true"><span>INSIGHT</span><b>◈</b><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
       <div className="ic2-mast-copy">
         <small>{modeMeta.eyebrow}</small>
         <h1>{modeMeta.title}</h1>
         <p>{modeMeta.sub}</p>
       </div>
-      <div className="ic2-system-state">
-        <span><i/>LIVE</span>
-        <b>v{CURRENT_INSIGHT_APP_VERSION}</b>
+      <div className="ic6-top-panels" aria-label="INSIGHT主要機能">
+        <div className="ic6-panel caution">
+              </div>
+        <div className={`ic6-panel analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+          <button className="ic6-panel-main" onClick={()=>openMode("analysis")} aria-label="分析を開く"><strong>📊 分析</strong><small>公式Dashboard＋INSIGHT</small></button>
+          <a className="ic6-panel-mini" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
+        </div>
+        <div className={`ic6-panel notification ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
+          <button className="ic6-panel-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>通知履歴・追加分析</small></button>
+          <a className="ic6-panel-mini" href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"更新":notificationMissing?"設定":"設定"}</a>
+        </div>
       </div>
       <div className="ic2-horizon" aria-hidden="true"><span/><span/><span/></div>
-    </section>
-    {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
-    <section className="miv5-update miv5-command-deck" aria-label="INSIGHT主要機能">
-      <div className="miv5-source-grid">
-        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")} aria-label="分析を開く">{dashboardCardContent}</button>
-          <a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
-        </div>
-        <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span></button>
-          <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"更新":notificationMissing?"設定":"設定"}</a>
-        </div>
-        <div className="miv5-source-card detail">
-          <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>公開データを深掘り</span></button>
-        </div>
-      </div>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <MemberInsightCompleteness revision={revision}/>
