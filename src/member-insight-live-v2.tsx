@@ -69,8 +69,9 @@ const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2
 const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms));
 
 export function MemberInsightLiveV2(){
-  const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const initialNavTab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(initialMode)?initialMode:"likes"));
+  const explicitMode=requestedMode();
+  const initialMode:Mode=explicitMode||"normal";
+  const initialNavTab=String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[itemDockOpen,setItemDockOpen]=useState(false),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
@@ -79,6 +80,7 @@ export function MemberInsightLiveV2(){
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
   function openMode(next:Mode){
+    setItemDockOpen(false);
     if(mode===next){
       if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
       return;
@@ -218,8 +220,8 @@ export function MemberInsightLiveV2(){
   }
   useEffect(()=>{
     const requested=requestedMode();
-    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:["comments","favorites","social","notifications"].includes(requested)?requested:window.history.state?.insightTab||"likes",insightScrollY:0},"",u.href);setNavTab(["comments","favorites","social","notifications"].includes(requested)?requested:String(window.history.state?.insightTab||"likes"));setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
-    else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
+    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");const tab=["comments","favorites","social","notifications"].includes(requested)?requested:"likes";window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0},"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
+    else{window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);setNavTab("likes");setMode("normal")}
     const pop=()=>{const next=history.state?.insightMode;const tab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(next)?next:"likes"));const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
@@ -333,7 +335,7 @@ export function MemberInsightLiveV2(){
     </section>
     <div className={`miv5-item-dock ${itemDockOpen?"open":""}`} aria-label="INSIGHT項目ランチャー">
       <button type="button" className="miv5-item-dock-toggle" aria-expanded={itemDockOpen} onClick={()=>setItemDockOpen(v=>!v)}>
-        <span>⌘</span><b>{INSIGHT_NAV_ITEMS.find(([key])=>key===navTab)?.[1]||"項目"}</b><small>{itemDockOpen?"閉じる":"項目"}</small>
+        <span>{itemDockOpen?"⌄":"▦"}</span><b>{itemDockOpen?"項目を閉じる":"項目を選ぶ"}</b><small>現在：{INSIGHT_NAV_ITEMS.find(([key])=>key===navTab)?.[1]||"スキ履歴"}</small>
       </button>
       {itemDockOpen?<nav className="miv5-item-sheet" aria-label="INSIGHT各項目">
         {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>{handleUnifiedTab(key);setItemDockOpen(false)}}>{label}</button>)}
