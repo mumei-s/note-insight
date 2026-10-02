@@ -64,7 +64,7 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null),[autoSyncEnabled,setAutoSyncEnabled]=useState(()=>localStorage.getItem(AUTO_SYNC_ENABLED_KEY)!=="0");
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
@@ -310,25 +310,24 @@ export function MemberInsightLiveV2(){
       <div className="ic2-horizon" aria-hidden="true"><span/><span/><span/></div>
     </section>
     {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
-    <section className="miv5-update" aria-label="INSIGHT主要機能">
+    <section className="miv5-update miv5-command-deck" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
-        <div className="miv5-source-card normal miv5-auto-card">
-          <div className="miv5-source-main miv5-source-status" aria-busy={dataBusy}><strong>画面更新</strong><small>{autoSyncEnabled?"自動":"手動"}</small><span>{dataBusy?"保存済み最新値を反映中":"中央更新済みデータを表示"}</span></div>
-          <div className="miv5-auto-actions"><button type="button" className={autoSyncEnabled?"active":""} aria-pressed={autoSyncEnabled} onClick={()=>setAutoSyncEnabled(true)}>自動</button><button type="button" className={!autoSyncEnabled?"active":""} aria-pressed={!autoSyncEnabled} onClick={()=>setAutoSyncEnabled(false)}>手動</button>{!autoSyncEnabled?<button type="button" className="refresh" disabled={dataBusy} onClick={()=>void refreshSavedData(true)}>{dataBusy?"反映中":"更新"}</button>:null}</div>
+        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")} aria-label="分析を開く">{dashboardCardContent}</button>
+          <a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span></button>
-          <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"本人通知を更新":notificationMissing?"＋ 本人通知を設定":"⚙ 設定・更新状態"}</a>
+          <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"更新":notificationMissing?"設定":"設定"}</a>
         </div>
-        <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")} aria-label="分析を開く">{dashboardCardContent}</button>
-          <div className="miv5-dashboard-links"><a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a><a className="miv5-install-link miv5-detail-link" href="./install-free-analysis.html">詳細</a></div>
+        <div className="miv5-source-card detail">
+          <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>公開データを深掘り</span></button>
         </div>
       </div>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <MemberInsightCompleteness revision={revision}/>
-    <MemberInsightUnifiedV4 revision={revision} active={mode==="normal"} onTabChange={handleUnifiedTab}/>
+    <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={true} onTabChange={handleUnifiedTab}/></div>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
