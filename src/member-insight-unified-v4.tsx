@@ -109,16 +109,18 @@ export function MemberInsightUnifiedV4({revision=0,onTabChange,active=true}:{rev
     <div className="miu-stats"><button onClick={()=>chooseTab("articles")}><small>{officialArticles!==null?"公式記事":"記事"}</small><strong>{n(officialArticles!==null&&officialArticles>0?officialArticles:(summary.articleCount||data.articles.length))}</strong></button><button onClick={()=>chooseTab("likes")}><small>{officialLikes!==null?"公式スキ":"保存スキ"}</small><strong>{n(officialLikes!==null?officialLikes:summary.identifiedLikeCount)}</strong></button><button onClick={()=>chooseTab("supporters")}><small>スキした人数</small><strong>{n(summary.supporterCount||analysis.uniqueSupporters)}</strong></button><button onClick={()=>chooseTab("comments")}><small>{officialComments!==null?"公式コメント":"コメント"}</small><strong>{n(officialComments!==null?officialComments:data.counts.comments)}</strong></button><button onClick={()=>chooseTab("social")}><small>フォロワー</small><strong>{n(data.counts.followers)}</strong></button><button onClick={()=>chooseTab("notifications")}><small>通知</small><strong>{n(data.counts.notifications)}</strong></button></div>
     <nav className="miu-nav">{nav.map(x=><button key={x[0]} className={tab===x[0]?"active":""} onClick={()=>chooseTab(x[0])}>{x[1]}</button>)}</nav>
     <div className="miu-tab-stage">
-      {visited.has("likes")?<div hidden={tab!=="likes"}><Likes revision={revision}/></div>:null}
-      {visited.has("supporters")?<div hidden={tab!=="supporters"}><Supporters revision={revision}/></div>:null}
-      {visited.has("commentRanking")?<div hidden={tab!=="commentRanking"}><CommentRanking revision={revision}/></div>:null}
-      {visited.has("magazines")?<div hidden={tab!=="magazines"}><Magazines revision={revision}/></div>:null}
-      {visited.has("dm")&&active?<div hidden={tab!=="dm"}><MemberInsightDm revision={revision}/></div>:null}
-      {visited.has("articles")?<div hidden={tab!=="articles"}><Articles data={data} dashboardData={dashboardData}/></div>:null}
-      {tab==="comments"?<Comments revision={revision}/>:null}
-      {tab==="favorites"?<Favorites revision={revision}/>:null}
-      {tab==="social"?<Social revision={revision}/>:null}
-      {tab==="notifications"?<Notifications revision={revision} noteId={data.member.noteId} articles={data.articles}/>:null}
+      {active?<>
+        {visited.has("likes")?<div hidden={tab!=="likes"}><Likes revision={revision}/></div>:null}
+        {visited.has("supporters")?<div hidden={tab!=="supporters"}><Supporters revision={revision}/></div>:null}
+        {visited.has("commentRanking")?<div hidden={tab!=="commentRanking"}><CommentRanking revision={revision}/></div>:null}
+        {visited.has("magazines")?<div hidden={tab!=="magazines"}><Magazines revision={revision}/></div>:null}
+        {visited.has("dm")?<div hidden={tab!=="dm"}><MemberInsightDm revision={revision}/></div>:null}
+        {visited.has("articles")?<div hidden={tab!=="articles"}><Articles data={data} dashboardData={dashboardData}/></div>:null}
+        {tab==="comments"?<Comments revision={revision}/>:null}
+        {tab==="favorites"?<Favorites revision={revision}/>:null}
+        {tab==="social"?<Social revision={revision}/>:null}
+        {tab==="notifications"?<Notifications revision={revision} noteId={data.member.noteId} articles={data.articles}/>:null}
+      </>:null}
     </div>
   </main></div>
 }
