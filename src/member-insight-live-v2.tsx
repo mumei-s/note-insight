@@ -63,11 +63,15 @@ export function MemberInsightLiveV2(){
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   function openMode(next:Mode){
-    if(mode===next){requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":next==="notifications"?"#minf-notifications":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));return}
+    if(mode===next){
+      if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
+      return;
+    }
     const y=window.scrollY;
+    if(next==="notifications")notificationEntryY.current=y;
     window.history.replaceState({...window.history.state,insightScrollY:y},"",window.location.href);
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",window.location.href);
     setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
@@ -189,7 +193,7 @@ export function MemberInsightLiveV2(){
     const requested=requestedMode();
     if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:["comments","favorites","social","notifications"].includes(requested)?requested:window.history.state?.insightTab||"likes",insightScrollY:0},"",u.href);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
     else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
-    const pop=()=>{const next=history.state?.insightMode;const y=Number(history.state?.insightScrollY);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}))};
+    const pop=()=>{const next=history.state?.insightMode;const y=Number(history.state?.insightScrollY);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
   useEffect(()=>{
@@ -197,7 +201,33 @@ export function MemberInsightLiveV2(){
     window.addEventListener("mumei-insight-open-mode",handler as EventListener);return()=>window.removeEventListener("mumei-insight-open-mode",handler as EventListener)
   },[mode]);
   useEffect(()=>{
-    if(mode!=="notifications")return;let stopped=false,tries=0;const jump=()=>{if(stopped)return;const el=document.getElementById("minf-notifications");if(el){el.scrollIntoView({block:"start",behavior:"auto"});return}if(tries++<12)window.setTimeout(jump,70)};requestAnimationFrame(jump);return()=>{stopped=true}
+    if(mode!=="notifications")return;
+    let stopped=false,tries=0,timer=0,lastTop:number|null=null,stableFrames=0;
+    const previousOverflow=document.documentElement.style.overflowY;
+    document.documentElement.style.overflowY="hidden";
+    const finish=(el:HTMLElement)=>{
+      if(stopped)return;
+      document.documentElement.style.overflowY=previousOverflow;
+      const top=Math.max(0,window.scrollY+el.getBoundingClientRect().top-72);
+      window.scrollTo({top,behavior:"auto"});
+    };
+    const waitForPanel=()=>{
+      if(stopped)return;
+      const el=document.getElementById("minf-notifications");
+      if(el&&el.offsetHeight>80){
+        const top=Math.round(el.getBoundingClientRect().top);
+        stableFrames=lastTop===top?stableFrames+1:0;
+        lastTop=top;
+        if(stableFrames>=1){finish(el);return}
+      }
+      if(tries++<20)timer=window.setTimeout(()=>requestAnimationFrame(waitForPanel),80);
+      else{
+        document.documentElement.style.overflowY=previousOverflow;
+        if(notificationEntryY.current!==null)window.scrollTo({top:notificationEntryY.current,behavior:"auto"});
+      }
+    };
+    requestAnimationFrame(()=>requestAnimationFrame(waitForPanel));
+    return()=>{stopped=true;if(timer)window.clearTimeout(timer);document.documentElement.style.overflowY=previousOverflow}
   },[mode]);
   useEffect(()=>{
     void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
