@@ -1,0 +1,217 @@
+/* Motion discipline v8
+   Persistent UI stays calm. Motion appears only on entry/loading/update states. */
+
+body:has(.miv5)::before,
+body:has(.miv5)::after,
+.ic6-integrated-head::before,
+.ic6-integrated-head::after,
+.ic6-integrated-head .ic2-atmosphere i,
+.ic6-integrated-head .ic2-mast-copy h1,
+.ic6-integrated-head .ic2-brandmark b,
+.ic6-panel,
+.ic6-panel::after,
+.miu-top::before,
+.miu-top>.miu-avatar,
+.miu-nav button.active,
+.app-bottom-nav button.active::after{
+  animation:none!important;
+}
+
+/* Keep only short one-shot scene entrance. */
+.miv5-final-slot,
+.miv5-unified-slot{
+  animation:ic8SceneIn .28s cubic-bezier(.2,.8,.2,1) both!important;
+}
+
+/* Compact top area. */
+.ic6-integrated-head{
+  min-height:202px!important;
+  padding:10px 10px 68px!important;
+  border-radius:0 0 18px 18px!important;
+}
+.ic6-integrated-head .ic2-mast-copy{
+  margin-top:24px!important;
+  max-width:84%!important;
+}
+.ic6-integrated-head .ic2-mast-copy small{
+  font-size:7px!important;
+  margin-bottom:2px!important;
+}
+.ic6-integrated-head .ic2-mast-copy h1{
+  font-size:clamp(23px,6.8vw,31px)!important;
+  line-height:1!important;
+}
+.ic6-integrated-head .ic2-mast-copy p{
+  margin-top:6px!important;
+  font-size:8.5px!important;
+  line-height:1.35!important;
+}
+.ic6-integrated-head .ic2-brandmark{
+  top:9px!important;
+  right:10px!important;
+}
+.ic6-integrated-head .ic2-brandmark span{font-size:7px!important}
+.ic6-integrated-head .ic2-brandmark b{font-size:19px!important}
+.ic6-integrated-head .ic2-brandmark small{font-size:5.5px!important}
+.ic6-integrated-head .ic2-horizon{
+  bottom:58px!important;
+  height:14px!important;
+}
+
+.ic6-top-panels{
+  left:4px!important;
+  right:4px!important;
+  bottom:5px!important;
+  gap:3px!important;
+}
+.ic6-panel{
+  min-height:55px!important;
+  border-radius:11px!important;
+}
+.ic6-panel-main,
+.ic6-caution-link{
+  min-height:55px!important;
+  padding:7px 5px 22px!important;
+}
+.ic6-panel-main strong,
+.ic6-caution-link strong{
+  font-size:9px!important;
+}
+.ic6-panel-main small,
+.ic6-caution-link small{
+  font-size:5.7px!important;
+  line-height:1.15!important;
+}
+.ic6-panel-mini{
+  min-width:39px!important;
+  min-height:23px!important;
+  right:4px!important;
+  bottom:3px!important;
+  padding:0 6px!important;
+  font-size:6.8px!important;
+  box-shadow:none!important;
+}
+
+/* Static panels still react on touch/focus. */
+.ic6-panel:active{transform:scale(.985)!important}
+.ic6-panel-main:focus-visible,
+.ic6-caution-link:focus-visible,
+.ic6-panel-mini:focus-visible{
+  outline:2px solid #83e8ff;
+  outline-offset:1px;
+}
+
+/* Loading/update-only visual scene. */
+.micf-sync-scene{
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:3px 10px;
+  align-items:center;
+  margin:9px 0 3px;
+  padding:9px 10px 11px;
+  border:1px solid #36586d;
+  border-radius:10px;
+  background:linear-gradient(145deg,#0b2030,#081620);
+  color:#dff8ff;
+}
+.micf-sync-scene b{font-size:10px}
+.micf-sync-scene>span{font-size:8px;color:#8fb0bf;white-space:nowrap}
+.micf-sync-track{
+  grid-column:1/-1;
+  position:relative;
+  height:4px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#0a1821;
+}
+.micf-sync-track::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent,#66def8,#fff,#786bff,#66def8,transparent);
+  background-size:220% 100%;
+  animation:ic8DataStream 1.15s linear infinite;
+}
+.micf-sync-track i{
+  position:absolute;
+  top:0;
+  width:16%;
+  height:100%;
+  opacity:.0;
+  border-radius:999px;
+  background:#dffcff;
+}
+.micf-sync-scene.result{
+  border-color:#3d7a56;
+  background:linear-gradient(145deg,#0f2c20,#091910);
+  color:#c7ffd9;
+}
+.micf-sync-scene.result .micf-sync-track::before{
+  animation:ic8ResultSweep .8s ease-out 1 both;
+  background:linear-gradient(90deg,transparent,#7df0ad,#eafff0,#7df0ad,transparent);
+}
+.micf-load-state.done{
+  margin-top:9px!important;
+}
+
+/* Initial blank loaders use a horizontal data lane, never circles. */
+.miu-loading::before{
+  animation:ic8DataStream 1.15s linear infinite!important;
+}
+.miu-loading::after{
+  content:"保存済みデータを復元中"!important;
+}
+
+/* Bottom nav is calm when idle. */
+.app-bottom-nav button.active{
+  box-shadow:inset 0 1px rgba(255,255,255,.07),0 0 16px rgba(73,201,231,.12)!important;
+}
+
+/* Tab highlight is static; touch gives feedback. */
+.miu-nav button.active{
+  box-shadow:inset 0 1px rgba(255,255,255,.12),0 0 20px rgba(83,211,242,.30)!important;
+}
+.miu-nav button:active{transform:scale(.98)}
+
+@keyframes ic8SceneIn{
+  from{opacity:.62;transform:translateY(7px);filter:blur(2px)}
+  to{opacity:1;transform:translateY(0);filter:blur(0)}
+}
+@keyframes ic8DataStream{
+  from{background-position:100% 0}
+  to{background-position:-120% 0}
+}
+@keyframes ic8ResultSweep{
+  from{background-position:120% 0;opacity:.2}
+  to{background-position:-120% 0;opacity:1}
+}
+
+@media(max-width:620px){
+  .ic6-integrated-head{
+    min-height:194px!important;
+    padding:9px 7px 64px!important;
+  }
+  .ic6-integrated-head .ic2-mast-copy{
+    margin-top:22px!important;
+    max-width:88%!important;
+  }
+  .ic6-integrated-head .ic2-mast-copy h1{
+    font-size:clamp(22px,6.7vw,29px)!important;
+  }
+  .ic6-top-panels{left:3px!important;right:3px!important;bottom:4px!important}
+  .ic6-panel,
+  .ic6-panel-main,
+  .ic6-caution-link{min-height:52px!important}
+  .ic6-panel-main,
+  .ic6-caution-link{padding:6px 4px 20px!important}
+  .ic6-panel-main strong,
+  .ic6-caution-link strong{font-size:8.5px!important}
+  .ic6-panel-main small,
+  .ic6-caution-link small{font-size:5.4px!important}
+  .ic6-panel-mini{min-width:36px!important;min-height:21px!important;font-size:6.2px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .miv5-final-slot,.miv5-unified-slot,.micf-sync-track::before,.miu-loading::before{animation:none!important}
+}
