@@ -16,7 +16,6 @@ import { MemberInsightNotificationsFinal } from "./member-insight-notifications-
 import { MemberInsightAnalysisHub } from "./member-insight-analysis-hub";
 import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
 import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
-import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
 import "./insight-cinematic-shell-v1.css";
@@ -306,7 +305,16 @@ export function MemberInsightLiveV2(){
       </div>
       <div className="ic6-top-panels" aria-label="INSIGHT主要機能">
         <div className="ic6-panel caution">
-              </div>
+          <details className="ic6-caution-details">
+            <summary><strong>⚠ 注意</strong><small>精度・取得元</small></summary>
+            <section className="ic6-caution-body">
+              <div><b>📊 公式Dashboardを正本</b><span>PV・スキ・コメント・売上・流入など、公式Dashboardで取得できる数値は公式値を最優先で表示します。</span></div>
+              <div><b>公開データは補助</b><span>公開記事・公開スキ・公開コメント・フォロー等は履歴や人物確認の補助に使います。</span></div>
+              <div><b>🔔 本人通知</b><span>通知欄にしかないメンシプ参加・掲示板返信・購入/支援などを追加取得します。</span></div>
+              <div className="precision"><b>重要</b><span>限定公開・削除済み・note側集計更新の時間差などにより、公開履歴件数と公式Dashboard総数が一致しない場合があります。</span></div>
+            </section>
+          </details>
+        </div>
         <div className={`ic6-panel analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button className="ic6-panel-main" onClick={()=>openMode("analysis")} aria-label="分析を開く"><strong>📊 分析</strong><small>公式Dashboard＋INSIGHT</small></button>
           <a className="ic6-panel-mini" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
