@@ -321,7 +321,7 @@ export function MemberInsightLiveV2(){
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={true} onTabChange={handleUnifiedTab}/></div>
-    {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision}/></div>:null}
+    {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision} noteId={noteId}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
