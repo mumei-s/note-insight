@@ -316,7 +316,7 @@ export function MemberInsightLiveV2(){
       </div>
       <div className="miv5-creator-actions">
         <div className="miv5-creator-brand"><span>◇</span><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
-        <button type="button" onClick={()=>{setAccessIntent("switch");location.hash="access/insight"}}>アカウント切替</button>
+        <button type="button" onClick={()=>{sessionStorage.setItem("mumei-insight-account-switch-lock-v1","1");setAccessIntent("switch");location.hash="access/insight"}}>アカウント切替</button>
       </div>
     </section>
     <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
