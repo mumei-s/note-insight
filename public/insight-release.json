@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.03.2",
+  "appVersion": "2026.10.03.3",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-03T02:20:00+09:00",
+  "releasedAt": "2026-10-03T02:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Cinematic Shell v1を追加。機能コード・認証・通知取得・DM・分析・スクロール制御は変更せず、CSSのみで立体感、発光、選択状態、読込演出、タブ遷移の視認性を強化。prefers-reduced-motion対応。",
+  "note": "Cinematic Shell v2。INSIGHT本体の機能ロジックは維持したまま、モード別シネマティックヘッダー、2×2コントロールデッキ、立体パネル、横スクロール操作レール、通知・フォローのステージ演出、ボトムナビ再設計を追加。認証・セッション・通知取得・DM・分析API・スクロール制御は変更しない。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
