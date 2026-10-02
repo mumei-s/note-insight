@@ -1,0 +1,470 @@
+/* INSIGHT Visual Overhaul v3
+   Presentation only. No auth/session/API/data behavior changes. */
+
+/* ===== Full-width mobile app surface ===== */
+.miv5{
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0 0 104px!important;
+  overflow-x:clip;
+}
+@media(min-width:900px){
+  .miv5{max-width:980px!important;margin:0 auto!important}
+}
+@media(max-width:620px){
+  .miv5{padding-left:0!important;padding-right:0!important}
+  .miv5-update,.miv5-app-feedback,.miv5-final-slot,.miu,.minf,.mis2,.miah,.mia2,.miaf{margin-left:0!important;margin-right:0!important}
+}
+
+/* Hide visual scrollbar only; scrolling remains enabled. */
+html:has(.miv5),body:has(.miv5){scrollbar-width:none!important}
+html:has(.miv5)::-webkit-scrollbar,
+body:has(.miv5)::-webkit-scrollbar{width:0!important;height:0!important;background:transparent!important}
+
+/* ===== Brand hero: stronger and clearly 無名S note INSIGHT ===== */
+.ic2-masthead{
+  min-height:278px!important;
+  margin:0 0 10px!important;
+  padding:20px 20px 28px!important;
+  border-radius:0 0 30px 30px!important;
+  background:
+    radial-gradient(circle at 82% 18%,rgba(120,74,255,.40),transparent 24%),
+    radial-gradient(circle at 14% 22%,rgba(25,194,238,.28),transparent 26%),
+    radial-gradient(circle at 54% 105%,rgba(255,188,83,.14),transparent 30%),
+    linear-gradient(160deg,#06121f 0%,#081b2a 44%,#050b13 100%)!important;
+  box-shadow:0 30px 75px rgba(0,0,0,.46),inset 0 -1px rgba(119,230,255,.18)!important;
+}
+.ic2-masthead::before{
+  inset:-55% -20%!important;
+  background:
+    conic-gradient(from 30deg,
+      transparent 0 15%,
+      rgba(119,230,255,.10) 18%,
+      transparent 21% 44%,
+      rgba(133,91,255,.13) 48%,
+      transparent 52% 78%,
+      rgba(255,189,88,.08) 82%,
+      transparent 86%)!important;
+  animation:ic3HeroOrbit 12s linear infinite!important;
+}
+.ic2-masthead::after{
+  background:
+    linear-gradient(rgba(130,230,255,.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(130,230,255,.04) 1px,transparent 1px),
+    radial-gradient(circle at center,transparent 0 42%,rgba(91,216,244,.06) 43% 43.6%,transparent 44%)!important;
+  background-size:24px 24px,24px 24px,100% 100%!important;
+  opacity:.9;
+}
+.ic2-brandmark{
+  top:18px!important;right:20px!important;
+  font-size:10px!important;
+  color:#c7f6ff!important;
+  text-shadow:0 0 18px rgba(119,230,255,.38);
+}
+.ic2-brandmark b{
+  font-size:31px!important;
+  animation:ic3BrandPulse 2.4s ease-in-out infinite;
+}
+.ic2-mast-copy{
+  margin-top:62px!important;
+  max-width:92%!important;
+}
+.ic2-mast-copy small{
+  font-size:11px!important;
+  color:#8ceaff!important;
+  letter-spacing:.19em!important;
+  text-shadow:0 0 12px rgba(119,230,255,.35);
+}
+.ic2-mast-copy h1{
+  margin-top:6px!important;
+  max-width:100%;
+  font-size:clamp(34px,8.6vw,64px)!important;
+  line-height:1.02!important;
+  letter-spacing:-.045em!important;
+  text-wrap:balance;
+  background:linear-gradient(180deg,#fff 0%,#eafaff 55%,#9feaff 118%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent!important;
+  filter:drop-shadow(0 0 18px rgba(100,220,245,.15));
+}
+.ic2-mast-copy p{
+  font-size:14px!important;
+  color:#b3cbd8!important;
+  margin-top:15px!important;
+}
+.ic2-system-state{
+  right:20px!important;
+  bottom:30px!important;
+  padding:7px 10px;
+  border:1px solid rgba(112,230,179,.23);
+  border-radius:12px;
+  background:rgba(5,21,28,.58);
+  backdrop-filter:blur(12px);
+}
+.ic2-horizon{
+  left:10%!important;right:10%!important;bottom:15px!important;
+  opacity:.9!important;
+}
+.ic2-horizon::before,
+.ic2-horizon::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:-38px;
+  width:118px;height:118px;
+  border:1px solid rgba(113,225,250,.14);
+  border-radius:50%;
+  transform:translateX(-50%) rotateX(72deg);
+  animation:ic3HorizonPulse 3s ease-in-out infinite;
+}
+.ic2-horizon::after{
+  width:190px;height:190px;
+  top:-74px;
+  opacity:.45;
+  animation-delay:.7s;
+}
+@media(max-width:620px){
+  .ic2-masthead{min-height:258px!important;padding:16px 15px 24px!important;border-radius:0 0 24px 24px!important}
+  .ic2-mast-copy{margin-top:58px!important;max-width:96%!important}
+  .ic2-mast-copy h1{font-size:clamp(31px,9.1vw,44px)!important}
+  .ic2-mast-copy p{font-size:12px!important}
+  .ic2-system-state{right:14px!important;bottom:26px!important}
+}
+
+/* ===== Control deck: fill phone width and feel like an app console ===== */
+.miv5-update{
+  margin:-22px 8px 8px!important;
+  padding:7px!important;
+  border:1px solid rgba(112,218,244,.2)!important;
+  border-radius:24px!important;
+  background:linear-gradient(180deg,rgba(8,23,34,.95),rgba(4,13,21,.98))!important;
+  box-shadow:0 18px 45px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.02) inset!important;
+}
+.miv5-source-grid{gap:7px!important}
+.miv5-source-card{
+  min-height:156px!important;
+  border-radius:18px!important;
+  border-color:rgba(116,219,245,.30)!important;
+  box-shadow:0 12px 30px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.045)!important;
+}
+.miv5-source-card::before{
+  background:
+    linear-gradient(125deg,rgba(255,255,255,.05),transparent 30%),
+    radial-gradient(circle at 15% 110%,rgba(95,220,246,.13),transparent 35%)!important;
+}
+.miv5-source-card:nth-child(1){background:linear-gradient(145deg,#09251f,#061a18 62%,#071116)!important}
+.miv5-source-card:nth-child(2){background:linear-gradient(145deg,#251909,#1a1207 62%,#100e09)!important}
+.miv5-source-card:nth-child(3){background:linear-gradient(145deg,#101c2b,#0a1622 62%,#081119)!important}
+.miv5-source-card:nth-child(4){background:linear-gradient(145deg,#19122e,#100d20 62%,#090d15)!important}
+.miv5-source-main strong{font-size:16px!important;text-shadow:0 0 13px rgba(255,255,255,.10)}
+.miv5-install-link{font-size:9.5px!important}
+@media(max-width:390px){
+  .miv5-update{margin-left:5px!important;margin-right:5px!important;padding:5px!important}
+  .miv5-source-grid{gap:5px!important}
+  .miv5-source-card{min-height:150px!important}
+  .miv5-source-main{padding:14px 9px 9px!important}
+}
+
+/* ===== Participant spotlight — make the member the hero ===== */
+.miu{
+  overflow:visible!important;
+  border:0!important;
+  background:transparent!important;
+}
+.miu>main{
+  overflow:hidden;
+  border-radius:28px 28px 18px 18px;
+  border:1px solid rgba(110,219,244,.25);
+  background:
+    radial-gradient(circle at 16% 3%,rgba(59,203,242,.13),transparent 24%),
+    linear-gradient(180deg,#071722,#050d14 75%);
+  box-shadow:0 24px 60px rgba(0,0,0,.38);
+}
+.miu-top{
+  min-height:230px!important;
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:112px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:18px!important;
+  padding:30px 22px 58px!important;
+  overflow:hidden!important;
+  border-bottom:1px solid rgba(119,230,255,.16)!important;
+  background:
+    radial-gradient(circle at 18% 48%,rgba(98,226,255,.22),transparent 19%),
+    radial-gradient(circle at 92% 16%,rgba(116,83,255,.23),transparent 24%),
+    linear-gradient(145deg,#092235,#07131e 58%,#080d18)!important;
+}
+.miu-top::before{
+  content:""!important;
+  position:absolute!important;
+  width:190px!important;height:190px!important;
+  left:-39px!important;top:18px!important;bottom:auto!important;
+  border-radius:50%!important;
+  background:
+    radial-gradient(circle,transparent 0 34%,rgba(120,232,255,.22) 35% 35.7%,transparent 36% 46%,rgba(120,232,255,.12) 47% 47.5%,transparent 48%),
+    conic-gradient(from 0deg,transparent,rgba(126,234,255,.22),transparent 32%,rgba(116,85,255,.18),transparent 66%)!important;
+  opacity:1!important;
+  animation:ic3ParticipantOrbit 9s linear infinite!important;
+  pointer-events:none;
+}
+.miu-top::after{
+  content:"ACTIVE PARTICIPANT"!important;
+  position:absolute!important;
+  left:22px!important;right:auto!important;
+  bottom:17px!important;
+  width:auto!important;height:auto!important;
+  padding:5px 9px!important;
+  border:1px solid rgba(122,236,255,.31)!important;
+  border-radius:999px!important;
+  background:rgba(4,18,27,.68)!important;
+  color:#93ecff!important;
+  font-size:8px!important;
+  font-weight:950!important;
+  letter-spacing:.14em!important;
+  box-shadow:0 0 20px rgba(90,218,247,.11)!important;
+}
+.miu-top>.miu-avatar{
+  position:relative;
+  z-index:3;
+  width:104px!important;height:104px!important;
+  border:3px solid rgba(219,249,255,.95)!important;
+  box-shadow:
+    0 0 0 5px rgba(95,218,245,.16),
+    0 0 0 10px rgba(95,218,245,.06),
+    0 0 34px rgba(92,220,249,.42),
+    0 18px 28px rgba(0,0,0,.35)!important;
+  animation:ic3AvatarGlow 2.8s ease-in-out infinite;
+}
+.miu-top>div:not(.miu-topactions){
+  position:relative;
+  z-index:3;
+  min-width:0;
+}
+.miu-top>div:not(.miu-topactions)>small{
+  color:#bfff4a!important;
+  font-size:10px!important;
+  letter-spacing:.15em!important;
+  font-weight:950!important;
+  text-shadow:0 0 14px rgba(191,255,74,.25);
+}
+.miu-top h1{
+  margin:7px 0 4px!important;
+  font-size:clamp(25px,6.4vw,42px)!important;
+  line-height:1.08!important;
+  color:#fff!important;
+  text-shadow:0 0 22px rgba(108,226,252,.14);
+}
+.miu-top>div>a{
+  color:#80e8ff!important;
+  font-size:14px!important;
+}
+.miu-topactions{
+  position:absolute!important;
+  z-index:4;
+  right:16px!important;
+  bottom:14px!important;
+  display:flex!important;
+  gap:7px!important;
+}
+.miu-topactions button{
+  min-height:34px!important;
+  border-radius:999px!important;
+  border:1px solid rgba(121,220,244,.24)!important;
+  background:rgba(7,25,36,.88)!important;
+  color:#c5f6ff!important;
+  padding:0 11px!important;
+  font-size:9px!important;
+  box-shadow:0 8px 18px rgba(0,0,0,.18);
+}
+.miu-topactions button.sync{
+  border-color:rgba(191,255,74,.32)!important;
+  color:#d8ff8d!important;
+  background:rgba(20,39,20,.82)!important;
+}
+@media(max-width:620px){
+  .miu>main{border-radius:24px 24px 16px 16px}
+  .miu-top{min-height:214px!important;grid-template-columns:88px minmax(0,1fr)!important;gap:13px!important;padding:26px 14px 58px!important}
+  .miu-top::before{width:158px!important;height:158px!important;left:-34px!important;top:23px!important}
+  .miu-top>.miu-avatar{width:82px!important;height:82px!important;border-width:2px!important}
+  .miu-top h1{font-size:clamp(22px,6.8vw,32px)!important}
+  .miu-top>div>a{font-size:12px!important}
+  .miu-topactions{right:10px!important;bottom:12px!important}
+}
+
+/* Participant metrics look like live instrumentation. */
+.miu-stats{
+  position:relative;
+  z-index:4;
+  margin:-19px 8px 6px!important;
+  padding:7px!important;
+  border:1px solid rgba(112,216,243,.18);
+  border-radius:18px;
+  background:rgba(5,16,24,.93);
+  backdrop-filter:blur(14px);
+  box-shadow:0 14px 34px rgba(0,0,0,.30);
+}
+.miu-stats button{
+  min-height:74px!important;
+  border-radius:13px!important;
+  background:linear-gradient(145deg,#0d2634,#081824)!important;
+  border-color:rgba(103,207,234,.20)!important;
+}
+.miu-stats button strong{
+  font-size:24px!important;
+  color:#dffbff!important;
+  text-shadow:0 0 18px rgba(112,226,250,.28)!important;
+}
+.miu-stats button small{
+  color:#7fa3b7!important;
+  font-size:8px!important;
+  letter-spacing:.04em;
+}
+
+/* ===== Replace vertical scan with radar/pulse HUD ===== */
+.mis2[aria-busy="true"],
+.minf[aria-busy="true"],
+.micf[aria-busy="true"]{
+  position:relative!important;
+  overflow:clip!important;
+}
+.mis2[aria-busy="true"]::before,
+.minf[aria-busy="true"]::before,
+.micf[aria-busy="true"]::before{
+  content:"BACKGROUND SYNC"!important;
+  position:absolute!important;
+  top:10px!important;right:10px!important;left:auto!important;
+  float:none!important;
+  margin:0!important;
+  padding:7px 11px 7px 27px!important;
+  z-index:85!important;
+  border-radius:999px!important;
+  border:1px solid rgba(111,226,250,.37)!important;
+  background:
+    radial-gradient(circle at 13px 50%,#70eeaa 0 3px,transparent 4px),
+    linear-gradient(135deg,rgba(7,28,39,.94),rgba(8,18,28,.94))!important;
+  color:#d7faff!important;
+  font-size:8px!important;
+  font-weight:950!important;
+  letter-spacing:.11em!important;
+  box-shadow:0 0 26px rgba(90,220,248,.14)!important;
+  animation:ic3SyncBadge 2s ease-in-out infinite!important;
+  pointer-events:none!important;
+}
+.mis2[aria-busy="true"]::after,
+.minf[aria-busy="true"]::after,
+.micf[aria-busy="true"]::after{
+  content:""!important;
+  position:absolute!important;
+  width:148px!important;height:148px!important;
+  left:auto!important;right:-54px!important;
+  top:-48px!important;
+  bottom:auto!important;
+  border-radius:50%!important;
+  border:1px solid rgba(106,224,249,.18)!important;
+  background:
+    radial-gradient(circle,rgba(103,225,250,.08) 0 12%,transparent 13% 35%,rgba(103,225,250,.07) 36% 36.8%,transparent 37%),
+    conic-gradient(from 25deg,transparent 0 68%,rgba(107,228,251,.22) 74%,transparent 82%)!important;
+  box-shadow:none!important;
+  transform:none!important;
+  animation:ic3Radar 3.2s linear infinite!important;
+  pointer-events:none!important;
+  z-index:1!important;
+}
+.mis2[aria-busy="true"] .mis2-list,
+.minf[aria-busy="true"] .minf-list,
+.micf[aria-busy="true"] .micf-list,
+.micf[aria-busy="true"] .micf-thread-list{
+  opacity:1!important;
+  filter:none!important;
+}
+.mis2[aria-busy="true"] .mis2-head::after,
+.minf[aria-busy="true"] .minf-head::after,
+.micf[aria-busy="true"] .micf-head::after{
+  content:"表示中のデータを残したまま裏で更新中"!important;
+  color:#78dff6!important;
+  font-size:9px!important;
+}
+
+/* Initial/empty loading gets a richer non-blocking-looking stage. */
+.miu-loading,
+.miu-empty,
+.minf-empty,
+.mis2-empty,
+.micf-empty{
+  position:relative;
+  border-radius:16px;
+}
+.miu-loading{
+  min-height:180px!important;
+  display:grid!important;
+  place-items:center!important;
+  text-align:center;
+  overflow:hidden;
+  border:1px solid rgba(109,220,246,.18);
+  background:
+    radial-gradient(circle at center,rgba(83,204,236,.10),transparent 28%),
+    linear-gradient(180deg,#071722,#050d14);
+  color:#bfeffc!important;
+}
+.miu-loading::before{
+  content:"";
+  position:absolute;
+  width:126px;height:126px;
+  border-radius:50%;
+  border:1px solid rgba(110,226,250,.26);
+  box-shadow:0 0 0 18px rgba(110,226,250,.025),0 0 0 36px rgba(110,226,250,.018);
+  animation:ic3LoadingOrbit 3s ease-in-out infinite;
+}
+.miu-loading::after{
+  content:"INSIGHT DATA LINK";
+  position:absolute;
+  bottom:22px;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.15em;
+  color:#6f9bac;
+}
+
+/* ===== Bottom nav stronger ===== */
+.app-bottom-nav{
+  width:calc(100% - 12px)!important;
+  max-width:760px!important;
+  bottom:6px!important;
+  border-radius:21px!important;
+  border-color:rgba(113,222,247,.26)!important;
+  background:linear-gradient(180deg,rgba(8,23,34,.96),rgba(4,12,20,.98))!important;
+  box-shadow:0 20px 50px rgba(0,0,0,.48),0 0 28px rgba(72,190,221,.07)!important;
+}
+.app-bottom-nav button.active{
+  background:linear-gradient(145deg,#1b536c,#103346)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.07),0 0 24px rgba(72,203,236,.16)!important;
+}
+
+/* ===== Motion ===== */
+@keyframes ic3HeroOrbit{to{transform:rotate(360deg)}}
+@keyframes ic3BrandPulse{0%,100%{transform:scale(.94);filter:brightness(.9)}50%{transform:scale(1.08);filter:brightness(1.35)}}
+@keyframes ic3HorizonPulse{0%,100%{opacity:.20;transform:translateX(-50%) rotateX(72deg) scale(.9)}50%{opacity:.75;transform:translateX(-50%) rotateX(72deg) scale(1.08)}}
+@keyframes ic3ParticipantOrbit{to{transform:rotate(360deg)}}
+@keyframes ic3AvatarGlow{0%,100%{filter:brightness(1);box-shadow:0 0 0 5px rgba(95,218,245,.13),0 0 0 10px rgba(95,218,245,.05),0 0 25px rgba(92,220,249,.28),0 18px 28px rgba(0,0,0,.35)}50%{filter:brightness(1.08);box-shadow:0 0 0 5px rgba(95,218,245,.22),0 0 0 10px rgba(95,218,245,.08),0 0 45px rgba(92,220,249,.55),0 18px 28px rgba(0,0,0,.35)}}
+@keyframes ic3SyncBadge{0%,100%{opacity:.72;transform:scale(.98)}50%{opacity:1;transform:scale(1)}}
+@keyframes ic3Radar{to{transform:rotate(360deg)}}
+@keyframes ic3LoadingOrbit{0%,100%{transform:scale(.92) rotate(0deg);opacity:.35}50%{transform:scale(1.08) rotate(180deg);opacity:.9}}
+
+@media(prefers-reduced-motion:reduce){
+  .ic2-masthead::before,
+  .ic2-brandmark b,
+  .ic2-horizon::before,
+  .ic2-horizon::after,
+  .miu-top::before,
+  .miu-top>.miu-avatar,
+  .mis2[aria-busy="true"]::before,
+  .minf[aria-busy="true"]::before,
+  .micf[aria-busy="true"]::before,
+  .mis2[aria-busy="true"]::after,
+  .minf[aria-busy="true"]::after,
+  .micf[aria-busy="true"]::after,
+  .miu-loading::before{animation:none!important}
+}
