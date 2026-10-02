@@ -68,32 +68,12 @@ export function goTo(route: string) {
 function BottomNav({ route }: { route: string }) {
   const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
   const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
-  const [topArmed, setTopArmed] = useState(false);
-  useEffect(() => { if (route !== "home") setTopArmed(false); }, [route]);
-  function exitApp() {
-    try { window.close(); } catch { /* browser may block close for user-opened windows */ }
-    if (/Android/i.test(navigator.userAgent)) {
-      window.setTimeout(() => {
-        if (document.visibilityState !== "visible") return;
-        window.location.href = "intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.HOME;end";
-      }, 40);
-      window.setTimeout(() => {
-        if (document.visibilityState === "visible") window.location.replace("./exit.html?close=1");
-      }, 900);
-      return;
-    }
-    window.setTimeout(() => {
-      if (document.visibilityState === "visible") window.location.replace("./exit.html?close=1");
-    }, 120);
-  }
   function topPress() {
     if (route !== "home") {
-      setTopArmed(false);
       goTo("home");
       return;
     }
     window.scrollTo({ top: 0, behavior: "auto" });
-    setTopArmed(false);
   }
   function notePress() {
     window.location.assign("https://note.com/");
