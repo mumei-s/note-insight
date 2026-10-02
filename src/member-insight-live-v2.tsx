@@ -21,6 +21,7 @@ import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
 import "./insight-cinematic-shell-v1.css";
 import "./insight-cinematic-shell-v2.css";
+import "./insight-live-scan-theater.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
