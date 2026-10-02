@@ -69,7 +69,7 @@ export function NotificationFormatAlerts({ownerSession=false}:{ownerSession?:boo
   const token=localStorage.getItem(ownerSession?"mumei-unified-owner-token":INSIGHT_TOKEN_KEY)||"";if(!token)return;
   try{const r=await fetch(FEED.replace("feed-final","format-reviews"),{method:"POST",headers:{"Content-Type":"application/json",[ownerSession?"X-Owner-Token":"X-Insight-Token"]:token},body:JSON.stringify({action,kind}),cache:"no-store"});const p=await r.json();if(!r.ok||!p.ok)throw new Error("分類案内を確認できません");if(live.current){setAlerts(p.alerts||[]);setError("")}}catch(e){if(live.current)setError(e instanceof Error?e.message:String(e))}finally{if(live.current)setBusy("")}
  }
- useEffect(()=>{live.current=true;void request();const refresh=()=>{if(document.visibilityState!=="hidden")void request()},timer=window.setInterval(refresh,30000);window.addEventListener("focus",refresh);window.addEventListener("mumei-notification-classified",refresh);return()=>{live.current=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("mumei-notification-classified",refresh)}},[ownerSession]);
+ useEffect(()=>{live.current=true;void request();const refresh=()=>{if(document.visibilityState!=="hidden")void request()},timer=window.setInterval(refresh,300000);window.addEventListener("focus",refresh);window.addEventListener("mumei-notification-classified",refresh);return()=>{live.current=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("mumei-notification-classified",refresh)}},[ownerSession]);
  if(!alerts.length&&!error)return null;
  return <details className="minf-owner-formats" aria-label="運営者向け分類案内"><summary>運営者用：未対応の通知形式 {alerts.length}種類</summary><small>全参加者の新しい通知形式を集約しています。ルールの対応後、保存済み通知も自動で再分類します。</small>{error?<p role="status">{error}</p>:null}{alerts.map(a=><div className="minf-category-alert" key={a.kind}><span>{a.read_at?"既読":"● 未読"} · {a.kind}</span><small>{Number(a.notification_count||0)}件をその他に保存済み</small><button disabled={Boolean(busy)} onClick={()=>{setBusy(a.kind);void request(a.read_at?"unread":"read",a.kind)}}>{busy===a.kind?"保存中…":a.read_at?"未読に戻す":"既読にする"}</button></div>)}</details>
 }
@@ -181,7 +181,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     return()=>window.clearTimeout(t)
   },[memberNoteId,revision]);
 
-  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void refreshRecent()},timer=window.setInterval(refresh,1500),full=window.setInterval(()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},30000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.clearInterval(full);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
+  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void refreshRecent()},timer=window.setInterval(refresh,8000),full=window.setInterval(()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay)},120000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);return()=>{window.clearInterval(timer);window.clearInterval(full);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh)}},[kind,selectedDay,page,memberNoteId]);
   useEffect(()=>{
     const noteId=accountKey(memberNoteId);
     if(!noteId)return;
