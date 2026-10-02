@@ -215,3 +215,33 @@ body:has(.miv5)::after,
 @media(prefers-reduced-motion:reduce){
   .miv5-final-slot,.miv5-unified-slot,.micf-sync-track::before,.miu-loading::before{animation:none!important}
 }
+
+
+/* True first-load scene for lightweight tabs. */
+.miu-load-scene{
+  position:relative;
+  overflow:hidden;
+  margin:12px 0;
+  padding:18px 14px 26px;
+  border:1px solid #35586d;
+  border-radius:12px;
+  background:
+    radial-gradient(circle at 18% 30%,rgba(94,218,246,.12),transparent 24%),
+    linear-gradient(145deg,#0b2030,#081620);
+  color:#dff8ff;
+}
+.miu-load-scene b{display:block;font-size:11px}
+.miu-load-scene span{display:block;margin-top:4px;color:#8faebe;font-size:8px}
+.miu-load-scene i{
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:10px;
+  height:4px;
+  border-radius:999px;
+  overflow:hidden;
+  background:linear-gradient(90deg,transparent,#62def8,#fff,#766bff,#62def8,transparent);
+  background-size:220% 100%;
+  animation:ic8DataStream 1.15s linear infinite;
+  box-shadow:0 0 14px rgba(101,223,248,.28);
+}
