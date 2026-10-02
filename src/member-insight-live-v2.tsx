@@ -23,6 +23,7 @@ import "./insight-cinematic-shell-v1.css";
 import "./insight-cinematic-shell-v2.css";
 import "./insight-live-scan-theater.css";
 import "./insight-visual-overhaul-v3.css";
+import "./insight-integrated-hero-v6.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
