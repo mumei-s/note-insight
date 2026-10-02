@@ -68,7 +68,22 @@ export function goTo(route: string) {
 function BottomNav({ route }: { route: string }) {
   const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
   const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
+  const subModeNow=()=>route==="dashboard"&&((window.history.state?.insightMode&&window.history.state.insightMode!=="normal")||(window.history.state?.insightTab&&window.history.state.insightTab!=="likes"));
+  const [insightSubMode,setInsightSubMode]=useState(subModeNow);
+  useEffect(()=>{
+    const sync=()=>setInsightSubMode(subModeNow());
+    sync();
+    window.addEventListener("mumei-insight-navigation",sync);
+    window.addEventListener("mumei-insight-root",sync);
+    window.addEventListener("popstate",sync);
+    return()=>{window.removeEventListener("mumei-insight-navigation",sync);window.removeEventListener("mumei-insight-root",sync);window.removeEventListener("popstate",sync)}
+  },[route]);
   function topPress() {
+    if(route==="dashboard"&&insightSubMode){
+      sessionStorage.removeItem("mumei-insight-entry-mode");
+      window.dispatchEvent(new Event("mumei-insight-root"));
+      return;
+    }
     if (route !== "home") {
       goTo("home");
       return;
@@ -80,7 +95,7 @@ function BottomNav({ route }: { route: string }) {
   }
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
-      <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
+      <button className={route === "home" ? "active" : insightSubMode ? "main-return" : ""} onClick={topPress} aria-label={insightSubMode?"INSIGHTメインへ":"TOP"}><span aria-hidden="true">{insightSubMode?"↩":"⌂"}</span><b>{insightSubMode?"メイン":"TOP"}</b></button>
       <button className={insightActive ? "active" : ""} onClick={() => { if (!hasMember) { goTo("access/insight"); return; } if (route !== "dashboard") { goTo("dashboard"); return; } sessionStorage.removeItem("mumei-insight-entry-mode"); window.dispatchEvent(new Event("mumei-insight-root")); }}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
