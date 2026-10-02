@@ -327,7 +327,7 @@ export function MemberInsightLiveV2(){
         </div>
         <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
           <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b><small>通知履歴</small></button>
-          <a className="gear" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
+          <a className="gear" href={noteId?`./notification-browser-install.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
         </div>
       </nav>
     </section>
