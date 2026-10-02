@@ -40,6 +40,7 @@ const AUTO_SYNC_KEY="mumei-insight-last-auto-public-sync";
 const AUTO_SYNC_ENABLED_KEY="mumei-insight-auto-sync-enabled";
 const RELATION_SYNC_KEY="mumei-insight-last-auto-relation-sync";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
+const INSIGHT_NAV_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","通知"],["dm","DM"],["articles","記事"]] as const;
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
 function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
 
@@ -66,7 +67,7 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const initialNavTab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(initialMode)?initialMode:"likes"));\n  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
@@ -82,17 +83,17 @@ export function MemberInsightLiveV2(){
     if(next==="notifications")notificationEntryY.current=y;
     window.history.replaceState({...window.history.state,insightScrollY:y},"",window.location.href);
     window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",window.location.href);
-    setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
+    if(["comments","favorites","social","notifications"].includes(next))setNavTab(next);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
     if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   function handleUnifiedTab(tab:string){
     const next:Mode=tab==="comments"?"comments":tab==="favorites"?"favorites":tab==="social"?"social":tab==="notifications"?"notifications":"normal";
     const current=window.history.state||{};
-    if(mode===next&&current.insightTab===tab)return;
+    if(mode===next&&current.insightTab===tab){setNavTab(tab);return}
     window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
     window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
-    setMode(next);
+    setNavTab(tab);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
   }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function checkRelease(){
@@ -213,9 +214,9 @@ export function MemberInsightLiveV2(){
   }
   useEffect(()=>{
     const requested=requestedMode();
-    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:["comments","favorites","social","notifications"].includes(requested)?requested:window.history.state?.insightTab||"likes",insightScrollY:0},"",u.href);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
+    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:["comments","favorites","social","notifications"].includes(requested)?requested:window.history.state?.insightTab||"likes",insightScrollY:0},"",u.href);setNavTab(["comments","favorites","social","notifications"].includes(requested)?requested:String(window.history.state?.insightTab||"likes"));setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
     else if(!MODES.has(history.state?.insightMode))window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:window.scrollY},"",window.location.href);
-    const pop=()=>{const next=history.state?.insightMode;const y=Number(history.state?.insightScrollY);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
+    const pop=()=>{const next=history.state?.insightMode;const tab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(next)?next:"likes"));const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
   useEffect(()=>{
@@ -225,7 +226,7 @@ export function MemberInsightLiveV2(){
   useEffect(()=>{
     const root=()=>{
       window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);
-      setMode("normal");
+      setNavTab("likes");setMode("normal");
       window.dispatchEvent(new Event("mumei-insight-navigation"));
       requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<HTMLElement>(".miu")?.scrollIntoView({block:"start",behavior:"auto"})));
     };
@@ -320,6 +321,9 @@ export function MemberInsightLiveV2(){
       </div>
       <div className="ic2-horizon" aria-hidden="true"><span/><span/><span/></div>
     </section>
+    <nav className="miv5-global-nav" aria-label="INSIGHT各項目">
+      {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>handleUnifiedTab(key)}>{label}</button>)}
+    </nav>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={true} onTabChange={handleUnifiedTab}/></div>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision} noteId={noteId}/></div>:null}
