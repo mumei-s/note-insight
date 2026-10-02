@@ -4,7 +4,7 @@ export function MemberInsightCompleteness({revision=0}:{revision?:number}){
   void revision;
   return <aside className="micmp precision-only">
     <details>
-      <summary><b>⚠ データ精度・取得元</b><span>注意事項</span></summary>
+      <summary><b>⚠ 注意</b><span>精度・取得元</span></summary>
       <section className="micmp-notice">
         <div><b>📊 公式Dashboardを正本</b><span>PV・スキ・コメント・売上・流入など、公式Dashboardで取得できる数値はDashboard同期の公式値を最優先で表示します。</span></div>
         <div><b>公開データは補助</b><span>公開記事・公開スキ・公開コメント・フォロー等は履歴や人物確認の補助に使います。公式Dashboardと数字が異なる場合、集計値は公式Dashboard側を採用します。</span></div>
