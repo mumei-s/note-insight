@@ -2,10 +2,10 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.4.0';
+const VERSION='1.4.1';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
-const FIL='mumei_insight_magazine_filter_enabled_v3:';
+const FIL='mumei_insight_magazine_filter_enabled_v3:',PANEL='mumei_insight_notification_panel_enabled_v1';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter-settings.html?from=note';
 const INSIGHT='https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
@@ -13,7 +13,8 @@ const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)&&!find
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase(),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
-let knownAccount=null,accountRequest=null;
+async function refreshPanel(){panelVisible=Boolean(await get(PANEL,true));if(panelVisible)schedule(0);else for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return panelVisible}
+let knownAccount=null,accountRequest=null,panelVisible=null;
 async function account(){if(accountRequest)return accountRequest;accountRequest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();knownAccount=/^[a-z0-9_-]+$/.test(id)?{id}:null;return knownAccount}catch{return null}finally{clearTimeout(timer);accountRequest=null}})();return accountRequest}
 function text(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function shown(el){if(!(el instanceof Element))return false;const r=el.getBoundingClientRect();if(r.width<1||r.height<1)return false;for(let p=el;p&&p!==document.body;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden')return false}return true}
@@ -69,7 +70,7 @@ function dedupe(){
  return keep
 }
 function mount(){
- if(!featureOn()||isDmRoute()){for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
+ if(!featureOn()||panelVisible!==true||isDmRoute()){for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
  const panel=findPanel();if(!panel){const old=dedupe();if(old)old.remove();return}
  installStyle();
  let bar=dedupe()||makeBar();
@@ -80,8 +81,8 @@ let timer=0,lastStatus=null;
 const owned=node=>node instanceof Element&&Boolean(node.closest('#'+TOOLBAR+',#'+STYLE));
 const schedule=(ms=180)=>{if(timer)return;timer=setTimeout(()=>{timer=0;mount()},ms)};
 function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!owned(r.target)))schedule()}).observe(document.documentElement,{subtree:true,childList:true});schedule(150)}
-observe();
-window.addEventListener('pageshow',()=>{schedule(150);const bar=dedupe();if(bar)void sync(bar)});window.addEventListener('focus',()=>{schedule(150);const bar=dedupe();if(bar)void sync(bar)});
+void refreshPanel().then(observe);
+window.addEventListener('pageshow',()=>{void refreshPanel();const bar=dedupe();if(bar)void sync(bar)});window.addEventListener('focus',()=>{void refreshPanel();const bar=dedupe();if(bar)void sync(bar)});
 function renderStatus(d){
  lastStatus=d;const bar=dedupe();if(!bar?.isConnected)return;
  const b=bar.querySelector('[data-action="read"]'),line=bar.querySelector('.read-status');if(!b)return;
@@ -94,5 +95,6 @@ function renderStatus(d){
 }
 window.addEventListener('mumei-notification-reader-status',e=>renderStatus(e.detail||{}));
 window.addEventListener('mumei-notification-feature-changed',()=>{lastStatus=null;mount()});
-window.__mumeiNotificationControlsV1={version:VERSION,mount,findPanel,sync};
+const panelListen=modern()&&typeof GM.addValueChangeListener==='function'?GM.addValueChangeListener:typeof GM_addValueChangeListener==='function'?GM_addValueChangeListener:null;if(panelListen)try{panelListen(PANEL,()=>void refreshPanel())}catch{}
+window.__mumeiNotificationControlsV1={version:VERSION,mount,findPanel,sync,refreshPanel};
 })();
