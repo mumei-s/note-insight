@@ -1,0 +1,341 @@
+/* Launcher + creator hero v10
+   Lightweight top launcher, one-shot hero motion only. */
+
+.miv5-creator-first{
+  position:relative;
+  min-height:108px!important;
+  padding:18px 12px 12px!important;
+  grid-template-columns:60px minmax(0,1fr) auto!important;
+  gap:11px!important;
+  align-items:center!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(circle at 14% 35%,rgba(75,205,238,.18),transparent 24%),
+    radial-gradient(circle at 84% 10%,rgba(119,81,255,.18),transparent 26%),
+    linear-gradient(145deg,#071b28,#081520 58%,#070d14)!important;
+  border-bottom:1px solid rgba(108,221,246,.24)!important;
+  box-shadow:0 16px 36px rgba(0,0,0,.28)!important;
+}
+.miv5-creator-first::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(110deg,transparent 0 34%,rgba(255,255,255,.10) 44%,rgba(111,229,252,.10) 49%,transparent 58%);
+  transform:translateX(-120%);
+  animation:ic10HeroSweep .85s ease-out .12s 1 both;
+}
+.miv5-creator-first::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity:.34;
+  background:
+    linear-gradient(rgba(118,226,249,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(118,226,249,.026) 1px,transparent 1px);
+  background-size:22px 22px;
+  mask-image:linear-gradient(to bottom,#000,transparent 95%);
+}
+
+.miv5-creator-avatar{
+  width:58px!important;
+  height:58px!important;
+  z-index:2;
+  box-shadow:
+    0 0 0 3px rgba(95,218,245,.11),
+    0 0 22px rgba(92,220,249,.28),
+    0 12px 24px rgba(0,0,0,.30)!important;
+}
+.miv5-creator-copy{
+  z-index:2;
+}
+.miv5-creator-copy h1{
+  font-size:clamp(18px,5.4vw,26px)!important;
+  letter-spacing:-.02em;
+}
+.miv5-creator-copy a{
+  margin-top:5px!important;
+  font-size:10px!important;
+}
+
+.miv5-creator-actions{
+  z-index:3;
+  gap:7px!important;
+}
+.miv5-creator-brand{
+  display:grid;
+  grid-template-columns:auto auto;
+  grid-template-rows:auto auto;
+  column-gap:6px;
+  align-items:center;
+  justify-items:end;
+}
+.miv5-creator-brand strong{
+  grid-column:1;
+  grid-row:1;
+  color:#dffbff;
+  font-size:12px;
+  font-weight:950;
+  letter-spacing:.16em;
+  text-shadow:0 0 14px rgba(119,230,255,.25);
+}
+.miv5-creator-brand span{
+  grid-column:2;
+  grid-row:1/3;
+  color:#aeeeff;
+  font-size:23px;
+  line-height:1;
+  transform:rotate(45deg);
+  text-shadow:0 0 16px rgba(124,231,255,.35);
+}
+.miv5-creator-brand small{
+  grid-column:1;
+  grid-row:2;
+  color:#6c8a9b!important;
+  font-size:6px!important;
+  letter-spacing:.02em;
+}
+.miv5-creator-actions button{
+  min-height:31px!important;
+  padding:0 11px!important;
+  border-color:#3b647a!important;
+  background:rgba(10,34,47,.90)!important;
+  font-size:7.5px!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
+}
+
+/* Command stage becomes a launcher strip, not three cards. */
+.miv5-command-stage{
+  padding:7px 8px 6px!important;
+  background:
+    linear-gradient(180deg,rgba(4,12,19,.98),rgba(3,10,16,.99))!important;
+  border-bottom:1px solid rgba(91,194,221,.10)!important;
+}
+.miv5-command-stage.main{
+  padding-top:7px!important;
+}
+.miv5-mode-label{
+  min-height:34px!important;
+  padding:2px 4px 6px!important;
+}
+.miv5-mode-label h2{
+  font-size:15px!important;
+}
+.miv5-mode-label p{
+  font-size:6.7px!important;
+}
+
+.miv5-launcher{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  align-items:start;
+}
+.miv5-launcher-item{
+  position:relative;
+  min-width:0;
+  min-height:68px;
+  border:0;
+  border-radius:16px;
+  background:transparent;
+  text-decoration:none;
+  color:#dcecf5;
+  overflow:visible;
+}
+.miv5-launcher-item>button,
+.miv5-launcher-item.caution{
+  width:100%;
+  min-height:68px;
+  border:0;
+  border-radius:16px;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  display:grid;
+  justify-items:center;
+  align-content:center;
+  gap:2px;
+  padding:5px 4px 7px;
+  text-decoration:none;
+  transition:transform .14s ease,background .16s ease,box-shadow .16s ease;
+}
+.miv5-launcher-item .icon{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(110,218,243,.30);
+  border-radius:13px;
+  background:
+    linear-gradient(145deg,#102d3f,#0a1c29);
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.04),
+    0 7px 14px rgba(0,0,0,.20);
+  font-size:17px;
+  line-height:1;
+}
+.miv5-launcher-item b{
+  margin-top:2px;
+  font-size:9px;
+  line-height:1.05;
+}
+.miv5-launcher-item small{
+  font-size:5.8px;
+  line-height:1.1;
+  color:#718b9b;
+  white-space:nowrap;
+}
+.miv5-launcher-item.caution .icon{
+  border-color:rgba(232,190,91,.28);
+  background:linear-gradient(145deg,#2b220f,#171208);
+}
+.miv5-launcher-item.notification .icon{
+  border-color:rgba(234,188,82,.28);
+  background:linear-gradient(145deg,#2a1e0d,#171208);
+}
+.miv5-launcher-item.analysis .icon{
+  border-color:rgba(100,214,242,.34);
+}
+.miv5-launcher-item>button:active,
+.miv5-launcher-item.caution:active{
+  transform:scale(.96);
+}
+.miv5-launcher-item.active>button{
+  background:rgba(14,40,54,.56);
+  box-shadow:0 0 18px rgba(87,207,237,.10);
+}
+.miv5-launcher-item.active .icon{
+  border-color:#80eaff;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.08),
+    0 0 0 1px rgba(128,234,255,.08),
+    0 0 22px rgba(81,209,240,.24);
+}
+.miv5-launcher-item.notification.active>button{
+  background:rgba(48,35,11,.42);
+}
+.miv5-launcher-item.notification.active .icon{
+  border-color:#f0c264;
+  box-shadow:0 0 20px rgba(242,193,81,.20);
+}
+
+/* Gear is a tiny status/action badge, not part of main launcher weight. */
+.miv5-launcher-item .gear{
+  position:absolute;
+  top:3px;
+  right:10%;
+  z-index:5;
+  width:22px;
+  height:22px;
+  border:1px solid rgba(119,214,238,.22);
+  border-radius:50%;
+  background:#0a1c27;
+  color:#a9dbe8;
+  text-decoration:none;
+  display:grid;
+  place-items:center;
+  font-size:9px;
+  box-shadow:0 5px 10px rgba(0,0,0,.18);
+}
+.miv5-launcher-item.needs-update .gear,
+.miv5-launcher-item.needs-install .gear{
+  border-color:#bfff4a;
+  color:#e6ffad;
+  box-shadow:0 0 14px rgba(191,255,74,.18);
+}
+.miv5-launcher-item.needs-update .gear::after,
+.miv5-launcher-item.needs-install .gear::after{
+  content:"";
+  position:absolute;
+  right:-2px;
+  top:-2px;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#bfff4a;
+  box-shadow:0 0 8px rgba(191,255,74,.70);
+}
+
+/* Old heavy card styles cannot bleed into launcher. */
+.miv5-command-stage .ic6-top-panels,
+.miv5-command-stage .ic6-panel,
+.miv5-command-stage .ic6-panel-main,
+.miv5-command-stage .ic6-panel-mini{
+  all:unset;
+}
+
+/* Keep item navigator close to launcher. */
+.miv5-global-nav{
+  margin-top:2px!important;
+}
+
+/* one-shot entrance only */
+@keyframes ic10HeroSweep{
+  0%{transform:translateX(-120%);opacity:0}
+  20%{opacity:1}
+  100%{transform:translateX(120%);opacity:0}
+}
+
+@media(max-width:620px){
+  .miv5-creator-first{
+    min-height:101px!important;
+    grid-template-columns:51px minmax(0,1fr) auto!important;
+    padding:15px 8px 10px!important;
+    gap:8px!important;
+  }
+  .miv5-creator-avatar{
+    width:48px!important;
+    height:48px!important;
+  }
+  .miv5-creator-copy h1{
+    font-size:clamp(16px,5vw,22px)!important;
+  }
+  .miv5-creator-copy a{
+    font-size:8.8px!important;
+  }
+  .miv5-creator-brand strong{
+    font-size:10px;
+  }
+  .miv5-creator-brand span{
+    font-size:19px;
+  }
+  .miv5-creator-actions button{
+    min-height:28px!important;
+    padding:0 8px!important;
+    font-size:6.7px!important;
+  }
+  .miv5-command-stage{
+    padding:5px 6px 4px!important;
+  }
+  .miv5-launcher{
+    gap:8px;
+  }
+  .miv5-launcher-item,
+  .miv5-launcher-item>button,
+  .miv5-launcher-item.caution{
+    min-height:63px;
+  }
+  .miv5-launcher-item .icon{
+    width:31px;
+    height:31px;
+    border-radius:11px;
+    font-size:15px;
+  }
+  .miv5-launcher-item b{
+    font-size:8.2px;
+  }
+  .miv5-launcher-item small{
+    font-size:5.3px;
+  }
+  .miv5-launcher-item .gear{
+    width:20px;
+    height:20px;
+    right:8%;
+    font-size:8px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .miv5-creator-first::before{animation:none!important;opacity:0}
+}
