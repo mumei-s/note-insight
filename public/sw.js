@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v81-thumb-dock-20261003";
+const CACHE_NAME = "mumei-note-insight-v82-comments-perf-20261003";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
