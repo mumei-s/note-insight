@@ -205,6 +205,16 @@ export function MemberInsightLiveV2(){
     window.addEventListener("mumei-insight-open-mode",handler as EventListener);return()=>window.removeEventListener("mumei-insight-open-mode",handler as EventListener)
   },[mode]);
   useEffect(()=>{
+    const root=()=>{
+      window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);
+      setMode("normal");
+      window.dispatchEvent(new Event("mumei-insight-navigation"));
+      requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<HTMLElement>(".miu")?.scrollIntoView({block:"start",behavior:"auto"})));
+    };
+    window.addEventListener("mumei-insight-root",root);
+    return()=>window.removeEventListener("mumei-insight-root",root);
+  },[]);
+  useEffect(()=>{
     if(mode!=="notifications")return;
     let stopped=false,tries=0,timer=0,lastTop:number|null=null,stableFrames=0;
     const previousOverflow=document.documentElement.style.overflowY;
