@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='mumei-s.github.io'||location.pathname!=='/note-insight/notification-filter-settings.html')return;
 if(window.__mumeiNotificationSettingsBridgeV1Loaded)return;window.__mumeiNotificationSettingsBridgeV1Loaded=true;
-const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',PROFILE='mumei_insight_magazine_mute_profiles_v5:',RETURN='mumei_insight_return_bell_v1';
+const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',PROFILE='mumei_insight_magazine_mute_profiles_v5:',RETURN='mumei_insight_return_bell_v1',PANEL='mumei_insight_notification_panel_enabled_v1';
 const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const account=(new URLSearchParams(location.search).get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
@@ -23,16 +23,17 @@ async function profile(id){
 async function load(){
  if(!/^[a-z0-9_-]+$/.test(account)){send('error',{message:'noteアカウントを確認できません'});return}
  let groups=norm(await get(GRP+account,[]));if(!groups.length){const legacy=await get(MUT+account,[]);if(Array.isArray(legacy)&&legacy.length)groups=[{name:'通知フィルター',enabled:true,ids:[...new Set(legacy.map(String).map(x=>x.toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}]}
- send('state',{groups,filterOn:Boolean(await get(FIL+account,false))})
+ send('state',{groups,filterOn:Boolean(await get(FIL+account,false)),panelOn:Boolean(await get(PANEL,true))})
 }
 addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==PAGE||e.data?.account!==account)return;const d=e.data;(async()=>{
  try{
   if(d.type==='load')await load();
   else if(d.type==='save'){const groups=norm(d.groups);await set(GRP+account,groups);await set(MUT+account,[...new Set(groups.filter(g=>g.enabled).flatMap(g=>g.ids))]);send('saved')}
+  else if(d.type==='panel-set'){const panelOn=Boolean(d.enabled);await set(PANEL,panelOn);send('panel-saved',{panelOn})}
   else if(d.type==='return-bell'){await set(RETURN,{account,at:Date.now()});send('return-ready')}
   else if(d.type==='profiles'){const ids=[...new Set((Array.isArray(d.ids)?d.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];for(let i=0;i<ids.length;i+=6){const part=ids.slice(i,i+6);const profiles=await Promise.all(part.map(profile));await saveProfiles(profiles);send('profiles',{profiles});if(i+6<ids.length)await new Promise(r=>setTimeout(r,50))}}
  }catch(err){send('error',{message:clean(err?.message||'設定処理に失敗しました')})}
 })()});
 void load();
-window.__mumeiNotificationSettingsBridgeV1={version:'1.1.0',load};
+window.__mumeiNotificationSettingsBridgeV1={version:'1.1.1',load};
 })();
