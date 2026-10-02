@@ -214,3 +214,7 @@
   .miv5-launcher-halo{animation:none!important}
   .miv5-hero-signature strong{opacity:.14!important;clip-path:none!important}
 }
+
+
+/* v18: the old floating item dock is retired; item control now lives inside bottom nav. */
+.miv5-item-dock{display:none!important}
