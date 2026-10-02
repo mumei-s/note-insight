@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v77-delta-cache-20261003";
+const CACHE_NAME = "mumei-note-insight-v78-shared-nav-20261003";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
