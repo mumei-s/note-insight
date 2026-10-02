@@ -229,7 +229,7 @@ export function MemberInsightLiveV2(){
   useEffect(()=>{
     const requested=requestedMode();
     if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");const tab=["comments","favorites","social","notifications"].includes(requested)?requested:"likes";window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0},"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
-    else{window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);setNavTab("likes");setMode("normal")}
+    else{window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);setNavTab("likes");setMode("normal");window.dispatchEvent(new Event("mumei-insight-navigation"))}
     const pop=()=>{const next=history.state?.insightMode;const tab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(next)?next:"likes"));const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
