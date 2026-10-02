@@ -313,7 +313,7 @@ export function MemberInsightLiveV2(){
         {creatorId?<a href={`https://note.com/${creatorId}`} target="_blank" rel="noreferrer">@{creatorId} ↗</a>:null}
       </div>
       <div className="miv5-creator-actions">
-        <div className="miv5-creator-brand"><strong>INSIGHT</strong><span>◇</span><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
+        <div className="miv5-creator-brand"><span>◇</span><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
         <button type="button" onClick={()=>{setAccessIntent("switch");location.hash="access/insight"}}>アカウント切替</button>
       </div>
     </section>
