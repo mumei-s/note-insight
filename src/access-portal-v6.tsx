@@ -20,6 +20,7 @@ const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
 const RECOVERY_TOKEN_KEY = "mumei-insight-recovery-token-v1";
 const RECOVERY_STATE_KEY = "mumei-insight-recovery-state-v2";
+const SWITCH_LOCK_KEY = "mumei-insight-account-switch-lock-v1";
 
 type Application = {
   id: string;
@@ -124,7 +125,7 @@ export function AccessPortalV6() {
   const storedAccounts = useMemo(() => readStoredInsightAccounts().filter((item) => item.noteId), [version]);
 
   function refresh() { setVersion((value) => value + 1); }
-  function goDashboard() { sessionStorage.removeItem(OWNER_VIEW_KEY); window.location.hash = "dashboard"; }
+  function goDashboard() { sessionStorage.removeItem(SWITCH_LOCK_KEY); sessionStorage.removeItem(OWNER_VIEW_KEY); window.location.hash = "dashboard"; }
   function currentJoinAccount() {
     const noteId = cleanId(localStorage.getItem(JOIN_NOTE_KEY) || "");
     return noteId ? getStoredInsightAccount(noteId) : null;
@@ -199,10 +200,11 @@ export function AccessPortalV6() {
   async function bootstrap() {
     sessionStorage.removeItem(OWNER_VIEW_KEY);
     const intent = consumeAccessIntent();
-    const hasMember = await hydrateCurrentMember();
-
+    const switchLocked = sessionStorage.getItem(SWITCH_LOCK_KEY) === "1";
+    if (switchLocked || intent === "switch") { setStage("accounts"); return; }
     if (intent === "apply") { setStage("apply"); return; }
-    if (intent === "switch" || intent === "login") { setStage("accounts"); return; }
+    if (intent === "login") { setStage("accounts"); return; }
+    const hasMember = await hydrateCurrentMember();
     if (hasMember) { goDashboard(); return; }
     if (await resumeCurrentJoin()) return;
     const recovery = readRecoveryState();
@@ -342,7 +344,7 @@ export function AccessPortalV6() {
   }
 
   return <div className="access2"><main className="access2-main">
-    <a href="#" className="access2-back">← TOP</a>
+    <a href="#" className="access2-back" onClick={()=>sessionStorage.removeItem(SWITCH_LOCK_KEY)}>← TOP</a>
     <header className="access2-head"><small>INSIGHT MEMBER</small><h1>INSIGHT</h1><p>初回の本人確認後はログイン状態を保持。認証済みアカウントはタップだけで切り替えられます。</p></header>
     {error ? <div className="access2-alert">{error}</div> : null}
     {message ? <div className="access2-message">{message}</div> : null}
