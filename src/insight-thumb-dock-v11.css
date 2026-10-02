@@ -78,36 +78,75 @@
   gap:7px!important;
   position:relative;
   isolation:isolate;
+  min-height:76px;
 }
-.miv5-launcher::before,
-.miv5-launcher::after{
+.miv5-launcher-halo{
+  position:absolute;
+  z-index:0;
+  pointer-events:none;
+  left:50%;
+  top:50%;
+  width:118%;
+  height:98px;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  border:2px solid rgba(113,232,255,.44);
+  box-shadow:
+    0 0 0 8px rgba(91,219,247,.045),
+    0 0 0 16px rgba(116,88,255,.025),
+    0 0 34px rgba(87,214,245,.28),
+    inset 0 0 30px rgba(110,224,249,.08);
+  opacity:0;
+  animation:ic11HaloSpan .95s cubic-bezier(.2,.8,.2,1) .18s 1 forwards;
+}
+.miv5-launcher-halo::before,
+.miv5-launcher-halo::after{
   content:"";
   position:absolute;
-  pointer-events:none;
-  z-index:-1;
   left:50%;
-  transform:translateX(-50%);
+  top:50%;
+  transform:translate(-50%,-50%);
   border-radius:50%;
+  pointer-events:none;
 }
-.miv5-launcher::before{
-  width:112%;
-  height:94px;
-  top:-21px;
-  border:1px solid rgba(112,228,251,.22);
-  box-shadow:
-    0 0 0 9px rgba(100,220,246,.025),
-    0 0 34px rgba(91,214,242,.12);
-  opacity:0;
-  animation:ic11LauncherHalo 1.05s ease-out .26s 1 forwards;
-}
-.miv5-launcher::after{
-  width:76%;
+.miv5-launcher-halo::before{
+  width:78%;
   height:64px;
-  top:-6px;
-  border:1px solid rgba(132,104,255,.17);
-  opacity:0;
-  animation:ic11LauncherHaloInner .9s ease-out .34s 1 forwards;
+  border:1px solid rgba(159,128,255,.38);
+  box-shadow:0 0 22px rgba(139,104,255,.18);
 }
+.miv5-launcher-halo::after{
+  width:42%;
+  height:36px;
+  border:1px solid rgba(160,241,255,.24);
+}
+.miv5-launcher-halo strong{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  color:rgba(215,249,255,.20);
+  font-size:18px;
+  font-weight:950;
+  letter-spacing:.26em;
+  text-indent:.26em;
+  text-shadow:0 0 18px rgba(110,229,252,.26);
+}
+.miv5-launcher-halo i{
+  position:absolute;
+  top:50%;
+  width:22%;
+  height:2px;
+  background:linear-gradient(90deg,transparent,#8cecff,transparent);
+  box-shadow:0 0 10px rgba(126,229,251,.50);
+}
+.miv5-launcher-halo i:first-of-type{left:3%}
+.miv5-launcher-halo i:last-of-type{right:3%}
+.miv5-launcher-item{
+  position:relative;
+  z-index:2;
+}
+.miv5-launcher::before,.miv5-launcher::after{display:none!important}
 .miv5-launcher-item,
 .miv5-launcher-item>button,
 .miv5-launcher-item.caution{min-height:55px!important}
@@ -161,28 +200,28 @@
   grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;
   gap:7px;
-  width:min(244px,74vw);
-  min-height:37px;
+  width:min(318px,88vw);
+  min-height:46px;
   margin:0 auto;
-  padding:0 12px;
-  border:1px solid rgba(106,216,242,.31);
+  padding:0 14px;
+  border:1.5px solid rgba(118,228,252,.66);
   border-radius:999px;
-  background:rgba(6,20,30,.95);
+  background:linear-gradient(145deg,rgba(14,47,63,.98),rgba(8,28,40,.98));
   backdrop-filter:blur(14px);
   color:#d8f6ff;
   font:inherit;
-  box-shadow:0 8px 22px rgba(0,0,0,.30),0 0 18px rgba(73,198,228,.07);
+  box-shadow:0 10px 26px rgba(0,0,0,.34),0 0 24px rgba(76,204,235,.18),inset 0 1px rgba(255,255,255,.05);
 }
-.miv5-item-dock-toggle span{color:#79e4fb;font-size:14px}
+.miv5-item-dock-toggle span{color:#a9f2ff;font-size:18px;text-shadow:0 0 12px rgba(116,230,252,.45)}
 .miv5-item-dock-toggle b{
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   text-align:left;
-  font-size:9px;
+  font-size:11px;
 }
-.miv5-item-dock-toggle small{color:#7f9aab;font-size:6.5px}
+.miv5-item-dock-toggle small{color:#9bb7c6;font-size:7px;font-weight:800}
 .miv5-item-dock-toggle:active{transform:scale(.985)}
 
 .miv5-item-sheet{
@@ -235,15 +274,10 @@
   20%{opacity:1}
   100%{opacity:0;transform:translateX(72%)}
 }
-@keyframes ic11LauncherHalo{
-  0%{opacity:0;transform:translateX(-50%) scale(.72)}
-  55%{opacity:.70}
-  100%{opacity:.22;transform:translateX(-50%) scale(1)}
-}
-@keyframes ic11LauncherHaloInner{
-  0%{opacity:0;transform:translateX(-50%) scale(.78)}
-  70%{opacity:.52}
-  100%{opacity:.16;transform:translateX(-50%) scale(1)}
+@keyframes ic11HaloSpan{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(.72)}
+  62%{opacity:.95;transform:translate(-50%,-50%) scale(1.03)}
+  100%{opacity:.62;transform:translate(-50%,-50%) scale(1)}
 }
 @keyframes ic11SheetUp{
   from{opacity:0;transform:translateY(8px) scale(.985)}
@@ -262,7 +296,9 @@
   }
   .miv5-hero-signature em{display:none!important}
   .miv5-command-stage{padding:3px 6px 1px!important}
-  .miv5-launcher{gap:6px!important}
+  .miv5-launcher{gap:6px!important;min-height:72px}
+  .miv5-launcher-halo{width:116%;height:88px}
+  .miv5-launcher-halo strong{font-size:15px;letter-spacing:.22em;text-indent:.22em}
   .miv5-launcher-item,
   .miv5-launcher-item>button,
   .miv5-launcher-item.caution{min-height:52px!important}
@@ -291,7 +327,6 @@
   .miv5-hero-signature strong,
   .miv5-hero-signature i,
   .miv5-item-sheet,
-  .miv5-launcher::before,
-  .miv5-launcher::after{animation:none!important}
+  .miv5-launcher-halo{animation:none!important}
   .miv5-hero-signature strong{opacity:.14!important;clip-path:none!important}
 }
