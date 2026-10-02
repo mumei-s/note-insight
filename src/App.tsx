@@ -114,8 +114,8 @@ function BottomNav({ route }: { route: string }) {
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
     <style>{`
-      html{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
-      .app-route-shell{min-height:100vh;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+      html{scroll-padding-bottom:calc(118px + env(safe-area-inset-bottom,0px))}
+      .app-route-shell{min-height:100vh;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}.app-route-shell.is-dashboard{padding-bottom:calc(118px + env(safe-area-inset-bottom,0px))}
       .app-route-shell>*{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       .app-route-shell.is-member .iv8-apprefresh{display:none!important}
       .app-route-shell.is-admin{padding-bottom:24px!important}.app-route-shell.is-admin>*{scroll-margin-bottom:0!important}
@@ -331,7 +331,7 @@ export function App() {
   if (PARTICIPANT_MAINTENANCE && !maintenanceBypass) return <MaintenanceScreen />;
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
-    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""}`}>{page}</div>
+    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""}`}>{page}</div>
     {hideBottomNav ? null : <BottomNav route={route} />}
   </>;
 }
