@@ -7,3 +7,5 @@
 .mis2-relationship-filter{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px;color:#a8c6d4}
 .mis2-relationship-filter select{flex:1;min-width:0;border:1px solid #416174;border-radius:10px;background:#081720;color:#edf8fd;padding:9px;font-size:14px}
 .mis2-social-root>.mis2-viewtabs{margin:0 0 10px}
+
+.mis2-investigate-guide{display:grid;gap:3px;margin:8px 0;padding:10px 12px;border:1px solid #b9853a;border-radius:11px;background:linear-gradient(145deg,#2a2115,#15191d);color:#f7e4bd}.mis2-investigate-guide strong{font-size:12px}.mis2-investigate-guide span{font-size:10px;line-height:1.5;color:#cdbf9f}.mis2-viewtabs button:last-child{border-color:#6b5532}.mis2-viewtabs button:last-child.active{border-color:#e4a84f;background:#3a2b18;color:#fff1cf}
