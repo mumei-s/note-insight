@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount, setAccessIntent } from "./insight-account-store";
 import {
   CURRENT_INSIGHT_APP_VERSION,
   CURRENT_DASHBOARD_VERSION,
@@ -25,6 +25,7 @@ import "./insight-visual-overhaul-v3.css";
 import "./insight-integrated-hero-v6.css";
 import "./insight-cinematic-overdrive-v7.css";
 import "./insight-motion-discipline-v8.css";
+import "./insight-creator-first-v9.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -290,24 +291,33 @@ export function MemberInsightLiveV2(){
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
   const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span></>;
+  const account=currentStoredInsightAccount();
+  const creatorId=String(official?.member?.noteId||account?.noteId||noteId||"").replace(/^@/,"");
+  const creatorName=String(official?.member?.displayName||official?.member?.nickname||account?.displayName||creatorId||"noteクリエイター");
+  const creatorImage=String(official?.member?.imageUrl||official?.member?.profileImageUrl||account?.imageUrl||"");
   const modeMeta={
-    normal:{eyebrow:"MUMEI S NOTE",title:"無名S note INSIGHT",sub:"保存・分析・通知をひとつの視界へ"},
-    comments:{eyebrow:"無名S note INSIGHT",title:"コメント解析",sub:"返信の抜けと会話の続きまで追跡"},
-    favorites:{eyebrow:"無名S note INSIGHT",title:"お気に入り",sub:"追いたいクリエイターを見失わない"},
-    social:{eyebrow:"無名S note INSIGHT",title:"フォロー解析",sub:"フォロー関係の変化を照合"},
-    notifications:{eyebrow:"無名S note INSIGHT",title:"本人通知",sub:"本人通知を履歴として残す"},
-    analysis:{eyebrow:"無名S note INSIGHT",title:"分析",sub:"公式値と保存履歴を重ねて読む"},
+    normal:{title:"",sub:""},
+    comments:{title:"コメント解析",sub:"返信の抜けと会話の続きまで追跡"},
+    favorites:{title:"お気に入り",sub:"追いたいクリエイターを見失わない"},
+    social:{title:"フォロー解析",sub:"フォロー関係の変化を照合"},
+    notifications:{title:"本人通知",sub:"本人通知を履歴として残す"},
+    analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
-    <section className="ic2-masthead ic6-integrated-head" aria-label="INSIGHT現在画面">
-      <div className="ic2-atmosphere" aria-hidden="true"><i/><i/><i/></div>
-      <div className="ic2-brandmark" aria-hidden="true"><span>INSIGHT</span><b>◈</b><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
-      <div className="ic2-mast-copy">
-        <small>{modeMeta.eyebrow}</small>
-        <h1>{modeMeta.title}</h1>
-        <p>{modeMeta.sub}</p>
+    <section className="miv5-creator-first" aria-label="現在のクリエイター">
+      <div className="miv5-creator-avatar">{creatorImage?<img src={creatorImage} alt="" referrerPolicy="no-referrer"/>:<span>{[...creatorName][0]||"人"}</span>}</div>
+      <div className="miv5-creator-copy">
+        <h1>{creatorName}</h1>
+        {creatorId?<a href={`https://note.com/${creatorId}`} target="_blank" rel="noreferrer">@{creatorId} ↗</a>:null}
       </div>
-      <div className="ic6-top-panels" aria-label="INSIGHT主要機能">
+      <div className="miv5-creator-actions">
+        <small>INSIGHT <b>v{CURRENT_INSIGHT_APP_VERSION}</b></small>
+        <button type="button" onClick={()=>{setAccessIntent("switch");location.hash="access/insight"}}>アカウント切替</button>
+      </div>
+    </section>
+    <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
+      {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
+      <div className="ic6-top-panels">
         <div className="ic6-panel caution">
           <a className="ic6-panel-main ic6-caution-link" href="./insight-data-notice.html"><strong>⚠ 注意</strong><small>精度・取得元</small></a>
         </div>
@@ -315,12 +325,11 @@ export function MemberInsightLiveV2(){
           <button className="ic6-panel-main" onClick={()=>openMode("analysis")} aria-label="分析を開く"><strong>📊 分析</strong><small>公式Dashboard＋INSIGHT</small></button>
           <a className="ic6-panel-mini" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
         </div>
-        <div className={`ic6-panel notification ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
+        <div className="ic6-panel notification">
           <button className="ic6-panel-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>通知履歴・追加分析</small></button>
           <a className="ic6-panel-mini" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"}>設定</a>
         </div>
       </div>
-      <div className="ic2-horizon" aria-hidden="true"><span/><span/><span/></div>
     </section>
     <nav className="miv5-global-nav" aria-label="INSIGHT各項目">
       {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>handleUnifiedTab(key)}>{label}</button>)}
