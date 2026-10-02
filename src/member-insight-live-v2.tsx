@@ -22,6 +22,7 @@ import "./member-insight-live-v2.css";
 import "./insight-cinematic-shell-v1.css";
 import "./insight-cinematic-shell-v2.css";
 import "./insight-live-scan-theater.css";
+import "./insight-visual-overhaul-v3.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -259,12 +260,12 @@ export function MemberInsightLiveV2(){
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
   const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span></>;
   const modeMeta={
-    normal:{eyebrow:"MY NOTE INTELLIGENCE",title:"INSIGHT CORE",sub:"保存・分析・通知をひとつの視界へ"},
-    comments:{eyebrow:"CONVERSATION TRACE",title:"COMMENTS",sub:"返信の抜けと会話の続きまで追跡"},
-    favorites:{eyebrow:"CREATOR WATCH",title:"FAVORITES",sub:"追いたいクリエイターを見失わない"},
-    social:{eyebrow:"RELATION MAP",title:"SOCIAL",sub:"フォロー関係の変化を照合"},
-    notifications:{eyebrow:"PRIVATE SIGNAL ARCHIVE",title:"NOTIFICATIONS",sub:"本人通知を履歴として残す"},
-    analysis:{eyebrow:"OFFICIAL × INSIGHT",title:"ANALYTICS",sub:"公式値と保存履歴を重ねて読む"},
+    normal:{eyebrow:"MUMEI S NOTE",title:"無名S note INSIGHT",sub:"保存・分析・通知をひとつの視界へ"},
+    comments:{eyebrow:"無名S note INSIGHT",title:"コメント解析",sub:"返信の抜けと会話の続きまで追跡"},
+    favorites:{eyebrow:"無名S note INSIGHT",title:"お気に入り",sub:"追いたいクリエイターを見失わない"},
+    social:{eyebrow:"無名S note INSIGHT",title:"フォロー解析",sub:"フォロー関係の変化を照合"},
+    notifications:{eyebrow:"無名S note INSIGHT",title:"本人通知",sub:"本人通知を履歴として残す"},
+    analysis:{eyebrow:"無名S note INSIGHT",title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
     <section className="ic2-masthead" aria-label="INSIGHT現在画面">
