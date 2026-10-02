@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v75-nav-panel-toggle-20261003";
+const CACHE_NAME = "mumei-note-insight-v76-four-nav-cinematic-20261003";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
