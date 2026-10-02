@@ -311,25 +311,23 @@ export function MemberInsightLiveV2(){
         {creatorId?<a href={`https://note.com/${creatorId}`} target="_blank" rel="noreferrer">@{creatorId} ↗</a>:null}
       </div>
       <div className="miv5-creator-actions">
-        <small><b>v{CURRENT_INSIGHT_APP_VERSION}</b></small>
+        <div className="miv5-creator-brand"><strong>INSIGHT</strong><span>◇</span><small>v{CURRENT_INSIGHT_APP_VERSION}</small></div>
         <button type="button" onClick={()=>{setAccessIntent("switch");location.hash="access/insight"}}>アカウント切替</button>
       </div>
     </section>
     <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
-      <div className="ic6-top-panels">
-        <div className="ic6-panel caution">
-          <a className="ic6-panel-main ic6-caution-link" href="./insight-data-notice.html"><strong>⚠ 注意</strong><small>精度・取得元</small></a>
+      <nav className="miv5-launcher" aria-label="INSIGHTランチャー">
+        <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b><small>精度・取得元</small></a>
+        <div className={`miv5-launcher-item analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+          <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b><small>公式＋INSIGHT</small></button>
+          <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
         </div>
-        <div className={`ic6-panel analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="ic6-panel-main" onClick={()=>openMode("analysis")} aria-label="分析を開く"><strong>📊 分析</strong><small>公式Dashboard＋INSIGHT</small></button>
-          <a className="ic6-panel-mini" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a>
+        <div className="miv5-launcher-item notification">
+          <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b><small>通知履歴</small></button>
+          <a className="gear" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
         </div>
-        <div className="ic6-panel notification">
-          <button className="ic6-panel-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>通知履歴・追加分析</small></button>
-          <a className="ic6-panel-mini" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"}>設定</a>
-        </div>
-      </div>
+      </nav>
     </section>
     <nav className="miv5-global-nav" aria-label="INSIGHT各項目">
       {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>handleUnifiedTab(key)}>{label}</button>)}
