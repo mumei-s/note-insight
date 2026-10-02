@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.5.4
-// @description  常用版。初投稿2タグを個別ON/OFF・両方ONで混合最新順。①画像🔗は本文タップ位置から挿入。上端ドラッグバーで移動可能。公開記事1件を厳密確認。
+// @version      1.6.0
+// @description  常用版。初投稿特別案件に加えて#ワーママ案件を独立追加。#ワーママは新着からタグ実在＋本文文脈を確認し、疑わしい記事とNG記事を除外。投稿記事数は制限しない。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.5.4';
+const VERSION='1.6.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -29,6 +29,12 @@ const RUN_PREFIX='mumei_profile_card_paster_run_v15:';
 const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
 const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
 const FIRST_TAGS=['はじめてのnote','初めてのnote'];
+const WORKMOM_TAG='ワーママ';
+const WORKMOM_CONTEXT={
+ explicit:/(?:ワーママ|働くママ|働くお母さん|働く母|仕事と育児|育児と仕事|仕事と子育て|子育てと仕事)/i,
+ parent:/(?:ママ|お母さん|母親|母として|育児|子育て|子ども|子供|保育園|保育所|学童|育休|産休|授乳|出産|妊娠)/i,
+ work:/(?:仕事|働|勤務|職場|会社|復職|時短|フルタイム|パート|正社員|キャリア|在宅ワーク|テレワーク|共働き|残業|転職)/i
+};
 const SPECIAL_NG=[
   {label:'ポルノ',re:/(?:ポルノ|アダルト|18禁|R-?18|エロ|性的|セックス|風俗|AV女優|ヌード|自慰|性行為|援助交際)/i},
   {label:'ギャンブル',re:/(?:ギャンブル|パチンコ|パチスロ|競馬|競艇|競輪|カジノ|賭け|ブックメーカー)/i},
@@ -412,6 +418,62 @@ async function specialArticleText(row){
  }catch{}
  return parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim()
 }
+function exactWorkmomTag(value){
+ return /(?:^|[^一-龯ぁ-んァ-ヶ々ーA-Za-z0-9_])#?ワーママ(?:$|[^一-龯ぁ-んァ-ヶ々ーA-Za-z0-9_])/i.test(String(value||''))
+}
+async function workmomArticleAudit(row){
+ let note={},doc=null;
+ try{const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));note=p?.data||p||{}}catch{}
+ try{
+  const html=String(await xhr(row.url,'text',45000)||'');
+  doc=new DOMParser().parseFromString(html,'text/html')
+ }catch{}
+ const tagDump=JSON.stringify(note.hashtags||note.tags||note.hashtag_names||note.tag_names||note.note_hashtags||[]);
+ let exactTag=exactWorkmomTag(tagDump);
+ if(!exactTag&&doc){
+  exactTag=[...doc.querySelectorAll('a')].some(a=>{
+   const label=String(a.textContent||'').trim().replace(/^#/,'');
+   let href=String(a.getAttribute('href')||'');try{href=decodeURIComponent(href)}catch{}
+   return label===WORKMOM_TAG||href.includes('/hashtag/'+WORKMOM_TAG)
+  })
+ }
+ if(!exactTag)return{ok:false,reason:'#ワーママタグ確認不可'};
+ const parts=[
+  row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,
+  doc?.querySelector('article')?.textContent||doc?.querySelector('main')?.textContent||''
+ ];
+ const text=parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim();
+ const blocked=specialBlockedReason(text);if(blocked)return{ok:false,reason:blocked};
+ const relevant=WORKMOM_CONTEXT.explicit.test(text)||(WORKMOM_CONTEXT.parent.test(text)&&WORKMOM_CONTEXT.work.test(text));
+ if(!relevant)return{ok:false,reason:'ワーママ文脈不足'};
+ return{ok:true,reason:''}
+}
+async function collectWorkmom(mode,count){
+ const limit=targetLimit(mode,count);if(limit===0)return[];
+ let cursor='0',pageNo=0,scanned=0;const tested=new Set(),out=[];
+ while(out.length<limit&&pageNo<250){
+  if(stopRequested)throw new Error('停止しました');
+  pageNo++;
+  setStatus('#ワーママ案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+  const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(WORKMOM_TAG)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
+  const q=normalizeSearch(p);if(!q.arr.length)break;
+  for(const raw of q.arr){
+   if(out.length>=limit)break;
+   const row=articleFromRaw(raw,{}),u=norm(row?.url);
+   if(!row||!u||u===norm(FINAL_URL)||tested.has(u))continue;
+   tested.add(u);scanned++;
+   setStatus('#ワーママ案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit)+'｜'+row.creator);
+   const audit=await workmomArticleAudit({...row,url:u});
+   if(!audit.ok)continue;
+   out.push({...row,url:u,workmom:true});
+   await sleep(80)
+  }
+  if(q.last||q.cursor==null||String(q.cursor)===String(cursor))break;
+  cursor=String(q.cursor);await sleep(60)
+ }
+ return out
+}
+
 async function collectFirstNoteSpecial(mode,count,selectedTags){
  const limit=targetLimit(mode,count);
  if(limit===0)return[];
@@ -530,8 +592,8 @@ async function enrich(row){
   title:String(note.name||note.title||row.title||'無題の記事').trim()
  }
 }
-async function buildRows(input,special=false){
- const raw=special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice);
+async function buildRows(input,special=false,workmom=false){
+ const raw=workmom?await collectWorkmom(input.mode,input.count):special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice);
  const seen=new Set(),rows=[];
  for(const row of raw){
   const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
@@ -682,16 +744,18 @@ function inputValues(save=true){
  const specialMode=p.querySelector('[data-special-mode]')?.value==='all'?'all':'number';
  const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||100)));
  const specialTags=[...p.querySelectorAll('button[data-special-tag].on')].map(x=>String(x.dataset.specialTag||'')).filter(Boolean);
- const v={sources,mode,count,choice,specialMode,specialCount,specialTags,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ const workmomMode=p.querySelector('[data-workmom-mode]')?.value==='all'?'all':'number';
+ const workmomCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-workmom-count]')?.value||g.workmomCount||100)));
+ const v={sources,mode,count,choice,specialMode,specialCount,specialTags,workmomMode,workmomCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
 function amountLabel(mode,count){return mode==='all'?'全数':String(count)+'件'}
-async function createImageList({special=false}={}){
+async function createImageList({special=false,workmom=false}={}){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
   const input=inputValues();
-  if(!special){
+  if(!special&&!workmom){
    const sources=parseUnifiedSources(input.sources);
    if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
    if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
@@ -709,25 +773,27 @@ async function createImageList({special=false}={}){
   }
 
   if(special&&(!Array.isArray(input.specialTags)||!input.specialTags.length))throw new Error('初投稿タグを1つ以上選んでください');
-  const effective=special
-   ?{...input,mode:input.specialMode,count:input.specialCount,specialTags:input.specialTags}
-   :input;
+  const effective=workmom
+   ?{...input,mode:input.workmomMode,count:input.workmomCount}
+   :special
+    ?{...input,mode:input.specialMode,count:input.specialCount,specialTags:input.specialTags}
+    :input;
 
-  const rows=await buildRows(effective,special);
+  const rows=await buildRows(effective,special,workmom);
   if(!rows.length)throw new Error('貼り付け対象が0件です');
 
   // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
-  const requestedCount=special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
+  const requestedCount=workmom?(input.workmomMode==='all'?null:input.workmomCount):special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
   writeRun({
    version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],rows,
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
-   createdAt:Date.now(),stage:'images_building',special:Boolean(special),
+   createdAt:Date.now(),stage:'images_building',special:Boolean(special),workmom:Boolean(workmom),
    imageAnchorPos:imageInsertPos,
-   sources:special?input.specialTags.map(x=>'#'+x).join(' '):input.sources,
+   sources:workmom?'#'+WORKMOM_TAG:special?input.specialTags.map(x=>'#'+x).join(' '):input.sources,
    mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
-  setStatus((special?'特別案件':'通常')+'｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
+  setStatus((workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
@@ -838,9 +904,11 @@ function resetFields(){
  p.querySelector('[data-count]').value='10';
  const sm=p.querySelector('[data-special-mode]'),sc=p.querySelector('[data-special-count]');
  if(sm)sm.value='number';if(sc)sc.value='100';
+ const wm=p.querySelector('[data-workmom-mode]'),wc=p.querySelector('[data-workmom-count]');
+ if(wm)wm.value='number';if(wc)wc.value='100';
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.add('on'));
  p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
- applyAmountMode();applySpecialAmountMode()
+ applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode()
 }
 async function resetAll(){
  if(busy)return;
@@ -869,6 +937,10 @@ function applyAmountMode(){
 }
 function applySpecialAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-special-mode]'),num=p?.querySelector('[data-special-count]');
+ if(num)num.style.display=sel?.value==='all'?'none':'block'
+}
+function applyWorkmomAmountMode(){
+ const p=document.getElementById(PANEL),sel=p?.querySelector('[data-workmom-mode]'),num=p?.querySelector('[data-workmom-count]');
  if(num)num.style.display=sel?.value==='all'?'none':'block'
 }
 function setCollapsed(on){
@@ -957,7 +1029,7 @@ function mount(){
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
  #${PANEL} .hint{margin-top:2px;font-size:7.5px;color:#91b5c8;line-height:1.25}
  #${PANEL} .phase{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
- #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"]{background:#0b6176;border-color:#64d8ef}
+ #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"],#${PANEL} [data-a="workmom-images"]{background:#0b6176;border-color:#64d8ef}
  #${PANEL} [data-a="cards"]{background:#34518a;border-color:#7897df}
  #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
  #${PANEL} details{margin-top:4px;border:1px solid #29485b;border-radius:6px;background:#091923;padding:3px}
@@ -985,6 +1057,13 @@ function mount(){
    <div class="special-actions"><button data-a="commit-excluded">前回成功→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
   </details>
 
+  <details data-workmom>
+   <summary>＋ 案件：#ワーママ</summary>
+   <div class="hint">#ワーママ新着 → タグ実在＋本文文脈を確認。ワーママ記事と判断しにくいもの・NG記事は除外。投稿記事数の制限なし。</div>
+   <div class="amount"><select data-workmom-mode><option value="number">件数</option><option value="all">全数</option></select><input data-workmom-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.workmomCount??100)}"></div>
+   <button data-a="workmom-images" style="width:100%;margin-top:3px">① #ワーママ画像一覧</button>
+  </details>
+
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
   <div id="${STATUS}">①画像一覧は自動。②は本文で置く場所をタップしてから押す。</div>
@@ -996,9 +1075,10 @@ function mount(){
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
  p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';
  p.querySelector('[data-special-mode]').value=g.specialMode==='all'?'all':'number';
+ p.querySelector('[data-workmom-mode]').value=g.workmomMode==='all'?'all':'number';
  const savedSpecialTags=Array.isArray(g.specialTags)?g.specialTags:FIRST_TAGS;
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.toggle('on',savedSpecialTags.includes(x.dataset.specialTag)));
- applyAmountMode();applySpecialAmountMode();updateExcludedCount();
+ applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();updateExcludedCount();
 
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
@@ -1006,6 +1086,7 @@ function mount(){
  }));
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
  p.querySelector('[data-special-mode]').addEventListener('change',()=>{applySpecialAmountMode();saveUiState()});
+ p.querySelector('[data-workmom-mode]').addEventListener('change',()=>{applyWorkmomAmountMode();saveUiState()});
  p.querySelectorAll('button[data-special-tag]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
   btn.classList.toggle('on');
@@ -1024,15 +1105,16 @@ function mount(){
   x.addEventListener('click',e=>e.stopPropagation());
   x.addEventListener('change',()=>saveUiState())
  });
- for(const sel of ['[data-count]','[data-special-count]']){
+ for(const sel of ['[data-count]','[data-special-count]','[data-workmom-count]']){
   const el=p.querySelector(sel);
   el?.addEventListener('input',()=>{const d=String(el.value||'').replace(/\D+/g,'').slice(0,4);if(el.value!==d)el.value=d})
  }
 
  p.querySelector('[data-ui="collapse"]').addEventListener('click',e=>{e.preventDefault();setCollapsed(!p.classList.contains('collapsed'))});
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
- p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false})});
- p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true})});
+ p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false})});
+ p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false})});
+ p.querySelector('[data-a="workmom-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:true})});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="commit-excluded"]').addEventListener('click',e=>{e.preventDefault();commitSpecialLast()});
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
