@@ -25,7 +25,7 @@ function MutualComparison({revision}:{revision:number}){
   const id=++request.current;setBusy(true);try{const x=await post({action:'comparison',window:windowMode,relationship:filter,query,page,pageSize:PAGE});if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){setData(x);setError('')}}catch(e){if(!disposed&&request.current===id)setError(e instanceof Error?e.message:'照合結果を読み込めませんでした')}finally{if(!disposed&&request.current===id)setBusy(false)}
  };const first=window.setTimeout(()=>void refresh(),query?250:0),timer=window.setInterval(()=>{if(document.visibilityState==='visible')void refresh()},60000),focus=()=>void refresh();window.addEventListener('focus',focus);return()=>{disposed=true;request.current++;window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener('focus',focus)}},[revision,windowMode,filter,query,page]);
  const rows:Row[]=data?.rows||[],counts=data?.counts||{},status=data?.status,pages=Math.max(1,Math.ceil(Number(data?.total||0)/PAGE)),noteId=data?.noteId||'',scanUrl=noteId?`https://note.com/${encodeURIComponent(noteId)}?mumei_social_scan=1`:'';
- return <section id="mis2-social" className="mis2">
+ return <section id="mis2-social" className="mis2" aria-busy={loading}>
   <header className="mis2-head"><div><small>FOLLOW RELATIONSHIP</small><h2>フォローとフォロワーを照合</h2></div></header>
   <div className="mis2-window" role="group" aria-label="照合の順番"><button aria-pressed={windowMode==='oldest'} onClick={()=>{setWindowMode('oldest');setPage(1)}}>下から1,000人</button><button aria-pressed={windowMode==='latest'} onClick={()=>{setWindowMode('latest');setPage(1)}}>最新1,000人</button></div>
   <div className="mis2-comparison-status"><span>{status?.complete?'照合保存済み':status?.following_checked?'下から照合中':'相手の状態を確認待ち'}{status?` · 自分のフォロー ${n(status.following_checked)} / ${n(Math.min(1000,Number(status.following_total||0)))}人`:''}</span>{scanUrl?<a href={scanUrl} target="_blank" rel="noreferrer">noteで照合 ↗</a>:null}</div>
@@ -61,7 +61,7 @@ function SocialHistory({revision=0}:{revision?:number}){
   try{const data=await post({action:"investigate",personKey:row.person_key,page:candidatePage});if(id===inspectionRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token)setInspection({row,...data,loading:false})}
   catch(e){if(id===inspectionRequest.current)setInspection({row,loading:false,error:e instanceof Error?e.message:"調査失敗"})}
  }
- useEffect(()=>{setRows([]);setTotal(0);setPage(1);setLoading(true);const timer=window.setTimeout(()=>void load(1),query?250:0);return()=>{window.clearTimeout(timer);request.current++}},[direction,change,day,revision,view,windowMode,query]);
+ useEffect(()=>{setPage(1);setLoading(true);const timer=window.setTimeout(()=>void load(1),query?250:0);return()=>{window.clearTimeout(timer);request.current++}},[direction,change,day,revision,view,windowMode,query]);
  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,true)},timer=window.setInterval(refresh,60000);window.addEventListener("focus",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh)}},[page,direction,change,day,view,windowMode,query]);
  useEffect(()=>()=>{request.current++;inspectionRequest.current++},[]);
  const pages=Math.max(1,Math.ceil(total/PAGE)),followers=latest.followers,followings=latest.followings;
