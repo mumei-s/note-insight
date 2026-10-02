@@ -166,6 +166,19 @@ export function MemberInsightLiveV2(){
       else if(!result.ok)setStatus("保存済みデータを表示中です。更新できなかった場合はもう一度押してください。");
     }finally{manualRefreshRunning.current=false;setDataBusy(false)}
   }
+  async function refreshSavedData(showBusy=false){
+    if(manualRefreshRunning.current)return;
+    manualRefreshRunning.current=true;
+    if(showBusy)setDataBusy(true);
+    try{
+      await loadOfficial();
+      setRevision(v=>v+1);
+      if(showBusy)setStatus(`保存済み最新データを反映 ${timeNow()}`);
+    }finally{
+      manualRefreshRunning.current=false;
+      if(showBusy)setDataBusy(false);
+    }
+  }
   async function updateInsightApp(){
     if(appBusy)return;
     setAppBusy(true);
@@ -249,11 +262,12 @@ export function MemberInsightLiveV2(){
   useEffect(()=>{
     void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
-    const relationFirst=window.setTimeout(()=>void relationSync(false),5000),first=window.setTimeout(()=>void publicSync(false),8000),timer=window.setInterval(()=>void publicSync(false),5*60_000),relationTimer=window.setInterval(()=>{if(document.visibilityState==="visible")void relationSync(false)},10*60_000),visible=()=>{if(document.visibilityState==="visible")window.setTimeout(()=>{void publicSync(false);void relationSync(false)},QUIET_MS)};
+    const first=window.setTimeout(()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void refreshSavedData(false)},15000);
+    const timer=window.setInterval(()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void refreshSavedData(false)},15*60_000);
+    const visible=()=>{if(document.visibilityState==="visible"&&autoSyncEnabledRef.current)window.setTimeout(()=>void refreshSavedData(false),QUIET_MS)};
     document.addEventListener("visibilitychange",visible);
-    return()=>{window.clearTimeout(relationFirst);window.clearTimeout(first);window.clearInterval(timer);window.clearInterval(relationTimer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible);publicSyncRun.current++;publicSyncController.current?.abort();publicSyncController.current=null;running.current=false}
+    return()=>{window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible);publicSyncRun.current++;publicSyncController.current?.abort();publicSyncController.current=null;running.current=false}
   },[]);
-  useEffect(()=>{if(mode==="social")void relationSync(false)},[mode]);
   useEffect(()=>{
     void checkRelease();const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void checkRelease()},15*60_000);const refresh=()=>{if(document.visibilityState==="visible")void checkRelease()};
     const storageRefresh=(event:StorageEvent)=>{if(event.key===NOTIFICATION_VERSION_STORAGE_KEY||event.key===DASHBOARD_VERSION_STORAGE_KEY)refresh()};
@@ -299,8 +313,8 @@ export function MemberInsightLiveV2(){
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
         <div className="miv5-source-card normal miv5-auto-card">
-          <div className="miv5-source-main miv5-source-status" aria-busy={dataBusy}><strong>通常データ</strong><small>{autoSyncEnabled?"自動更新 ON":"自動更新 OFF"}</small><span>{dataBusy?"保存済みデータを表示したまま更新中":status}</span></div>
-          <div className="miv5-auto-actions"><button type="button" aria-pressed={autoSyncEnabled} onClick={()=>setAutoSyncEnabled(v=>!v)}>{autoSyncEnabled?"自動 ON":"自動 OFF"}</button><button type="button" disabled={dataBusy} onClick={()=>void manualDataRefresh()}>{dataBusy?"更新中":"今すぐ更新"}</button></div>
+          <div className="miv5-source-main miv5-source-status" aria-busy={dataBusy}><strong>画面更新</strong><small>{autoSyncEnabled?"自動":"手動"}</small><span>{dataBusy?"保存済み最新値を反映中":"中央更新済みデータを表示"}</span></div>
+          <div className="miv5-auto-actions"><button type="button" className={autoSyncEnabled?"active":""} aria-pressed={autoSyncEnabled} onClick={()=>setAutoSyncEnabled(true)}>自動</button><button type="button" className={!autoSyncEnabled?"active":""} aria-pressed={!autoSyncEnabled} onClick={()=>setAutoSyncEnabled(false)}>手動</button>{!autoSyncEnabled?<button type="button" className="refresh" disabled={dataBusy} onClick={()=>void refreshSavedData(true)}>{dataBusy?"反映中":"更新"}</button>:null}</div>
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span></button>
