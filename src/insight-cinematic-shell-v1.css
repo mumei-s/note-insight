@@ -1,0 +1,259 @@
+/* INSIGHT Cinematic Shell v1
+   Visual-only layer. No layout ownership, no pointer interception, no JS state. */
+
+:root{
+  --ic-bg:#071019;
+  --ic-panel:#0b1722;
+  --ic-panel-2:#102231;
+  --ic-line:rgba(111,216,242,.26);
+  --ic-line-hot:rgba(111,216,242,.72);
+  --ic-cyan:#83e7ff;
+  --ic-cyan-soft:#bdefff;
+  --ic-gold:#e9b85f;
+  --ic-text:#eef8ff;
+  --ic-muted:#8fa6b8;
+  --ic-shadow:0 18px 46px rgba(0,0,0,.26);
+}
+
+/* App atmosphere */
+.miv5{
+  position:relative;
+  isolation:isolate;
+}
+.miv5::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 18% 8%,rgba(43,165,204,.11),transparent 28%),
+    radial-gradient(circle at 82% 22%,rgba(91,77,184,.09),transparent 30%),
+    linear-gradient(180deg,#08121c 0%,#061018 48%,#050b11 100%);
+}
+.miv5::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  opacity:.28;
+  background-image:
+    linear-gradient(rgba(127,220,242,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(127,220,242,.025) 1px,transparent 1px);
+  background-size:28px 28px;
+  mask-image:linear-gradient(to bottom,rgba(0,0,0,.65),transparent 85%);
+}
+
+/* Main feature cards */
+.miv5-source-card,
+.miu-panel,
+.minf,
+.mis2,
+.miah,
+.mia2,
+.miaf,
+.miv5-final-slot>section{
+  position:relative;
+  overflow:hidden;
+  box-shadow:var(--ic-shadow);
+}
+.miv5-source-card::before,
+.miu-panel::before,
+.minf::before,
+.mis2::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  border-radius:inherit;
+  background:linear-gradient(115deg,rgba(255,255,255,.035),transparent 28%,transparent 70%,rgba(96,214,242,.035));
+}
+.miv5-source-card{
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.miv5-source-card:has(.miv5-source-main:active){
+  transform:translateY(1px) scale(.995);
+}
+.miv5-source-card.needs-update,
+.miv5-source-card.needs-install{
+  box-shadow:0 0 0 1px rgba(233,184,95,.18),0 0 26px rgba(233,184,95,.08),var(--ic-shadow);
+}
+.miv5-source-card.needs-update::after,
+.miv5-source-card.needs-install::after{
+  content:"";
+  position:absolute;
+  left:10%;
+  right:10%;
+  bottom:0;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,var(--ic-gold),transparent);
+  animation:icPulseBar 2.4s ease-in-out infinite;
+}
+
+/* Selected / interactive controls */
+.miu-nav button,
+.mis2-viewtabs button,
+.mis2-window button,
+.minf-filter-panel select,
+.minf-filter-panel button{
+  transition:transform .14s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease,color .18s ease;
+}
+.miu-nav button:active,
+.mis2-viewtabs button:active,
+.mis2-window button:active,
+.minf-filter-panel button:active{
+  transform:scale(.98);
+}
+.miu-nav button.active,
+.mis2-viewtabs button.active,
+.mis2-window button[aria-pressed="true"]{
+  box-shadow:0 0 0 1px rgba(109,220,246,.16),0 0 22px rgba(69,196,226,.13);
+}
+
+/* Notification screen */
+.mode-notifications .miv5-final-slot{
+  animation:icPanelReveal .24s ease-out both;
+}
+.mode-notifications .minf{
+  border-color:rgba(104,211,239,.42)!important;
+  box-shadow:0 0 0 1px rgba(104,211,239,.06),0 20px 50px rgba(0,0,0,.32);
+}
+.minf-quick.done{
+  position:relative;
+  overflow:hidden;
+}
+.minf-quick.done::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(105deg,transparent 30%,rgba(124,232,255,.1) 50%,transparent 70%);
+  transform:translateX(-100%);
+  animation:icSweep 2.8s ease-in-out infinite;
+}
+
+/* Social / analysis reveal */
+.mode-social .miv5-final-slot,
+.mode-analysis .miv5-final-slot,
+.mode-comments .miv5-final-slot,
+.mode-favorites .miv5-final-slot{
+  animation:icPanelReveal .22s ease-out both;
+}
+.mis2-investigate-guide{
+  box-shadow:0 0 0 1px rgba(233,184,95,.05),0 0 22px rgba(233,184,95,.08);
+}
+
+/* Lists: subtle depth, no reflow */
+.mis2-list article,
+.minf-list article,
+.miu-list article,
+.miu-self-article-grid>a{
+  transition:transform .14s ease,border-color .16s ease,box-shadow .16s ease;
+}
+.mis2-list article:active,
+.minf-list article:active,
+.miu-self-article-grid>a:active{
+  transform:scale(.995);
+}
+
+/* Bottom navigation */
+.app-bottom-nav{
+  box-shadow:0 -14px 36px rgba(0,0,0,.38)!important;
+  border-top-color:rgba(105,207,235,.22)!important;
+}
+.app-bottom-nav button{
+  position:relative;
+  transition:background .18s ease,color .18s ease,transform .14s ease;
+}
+.app-bottom-nav button:active{transform:scale(.97)}
+.app-bottom-nav button.active::after{
+  content:"";
+  position:absolute;
+  left:26%;
+  right:26%;
+  bottom:3px;
+  height:2px;
+  border-radius:999px;
+  background:var(--ic-cyan);
+  box-shadow:0 0 10px rgba(131,231,255,.7);
+}
+
+/* Busy states communicate without replacing content */
+[aria-busy="true"]{
+  position:relative;
+}
+[aria-busy="true"]::after{
+  content:"";
+  position:absolute;
+  left:8%;
+  right:8%;
+  bottom:4px;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,var(--ic-cyan),transparent);
+  animation:icBusy 1.35s linear infinite;
+}
+
+/* Headings */
+.miu-top h1,
+.minf-head h2,
+.mis2-head h2{
+  text-shadow:0 0 18px rgba(124,226,249,.08);
+}
+.miu-top,
+.minf-head,
+.mis2-head{
+  position:relative;
+}
+.miu-top::after,
+.minf-head::after,
+.mis2-head::after{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:-1px;
+  width:72px;
+  height:1px;
+  background:linear-gradient(90deg,var(--ic-cyan),transparent);
+  opacity:.7;
+}
+
+/* Preserve responsiveness and performance */
+@keyframes icPanelReveal{
+  from{opacity:.72;transform:translateY(7px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes icPulseBar{
+  0%,100%{opacity:.35;transform:scaleX(.72)}
+  50%{opacity:1;transform:scaleX(1)}
+}
+@keyframes icSweep{
+  0%,64%{transform:translateX(-110%)}
+  86%,100%{transform:translateX(110%)}
+}
+@keyframes icBusy{
+  from{transform:translateX(-70%)}
+  to{transform:translateX(70%)}
+}
+
+@media(max-width:620px){
+  .miv5-source-card,
+  .miu-panel,
+  .minf,
+  .mis2{box-shadow:0 12px 28px rgba(0,0,0,.24)}
+  .miv5::after{background-size:22px 22px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .miv5 *,
+  .miv5 *::before,
+  .miv5 *::after,
+  .app-bottom-nav *,
+  .app-bottom-nav *::before,
+  .app-bottom-nav *::after{
+    animation:none!important;
+    transition:none!important;
+  }
+}

@@ -19,6 +19,7 @@ import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
 import { MemberInsightCompleteness } from "./member-insight-completeness";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
+import "./insight-cinematic-shell-v1.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";

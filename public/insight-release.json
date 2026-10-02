@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.03.1",
+  "appVersion": "2026.10.03.2",
   "notificationVersion": "3.6.20",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-03T01:30:00+09:00",
+  "releasedAt": "2026-10-03T02:20:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "フォロー方向表記を『相手があなたをフォロー／あなたが相手をフォロー』へ明確化。拾えなかった減少・不明人物の再調査導線を強調。本人通知は描画完了後の1回だけスクロールし、戻り位置を安定化。保存完了イベントは即反映のまま、通知・照合の受動ポーリング間隔を延長して不要通信を削減。ログイン・認証・セッション仕様は変更しない。",
+  "note": "Cinematic Shell v1を追加。機能コード・認証・通知取得・DM・分析・スクロール制御は変更せず、CSSのみで立体感、発光、選択状態、読込演出、タブ遷移の視認性を強化。prefers-reduced-motion対応。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
