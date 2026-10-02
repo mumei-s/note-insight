@@ -88,23 +88,19 @@ function BottomNav({ route }: { route: string }) {
   }
   function topPress() {
     if (route !== "home") {
-      setTopArmed(true);
+      setTopArmed(false);
       goTo("home");
       return;
     }
-    if (topArmed) {
-      exitApp();
-      return;
-    }
     window.scrollTo({ top: 0, behavior: "auto" });
-    setTopArmed(true);
+    setTopArmed(false);
   }
   function notePress() {
     window.location.assign("https://note.com/");
   }
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
-      <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label={topArmed && route === "home" ? "TOPをもう一度押すと終了" : "TOP"}><span aria-hidden="true">⌂</span><b>TOP</b>{topArmed && route === "home" ? <em>もう1回で終了</em> : null}</button>
+      <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
       <button className={insightActive ? "active" : ""} onClick={() => goTo(hasMember ? "dashboard" : "access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
