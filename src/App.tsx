@@ -31,6 +31,7 @@ const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
 const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
+const INSIGHT_BOTTOM_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","通知"],["dm","DM"],["articles","記事"]] as const;
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
 
 function rawRoute() { return window.location.hash.replace(/^#\/?/, "") || "home"; }
@@ -68,6 +69,25 @@ export function goTo(route: string) {
 function BottomNav({ route }: { route: string }) {
   const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
   const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
+  const showItemLauncher = route === "dashboard";
+  const currentTab=()=>String(window.history.state?.insightTab||"likes");
+  const [itemOpen,setItemOpen]=useState(false);
+  const [itemTab,setItemTab]=useState(currentTab);
+  useEffect(()=>{
+    const sync=()=>{setItemTab(currentTab())};
+    const close=()=>setItemOpen(false);
+    sync();
+    window.addEventListener("mumei-insight-navigation",sync);
+    window.addEventListener("popstate",sync);
+    window.addEventListener("mumei-insight-close-items",close);
+    return()=>{window.removeEventListener("mumei-insight-navigation",sync);window.removeEventListener("popstate",sync);window.removeEventListener("mumei-insight-close-items",close)}
+  },[route]);
+  useEffect(()=>{if(!showItemLauncher)setItemOpen(false)},[showItemLauncher]);
+
+  function chooseItem(tab:string){
+    setItemOpen(false);setItemTab(tab);
+    window.dispatchEvent(new CustomEvent("mumei-insight-select-item",{detail:tab}));
+  }
 
   function topPress() {
     if (route !== "home") { goTo("home"); return; }
@@ -82,7 +102,13 @@ function BottomNav({ route }: { route: string }) {
   function notePress() { window.location.assign("https://note.com/"); }
 
   return <>
-    <nav className="app-bottom-nav" aria-label="メインナビゲーション">
+    <nav className={`app-bottom-nav ${showItemLauncher?"has-items":""}`} aria-label="メインナビゲーション">
+      {showItemLauncher?<button type="button" className="app-bottom-item-toggle" aria-expanded={itemOpen} onClick={()=>setItemOpen(v=>!v)}>
+        <span aria-hidden="true">{itemOpen?"⌄":"▦"}</span><b>{itemOpen?"項目を閉じる":"項目を選ぶ"}</b><small>現在：{INSIGHT_BOTTOM_ITEMS.find(([key])=>key===itemTab)?.[1]||"スキ履歴"}</small>
+      </button>:null}
+      {showItemLauncher&&itemOpen?<div className="app-bottom-item-sheet" aria-label="INSIGHT各項目">
+        {INSIGHT_BOTTOM_ITEMS.map(([key,label])=><button type="button" key={key} className={itemTab===key?"active":""} onClick={()=>chooseItem(key)}>{label}</button>)}
+      </div>:null}
       <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
       <button className={insightActive ? "active" : ""} onClick={insightPress} aria-label="INSIGHT"><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
@@ -93,14 +119,20 @@ function BottomNav({ route }: { route: string }) {
       .app-route-shell>*{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       .app-route-shell.is-member .iv8-apprefresh{display:none!important}
       .app-route-shell.is-admin{padding-bottom:24px!important}.app-route-shell.is-admin>*{scroll-margin-bottom:0!important}
-      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
+      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border:1px solid #2b394c;border-bottom:0;border-radius:20px 20px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
       .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;font:inherit;border-radius:12px;overflow:hidden}
+      .app-bottom-nav.has-items{padding-top:5px}
+      .app-bottom-item-toggle{grid-column:1/-1!important;display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;min-height:36px!important;margin:0 8px 4px!important;padding:0 11px!important;border:1px solid rgba(107,218,243,.48)!important;border-radius:999px!important;background:linear-gradient(145deg,rgba(13,45,60,.96),rgba(8,27,39,.96))!important;color:#e8fbff!important;box-shadow:0 0 18px rgba(74,200,230,.12),inset 0 1px rgba(255,255,255,.04)!important}
+      .app-bottom-item-toggle span{font-size:15px!important;color:#9ceeff}.app-bottom-item-toggle b{font-size:9px!important;text-align:left!important}.app-bottom-item-toggle small{font-size:6.5px;color:#91adbc;white-space:nowrap}
+      .app-bottom-item-sheet{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;padding:6px;border:1px solid rgba(103,210,237,.28);border-radius:15px;background:rgba(5,17,26,.985);backdrop-filter:blur(18px);box-shadow:0 18px 48px rgba(0,0,0,.46),0 0 28px rgba(67,190,220,.08)}
+      .app-bottom-item-sheet button{min-height:38px!important;padding:4px 2px!important;border:1px solid rgba(101,199,225,.28)!important;border-radius:9px!important;background:#0f2736!important;color:#d9edf6!important;font-size:7px!important;font-weight:900!important}
+      .app-bottom-item-sheet button.active{border-color:#83eaff!important;background:linear-gradient(145deg,#246681,#17475e)!important;color:#fff!important;box-shadow:0 0 16px rgba(83,211,242,.24)!important}
       .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;max-width:100%;text-align:center;white-space:nowrap}
       .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
       .app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid rgba(43,57,76,.45)}
       .app-bottom-nav button.note-exit b{color:#c9f4ff}
       .app-session-check{min-height:56vh;display:grid;place-items:center;padding:28px}.app-session-check>div{width:min(420px,100%);border:1px solid #2c4055;border-radius:16px;background:#0c1621;padding:18px;color:#dce9f5;text-align:center}.app-session-check b{display:block;color:#8feaff;margin-bottom:6px}.app-session-check span{font-size:12px;color:#91a3b7}
-      @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:420px}.app-route-shell{padding-bottom:94px}}
+      @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:18px;padding-bottom:6px;width:460px}.app-route-shell{padding-bottom:104px}}
     `}</style>
   </>;
 }
