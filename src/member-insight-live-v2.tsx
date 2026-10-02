@@ -24,6 +24,7 @@ import "./insight-live-scan-theater.css";
 import "./insight-visual-overhaul-v3.css";
 import "./insight-integrated-hero-v6.css";
 import "./insight-cinematic-overdrive-v7.css";
+import "./insight-motion-discipline-v8.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
