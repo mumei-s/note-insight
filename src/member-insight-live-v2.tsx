@@ -308,7 +308,7 @@ export function MemberInsightLiveV2(){
     analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
-    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div className="miv5-hero-signature" aria-hidden="true"><strong>INSIGHT</strong><i/><em/></div>
+    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
       <div className="miv5-creator-avatar">{creatorImage?<img src={creatorImage} alt="" referrerPolicy="no-referrer"/>:<span>{[...creatorName][0]||"人"}</span>}</div>
       <div className="miv5-creator-copy">
         <h1>{creatorName}</h1>
@@ -321,14 +321,14 @@ export function MemberInsightLiveV2(){
     </section>
     <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
-      <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div className="miv5-launcher-halo" aria-hidden="true"><strong>INSIGHT</strong><i/><i/></div>
-        <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b><small>精度・取得元</small></a>
+      <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div className="miv5-launcher-halo" aria-hidden="true"><i/><i/></div>
+        <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b></a>
         <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b><small>公式＋INSIGHT</small></button>
+          <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b></button>
           <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
         </div>
         <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
-          <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b><small>通知履歴</small></button>
+          <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b></button>
           <a className="gear" href={noteId?`./notification-browser-install.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
         </div>
       </nav>
