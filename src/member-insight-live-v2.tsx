@@ -321,11 +321,8 @@ export function MemberInsightLiveV2(){
           <a className={`miv5-install-link ${notificationUpdateAvailable||notificationMissing?"update-ready":""}`} href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"本人通知を更新":notificationMissing?"＋ 本人通知を設定":"⚙ 設定・更新状態"}</a>
         </div>
         <div className={`miv5-source-card dashboard ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
-          <button className="miv5-source-main" onClick={()=>openMode("analysis")} aria-label="分析を開く。設定・更新は下の丸いボタンです">{dashboardCardContent}</button>
-          <a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"ダッシュボードを更新":"設定・更新を確認"}</a>
-        </div>
-        <div className="miv5-source-card detail">
-          <button className="miv5-source-main" onClick={()=>window.location.assign("./install-free-analysis.html")}><strong>🔎 詳細分析</strong><small>インストール不要</small><span>本人通知・Dashboard同期なし</span></button>
+          <button className="miv5-source-main" onClick={()=>openMode("analysis")} aria-label="分析を開く">{dashboardCardContent}</button>
+          <div className="miv5-dashboard-links"><a className="miv5-install-link miv5-dashboard-settings" href={dashboardSetupHref}>{dashboardUpdateAvailable?"更新":"設定"}</a><a className="miv5-install-link miv5-detail-link" href="./install-free-analysis.html">詳細</a></div>
         </div>
       </div>
     </section>
