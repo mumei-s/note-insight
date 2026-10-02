@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.03.10",
+  "appVersion": "2026.10.03.11",
   "notificationVersion": "3.6.21",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-03T05:12:00+09:00",
+  "releasedAt": "2026-10-03T05:40:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "注意は浮遊表示を廃止し専用ページへ移動。本人通知の上段ボタンは常に設定へ統一し、設定画面内でnote公式🔔操作パネルON/OFFを切替可能。下ナビはTOP/メイン/INSIGHT/noteへの4等分。TOP=サイトTOP、メイン=スキ履歴、INSIGHT=現在画面先頭。Cinematic Overdrive v7で背景光源・流光・ホログラム・モード遷移・ナビ発光を強化。",
+  "note": "下ナビをTOP/INSIGHT/noteへの3等分へ戻し、INSIGHTを原点（スキ履歴）に統一。上部ヘッダーと3パネルの縦幅を圧縮。常時アニメを停止し、演出は画面遷移・初回読込・差分確認・追加反映時だけに限定。コメント全履歴は完成スナップショットをIndexedDBに1世代保存し、再訪時は即表示して追加分だけ取得。スキ履歴・スキ順位・コメント順位も保存済みレスポンスを先に表示して裏で再確認。",
   "dmVersion": "1.4.9",
   "dmLabel": "DM同期"
 }
