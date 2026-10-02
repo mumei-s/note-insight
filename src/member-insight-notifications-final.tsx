@@ -76,7 +76,8 @@ export function NotificationFormatAlerts({ownerSession=false}:{ownerSession?:boo
 
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
-  const[rows,setRows]=useState<Row[]>(()=>freshBoard(accountKey(memberNoteId)).slice(0,PAGE)),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
+  const initialRows=readBoard(accountKey(memberNoteId)).slice(0,PAGE);
+  const[rows,setRows]=useState<Row[]>(initialRows),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(initialRows.length),[loading,setLoading]=useState(initialRows.length===0),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
   const[serverSync,setServerSync]=useState({received:0,confirmed:0,source:""});
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:""});
@@ -157,15 +158,15 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(!finished){setRepairStatus(`${checked}件まで確認・停止中（続きから再開できます）`);return false}
       try{localStorage.removeItem(progressKey);localStorage.setItem(`mumei-notification-reclassify-version:${account}`,CLASSIFIER_VERSION)}catch{}
       setRepairStatus(remaining?.remaining?`確認済み：今回${checked}件を確認・${moved}件を分類。未解決${remaining.remaining}件（本文不足${remaining.insufficient}件）。`:checked?`${checked}件を確認・${moved}件を分類。未解決はありません。`:"新たに再分類する通知はありません。");window.dispatchEvent(new Event("mumei-notification-classified"));
-      void load(1,view.current.kind,false,view.current.selectedDay);return true;
+      void load(1,view.current.kind,true,view.current.selectedDay);return true;
     }catch(e){setRepairStatus(`途中保存済み・再開できます：${e instanceof Error?e.message:String(e)}`);return false}
     finally{repairRunning.current=false;setReclassifying(false)}
   }
   useEffect(()=>()=>{repairStop.current=true},[]);
   useEffect(()=>{
     const account=accountKey(memberNoteId),cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|1`);
-    const fresh=freshBoard(account),instant=cached?.rows||(fresh.length?fresh.filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).slice(0,PAGE):[]);
-    if(instant.length)setRows(instant);setPage(1);setLoading(true);
+    const saved=filterBoard(account,kind,selectedDay),instant=cached?.rows||saved,hasSavedBoard=readBoard(account).length>0;
+    setRows(instant);setPage(1);setLoading(!cached&&!hasSavedBoard&&instant.length===0);
     if(cached){setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
     recentRequest.current.watermark="";void refreshRecent();void load(1,kind,true,selectedDay);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
