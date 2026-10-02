@@ -81,7 +81,7 @@ function BottomNav({ route }: { route: string }) {
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
       <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
-      <button className={insightActive ? "active" : ""} onClick={() => goTo(hasMember ? "dashboard" : "access/insight")}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
+      <button className={insightActive ? "active" : ""} onClick={() => { if (!hasMember) { goTo("access/insight"); return; } if (route !== "dashboard") { goTo("dashboard"); return; } sessionStorage.removeItem("mumei-insight-entry-mode"); window.dispatchEvent(new Event("mumei-insight-root")); }}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
     <style>{`
