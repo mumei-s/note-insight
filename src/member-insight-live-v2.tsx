@@ -72,15 +72,23 @@ export function MemberInsightLiveV2(){
   const explicitMode=requestedMode();
   const initialMode:Mode=explicitMode||"normal";
   const initialNavTab=String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[itemDockOpen,setItemDockOpen]=useState(false),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
   const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
+  useEffect(()=>{
+    const select=(event:Event)=>{
+      const tab=String((event as CustomEvent).detail||"");
+      if(INSIGHT_NAV_ITEMS.some(([key])=>key===tab))handleUnifiedTab(tab);
+    };
+    window.addEventListener("mumei-insight-select-item",select as EventListener);
+    return()=>window.removeEventListener("mumei-insight-select-item",select as EventListener);
+  },[mode]);
   function openMode(next:Mode){
-    setItemDockOpen(false);
+    window.dispatchEvent(new Event("mumei-insight-close-items"));
     if(mode===next){
       if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
       return;
@@ -99,7 +107,7 @@ export function MemberInsightLiveV2(){
     if(mode===next&&current.insightTab===tab){setNavTab(tab);return}
     window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
     window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
-    setNavTab(tab);setItemDockOpen(false);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
+    setNavTab(tab);setMode(next);window.dispatchEvent(new Event("mumei-insight-close-items"));window.dispatchEvent(new Event("mumei-insight-navigation"));
   }
   async function loadOfficial(){try{setOfficial(await post(MEMBER,"dashboard",{},45_000))}catch{/* 個別パネルは利用可能 */}}
   async function checkRelease(){
@@ -321,7 +329,7 @@ export function MemberInsightLiveV2(){
     </section>
     <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
-      <nav className="miv5-launcher" aria-label="INSIGHTランチャー">
+      <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div className="miv5-launcher-halo" aria-hidden="true"><i/><i/></div>
         <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b></a>
         <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b></button>
@@ -333,14 +341,6 @@ export function MemberInsightLiveV2(){
         </div>
       </nav>
     </section>
-    <div className={`miv5-item-dock ${itemDockOpen?"open":""}`} aria-label="INSIGHT項目ランチャー">
-      <button type="button" className="miv5-item-dock-toggle" aria-expanded={itemDockOpen} onClick={()=>setItemDockOpen(v=>!v)}>
-        <span>{itemDockOpen?"⌄":"▦"}</span><b>{itemDockOpen?"項目を閉じる":"項目を選ぶ"}</b><small>現在：{INSIGHT_NAV_ITEMS.find(([key])=>key===navTab)?.[1]||"スキ履歴"}</small>
-      </button>
-      {itemDockOpen?<nav className="miv5-item-sheet" aria-label="INSIGHT各項目">
-        {INSIGHT_NAV_ITEMS.map(([key,label])=><button key={key} className={(mode!=="analysis"&&navTab===key)?"active":""} onClick={()=>{handleUnifiedTab(key);setItemDockOpen(false)}}>{label}</button>)}
-      </nav>:null}
-    </div>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
     <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={true} onTabChange={handleUnifiedTab}/></div>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision} noteId={noteId}/></div>:null}
