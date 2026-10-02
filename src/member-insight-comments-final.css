@@ -14,3 +14,20 @@
  .micf-tools>button{min-height:36px}
  .micf-head{gap:7px}.micf-head>strong{flex:0 0 auto}
 }
+
+
+/* Large history rendering guard */
+.micf-more{
+  display:grid;
+  place-items:center;
+  gap:3px;
+  min-height:64px;
+  margin:10px 0 4px;
+  border:1px dashed #31536a;
+  border-radius:12px;
+  background:#08151e;
+  color:#bfefff;
+  text-align:center;
+}
+.micf-more b{font-size:10px}
+.micf-more span{font-size:8px;color:#819eae}
