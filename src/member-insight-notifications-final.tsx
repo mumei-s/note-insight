@@ -165,7 +165,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   useEffect(()=>{
     const account=accountKey(memberNoteId),cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|1`);
     const fresh=freshBoard(account),instant=cached?.rows||(fresh.length?fresh.filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).slice(0,PAGE):[]);
-    setRows(instant);setPage(1);setLoading(!instant.length);
+    if(instant.length)setRows(instant);setPage(1);setLoading(true);
     if(cached){setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
     recentRequest.current.watermark="";void refreshRecent();void load(1,kind,true,selectedDay);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
@@ -196,7 +196,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const readerLabel=readerMode==="full"||readerMode==="window"?"取得範囲の保存完了":readerMode==="delta"?"差分完了":readerMode==="partial"?"途中保存":readerMode==="error"?"読取エラー":readerStatus?.historyComplete?"全履歴確認済み":"端末状態 未確認";
   const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   const serverLabel=syncAt?"サーバー反映済み":"サーバー反映 未確認";
-  return <section id="minf-notifications" className="minf">
+  return <section id="minf-notifications" className="minf" aria-busy={loading}>
     <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><p>保存済み通知を即表示。分類・日付・精度確認は1パネルにまとめています。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
     <div className={`minf-quick ${readerClass}`} role="status">
       <div className="minf-quick-save"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>{readerLabel}</i></div>

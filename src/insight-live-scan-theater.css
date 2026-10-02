@@ -1,0 +1,114 @@
+/* INSIGHT Live Scan Theater
+   Busy state is visual-only: current data remains visible and interactive. */
+
+.mis2[aria-busy="true"],
+.minf[aria-busy="true"],
+.micf[aria-busy="true"]{
+  position:relative;
+  overflow:hidden;
+}
+
+.mis2[aria-busy="true"]::before,
+.minf[aria-busy="true"]::before,
+.micf[aria-busy="true"]::before{
+  content:"LIVE SCAN";
+  position:sticky;
+  top:8px;
+  z-index:80;
+  float:right;
+  margin:8px 10px 0 0;
+  padding:6px 10px 6px 24px;
+  border:1px solid rgba(113,224,248,.45);
+  border-radius:999px;
+  background:rgba(5,20,29,.88);
+  backdrop-filter:blur(12px);
+  color:#c8f7ff;
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.12em;
+  box-shadow:0 0 24px rgba(91,213,240,.14);
+  pointer-events:none;
+}
+
+.mis2[aria-busy="true"]::after,
+.minf[aria-busy="true"]::after,
+.micf[aria-busy="true"]::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  height:2px;
+  z-index:79;
+  pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,#6de5ff 44%,#fff 50%,#6de5ff 56%,transparent 100%);
+  box-shadow:0 0 18px rgba(109,229,255,.8);
+  animation:insightScanLine 1.65s ease-in-out infinite;
+}
+
+.mis2[aria-busy="true"]>*,
+.minf[aria-busy="true"]>*,
+.micf[aria-busy="true"]>*{
+  transition:opacity .18s ease,filter .18s ease;
+}
+
+/* Keep data readable; signal background refresh without blanking it. */
+.mis2[aria-busy="true"] .mis2-list,
+.minf[aria-busy="true"] .minf-list,
+.micf[aria-busy="true"] .micf-list,
+.micf[aria-busy="true"] .micf-thread-list{
+  opacity:.78;
+  filter:saturate(.9);
+}
+
+.mis2[aria-busy="true"] .mis2-head::after,
+.minf[aria-busy="true"] .minf-head::after,
+.micf[aria-busy="true"] .micf-head::after{
+  content:"更新中・現在の表示はそのまま使えます";
+  display:block;
+  margin-top:4px;
+  color:#78dff6;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+
+/* A small activity beacon inside the scan pill */
+.mis2[aria-busy="true"]::before,
+.minf[aria-busy="true"]::before,
+.micf[aria-busy="true"]::before{
+  background-image:
+    radial-gradient(circle at 12px 50%,#75f0a9 0 3px,transparent 4px),
+    linear-gradient(rgba(5,20,29,.88),rgba(5,20,29,.88));
+}
+
+@keyframes insightScanLine{
+  0%{transform:translateY(0);opacity:.25}
+  45%{opacity:1}
+  100%{transform:translateY(520px);opacity:.18}
+}
+
+@media(max-width:620px){
+  .mis2[aria-busy="true"]::before,
+  .minf[aria-busy="true"]::before,
+  .micf[aria-busy="true"]::before{
+    top:5px;
+    margin-right:6px;
+    font-size:8px;
+    padding:5px 8px 5px 21px;
+  }
+  .mis2[aria-busy="true"]::after,
+  .minf[aria-busy="true"]::after,
+  .micf[aria-busy="true"]::after{
+    animation-duration:1.4s;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .mis2[aria-busy="true"]::after,
+  .minf[aria-busy="true"]::after,
+  .micf[aria-busy="true"]::after{
+    animation:none!important;
+    opacity:.55;
+  }
+}
