@@ -35,6 +35,7 @@ const MANUAL_UI_TIMEOUT=32_000;
 const ENTRY_MODE_KEY="mumei-insight-entry-mode";
 const APP_UPDATE_RESULT_KEY="mumei-insight-app-update-result";
 const AUTO_SYNC_KEY="mumei-insight-last-auto-public-sync";
+const AUTO_SYNC_ENABLED_KEY="mumei-insight-auto-sync-enabled";
 const RELATION_SYNC_KEY="mumei-insight-last-auto-relation-sync";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
@@ -63,12 +64,13 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 
 export function MemberInsightLiveV2(){
   const initialMode=requestedMode()||(MODES.has(history.state?.insightMode)?history.state.insightMode as Mode:"normal");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("保存済み公開データを表示中・自動更新待機"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[official,setOfficial]=useState<any>(null),[autoSyncEnabled,setAutoSyncEnabled]=useState(()=>localStorage.getItem(AUTO_SYNC_ENABLED_KEY)!=="0");
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0);
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(AUTO_SYNC_KEY)||0)),lastRelationRun=useRef(Number(localStorage.getItem(RELATION_SYNC_KEY)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
+  useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
   function openMode(next:Mode){
     if(mode===next){
       if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
@@ -125,6 +127,7 @@ export function MemberInsightLiveV2(){
   async function publicSync(force=false){
     const now=Date.now();
     if(running.current&&!force)return false;
+    if(!force&&!autoSyncEnabledRef.current)return false;
     if(!force&&(document.visibilityState!=="visible"||now-lastInteraction.current<QUIET_MS||now-lastRun.current<AUTO_MS))return false;
     if(force&&running.current)publicSyncController.current?.abort();
     const run=++publicSyncRun.current,controller=new AbortController();
@@ -295,8 +298,9 @@ export function MemberInsightLiveV2(){
     {appUpdateAvailable?<section className="miv5-app-update" aria-label="INSIGHT本体の更新"><div><strong>INSIGHT本体の更新</strong><small>新しい画面・機能を適用します</small><small>現在 v{CURRENT_INSIGHT_APP_VERSION} ／ 新しい版 v{appLatest}</small></div><button disabled={appBusy} onClick={()=>void updateInsightApp()}>{appBusy?"確認中…":"INSIGHT本体を更新"}</button></section>:null}
     <section className="miv5-update" aria-label="INSIGHT主要機能">
       <div className="miv5-source-grid">
-        <div className="miv5-source-card normal">
-          <button className="miv5-source-main" aria-busy={dataBusy} aria-label="公開データを再取得" onClick={()=>void manualDataRefresh()}><strong>{dataBusy?"読込中…":"✓ 通常データ"}</strong><small>公開記事・スキなどを再取得</small><span>{dataBusy?"保存済みデータは利用可能":status}</span></button>
+        <div className="miv5-source-card normal miv5-auto-card">
+          <div className="miv5-source-main miv5-source-status" aria-busy={dataBusy}><strong>通常データ</strong><small>{autoSyncEnabled?"自動更新 ON":"自動更新 OFF"}</small><span>{dataBusy?"保存済みデータを表示したまま更新中":status}</span></div>
+          <div className="miv5-auto-actions"><button type="button" aria-pressed={autoSyncEnabled} onClick={()=>setAutoSyncEnabled(v=>!v)}>{autoSyncEnabled?"自動 ON":"自動 OFF"}</button><button type="button" disabled={dataBusy} onClick={()=>void manualDataRefresh()}>{dataBusy?"更新中":"今すぐ更新"}</button></div>
         </div>
         <div className={`miv5-source-card notice ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
           <button className="miv5-source-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>{notificationInstalled?`この端末 v${notificationInstalled}`:"この端末は未導入"}{notificationUpdateAvailable&&notificationLatest?` → v${notificationLatest}`:""}</small><span>通知履歴・追加分析</span></button>
