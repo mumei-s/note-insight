@@ -23,6 +23,7 @@ import "./insight-cinematic-shell-v2.css";
 import "./insight-live-scan-theater.css";
 import "./insight-visual-overhaul-v3.css";
 import "./insight-integrated-hero-v6.css";
+import "./insight-cinematic-overdrive-v7.css";
 import "./insight-ux-v12";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
@@ -305,15 +306,7 @@ export function MemberInsightLiveV2(){
       </div>
       <div className="ic6-top-panels" aria-label="INSIGHT主要機能">
         <div className="ic6-panel caution">
-          <details className="ic6-caution-details">
-            <summary><strong>⚠ 注意</strong><small>精度・取得元</small></summary>
-            <section className="ic6-caution-body">
-              <div><b>📊 公式Dashboardを正本</b><span>PV・スキ・コメント・売上・流入など、公式Dashboardで取得できる数値は公式値を最優先で表示します。</span></div>
-              <div><b>公開データは補助</b><span>公開記事・公開スキ・公開コメント・フォロー等は履歴や人物確認の補助に使います。</span></div>
-              <div><b>🔔 本人通知</b><span>通知欄にしかないメンシプ参加・掲示板返信・購入/支援などを追加取得します。</span></div>
-              <div className="precision"><b>重要</b><span>限定公開・削除済み・note側集計更新の時間差などにより、公開履歴件数と公式Dashboard総数が一致しない場合があります。</span></div>
-            </section>
-          </details>
+          <a className="ic6-panel-main ic6-caution-link" href="./insight-data-notice.html"><strong>⚠ 注意</strong><small>精度・取得元</small></a>
         </div>
         <div className={`ic6-panel analysis ${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button className="ic6-panel-main" onClick={()=>openMode("analysis")} aria-label="分析を開く"><strong>📊 分析</strong><small>公式Dashboard＋INSIGHT</small></button>
@@ -321,7 +314,7 @@ export function MemberInsightLiveV2(){
         </div>
         <div className={`ic6-panel notification ${notificationUpdateAvailable?"needs-update":notificationMissing?"needs-install":""}`}>
           <button className="ic6-panel-main" onClick={()=>openMode("notifications")}><strong>🔔 本人通知</strong><small>通知履歴・追加分析</small></button>
-          <a className="ic6-panel-mini" href="./tool-setup.html?from=insight">{notificationUpdateAvailable?"更新":notificationMissing?"設定":"設定"}</a>
+          <a className="ic6-panel-mini" href={noteId?`./notification-filter-settings.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}`:"./tool-setup.html?from=insight"}>設定</a>
         </div>
       </div>
       <div className="ic2-horizon" aria-hidden="true"><span/><span/><span/></div>
