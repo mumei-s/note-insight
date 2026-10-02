@@ -78,25 +78,32 @@ function BottomNav({ route }: { route: string }) {
     window.addEventListener("popstate",sync);
     return()=>{window.removeEventListener("mumei-insight-navigation",sync);window.removeEventListener("mumei-insight-root",sync);window.removeEventListener("popstate",sync)}
   },[route]);
+
   function topPress() {
-    if(route==="dashboard"&&insightSubMode){
-      sessionStorage.removeItem("mumei-insight-entry-mode");
-      window.dispatchEvent(new Event("mumei-insight-root"));
-      return;
-    }
-    if (route !== "home") {
-      goTo("home");
-      return;
-    }
+    if (route !== "home") { goTo("home"); return; }
     window.scrollTo({ top: 0, behavior: "auto" });
   }
-  function notePress() {
-    window.location.assign("https://note.com/");
+  function mainPress() {
+    if (!hasMember) { goTo("access/insight"); return; }
+    if (route !== "dashboard") { goTo("dashboard"); return; }
+    sessionStorage.removeItem("mumei-insight-entry-mode");
+    window.dispatchEvent(new Event("mumei-insight-root"));
   }
+  function insightPress() {
+    if (!hasMember) { goTo("access/insight"); return; }
+    if (route !== "dashboard") { goTo("dashboard"); return; }
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+  function notePress() { window.location.assign("https://note.com/"); }
+
+  const mainActive=route==="dashboard"&&!insightSubMode;
+  const insightContext=insightActive&&!mainActive;
+
   return <>
     <nav className="app-bottom-nav" aria-label="メインナビゲーション">
-      <button className={route === "home" ? "active" : insightSubMode ? "main-return" : ""} onClick={topPress} aria-label={insightSubMode?"INSIGHTメインへ":"TOP"}><span aria-hidden="true">{insightSubMode?"↩":"⌂"}</span><b>{insightSubMode?"メイン":"TOP"}</b></button>
-      <button className={insightActive ? "active" : ""} onClick={() => { if (!hasMember) { goTo("access/insight"); return; } if (route !== "dashboard") { goTo("dashboard"); return; } sessionStorage.removeItem("mumei-insight-entry-mode"); window.dispatchEvent(new Event("mumei-insight-root")); }}><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
+      <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
+      <button className={mainActive ? "active main-return" : "main-return"} onClick={mainPress} aria-label="INSIGHTメイン"><span aria-hidden="true">↩</span><b>メイン</b></button>
+      <button className={insightContext ? "active" : ""} onClick={insightPress} aria-label="INSIGHT"><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
     <style>{`
@@ -105,12 +112,15 @@ function BottomNav({ route }: { route: string }) {
       .app-route-shell>*{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       .app-route-shell.is-member .iv8-apprefresh{display:none!important}
       .app-route-shell.is-admin{padding-bottom:24px!important}.app-route-shell.is-admin>*{scroll-margin-bottom:0!important}
-      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:1fr 1fr .62fr;gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
-      .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:grid;place-items:center;align-content:center;gap:2px;font:inherit;border-radius:12px}
-      .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;white-space:nowrap}.app-bottom-nav button em{font-style:normal;font-size:7px;line-height:1.1;color:#ffe09a;white-space:nowrap}
-      .app-bottom-nav button{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden}.app-bottom-nav button b{max-width:100%;text-align:center;white-space:nowrap}.app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}.app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid #243246;border-radius:0}.app-bottom-nav button.note-exit b{color:#c9f4ff}
+      .app-bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:9999;width:min(720px,100%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:rgba(7,10,16,.96);backdrop-filter:blur(16px);border-top:1px solid #2b394c;box-shadow:0 -10px 30px rgba(0,0,0,.28)}
+      .app-bottom-nav button{min-width:0;min-height:54px;border:0;background:transparent;color:#8796aa;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;font:inherit;border-radius:12px;overflow:hidden}
+      .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;max-width:100%;text-align:center;white-space:nowrap}
+      .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
+      .app-bottom-nav button.main-return{color:#b9eefe;border-left:1px solid rgba(43,57,76,.45)}
+      .app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid rgba(43,57,76,.45)}
+      .app-bottom-nav button.note-exit b{color:#c9f4ff}
       .app-session-check{min-height:56vh;display:grid;place-items:center;padding:28px}.app-session-check>div{width:min(420px,100%);border:1px solid #2c4055;border-radius:16px;background:#0c1621;padding:18px;color:#dce9f5;text-align:center}.app-session-check b{display:block;color:#8feaff;margin-bottom:6px}.app-session-check span{font-size:12px;color:#91a3b7}
-      @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:420px}.app-route-shell{padding-bottom:94px}}
+      @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:16px;padding-bottom:6px;width:520px}.app-route-shell{padding-bottom:94px}}
     `}</style>
   </>;
 }
