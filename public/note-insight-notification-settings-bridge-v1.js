@@ -1,10 +1,10 @@
 (function(){
 'use strict';
-if(location.hostname!=='mumei-s.github.io'||!['/note-insight/notification-filter-settings.html','/note-insight/notification-settings.html'].includes(location.pathname))return;
+if(location.hostname!=='mumei-s.github.io'||!['/note-insight/notification-filter-settings.html','/note-insight/notification-browser-install.html'].includes(location.pathname))return;
 if(window.__mumeiNotificationSettingsBridgeV1Loaded)return;window.__mumeiNotificationSettingsBridgeV1Loaded=true;
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',PROFILE='mumei_insight_magazine_mute_profiles_v5:',RETURN='mumei_insight_return_bell_v1',PANEL='mumei_insight_notification_panel_enabled_v1';
-const PAGE=location.pathname.endsWith('/notification-settings.html')?'mumei-notification-settings-page-v1':'mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
-const account=(new URLSearchParams(location.search).get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
+const PAGE=location.pathname.endsWith('/notification-browser-install.html')?'mumei-notification-install-page-v1':'mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
+const params=new URLSearchParams(location.search),account=(params.get('notificationAccount')||params.get('account')||'').replace(/^@/,'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);throw new Error('設定を保存できません。本人通知ツールを確認してください')}
@@ -35,5 +35,5 @@ addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==P
  }catch(err){send('error',{message:clean(err?.message||'設定処理に失敗しました')})}
 })()});
 void load();
-window.__mumeiNotificationSettingsBridgeV1={version:'1.1.2',load};
+window.__mumeiNotificationSettingsBridgeV1={version:'1.1.3',load};
 })();
