@@ -94,6 +94,10 @@ test('黒い切替待ち画面はナビ非表示中も装飾され、確認完�
   const nav = w.document.querySelector('.app-bottom-nav');
   assert.deepEqual([...nav.querySelectorAll('button[aria-label]')].map(el => el.getAttribute('aria-label')), ['TOP', 'INSIGHT', 'noteへ']);
   assert.equal(nav.querySelector('.app-bottom-item-toggle').textContent.includes('項目を選ぶ'), true);
+  await React.act(async () => nav.querySelector('.app-bottom-item-toggle').click());
+  const labels = [...nav.querySelectorAll('.app-bottom-item-sheet button')].map(el => el.textContent);
+  assert.ok(labels.includes('本人通知'));
+  assert.ok(!labels.includes('通知'));
   assert.equal(requests, 1, '演出が認証を再実行しない');
   assert.equal(w.location.hash, '#dashboard');
   assert.equal(w.localStorage.getItem('fixture-token-key'), 'fixture-session');
@@ -131,7 +135,8 @@ test('上部演出だけを再生し、操作ボタンと保存データ画面�
   assert.ok(w.document.querySelector('.miv5.mode-normal'));
   assert.equal(w.history.state.insightTab, 'likes');
   assert.equal(mounts, 1);
-  assert.match(w.document.querySelector('[aria-label="本人通知設定"]').href, /notification-connection\.html/);
+  assert.equal(w.document.querySelector('.miv5-launcher-item.notification .gear'), null);
+  assert.ok(w.document.querySelector('[aria-label="本人通知の連携と履歴を開く"]'));
 });
 
 test('上部文字の二重透明化を防ぎ、下部は静止、動きを減らす設定にも対応する', () => {
@@ -145,4 +150,25 @@ test('上部文字の二重透明化を防ぎ、下部は静止、動きを減�
   const ast = ts.createSourceFile('App.tsx', appSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const scene = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'InsightSessionTransition').getText(ast);
   assert.doesNotMatch(scene, /setTimeout|fetch|localStorage|history|goTo\(/, '待機画面は表示専用');
+});
+
+test('クリエイターの名前・画像・noteリンクはアカウント切替に追従する', async t => {
+  const { w, root } = setup(t);
+  let current = { noteId: 'creator_a', displayName: 'Creator A', imageUrl: 'https://example.com/a.png' };
+  const fetch = async () => ({ ok: true, json: async () => ({ ok: true, member: { ...current }, rows: [], total: 0 }) });
+  const { MemberInsightLiveV2 } = load(liveSource, w, fetch, {
+    './insight-account-store': { INSIGHT_TOKEN_KEY: 'fixture-token-key', currentStoredInsightAccount: () => current, setAccessIntent() {} },
+  });
+  const verify = () => {
+    assert.equal(w.document.querySelector('.miv5-creator-copy h1').textContent, current.displayName);
+    assert.equal(w.document.querySelector('.miv5-creator-copy a').href, 'https://note.com/' + current.noteId);
+    assert.equal(w.document.querySelector('.miv5-creator-avatar img').src, current.imageUrl);
+    assert.deepEqual([...w.document.querySelectorAll('.miv5-hero-signature strong span')].map(el => el.textContent), ['無名 S note', 'INSIGHT']);
+  };
+  await React.act(async () => root.render(React.createElement(MemberInsightLiveV2, { key: current.noteId })));
+  verify();
+  current = { noteId: 'creator_b', displayName: 'Creator B', imageUrl: 'https://example.com/b.png' };
+  await React.act(async () => root.render(React.createElement(MemberInsightLiveV2, { key: current.noteId })));
+  verify();
+  assert.doesNotMatch(w.document.querySelector('.miv5-creator-copy').textContent, /Creator A|ss_yr/);
 });

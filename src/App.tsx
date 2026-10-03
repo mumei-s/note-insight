@@ -31,7 +31,7 @@ const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
 const NOTIFICATION_AUTO_RESULT_KEY = "mumei-notification-auto-result-v2924";
 const ADMIN_ROUTES = new Set(["owner", "manage", "owner-insight"]);
 const PARTICIPANT_CHILD_ROUTES = new Set(["dashboard", "evidence", "article-likes", "dashboard-legacy"]);
-const INSIGHT_BOTTOM_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","通知"],["dm","DM"],["articles","記事"]] as const;
+const INSIGHT_BOTTOM_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","本人通知"],["dm","DM"],["articles","記事"]] as const;
 const DETACHED_ROUTES = new Set(["catalog", "catalog-admin", "member", "battle", "game-admin", "insight-admin", "access/catalog"]);
 
 function rawRoute() { return window.location.hash.replace(/^#\/?/, "") || "home"; }

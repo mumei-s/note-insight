@@ -57,7 +57,7 @@ jobs:
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
       - name: Check entry motion and retained notification behavior
-        run: node --test tests/insight-entry-motion-v20.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs
+        run: node --test tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs
       # Emergency maintenance deploy: full regressions resume before maintenance is lifted.
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
