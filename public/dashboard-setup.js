@@ -26,6 +26,10 @@
   if(/\/note-insight\/(?:index\.html)?$/.test(backUrl.pathname)){backUrl.searchParams.set('insightMode','analysis');backUrl.hash='dashboard'}
   const back=backUrl.href;
   $('back').href=back;$('returnAnalysis').href=back;
+  const normalAnalysis=$('normalAnalysis'),combinedAnalysis=$('combinedAnalysis');
+  if(normalAnalysis){const url=new URL('./install-free-analysis-v3.html',location.href);url.searchParams.set('return',back);if(q.get('account'))url.searchParams.set('account',q.get('account'));normalAnalysis.href=url.href}
+  if(combinedAnalysis){const url=new URL(back);url.searchParams.set('analysisPanel','verdict');combinedAnalysis.href=url.href}
+  $('notificationAnalysisSettings')?.addEventListener('click',()=>{const details=$('noticeTitle')?.closest('details');if(details)details.open=true});
   const self=new URL(location.href);self.searchParams.delete('verifyTs');self.searchParams.set('auto','0');
   const noticeUrl=new URL('./notification-browser-install.html',location.href);noticeUrl.searchParams.set('return',self.href);$('installNotice').href=noticeUrl.href;
   function text(el,value){if(el.textContent!==value)el.textContent=value}

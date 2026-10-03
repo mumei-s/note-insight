@@ -3,10 +3,16 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>ダッシュボードの更新・設定｜INSIGHT</title>
-<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><script src="./dashboard-setup.js?v=2026092719" defer></script>
+<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><link rel="stylesheet" href="./analysis-settings-menu.css?v=2026100326"><script src="./dashboard-setup.js?v=2026100326" defer></script>
 </head><body><main class="wrap">
 <a id="back" class="back" href="./?insightMode=analysis#dashboard">← 分析へ戻る</a>
-<header><p class="eyebrow">INSIGHT / ツールの更新</p><h1>ダッシュボードの更新・設定</h1><p class="lead">連携と読み込みは、下のボタンから開始します。</p></header>
+<header><p class="eyebrow">INSIGHT / SETTINGS</p><h1>分析の設定・更新</h1><p class="lead">ツールの連携・更新と分析の入口をまとめています。</p></header>
+<nav class="analysis-settings-menu" aria-label="分析の使用・設定">
+<a id="normalAnalysis" href="./install-free-analysis-v3.html"><b>通常分析</b><small>ツール不要・公開データで利用</small></a>
+<a href="#dashboardTitle"><b>ダッシュボード INSIGHTプロ</b><small>公式データの連携・更新</small></a>
+<a id="notificationAnalysisSettings" href="#noticeTitle"><b>本人通知分析</b><small>本人通知ツールの連携・更新</small></a>
+<a id="combinedAnalysis" href="./?insightMode=analysis&analysisPanel=verdict#dashboard"><b>総合判定</b><small>公式値・記事評価・通知の照合</small></a>
+</nav>
 <section class="card read-card" aria-labelledby="dashboardTitle">
 <div class="tool-head"><h2 id="dashboardTitle">ダッシュボード同期</h2><span id="dashBadge" class="badge">確認中</span></div>
 <p id="account" class="hint"></p>
