@@ -130,7 +130,7 @@ async function scan(opts={}){
   if(e?.code==='READ_STOPPED'){health('読込を停止しました','done',{scanning:false,stopping:true,partial:true,...e.progress});return 0}
   const delay=e?.retryable?Math.min(300000,30000*2**Math.min(retryFailures++,4)):0;
   retryAt=delay?Date.now()+delay:Infinity;
-  health(`${String(e?.message||e)}｜${delay?Math.ceil(delay/1000)+'秒後に再試行':'再試行で続きから再開'}`,'error',{scanning:false,retryAt,...e.progress});return 0;
+  health(`${String(e?.message||e)}｜${delay?Math.ceil(delay/1000)+'秒後に再試行':'再試行で続きから再開'}`,'error',{scanning:false,retryAt,errorCode:String(e?.code||''),...e.progress});return 0;
  }
  finally{scanning=false;if(pendingCapture&&!stop)scheduleAuto(80)}
 }

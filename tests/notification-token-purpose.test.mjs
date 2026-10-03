@@ -18,9 +18,9 @@ async function backend(tokens=[],codes=[]){
  await mod.link(()=>new vm.SyntheticModule(['createClient'],function(){this.setExport('createClient',()=>db)},{context:ctx}));await mod.evaluate();
  return {tables,call:async(body,auth=true)=>{const r=await handle(new Request('https://example.test',{method:'POST',headers:auth?{'X-Owner-Token':'fixture'}:{},body:JSON.stringify({...body,role:'owner'})}));return {status:r.status,body:await r.json()}}};
 }
-test('本人通知の再連携でDashboard・DM・別アカウントの連携を失効させない',async()=>{
+test('本人通知の再連携で既存端末・Dashboard・DM・別アカウントを失効させない',async()=>{
  const rows=[token('note_notification_auto_sync'),token('note_dashboard_sync'),token('note_dm_sync'),token('note_notification_auto_sync','another')],h=await backend(rows),r=await h.call({action:'issue'});
- assert.equal(r.status,200);assert.ok(rows[0].revoked_at);assert.deepEqual(rows.slice(1,4).map(x=>x.revoked_at),[null,null,null]);assert.equal(rows.at(-1).purpose,'note_notification_auto_sync');
+ assert.equal(r.status,200);assert.deepEqual(rows.slice(0,4).map(x=>x.revoked_at),[null,null,null,null]);assert.equal(rows.at(-1).purpose,'note_notification_auto_sync');
 });
 test('Dashboardだけ連携済みでも本人通知を連携済みと誤判定しない',async()=>{const h=await backend([token('note_dashboard_sync')]),r=await h.call({action:'stats'});assert.equal(r.status,200);assert.equal(r.body.paired,false)});
 test('本人通知のコード再発行でDashboardの待機中コードを削除しない',async()=>{

@@ -1,2 +1,2 @@
-INSIGHT 2026.09.22.12 / notification 3.6.6 / dashboard 1.4.9 / DM 1.4.5
-Direct dashboard connection, actionable analysis update card, compact setup and contextual extension fees.
+INSIGHT 2026.10.03.19 / notification 3.6.23 / dashboard 1.6.4 / DM 1.4.9
+Notification re-pairing, multi-device long sessions, central adapter entry, collapsible bell controls, and a readable sharing thumbnail.

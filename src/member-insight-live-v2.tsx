@@ -302,6 +302,7 @@ export function MemberInsightLiveV2(){
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||"").toLowerCase();
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
+  const notificationConnectionHref=`./notification-connection.html?from=insight${noteId?`&notificationAccount=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
   const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span></>;
   const account=currentStoredInsightAccount();
   const creatorId=String(official?.member?.noteId||account?.noteId||noteId||"").replace(/^@/,"");
@@ -336,8 +337,8 @@ export function MemberInsightLiveV2(){
           <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
         </div>
         <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
-          <button type="button" onClick={()=>openMode("notifications")} aria-label="本人通知を開く"><span className="icon">🔔</span><b>本人通知</b></button>
-          <a className="gear" href={noteId?`./notification-browser-install.html?from=insight&notificationAccount=${encodeURIComponent(noteId)}&return=${encodeURIComponent(window.location.href)}`:"./tool-setup.html?from=insight"} aria-label="本人通知設定">⚙</a>
+          <button type="button" onClick={()=>{window.location.href=notificationConnectionHref}} aria-label="本人通知の連携と履歴を開く"><span className="icon">🔔</span><b>本人通知</b></button>
+          <a className="gear" href={notificationConnectionHref} aria-label="本人通知設定">⚙</a>
         </div>
       </nav>
     </section>

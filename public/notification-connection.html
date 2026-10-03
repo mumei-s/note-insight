@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <meta name="theme-color" content="#071019">
+  <title>本人通知の連携｜INSIGHT</title>
+  <style>
+    *{box-sizing:border-box}html{background:#071019;color-scheme:dark}body{margin:0;background:radial-gradient(circle at 75% -10%,#183b43 0,transparent 38%),linear-gradient(180deg,#071019,#06090e 68%);color:#edf7fb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}.wrap{width:min(760px,calc(100% - 24px));margin:auto;padding:16px 0 max(54px,env(safe-area-inset-bottom))}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}.back,.switch{color:#9ceeff;text-decoration:none;font-weight:900;font-size:12px}.switch{color:#98aabd}.hero{padding:44px 2px 16px}.eyebrow{margin:0 0 8px;color:#8feaff;font-size:10px;font-weight:950;letter-spacing:.16em}.hero h1{margin:0;font-size:clamp(34px,8vw,58px);line-height:1.02;letter-spacing:-.045em}.hero>p{max-width:650px;margin:14px 0 0;color:#a6b8c7;line-height:1.8;font-size:14px}.separate{margin-top:18px;border:1px solid #35556a;border-radius:15px;background:#0b1924;padding:13px 14px;color:#c9e8f2;font-size:12px;line-height:1.7}.separate b{color:#b9ff56}.panel{margin-top:12px;border:1px solid #293b4b;border-radius:20px;background:linear-gradient(180deg,rgba(16,28,39,.96),rgba(9,16,24,.96));padding:17px;box-shadow:0 18px 45px rgba(0,0,0,.2)}.panel h2{margin:0 0 11px;font-size:18px}.state{display:grid;gap:7px}.state-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid #293e50;border-radius:12px;background:#08121b;padding:11px 12px}.state-row span{color:#8fa4b4;font-size:11px}.state-row strong{font-size:12px;text-align:right}.good{color:#adffbf}.warn{color:#ffd17c}.bad{color:#ff9faf}.message{margin:11px 0 0;border:1px solid #355268;border-radius:12px;background:#0c1a25;padding:11px;color:#c7e2ed;font-size:12px;font-weight:750;line-height:1.65}.message.success{border-color:#3f7650;background:#0c2013;color:#c8ffd3}.message.error{border-color:#814852;background:#291219;color:#ffd1d8}.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.btn{min-height:50px;border:1px solid #456277;border-radius:13px;background:#112331;color:#eafaff;padding:0 13px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;font:950 13px/1.3 system-ui;cursor:pointer}.btn.primary{background:#b8ff4b;border-color:#b8ff4b;color:#111a08}.btn.cyan{background:#73ddf7;border-color:#73ddf7;color:#07151a}.btn:disabled{opacity:.4;cursor:default}.hint{margin:10px 1px 0;color:#8095a7;font-size:10px;line-height:1.65}.steps{display:grid;gap:8px;counter-reset:step}.step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start}.step:before{counter-increment:step;content:counter(step);width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#173041;color:#9ceeff;font-size:11px;font-weight:950}.step b{display:block;font-size:13px}.step p{margin:3px 0 0;color:#8fa2b2;font-size:11px;line-height:1.6}.matrix{display:grid;grid-template-columns:1fr 1fr;gap:7px}.matrix div{min-height:54px;border:1px solid #293e50;border-radius:12px;background:#09131c;padding:10px}.matrix b,.matrix span{display:block}.matrix b{font-size:11px}.matrix span{margin-top:4px;font-size:9px;color:#93a7b7}.matrix .yes{color:#adffbf}.matrix .no{color:#ffabb5}.architecture{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch}.architecture>div{border:1px solid #2e4556;border-radius:13px;background:#09131c;padding:12px}.architecture b{display:block;font-size:12px}.architecture p{margin:5px 0 0;color:#8ea2b3;font-size:10px;line-height:1.55}.architecture>i{align-self:center;color:#77dff7;font-style:normal;font-weight:950}.foot{margin:16px 2px 0;color:#728797;font-size:10px;line-height:1.65}@media(max-width:580px){.hero{padding-top:32px}.actions,.matrix{grid-template-columns:1fr}.architecture{grid-template-columns:1fr}.architecture>i{text-align:center;transform:rotate(90deg)}.panel{padding:15px}.top .switch{max-width:45%;text-align:right}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <nav class="top"><a class="back" id="back" href="./?insightMode=notifications#dashboard">← INSIGHTへ戻る</a><a class="switch" href="./#access/insight">INSIGHTアカウント切替</a></nav>
+  <header class="hero">
+    <p class="eyebrow">PRIVATE NOTIFICATION ADAPTER</p>
+    <h1>本人通知を<br>この端末へ連携</h1>
+    <p>INSIGHT本体はURLを開くだけで利用できます。自分のベル通知を保存したい人だけ、この付帯ツールを追加します。GitHubの作成や複製は不要です。</p>
+    <div class="separate"><b>「INSIGHT参加中」と「本人通知の端末連携」は別状態です。</b><br>参加中でも、端末側の連携キーが無効なら本人通知だけ再連携します。INSIGHTへ再申請する必要はありません。</div>
+  </header>
+
+  <section class="panel" aria-labelledby="stateTitle">
+    <h2 id="stateTitle">現在の状態</h2>
+    <div class="state">
+      <div class="state-row"><span>INSIGHT</span><strong id="loginState">ログイン確認中…</strong></div>
+      <div class="state-row"><span>対象note</span><strong id="accountState">確認中…</strong></div>
+      <div class="state-row"><span>本人通知</span><strong id="pairState">連携確認中…</strong></div>
+      <div class="state-row"><span>この端末の付帯ツール</span><strong id="toolState">確認中…</strong></div>
+    </div>
+    <div id="message" class="message" role="status" aria-live="polite">認証状態を確認しています。</div>
+    <div class="actions">
+      <button id="pair" class="btn primary" type="button" disabled>この端末を本人通知へ連携</button>
+      <a id="history" class="btn" href="./?insightMode=notifications#dashboard">保存済み本人通知を開く</a>
+    </div>
+    <p class="hint">再連携しても他の端末は切れません。新しいキーは10年間有効です。明示的な退会時だけ、本人通知を含む全端末の認証を停止します。</p>
+  </section>
+
+  <section class="panel">
+    <h2>初回だけ：付帯ツールを入れる</h2>
+    <div class="steps">
+      <div class="step"><div><b>対応ブラウザでインストール／更新</b><p>端末内のnote画面で動きます。noteのパスワードやログインCookieをINSIGHTへ送りません。</p></div></div>
+      <div class="step"><div><b>上の「この端末を連携」を押す</b><p>ログイン中のnote本人IDとINSIGHT参加IDが一致した時だけ連携します。</p></div></div>
+      <div class="step"><div><b>noteのベルを開いて「読込」</b><p>通知を端末内で読み取り、本人専用のINSIGHTへ保存します。</p></div></div>
+    </div>
+    <div class="actions"><a id="install" class="btn cyan" href="./notification-browser-install.html">付帯ツールをインストール／更新</a><a id="openNote" class="btn" href="https://note.com/" target="_blank" rel="noreferrer">noteを開く</a></div>
+  </section>
+
+  <section class="panel">
+    <h2>本体と付帯ツールの役割</h2>
+    <div class="architecture">
+      <div><b>INSIGHT本体</b><p>共通URLから利用。参加認証、公開データ分析、保存済み本人通知の表示を担当。</p></div>
+      <i>＋</i>
+      <div><b>本人通知アダプター</b><p>必要な人だけ導入。自分がログイン中のnoteベルを端末内で読み、INSIGHTへ渡します。</p></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>対応環境</h2>
+    <div class="matrix">
+      <div><b>iPhone / iPad Safari</b><span class="yes">Userscripts等で対応</span></div>
+      <div><b>Android Edge / Firefox</b><span class="yes">ユーザースクリプトで対応</span></div>
+      <div><b>PC / Mac</b><span class="yes">主要ブラウザで対応</span></div>
+      <div><b>Android Chrome / アプリ内ブラウザ</b><span class="no">付帯ツール非対応・ブラウザ切替が必要</span></div>
+    </div>
+  </section>
+  <p class="foot">本人通知はnoteの公開APIではなく、本人が閲覧できるログイン済み画面から取得します。note側の仕様変更時には付帯ツールの更新が必要になる場合があります。</p>
+</main>
+<script>
+(()=>{
+'use strict';
+const ENDPOINT='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-import-token';
+const MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',TOOL='mumei-notification-tool-version';
+const q=new URLSearchParams(location.search),member=localStorage.getItem(MEMBER)||'',owner=localStorage.getItem(OWNER)||'';
+const role=q.get('role')==='owner'||(!member&&owner)?'owner':'member',token=role==='owner'?owner:member;
+const el=id=>document.getElementById(id),loginState=el('loginState'),accountState=el('accountState'),pairState=el('pairState'),toolState=el('toolState'),message=el('message'),pair=el('pair'),install=el('install'),openNote=el('openNote'),history=el('history'),back=el('back');
+let account='',latest='',paired=false;
+function safeReturn(raw){try{const u=new URL(String(raw||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+const requestedReturn=safeReturn(q.get('return'));if(requestedReturn)back.href=requestedReturn;
+function cleanAccount(v){return String(v||'').trim().replace(/^@/,'').toLowerCase()}
+function setMessage(text,kind=''){message.textContent=text;message.className='message'+(kind?' '+kind:'')}
+function transientFree(){const u=new URL(location.href);for(const k of ['notificationPaired','notificationPairError','notificationExpectedAccount','notificationActualAccount','notificationNoteAccount'])u.searchParams.delete(k);return u}
+function errorText(code){const expected=cleanAccount(q.get('notificationExpectedAccount')),actual=cleanAccount(q.get('notificationActualAccount'));if(code==='NOTE_LOGIN_REQUIRED')return`noteへログインできていません。@${expected||account||'対象アカウント'} でnoteへログインしてから、もう一度連携してください。`;if(code==='NOTE_ACCOUNT_MISMATCH')return`noteは @${actual||'別アカウント'} でログイン中です。対象の @${expected||account} に切り替えてから再連携してください。`;if(code==='PAIR_CODE_EXPIRED')return'連携用の一時コードが期限切れです。この画面からもう一度連携してください。';if(code==='USERSCRIPT_REQUEST_UNAVAILABLE')return'付帯ツールが動いていません。インストール／更新後に再連携してください。';return`本人通知の連携を完了できませんでした（${code}）。もう一度お試しください。`}
+async function call(action){const headers={'Content-Type':'application/json'};headers[role==='owner'?'X-Owner-Token':'X-Insight-Token']=token;const r=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify({action,role}),cache:'no-store'}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||`HTTP_${r.status}`);return p}
+function setupLinks(){const here=transientFree(),i=new URL('./notification-browser-install.html',location.href);i.searchParams.set('from','notification-connection');if(account)i.searchParams.set('notificationAccount',account);i.searchParams.set('return',here.href);install.href=i.href;if(account){openNote.href=`https://note.com/${encodeURIComponent(account)}`;history.href=`./?insightMode=notifications&notificationAccount=${encodeURIComponent(account)}#dashboard`}}
+async function release(){try{const r=await fetch(`./insight-release.json?ts=${Date.now()}`,{cache:'no-store'}),p=await r.json();latest=String(p.notificationVersion||'')}catch{}const installed=String(localStorage.getItem(TOOL)||'');if(installed){toolState.textContent=latest&&installed!==latest?`v${installed}（更新あり v${latest}）`:`v${installed}`;toolState.className=latest&&installed!==latest?'warn':'good'}else{toolState.textContent=latest?`未確認（最新 v${latest}）`:'未確認';toolState.className='warn'}return installed}
+async function load(){const installed=await release(),pairResult=q.get('notificationPaired'),pairError=q.get('notificationPairError');if(!token){loginState.textContent='ログインが必要';loginState.className='bad';accountState.textContent='—';pairState.textContent='確認不可';pairState.className='warn';setMessage('INSIGHTへログインしてください。参加中でも、このブラウザにログイン情報がない場合はアカウント切替から復帰できます。','error');pair.textContent='INSIGHTへログイン';pair.disabled=false;pair.onclick=()=>{location.href='./#access/insight'};setupLinks();return}
+ try{const p=await call('stats');account=cleanAccount(p.noteId);paired=Boolean(p.paired);loginState.textContent='ログイン中・参加中';loginState.className='good';accountState.textContent=`@${account}`;accountState.className='good';pairState.textContent=paired?`連携済み${Number(p.activeDeviceCount||0)>1?`（${Number(p.activeDeviceCount)}端末）`:''}`:'この端末は要連携';pairState.className=paired?'good':'warn';pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';pair.disabled=false;setupLinks();if(pairResult==='1'){setMessage(`@${account} の本人通知をこの端末へ連携しました。他の端末の連携は維持されます。`,'success')}else if(pairError){setMessage(errorText(pairError),'error')}else if(!installed){setMessage('先に付帯ツールをインストール／更新し、その後この端末を連携してください。')}else if(paired){setMessage(`@${account} は本人通知へ連携済みです。期限切れ表示が出た端末では「再連携」を1回押してください。`,'success')}else setMessage('付帯ツールを確認後、この端末を本人通知へ連携してください。')
+ }catch(e){loginState.textContent='再ログインが必要';loginState.className='bad';accountState.textContent='確認できません';pairState.textContent='確認不可';pairState.className='warn';setMessage(`INSIGHT認証を確認できません（${String(e?.message||e)}）。アカウント切替からログインを復帰してください。`,'error');pair.textContent='INSIGHTへログイン';pair.disabled=false;pair.onclick=()=>{location.href='./#access/insight'};setupLinks()}}
+pair.addEventListener('click',async()=>{if(!token||!account)return;pair.disabled=true;pair.textContent='一時コード発行中…';setMessage('note本人IDと照合する準備をしています。');try{const p=await call('pair-start'),u=new URL(p.noteUrl),backUrl=transientFree();backUrl.searchParams.set('notificationAccount',account);u.searchParams.set('mumei_return',backUrl.href);setMessage(`noteへ移動します。@${account} でログイン中か確認してください。`);location.href=u.href}catch(e){pair.disabled=false;pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';setMessage(`連携を開始できません（${String(e?.message||e)}）。`,'error')}});
+void load();
+})();
+</script>
+</body>
+</html>
