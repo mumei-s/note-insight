@@ -1,3 +1,4 @@
+import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount, setAccessIntent } from "./insight-account-store";
 import {
@@ -29,6 +30,7 @@ import "./insight-creator-first-v9.css";
 import "./insight-launcher-v10.css";
 import "./insight-thumb-dock-v11.css";
 import "./insight-ux-v12";
+import "./member-insight-analysis-scene.css";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
@@ -316,9 +318,9 @@ export function MemberInsightLiveV2(){
     notifications:{title:"本人通知",sub:"本人通知を履歴として残す"},
     analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
-  return <div className={`miv5 mode-${mode}`}>
+  return <div className={`miv5 mode-${mode}`}><div key={`light:${mode}:${navTab}`} className="miv5-page-light" aria-hidden="true"/>
     <section className="miv5-creator-first" aria-label="現在のクリエイター"><div key={`${mode}:${navTab}`} className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
-      <div className="miv5-creator-avatar">{creatorImage?<img src={creatorImage} alt="" referrerPolicy="no-referrer"/>:<span>{[...creatorName][0]||"人"}</span>}</div>
+      <div className="miv5-creator-avatar"><CreatorAvatar name={creatorName} image={creatorImage} noteId={creatorId} eager/></div>
       <div className="miv5-creator-copy">
         <h1>{creatorName}</h1>
         {creatorId?<a href={`https://note.com/${creatorId}`} target="_blank" rel="noreferrer">@{creatorId} ↗</a>:null}
