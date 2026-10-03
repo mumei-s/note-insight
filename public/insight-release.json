@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.04.2",
+  "appVersion": "2026.10.04.3",
   "notificationVersion": "3.6.25",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-04T07:35:57+09:00",
+  "releasedAt": "2026-10-04T08:47:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "承認済み・本人確認前でも別PCやスマホから本人確認を続行できます。機種変更・再ログインで同じnote IDの確認コードを発行し、再申請・再承認なしで利用開始できます。",
+  "note": "分析4パネルの余白と設定の押下範囲を修正。noteの同期パネルONとINSIGHTプロの入口を区別し、一覧に浮かび上がりときらめきを追加。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

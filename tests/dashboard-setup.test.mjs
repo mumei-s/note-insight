@@ -172,3 +172,9 @@ test('設定の4項目は本人IDと分析への戻り先を維持し、本人�
  const combined=new URL(h.get('combinedAnalysis').href);assert.equal(combined.searchParams.get('analysisPanel'),'verdict');assert.equal(combined.hash,'#dashboard');
  const details=h.get('noticeTitle').closest('details');assert.equal(details.open,false);h.get('notificationAnalysisSettings').click();await settle();assert.equal(details.open,true);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);assert.equal(h.nav.length,0);
 });
+
+ test('同期パネルONとINSIGHTプロの入口を分け、選択済み通知からもダッシュボードに戻れる',async t=>{
+  const h=page(t,{active:release.dashboardVersion,query:'?account=tester&auto=0&return='+encodeURIComponent(base+'?insightMode=analysis&analysisPanel=notifications#dashboard')});await settle();
+  const target=new URL(h.get('openDashboardAnalysis').href);assert.equal(target.searchParams.get('analysisPanel'),'dashboard');assert.equal(target.searchParams.get('insightMode'),'analysis');assert.equal(target.hash,'#dashboard');
+  assert.match(h.get('dashboardFeatureStatus').textContent,/noteの公式ダッシュボード/);
+ });

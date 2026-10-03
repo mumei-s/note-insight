@@ -16,7 +16,7 @@
   function readFeatureState(){const state=document.documentElement.getAttribute('data-mumei-dashboard-feature');if(state==='on'||state==='off'){const next=state==='on';if(featureSeen&&next!==featureEnabled)featureRevision++;featureSeen=true;featureEnabled=next}}
   const canRead=()=>featureSeen&&featureEnabled;
   function requestFeature(){window.postMessage({source:'mumei-dashboard-feature-ui-v1',type:'get'},location.origin)}
-  function paintFeature(){const button=featureToggle();if(!button)return;button.disabled=!featureSeen||featureBusy;button.setAttribute('aria-pressed',String(featureEnabled));text(button,featureBusy?'切替中…':featureSeen?'ダッシュボード パネル '+(featureEnabled?'ON':'OFF'):'ダッシュボード パネル 確認中');text($('dashboardFeatureStatus'),featureError||(!featureSeen?'同期ツールを更新すると、パネルと自動読込を切り替えられます。':featureEnabled?'ON：公式ダッシュボードで自動読み込みします。':'OFF：パネルと自動読込を停止しています。再読込・再訪後もOFFを保持します。'))}
+  function paintFeature(){const button=featureToggle();if(!button)return;button.disabled=!featureSeen||featureBusy;button.setAttribute('aria-pressed',String(featureEnabled));text(button,featureBusy?'切替中…':featureSeen?'noteの同期パネル '+(featureEnabled?'ON':'OFF'):'noteの同期パネル 確認中');text($('dashboardFeatureStatus'),featureError||(!featureSeen?'同期ツールを更新すると、パネルと自動読込を切り替えられます。':featureEnabled?'ON：noteの公式ダッシュボードに同期パネルを表示し、自動で読み込みます。保存済みのINSIGHTプロは下から開けます。':'OFF：パネルと自動読込を停止しています。再読込・再訪後もOFFを保持します。'))}
   window.addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!=='mumei-dashboard-feature-bridge-v1'||e.data.type!=='state')return;if(featureSeen&&featureEnabled!==Boolean(e.data.enabled))featureRevision++;featureSeen=true;featureEnabled=Boolean(e.data.enabled);featureBusy=false;featureError=String(e.data.error||'');paint()});
   featureToggle()?.addEventListener('click',()=>{if(!featureSeen||featureBusy)return;featureBusy=true;featureError='';paintFeature();window.postMessage({source:'mumei-dashboard-feature-ui-v1',type:'set',enabled:!featureEnabled},location.origin)});
 
@@ -26,6 +26,7 @@
   if(/\/note-insight\/(?:index\.html)?$/.test(backUrl.pathname)){backUrl.searchParams.set('insightMode','analysis');backUrl.hash='dashboard'}
   const back=backUrl.href;
   $('back').href=back;$('returnAnalysis').href=back;
+  const dashboardAnalysis=$('openDashboardAnalysis');if(dashboardAnalysis){const url=new URL(back);url.searchParams.set('insightMode','analysis');url.searchParams.set('analysisPanel','dashboard');url.hash='dashboard';dashboardAnalysis.href=url.href}
   const normalAnalysis=$('normalAnalysis'),combinedAnalysis=$('combinedAnalysis');
   if(normalAnalysis){const url=new URL('./install-free-analysis-v3.html',location.href);url.searchParams.set('return',back);if(q.get('account'))url.searchParams.set('account',q.get('account'));normalAnalysis.href=url.href}
   if(combinedAnalysis){const url=new URL(back);url.searchParams.set('analysisPanel','verdict');combinedAnalysis.href=url.href}
