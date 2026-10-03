@@ -4,21 +4,53 @@ import { useVisibleMotion } from "./insight-visible-motion";
 import "./hub-participant-showcase.css";
 
 type Person = { id: string; noteId: string; name: string; image: string | null; profileUrl: string };
+const PLAYBACK_STORAGE_KEY = "mumei-insight-participant-playback-v1";
+const PLAYBACK_SPEEDS = [
+  { level: 1, seconds: 4 }, { level: 2, seconds: 3 }, { level: 3, seconds: 2 },
+  { level: 4, seconds: 1.5 }, { level: 5, seconds: 1 },
+];
+type PlaybackSettings = { version: 1; speedLevel: number; paused: boolean; explicitPlayback: boolean; personId: string };
+function readPlaybackSettings(): PlaybackSettings {
+  const defaults: PlaybackSettings = { version: 1, speedLevel: 3, paused: false, explicitPlayback: false, personId: "" };
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(PLAYBACK_STORAGE_KEY) || "null") as Partial<PlaybackSettings> | null;
+    if (!saved || saved.version !== 1) return defaults;
+    return {
+      ...defaults,
+      speedLevel: PLAYBACK_SPEEDS.some(speed => speed.level === saved.speedLevel) ? saved.speedLevel! : defaults.speedLevel,
+      paused: saved.paused === true,
+      explicitPlayback: saved.explicitPlayback === true,
+      personId: typeof saved.personId === "string" ? saved.personId : "",
+    };
+  } catch { return defaults; }
+}
+function nextPersonId(people: Person[], current: string, step: number) {
+  if (!people.length) return current;
+  const position = Math.max(0, people.findIndex(person => person.id === current));
+  return people[(position + step + people.length) % people.length].id;
+}
 export function ParticipantShowcase({ people }: { people: Person[] }) {
-  const { ref, motion, reduced, visible, foreground } = useVisibleMotion(), [index, setIndex] = useState(0), [paused, setPaused] = useState(false), [hover, setHover] = useState(false);
-  const [explicitPlayback, setExplicitPlayback] = useState(false), [listOpen, setListOpen] = useState(false), [query, setQuery] = useState("");
+  const [saved] = useState(readPlaybackSettings);
+  const { ref, motion, reduced, visible, foreground } = useVisibleMotion(), [personId, setPersonId] = useState(saved.personId), [paused, setPaused] = useState(saved.paused), [hover, setHover] = useState(false);
+  const [speedLevel, setSpeedLevel] = useState(saved.speedLevel), [explicitPlayback, setExplicitPlayback] = useState(saved.explicitPlayback), [listOpen, setListOpen] = useState(false), [query, setQuery] = useState("");
   const listId = useId(), requestedPlayback = !paused && (!reduced || explicitPlayback), playing = requestedPlayback && visible && foreground && !hover;
-  const [start, setStart] = useState<{ x: number; y: number } | null>(null), active = people.length ? index % people.length : 0, person = people[active];
+  const speed = PLAYBACK_SPEEDS.find(speed => speed.level === speedLevel)!;
+  const [start, setStart] = useState<{ x: number; y: number } | null>(null), active = Math.max(0, people.findIndex(person => person.id === personId)), person = people[active];
+  const activePersonId = person?.id;
+  useEffect(() => {
+    if (!activePersonId) return;
+    try { window.localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify({ version: 1, speedLevel, paused, explicitPlayback, personId: activePersonId } satisfies PlaybackSettings)); } catch {}
+  }, [speedLevel, paused, explicitPlayback, activePersonId]);
   useEffect(() => {
     if (!playing || people.length < 2) return;
-    const timer = window.setInterval(() => setIndex(i => (i + 1) % people.length), 5800);
+    const timer = window.setInterval(() => setPersonId(current => nextPersonId(people, current, 1)), speed.seconds * 1000);
     return () => window.clearInterval(timer);
-  }, [playing, people.length]);
-  function move(step: number) { setPaused(true); setIndex(i => (i + step + people.length) % people.length); }
+  }, [playing, people, speed.seconds]);
+  function move(step: number) { setPaused(true); setPersonId(current => nextPersonId(people, current, step)); }
   function togglePlayback() {
     if (requestedPlayback) { setPaused(true); return; }
     setHover(false); setExplicitPlayback(true); setPaused(false);
-    setIndex(i => (i + 1) % people.length);
+    setPersonId(current => nextPersonId(people, current, 1));
   }
   function toggleList() { setListOpen(value => !value); setQuery(""); }
   const term = query.trim().toLowerCase(), listed = term ? people.filter(p => `${p.name} @${p.noteId}`.toLowerCase().includes(term)) : people;
@@ -29,7 +61,7 @@ export function ParticipantShowcase({ people }: { people: Person[] }) {
       if (start) { const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) move(dx < 0 ? 1 : -1); } setStart(null);
     }} onPointerCancel={() => setStart(null)}>
       <div className="hub-showcase-rails" aria-hidden="true"><i/><i/><i/></div>
-      <div className="hub-showcase-satellites">{satellites.map((p, slot) => <button key={p.id} className={p.id === person.id ? "selected" : ""} style={{ "--x": `${satellites.length === 1 ? 50 : 12 + slot * 76 / (satellites.length - 1)}%`, "--y": `${54 - slot * 9}px` } as CSSProperties} onClick={() => { setPaused(true); setIndex(people.findIndex(x => x.id === p.id)); }} aria-label={`${p.name}を表示`} aria-pressed={p.id === person.id}><CreatorAvatar person={p} name={p.name} className="hub-showcase-satellite-avatar"/><span>{p.name}</span></button>)}</div>
+      <div className="hub-showcase-satellites">{satellites.map((p, slot) => <button key={p.id} className={p.id === person.id ? "selected" : ""} style={{ "--x": `${satellites.length === 1 ? 50 : 12 + slot * 76 / (satellites.length - 1)}%`, "--y": `${54 - slot * 9}px` } as CSSProperties} onClick={() => { setPaused(true); setPersonId(p.id); }} aria-label={`${p.name}を表示`} aria-pressed={p.id === person.id}><CreatorAvatar person={p} name={p.name} className="hub-showcase-satellite-avatar"/><span>{p.name}</span></button>)}</div>
       <div className="hub-showcase-plane" aria-hidden="true"/>
       <a key={person.id} className="hub-showcase-focus" href={person.profileUrl} target="_blank" rel="noreferrer" title={`${person.name}のnote`}>
         <div className="hub-showcase-portrait"><CreatorAvatar person={person} name={person.name} className="hub-showcase-avatar" eager/><i aria-hidden="true"/></div>
@@ -38,6 +70,7 @@ export function ParticipantShowcase({ people }: { people: Person[] }) {
       <div key={`particles-${person.id}`} className="hub-showcase-particles" aria-hidden="true">{Array.from({length:7},(_,i)=><i key={i} style={{"--p":i} as CSSProperties}/>)}</div>
     </div>
     <div className="hub-showcase-controls"><button disabled={people.length < 2} onClick={() => move(-1)} aria-label="前のクリエイター">←</button><button disabled={people.length < 2} onClick={togglePlayback} aria-pressed={requestedPlayback}>{requestedPlayback ? "Ⅱ 停止" : "▶ 再生"}</button><span aria-live={requestedPlayback ? "off" : "polite"}>{active + 1} / {people.length}</span><button disabled={people.length < 2} onClick={() => move(1)} aria-label="次のクリエイター">→</button></div>
+    <div className="hub-showcase-speed"><label><span>切替速度</span><select value={speedLevel} onChange={e => setSpeedLevel(Number(e.target.value))}>{PLAYBACK_SPEEDS.map(speed => <option key={speed.level} value={speed.level}>Lv.{speed.level} · {speed.seconds}秒{speed.level === 3 ? "（標準）" : ""}</option>)}</select></label><small>選んだ設定を維持</small></div>
     <section className="hub-showcase-all" data-open={listOpen ? "true" : "false"}>
       <button className="hub-showcase-list-toggle" onClick={toggleList} aria-expanded={listOpen} aria-controls={listId}>
         <span>参加者一覧</span><b>{people.length}名</b><em>{listOpen ? "閉じる" : "全員を見る"}</em><i aria-hidden="true">⌄</i>

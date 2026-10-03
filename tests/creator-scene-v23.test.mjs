@@ -72,6 +72,91 @@ function playbackFixture(h) {
   return timers;
 }
 const playbackPeople = Array.from({ length: 3 }, (_, i) => ({ id: `${i}`, noteId: `person_${i}`, name: `参加者${i}`, image: `https://example.com/${i}.png`, profileUrl: `https://note.com/person_${i}` }));
+const playbackKey = 'mumei-insight-participant-playback-v1';
+function speedTimers(h) {
+  const timers = new Map(); let id = 0;
+  h.w.setInterval = (callback, delay) => { timers.set(++id, { callback, delay }); return id; };
+  h.w.clearInterval = timer => timers.delete(timer);
+  return timers;
+}
+async function chooseSpeed(h, level) {
+  await React.act(async () => {
+    const select = h.w.document.querySelector('.hub-showcase-speed select');
+    select.value = String(level);
+    select.dispatchEvent(new h.w.Event('change', { bubbles: true }));
+    await pause();
+  });
+}
+
+test('速度5段階をすぐにタイマーへ反映し、タイマーが重複せず停止中の速度変更でも再生しない', async t => {
+  const h = await sceneFixture(t), timers = speedTimers(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '3');
+  assert.equal([...timers.values()][0].delay, 2000);
+  for (const [level, delay] of [[1, 4000], [2, 3000], [3, 2000], [4, 1500], [5, 1000]]) {
+    const oldTimer = [...timers.keys()][0];
+    await chooseSpeed(h, level);
+    assert.equal(timers.size, 1);
+    assert.equal(timers.has(oldTimer), false);
+    assert.equal([...timers.values()][0].delay, delay);
+  }
+  await React.act(async () => { [...timers.values()][0].callback(); await pause(); });
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
+  const toggle = h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]');
+  await h.click(toggle);
+  await chooseSpeed(h, 4);
+  assert.equal(timers.size, 0);
+  assert.equal(toggle.getAttribute('aria-pressed'), 'false');
+  await h.click(toggle);
+  assert.equal(timers.size, 1);
+  assert.equal([...timers.values()][0].delay, 1500);
+});
+
+test('ページを戻すと速度・再生状態・表示人物が復元され、読み込み中や参加者の並び替えでも人物を維持する', async t => {
+  const h = await sceneFixture(t), timers = speedTimers(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  await chooseSpeed(h, 5);
+  await h.click(h.w.document.querySelector('[aria-label="次のクリエイター"]'));
+  const saved = JSON.parse(h.w.localStorage.getItem(playbackKey));
+  assert.equal(saved.speedLevel, 5); assert.equal(saved.paused, true); assert.equal(saved.personId, '1');
+  await h.render(() => null, {});
+  assert.equal(timers.size, 0);
+  await h.render(ParticipantShowcase, { people: [] });
+  assert.equal(h.w.localStorage.getItem(playbackKey), JSON.stringify(saved));
+  const reordered = [playbackPeople[2], playbackPeople[0], playbackPeople[1]];
+  await h.render(ParticipantShowcase, { people: reordered });
+  assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '5');
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
+  assert.match(h.w.document.querySelector('.hub-showcase-controls').textContent, /3 \/ 3/);
+  assert.equal(timers.size, 0);
+  await h.click(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]'));
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_2');
+  await h.render(() => null, {});
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  assert.equal(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]').getAttribute('aria-pressed'), 'true');
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_2');
+  assert.equal([...timers.values()][0].delay, 1000);
+  await h.render(ParticipantShowcase, { people: [playbackPeople[0], playbackPeople[1]] });
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_0');
+});
+
+test('保存値が壊れていたり保存が禁止されていても標準速度で表示・切替できる', async t => {
+  const h = await sceneFixture(t), timers = speedTimers(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  for (const raw of ['{broken', 'null', JSON.stringify({ version: 1, speedLevel: 99, paused: 'true', personId: {} }), JSON.stringify({ version: 99, speedLevel: 5 })]) {
+    h.w.localStorage.setItem(playbackKey, raw);
+    await h.render(ParticipantShowcase, { people: playbackPeople });
+    assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '3');
+    assert.equal([...timers.values()][0].delay, 2000);
+    await h.render(() => null, {});
+  }
+  h.w.Storage.prototype.getItem = () => { throw new Error('storage unavailable'); };
+  h.w.Storage.prototype.setItem = () => { throw new Error('storage unavailable'); };
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  await chooseSpeed(h, 5);
+  await React.act(async () => { [...timers.values()][0].callback(); await pause(); });
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
+  assert.equal([...timers.values()][0].delay, 1000);
+});
 
 test('タップ由来のホバーが残っても再生直後に人物が替わり、その後も自動切替を続ける', async t => {
   const h = await sceneFixture(t), timers = playbackFixture(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
