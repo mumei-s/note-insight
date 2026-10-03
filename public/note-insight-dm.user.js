@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT DM同期
 // @namespace    https://github.com/mumei-s/note-insight/dm
-// @version      1.4.9
-// @description  INSIGHT DM同期。note画面を移動させず、親Readerが画面外の実DMルームDOMを直接読んで全件同期します。
+// @version      1.4.10
+// @description  INSIGHT DM同期。表示更新による再読込・点滅を抑え、通常のDM画面と入力欄を保ちながら本文を同期します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -20,7 +20,7 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-account-pair-v1.js?v=100
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-network-v2.js?v=147
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=145
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=1410
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=103
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
@@ -28,7 +28,7 @@
 
 (function(){
 'use strict';
-const VERSION='1.4.9',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
+const VERSION='1.4.10',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(GMKEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(GMKEY,String(v||''))}catch{}}
 function publish(){try{localStorage.setItem(KEY,VERSION);window.dispatchEvent(new Event('mumei-dm-version-changed'))}catch{}}
