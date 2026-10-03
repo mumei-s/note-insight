@@ -26,7 +26,7 @@ function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boo
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
-  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0),messageFlight=useRef<string>(""),listRunning=useRef(false);
+  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0),messageFlight=useRef<string>(""),messageView=useRef<string>(""),listRunning=useRef(false);
   const[messageOwner,setMessageOwner]=useState(""),[messagesLoading,setMessagesLoading]=useState(false);
   useEffect(()=>{const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();if(!id)return;
     const receive=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.source==="mumei-dm-status-bridge"&&event.data?.noteId===id)setReader(event.data.status||null)};
@@ -43,13 +43,14 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
       setSelected(prev=>prev&&filtered.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
     }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{listRunning.current=false;if(!silent)setLoading(false)}
   }
-  async function loadMessages(person:Row|null){
+  async function loadMessages(person:Row|null,silent=false){
     const token=localStorage.getItem(INSIGHT_TOKEN_KEY),key=person?`${token}|${person.person_key}`:'';
     if(key&&messageFlight.current===key)return;
     const seq=++messageRequest.current;
-    if(!person){messageFlight.current='';setMessages([]);setMessageOwner('');setMessagesLoading(false);return}
-    messageFlight.current=key;setMessagesLoading(true);
-    if(messageOwner!==person.person_key){setMessages([]);setMessageOwner(person.person_key)}
+    if(!person){messageFlight.current='';messageView.current='';setMessages([]);setMessageOwner('');setMessagesLoading(false);return}
+    const changed=messageView.current!==key;
+    messageFlight.current=key;if(!silent||changed)setMessagesLoading(true);
+    if(changed){messageView.current=key;setMessages([]);setMessageOwner(person.person_key)}
     const current=()=>seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
     const publish=(rows:Row[])=>{if(!current())return;const seen=new Set<string>();setMessages(rows.filter(r=>{const k=String(r.message_key||r.id||'');if(!k||seen.has(k))return false;seen.add(k);return true}).slice().reverse())};
     try{
@@ -75,7 +76,7 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
   useEffect(()=>{void load(false)},[revision]);
   useEffect(()=>{void loadMessages(selected)},[selected?.person_key,revision]);
   useEffect(()=>{
-    const refresh=()=>{if(document.visibilityState!=="visible")return;void load(true);if(selected)void loadMessages(selected)};
+    const refresh=()=>{if(document.visibilityState!=="visible")return;void load(true);if(selected)void loadMessages(selected,true)};
     const timer=window.setInterval(refresh,2500);
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
     return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh)}
