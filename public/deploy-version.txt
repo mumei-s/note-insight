@@ -1,2 +1,2 @@
-INSIGHT 2026.10.03.19 / notification 3.6.23 / dashboard 1.6.4 / DM 1.4.9
-Notification re-pairing, multi-device long sessions, central adapter entry, collapsible bell controls, and a readable sharing thumbnail.
+INSIGHT 2026.10.03.20 / notification 3.6.23 / dashboard 1.6.4 / DM 1.4.9
+Two-line logo transition during session checking, visible upper background branding and oval light, stationary bottom navigation. Authentication and notification behavior unchanged.
