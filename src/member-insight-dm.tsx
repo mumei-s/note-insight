@@ -1,3 +1,4 @@
+import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import { CURRENT_DM_VERSION, fetchInsightRelease, versionDiffers } from "./insight-release";
@@ -21,7 +22,7 @@ async function post(endpoint:string,body:Record<string,unknown>){
 const feed=(action:string,extra:Record<string,unknown>={})=>post(API,{action,...extra});
 const pair=(action:string,extra:Record<string,unknown>={})=>post(PAIR,{action,...extra});
 const fmt=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
-function Avatar({row}:{row:Row}){const src=String(row.peer_image_url||row.sender_image_url||"");const name=String(row.peer_name||row.sender_name||row.peer_note_id||"DM");return src?<img className="midm-avatar" src={src} alt="" referrerPolicy="no-referrer"/>:<span className="midm-avatar fallback">{name.slice(0,1)}</span>}
+function Avatar({row}:{row:Row}){return <CreatorAvatar person={row} name={String(row.peer_name||row.sender_name||row.peer_note_id||"DM")} className="midm-avatar"/>}
 function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boolean(r.peer_note_id||r.peer_url||r.peer_image_url||(name&&name!=="DM相手"))}
 export function MemberInsightDm({revision=0}:{revision?:number}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
