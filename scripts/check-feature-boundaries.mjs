@@ -25,7 +25,7 @@ const rules = [
   ['notification-insight-ui', (p) => /^src\/(?:insight-notification-ui|member-insight-notifications)/.test(p)],
   ['notification-backend', (p) => /^supabase\/functions\/insight-notification-/.test(p)],
   ['dashboard', (p) => /(?:^|\/)(?:insight-)?dashboard/i.test(p) || /note-insight-dashboard/i.test(p)],
-  ['auth-access', (p) => /^src\/(?:access-portal|insight-account-store)/.test(p) || /^supabase\/functions\/(?:insight-access|insight-access-reactivate|insight-code-login|insight-self-account)/.test(p)],
+  ['auth-access', (p) => /^src\/(?:access-portal|insight-account-store)/.test(p) || /^supabase\/functions\/(?:insight-access|insight-access-reactivate|insight-code-login|insight-self-account|insight-recovery)/.test(p)],
   ['directory-catalog', (p) => p === 'public/directory-member.html' || /^src\/catalog-/.test(p) || /^supabase\/functions\/insight-participants/.test(p)],
   ['favorites', (p) => /favorite/i.test(p)],
   ['games', (p) => /(?:^|\/)(?:game-|creator-world-game|match-game|creator-game-data)/i.test(p)],

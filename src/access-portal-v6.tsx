@@ -39,12 +39,13 @@ function errorText(code: string) {
   const messages: Record<string, string> = {
     NOTE_ID_INVALID: "note IDまたはクリエイターページURLを確認してください。",
     NOTE_ACCOUNT_NOT_FOUND: "そのnoteクリエイターを確認できませんでした。",
+    NOTE_ACCOUNT_MISMATCH: "入力したnote IDとプロフィールが一致しません。もう一度確認してください。",
     APPLICATION_EXISTS: "このnote IDはすでに申請されています。承認待ち状態を確認してください。",
     ALREADY_ACTIVE: "このnote IDは参加中です。新規申請ではなく再ログインしてください。",
     PROFILE_CODE_NOT_FOUND: "自己紹介欄に確認コードがまだ見つかりません。保存後にもう一度押してください。",
     INSIGHT_SESSION_INVALID: "この端末の保存済みログインは失効しています。再ログインしてください。",
     INSIGHT_MEMBER_INACTIVE: "この参加権は現在利用できません。",
-    INSIGHT_MEMBER_NOT_ACTIVE: "このnote IDは現在の参加中アカウントとして確認できません。利用停止中なら参加申請から進めてください。",
+    INSIGHT_MEMBER_NOT_ACTIVE: "承認済み・参加中の登録を確認できません。承認待ちならOWNER承認後に再度お試しください。未申請・利用停止中なら参加申請へ進んでください。",
     RECOVERY_TOKEN_INVALID: "再ログイン確認が失効しました。もう一度コードを発行してください。",
     RECOVERY_NOT_READY: "再ログイン確認が完了済み、または失効しています。もう一度コードを発行してください。",
     WAITING_OWNER_APPROVAL: "OWNER承認待ちです。",
@@ -318,7 +319,7 @@ export function AccessPortalV6() {
       setVerificationCode(state.verificationCode);
       setNoteInput("");
       setStage("recovery-check");
-      setMessage("再ログイン情報をこの端末に保持しました。noteへ移動して戻ってもこの続きから再開できます。");
+      setMessage(app.status === "approved" ? "承認済みの申請が見つかりました。この端末で本人確認を続けられます。再申請・再承認は不要です。" : "再ログイン情報をこの端末に保持しました。noteへ移動して戻ってもこの続きから再開できます。");
     } catch (reason) { setError(errorText(reason instanceof Error ? reason.message : "ACCESS_ERROR")); }
     finally { setSaving(false); }
   }
@@ -365,8 +366,8 @@ export function AccessPortalV6() {
 
     {stage === "approved" && application ? <section className="access2-card"><small className="access2-note">STEP 2 / 2</small><h2>note自己紹介欄で本人確認</h2><Identity app={application} /><p>下の確認コードを一時的にnote自己紹介欄へ入れて保存してください。認証後は削除して元に戻せます。コードをログイン欄へ入力する必要はありません。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyProfile()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
 
-    {stage === "recovery" ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>機種変更・再ログイン</h2><p>参加中のnote IDまたはクリエイターページURLを入れてください。新しい本人確認コードを発行し、この端末に続きの状態を保持します。</p><form onSubmit={startRecovery}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "確認中…" : "本人確認コードを発行"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
+    {stage === "recovery" ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>機種変更・再ログイン</h2><p>承認済み・参加中のnote IDまたはクリエイターページURLを入れてください。別の端末でも初回の本人確認を続けられます。新しい確認コードと続きの状態をこの端末に保持します。</p><form onSubmit={startRecovery}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "確認中…" : "本人確認コードを発行"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
 
-    {stage === "recovery-check" && application ? <section className="access2-card"><small className="access2-note">RE-VERIFY</small><h2>自己紹介欄で再確認</h2><Identity app={application} /><p>下の新しい確認コードを一時的に自己紹介欄へ入れて保存してください。noteへ移動して戻っても、この画面の続きは保持されます。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyRecovery()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
+    {stage === "recovery-check" && application ? <section className="access2-card"><small className="access2-note">{application.status === "approved" ? "STEP 2 / 2" : "RE-VERIFY"}</small><h2>{application.status === "approved" ? "承認済み・本人確認を続ける" : "自己紹介欄で再確認"}</h2><Identity app={application} /><p>下の新しい確認コードを一時的に自己紹介欄へ入れて保存してください。noteへ移動して戻っても、この画面の続きは保持されます。確認後はコードを削除して元に戻せます。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyRecovery()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
   </main></div>;
 }
