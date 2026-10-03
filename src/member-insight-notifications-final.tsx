@@ -1,3 +1,4 @@
+import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import "./member-insight-notifications-final.css";
@@ -57,8 +58,7 @@ function href(r:Row){return String(r.target_url||r.source_url||r.actor_url||"")}
 function targetLabel(r:Row){const u=String(r.target_url||"");if(/\/membership/.test(u))return"メンシプを開く ↗";if(/\/m\//.test(u))return"対象マガジン ↗";if(/\/n\//.test(u))return"対象記事 ↗";return u?"対象ページ ↗":r.actor_url?"相手ページ ↗":""}
 function rowKey(r:Row){return`${displayType(r)}|${canonical(r.raw_text)}|${String(r.actor_url||"").split("?")[0]}|${String(r.occurred_at||"")}`}
 function Avatar({row,selfId}:{row:Row;selfId:string}){
- const name=actorName(row),img=safeActorImage(row.actor_image_url),[failed,setFailed]=useState("");
- const type=displayType(row),top=creatorTop(row.actor_url,selfId),visual=img&&failed!==img?<img className="minf-avatar" src={img} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={()=>setFailed(img)}/>:<span className="minf-avatar fallback" aria-label={name}>{ICON_FALLBACK[type]||([...(name||"")][0]||"🔔")}</span>;
+ const name=actorName(row),top=creatorTop(row.actor_url,selfId),image=safeActorImage(row.actor_image_url),visual=creatorNoteId(row)||image?<CreatorAvatar person={{...row,actor_image_url:image}} name={name} className="minf-avatar"/>:<span className="minf-avatar fallback" aria-label={name}>{ICON_FALLBACK[displayType(row)]||([...(name||"")][0]||"🔔")}</span>;
  return top?<a href={top} target="_blank" rel="noreferrer" aria-label={`${name}のクリエイターページ`}>{visual}</a>:visual;
 }
 
