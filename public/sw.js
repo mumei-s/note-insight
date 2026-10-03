@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v92-compact-analysis-20261003";
+const CACHE_NAME = "mumei-note-insight-v93-owner-dm-retention-20261004";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
