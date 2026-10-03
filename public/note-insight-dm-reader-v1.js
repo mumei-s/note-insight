@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.5';
+const VERSION='1.4.10';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -68,7 +68,7 @@ function scrollHost(root){
 function direction(el,root,me){const meta=clean([el.getAttribute('data-testid'),el.getAttribute('data-direction'),el.getAttribute('class'),el.getAttribute('aria-label')].join(' ')).toLowerCase();if(/(?:outgoing|sent|mine|my-message|from-me|self)/.test(meta))return'outbound';if(/(?:incoming|received|from-them|other)/.test(meta))return'inbound';for(const a of el.querySelectorAll('a[href]')){const id=creatorId(a.getAttribute('href'));if(id)return id===me?'outbound':'inbound'}const rr=root.getBoundingClientRect(),r=el.getBoundingClientRect(),center=r.left+r.width/2;if(center>rr.left+rr.width*.62)return'outbound';if(center<rr.left+rr.width*.38)return'inbound';return'unknown'}
 function messageData(el,threadKey,root,me,duplicateFromNewest=0){const raw=String(el.innerText||el.textContent||'').replace(/\r\n?/g,'\n').trim(),dt=el.querySelector('time[datetime],[datetime]'),tm=dt&&dt.getAttribute('datetime')||relativeTime(raw),dir=direction(el,root,me),baseHref=el.ownerDocument?.defaultView?.location?.href||location.href;let senderUrl=null,senderName=null,senderImage=null;for(const a of el.querySelectorAll('a[href]')){const id=creatorId(a.getAttribute('href'));if(id){senderUrl=new URL(a.getAttribute('href'),baseHref).href;senderName=clean(a.textContent)||id;break}}const img=[...el.querySelectorAll('img[src]')].find(x=>!/emoji|stamp|attachment|upload/i.test(String(x.className||'')+' '+String(x.alt||'')));if(img)senderImage=String(img.currentSrc||img.src||'');let attachmentUrl=null,attachmentName=null,attachmentType=null;for(const a of el.querySelectorAll('a[href]')){const href=String(a.href||'');if(!href||creatorId(href)||/\/messages\/rooms/i.test(href))continue;attachmentUrl=href;attachmentName=clean(a.getAttribute('download')||a.textContent)||null;attachmentType=/\.(?:png|jpe?g|gif|webp|heic)(?:$|\?)/i.test(href)?'image':'file';break}if(!attachmentUrl){const ai=[...el.querySelectorAll('img[src]')].find(x=>x!==img);if(ai){attachmentUrl=String(ai.currentSrc||ai.src||'');attachmentName=clean(ai.alt)||null;attachmentType='image'}}let body=raw;if(senderName&&body.startsWith(senderName))body=body.slice(senderName.length).trim();body=body.replace(/\s*(?:既読|未読)?\s*(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前)?$/u,'').trim();const domId=el.closest('[data-message-id]')?.getAttribute('data-message-id')||el.getAttribute('data-message-id')||el.getAttribute('data-id')||el.getAttribute('id')||'',base=[threadKey,domId,dt?.getAttribute('datetime')||'',dir,body,attachmentUrl||'',duplicateFromNewest].join('|');return{thread_key:threadKey,message_key:domId?('dom:'+threadKey+':'+domId):('sig:'+hash(base)),direction:dir,sender_name:senderName,sender_url:senderUrl,sender_image_url:senderImage,body:body||null,sent_at:tm,raw_text:raw||null,attachment_name:attachmentName,attachment_url:attachmentUrl,attachment_type:attachmentType,meta:{source:'note-dm-dom-v1',room_url:baseHref,time_estimated:!dt}}}
 async function save(a,threads,messages){const token=String(await get(key(TOKEN,a.id),'')||'');if(!token)throw new Error('DM_PAIR_REQUIRED');return request(INGEST,{noteId:a.id,threads,messages},{'X-Ingest-Token':token})}
-function cloak(on){try{if(on){document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-dm-scan-cloak','1')}else{document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-dm-scan-cloak')}}catch{}}
+function cloak(on){try{if(on){document.documentElement.style.setProperty('visibility','hidden','important');document.documentElement.setAttribute('data-mumei-dm-scan-cloak','1')}else if(document.documentElement.hasAttribute('data-mumei-dm-scan-cloak')){document.documentElement.style.removeProperty('visibility');document.documentElement.removeAttribute('data-mumei-dm-scan-cloak')}}catch{}}
 async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=>true){
  const network=window.__mumeiDmNetworkV2;
  const roomAlive=()=>alive()&&roomKeyFromUrl(doc.defaultView?.location?.href||doc.location?.href||roomUrl)===threadKey;
@@ -125,14 +125,14 @@ async function scanRoom(a,threadKey,doc=document,roomUrl=location.href,alive=()=
  if(!read&&!empty)throw new Error('DM_MESSAGE_BODY_NOT_FOUND');
  return{read,saved,stored:confirmed.size,complete:empty&&!interrupted&&roomAlive(),empty,domFallback:true};
 }
-let layoutTimer=0,composerResize=null,observedEditor=null;
+let layoutTimer=0,composerResize=null,observedEditor=null,statusHeight=18;
 function statusLayout(){
  const box=document.getElementById('mumei-dm-reader-status');if(!box)return;
  if(!reconcileSurface())return;
  const vv=window.visualViewport,layoutHeight=document.documentElement.clientHeight||innerHeight||0,viewTop=Number(vv?.offsetTop||0),viewBottom=vv?viewTop+Number(vv.height):layoutHeight;
  const editor=roomKeyFromUrl(location.href)?textbox():null;
  if(editor!==observedEditor){observedEditor=editor;composerResize?.disconnect();if(editor&&typeof ResizeObserver==='function'){composerResize= new ResizeObserver(scheduleStatusLayout);composerResize.observe(editor)}}
- const hide=()=>{box.hidden=true;if(box.style.display!=='none')box.style.display='none'};
+ const hide=()=>{if(!box.hidden)box.hidden=true;if(box.style.display!=='none')box.style.display='none'};
  // If the composer is not measurable, do not guess a fixed position over it.
  if(composing()||(roomKeyFromUrl(location.href)&&!editor)||(vv&&(layoutHeight-viewBottom>100||Number(vv.scale)>1.05))){hide();return}
  let boundary=viewBottom,composerBottom=0;
@@ -145,14 +145,14 @@ function statusLayout(){
    boundary=Math.min(boundary,pr.top);composerBottom=Math.max(composerBottom,pr.bottom);
   }
  }
- box.hidden=false;if(box.style.display!=='flex')box.style.display='flex';
- const height=box.getBoundingClientRect().height||18;
+ const height=box.getBoundingClientRect().height||statusHeight;
+ const reveal=value=>{if(box.style.bottom!==value)box.style.bottom=value;if(box.hidden)box.hidden=false;if(box.style.display!=='flex')box.style.display='flex';const measured=box.getBoundingClientRect().height;if(measured>0)statusHeight=measured};
  // Prefer the actual gap below the composer; never cover its controls.
- if(editor&&viewBottom-composerBottom>=height+6){const value=Math.max(3,Math.ceil(layoutHeight-viewBottom+3))+'px';if(box.style.bottom!==value)box.style.bottom=value;return}
+ if(editor&&viewBottom-composerBottom>=height+6){reveal(Math.max(3,Math.ceil(layoutHeight-viewBottom+3))+'px');return}
  if(boundary-viewTop<height+16){hide();return}
  const bottom=Math.max(8,Math.ceil(layoutHeight-boundary+8));
  const value=editor?bottom+'px':`max(${bottom}px,env(safe-area-inset-bottom))`;
- if(box.style.bottom!==value)box.style.bottom=value;
+ reveal(value);
 }
 function scheduleStatusLayout(){clearTimeout(layoutTimer);layoutTimer=setTimeout(statusLayout,16)}
 document.addEventListener('focusin',statusLayout,true);
@@ -172,7 +172,7 @@ function showStatus(state){
  const complete=state.lastRunComplete===true,stored=Number(state.storedMessageCount||0),label=state.lastError?'再試行待ち':manualPaused?'一時停止':complete?'全件保存完了・新着待ち':state.phase==='delta'?'新着を保存中':'過去分を取得中';
  const message=rootRoute()?`${complete?'全会話保存完了':label} · ${Number(state.currentThread||0)}/${Number(state.threadCount||0)}人 · 本文保存 ${stored}件`:`DM ${label} · 本文保存 ${stored}件`;
  if(box.firstElementChild.textContent!==message)box.firstElementChild.textContent=message;
- box.title=String(state.lastError||'');statusLayout();
+ const title=String(state.lastError||'');if(box.title!==title)box.title=title;statusLayout();
  clearTimeout(statusHideTimer); // Keep one stable status node while this DM surface is open.
 }
 async function updateCheck(a,patch){const prev=await get(key(CHECK,a.id),{}),value={...prev,...patch,version:VERSION};await set(key(CHECK,a.id),value);showStatus(value)}
@@ -182,7 +182,7 @@ let bgRunning=false,bgLastAt=0,bgWorkerDone=false;
 function bgUrl(v){try{const u=new URL(v,location.href);u.searchParams.set('mumei_dm_parent','1');return u.href}catch{return String(v||'')}}
 function syncFrame(a,url,threadKey){
  return new Promise(resolve=>{
-  const frame=document.createElement('iframe');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:390px!important;height:800px!important;opacity:0!important;pointer-events:none!important;left:0!important;top:0!important;z-index:-2147483000!important;border:0!important';
+  const frame=document.createElement('iframe');frame.setAttribute('data-mumei-dm-reader-frame','1');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.style.cssText='position:fixed!important;width:390px!important;height:800px!important;opacity:0!important;pointer-events:none!important;left:0!important;top:0!important;z-index:-2147483000!important;border:0!important';
   let done=false;
   const finish=x=>{if(done)return;done=true;clearTimeout(timer);clearInterval(watch);try{frame.remove()}catch{}resolve(x)};
   const timer=setTimeout(()=>finish({threadKey,read:0,saved:0,timeout:true}),90000);
@@ -258,5 +258,7 @@ async function run(){
   if(isBg)parent.postMessage({source:'mumei-dm-bg-v130',threadKey,read:0,saved:0,error:String(e&&e.message||e)},location.origin);else cloak(false)
  }finally{roomRunning=false;showStatus(await get(key(CHECK,a.id),{}))}
 }
-{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);setInterval(()=>{if(document.visibilityState!=='hidden'&&!manualPaused)schedule(0)},5000);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!r.target.closest?.('#mumei-dm-reader-status'))){scheduleStatusLayout();schedule(180)}}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
+function readerOutput(node){const el=node?.nodeType===1?node:node?.parentElement;return Boolean(el?.closest?.('#mumei-dm-reader-status,[data-mumei-dm-reader-frame]'))}
+function ownMutation(record){if(readerOutput(record.target))return true;if(record.type==='childList'){const changed=[...record.addedNodes,...record.removedNodes];return changed.length>0&&changed.every(readerOutput)}return false}
+{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);setInterval(()=>{if(document.visibilityState!=='hidden'&&!manualPaused)schedule(0)},5000);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{const native=records.filter(r=>!ownMutation(r));if(!native.length)return;const visible=reconcileSurface();scheduleStatusLayout();if(visible&&native.some(r=>r.type==='childList'||r.type==='characterData'))schedule(180)}).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
 })();
