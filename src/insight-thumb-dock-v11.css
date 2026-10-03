@@ -1,4 +1,4 @@
-/* INSIGHT v20 — visible upper-stage play, bottom-dock utility.
+/* INSIGHT v22 — left-aligned brand glints and upper-panel sparkle.
    Motion is one-shot only. No auth/session/data behavior here. */
 
 /* ===== CREATOR HERO ===== */
@@ -53,11 +53,34 @@
   letter-spacing:.07em;
 }
 .miv5-hero-signature strong span:last-child{
-  justify-self:end;
+  justify-self:start;
+  margin-left:8%;
   margin-top:2px;
   font-size:clamp(31px,8vw,44px);
   letter-spacing:.14em;
 }
+.miv5-hero-signature strong span{
+  position:relative;
+  background:linear-gradient(110deg,rgba(214,248,255,.20) 36%,rgba(139,233,255,.65) 45%,rgba(255,255,255,.92) 49%,rgba(180,163,255,.62) 53%,rgba(214,248,255,.20) 62%);
+  background-size:280% 100%;
+  background-position:100% 0;
+  background-clip:text;
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  animation:iv22LetterGlint 2.8s ease-out .24s 1 both;
+}
+.miv5-hero-signature strong span:last-child{animation-delay:.48s}
+.miv5-hero-signature strong span::after{
+  content:"";
+  position:absolute;
+  right:8%;top:18%;width:12px;height:12px;
+  background:linear-gradient(90deg,transparent 43%,#e9fcff 49%,#e9fcff 51%,transparent 57%),linear-gradient(transparent 43%,#e9fcff 49%,#e9fcff 51%,transparent 57%);
+  filter:drop-shadow(0 0 4px #89eaff);
+  pointer-events:none;
+  opacity:0;
+  animation:iv22StarGlint 2.6s ease-out .3s 1 both;
+}
+.miv5-hero-signature strong span:last-child::after{right:24%;top:48%;animation-delay:.62s}
 .miv5-hero-signature i{
   position:absolute;
   left:-18%;right:-18%;top:56%;
@@ -193,6 +216,8 @@
 }
 
 .miv5-launcher-item{
+  --glint-delay:.4s;
+  --glint-color:#b8f5ff;
   position:relative!important;
   z-index:2!important;
   min-width:0!important;
@@ -203,6 +228,32 @@
   color:#e5f5fb!important;
   text-decoration:none!important;
 }
+.miv5-launcher-item.caution{--glint-color:#ffe1a2}
+.miv5-launcher-item.analysis{--glint-delay:.68s}
+.miv5-launcher-item.notification{--glint-delay:.96s;--glint-color:#ffe1a2}
+.miv5-launcher-item::before,
+.miv5-launcher-item::after{
+  content:"";
+  position:absolute;
+  z-index:4;
+  pointer-events:none;
+  opacity:0;
+}
+.miv5-launcher-item::before{
+  right:18%;top:13%;width:11px;height:11px;
+  background:linear-gradient(90deg,transparent 43%,var(--glint-color) 49%,var(--glint-color) 51%,transparent 57%),linear-gradient(transparent 43%,var(--glint-color) 49%,var(--glint-color) 51%,transparent 57%);
+  filter:drop-shadow(0 0 4px var(--glint-color));
+  animation:iv22StarGlint 2.6s ease-out var(--glint-delay) 1 both;
+}
+.miv5-launcher-item::after{
+  inset:4px;
+  border-radius:14px;
+  background:linear-gradient(112deg,transparent 39%,rgba(131,229,249,.12) 45%,rgba(237,252,255,.43) 49%,rgba(186,169,255,.16) 53%,transparent 61%);
+  background-size:280% 100%;
+  animation:iv22PanelGlint 2.4s ease-out var(--glint-delay) 1 both;
+}
+.miv5-launcher-item:hover::before,
+.miv5-launcher-item:focus-within::before{animation:iv22StarHover 1.2s ease-out 1 both}
 .miv5-launcher-item>button,
 .miv5-launcher-item.caution{
   width:100%!important;
@@ -267,6 +318,25 @@
 .miv5{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))!important}
 
 /* ===== one-shot motion only ===== */
+@keyframes iv22LetterGlint{
+  0%{background-position:100% 0}
+  100%{background-position:0% 0}
+}
+@keyframes iv22StarGlint{
+  0%,18%,65%,100%{opacity:0;transform:scale(.25) rotate(0deg)}
+  33%{opacity:.95;transform:scale(1) rotate(45deg)}
+  48%{opacity:.25;transform:scale(.7) rotate(85deg)}
+}
+@keyframes iv22StarHover{
+  0%,100%{opacity:0;transform:scale(.3) rotate(0deg)}
+  40%{opacity:1;transform:scale(1.1) rotate(45deg)}
+}
+@keyframes iv22PanelGlint{
+  0%{opacity:0;background-position:100% 0}
+  24%{opacity:.85}
+  70%{opacity:.5}
+  100%{opacity:0;background-position:0% 0}
+}
 @keyframes iv20BrandIn{
   0%{opacity:0;transform:translateY(8px)}
   55%{opacity:1;transform:translateY(0)}
@@ -322,11 +392,19 @@
 
 @media(prefers-reduced-motion:reduce){
   .miv5-hero-signature strong,
+  .miv5-hero-signature strong span,
+  .miv5-hero-signature strong span::after,
+  .miv5-launcher-item::before,
+  .miv5-launcher-item::after,
   .miv5-hero-signature i,
   .miv5-launcher-halo::before,
   .miv5-launcher-halo::after,
   .miv5-launcher-halo i{animation:none!important}
   .miv5-hero-signature strong{opacity:1!important;transform:none!important}
+  .miv5-hero-signature strong span{background:none!important;-webkit-text-fill-color:currentColor!important}
+  .miv5-hero-signature strong span::after,
+  .miv5-launcher-item::before,
+  .miv5-launcher-item::after{display:none!important}
   .miv5-launcher-halo::before{opacity:.46!important;transform:translateY(-50%) scale(1)!important}
   .miv5-hero-signature i,
   .miv5-launcher-halo::after,

@@ -144,6 +144,10 @@ test('上部文字の二重透明化を防ぎ、下部は静止、動きを減�
   assert.match(upperCss, /100%\{opacity:1;transform:translateY\(0\)\}/);
   assert.doesNotMatch(upperCss, /opacity:\.13|infinite|app-bottom-nav/);
   assert.match(upperCss, /\.miv5-launcher-halo\{[\s\S]*?display:block!important/);
+  assert.match(upperCss, /strong span:last-child\{\s*justify-self:start;\s*margin-left:8%/);
+  assert.match(upperCss, /\.miv5-launcher-item::before,\s*\.miv5-launcher-item::after\{[^}]*pointer-events:none/);
+  assert.match(upperCss, /@keyframes iv22LetterGlint/);
+  assert.match(upperCss, /@keyframes iv22StarGlint/);
   assert.match(upperCss, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(appSource, /const PARTICIPANT_MAINTENANCE = false/);
   assert.match(appSource, /@media\(prefers-reduced-motion:reduce\)/);
