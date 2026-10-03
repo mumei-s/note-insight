@@ -34,18 +34,101 @@ test('人物切替中に前の画像補完が返っても、新しい人物の�
   assert.equal(h.w.document.querySelector('img').src, 'https://example.com/b.png');
 });
 
-test('隠れていたメンバーも全員を常時表示し、光のレールから人物と本人noteを切り替える', async t => {
+test('人数が増えても全員が一覧パネルに入り、名前・note IDで探して本人noteへ移動できる', async t => {
   const h = await sceneFixture(t), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
-  const people = Array.from({ length: 8 }, (_, i) => ({ id: `${i}`, noteId: `person_${i}`, name: `参加者${i}`, image: `https://example.com/${i}.png`, profileUrl: `https://note.com/person_${i}` }));
+  const people = Array.from({ length: 240 }, (_, i) => ({ id: `${i}`, noteId: `person_${i}`, name: `参加者${i}`, image: `https://example.com/${i}.png`, profileUrl: `https://note.com/person_${i}` }));
   await h.render(ParticipantShowcase, { people });
-  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 8);
-  assert.equal(h.w.document.querySelector('.hub-showcase-all details'), null);
-  assert.equal(h.w.document.querySelector('.hub-showcase-all').hasAttribute('hidden'), false);
+  const toggle = h.w.document.querySelector('.hub-showcase-list-toggle');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(h.w.document.querySelector('.hub-showcase-panel').hidden, true);
+  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 0);
+  await h.click(toggle);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(h.w.document.querySelector('.hub-showcase-panel').hidden, false);
+  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 240);
+  const input = h.w.document.querySelector('input[type="search"]');
+  await h.change(input, 'person_239');
+  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 1);
+  assert.equal(h.w.document.querySelector('.hub-showcase-all a').href, 'https://note.com/person_239');
+  await h.change(input, '参加者100');
+  assert.equal(h.w.document.querySelector('.hub-showcase-all a').href, 'https://note.com/person_100');
+  await h.change(input, '該当なし');
+  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 0);
+  assert.match(h.w.document.querySelector('.hub-showcase-list-empty').textContent, /該当する参加者はいません/);
+  await h.click(toggle); await h.click(toggle);
+  assert.equal(h.w.document.querySelectorAll('.hub-showcase-all a').length, 240);
+  assert.equal(h.w.document.querySelector('input[type="search"]').value, '');
   await h.click(h.w.document.querySelector('[aria-label="次のクリエイター"]'));
   assert.match(h.w.document.querySelector('.hub-showcase-identity').textContent, /参加者1/);
   assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
   assert.match(h.w.document.querySelector('.hub-showcase-controls').textContent, /再生/);
   assert.equal(h.w.document.querySelector('.hub-showcase-card'), null);
+});
+
+function playbackFixture(h) {
+  const timers = new Map(); let id = 0;
+  h.w.setInterval = callback => { timers.set(++id, callback); return id; };
+  h.w.clearInterval = timer => timers.delete(timer);
+  return timers;
+}
+const playbackPeople = Array.from({ length: 3 }, (_, i) => ({ id: `${i}`, noteId: `person_${i}`, name: `参加者${i}`, image: `https://example.com/${i}.png`, profileUrl: `https://note.com/person_${i}` }));
+
+test('タップ由来のホバーが残っても再生直後に人物が替わり、その後も自動切替を続ける', async t => {
+  const h = await sceneFixture(t), timers = playbackFixture(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  assert.equal(timers.size, 1);
+  const stage = h.w.document.querySelector('.hub-showcase-stage');
+  await React.act(async () => {
+    const touch = new h.w.MouseEvent('pointerover', { bubbles: true });
+    Object.defineProperty(touch, 'pointerType', { value: 'touch' });
+    stage.dispatchEvent(touch);
+    stage.dispatchEvent(new h.w.MouseEvent('mouseover', { bubbles: true }));
+    await pause();
+  });
+  assert.equal(timers.size, 1);
+  await h.click(h.w.document.querySelector('[aria-label="次のクリエイター"]'));
+  assert.equal(timers.size, 0);
+  await h.click(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]'));
+  assert.match(h.w.document.querySelector('.hub-showcase-identity').textContent, /参加者2/);
+  assert.equal(timers.size, 1);
+  await React.act(async () => { [...timers.values()][0](); await pause(); });
+  assert.match(h.w.document.querySelector('.hub-showcase-identity').textContent, /参加者0/);
+  await h.click(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]'));
+  assert.equal(timers.size, 0);
+});
+
+test('動きを減らす設定でも明示的な再生は動き、画面外とバックグラウンドでは止まる', async t => {
+  let observer;
+  class Observer {
+    constructor(callback) { observer = callback; }
+    observe() { observer([{ isIntersecting: true }]); }
+    disconnect() {}
+  }
+  const h = await sceneFixture(t, { globals: { IntersectionObserver: Observer } }), timers = playbackFixture(h);
+  h.w.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  const { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  assert.equal(timers.size, 0);
+  assert.match(h.w.document.querySelector('.hub-showcase-controls').textContent, /再生/);
+  await h.click(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]'));
+  assert.equal(timers.size, 1);
+  assert.equal(h.w.document.querySelector('.hub-showcase').dataset.motion, 'off');
+  await React.act(async () => { [...timers.values()][0](); await pause(); });
+  assert.match(h.w.document.querySelector('.hub-showcase-identity').textContent, /参加者2/);
+  await React.act(async () => {
+    Object.defineProperty(h.w.document, 'visibilityState', { configurable: true, value: 'hidden' });
+    h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); await pause();
+  });
+  assert.equal(timers.size, 0);
+  await React.act(async () => {
+    Object.defineProperty(h.w.document, 'visibilityState', { configurable: true, value: 'visible' });
+    h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); await pause();
+  });
+  assert.equal(timers.size, 1);
+  await React.act(async () => { observer([{ isIntersecting: false }]); await pause(); });
+  assert.equal(timers.size, 0);
+  await React.act(async () => { observer([{ isIntersecting: true }]); await pause(); });
+  assert.equal(timers.size, 1);
 });
 
 test('円グラフは正確な構成比と合計を保ち、棒グラフの未取得値を0にしない', async t => {
