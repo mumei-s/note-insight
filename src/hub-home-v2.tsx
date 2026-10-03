@@ -150,6 +150,6 @@ export function HubHome() {
       {[["01","参加申請","自分のnote IDで申請。"],["02","OWNER承認","運営者が内容を確認・承認。"],["03","noteで本人確認","発行コードを自己紹介欄へ一時掲載。"],["04","利用開始","自己紹介を戻し、本人アイコンをTOPへ。"]].map(([no,title,copy],i) => <article key={no} style={{ "--step": i } as React.CSSProperties}><small>{no}</small><strong>{title}</strong><p>{copy}</p></article>)}
     </section>
 
-    <section ref={crossScene.ref} className="hub-wrap hub-cross" data-motion={crossScene.motion ? "on" : "off"}><article><small>CROSS PLATFORM</small><h2>どの端末・ブラウザからも</h2><p>本人確認後のnote ID＋個別パスコードで、別のスマホやPCでもログイン。複数アカウントを保存し、ログアウトせず切り替えられます。</p></article></section>
+    <section ref={crossScene.ref} className="hub-wrap hub-cross" data-motion={crossScene.motion ? "on" : "off"}><article><small>CROSS PLATFORM</small><h2>どの端末・ブラウザからも</h2><p>同じnote IDで、PC2台でもスマホでも利用できます。新しい端末は「機種変更・再ログイン」から本人確認。保存した履歴は共通で、他の端末もログインしたまま使えます。</p></article></section>
   </main><ConfirmDialog action={confirm} account={activeAccount} busy={busy} onCancel={() => setConfirm(null)} onYes={() => void confirmAction()} /></div>;
 }
