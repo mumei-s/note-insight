@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.04.1",
+  "appVersion": "2026.10.04.2",
   "notificationVersion": "3.6.25",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-04T01:22:48+09:00",
+  "releasedAt": "2026-10-04T07:35:57+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の右端に浮く開閉ベルと「−」の縮小ボタンを廃止。操作は通知一覧の下部に集約し、以前の収納設定が残っていても操作できます。",
+  "note": "承認済み・本人確認前でも別PCやスマホから本人確認を続行できます。機種変更・再ログインで同じnote IDの確認コードを発行し、再申請・再承認なしで利用開始できます。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

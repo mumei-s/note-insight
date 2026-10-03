@@ -14,6 +14,7 @@ function headers(req: Request) {
     "Access-Control-Allow-Headers": "content-type,x-insight-recovery",
     "Access-Control-Allow-Methods": "POST,OPTIONS",
     "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
     "Vary": "Origin",
   };
 }
@@ -55,6 +56,7 @@ async function fetchCreator(id: string) {
     if (!response.ok) throw new Error(response.status === 404 ? "NOTE_ACCOUNT_NOT_FOUND" : "NOTE_PROFILE_UNAVAILABLE");
     const payload = await response.json().catch(() => ({}));
     const data = payload?.data || {};
+    if (String(data.urlname || id).toLowerCase() !== id.toLowerCase()) throw new Error("NOTE_ACCOUNT_MISMATCH");
     return {
       noteId: String(data.urlname || id).toLowerCase(),
       displayName: String(data.nickname || id).slice(0, 300),
@@ -73,6 +75,15 @@ async function issueSession(applicationId: string) {
 function safeApp(app: any) {
   return { id: app.id, noteId: app.note_id, displayName: app.display_name, imageUrl: app.image_url, status: app.status };
 }
+async function activatePublicParticipant(app: any) {
+  const { data: existing, error: findError } = await sb.from("insight_participants_public").select("member_id").eq("note_id", app.note_id).maybeSingle();
+  if (findError) throw findError;
+  const payload = { note_id: app.note_id, display_name: app.display_name || `@${app.note_id}`, image_url: app.image_url || null, active: true, synced_at: new Date().toISOString() };
+  const result = existing?.member_id
+    ? await sb.from("insight_participants_public").update(payload).eq("member_id", existing.member_id)
+    : await sb.from("insight_participants_public").insert({ member_id: String(app.id), role: "member", ...payload });
+  if (result.error) throw result.error;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: headers(req) });
@@ -87,7 +98,7 @@ Deno.serve(async (req) => {
       const creator = await fetchCreator(id);
       const { data: app, error } = await sb.from("insight_access_applications").select("*").ilike("note_id", creator.noteId).maybeSingle();
       if (error) throw error;
-      if (!app || app.status !== "active") throw new Error("INSIGHT_MEMBER_NOT_ACTIVE");
+      if (!app || (app.status !== "approved" && app.status !== "active")) throw new Error("INSIGHT_MEMBER_NOT_ACTIVE");
 
       const recoveryToken = randomHex(32);
       const code = randomCode();
@@ -100,8 +111,9 @@ Deno.serve(async (req) => {
         verification_code_plain: code,
         verification_attempts: 0,
         updated_at: now,
-      }).eq("id", app.id).select().single();
+      }).eq("id", app.id).eq("status", app.status).select().maybeSingle();
       if (updateError) throw updateError;
+      if (!next) throw new Error("INSIGHT_MEMBER_NOT_ACTIVE");
       return json(req, { ok: true, recoveryToken, verificationCode: code, application: safeApp(next) });
     }
 
@@ -110,7 +122,7 @@ Deno.serve(async (req) => {
       if (!raw) throw new Error("RECOVERY_TOKEN_REQUIRED");
       const { data: app, error } = await sb.from("insight_access_applications").select("*").eq("applicant_token_hash", await sha256(raw)).maybeSingle();
       if (error || !app) throw new Error("RECOVERY_TOKEN_INVALID");
-      if (app.status !== "active" || !app.verification_code_plain) throw new Error("RECOVERY_NOT_READY");
+      if ((app.status !== "approved" && app.status !== "active") || !app.verification_code_plain) throw new Error("RECOVERY_NOT_READY");
 
       const attempts = Number(app.verification_attempts || 0) + 1;
       if (attempts > 30) throw new Error("VERIFICATION_ATTEMPTS_EXCEEDED");
@@ -123,12 +135,15 @@ Deno.serve(async (req) => {
       const { data: verified, error: verifyError } = await sb.from("insight_access_applications").update({
         display_name: creator.displayName,
         image_url: creator.imageUrl,
+        status: "active",
         verification_code_plain: null,
         verification_code_hash: null,
         verified_at: now,
         updated_at: now,
-      }).eq("id", app.id).select().single();
+      }).eq("id", app.id).in("status", ["approved", "active"]).eq("applicant_token_hash", app.applicant_token_hash).eq("verification_code_hash", app.verification_code_hash).select().maybeSingle();
       if (verifyError) throw verifyError;
+      if (!verified) throw new Error("RECOVERY_NOT_READY");
+      if (app.status === "approved") await activatePublicParticipant(verified);
       const memberToken = await issueSession(verified.id);
       return json(req, { ok: true, memberToken, application: safeApp(verified), message: "PROFILE_VERIFIED_RESTORE_BIO" });
     }
@@ -136,7 +151,7 @@ Deno.serve(async (req) => {
     throw new Error("ACTION_NOT_SUPPORTED");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = /NOT_FOUND/.test(message) ? 404 : /INVALID|REQUIRED|NOT_ACTIVE|NOT_READY|PROFILE_CODE|ATTEMPTS/.test(message) ? 401 : /ACTION_NOT_SUPPORTED/.test(message) ? 400 : 500;
+    const status = message === "NOTE_ACCOUNT_NOT_FOUND" ? 404 : /INVALID|REQUIRED|NOT_ACTIVE|NOT_READY|PROFILE_CODE|ATTEMPTS|MISMATCH/.test(message) ? 401 : /ACTION_NOT_SUPPORTED/.test(message) ? 400 : 500;
     return json(req, { ok: false, error: message }, status);
   }
 });
