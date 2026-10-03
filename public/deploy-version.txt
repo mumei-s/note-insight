@@ -1,2 +1,2 @@
-INSIGHT 2026.10.03.23 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
-Magazine-scoped search with immediate local results and cancellation, shared creator image recovery, all participants visible, diagonal light presentation, dimensional charts, readable analysis, and square-safe social previews.
+INSIGHT 2026.10.03.24 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
+Responsive participant playback with immediate feedback and an animated, searchable, bounded all-member panel with equal-height cards.
