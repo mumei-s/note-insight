@@ -92,13 +92,15 @@ export function MemberInsightLiveV2(){
   function openMode(next:Mode){
     window.dispatchEvent(new Event("mumei-insight-close-items"));
     if(mode===next){
+      if(next==="analysis")window.dispatchEvent(new Event("mumei-insight-analysis-menu"));
       if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
       return;
     }
     const y=window.scrollY;
     if(next==="notifications")notificationEntryY.current=y;
     window.history.replaceState({...window.history.state,insightScrollY:y},"",window.location.href);
-    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",window.location.href);
+    const modeUrl=new URL(window.location.href);modeUrl.searchParams.delete("analysisPanel");modeUrl.searchParams.delete("insightMode");
+    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",modeUrl.href);
     if(["comments","favorites","social","notifications"].includes(next))setNavTab(next);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
     if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
@@ -302,7 +304,7 @@ export function MemberInsightLiveV2(){
   const dashboardLatest=release?.dashboardVersion||CURRENT_DASHBOARD_VERSION;
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
-  const noteId=String(official?.member?.noteId||"").toLowerCase();
+  const noteId=String(official?.member?.noteId||currentStoredInsightAccount()?.noteId||"").toLowerCase();
   const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
   const notificationConnectionHref=`./notification-connection.html?from=insight${noteId?`&notificationAccount=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
   const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span></>;
@@ -334,7 +336,7 @@ export function MemberInsightLiveV2(){
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
       <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div key={`${mode}:${navTab}`} className="miv5-launcher-halo" aria-hidden="true"><i/><i/></div>
         <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b></a>
-        <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
+        <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable||notificationUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b></button>
           <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
         </div>
