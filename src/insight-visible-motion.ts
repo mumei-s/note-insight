@@ -13,5 +13,5 @@ export function useVisibleMotion<T extends HTMLElement = HTMLDivElement>() {
     } else setVisible(true);
     return () => { observer?.disconnect(); media?.removeEventListener?.("change", update); document.removeEventListener("visibilitychange", page); };
   }, []);
-  return { ref, motion: visible && foreground && !reduced, reduced };
+  return { ref, motion: visible && foreground && !reduced, reduced, visible, foreground };
 }
