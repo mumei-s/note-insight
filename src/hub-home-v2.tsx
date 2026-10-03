@@ -40,7 +40,7 @@ function ParticipantRail({ people, loading, activeNoteId }: { people: RailPerson
     return [primary, ...people.filter((p) => p.id !== primary.id)];
   }, [people, activeNoteId]);
   return <section className="hub-participants hub-participants-v2 is-insight" aria-label="INSIGHT参加クリエイター">
-    <div className="hub-participant-heading hub-participant-heading-v2"><strong>INSIGHT参加 <b>{loading ? "—" : people.length}名</b></strong><small>アイコン・名前をタップ→本人note</small></div>
+    <div className="hub-participant-heading hub-participant-heading-v2"><strong>参加クリエイター <b>{loading ? "—" : people.length}名</b></strong><small>タップで本人noteへ</small></div>
     {loading ? <div className="hub-participant-loading" role="status"><i /><i /><i /><span>参加クリエイターを確認中</span></div> : !ordered.length ? <p className="hub-participant-empty">本人認証済みの参加クリエイターがここに並びます。</p> : <ParticipantShowcase people={ordered}/>}
   </section>;
 }
@@ -61,6 +61,7 @@ function ConfirmDialog({ action, account, busy, onCancel, onYes }: { action: Con
 
 export function HubHome() {
   const heroScene = useVisibleMotion<HTMLElement>();
+  const stepsScene = useVisibleMotion<HTMLElement>(), crossScene = useVisibleMotion<HTMLElement>();
   const [people, setPeople] = useState<RailPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [accountVersion, setAccountVersion] = useState(0);
@@ -143,12 +144,12 @@ export function HubHome() {
 
     <section ref={heroScene.ref} className="hub-hero hub-wrap hub-hero-scene" data-motion={heroScene.motion?"on":"off"}><div className="hub-hero-depth" aria-hidden="true"><i/><i/><i/><i/></div><div className="hub-hero-streaks" aria-hidden="true"><i/><i/><i/></div><div className="hub-hero-sparks" aria-hidden="true">{Array.from({length:9},(_,i)=><i key={i} style={{"--spark":i} as React.CSSProperties}/>)}</div><p>NOTE CREATOR ANALYTICS</p><h1><span>無名S note</span><strong>INSIGHT</strong></h1><span>noteの反応を「誰が・どの記事に・どれだけ応援しているか」まで蓄積して見る、参加制のクリエイター分析ツール。</span></section>
 
-    <section className="hub-wrap" style={{ paddingBottom: 16 }}><article className="hub-entrance" style={{ maxWidth: 900, margin: "0 auto", minHeight: 0, borderColor: "#486522" }}><small style={{ color: "#b6ff38" }}>MEMBER ACCESS</small><h2>INSIGHT</h2><p>参加申請後、OWNER承認とnote自己紹介欄を使った本人確認を行います。認証後は本人専用INSIGHTを利用でき、同じ端末ではログイン状態を長期保持します。</p><ParticipantRail people={people} loading={loading} activeNoteId={activeAccount?.noteId || ""}/><a className="hub-open" href={primaryHref} style={{ background: "#b6ff38" }} onClick={(event) => { if (!memberReady) { event.preventDefault(); openAccess("login"); } }}>{primaryLabel}</a></article></section>
+    <section className="hub-wrap hub-members"><article className="hub-entrance" style={{ maxWidth: 900, margin: "0 auto", minHeight: 0, borderColor: "#486522" }}><h2>メンバー紹介</h2><p>参加申請・承認・noteでの本人確認後、自分のINSIGHTを利用できます。ログイン状態はこの端末に保存されます。</p><ParticipantRail people={people} loading={loading} activeNoteId={activeAccount?.noteId || ""}/><a className="hub-open" href={primaryHref} style={{ background: "#b6ff38" }} onClick={(event) => { if (!memberReady) { event.preventDefault(); openAccess("login"); } }}>{primaryLabel}</a></article></section>
 
-    <section className="hub-wrap hub-steps">
-      {[["01","参加申請","固定URLから、自分のnote IDで参加申請します。"],["02","OWNER承認","申請はOWNER専用管理ページに届き、確認後に承認します。"],["03","noteで本人確認","発行コードを自己紹介欄へ一時掲載し、本人確認します。"],["04","利用開始","確認後は自己紹介を元に戻せます。本人アイコンがTOP参加者一覧へ追加されます。"]].map(([no,title,copy]) => <article key={no}><small>{no}</small><strong>{title}</strong><p>{copy}</p></article>)}
+    <section ref={stepsScene.ref} className="hub-wrap hub-steps" data-motion={stepsScene.motion ? "on" : "off"}>
+      {[["01","参加申請","自分のnote IDで申請。"],["02","OWNER承認","運営者が内容を確認・承認。"],["03","noteで本人確認","発行コードを自己紹介欄へ一時掲載。"],["04","利用開始","自己紹介を戻し、本人アイコンをTOPへ。"]].map(([no,title,copy],i) => <article key={no} style={{ "--step": i } as React.CSSProperties}><small>{no}</small><strong>{title}</strong><p>{copy}</p></article>)}
     </section>
 
-    <section className="hub-wrap hub-cross"><article><small>CROSS PLATFORM</small><h2>端末・ブラウザを固定しない</h2><p>本人確認後のnote ID＋個別パスコードで、別のスマホ・PC・ブラウザからもログインできます。この端末では複数アカウントを保存し、ログアウトせず切り替えられます。</p></article></section>
+    <section ref={crossScene.ref} className="hub-wrap hub-cross" data-motion={crossScene.motion ? "on" : "off"}><article><small>CROSS PLATFORM</small><h2>どの端末・ブラウザからも</h2><p>本人確認後のnote ID＋個別パスコードで、別のスマホやPCでもログイン。複数アカウントを保存し、ログアウトせず切り替えられます。</p></article></section>
   </main><ConfirmDialog action={confirm} account={activeAccount} busy={busy} onCancel={() => setConfirm(null)} onYes={() => void confirmAction()} /></div>;
 }
