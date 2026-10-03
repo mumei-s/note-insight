@@ -49,16 +49,17 @@ export function MemberInsightAnalysisHub({revision=0,noteId=""}:{revision?:numbe
   useEffect(() => { const menu = () => openPanel("menu"); window.addEventListener("mumei-insight-analysis-menu", menu); return () => window.removeEventListener("mumei-insight-analysis-menu", menu); }, [panel]);
   const choices = [
     { id: "normal", title: "通常分析", icon: "◈", copy: "公開記事・スキ・コメント", hint: "本人通知なしで利用", settings: "" },
-    { id: "dashboard", title: "ダッシュボード INSIGHTプロ", icon: "▥", copy: "公式値・成長・流入・収益", hint: "使用・設定は⚙から", settings: "#dashboardTitle" },
-    { id: "notifications", title: "本人通知分析", icon: "🔔", copy: "人物・交流・反応の履歴", hint: "使用・設定は⚙から", settings: "#noticeTitle" },
-    { id: "verdict", title: "総合判定", icon: "✦", copy: "伸び・記事評価・通知との照合", hint: "使用・設定は⚙から", settings: "" },
+    { id: "dashboard", title: "ダッシュボード INSIGHTプロ", icon: "▥", copy: "公式値・成長・流入・収益", hint: "連携・更新は右の⚙", settings: "#dashboardTitle" },
+    { id: "notifications", title: "本人通知分析", icon: "🔔", copy: "人物・交流・反応の履歴", hint: "連携・更新は右の⚙", settings: "#noticeTitle" },
+    { id: "verdict", title: "総合判定", icon: "✦", copy: "伸び・記事評価・通知との照合", hint: "連携・更新は右の⚙", settings: "" },
   ];
   return <section ref={scene.ref} className="miah" data-panel={panel} data-motion={scene.motion ? "on" : "off"} aria-label="分析メニュー">
-    <nav className="miah-menu" aria-label="4つの分析">{choices.map((choice, order) => <article key={choice.id} className={`miah-menu-card ${choice.id}`} data-selected={panel===choice.id} style={{ "--card-order": order } as React.CSSProperties}>
+    <header className="miah-menu-heading"><span>分析を選ぶ</span><small>4つの視点で、次の一歩へ</small></header>
+    <nav className="miah-menu" aria-label="4つの分析">{choices.map((choice, order) => <article key={choice.id} className={`miah-menu-card miah-kind-${choice.id}`} data-choice={choice.id} data-selected={panel===choice.id} style={{ "--card-order": order } as React.CSSProperties}>
       {choice.id === "normal" ? <a className="miah-menu-main" href={normalHref}><i aria-hidden="true">{choice.icon}</i><strong>{choice.title}</strong><span>{choice.copy}</span><small>{choice.hint}</small></a> : <button className="miah-menu-main" onClick={() => openPanel(choice.id as AnalysisPanel)} aria-pressed={panel===choice.id}><i aria-hidden="true">{choice.icon}</i><strong>{choice.title}</strong><span>{choice.copy}</span><small>{choice.hint}</small></button>}
       {choice.id !== "normal" && <a className="miah-menu-settings" href={setupHref+choice.settings} aria-label={`${choice.title}の設定`}>⚙</a>}
     </article>)}</nav>
-    {panel !== "menu" && <section key={`${cleanNoteId}:${panel}`} className={`miah-selected ${panel}`} aria-label={choices.find(choice=>choice.id===panel)?.title}>
+    {panel !== "menu" && <section key={`${cleanNoteId}:${panel}`} className={`miah-selected miah-kind-${panel}`} aria-label={choices.find(choice=>choice.id===panel)?.title}>
       <button className="miah-menu-back" onClick={() => openPanel("menu")}>← 分析一覧</button>
       {panel === "notifications" ? <NotificationDeepAnalysis revision={revision}/> : <MemberInsightAnalyticsProV3 revision={revision} view={panel === "verdict" ? "verdict" : "dashboard"}/>}
     </section>}
