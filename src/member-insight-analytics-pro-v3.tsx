@@ -80,11 +80,11 @@ function TrendChart({rows,period="month",latest={}}:{rows:Row[];period?:Period;l
   <p className={vals.length<expected||!view.length?'mipro-warning mipro-coverage':'mipro-note mipro-coverage'}>{!view.length?'この期間の推移は未取得です。期間合計があっても、推移は補完しません。':`${stepLabel} ${vals.length} / ${expected} ${granularity==='DAY'?'日':'点'}を保存済み。`}{vals.length<expected?' 未取得を0とは扱いません。':''}{granularity!=='DAY'?' 公式が返した週・月の集計を表示しています。日別や曜日の数値には分解しません。':''}{last&&last>=jstDay(new Date())?' 末尾の期間は保存時点の途中値です。':''}</p>
  </div>
 }
-function Bars({items,title,unit}:{items:{label:string;value:number|null;sub?:string}[];title:string;unit:string}){const mx=Math.max(1,...items.map(x=>x.value??0));return <figure className="mipro-bars"><figcaption><b>{title}</b><small>横の長さ＝{unit}・最大 {n(mx)}{unit}</small></figcaption>{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i aria-hidden="true"><b style={{width:`${Math.max(0,(x.value??0)/mx*100)}%`}}/></i><strong>{x.value==null?"—":n(x.value)+" "+unit}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</figure>}
+function Bars({items,title,unit}:{items:{label:string;value:number|null;sub?:string}[];title:string;unit:string}){const scene=useVisibleMotion<HTMLElement>();const mx=Math.max(1,...items.map(x=>x.value??0));return <figure ref={scene.ref} className="mipro-bars insight-chart-scene" data-motion={scene.motion?"on":"off"}><figcaption><b>{title}</b><small>横の長さ＝{unit}・最大 {n(mx)}{unit}</small></figcaption>{items.map((x,i)=><div key={`${x.label}-${i}`}><span>{x.label}</span><i aria-hidden="true"><b style={{width:`${Math.max(0,(x.value??0)/mx*100)}%`}}/></i><strong>{x.value==null?"—":n(x.value)+" "+unit}</strong>{x.sub?<small>{x.sub}</small>:null}</div>)}</figure>}
 function Fold({title,sub,children,defaultOpen=false}:{title:string;sub:string;children:ReactNode;defaultOpen?:boolean}){return <details className="mipro-fold" open={defaultOpen}><summary><span><b>{title}</b><small>{sub}</small></span><em>開く</em></summary><div className="mipro-fold-body">{children}</div></details>}
 function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <div className="mipro-kpis">{items.map(x=><article key={x.label}><small>{x.label}</small><b>{x.value}</b><span>{x.sub}</span></article>)}</div>}
 
-export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:number;onBack?:()=>void}){
+export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}:{revision?:number;onBack?:()=>void;view?:"dashboard"|"verdict"}){
   const[period,setPeriod]=useState<Period>(preferredPeriod);
   const initial=useMemo(()=>readCache(period),[]);
   const[data,setData]=useState<any>(initial?.data||null),[loading,setLoading]=useState(!initial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(initial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
@@ -94,18 +94,18 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
     refreshState.current={busy:true,at:Date.now()};
     const seq=++requestSeq.current,owner=cacheKey(period),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
     const current=()=>seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
-    if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(true);setError("");
+    if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(view==="verdict");setError("");
     let dashboard:any=null,followerCount:any=data?.followerCount||null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
     const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications,followerCount};setData(next);setCachedAt(Date.now());writeCache(next,period)};
     const followerTask=api(DASH,{action:"follower-count"}).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(()=>{if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
-    const noticeTask=notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)});
+    const noticeTask=view==="verdict"?notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)}):Promise.resolve();
     try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period});publish()}
     catch(e){if(current())setError(e instanceof Error?e.message:"分析データを取得できませんでした")}
     finally{if(current()){setLoading(false);setRefreshing(false);refreshState.current.busy=false}}
     await Promise.all([noticeTask,followerTask]);
   }
-  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision,period]);
-  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[period]);
+  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision,period,view]);
+  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[period,view]);
   const articles=useMemo(()=>normalizeArticles((data?.topArticles||[]).filter((r:Row)=>!r.contentType||r.contentType==='article')),[data?.topArticles]);
 
 
@@ -131,8 +131,8 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
   const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!latestFollower?'現在のフォロワー数':null].filter(Boolean);
   const openAll=(open:boolean)=>root.current?.querySelectorAll<HTMLDetailsElement>("details.mipro-fold").forEach(x=>x.open=open);
   const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);
-  return <section className="mipro" ref={root}>
-    <header className="mipro-head"><div><small>YOUR NOTE / INSIGHT</small><h2>数字を、<br/>次のアイデアに。</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>noteの数値を更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"確認中…":"保存データを再表示"}</button></div></header>
+  return <section className={`mipro mipro-view-${view}`} ref={root}>
+    <header className="mipro-head"><div><small>YOUR NOTE / INSIGHT</small><h2>{view==="verdict"?"総合判定":<>数字を、<br/>次のアイデアに。</>}</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>⚙ 設定・数値の更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"確認中…":"保存データを再表示"}</button></div></header>
     <div className="mipro-period-picker" role="group" aria-label="分析全体の期間"><div><span>分析する期間</span><small>集計・記事・グラフを一緒に切替</small></div><div>{(Object.keys(PERIODS) as Period[]).map(p=><button key={p} aria-pressed={period===p} onClick={()=>changePeriod(p)}>{PERIODS[p]}{data?.availablePeriods&&!data.availablePeriods.includes(p)?<small>未取得</small>:null}</button>)}</div></div>
     {loading?<p className="mipro-note" role="status">{PERIODS[period]}の保存済みデータを確認中…</p>:!data?.latestDashboard?<div className="mipro-empty-period"><small>{PERIODS[period]}</small><h3>この期間は、まだ取り込まれていません。</h3><p>{error||"期間を混ぜず、この期間の公式集計・記事別数値・推移を取得します。"}</p><a href={syncHref}>{PERIODS[period]}を自動で取り込む</a></div>:null}
     {data?.latestDashboard?<>
@@ -142,6 +142,7 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
     <div className="mipro-release"><span>本体 {CURRENT_INSIGHT_APP_VERSION}</span><span>Dashboard {CURRENT_DASHBOARD_VERSION}</span><span>本人通知 {CURRENT_NOTIFICATION_VERSION}</span><span>照合 @{noteId||"—"}</span></div>
     <div className="mipro-fold-controls"><button onClick={()=>openAll(true)}>分析をすべて開く</button><button onClick={()=>openAll(false)}>すべて収納</button></div>
 
+    {view==="dashboard"?<>
     <Fold defaultOpen title="① 公式Dashboard 保存時点の値" sub={`${savedPeriod} ／ 保存 ${jtime(latest.capturedAt)}`}>
       <p className="mipro-note">対象：{savedPeriod}。以下は保存時点の公式集計です。noteで現在表示される値との差は、保存後の増加や選択期間の違いを含みます。</p>
       <Kpis items={[{label:"ページビュー(PV)",value:official("pageViews",latest.pageViews??latest.views),sub:"note公式Dashboard"},{label:"インプレッション(Imp)",value:official("impressions",latest.impressions),sub:"note内表示回数"},{label:"スキ",value:official("likes",latest.likes),sub:"公式集計"},{label:"コメント",value:official("comments",latest.comments),sub:"公式集計"},{label:"売上",value:official("salesYen",latest.salesYen,true),sub:"公式集計"},{label:"フォロワー",value:latestFollower?`${n(latestFollower.count)}人`:"未取得",sub:latestFollower?`${latestFollower.stale?"更新待ち・保存値":"公開プロフィール"} ${jtime(latestFollower.at)}`:"公開プロフィールを確認中／未取得"}]}/>
@@ -194,16 +195,20 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack}:{revision?:numbe
       {!metrics.some(r=>r.pageViews!=null)?<p className="mipro-note">公式の日別PVがまだ保存されていません。<a href={syncHref}>noteで数値を更新</a>すると、選択期間のグラフも自動で読み込みます。公式が週・月単位で返す長期の値から、日別や曜日の値は推測しません。</p>:null}
     </Fold>
 
-    <Fold title="⑨ 本人通知 × PV クロス分析" sub={corr==null?"重なる日別データ7日以上で算出":`同日相関 ${corr.toFixed(2)}`}>
-      <Kpis items={[{label:"照合対象の通知",value:`${n(data?.notifications?.total)}件`,sub:"全保存履歴の日別件数"},{label:"重複日",value:`${pairs.length}日`,sub:"通知件数と公式PVを日単位で照合"},{label:"通知↔PV 同日相関",value:corr==null?"算出待ち":corr.toFixed(2),sub:"相関であり因果ではありません"},{label:"通知多い日/少ない日",value:highNotif.length&&lowNotif.length?`${n(highPv)} / ${n(lowPv)} PV`:"—",sub:"それぞれの平均PV/日"}]}/>
-      {pairs.length?<InsightScatter items={pairs}/>:null}
-      <p className="mipro-note">本人通知は「誰が・何に反応したか」、公式DashboardはPV・売上。別ソースを混同せず、<strong>日付で照合して関係を見る</strong>分析です。</p>
-    </Fold>
-
     <Fold title="⑩ 記事総合ランキング" sub="最大値依存をやめ、本人内パーセンタイルで評価">
       <ArticleRanking articles={ranked}/>
       <p className="mipro-note">INSIGHT指数はPV 35%・反応効率25%・1,000回閲覧あたりの売上20%・売上10%・比較可能なPV化10%を<strong>本人内順位</strong>で合成。1本の極端な記事に全体評価を引っ張られにくくしています。</p>
     </Fold>
+    </>:<>
+      <Kpis items={[{label:"取得済みの分析材料",value:`${quality}/6`,sub:"未取得項目を0や不調と判定しません"},{label:"記事比較",value:`${articles.length}記事`,sub:"本人内順位で評価"},{label:"照合対象の通知",value:`${n(data?.notifications?.total)}件`,sub:"保存済み本人通知"},{label:"日付の重なり",value:`${pairs.length}日`,sub:"公式PVと通知件数を日単位で照合"}]}/>
+      <Fold defaultOpen title="伸びの総合判定" sub="突出した1日と、日々の底上げを区別"><GrowthAnalysis rows={metrics} today={jstDay(new Date())}/></Fold>
+      <Fold defaultOpen title="本人通知 × PV クロス分析" sub={corr==null?"重なる日別データ7日以上で算出":`同日相関 ${corr.toFixed(2)}`}>
+        <Kpis items={[{label:"通知↔PV 同日相関",value:corr==null?"算出待ち":corr.toFixed(2),sub:"相関であり因果ではありません"},{label:"通知多い日/少ない日",value:highNotif.length&&lowNotif.length?`${n(highPv)} / ${n(lowPv)} PV`:"—",sub:"それぞれの平均PV/日"}]}/>
+        {pairs.length?<InsightScatter items={pairs}/>:null}
+        <p className="mipro-note">本人通知と公式PVを日付で照合します。{corr==null?"重なる日付が7日未満、または値に変化がないため相関を算出できません。":"保存履歴上の関連を示し、通知がPVを増やしたとは判定しません。"}</p>
+      </Fold>
+      <Fold defaultOpen title="記事総合ランキング" sub="PV・反応効率・収益を本人内順位で評価"><ArticleRanking articles={ranked}/></Fold>
+    </>}
     </>:null}
   </section>
 }

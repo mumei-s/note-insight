@@ -1,14 +1,11 @@
 import { InsightColumns } from "./member-insight-analysis-charts";
 import { InsightDonut } from "./insight-donut";
 import { useEffect, useRef, useState } from "react";
+import { useVisibleMotion } from "./insight-visible-motion";
 import { loadNotificationSummary } from "./member-insight-analysis-summary-client";
-import {
-  CURRENT_DASHBOARD_VERSION,
-  CURRENT_NOTIFICATION_VERSION,
-  compareVersions,
-} from "./insight-release";
 import { MemberInsightAnalyticsProV3 } from "./member-insight-analytics-pro-v3";
 import "./member-insight-analysis-hub.css";
+import "./member-insight-analysis-menu.css";
 
 const nf=new Intl.NumberFormat("ja-JP");
 const n=(v:any)=>nf.format(Number(v||0));
@@ -30,10 +27,40 @@ function NotificationDeepAnalysis({revision=0}:{revision?:number}){
     <div className="miah-insights"><span><b>{n(data.peakHour)}時台</b>に通知が最も集中</span><span><b>{data.weekName||"—"}曜日</b>が最多</span><span><b>{Number(data.topActorShare||0).toFixed(1)}%</b>最多反応者への集中率</span><span><b>{Number(data.coverage||0).toFixed(1)}%</b>保存件数に対する分析取得率</span></div><p>本人通知では<strong>「誰が・何に・いつ反応したか」</strong>を分析します。相対日時は概算、日時未取得分は保存日時で集計します。直近7日の比較は対象期間にかかわらず前7日と比較します。分類済み率は分類の正答率ではありません。Dashboard同期が無くても利用できます。</p></section>;
 }
 
-export function MemberInsightAnalysisHub({revision=0,onBack,noteId="",dashboardInstalled="",notificationInstalled="",dashboardLatest="",notificationLatest=""}:{revision?:number;onBack?:()=>void;noteId?:string;dashboardInstalled?:string;notificationInstalled?:string;dashboardLatest?:string;notificationLatest?:string}){
-  const cleanNoteId=String(noteId||"").match(/[A-Za-z0-9_-]+/)?.[0]?.toLowerCase()||"",role=cleanNoteId==="ss_yr"?"owner":"member",setupHref=`./dashboard-setup.html?from=analysis&role=${role}&account=${encodeURIComponent(cleanNoteId)}&return=${encodeURIComponent(window.location.href)}&auto=0`,dashboardTarget=dashboardLatest||CURRENT_DASHBOARD_VERSION,notificationTarget=notificationLatest||CURRENT_NOTIFICATION_VERSION,dashboardUsable=Boolean(dashboardInstalled&&compareVersions(dashboardInstalled,dashboardTarget)>=0),notificationUsable=Boolean(notificationInstalled&&compareVersions(notificationInstalled,notificationTarget)>=0),allReady=dashboardUsable&&notificationUsable;
-  return <section className="miah"><div className="miah-tools" aria-label="分析ツールの更新"><div className="miah-tool-statuses"><span className={dashboardUsable?"ready":"update"}>{dashboardUsable?"✓":"↑"} ダッシュボード {dashboardInstalled?`v${dashboardInstalled}`:"未確認"}{!dashboardUsable?` → v${dashboardTarget}`:""}</span><span className={notificationUsable?"ready":"update"}>{notificationUsable?"✓":"↑"} 本人通知 {notificationInstalled?`v${notificationInstalled}`:"未確認"}{!notificationUsable?` → v${notificationTarget}`:""}</span></div><a className="miah-tools-link" href={setupHref}>{allReady?"ダッシュボードの設定・更新確認":"ダッシュボードの更新パネルを開く"} →</a></div><p className="miah-rule"><b>数値の正本：</b>PV・スキ・コメント・売上・流入などDashboardで取得できる値は公式Dashboardを最優先。公開データと差がある場合は公式値を採用します。</p>
-    <section className="miah-analysis-layer base"><header className="miah-layer-head"><div><small>DASHBOARD ANALYSIS V3</small><h2>📊 公式Dashboard＋INSIGHT Pro分析</h2><p>公式Dashboardの生値を正本にし、データ品質を判定してから本人内ベンチマーク・流入・収益・通知とのクロス分析まで行います。</p></div><span>{allReady?"2ツール準備済み":"保存済みデータで分析"}</span></header><div className="miah-layer-tags"><span>公式値</span><span>データ品質</span><span>成長推移</span><span>本人内ベンチマーク</span><span>流入</span><span>収益</span><span>曜日</span><span>通知×PV</span><span>記事指数</span></div><MemberInsightAnalyticsProV3 key={cleanNoteId} revision={revision} onBack={onBack}/></section>
-    <details className="miah-analysis-layer notice miah-fold" open><summary><b>🔔 本人通知の人物・交流分析</b><span>人物別反応・14日推移・時間帯・コメント・メンシプ・購入/支援</span></summary><div className="miah-fold-body"><NotificationDeepAnalysis key={cleanNoteId} revision={revision}/></div></details>
+type AnalysisPanel = "menu" | "dashboard" | "notifications" | "verdict";
+function requestedPanel(): AnalysisPanel {
+  const value = new URL(window.location.href).searchParams.get("analysisPanel");
+  return value === "dashboard" || value === "notifications" || value === "verdict" ? value : "menu";
+}
+export function MemberInsightAnalysisHub({revision=0,noteId=""}:{revision?:number;onBack?:()=>void;noteId?:string;dashboardInstalled?:string;notificationInstalled?:string;dashboardLatest?:string;notificationLatest?:string}){
+  const scene = useVisibleMotion<HTMLElement>(), [panel, setPanel] = useState<AnalysisPanel>(requestedPanel);
+  const cleanNoteId=String(noteId||"").match(/[A-Za-z0-9_-]+/)?.[0]?.toLowerCase()||"",role=cleanNoteId==="ss_yr"?"owner":"member";
+  const returnUrl = new URL(window.location.href); returnUrl.searchParams.set("insightMode", "analysis"); returnUrl.searchParams.delete("analysisPanel"); returnUrl.hash = "dashboard";
+  const setupHref=`./dashboard-setup.html?from=analysis&role=${role}&account=${encodeURIComponent(cleanNoteId)}&return=${encodeURIComponent(returnUrl.href)}&auto=0`;
+  const normalHref=`./install-free-analysis-v3.html?account=${encodeURIComponent(cleanNoteId)}&return=${encodeURIComponent(returnUrl.href)}`;
+  useEffect(() => { const restore = () => setPanel(requestedPanel()); window.addEventListener("popstate", restore); return () => window.removeEventListener("popstate", restore); }, []);
+  function openPanel(next: AnalysisPanel) {
+    if (next === panel) return;
+    const url = new URL(window.location.href); url.searchParams.set("insightMode", "analysis");
+    if (next === "menu") url.searchParams.delete("analysisPanel"); else url.searchParams.set("analysisPanel", next);
+    window.history.pushState({...window.history.state,route:"dashboard",insightMode:"analysis",analysisPanel:next,insightScrollY:window.scrollY}, "", url.href);
+    setPanel(next);
+  }
+  useEffect(() => { const menu = () => openPanel("menu"); window.addEventListener("mumei-insight-analysis-menu", menu); return () => window.removeEventListener("mumei-insight-analysis-menu", menu); }, [panel]);
+  const choices = [
+    { id: "normal", title: "通常分析", icon: "◈", copy: "公開記事・スキ・コメント", hint: "本人通知なしで利用", settings: "" },
+    { id: "dashboard", title: "ダッシュボード INSIGHTプロ", icon: "▥", copy: "公式値・成長・流入・収益", hint: "使用・設定は⚙から", settings: "#dashboardTitle" },
+    { id: "notifications", title: "本人通知分析", icon: "🔔", copy: "人物・交流・反応の履歴", hint: "使用・設定は⚙から", settings: "#noticeTitle" },
+    { id: "verdict", title: "総合判定", icon: "✦", copy: "伸び・記事評価・通知との照合", hint: "使用・設定は⚙から", settings: "" },
+  ];
+  return <section ref={scene.ref} className="miah" data-panel={panel} data-motion={scene.motion ? "on" : "off"} aria-label="分析メニュー">
+    <nav className="miah-menu" aria-label="4つの分析">{choices.map((choice, order) => <article key={choice.id} className={`miah-menu-card ${choice.id}`} data-selected={panel===choice.id} style={{ "--card-order": order } as React.CSSProperties}>
+      {choice.id === "normal" ? <a className="miah-menu-main" href={normalHref}><i aria-hidden="true">{choice.icon}</i><strong>{choice.title}</strong><span>{choice.copy}</span><small>{choice.hint}</small></a> : <button className="miah-menu-main" onClick={() => openPanel(choice.id as AnalysisPanel)} aria-pressed={panel===choice.id}><i aria-hidden="true">{choice.icon}</i><strong>{choice.title}</strong><span>{choice.copy}</span><small>{choice.hint}</small></button>}
+      {choice.id !== "normal" && <a className="miah-menu-settings" href={setupHref+choice.settings} aria-label={`${choice.title}の設定`}>⚙</a>}
+    </article>)}</nav>
+    {panel !== "menu" && <section key={`${cleanNoteId}:${panel}`} className={`miah-selected ${panel}`} aria-label={choices.find(choice=>choice.id===panel)?.title}>
+      <button className="miah-menu-back" onClick={() => openPanel("menu")}>← 分析一覧</button>
+      {panel === "notifications" ? <NotificationDeepAnalysis revision={revision}/> : <MemberInsightAnalyticsProV3 revision={revision} view={panel === "verdict" ? "verdict" : "dashboard"}/>}
+    </section>}
   </section>;
 }
