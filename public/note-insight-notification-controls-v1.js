@@ -2,10 +2,10 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.4.3';
+const VERSION='1.4.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
-const FIL='mumei_insight_magazine_filter_enabled_v3:',PANEL='mumei_insight_notification_panel_enabled_v1',COLLAPSE='mumei_insight_notification_controls_collapsed_v1';
+const FIL='mumei_insight_magazine_filter_enabled_v3:',PANEL='mumei_insight_notification_panel_enabled_v1';
 const SETTINGS='https://mumei-s.github.io/note-insight/notification-filter-settings.html?from=note';
 const INSIGHT='https://mumei-s.github.io/note-insight/?insightMode=notifications#dashboard';
 const CONNECTION='https://mumei-s.github.io/note-insight/notification-connection.html?from=note';
@@ -31,16 +31,14 @@ function findPanel(){
  for(const a of ns)for(const b of os){let p=a.parentElement,d=0;while(p&&p!==document.body&&d++<12){if(p.contains(b)&&shown(p)){let q=p,k=0;while(q&&q!==document.body&&k++<6){if(hasRows(q))return q;q=q.parentElement}}p=p.parentElement}}
  return null
 }
-function installStyle(){let s=document.getElementById(STYLE);if(s)return;s=document.createElement('style');s.id=STYLE;document.documentElement.append(s);s.textContent=`#${TOOLBAR}{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:grid;grid-template-columns:.82fr 1fr .72fr 1.12fr;gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{min-height:32px!important;height:32px!important;min-width:0;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:800 11px/1.2 system-ui;padding:0 3px!important;white-space:nowrap;touch-action:manipulation;cursor:pointer}#${TOOLBAR} button[data-action=filter]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;overflow:hidden;white-space:normal;font-size:10px;line-height:1.05}#${TOOLBAR} button[data-action=filter] small{font-size:9px;line-height:1.1}#${TOOLBAR} .read-status{grid-column:1/-1;margin:0 3px;color:#bedce9;font:600 10px/1.3 system-ui;white-space:normal;overflow-wrap:anywhere}#${TOOLBAR} .collapse{position:absolute;right:4px;top:-26px;width:42px!important;height:23px!important;min-height:23px!important;border-radius:7px 7px 0 0!important;background:#0b1b27!important;color:#cbe7f4!important}#${TOOLBAR}[data-collapsed="1"]{left:auto;right:0;bottom:38%;width:46px;display:block;padding:3px 0;border-radius:10px 0 0 10px}#${TOOLBAR}[data-collapsed="1"]>button:not(.collapse),#${TOOLBAR}[data-collapsed="1"]>.read-status{display:none!important}#${TOOLBAR}[data-collapsed="1"]>.collapse{position:static;width:44px!important;height:48px!important;min-height:48px!important;border:0!important;border-radius:9px 0 0 9px!important;font-size:18px!important}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button[data-state="done"]{background:#123d26;border-color:#63cf85;color:#dfffea}#${TOOLBAR} button[data-state="error"]{background:#3a171d;border-color:#a95b68;color:#ffdbe0}#${TOOLBAR} button:active{transform:scale(.98)}`}
-function collapsed(bar,on){if(!bar)return;bar.dataset.collapsed=on?'1':'0';const b=bar.querySelector('[data-action="collapse"]');if(b){b.textContent=on?'🔔':'−';b.setAttribute('aria-label',on?'本人通知ツールを開く':'本人通知ツールを画面端へしまう');b.title=on?'本人通知ツールを開く':'画面端へしまう'}}
-async function sync(bar){if(!bar?.isConnected)return;collapsed(bar,Boolean(await get(COLLAPSE,false)));const a=await account();if(!a)return;const enabled=Boolean(await get(key(FIL,a.id),false)),b=bar.querySelector('[data-action="filter"]');if(b){b.dataset.on=enabled?'1':'0';b.setAttribute('aria-label',enabled?'フィルター ON':'フィルター OFF');if(!b.querySelector('span'))b.innerHTML='<span>フィルター </span><small></small>';text(b.querySelector('small'),enabled?'ON':'OFF')}}
+function installStyle(){let s=document.getElementById(STYLE);if(s?.dataset.version===VERSION)return;if(!s){s=document.createElement('style');s.id=STYLE;document.documentElement.append(s)}s.dataset.version=VERSION;s.textContent=`#${TOOLBAR}{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:grid;grid-template-columns:.82fr 1fr .72fr 1.12fr;gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{min-height:32px!important;height:32px!important;min-width:0;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:800 11px/1.2 system-ui;padding:0 3px!important;white-space:nowrap;touch-action:manipulation;cursor:pointer}#${TOOLBAR} button[data-action=filter]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;overflow:hidden;white-space:normal;font-size:10px;line-height:1.05}#${TOOLBAR} button[data-action=filter] small{font-size:9px;line-height:1.1}#${TOOLBAR} .read-status{grid-column:1/-1;margin:0 3px;color:#bedce9;font:600 10px/1.3 system-ui;white-space:normal;overflow-wrap:anywhere}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button[data-state="done"]{background:#123d26;border-color:#63cf85;color:#dfffea}#${TOOLBAR} button[data-state="error"]{background:#3a171d;border-color:#a95b68;color:#ffdbe0}#${TOOLBAR} button:active{transform:scale(.98)}`}
+async function sync(bar){if(!bar?.isConnected)return;const a=await account();if(!a)return;const enabled=Boolean(await get(key(FIL,a.id),false)),b=bar.querySelector('[data-action="filter"]');if(b){b.dataset.on=enabled?'1':'0';b.setAttribute('aria-label',enabled?'フィルター ON':'フィルター OFF');if(!b.querySelector('span'))b.innerHTML='<span>フィルター </span><small></small>';text(b.querySelector('small'),enabled?'ON':'OFF')}}
 function leave(url,label){
  const veil=document.createElement('div');veil.id='mumei-route-veil-v130';veil.textContent=label||'INSIGHTへ移動中…';veil.style.cssText='position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:#07131c;color:#e7f8ff;font:900 13px/1.4 system-ui;letter-spacing:.03em';
  document.documentElement.appendChild(veil);requestAnimationFrame(()=>location.replace(url))
 }
 async function act(action,bar){
  if(!featureOn())return;
- if(action==='collapse'){const next=bar?.dataset.collapsed!=='1';await set(COLLAPSE,next);collapsed(bar,next);return}
  if(action==='read'){
   const b=bar?.querySelector('[data-action="read"]');if(b){const running=b.dataset.state==='busy';b.textContent=running?'停止中…':'読込中';b.dataset.state='busy'}
   if(b?.dataset.repair==='1'){const a=knownAccount||await account(),u=new URL(CONNECTION);if(a)u.searchParams.set('notificationAccount',a.id);u.searchParams.set('return',INSIGHT);leave(u.href,'本人通知の再連携を開いています…');return}
@@ -54,7 +52,7 @@ async function act(action,bar){
 }
 function makeBar(){
  const bar=document.createElement('div');bar.id=TOOLBAR;bar.setAttribute('data-mumei-notification-controls','1');
- bar.innerHTML='<button class="collapse" type="button" data-action="collapse" aria-label="本人通知ツールを画面端へしまう">−</button><button type="button" data-action="read">読込</button><button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT【通知】</button><p class="read-status" role="status" aria-live="polite">新着を確認します</p>';
+ bar.innerHTML='<button type="button" data-action="read">読込</button><button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT【通知】</button><p class="read-status" role="status" aria-live="polite">新着を確認します</p>';
  return bar
 }
 function toolbarTarget(e){const t=e.target;return t instanceof Element?t.closest('#'+TOOLBAR+' button[data-action]'):null}
@@ -72,6 +70,7 @@ function dedupe(){
  let keep=all.find(x=>x.id===TOOLBAR)||null;
  if(!keep&&all.length){keep=all[0];keep.id=TOOLBAR;keep.setAttribute('data-mumei-notification-controls','1')}
  for(const el of all)if(el!==keep)el.remove();
+ if(keep){keep.removeAttribute('data-collapsed');for(const button of keep.querySelectorAll('[data-action="collapse"],.collapse'))button.remove()}
  return keep
 }
 function mount(){
