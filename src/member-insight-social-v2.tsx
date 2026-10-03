@@ -1,3 +1,4 @@
+import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
@@ -12,7 +13,7 @@ function actorLabel(r:Row){if(!isUnknown(r))return String(r.actor_name||"noteユ
 function directionLabel(direction:any){return direction==="followers"?"相手があなたをフォロー":"あなたが相手をフォロー"}
 function changeLabel(r:Row){const add=r.event_type==="added";return `【${add?"増":"減"}】${directionLabel(r.direction)}`}
 function detailLabel(r:Row){if(isUnknown(r)&&r.direction==="followers"&&r.event_type==="removed")return"note公式フォロワー総数は減少しましたが、当時の取得範囲では人物を特定できませんでした。「不明分を調査」から過去の保存人物と照合できます。";if(isUnknown(r)&&r.direction==="followers"&&r.event_type==="added")return"note公式フォロワー総数の増加分のうち、最新1,000人差分だけでは人物を特定できなかった分です。";if(r.event_type==="removed")return r.identity_exact?"関係終了を検知（原因不明）":"最新1,000人の範囲外になった可能性があり、解除は未確定です。";const add=r.event_type==="added",followers=r.direction==="followers";if(followers)return add?"相手が本人をフォロー":"相手が本人のフォローを解除";return add?"本人が相手をフォロー":"本人が相手のフォローを解除"}
-function Avatar({row}:{row:Row}){const name=actorLabel(row),image=String(row.actor_image_url||"");return image?<img src={image} alt="" referrerPolicy="no-referrer" loading="lazy" decoding="async"/>:<span>{isUnknown(row)?"?":([...[...name]][0]||"人")}</span>}
+function Avatar({row}:{row:Row}){return <CreatorAvatar person={row} name={actorLabel(row)}/>}
 function officialCount(r:any){return Number(r?.live_expected_count??r?.expected_count??0)}
 function syncText(r:any){if(!r)return"未照合";const got=Number(r.received_count||0),scanned=Number(r.expected_count||0),live=officialCount(r);if(r.complete&&scanned===live)return`完全照合 ${n(got)} / ${n(live)}`;if(r.live_count_at)return`公式現在 ${n(live)}人 / 人物最終照合 ${n(got)}人`;return`最新 ${n(got)}人を人物確認 / 公式 ${n(live)}人`}
 function syncNote(r:any){if(!r)return"同期履歴なし";const a=Number(r.added_count||0),d=Number(r.removed_count||0),when=date(r.created_at),liveAt=r.live_count_at?date(r.live_count_at):"";const live=liveAt?`・公式値確認 ${liveAt}`:"";if(r.complete)return`${when}・${a||d?`今回 増${a} / 減${d}`:"今回の増減なし"}${live}`;if(String(r.error||"").startsWith("NOTE_IDENTITY_LIST_CAPPED_AT_1000:"))return`${when}・公式総数差分 ${a||d?`増${a} / 減${d}`:"増減なし"}・人物は最新1,000人で照合${live}`;return`${when}・人物差分は取得できた範囲のみ${live}`}
