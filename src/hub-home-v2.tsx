@@ -1,3 +1,7 @@
+import { useVisibleMotion } from "./insight-visible-motion";
+import "./hub-home-intro.css";
+import { ParticipantShowcase } from "./hub-participant-showcase";
+import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useMemo, useState } from "react";
 import {
   EXPLICIT_LOGOUT_KEY_PREFIX,
@@ -27,11 +31,6 @@ async function post(endpoint: string, action: string, headers: Record<string, st
   return payload;
 }
 
-function Initial({ name }: { name: string }) { return <span className="hub-person-fallback">{[...name].slice(0, 1).join("") || "n"}</span>; }
-function Avatar({ person, large = false }: { person: RailPerson; large?: boolean }) {
-  return person.image ? <img className={large ? "hub-v2-avatar large" : "hub-v2-avatar"} src={person.image} alt="" referrerPolicy="no-referrer" /> : <span className={`hub-v2-avatar fallback ${large ? "large" : ""}`}>{[...person.name][0] || "n"}</span>;
-}
-
 function ParticipantRail({ people, loading, activeNoteId }: { people: RailPerson[]; loading: boolean; activeNoteId: string }) {
   const ordered = useMemo(() => {
     if (!people.length) return [] as RailPerson[];
@@ -40,29 +39,14 @@ function ParticipantRail({ people, loading, activeNoteId }: { people: RailPerson
       || people[0];
     return [primary, ...people.filter((p) => p.id !== primary.id)];
   }, [people, activeNoteId]);
-  const primary = ordered[0];
-  const compact = ordered.slice(1, 5);
-  const rest = ordered.slice(5);
-
   return <section className="hub-participants hub-participants-v2 is-insight" aria-label="INSIGHT参加クリエイター">
-    <div className="hub-participant-heading hub-participant-heading-v2"><strong>INSIGHT参加 <b>{loading ? "—" : people.length}名</b></strong><small>タップ→本人note</small></div>
-    {loading ? <div className="hub-participant-loading"><i /><i /><i /></div> : !primary ? <p className="hub-participant-empty">本人認証済みの参加クリエイターがここに並びます。</p> : <>
-      <div className="hub-v2-participant-row">
-        <a className="hub-v2-primary" href={primary.profileUrl} target="_blank" rel="noreferrer" title={`${primary.name}のnote`}>
-          <Avatar person={primary} large />
-          <span><small>MAIN CREATOR</small><b>{primary.name}</b></span>
-        </a>
-        <div className="hub-v2-compact4">
-          {compact.map((person) => <a key={person.id} href={person.profileUrl} target="_blank" rel="noreferrer" title={`${person.name}のnote`}><Avatar person={person} /><span>{person.name}</span></a>)}
-        </div>
-      </div>
-      {rest.length ? <details className="hub-v2-more"><summary>ほか {rest.length}名を見る</summary><div>{rest.map((person) => <a key={person.id} href={person.profileUrl} target="_blank" rel="noreferrer" title={`${person.name}のnote`}><Avatar person={person} /><span>{person.name}</span></a>)}</div></details> : null}
-    </>}
+    <div className="hub-participant-heading hub-participant-heading-v2"><strong>INSIGHT参加 <b>{loading ? "—" : people.length}名</b></strong><small>アイコン・名前をタップ→本人note</small></div>
+    {loading ? <div className="hub-participant-loading" role="status"><i /><i /><i /><span>参加クリエイターを確認中</span></div> : !ordered.length ? <p className="hub-participant-empty">本人認証済みの参加クリエイターがここに並びます。</p> : <ParticipantShowcase people={ordered}/>}
   </section>;
 }
 
 function AccountBadge({ account, count }: { account: StoredInsightAccount | null; count: number }) {
-  return <div className="hub-account-state">{account ? <>{account.imageUrl ? <img src={account.imageUrl} alt="" referrerPolicy="no-referrer" /> : <span>{[...(account.displayName || account.noteId)][0]}</span>}<div><small>ログイン中</small><b>{account.displayName || `@${account.noteId}`}</b>{count > 1 ? <em>保存済み {count}アカウント</em> : null}</div></> : <div><small>INSIGHT</small><b>未ログイン</b>{count ? <em>保存済み {count}アカウント</em> : null}</div>}</div>;
+  return <div className="hub-account-state">{account ? <><CreatorAvatar person={account} name={account.displayName || account.noteId} eager/><div><small>ログイン中</small><b>{account.displayName || `@${account.noteId}`}</b>{count > 1 ? <em>保存済み {count}アカウント</em> : null}</div></> : <div><small>INSIGHT</small><b>未ログイン</b>{count ? <em>保存済み {count}アカウント</em> : null}</div>}</div>;
 }
 
 function ConfirmDialog({ action, account, busy, onCancel, onYes }: { action: ConfirmAction; account: StoredInsightAccount | null; busy: boolean; onCancel: () => void; onYes: () => void }) {
@@ -76,6 +60,7 @@ function ConfirmDialog({ action, account, busy, onCancel, onYes }: { action: Con
 }
 
 export function HubHome() {
+  const heroScene = useVisibleMotion<HTMLElement>();
   const [people, setPeople] = useState<RailPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [accountVersion, setAccountVersion] = useState(0);
@@ -156,7 +141,7 @@ export function HubHome() {
     <section className="hub-accountbar hub-wrap"><AccountBadge account={memberReady ? activeAccount : null} count={accounts.length} /><div className="hub-account-actions"><button className="login" onClick={() => openAccess(accounts.length ? "switch" : "login")}>ログイン</button><button className="join" onClick={() => openAccess("apply")}>参加</button><button className="minor" disabled={!memberReady} onClick={() => setConfirm("logout")}>ログアウト</button><button className="minor danger" disabled={!memberReady} onClick={() => setConfirm("leave")}>退会</button></div></section>
     {accountMessage ? <div className="hub-account-message hub-wrap">{accountMessage}</div> : null}
 
-    <section className="hub-hero hub-wrap"><p>NOTE CREATOR ANALYTICS</p><h1>無名S note<br />INSIGHT</h1><span>noteの反応を「誰が・どの記事に・どれだけ応援しているか」まで蓄積して見る、参加制のクリエイター分析ツール。</span></section>
+    <section ref={heroScene.ref} className="hub-hero hub-wrap hub-hero-scene" data-motion={heroScene.motion?"on":"off"}><div className="hub-hero-depth" aria-hidden="true"><i/><i/><i/><i/></div><div className="hub-hero-streaks" aria-hidden="true"><i/><i/><i/></div><div className="hub-hero-sparks" aria-hidden="true">{Array.from({length:9},(_,i)=><i key={i} style={{"--spark":i} as React.CSSProperties}/>)}</div><p>NOTE CREATOR ANALYTICS</p><h1><span>無名S note</span><strong>INSIGHT</strong></h1><span>noteの反応を「誰が・どの記事に・どれだけ応援しているか」まで蓄積して見る、参加制のクリエイター分析ツール。</span></section>
 
     <section className="hub-wrap" style={{ paddingBottom: 16 }}><article className="hub-entrance" style={{ maxWidth: 900, margin: "0 auto", minHeight: 0, borderColor: "#486522" }}><small style={{ color: "#b6ff38" }}>MEMBER ACCESS</small><h2>INSIGHT</h2><p>参加申請後、OWNER承認とnote自己紹介欄を使った本人確認を行います。認証後は本人専用INSIGHTを利用でき、同じ端末ではログイン状態を長期保持します。</p><ParticipantRail people={people} loading={loading} activeNoteId={activeAccount?.noteId || ""}/><a className="hub-open" href={primaryHref} style={{ background: "#b6ff38" }} onClick={(event) => { if (!memberReady) { event.preventDefault(); openAccess("login"); } }}>{primaryLabel}</a></article></section>
 
