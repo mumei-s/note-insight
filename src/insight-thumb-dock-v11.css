@@ -5,11 +5,11 @@
 .miv5-creator-first{
   position:relative!important;
   display:grid!important;
-  grid-template-columns:58px minmax(0,1fr) auto!important;
+  grid-template-columns:44px minmax(0,1fr) auto!important;
   gap:10px!important;
-  align-items:center!important;
-  min-height:112px!important;
-  padding:18px 12px 14px!important;
+  align-items:end!important;
+  min-height:104px!important;
+  padding:48px 12px 12px!important;
   overflow:hidden!important;
   border-bottom:1px solid rgba(103,211,238,.20)!important;
   background:
@@ -37,7 +37,7 @@
   position:absolute;
   left:5%;
   right:5%;
-  top:9px;
+  top:7px;
   display:grid;
   gap:1px;
   color:rgba(214,248,255,.20);
@@ -49,13 +49,13 @@
 }
 .miv5-hero-signature strong span:first-child{
   justify-self:start;
-  font-size:clamp(20px,5.8vw,38px);
+  font-size:clamp(18px,4.8vw,26px);
   letter-spacing:.07em;
 }
 .miv5-hero-signature strong span:last-child{
   justify-self:end;
   margin-top:2px;
-  font-size:clamp(35px,9.5vw,66px);
+  font-size:clamp(31px,8vw,44px);
   letter-spacing:.14em;
 }
 .miv5-hero-signature i{
@@ -72,7 +72,7 @@
 .miv5-creator-copy,
 .miv5-creator-actions{position:relative!important;z-index:3!important}
 .miv5-creator-avatar{
-  width:56px!important;height:56px!important;
+  width:42px!important;height:42px!important;
   border-radius:50%!important;
   border:2px solid rgba(215,250,255,.90)!important;
   overflow:hidden!important;
@@ -83,7 +83,7 @@
 .miv5-creator-copy h1{
   margin:0!important;
   color:#fff!important;
-  font-size:clamp(17px,5vw,24px)!important;
+  font-size:clamp(14px,4vw,18px)!important;
   line-height:1.1!important;
   white-space:nowrap!important;
   overflow:hidden!important;
@@ -219,8 +219,7 @@
   gap:3px!important;
   text-decoration:none!important;
 }
-.miv5-launcher-item.analysis>button,
-.miv5-launcher-item.notification>button{padding-right:40px!important}
+.miv5-launcher-item.analysis>button{padding-right:40px!important}
 .miv5-launcher-item .icon{
   width:38px!important;height:38px!important;
   display:grid!important;place-items:center!important;
@@ -296,17 +295,17 @@
 
 @media(max-width:620px){
   .miv5-creator-first{
-    grid-template-columns:50px minmax(0,1fr) auto!important;
-    min-height:104px!important;
-    padding:16px 8px 12px!important;
+    grid-template-columns:38px minmax(0,1fr) auto!important;
+    min-height:96px!important;
+    padding:46px 8px 10px!important;
     gap:8px!important;
   }
-  .miv5-creator-avatar{width:48px!important;height:48px!important}
-  .miv5-creator-copy h1{font-size:clamp(16px,4.8vw,22px)!important}
+  .miv5-creator-avatar{width:36px!important;height:36px!important}
+  .miv5-creator-copy h1{font-size:clamp(13px,3.8vw,16px)!important}
   .miv5-creator-copy a{font-size:8.8px!important}
   .miv5-creator-actions button{min-height:28px!important;padding:0 8px!important;font-size:6.7px!important}
-  .miv5-hero-signature strong{left:4%;right:4%;top:10px}
-  .miv5-hero-signature strong span:first-child{font-size:clamp(18px,5.2vw,28px)}
+  .miv5-hero-signature strong{left:4%;right:4%;top:7px}
+  .miv5-hero-signature strong span:first-child{font-size:clamp(17px,4.8vw,24px)}
   .miv5-hero-signature strong span:last-child{font-size:clamp(31px,8.8vw,48px)}
   .miv5-command-stage{padding:3px 4px 5px!important}
   .miv5-launcher{gap:5px!important;min-height:86px!important;padding:7px 6px!important}
@@ -316,8 +315,7 @@
   .miv5-launcher-item.caution{min-height:68px!important}
   .miv5-launcher-item .icon{width:34px!important;height:34px!important;font-size:16px!important}
   .miv5-launcher-item b{font-size:9px!important}
-  .miv5-launcher-item.analysis>button,
-  .miv5-launcher-item.notification>button{padding-right:36px!important}
+  .miv5-launcher-item.analysis>button{padding-right:36px!important}
   .miv5-launcher-item .gear{width:29px!important;height:29px!important;right:3px!important;font-size:11px!important}
   .miv5-launcher-item.notification .gear{right:2px!important}
 }
