@@ -8,11 +8,15 @@ import { webcrypto } from 'node:crypto';
 
 const migrationFile = readdirSync('supabase/migrations').find(name => name.endsWith('_owner_dm_permanent_retention.sql'));
 const migration = readFileSync('supabase/migrations/' + migrationFile, 'utf8');
+const permissionsFile = readdirSync('supabase/migrations').find(name => name.endsWith('_owner_dm_retention_function_permissions.sql'));
+const permissionsMigration = readFileSync('supabase/migrations/' + permissionsFile, 'utf8');
 async function fixture(t) {
   const db = new PGlite(); t.after(() => db.close());
+  await db.exec('create role anon; create role authenticated; create role service_role bypassrls; alter default privileges in schema public grant execute on functions to anon,authenticated,service_role;');
   await db.exec("create table public.insight_notification_profiles(member_id text primary key); insert into public.insight_notification_profiles values ('owner'),('participant');");
   await db.exec(readFileSync('supabase/migrations/20260921035000_insight_dm_history.sql', 'utf8'));
   await db.exec(migration);
+  await db.exec(permissionsMigration);
   return db;
 }
 async function seed(db, member = 'owner', key = 'saved') {
@@ -47,7 +51,7 @@ test('本人分の直接削除・プロフィール連鎖削除・TRUNCATEを止
 });
 test('保護は権限を拡張せず、本人の履歴がないテーブルへの通常操作を妨げない', async t => {
   const db = await fixture(t); await seed(db, 'participant');
-  await db.exec("create role anon; create role authenticated; create role service_role bypassrls; grant usage on schema public to service_role; grant all on public.insight_dm_messages to service_role; grant usage on all sequences in schema public to service_role; set role service_role; update public.insight_dm_messages set body='参加者の更新' where member_id='participant'; reset role;");
+  await db.exec("grant usage on schema public to service_role; grant all on public.insight_dm_messages to service_role; grant usage on all sequences in schema public to service_role; set role service_role; update public.insight_dm_messages set body='参加者の更新' where member_id='participant'; reset role;");
   const permissions = (await db.query("select has_function_privilege('anon','public.protect_owner_dm_history_row()','EXECUTE') as anon,has_function_privilege('authenticated','public.protect_owner_dm_history_truncate()','EXECUTE') as authenticated,prosecdef from pg_proc where oid='public.protect_owner_dm_history_row()'::regprocedure")).rows[0];
   assert.deepEqual(permissions, { anon: false, authenticated: false, prosecdef: false });
   await db.exec('truncate public.insight_dm_messages;');
