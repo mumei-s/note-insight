@@ -1,2 +1,2 @@
-INSIGHT 2026.10.03.25 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
-Five playback speed levels, default 2 seconds, with speed, playback state and active participant retained across navigation and reloads.
+INSIGHT 2026.10.03.26 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
+Compact member introduction and persistent playback levels; four analysis panels with settings in the gear page; charts lift, settle and sparkle.
