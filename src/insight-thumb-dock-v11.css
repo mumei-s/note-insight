@@ -1,4 +1,4 @@
-/* INSIGHT v18 — upper-stage play, bottom-dock utility.
+/* INSIGHT v20 — visible upper-stage play, bottom-dock utility.
    Motion is one-shot only. No auth/session/data behavior here. */
 
 /* ===== CREATOR HERO ===== */
@@ -26,6 +26,7 @@
   background:linear-gradient(90deg,transparent,rgba(117,229,251,.55),transparent);
   pointer-events:none;
 }
+.miv5-creator-first::before{content:none!important}
 .miv5-hero-signature{
   position:absolute!important;
   inset:0!important;
@@ -34,18 +35,17 @@
 }
 .miv5-hero-signature strong{
   position:absolute;
-  left:34%;
+  left:5%;
   right:5%;
-  top:12px;
+  top:9px;
   display:grid;
   gap:1px;
-  color:rgba(214,248,255,.13);
+  color:rgba(214,248,255,.20);
   font-weight:950;
   line-height:.94;
   text-shadow:0 0 28px rgba(103,226,250,.17);
-  opacity:0;
-  transform:translateY(9px);
-  animation:iv18BrandIn 1.05s cubic-bezier(.2,.8,.2,1) .08s 1 forwards;
+  opacity:1;
+  animation:iv20BrandIn 1.35s cubic-bezier(.2,.8,.2,1) .08s 1 both;
 }
 .miv5-hero-signature strong span:first-child{
   justify-self:start;
@@ -66,7 +66,7 @@
   box-shadow:0 0 18px rgba(100,222,247,.55);
   opacity:0;
   transform:translateX(-70%);
-  animation:iv18HeroBeam .9s ease-out .18s 1 forwards;
+  animation:iv18HeroBeam 1.4s ease-out .18s 1 both;
 }
 .miv5-creator-avatar,
 .miv5-creator-copy,
@@ -141,7 +141,17 @@
     linear-gradient(180deg,rgba(6,23,33,.88),rgba(4,15,23,.92))!important;
   box-shadow:0 10px 24px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.025)!important;
 }
-.miv5-launcher::before{
+.miv5-launcher::before,.miv5-launcher::after{content:none!important}
+.miv5-launcher-halo{
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  display:block!important;
+  overflow:hidden!important;
+  border-radius:inherit!important;
+  pointer-events:none!important;
+}
+.miv5-launcher-halo::before{
   content:"";
   position:absolute;
   z-index:0;
@@ -153,9 +163,9 @@
   border:1.5px solid rgba(113,232,255,.42);
   box-shadow:0 0 0 7px rgba(91,219,247,.035),0 0 26px rgba(87,214,245,.19),inset 0 0 24px rgba(110,224,249,.05);
   opacity:0;
-  animation:iv18OvalIn .95s cubic-bezier(.2,.8,.2,1) .14s 1 forwards;
+  animation:iv18OvalIn 1.4s cubic-bezier(.2,.8,.2,1) .14s 1 both;
 }
-.miv5-launcher::after{
+.miv5-launcher-halo::after{
   content:"";
   position:absolute;
   z-index:0;
@@ -165,9 +175,22 @@
   background:linear-gradient(90deg,transparent,#8cecff,#fff,#8cecff,transparent);
   box-shadow:0 0 12px rgba(126,229,251,.55);
   opacity:0;
-  animation:iv18OvalSweep .95s ease-out .28s 1 forwards;
+  animation:iv18OvalSweep 1.3s ease-out .28s 1 both;
 }
-.miv5-launcher-halo{display:none!important}
+.miv5-launcher-halo i{
+  position:absolute;
+  inset:7px 3%;
+  border:1px solid rgba(137,237,255,.45);
+  border-radius:999px;
+  opacity:0;
+  pointer-events:none;
+  animation:iv20HaloEcho 1.5s ease-out .2s 1 both;
+}
+.miv5-launcher-halo i:last-child{
+  inset:13px 5%;
+  border-color:rgba(180,169,255,.3);
+  animation-delay:.34s;
+}
 
 .miv5-launcher-item{
   position:relative!important;
@@ -245,10 +268,10 @@
 .miv5{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))!important}
 
 /* ===== one-shot motion only ===== */
-@keyframes iv18BrandIn{
-  0%{opacity:0;transform:translateY(9px)}
-  55%{opacity:.28}
-  100%{opacity:.13;transform:translateY(0)}
+@keyframes iv20BrandIn{
+  0%{opacity:0;transform:translateY(8px)}
+  55%{opacity:1;transform:translateY(0)}
+  100%{opacity:1;transform:translateY(0)}
 }
 @keyframes iv18HeroBeam{
   0%{opacity:0;transform:translateX(-70%)}
@@ -265,6 +288,11 @@
   20%{opacity:1}
   100%{opacity:0;transform:translateX(340%)}
 }
+@keyframes iv20HaloEcho{
+  0%{opacity:0;transform:scale(.9)}
+  35%{opacity:.7}
+  100%{opacity:0;transform:scale(1.06)}
+}
 
 @media(max-width:620px){
   .miv5-creator-first{
@@ -277,12 +305,12 @@
   .miv5-creator-copy h1{font-size:clamp(16px,4.8vw,22px)!important}
   .miv5-creator-copy a{font-size:8.8px!important}
   .miv5-creator-actions button{min-height:28px!important;padding:0 8px!important;font-size:6.7px!important}
-  .miv5-hero-signature strong{left:31%;right:3%;top:11px}
+  .miv5-hero-signature strong{left:4%;right:4%;top:10px}
   .miv5-hero-signature strong span:first-child{font-size:clamp(18px,5.2vw,28px)}
   .miv5-hero-signature strong span:last-child{font-size:clamp(31px,8.8vw,48px)}
   .miv5-command-stage{padding:3px 4px 5px!important}
   .miv5-launcher{gap:5px!important;min-height:86px!important;padding:7px 6px!important}
-  .miv5-launcher::before{left:2%;right:2%;height:62px}
+  .miv5-launcher-halo::before{left:2%;right:2%;height:62px}
   .miv5-launcher-item,
   .miv5-launcher-item>button,
   .miv5-launcher-item.caution{min-height:68px!important}
@@ -297,9 +325,12 @@
 @media(prefers-reduced-motion:reduce){
   .miv5-hero-signature strong,
   .miv5-hero-signature i,
-  .miv5-launcher::before,
-  .miv5-launcher::after{animation:none!important}
-  .miv5-hero-signature strong{opacity:.13!important;transform:none!important}
-  .miv5-launcher::before{opacity:.46!important;transform:translateY(-50%) scale(1)!important}
-  .miv5-launcher::after{display:none!important}
+  .miv5-launcher-halo::before,
+  .miv5-launcher-halo::after,
+  .miv5-launcher-halo i{animation:none!important}
+  .miv5-hero-signature strong{opacity:1!important;transform:none!important}
+  .miv5-launcher-halo::before{opacity:.46!important;transform:translateY(-50%) scale(1)!important}
+  .miv5-hero-signature i,
+  .miv5-launcher-halo::after,
+  .miv5-launcher-halo i{display:none!important}
 }
