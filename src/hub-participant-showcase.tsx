@@ -6,18 +6,19 @@ import "./hub-participant-showcase.css";
 type Person = { id: string; noteId: string; name: string; image: string | null; profileUrl: string };
 const PLAYBACK_STORAGE_KEY = "mumei-insight-participant-playback-v1";
 const PLAYBACK_SPEEDS = [
-  { level: 1, seconds: 4 }, { level: 2, seconds: 3 }, { level: 3, seconds: 2 },
-  { level: 4, seconds: 1.5 }, { level: 5, seconds: 1 },
+  { level: 1, seconds: 3 }, { level: 2, seconds: 2 }, { level: 3, seconds: 1.5 },
+  { level: 4, seconds: 1 }, { level: 5, seconds: .7 },
 ];
-type PlaybackSettings = { version: 1; speedLevel: number; paused: boolean; explicitPlayback: boolean; personId: string };
+type PlaybackSettings = { version: 2; speedLevel: number; paused: boolean; explicitPlayback: boolean; personId: string };
 function readPlaybackSettings(): PlaybackSettings {
-  const defaults: PlaybackSettings = { version: 1, speedLevel: 3, paused: false, explicitPlayback: false, personId: "" };
+  const defaults: PlaybackSettings = { version: 2, speedLevel: 2, paused: false, explicitPlayback: false, personId: "" };
   try {
-    const saved = JSON.parse(window.localStorage.getItem(PLAYBACK_STORAGE_KEY) || "null") as Partial<PlaybackSettings> | null;
-    if (!saved || saved.version !== 1) return defaults;
+    const saved = JSON.parse(window.localStorage.getItem(PLAYBACK_STORAGE_KEY) || "null") as Partial<Omit<PlaybackSettings, "version">> & { version?: number } | null;
+    if (!saved || (saved.version !== 1 && saved.version !== 2)) return defaults;
+    const level = saved.speedLevel && saved.version === 1 ? Math.max(1, saved.speedLevel - 1) : saved.speedLevel;
     return {
       ...defaults,
-      speedLevel: PLAYBACK_SPEEDS.some(speed => speed.level === saved.speedLevel) ? saved.speedLevel! : defaults.speedLevel,
+      speedLevel: PLAYBACK_SPEEDS.some(speed => speed.level === saved.speedLevel) ? level! : defaults.speedLevel,
       paused: saved.paused === true,
       explicitPlayback: saved.explicitPlayback === true,
       personId: typeof saved.personId === "string" ? saved.personId : "",
@@ -39,7 +40,7 @@ export function ParticipantShowcase({ people }: { people: Person[] }) {
   const activePersonId = person?.id;
   useEffect(() => {
     if (!activePersonId) return;
-    try { window.localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify({ version: 1, speedLevel, paused, explicitPlayback, personId: activePersonId } satisfies PlaybackSettings)); } catch {}
+    try { window.localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify({ version: 2, speedLevel, paused, explicitPlayback, personId: activePersonId } satisfies PlaybackSettings)); } catch {}
   }, [speedLevel, paused, explicitPlayback, activePersonId]);
   useEffect(() => {
     if (!playing || people.length < 2) return;
@@ -56,7 +57,7 @@ export function ParticipantShowcase({ people }: { people: Person[] }) {
   const term = query.trim().toLowerCase(), listed = term ? people.filter(p => `${p.name} @${p.noteId}`.toLowerCase().includes(term)) : people;
   const satellites = people.length <= 5 ? people : Array.from({ length: 5 }, (_, slot) => people[(active + slot + people.length - 2) % people.length]);
   if (!person) return null;
-  return <div ref={ref} className="hub-showcase" data-motion={motion ? "on" : "off"} aria-label="参加クリエイターの光のレール">
+  return <div ref={ref} className="hub-showcase" style={{ "--spotlight-duration": `${Math.min(.75, speed.seconds * .65)}s` } as CSSProperties} data-motion={motion ? "on" : "off"} aria-label="参加クリエイターの光のレール">
     <div className="hub-showcase-stage" onPointerEnter={e => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)} onFocusCapture={() => setPaused(true)} onPointerDown={e => setStart({ x: e.clientX, y: e.clientY })} onPointerUp={e => {
       if (start) { const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) move(dx < 0 ? 1 : -1); } setStart(null);
     }} onPointerCancel={() => setStart(null)}>
@@ -69,8 +70,7 @@ export function ParticipantShowcase({ people }: { people: Person[] }) {
       </a>
       <div key={`particles-${person.id}`} className="hub-showcase-particles" aria-hidden="true">{Array.from({length:7},(_,i)=><i key={i} style={{"--p":i} as CSSProperties}/>)}</div>
     </div>
-    <div className="hub-showcase-controls"><button disabled={people.length < 2} onClick={() => move(-1)} aria-label="前のクリエイター">←</button><button disabled={people.length < 2} onClick={togglePlayback} aria-pressed={requestedPlayback}>{requestedPlayback ? "Ⅱ 停止" : "▶ 再生"}</button><span aria-live={requestedPlayback ? "off" : "polite"}>{active + 1} / {people.length}</span><button disabled={people.length < 2} onClick={() => move(1)} aria-label="次のクリエイター">→</button></div>
-    <div className="hub-showcase-speed"><label><span>切替速度</span><select value={speedLevel} onChange={e => setSpeedLevel(Number(e.target.value))}>{PLAYBACK_SPEEDS.map(speed => <option key={speed.level} value={speed.level}>Lv.{speed.level} · {speed.seconds}秒{speed.level === 3 ? "（標準）" : ""}</option>)}</select></label><small>選んだ設定を維持</small></div>
+    <div className="hub-showcase-controls"><button disabled={people.length < 2} onClick={() => move(-1)} aria-label="前のクリエイター">←</button><button disabled={people.length < 2} onClick={togglePlayback} aria-pressed={requestedPlayback}>{requestedPlayback ? "Ⅱ 停止" : "▶ 再生"}</button><span aria-live={requestedPlayback ? "off" : "polite"}>{active + 1} / {people.length}</span><button disabled={people.length < 2} onClick={() => move(1)} aria-label="次のクリエイター">→</button><label className="hub-showcase-speed" title="切替速度"><select aria-label="切替速度" value={speedLevel} onChange={e => setSpeedLevel(Number(e.target.value))}>{PLAYBACK_SPEEDS.map(speed => <option key={speed.level} value={speed.level}>Lv.{speed.level}</option>)}</select></label></div>
     <section className="hub-showcase-all" data-open={listOpen ? "true" : "false"}>
       <button className="hub-showcase-list-toggle" onClick={toggleList} aria-expanded={listOpen} aria-controls={listId}>
         <span>参加者一覧</span><b>{people.length}名</b><em>{listOpen ? "閉じる" : "全員を見る"}</em><i aria-hidden="true">⌄</i>

@@ -91,9 +91,9 @@ async function chooseSpeed(h, level) {
 test('速度5段階をすぐにタイマーへ反映し、タイマーが重複せず停止中の速度変更でも再生しない', async t => {
   const h = await sceneFixture(t), timers = speedTimers(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
   await h.render(ParticipantShowcase, { people: playbackPeople });
-  assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '3');
+  assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '2');
   assert.equal([...timers.values()][0].delay, 2000);
-  for (const [level, delay] of [[1, 4000], [2, 3000], [3, 2000], [4, 1500], [5, 1000]]) {
+  for (const [level, delay] of [[1, 3000], [2, 2000], [3, 1500], [4, 1000], [5, 700]]) {
     const oldTimer = [...timers.keys()][0];
     await chooseSpeed(h, level);
     assert.equal(timers.size, 1);
@@ -104,7 +104,7 @@ test('速度5段階をすぐにタイマーへ反映し、タイマーが重複�
   assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
   const toggle = h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]');
   await h.click(toggle);
-  await chooseSpeed(h, 4);
+  await chooseSpeed(h, 3);
   assert.equal(timers.size, 0);
   assert.equal(toggle.getAttribute('aria-pressed'), 'false');
   await h.click(toggle);
@@ -135,7 +135,7 @@ test('ページを戻すと速度・再生状態・表示人物が復元され�
   await h.render(ParticipantShowcase, { people: playbackPeople });
   assert.equal(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]').getAttribute('aria-pressed'), 'true');
   assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_2');
-  assert.equal([...timers.values()][0].delay, 1000);
+  assert.equal([...timers.values()][0].delay, 700);
   await h.render(ParticipantShowcase, { people: [playbackPeople[0], playbackPeople[1]] });
   assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_0');
 });
@@ -145,7 +145,7 @@ test('保存値が壊れていたり保存が禁止されていても標準速�
   for (const raw of ['{broken', 'null', JSON.stringify({ version: 1, speedLevel: 99, paused: 'true', personId: {} }), JSON.stringify({ version: 99, speedLevel: 5 })]) {
     h.w.localStorage.setItem(playbackKey, raw);
     await h.render(ParticipantShowcase, { people: playbackPeople });
-    assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '3');
+    assert.equal(h.w.document.querySelector('.hub-showcase-speed select').value, '2');
     assert.equal([...timers.values()][0].delay, 2000);
     await h.render(() => null, {});
   }
@@ -155,7 +155,23 @@ test('保存値が壊れていたり保存が禁止されていても標準速�
   await chooseSpeed(h, 5);
   await React.act(async () => { [...timers.values()][0].callback(); await pause(); });
   assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_1');
+  assert.equal([...timers.values()][0].delay, 700);
+});
+
+test('旧速度設定を引き継ぎ、秒数を出さない小さなレベル選択を再生操作と同じ行に置く', async t => {
+  const h = await sceneFixture(t), timers = speedTimers(h), { ParticipantShowcase } = h.load('src/hub-participant-showcase.tsx');
+  h.w.localStorage.setItem(playbackKey, JSON.stringify({ version: 1, speedLevel: 5, paused: true, personId: '2' }));
+  await h.render(ParticipantShowcase, { people: playbackPeople });
+  const select = h.w.document.querySelector('.hub-showcase-controls select');
+  assert.equal(select.value, '4');
+  assert.deepEqual([...select.options].map(option => option.textContent), ['Lv.1', 'Lv.2', 'Lv.3', 'Lv.4', 'Lv.5']);
+  assert.equal(h.w.document.querySelector('.hub-showcase-focus').href, 'https://note.com/person_2');
+  assert.equal(timers.size, 0);
+  assert.equal(JSON.parse(h.w.localStorage.getItem(playbackKey)).version, 2);
+  await h.click(h.w.document.querySelector('.hub-showcase-controls button[aria-pressed]'));
   assert.equal([...timers.values()][0].delay, 1000);
+  await chooseSpeed(h, 5);
+  assert.equal([...timers.values()][0].delay, 700);
 });
 
 test('タップ由来のホバーが残っても再生直後に人物が替わり、その後も自動切替を続ける', async t => {
