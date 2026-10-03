@@ -41,6 +41,7 @@ function load(source, w, fetch, overrides = {}) {
   const modules = {
     react: React,
     'react/jsx-runtime': jsx,
+    './creator-avatar': { CreatorAvatar: ({ image, name }) => React.createElement(image ? 'img' : 'span', image ? { src: image, alt: name } : {}, image ? undefined : name?.slice(0, 1)) },
     './insight-account-store': {
       INSIGHT_TOKEN_KEY: 'fixture-token-key', currentStoredInsightAccount: () => account,
       readStoredInsightAccounts: () => [account], restoreStoredMemberSession: () => account,

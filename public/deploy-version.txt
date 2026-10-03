@@ -1,2 +1,2 @@
-INSIGHT 2026.10.03.22 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
-Stable DM progress without self-triggered reads, per-row notification filters with all-hidden recovery, and left-aligned brand lettering with upper-panel glints.
+INSIGHT 2026.10.03.23 / notification 3.6.24 / dashboard 1.6.4 / DM 1.4.10
+Magazine-scoped search with immediate local results and cancellation, shared creator image recovery, all participants visible, diagonal light presentation, dimensional charts, readable analysis, and square-safe social previews.
