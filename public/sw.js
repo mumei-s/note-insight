@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v88-dm-filter-glints-20261003";
+const CACHE_NAME = "mumei-note-insight-v89-search-light-20261003";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));

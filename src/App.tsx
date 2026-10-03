@@ -77,6 +77,11 @@ const SESSION_TRANSITION_CSS = `
   .app-session-progress{display:block;width:86px;height:2px;margin:20px auto 0;overflow:hidden;border-radius:999px;background:#142b37}
   .app-session-progress::after{content:"";display:block;width:40%;height:100%;border-radius:inherit;background:#88e6fa;animation:insightEntryProgress 1.5s ease-in-out infinite}
   .app-route-shell.is-ready>.app-route-page{animation:insightPageReady .24s ease-out both}
+  .app-route-light{position:fixed;inset:0 0 150px;z-index:90;pointer-events:none;overflow:hidden;contain:strict}
+  .app-route-light::before{content:"";position:absolute;left:-35%;top:42%;width:150%;height:1px;background:linear-gradient(90deg,transparent,#a8fcae,#d3fbff,#73dbe5,transparent);box-shadow:0 0 22px 3px #78e4ee35;opacity:0;transform:rotate(-14deg);animation:insightRouteLight .65s ease-out both}
+  .app-route-light::after{content:"";position:absolute;inset:10% 10% 20%;border:1px solid #96e5ec1c;clip-path:polygon(0 25%,78% 0,100% 75%,22% 100%);opacity:0;animation:insightRouteDepth .55s ease-out both}
+  @keyframes insightRouteLight{0%{opacity:0;translate:-70% 0}25%{opacity:.8}100%{opacity:0;translate:75% 0}}
+  @keyframes insightRouteDepth{0%{opacity:0;transform:scale(.9)}30%{opacity:.7}100%{opacity:0;transform:scale(1.08)}}
   @keyframes insightEntryBrand{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   @keyframes insightEntryOrbit{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
   @keyframes insightEntryBeam{0%{opacity:0;transform:translateX(-100%)}20%{opacity:1}100%{opacity:0;transform:translateX(350%)}}
@@ -86,6 +91,7 @@ const SESSION_TRANSITION_CSS = `
     .app-session-brand,.app-session-caption,.app-session-mark::before,.app-session-mark::after,.app-session-progress::after,.app-route-shell.is-ready>.app-route-page{animation:none!important}
     .app-session-beam{display:none}
     .app-session-progress::after{width:100%}
+    .app-route-light{display:none}
   }
 `;
 
@@ -375,7 +381,7 @@ export function App() {
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
     <style>{SESSION_TRANSITION_CSS}</style>
-    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""} ${checkingMember?"is-session-check":"is-ready"}`}><div className="app-route-page">{page}</div></div>
+    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""} ${checkingMember?"is-session-check":"is-ready"}`}><div key={route} className="app-route-light" aria-hidden="true"/><div className="app-route-page">{page}</div></div>
     {hideBottomNav ? null : <BottomNav route={route} />}
   </>;
 }
