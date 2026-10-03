@@ -49,6 +49,7 @@ jobs:
           node --check public/note-insight-dm.user.js
           node --check public/note-insight-dm-network-v2.js
           node --check public/note-insight-dm-reader-v1.js
+          node --check public/public-analysis-motion.js
           node --check public/dashboard-setup.js
           node --check public/note-insight-dashboard-sync.user.js
           node --check public/note-insight-dashboard-feature-bridge-v1.js
@@ -62,6 +63,8 @@ jobs:
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
       - name: Check magazine search and creator presentation
         run: node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs
+      - name: Check analysis navigation, settings and retained data presentation
+        run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs
       - name: Check DM request ordering and person switching
         run: node --experimental-vm-modules --test --test-name-pattern='DM本文の遅い取得' tests/analysis-repair-v147.test.mjs
       # Emergency maintenance deploy: full regressions resume before maintenance is lifted.

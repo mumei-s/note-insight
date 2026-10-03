@@ -42,3 +42,21 @@
 @media(prefers-reduced-motion:reduce){.insight-chart-scene .insight-column-object,.insight-chart-scene .line,.insight-chart-scene .line-flow,.insight-chart-scene .donut-object,.insight-chart-scene .donut-ground{animation:none!important;stroke-dasharray:none}.insight-chart-scene .line-flow{display:none}}
 
 .miv5-page-light{position:fixed;inset:120px 0 150px;pointer-events:none;z-index:40;overflow:hidden;contain:strict}.miv5-page-light::after{content:"";position:absolute;top:32%;left:-25%;width:150%;height:1px;background:linear-gradient(90deg,transparent,#adf393,#c4f8ff,transparent);box-shadow:0 0 15px #79e2ea88;transform:rotate(-12deg);opacity:0;animation:insight-mode-light .65s ease-out both}@keyframes insight-mode-light{0%{opacity:0;translate:-60% 0}30%{opacity:.85}100%{opacity:0;translate:80% 0}}@media(prefers-reduced-motion:reduce){.miv5-page-light{display:none}}
+
+/* Assemble, lift and settle; the axes and final data geometry stay exact. */
+.insight-chart-scene::before,.insight-chart-scene::after{content:"";position:absolute;pointer-events:none;opacity:0;z-index:0}
+.insight-chart-scene::before{inset:-40%;background:linear-gradient(112deg,transparent 43%,#92ebed30 49%,#e6ffff55 50%,transparent 57%)}
+.insight-chart-scene::after{inset:0;background:radial-gradient(circle at 18% 24%,#eafffb 0 1px,transparent 4px),radial-gradient(circle at 73% 31%,#c6ffff 0 1px,transparent 4px),radial-gradient(circle at 84% 65%,#f1ffd9 0 1px,transparent 3px)}
+.insight-chart-scene>svg,.insight-chart-scene>figcaption,.insight-chart-scene>p{position:relative;z-index:1}
+.insight-chart-scene[data-motion=on]::before{animation:insight-chart-glint 1.7s ease-out .25s both}.insight-chart-scene[data-motion=on]::after{animation:insight-chart-spark 1.8s ease-out .65s 2 both}
+.insight-chart-scene[data-motion=on] .donut-object{animation:insight-donut-lift 1.8s cubic-bezier(.15,.7,.2,1) both;transform-origin:100px 96px}.insight-chart-scene[data-motion=on] .donut-ground{animation:insight-donut-shadow 1.8s ease-out both;transform-origin:100px 183px}
+.insight-chart-scene[data-motion=on] .insight-column-object{animation:insight-column-settle 1.15s cubic-bezier(.15,.7,.2,1) both}.insight-chart-scene[data-motion=on].mipro-bars i b{animation:insight-bar-reveal 1.2s cubic-bezier(.15,.7,.2,1) both}
+.insight-chart-scene[data-motion=on] .mipro-chart .point{animation:insight-point-glint 1.25s ease-out .65s 2 both}.insight-chart-scene[data-motion=on] .line-flow{animation:insight-line-current 2.4s linear 1.2s 2}
+@keyframes insight-donut-lift{0%{opacity:.2;transform:translateY(25px) scale(.92)}65%{opacity:1;transform:translateY(-10px) scale(1.02)}100%{opacity:1;transform:translateY(-6px) scale(1)}}
+@keyframes insight-donut-shadow{0%{opacity:.4;transform:scaleX(1.08)}65%{opacity:.2;transform:scaleX(.8)}100%{opacity:.24;transform:scaleX(.86)}}
+@keyframes insight-column-settle{0%{opacity:.2;transform:translateY(22px)}70%{opacity:1;transform:translateY(-5px)}100%{opacity:1;transform:none}}
+@keyframes insight-bar-reveal{0%{opacity:.25;clip-path:inset(0 100% 0 0)}100%{opacity:1;clip-path:inset(0)}}
+@keyframes insight-chart-glint{0%{opacity:0;transform:translateX(-65%)}30%{opacity:.85}100%{opacity:0;transform:translateX(70%)}}
+@keyframes insight-chart-spark{0%,100%{opacity:0;transform:translate(5px,8px)}35%{opacity:.9;transform:translate(0,-3px)}}
+@keyframes insight-point-glint{0%,100%{filter:drop-shadow(0 0 5px #6ee5ea75)}45%{filter:drop-shadow(0 0 11px #e3ffff);fill:#fff}}
+@media(prefers-reduced-motion:reduce){.insight-chart-scene::before,.insight-chart-scene::after,.insight-chart-scene .donut-object,.insight-chart-scene .donut-ground,.insight-chart-scene .insight-column-object,.insight-chart-scene.mipro-bars i b,.insight-chart-scene .mipro-chart .point{animation:none!important;transform:none!important;clip-path:none!important}}
