@@ -43,6 +43,6 @@ test("期限切れは再連携へ誘導し、操作パネルを画面端へ収�
 
 test("共有画像は静的な可読PNGを参照する", async () => {
   const html = await read("index.html");
-  assert.match(html, /mumei-s\.github\.io\/note-insight\/og-insight\.png\?v=2026100319/);
+  assert.match(html, /mumei-s\.github\.io\/note-insight\/og-insight-20261003\.png/);
   assert.doesNotMatch(html, /functions\/v1\/insight-og-image/);
 });
