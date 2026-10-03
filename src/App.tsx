@@ -58,6 +58,50 @@ function isMembershipInactive(code: string) {
   return /INSIGHT_MEMBER_INACTIVE|INSIGHT_MEMBER_NOT_ACTIVE|REACTIVATION_NOT_ALLOWED|WAITING_OWNER_APPROVAL/i.test(code);
 }
 
+// These styles must exist while BottomNav is hidden during the session check.
+// Presentation only: no extra wait, session mutation, or route interception.
+const SESSION_TRANSITION_CSS = `
+  .app-session-check{position:relative;isolation:isolate;display:grid;place-items:center;min-height:100svh;padding:32px 20px;overflow:hidden;background:#03070b;color:#dce9f5}
+  .app-session-check::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 46%,rgba(47,150,179,.12),transparent 58%)}
+  .app-session-scene{position:relative;width:min(440px,100%);text-align:center}
+  .app-session-mark{position:relative;display:grid;align-content:center;min-height:180px;padding:24px 18px}
+  .app-session-mark::before,.app-session-mark::after{content:"";position:absolute;inset:8px 0;border:1px solid rgba(108,218,242,.18);border-radius:50%;pointer-events:none}
+  .app-session-mark::before{animation:insightEntryOrbit 1.7s ease-out both}
+  .app-session-mark::after{inset:21px 17px;border-color:rgba(108,218,242,.07);animation:insightEntryOrbit 1.7s ease-out .12s both}
+  .app-session-brand{position:relative;z-index:1;display:grid;gap:6px;line-height:1;color:#e8faff;font-family:system-ui,sans-serif;animation:insightEntryBrand .55s ease-out both}
+  .app-session-brand span:first-child{font-size:clamp(18px,5vw,25px);font-weight:750;letter-spacing:.13em}
+  .app-session-brand span:last-child{font-size:clamp(36px,11vw,60px);font-weight:950;letter-spacing:.17em;text-indent:.17em;text-shadow:0 0 26px rgba(111,225,249,.24)}
+  .app-session-beam{position:absolute;z-index:2;top:50%;left:0;width:32%;height:1px;background:linear-gradient(90deg,transparent,#95ecff,#fff,transparent);box-shadow:0 0 16px rgba(106,225,250,.5);opacity:0;pointer-events:none;animation:insightEntryBeam 1.35s ease-out .15s both}
+  .app-session-caption{margin:16px 0 0;color:#9cbdcc;font:500 11px/1.8 system-ui,sans-serif;animation:insightEntryBrand .4s ease-out .12s both}
+  .app-session-caption span{display:block;color:#637e8b;font-size:10px}
+  .app-session-progress{display:block;width:86px;height:2px;margin:20px auto 0;overflow:hidden;border-radius:999px;background:#142b37}
+  .app-session-progress::after{content:"";display:block;width:40%;height:100%;border-radius:inherit;background:#88e6fa;animation:insightEntryProgress 1.5s ease-in-out infinite}
+  .app-route-shell.is-ready>.app-route-page{animation:insightPageReady .24s ease-out both}
+  @keyframes insightEntryBrand{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes insightEntryOrbit{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+  @keyframes insightEntryBeam{0%{opacity:0;transform:translateX(-100%)}20%{opacity:1}100%{opacity:0;transform:translateX(350%)}}
+  @keyframes insightEntryProgress{0%{transform:translateX(-110%)}100%{transform:translateX(350%)}}
+  @keyframes insightPageReady{from{opacity:.65}to{opacity:1}}
+  @media(prefers-reduced-motion:reduce){
+    .app-session-brand,.app-session-caption,.app-session-mark::before,.app-session-mark::after,.app-session-progress::after,.app-route-shell.is-ready>.app-route-page{animation:none!important}
+    .app-session-beam{display:none}
+    .app-session-progress::after{width:100%}
+  }
+`;
+
+export function InsightSessionTransition() {
+  return <section className="app-session-check" aria-label="INSIGHTへの切替">
+    <div className="app-session-scene">
+      <div className="app-session-mark" aria-hidden="true">
+        <strong className="app-session-brand"><span>無名 S note</span><span>INSIGHT</span></strong>
+        <i className="app-session-beam" />
+      </div>
+      <p className="app-session-caption" role="status">ログイン状態を確認しています<span>保存済み参加者は自動復帰します</span></p>
+      <i className="app-session-progress" aria-hidden="true" />
+    </div>
+  </section>;
+}
+
 export function goTo(route: string) {
   const next = route || "home";
   if (currentRoute() === next) { window.scrollTo({ top: 0, behavior: "auto" }); return; }
@@ -131,7 +175,6 @@ function BottomNav({ route }: { route: string }) {
       .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
       .app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid rgba(43,57,76,.45)}
       .app-bottom-nav button.note-exit b{color:#c9f4ff}
-      .app-session-check{min-height:56vh;display:grid;place-items:center;padding:28px}.app-session-check>div{width:min(420px,100%);border:1px solid #2c4055;border-radius:16px;background:#0c1621;padding:18px;color:#dce9f5;text-align:center}.app-session-check b{display:block;color:#8feaff;margin-bottom:6px}.app-session-check span{font-size:12px;color:#91a3b7}
       @media(min-width:760px){.app-bottom-nav{bottom:12px;border:1px solid #2b394c;border-radius:18px;padding-bottom:6px;width:460px}.app-route-shell{padding-bottom:104px}}
     `}</style>
   </>;
@@ -313,7 +356,7 @@ export function App() {
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   const memberValid = Boolean(memberToken && validatedMemberToken === memberToken);
   let page;
-  if (needsMember && memberToken && !memberValid && checkingMember) page = <div className="app-session-check"><div><b>INSIGHT</b><span>ログイン状態を確認しています。保存済み参加者は自動復帰します…</span></div></div>;
+  if (needsMember && memberToken && !memberValid && checkingMember) page = <InsightSessionTransition />;
   else if (route === "access/insight") page = <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
@@ -331,7 +374,8 @@ export function App() {
   if (PARTICIPANT_MAINTENANCE && !maintenanceBypass) return <MaintenanceScreen />;
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
-    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""}`}>{page}</div>
+    <style>{SESSION_TRANSITION_CSS}</style>
+    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""} ${checkingMember?"is-session-check":"is-ready"}`}><div className="app-route-page">{page}</div></div>
     {hideBottomNav ? null : <BottomNav route={route} />}
   </>;
 }
