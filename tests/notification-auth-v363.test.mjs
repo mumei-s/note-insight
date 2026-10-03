@@ -27,7 +27,7 @@ test("INSIGHTから共通の本人通知連携画面へ入り状態を分離表�
   assert.match(launcher, /notification-connection\.html/);
 });
 
-test("期限切れは再連携へ誘導し、操作パネルを画面端へ収納できる", async () => {
+test("期限切れは再連携へ誘導する", async () => {
   const [reader, controls, pair] = await Promise.all([
     read("public/note-insight-notification-reader-v4.js"),
     read("public/note-insight-notification-controls-v1.js"),
@@ -35,8 +35,6 @@ test("期限切れは再連携へ誘導し、操作パネルを画面端へ収�
   ]);
   assert.match(reader, /errorCode:String\(e\?\.code\|\|''\)/);
   assert.match(controls, /repair\?'再連携'/);
-  assert.match(controls, /data-action="collapse"/);
-  assert.match(controls, /data-collapsed="1"/);
   assert.match(pair, /NOTE_LOGIN_REQUIRED/);
   assert.match(pair, /NOTE_ACCOUNT_MISMATCH/);
 });

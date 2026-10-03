@@ -8,7 +8,7 @@ const read=name=>readFileSync('public/note-insight-notification-'+name,'utf8');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await pause(20);assert.ok(fn());}
 for(const mode of ['modern','legacy','focus'])test(`別タブでOFFにするとパネル・読取・フィルターを止め、ONと再訪も反映する (${mode})`,async t=>{
- const values=new Map([[KEY,true],['mumei_insight_magazine_filter_enabled_v3:tester',true],['mumei_insight_notification_groups_v1:tester',[{name:'G',enabled:true,ids:['actor']}]],['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor',name:'人物'}]]]),listeners=[];
+ const values=new Map([[KEY,true],['mumei_insight_notification_controls_collapsed_v1',true],['mumei_insight_magazine_filter_enabled_v3:tester',true],['mumei_insight_notification_groups_v1:tester',[{name:'G',enabled:true,ids:['actor']}]],['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor',name:'人物'}]]]),listeners=[];
  const create=(url,html)=>{const dom=new JSDOM(html,{url,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,top:0,left:0,right:360,bottom:100});
   const get=(k,d)=>values.has(k)?values.get(k):d,set=(k,v)=>{const old=values.get(k);values.set(k,v);for(const l of listeners)if(l.key===k)l.fn(k,old,v,l.w!==w)},listen=(key,fn)=>listeners.push({w,key,fn});
   if(mode==='legacy'){w.GM_getValue=get;w.GM_setValue=set;w.GM_addValueChangeListener=listen}else w.GM={getValue:async(...args)=>get(...args),setValue:async(...args)=>set(...args),...(mode==='modern'?{addValueChangeListener:listen}:{})};
@@ -24,6 +24,7 @@ for(const mode of ['modern','legacy','focus'])test(`別タブでOFFにすると�
  for(const name of ['reader-v4.js','controls-v1.js','filter-v4.js'])note.eval(read(name));
  const bar=()=>note.document.getElementById('mumei-inline-notification-controls-v1'),toggle=()=>app.document.querySelector('.mumei-notice-feature-toggle');
  await until(()=>bar()&&starts>0&&toggle()?.textContent==='note公式🔔パネル ON');
+ assert.notEqual(note.getComputedStyle(bar().querySelector('[data-action="filter"]')).display,'none','旧収納設定が残っていても通知一覧の下部で操作できる');
  note.document.querySelectorAll('.m-navbarNoticeItem')[1].remove();
  await note.__mumeiNotificationFilterV4.refresh(true);await pause(250);
  assert.ok(bar(),'全件がフィルター対象でも解除用パネルを残す');

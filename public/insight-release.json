@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.1",
-  "notificationVersion": "3.6.24",
+  "notificationVersion": "3.6.25",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-04T00:34:36+09:00",
+  "releasedAt": "2026-10-04T01:22:48+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "OWNERの保存済みDM本文を、相手の削除・ブロック・退会後や再同期時の上書き・削除から保護。TOPの別端末への案内を現行の「機種変更・再ログイン」に更新。同じnote IDでPC・スマホの複数端末から保存履歴を閲覧できます。",
+  "note": "本人通知の右端に浮く開閉ベルと「−」の縮小ボタンを廃止。操作は通知一覧の下部に集約し、以前の収納設定が残っていても操作できます。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
