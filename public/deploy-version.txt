@@ -1,2 +1,2 @@
-INSIGHT 2026.10.03.20 / notification 3.6.23 / dashboard 1.6.4 / DM 1.4.9
-Two-line logo transition during session checking, visible upper background branding and oval light, stationary bottom navigation. Authentication and notification behavior unchanged.
+INSIGHT 2026.10.03.21 / notification 3.6.23 / dashboard 1.6.4 / DM 1.4.9
+Notification shortcuts at the top, actionable tool updates, one notification entry, consistent personal-notification labels, and a smaller account-specific creator row.
