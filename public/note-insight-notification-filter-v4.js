@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.1.9';
+const VERSION='4.2.0';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -45,15 +45,18 @@ async function account(){if(accountId)return{id:accountId};if(accountJob)return 
 function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${FORCE}="1"]{display:var(--mumei-v2939-display,block)!important}.${OWN}{display:none!important}`;document.documentElement.append(s)}
 function shown(el){if(!el?.isConnected||!el.getBoundingClientRect)return false;for(let p=el;p;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden')return false}const r=el.getBoundingClientRect();return r.width>0&&r.height>0}
 function exact(v){return[...document.querySelectorAll('button,a,[role="tab"],[role="button"],div,span')].find(el=>shown(el)&&clean(el.textContent)===v)||null}
-function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)&&shown(p)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>100)return p}}return null}
-function shell(){const native=window.__mumeiNotificationReaderV4?.findPanel?.();return native||commonShell(exact('通知'),exact('お知らせ'))}
+function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)&&shown(p)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>0&&rows(p).length)return p}}return null}
+function shell(){const native=window.__mumeiNotificationReaderV4?.findPanel?.();return native&&shown(native)?native:commonShell(exact('通知'),exact('お知らせ'))}
 function fallbackRow(el){const t=clean(el.textContent),dated=!el.matches('a[href]')||el.querySelector('time[datetime]')||/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)/u.test(t);return t.length>5&&t.length<4000&&Boolean(leadName(t))&&Boolean(dated)}
-function rows(r){
+function candidates(r){
  if(!r)return[];
  const known=[...new Set([...r.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]'),...[...r.querySelectorAll(ITEM)].filter(el=>!String(el.className||'').includes('__'))])];
  const fallback=[...r.querySelectorAll(FALLBACK_ITEM)].filter(el=>fallbackRow(el)&&!known.some(k=>k!==el&&el.contains(k)));
- const xs=[...new Set([...known,...fallback])];return xs.filter(el=>!xs.some(parent=>parent!==el&&parent.contains(el)))
+ return [...new Set([...known,...fallback])]
 }
+function collection(el,xs){const nested=xs.filter(child=>child!==el&&el.contains(child)&&leadName(clean(child.textContent)));return nested.some((a,i)=>nested.slice(i+1).some(b=>!a.contains(b)&&!b.contains(a)))}
+function rows(r){const xs=candidates(r),single=xs.filter(el=>!collection(el,xs));return single.filter(el=>!single.some(parent=>parent!==el&&parent.contains(el)))}
+function restoreCollections(){for(const el of document.querySelectorAll('.'+OWN))if(collection(el,candidates(el)))setHidden(el,false)}
 function creatorIdFromUrl(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean);if(!u.hostname.endsWith('note.com')||p.length!==1)return'';const id=(p[0]||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:creatorIdFromUrl(a.getAttribute('href')),txt:clean(a.textContent)})).filter(x=>x.id)}
 function leadName(t){const m=clean(t).match(/^(.{1,180}?)\s*さん\s*(?:他\s*\d[\d,]*\s*名\s*)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||''}
@@ -65,7 +68,9 @@ function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE)}
 function setHidden(el,want){if(!el)return;forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
 function clearHides(){for(const el of document.querySelectorAll(`.${OWN},.${LEGACY}`))setHidden(el,false)}
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r||!shown(r))return;if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;for(const el of rows(r)){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}}
+let lastResult=null;
+function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r||!shown(r))return;if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r);for(const el of list){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}reportResult(st,list)}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
@@ -89,5 +94,5 @@ addEventListener('focus',discover);addEventListener('pageshow',discover);addEven
 const discovery=new MutationObserver(ms=>{if(!featureOn())return;if(root&&(!root.isConnected||root.hidden)){schedule(0);return}for(const m of ms){const target=m.target,panel=root||watchedPanel;if(m.type==='attributes'){if(owned(target))continue;if((panel&&(target===panel||target.contains(panel)))||target.matches?.(PANEL_HINT)){if(m.attributeName!=='class'||changed(m)){schedule();return}}}else{if(root?.contains(target))continue;if([...m.addedNodes].some(n=>n.nodeType===1&&!owned(n)&&(n.matches(PANEL_HINT)||n.querySelector(PANEL_HINT)||n.matches(FALLBACK_ITEM)&&fallbackRow(n)||[...n.querySelectorAll(FALLBACK_ITEM)].some(fallbackRow)))){schedule();return}}}});
 discovery.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden'],attributeOldValue:true});
 installStyle();schedule(120);
-window.__mumeiNotificationFilterV4={version:VERSION,refresh};
+window.__mumeiNotificationFilterV4={version:VERSION,refresh,getState:()=>lastResult,findPanel:()=>featureOn()&&root?.isConnected?(shown(root)?root:commonShell(exact('通知'),exact('お知らせ'))):null};
 })();

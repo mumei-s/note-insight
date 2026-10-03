@@ -159,3 +159,34 @@ test('単独通知の対応後も、スキ・返信・自分の記事追加・�
  await until(()=>hidden(e.panel.querySelector('#target')));
  for(const id of ['own','like','reply','unlisted','quoted'])assert.ok(!hidden(e.panel.querySelector('#'+id)),id);
 });
+
+test('通知を複数含むnoticeItems外枠を隠さず、対象の一行だけを隠す',async t=>{
+ const e=setup(t);
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="noticeItems" id="collection">'+row('target')+row('like','登録人物さんがあなたの記事にスキしました')+row('unlisted','別の人物さんが共同マガジンに新しい記事を3本追加しました')+'</div>';
+ await until(()=>hidden(e.panel.querySelector('#target')),'一覧の親ではなく対象の一行を非表示');
+ assert.ok(!hidden(e.panel.querySelector('#collection')));
+ for(const id of ['like','unlisted'])assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#'+id)).display,'none',id);
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',false);
+ await until(()=>!hidden(e.panel.querySelector('#target')),'OFFで対象行も復元');
+});
+
+test('以前のフィルターで隠れた一覧の外枠も、混在する通知を復元する',async t=>{
+ const e=setup(t);
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="noticeItems mumei-muted-v2939" id="collection">'+row('target')+row('like','登録人物さんがあなたの記事にスキしました')+'</div>';
+ await until(()=>!hidden(e.panel.querySelector('#collection'))&&hidden(e.panel.querySelector('#target')),'古い外枠の非表示を解き、行ごとに判定し直す');
+ assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#like')).display,'none');
+});
+
+test('全件がフィルター対象でもOFFボタンが残り、高さ0の一覧から全件を復元する',async t=>{
+ const e=setup(t);
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="notificationList" id="list">'+row('only','登録人物さんが共同マガジンに新しい記事を3本追加しました 1分前')+'</div>';
+ const list=e.panel.querySelector('#list'),only=e.panel.querySelector('#only');
+ e.w.__mumeiNotificationReaderV4.findPanel=()=>list;
+ e.w.HTMLElement.prototype.getBoundingClientRect=function(){return {width:360,height:this===list&&hidden(only)?0:300}};
+ e.w.eval(readFileSync('public/note-insight-notification-controls-v1.js','utf8'));
+ const button=()=>e.w.document.querySelector('[data-action="filter"]');
+ await until(()=>hidden(only)&&button()?.isConnected,'全件を隠してもOFF操作を残す');
+ assert.match(e.w.document.querySelector('.read-status').textContent,/すべてフィルター対象/);
+ button().click();await until(()=>!hidden(only)&&button()?.dataset.on==='0','高さ0でもOFFで一覧全件を表示');
+ assert.notEqual(e.w.getComputedStyle(only).display,'none');
+});

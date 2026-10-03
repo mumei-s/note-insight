@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.23
-// @description  本人通知V3.6.23。期限切れからの再連携、複数端末の長期連携、操作パネルの画面端収納に対応します。
+// @version      3.6.24
+// @description  本人通知V3.6.24。通知の外枠を隠す誤判定を防止し、全件フィルター対象でもOFFで一覧を復元できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -24,9 +24,9 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-feature-bridge-v1.js?v=110
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=36160
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=36161
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=142
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=143
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=362
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=419
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=420
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=120
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-status-bridge-v1.js?v=110
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-settings-bridge-v1.js?v=113
@@ -38,7 +38,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.23',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.24',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function publish(){try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}}
