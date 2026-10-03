@@ -1,47 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#071019"/>
-      <stop offset="0.56" stop-color="#0b151d"/>
-      <stop offset="1" stop-color="#111d16"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.82" cy="0.12" r="0.72">
-      <stop offset="0" stop-color="#6fe7f0" stop-opacity="0.28"/>
-      <stop offset="0.42" stop-color="#2d8392" stop-opacity="0.09"/>
-      <stop offset="1" stop-color="#071019" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#b9ff4b"/>
-      <stop offset="1" stop-color="#72e6f5"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.34"/>
-    </filter>
-    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse">
-      <path d="M54 0H0V54" fill="none" stroke="#7cb2c0" stroke-opacity="0.055" stroke-width="1"/>
-    </pattern>
-  </defs>
-  <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect width="1200" height="630" fill="url(#glow)"/>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-  <g opacity="0.75">
-    <circle cx="1035" cy="112" r="7" fill="#b9ff4b"/>
-    <circle cx="1080" cy="112" r="7" fill="#72e6f5"/>
-    <circle cx="1125" cy="112" r="7" fill="#ffffff" fill-opacity="0.42"/>
-  </g>
-  <g filter="url(#shadow)">
-    <rect x="68" y="70" width="1064" height="490" rx="36" fill="#09131b" fill-opacity="0.84" stroke="#6a9aac" stroke-opacity="0.34" stroke-width="2"/>
-    <rect x="68" y="70" width="13" height="490" rx="6.5" fill="url(#line)"/>
-  </g>
-  <g font-family="DejaVu Sans,Arial,sans-serif">
-    <text x="125" y="154" fill="#9db2c1" font-size="24" font-weight="700" letter-spacing="7">MUMEI S NOTE</text>
-    <text x="116" y="328" fill="#f4fbff" font-size="132" font-weight="800" letter-spacing="-7">INSIGHT</text>
-    <rect x="123" y="365" width="702" height="5" rx="2.5" fill="url(#line)"/>
-    <text x="124" y="425" fill="#b9ff4b" font-size="28" font-weight="800" letter-spacing="4">NOTE CREATOR ANALYTICS</text>
-    <text x="124" y="482" fill="#91a8b8" font-size="22" font-weight="600" letter-spacing="3">REACTIONS  ·  PEOPLE  ·  HISTORY</text>
-    <g transform="translate(930 408)">
-      <rect width="143" height="86" rx="21" fill="#0e2029" stroke="#5c8595" stroke-opacity="0.65"/>
-      <path d="M31 58V42M57 58V29M83 58V36M109 58V19" fill="none" stroke="url(#line)" stroke-width="10" stroke-linecap="round"/>
-    </g>
-  </g>
+<defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#07121e"/><stop offset=".55" stop-color="#0d2838"/><stop offset="1" stop-color="#08171d"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#74dfe9" stop-opacity=".19"/><stop offset="1" stop-color="#0a2332" stop-opacity="0"/></radialGradient>
+ <linearGradient id="light"><stop stop-color="#d2ffa3"/><stop offset=".5" stop-color="#8befff"/><stop offset="1" stop-color="#b7adff"/></linearGradient>
+ <linearGradient id="glass" x2=".8" y2="1"><stop stop-color="#79d6e9" stop-opacity=".13"/><stop offset=".4" stop-color="#173849"/><stop offset="1" stop-color="#091c2b"/></linearGradient>
+ <linearGradient id="bar" x2="1"><stop stop-color="#268aaa"/><stop offset=".3" stop-color="#b2f7fa"/><stop offset="1" stop-color="#32afc4"/></linearGradient>
+</defs>
+<rect width="1200" height="630" fill="url(#bg)"/>
+<ellipse cx="630" cy="320" rx="510" ry="310" fill="url(#halo)"/>
+<g fill="none" stroke="#81cad9" stroke-opacity=".1"><path d="M0 474 1200 164M0 503 1200 193M0 532 1200 222"/><path d="M0 0 260 630M210 0 470 630M420 0 680 630M630 0 890 630M840 0 1100 630"/></g>
+<path d="M195 229 853 66 1054 421 395 564Z" fill="#03111c" opacity=".65"/>
+<path d="M195 213 853 50 1054 405 395 548Z" fill="url(#glass)" stroke="#86d5e2" stroke-opacity=".25"/>
+<path d="M195 213 853 50" fill="none" stroke="url(#light)" stroke-width="2"/>
+<path d="M230 546 973 361" stroke="url(#light)" stroke-opacity=".55"/>
+<g opacity=".6"><circle cx="280" cy="170" r="3" fill="#cfffa2"/><circle cx="940" cy="158" r="4" fill="#91edff"/><circle cx="1030" cy="460" r="2" fill="#d5c1ff"/><circle cx="380" cy="488" r="3" fill="#b9f7ff"/></g>
+<!-- Essential brand occupies the central square used by compact URL previews. -->
+<g text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif">
+ <text x="603" y="204" fill="#c6e5ec" font-size="20" font-weight="600" letter-spacing="6">MUMEI S NOTE</text>
+ <text x="603" y="320" fill="#244b60" font-size="104" font-weight="bold" letter-spacing="-4">INSIGHT</text>
+ <text x="600" y="314" fill="#f0fbff" font-size="104" font-weight="bold" letter-spacing="-4">INSIGHT</text>
+ <path d="M376 341H824" stroke="url(#light)" stroke-width="3"/>
+ <text x="600" y="385" fill="#c6faa9" font-size="17" font-weight="600" letter-spacing="3">NOTE CREATOR ANALYTICS</text>
+</g>
+<g transform="translate(493 420)">
+ <ellipse cx="107" cy="58" rx="104" ry="7" fill="#040e16" opacity=".7"/>
+ <path d="M7 44 37 35 67 37 97 20 127 25 157 8 187 12 207 0" fill="none" stroke="#072232" stroke-width="7" transform="translate(0 4)"/>
+ <path d="M7 44 37 35 67 37 97 20 127 25 157 8 187 12 207 0" fill="none" stroke="url(#light)" stroke-width="3"/>
+ <circle cx="97" cy="20" r="5" fill="#dbfff0"/>
+ <rect x="44" y="48" width="16" height="9" rx="2" fill="url(#bar)"/><rect x="72" y="39" width="16" height="18" rx="2" fill="url(#bar)"/><rect x="100" y="31" width="16" height="26" rx="2" fill="url(#bar)"/><rect x="128" y="20" width="16" height="37" rx="2" fill="url(#bar)"/><rect x="156" y="11" width="16" height="46" rx="2" fill="url(#bar)"/>
+</g>
 </svg>
