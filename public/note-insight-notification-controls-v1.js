@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.4.2';
+const VERSION='1.4.3';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',PANEL='mumei_insight_notification_panel_enabled_v1',COLLAPSE='mumei_insight_notification_controls_collapsed_v1';
@@ -22,6 +22,7 @@ function shown(el){if(!(el instanceof Element))return false;const r=el.getBoundi
 function tabs(root){let n=false,o=false,c=0;for(const el of root.querySelectorAll('button,a,[role="tab"],[role="button"]')){if(c++>140)break;if(!shown(el))continue;const t=clean(el.textContent||el.getAttribute('aria-label')||el.getAttribute('title'));if(/^通知(?:\s*\d+)?$/u.test(t))n=true;if(/^お知らせ(?:\s*\d+)?$/u.test(t))o=true;if(n&&o)return true}return false}
 function hasRows(root){let n=0;for(const el of root.querySelectorAll(ITEM+',li,[role="listitem"]')){if(!shown(el))continue;const t=clean(el.textContent);if(t.length<3||t.length>4000)continue;if(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前)/u.test(t)){if(++n>=1)return true}}return false}
 function findPanel(){
+ try{const p=window.__mumeiNotificationFilterV4?.findPanel?.();if(p&&shown(p))return p}catch{}
  const reader=window.__mumeiNotificationReaderV4;
  try{const p=reader&&typeof reader.findPanel==='function'?reader.findPanel():null;if(p&&shown(p))return p}catch{}
  const exact=[...document.querySelectorAll(ITEM)].filter(shown);
@@ -79,9 +80,11 @@ function mount(){
  installStyle();
  let bar=dedupe()||makeBar();
  if(document.body&&bar.parentElement!==document.body){document.body.appendChild(bar);void sync(bar)}
- if(lastStatus)renderStatus(lastStatus)
+ lastFilter=window.__mumeiNotificationFilterV4?.getState?.()||lastFilter;
+ if(lastStatus)renderStatus(lastStatus);else text(bar.querySelector('.read-status'),filterNotice()||'新着を確認します')
 }
-let timer=0,lastStatus=null;
+let timer=0,lastStatus=null,lastFilter=null;
+function filterNotice(){return lastFilter?.enabled&&lastFilter.total>0&&lastFilter.hidden===lastFilter.total?`表示中の${lastFilter.total}件はすべてフィルター対象です｜OFFで表示`:''}
 const owned=node=>node instanceof Element&&Boolean(node.closest('#'+TOOLBAR+',#'+STYLE));
 const schedule=(ms=180)=>{if(timer)return;timer=setTimeout(()=>{timer=0;mount()},ms)};
 function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!owned(r.target)))schedule()}).observe(document.documentElement,{subtree:true,childList:true});schedule(150)}
@@ -97,10 +100,11 @@ function renderStatus(d){
  b.dataset.repair=repair?'1':'0';
  text(b,label);b.dataset.state=state==='error'?'error':busy?'busy':paused?'paused':'done';
  const message=state==='error'?String(d.message||'読込に失敗しました')+(total?`（保存確認 ${saved} / ${total}件）`:''):busy&&d.phase==='saving'?`保存先を確認中｜保存確認 ${saved} / ${total}件`:busy?`読込 ${read}${total?' / '+total:''}｜保存確認 ${saved}`:paused?`途中保存 ${saved}件｜続きから再開できます`:saved?`読込 ${read}｜保存確認 ${saved}件`:d.historyComplete?`確認 ${Number(d.checkedCount||0)}件・追加0件${d.boundaryAt?'｜保存位置 '+new Date(d.boundaryAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):''}`:'確認中・保存完了は未確認';
- text(line,message);b.title=String(d.message||message);b.setAttribute('aria-label',label+'：'+message);
+ text(line,[message,filterNotice()].filter(Boolean).join('｜'));b.title=String(d.message||message);b.setAttribute('aria-label',label+'：'+message);
 }
 window.addEventListener('mumei-notification-reader-status',e=>renderStatus(e.detail||{}));
-window.addEventListener('mumei-notification-feature-changed',()=>{lastStatus=null;mount()});
+window.addEventListener('mumei-notification-filter-status',e=>{lastFilter=e.detail||null;mount()});
+window.addEventListener('mumei-notification-feature-changed',()=>{lastStatus=null;lastFilter=null;mount()});
 const panelListen=modern()&&typeof GM.addValueChangeListener==='function'?GM.addValueChangeListener:typeof GM_addValueChangeListener==='function'?GM_addValueChangeListener:null;if(panelListen)try{panelListen(PANEL,()=>void refreshPanel())}catch{}
 window.__mumeiNotificationControlsV1={version:VERSION,mount,findPanel,sync,refreshPanel};
 })();
