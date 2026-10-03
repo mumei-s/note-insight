@@ -317,7 +317,7 @@ export function MemberInsightLiveV2(){
     analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}>
-    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
+    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div key={`${mode}:${navTab}`} className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
       <div className="miv5-creator-avatar">{creatorImage?<img src={creatorImage} alt="" referrerPolicy="no-referrer"/>:<span>{[...creatorName][0]||"人"}</span>}</div>
       <div className="miv5-creator-copy">
         <h1>{creatorName}</h1>
@@ -330,7 +330,7 @@ export function MemberInsightLiveV2(){
     </section>
     <section className={`miv5-command-stage ${mode==="normal"?"main":""}`} aria-label="INSIGHT主要機能">
       {mode!=="normal"?<header className="miv5-mode-label"><h2>{modeMeta.title}</h2><p>{modeMeta.sub}</p></header>:null}
-      <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div className="miv5-launcher-halo" aria-hidden="true"><i/><i/></div>
+      <nav className="miv5-launcher" aria-label="INSIGHTランチャー"><div key={`${mode}:${navTab}`} className="miv5-launcher-halo" aria-hidden="true"><i/><i/></div>
         <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b></a>
         <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b></button>
