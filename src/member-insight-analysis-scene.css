@@ -1,0 +1,44 @@
+/* Bright text sits above the glass; decoration never changes data coordinates. */
+.miv5 .miah .mipro{--bg:#0d1d2b;--panel:#132b3c;--inset:#0a1a29;--control:#213e50;--line:#486b80;--text:#f0f8ff;--muted:#c0d1df;--accent:#8aebf3;--accent-text:#d1f8ff;--accent-surface:#173f50;--peach:#ffd4a6;--lavender:#d6c4ff;background:linear-gradient(145deg,#152d3f,#0b1a28 65%);box-shadow:inset 0 1px #d2f5ff29,0 12px 34px #0005;color:var(--text)}
+.miv5 .miah .mipro :is(h2,h3,h4,figcaption>b,figcaption>strong){color:#effaff}
+.miv5 .miah .mipro :is(small,.mipro-note,.mipro-cache-state,.mipro-chart-period,.mipro-growth-source,.mipro-growth-period){color:#c0d1df}
+.miv5 .miah .mipro :is(.mipro-fold summary,.mipro-fold summary span,.mipro-chart-tip span,.mipro-ranking dt){color:#d6e7f2}
+.miv5 .miah .mipro :is(.mipro-chart-tip b,.mipro-history-records b,.mipro-history-list dd,.mipro-bars strong){color:#a8f1fb}
+.miv5 .miah .mipro .mipro-warning{color:#ffe0af;background:#393124}
+.miv5 .miah .mipro .mipro-ranking dl>div:nth-child(2) dd{color:#ffd4a6}.miv5 .miah .mipro .mipro-ranking dl>div:nth-child(3) dd{color:#d6c4ff}
+.miv5 .miah .mipro .mipro-period-picker button[aria-pressed=true]{background:#24566c;color:#f2fcff;box-shadow:inset 0 1px #c5faff50,0 4px 10px #0003}
+.miv5 .miah .mipro .mipro-kpis{background:#0b1b29;border-color:#406177}.miv5 .miah .mipro .mipro-kpis article{background:linear-gradient(155deg,#264558,#142938);box-shadow:inset 0 1px #cff8ff24}.miv5 .miah .mipro .mipro-kpis b{color:#a7f2fa;text-shadow:0 2px 8px #2cc8e11c}
+.miv5 .miah .mipro :is(.mipro-chart .ylabel,.mipro-chart .xlabel){fill:#c7d9e6}.miv5 .miah .mipro .mipro-chart .grid{stroke:#496679}
+.insight-chart-scene{position:relative;isolation:isolate;min-width:0;overflow:hidden}
+.miv5 .miah .insight-columns,.miv5 .miah .mipro-trend,.miv5 .miah .insight-donut{border:1px solid #45697f;background:radial-gradient(ellipse at 35% 5%,#20465b,#0d2133 70%);box-shadow:inset 0 1px #c1f6ff3b,0 10px 24px #0004;border-radius:16px}
+.miv5 .miah .insight-columns{padding:16px 12px}.miv5 .miah .insight-columns figcaption strong{font-size:15px;color:#f2fbff}.miv5 .miah .insight-columns figcaption small{font-size:11px;color:#c0d2e0}
+.insight-column-front{filter:drop-shadow(0 2px 4px #33cae525)}
+.insight-chart-scene[data-motion=on] .insight-column-object{animation:insight-column-rise .7s cubic-bezier(.18,.7,.22,1) both}
+.miv5 .miah .mipro-chart .line{stroke-width:3.5;filter:drop-shadow(0 0 4px #7aecff45)}
+.mipro-chart .line-depth{fill:none;stroke:#04121e;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;opacity:.7}
+.mipro-chart .line-flow{fill:none;stroke:#efffff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:.025 .14;opacity:0;pointer-events:none}
+.insight-chart-scene[data-motion=on] .line{stroke-dasharray:1;animation:insight-line-draw 1.15s ease-out both}
+.insight-chart-scene[data-motion=on] .line-flow{animation:insight-line-current 3.4s linear 1.2s 2}
+.miv5 .miah .mipro-chart .point{fill:#d0ffea;stroke:#76e5ed;stroke-width:2;filter:drop-shadow(0 0 5px #6ee5ea75)}
+.insight-chart-scene[data-motion=on] .donut-object{animation:insight-chart-float 4.4s ease-in-out 3;transform-origin:100px 96px}
+.insight-chart-scene[data-motion=on] .donut-ground{animation:insight-chart-shadow 4.4s ease-in-out 3;transform-origin:100px 183px}
+.insight-donut .donut-slice.selected{filter:drop-shadow(0 0 4px #d4fbff68)}
+.miv5 .miah .mipro .insight-donut{margin:12px 0 0;padding:14px;display:grid;grid-template-columns:210px minmax(0,1fr);gap:16px}.miv5 .miah .mipro .insight-donut svg{width:210px;max-width:100%;height:auto;justify-self:center}
+.miv5 .miah .mipro .insight-donut figcaption{display:grid;align-content:center;gap:5px;min-width:0}.miv5 .miah .mipro .insight-donut figcaption>strong{color:#eefaff;font-size:15px}.miv5 .miah .mipro .insight-donut figcaption>small{color:#c0d1df;font-size:11px}
+.miv5 .miah .insight-donut .insight-donut-legend{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;min-height:48px;border:1px solid #45697f75;border-radius:10px;background:#132b3c;color:#e2f1ff;font:500 12px/1.4 system-ui;text-align:left;touch-action:manipulation}
+.miv5 .miah .insight-donut .insight-donut-legend>i{width:10px;height:10px;flex:none;border-radius:3px;box-shadow:inset 0 1px #fff9,0 2px 3px #0008}.miv5 .miah .insight-donut .insight-donut-legend>span{flex:1;min-width:0;overflow-wrap:anywhere}.miv5 .miah .insight-donut .insight-donut-legend>b{display:grid;gap:3px;text-align:right;font-size:13px;white-space:nowrap;color:#f0faff}.miv5 .miah .insight-donut .insight-donut-legend em{font:500 11px/1.2 system-ui;color:#c4d4e3}
+.miv5 .miah .insight-donut .insight-donut-legend[aria-pressed=true]{border-color:#8fe5f2;background:#1a4356}.miv5 .miah .insight-chart-readout{color:#d3e9f4!important;background:#153548}.miv5 .miah .insight-chart-readout b{color:#c2f99e}
+.miv5 .miah .mipro-bars i{height:15px;border-radius:4px;overflow:visible;background:#04131f;box-shadow:inset 0 2px 3px #0008}
+.miv5 .miah .mipro-bars i b,.miv5 .miah .mipro-growth-bars .tracks .current{background:linear-gradient(180deg,#d6ffff,#76dce7 20%,#259bb7 75%,#146a8b);border-radius:3px;box-shadow:inset 0 1px #efffff80,0 3px 0 #063047,0 4px 6px #0005}
+.miv5 .miah .mipro-growth-bars .tracks .previous{background:linear-gradient(180deg,#e2d7ff,#a495d2 30%,#675898);box-shadow:inset 0 1px #efe2ff50,0 3px 0 #33294e}.miv5 .miah .mipro-growth-bars .tracks .missing{box-shadow:none;background:repeating-linear-gradient(135deg,#244256 0,#244256 4px,#142d3e 4px,#142d3e 8px)}
+.miv5 .miah .mipro-trend-toggle button{color:#c9dde9;background:#163244}.miv5 .miah .mipro-trend-toggle button.active{color:#f5ffff;background:#24556b;border-color:#82cfe2}
+.miv5 .miah .mipro .mipro-growth-verdict{border-color:#82e7d0}.miv5 .miah .mipro .mipro-growth-verdict h3{color:#d1fff0}.miv5 .miah .mipro .mipro-growth-readout{color:#eefaff}
+@keyframes insight-column-rise{from{opacity:.2;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes insight-line-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes insight-line-current{0%{opacity:0;stroke-dashoffset:0}10%,85%{opacity:.6}100%{opacity:0;stroke-dashoffset:-1}}
+@keyframes insight-chart-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes insight-chart-shadow{0%,100%{transform:scaleX(1);opacity:.35}50%{transform:scaleX(.89);opacity:.24}}
+@media(max-width:700px){.miv5 .miah .mipro .insight-donut{grid-template-columns:1fr;gap:2px}.miv5 .miah .mipro .insight-donut svg{width:min(240px,80%)}.miv5 .miah .mipro{padding:18px 10px}.miv5 .miah .insight-columns{padding:14px 8px}}
+@media(prefers-reduced-motion:reduce){.insight-chart-scene .insight-column-object,.insight-chart-scene .line,.insight-chart-scene .line-flow,.insight-chart-scene .donut-object,.insight-chart-scene .donut-ground{animation:none!important;stroke-dasharray:none}.insight-chart-scene .line-flow{display:none}}
+
+.miv5-page-light{position:fixed;inset:120px 0 150px;pointer-events:none;z-index:40;overflow:hidden;contain:strict}.miv5-page-light::after{content:"";position:absolute;top:32%;left:-25%;width:150%;height:1px;background:linear-gradient(90deg,transparent,#adf393,#c4f8ff,transparent);box-shadow:0 0 15px #79e2ea88;transform:rotate(-12deg);opacity:0;animation:insight-mode-light .65s ease-out both}@keyframes insight-mode-light{0%{opacity:0;translate:-60% 0}30%{opacity:.85}100%{opacity:0;translate:80% 0}}@media(prefers-reduced-motion:reduce){.miv5-page-light{display:none}}
