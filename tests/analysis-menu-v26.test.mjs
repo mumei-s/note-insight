@@ -18,14 +18,17 @@ test('分析は4つの入口で開始し、選んだ分析だけを読み込み�
   assert.equal(h.w.document.querySelector('.miah-selected'), null);
   assert.equal(h.w.document.querySelector('.miah-tools'), null);
   assert.equal(summaries, 0);
-  const normal = new URL(h.w.document.querySelector('.normal .miah-menu-main').href);
+  const normal = new URL(h.w.document.querySelector('.miah-kind-normal .miah-menu-main').href);
   assert.equal(normal.pathname, '/note-insight/install-free-analysis-v3.html'); assert.equal(normal.searchParams.get('account'), 'tester');
   const back = new URL(normal.searchParams.get('return')); assert.equal(back.searchParams.get('insightMode'), 'analysis'); assert.equal(back.hash, '#dashboard');
-  await h.click(h.w.document.querySelector('.notifications .miah-menu-main'));
+  await h.click(h.w.document.querySelector('.miah-kind-notifications .miah-menu-main'));
   assert.equal(summaries, 1); assert.ok(h.w.document.querySelector('.miah-notification')); assert.equal(h.w.document.querySelector('[data-pro-view]'), null);
-  await h.click(h.w.document.querySelector('.dashboard .miah-menu-main'));
+  await h.click(h.w.document.querySelector('.miah-kind-dashboard .miah-menu-main'));
   assert.equal(h.w.document.querySelector('[data-pro-view]').dataset.proView, 'dashboard'); assert.equal(h.w.document.querySelector('.miah-notification'), null);
-  await h.click(h.w.document.querySelector('.verdict .miah-menu-main'));
+  assert.equal(h.w.document.querySelector('.miah-menu-card.dashboard'), null, 'ページ用dashboardクラスの余白を引き継がない');
+  for (const gear of h.w.document.querySelectorAll('.miah-menu-settings')) assert.equal(gear.parentElement.querySelector('.miah-menu-main').contains(gear), false, '分析と設定は独立した押下領域');
+  assert.equal(new URL(h.w.document.querySelector('.miah-kind-normal .miah-menu-main').href).searchParams.get('account'), 'tester', '別パネルを開いた後も通常分析へ進める');
+  await h.click(h.w.document.querySelector('.miah-kind-verdict .miah-menu-main'));
   assert.equal(h.w.document.querySelector('[data-pro-view]').dataset.proView, 'verdict'); assert.equal(new URL(h.w.location.href).searchParams.get('analysisPanel'), 'verdict');
   await React.act(async () => h.w.dispatchEvent(new h.w.Event('mumei-insight-analysis-menu')));
   assert.equal(h.w.document.querySelector('.miah-selected'), null); assert.equal(new URL(h.w.location.href).searchParams.has('analysisPanel'), false);
@@ -45,7 +48,7 @@ test('直接URLの本人通知分析と設定リンクが対象アカウント�
   h.w.history.replaceState({}, '', '/note-insight/?insightMode=analysis&analysisPanel=notifications#dashboard');
   const { MemberInsightAnalysisHub } = h.load('src/member-insight-analysis-hub.tsx');
   await h.render(MemberInsightAnalysisHub, { noteId: 'ss_yr' });
-  assert.ok(h.w.document.querySelector('.miah-selected.notifications'));
+  assert.ok(h.w.document.querySelector('.miah-selected.miah-kind-notifications'));
   for (const gear of h.w.document.querySelectorAll('.miah-menu-settings')) {
     const url = new URL(gear.href); assert.equal(url.pathname, '/note-insight/dashboard-setup.html');
     assert.equal(url.searchParams.get('account'), 'ss_yr'); assert.equal(url.searchParams.get('role'), 'owner'); assert.equal(url.searchParams.get('auto'), '0');
