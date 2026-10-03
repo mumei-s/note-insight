@@ -1,3 +1,4 @@
+import { useVisibleMotion } from "./insight-visible-motion";
 import { InsightColumns, InsightScatter } from "./member-insight-analysis-charts";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
@@ -53,6 +54,7 @@ function weekdayMetrics(metrics:Row[]){return ["日","月","火","水","木","�
 function snapshotRows(data:any){return normalizeMetrics(data?.dashboard||[])}
 function calendarWindow(rows:Row[],days:number,offset=0){const end=rows.at(-1)?.date;if(!end)return[];const max=Date.parse(end+'T00:00:00Z')-offset*86400000,min=max-(days-1)*86400000;return rows.filter(r=>{const t=Date.parse(r.date+'T00:00:00Z');return t>=min&&t<=max})}
 function TrendChart({rows,period="month",latest={}}:{rows:Row[];period?:Period;latest?:Row}){
+ const scene=useVisibleMotion();
  const[metric,setMetric]=useState<"pageViews"|"salesYen"|"likes"|"comments">("pageViews"),[focus,setFocus]=useState<number|null>(null),uid=useId().replace(/:/g,"");
  const labels={pageViews:"ページビュー",salesYen:"売上",likes:"スキ",comments:"コメント"},units={pageViews:"PV",salesYen:"円",likes:"件",comments:"件"},label=labels[metric],unit=units[metric];
  const buckets:Row[]=latest.chartSeries?.length?latest.chartSeries:rows.map(r=>({...r,startDate:r.date,endDate:r.date,granularity:"DAY"}));
@@ -62,14 +64,14 @@ function TrendChart({rows,period="month",latest={}}:{rows:Row[];period?:Period;l
  const fmt=(v:any)=>v==null?'未取得':metric==='salesYen'?money(v):n(v),picked=view[focus==null?view.length-1:Math.min(focus,view.length-1)],selectedTotal=latest.availableTotals?.[metric]===false?null:latest[metric],expected=first&&last?granularity==="MONTH"?(Number(last.slice(0,4))-Number(first.slice(0,4)))*12+Number(last.slice(5,7))-Number(first.slice(5,7))+1:granularity==="WEEK"?Math.ceil((Date.parse(last)-Date.parse(first)+86400000)/(7*86400000)):Math.round((Date.parse(last)-Date.parse(first))/86400000)+1:0;
  const segments:Row[][]=[];for(const row of view){if(row[metric]==null){segments.push([]);continue}let segment=segments.at(-1);if(!segment||segment.length&&Date.parse(row.startDate)>Date.parse(segment.at(-1)!.endDate)+86400000){segment=[];segments.push(segment)}segment.push(row)}
  const rangeLabel=(r:Row)=>r.startDate===r.endDate?r.startDate:`${r.startDate}〜${r.endDate}`;
- return <div className="mipro-trend">
+ return <div ref={scene.ref} className="mipro-trend insight-chart-scene" data-motion={scene.motion?"on":"off"}>
   <div className="mipro-trend-head"><div><small>{PERIODS[period]} · 公式{stepLabel}実績</small><b>{label}の推移</b></div><span>{unit}</span></div>
   <div className="mipro-trend-toggle">{(Object.keys(labels) as Array<keyof typeof labels>).map(k=><button key={k} className={metric===k?'active':''} aria-pressed={metric===k} onClick={()=>{setMetric(k);setFocus(null)}}>{labels[k]}</button>)}</div>
   <div className="mipro-trend-kpis"><span><small>{PERIODS[period]}の公式合計</small><b>{fmt(selectedTotal)}<em>{unit}</em></b></span><span className="mipro-coverage-count"><small>{stepLabel}グラフの取得状況</small><b>{vals.length} / {expected || '—'}<em>{granularity==='DAY'?'日':'点'}</em></b></span></div>
   {view.length?<><p className="mipro-chart-period">{first} — {last}</p><div className="mipro-chart mipro-chart-pro"><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}の${stepLabel}推移、縦軸${unit}、横軸日付`}>
-   <defs><linearGradient id={uid+'area'} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#73cdd0" stopOpacity=".16"/><stop offset="1" stopColor="#73cdd0" stopOpacity="0"/></linearGradient></defs>
+   <defs><linearGradient id={uid+'area'} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#73e1f0" stopOpacity=".38"/><stop offset="1" stopColor="#73cdd0" stopOpacity=".01"/></linearGradient><linearGradient id={uid+"line"} x1="0" y1="0" x2="1" y2="0"><stop stopColor="#bcf49a"/><stop offset=".5" stopColor="#88edff"/><stop offset="1" stopColor="#b8b0ff"/></linearGradient></defs>
    {[0,.25,.5,.75,1].map(t=><g key={t}><line x1={left} x2={right} y1={y(high*t)} y2={y(high*t)} className="grid"/><text x={left-10} y={y(high*t)+4} textAnchor="end" className="ylabel">{n(high*t)}</text></g>)}
-   {segments.filter(a=>a.length>1).map((segment,i)=>{const points=segment.map(r=>`${x(r)},${y(r[metric])}`).join(' ');return <g key={i}><polygon points={`${x(segment[0])},${bottom} ${points} ${x(segment.at(-1)!)},${bottom}`} fill={`url(#${uid}area)`}/><polyline points={points} className="line"/></g>})}
+   {segments.filter(a=>a.length>1).map((segment,i)=>{const points=segment.map(r=>`${x(r)},${y(r[metric])}`).join(' ');return <g key={metric+"-"+i}><polygon points={`${x(segment[0])},${bottom} ${points} ${x(segment.at(-1)!)},${bottom}`} fill={`url(#${uid}area)`}/><polyline points={points} className="line-depth" transform="translate(0 4)"/><polyline points={points} className="line" pathLength="1" style={{stroke:`url(#${uid}line)`}}/><polyline points={points} className="line-flow" pathLength="1" aria-hidden="true"/></g>})}
    {picked?.[metric]!=null?<line x1={x(picked)} x2={x(picked)} y1={top} y2={bottom} className="selected-guide"/>:null}
    {vals.map(r=><g key={r.startDate} role="button" aria-label={`${rangeLabel(r)} ${label} ${fmt(r[metric])}${unit}`} tabIndex={0} onClick={()=>setFocus(view.indexOf(r))} onFocus={()=>setFocus(view.indexOf(r))} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setFocus(view.indexOf(r))}}}><circle cx={x(r)} cy={y(r[metric])} r="14" className="point-hit"/><circle cx={x(r)} cy={y(r[metric])} r={picked===r?4:vals.length<3?3:0} className="point"/><title>{`${rangeLabel(r)} ${fmt(r[metric])}${unit}`}</title></g>)}
    {[...new Set([0,Math.floor((view.length-1)/2),view.length-1])].map((idx,i)=><text key={idx} x={x(view[idx])} y="241" textAnchor={i===0?'start':i===2?'end':'middle'} className="xlabel">{granularity==='DAY'?view[idx].startDate.slice(5).replace('-','/'):view[idx].startDate.slice(0,7).replace('-','/')}</text>)}
