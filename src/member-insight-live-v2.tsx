@@ -43,7 +43,7 @@ const AUTO_SYNC_KEY="mumei-insight-last-auto-public-sync";
 const AUTO_SYNC_ENABLED_KEY="mumei-insight-auto-sync-enabled";
 const RELATION_SYNC_KEY="mumei-insight-last-auto-relation-sync";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
-const INSIGHT_NAV_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","通知"],["dm","DM"],["articles","記事"]] as const;
+const INSIGHT_NAV_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","本人通知"],["dm","DM"],["articles","記事"]] as const;
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
 function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
 
@@ -338,7 +338,6 @@ export function MemberInsightLiveV2(){
         </div>
         <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
           <button type="button" onClick={()=>{window.location.href=notificationConnectionHref}} aria-label="本人通知の連携と履歴を開く"><span className="icon">🔔</span><b>本人通知</b></button>
-          <a className="gear" href={notificationConnectionHref} aria-label="本人通知設定">⚙</a>
         </div>
       </nav>
     </section>
