@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.9
+// @version      1.7.0
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.9';
+  const VERSION='1.7.0';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -694,10 +694,11 @@
 #mumei-dashboard-sync textarea{display:block;box-sizing:border-box;width:100%;height:16vh;min-height:70px;resize:none;color:#eaf6ff;background:#07131d;border:1px solid #466677;border-radius:6px;font:12px/1.5 system-ui;padding:6px}
 #mumei-dashboard-sync [hidden]{display:none!important}
 #mumei-dashboard-clearance{height:58px;pointer-events:none}
-</style><div class="row"><span id="mumei-dash-brief" role="status" aria-live="polite">読み込みで開始</span><button id="mumei-dash-run" type="button">読み込み</button><button id="mumei-dash-feature-off" type="button" aria-label="ダッシュボード パネルをOFFにする。再びONにするには設定を開いてください">OFF</button></div><div class="footer"><details id="mumei-dash-history"><summary>履歴</summary><div class="status"></div><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details><a id="mumei-dash-settings" class="settings-note" href="https://mumei-s.github.io/note-insight/dashboard-setup.html?from=note">ON/OFFは設定から</a></div>`;
+</style><div class="row"><span id="mumei-dash-brief" role="status" aria-live="polite">読み込みで開始</span><button id="mumei-dash-run" type="button">読み込み</button><button id="mumei-dash-insight" type="button" aria-label="INSIGHTメインの分析ボタンへ戻る">INSIGHT</button><button id="mumei-dash-feature-off" type="button" aria-label="ダッシュボード パネルをOFFにする。再びONにするには設定を開いてください">OFF</button></div><div class="footer"><details id="mumei-dash-history"><summary>履歴</summary><div class="status"></div><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details><a id="mumei-dash-settings" class="settings-note" href="https://mumei-s.github.io/note-insight/dashboard-setup.html?from=note">ON/OFFは設定から</a></div>`;
     document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
     if(lastPresentation){status.textContent=lastPresentation.message;status.dataset.kind=lastPresentation.kind;renderCompactStatus(lastPresentation.message,lastPresentation.kind)}else setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
     panel.querySelector('#mumei-dash-run').onclick=()=>busy?stopReading():needsPair?void connectAndRead():void syncNow();
+    panel.querySelector('#mumei-dash-insight').onclick=()=>{if(busy){queuePartial(lastCollection);stopReading()}location.assign('https://mumei-s.github.io/note-insight/?insightMode=normal&insightFocus=analysis#dashboard')};
     paintMode();
     const off=panel.querySelector('#mumei-dash-feature-off');
     off.hidden=!window.__mumeiDashboardFeatureV1;

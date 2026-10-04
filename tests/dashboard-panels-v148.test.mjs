@@ -517,3 +517,7 @@ test('HTTP 402は保存先利用制限として表示して再保存を続けな
  assert.match(h.w.document.querySelector('.status')?.textContent||'',/HTTP_402/);
  assert.equal(h.w.document.getElementById('mumei-dash-brief')?.textContent,'保存先が利用制限中');
 });
+
+test('公式ダッシュボードのINSIGHTボタンはメインの分析位置を指定し、分析を開かない',async t=>{
+ const h=page(t,tabRows('戻り先のテスト'),{paired:false});await pause(50);const b=h.w.document.getElementById('mumei-dash-insight');assert.equal(b.textContent,'INSIGHT');b.click();assert.equal(h.nav.length,1);const url=new URL(h.nav[0]);assert.equal(url.origin,'https://mumei-s.github.io');assert.equal(url.searchParams.get('insightMode'),'normal');assert.equal(url.searchParams.get('insightFocus'),'analysis');assert.equal(url.hash,'#dashboard');assert.equal(h.saves.length,0);
+});

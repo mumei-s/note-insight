@@ -90,7 +90,7 @@ for(const automatic of [true,false])test('以前の自動設定に関係なく�
  assert.equal(w.document.getElementById('mumei-dash-settings').textContent,'ON/OFFは設定から');
  w.document.getElementById('mumei-dash-run').click();await until(()=>h.calls.some(x=>x.action==='ingest'));
  const count=h.calls.length,next=h.note();await pause(150);assert.equal(h.calls.length,count,'再訪で読み取りを始めない');
- assert.ok(next.document.getElementById('mumei-dash-history'));assert.equal(next.document.querySelectorAll('button').length,3,'読み込み・OFF・履歴コピーだけ');
+ assert.ok(next.document.getElementById('mumei-dash-history'));assert.equal(next.document.querySelectorAll('button').length,4,'読み込み・INSIGHT・OFF・履歴コピーだけ');
 });
 for(const path of ['/dashboard','/dashboard/','/dashboard/articles','/sitesettings/stats'])test('公式URLのパネルに読み込み・履歴・OFFを表示する：'+path,async t=>{
  const h=harness(t,{readOnStart:false}),w=h.note(undefined,'https://note.com'+path);await until(()=>w.document.getElementById('mumei-dash-run'));

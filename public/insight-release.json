@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.05.1",
   "notificationVersion": "3.6.29",
-  "dashboardVersion": "1.6.9",
+  "dashboardVersion": "1.7.0",
   "releasedAt": "2026-10-05T01:18:04+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "メイン：公式Dashboardの戻り先となる分析ボタンへフォーカス。下部INSIGHTにメイン表記。",
+  "note": "Dashboard：INSIGHTメインの分析位置へ戻るボタンを追加。取得済みデータの保存待ちを保持。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
