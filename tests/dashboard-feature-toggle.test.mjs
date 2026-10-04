@@ -8,8 +8,8 @@ const read=p=>readFileSync(p,'utf8'),KEY='mumei_insight_dashboard_feature_enable
 const bridge=read('public/note-insight-dashboard-feature-bridge-v1.js'),core=read('public/note-insight-dashboard-sync-core-v1.1.0.js'),wrapper=read('public/note-insight-dashboard-sync.user.js');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label='condition'){for(let i=0;i<100;i++){if(fn())return;await pause(20)}assert.ok(fn(),label)}
-function harness(t,{enabled=true,legacy=false,listener=true,failWrite=false,identity}={}){
- const values=new Map([[KEY,enabled],['mumei_insight_notification_feature_enabled_v1',true]]),listeners=[],calls=[];
+function harness(t,{enabled=true,automatic=true,legacy=false,listener=true,failWrite=false,identity,stats}={}){
+ const values=new Map([[KEY,enabled],['mumei_insight_dashboard_auto_enabled_v1',automatic],['mumei_insight_notification_feature_enabled_v1',true]]),listeners=[],calls=[];
  function create(url,html){const dom=new JSDOM(html,{url,runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
   const native=w.setTimeout.bind(w);w.setTimeout=(fn,ms,...a)=>native(fn,ms>=10000?ms:Math.min(ms,20),...a);w.setInterval=()=>1;
   w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:150});w.matchMedia=()=>({matches:true});w.performance.getEntriesByType=()=>[];
@@ -18,7 +18,7 @@ function harness(t,{enabled=true,legacy=false,listener=true,failWrite=false,iden
   const request=o=>{const body=JSON.parse(o.data);calls.push(body);const saved=calls.findLast(x=>x.action==='ingest');const p=body.action==='ingest'?{ok:true,snapshotId:1,capturedAt:'2026-09-27T00:00:00Z'}:body.snapshotId?{ok:true,paired:true,noteId:'tester',snapshotId:1,confirmed:true,articleCount:saved.articles.length,dailyPvDays:saved.metricSeries.filter(x=>x.pageViews!==null).length,dailyMetricCount:saved.metricSeries.length,totals:saved.totals}:{ok:true,paired:true,noteId:'tester'};queueMicrotask(()=>o.onload({status:200,responseText:JSON.stringify(p)}))};
   if(legacy){w.GM_getValue=get;w.GM_setValue=set;w.GM_xmlhttpRequest=request;if(listener)w.GM_addValueChangeListener=listen}else w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a),xmlHttpRequest:request,...(listener?{addValueChangeListener:listen}:{})};
   w.postMessage=data=>native(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})),0);
-  w.fetch=async url=>{calls.push({action:'fetch',url:String(url)});return String(url).includes('current_user')&&identity?identity():Response.json({data:{urlname:'tester'}})};
+  w.fetch=async url=>{calls.push({action:'fetch',url:String(url)});return String(url).includes('current_user')&&identity?identity():Response.json(String(url).includes('/stats')&&stats?stats:{data:{urlname:'tester'}})};
   w.localStorage.setItem('mumei-dashboard-note-id-v1','tester');w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture');
   w.eval(bridge);return w;
  }
@@ -76,4 +76,66 @@ test('本人確認待ちのOFF→ONは古い読込を止めて、新しい読込
  let finish,requests=0;const h=harness(t,{identity:()=>++requests===1?new Promise(r=>finish=r):Response.json({data:{urlname:'tester'}})}),w=h.note();await until(()=>finish);
  await w.__mumeiDashboardFeatureV1.setEnabled(false);await w.__mumeiDashboardFeatureV1.setEnabled(true);finish(Response.json({data:{urlname:'tester'}}));
  await until(()=>h.calls.some(x=>x.action==='ingest'));await pause(100);assert.equal(h.calls.filter(x=>x.action==='ingest').length,1);assert.ok(w.document.querySelector('#mumei-dashboard-sync'));
+});
+
+for(const cls of ['m-navbarNoticeButton','m-navbarNotice__trigger','m-navbarNotice'])test('ヘッダーのベルだけで同期パネルを消さない：'+cls,async t=>{
+ const h=harness(t),w=h.note(`<header><div class="${cls}"><button aria-label="通知を開く">🔔</button></div></header><main><h1>アクセス状況</h1><p>ページビュー 3</p><script type="application/json">{"page_views":{"2026-09-27":3}}</script></main>`);
+ await until(()=>h.calls.some(x=>x.action==='ingest'));
+ assert.equal(w.document.documentElement.getAttribute('data-mumei-dashboard-surface'),'dashboard');
+ const panel=w.document.getElementById('mumei-dashboard-sync');assert.ok(panel);assert.notEqual(w.getComputedStyle(panel).display,'none');
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'自動');
+ assert.equal(w.document.getElementById('mumei-dash-settings').textContent,'ON/OFFは設定から');
+ assert.match(w.document.getElementById('mumei-dash-settings').href,/dashboard-setup\.html/);
+ assert.equal(w.getComputedStyle(w.document.getElementById('mumei-dash-mode')).height,'28px');
+});
+
+for(const legacy of [false,true])test('手動を再訪でも保存し、読込ボタンだけで実行、再び自動に切り替えられる：legacy='+legacy,async t=>{
+ const h=harness(t,{automatic:false,legacy}),w=h.note();await w.__mumeiDashboardFeatureV1.ready;await pause(150);
+ assert.ok(w.document.getElementById('mumei-dashboard-sync'));assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'手動');
+ assert.equal(h.calls.length,0,'手動起動で本人取得も保存も始めない');
+ w.document.dispatchEvent(new w.Event('mumei-dashboard-read'));w.dispatchEvent(new w.Event('pageshow'));await pause(100);assert.equal(h.calls.length,0,'起動通知では手動を解除しない');
+ w.document.getElementById('mumei-dash-run').click();await until(()=>h.calls.some(x=>x.action==='ingest'));
+ const count=h.calls.length;const next=h.note();await next.__mumeiDashboardFeatureV1.ready;await pause(100);
+ assert.equal(next.document.getElementById('mumei-dash-mode').textContent,'手動');assert.equal(h.calls.length,count);
+ next.document.getElementById('mumei-dash-mode').click();await until(()=>h.values.get('mumei_insight_dashboard_auto_enabled_v1')===true&&h.calls.filter(x=>x.action==='ingest').length===2);
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'自動','別タブにも反映');
+});
+
+test('自動から手動へ切り替えると進行中の読込を止め、遅れた応答から保存しない',async t=>{
+ let finish;const h=harness(t,{identity:()=>new Promise(r=>finish=r)}),w=h.note();await until(()=>finish);
+ w.document.getElementById('mumei-dash-mode').click();await until(()=>h.values.get('mumei_insight_dashboard_auto_enabled_v1')===false);
+ finish(Response.json({data:{urlname:'tester'}}));await pause(100);
+ assert.equal(h.calls.filter(x=>x.action==='ingest').length,0);assert.ok(w.document.getElementById('mumei-dashboard-sync'));
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'手動');
+ const count=h.calls.length;w.document.dispatchEvent(new w.Event('mumei-dashboard-read'));await pause(100);assert.equal(h.calls.length,count);
+});
+
+test('モードの設定保存に失敗した場合は元の自動を維持する',async t=>{
+ const h=harness(t,{failWrite:true}),w=h.note();await until(()=>w.document.getElementById('mumei-dash-mode'));
+ w.document.getElementById('mumei-dash-mode').click();await until(()=>/fixture-save-failed/.test(w.document.querySelector('#mumei-dashboard-sync .status').textContent));
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'自動');assert.equal(h.values.get('mumei_insight_dashboard_auto_enabled_v1'),true);
+});
+
+test('手動では公式通信や通知画面からの復帰で自動保存せず、読込で取得済み値を保存する',async t=>{
+ const h=harness(t,{automatic:false,stats:{page_views:{'2026-09-26':8}}}),w=h.note();await w.__mumeiDashboardFeatureV1.ready;await pause(80);
+ await w.fetch('/api/v1/stats');await pause(100);
+ const sheet=w.document.createElement('section');sheet.innerHTML='<nav><a>通知</a><a>お知らせ</a></nav>';w.document.body.append(sheet);
+ await until(()=>!w.document.getElementById('mumei-dashboard-sync'));sheet.hidden=true;
+ await until(()=>w.document.getElementById('mumei-dashboard-sync'));await pause(100);
+ assert.equal(h.calls.filter(x=>x.action==='ingest').length,0);
+ assert.equal(h.calls.filter(x=>x.url?.includes('current_user')).length,0);
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'手動');
+ w.document.getElementById('mumei-dash-run').click();await until(()=>h.calls.some(x=>x.action==='ingest'));
+ assert.equal(h.calls.find(x=>x.action==='ingest').metricSeries.find(x=>x.date==='2026-09-26').pageViews,8);
+});
+
+test('小型パネルの停止で手動読込を止め、読込ボタンから再開できる',async t=>{
+ let finish,requests=0;const h=harness(t,{automatic:false,identity:()=>++requests===1?new Promise(r=>finish=r):Response.json({data:{urlname:'tester'}})}),w=h.note();await w.__mumeiDashboardFeatureV1.ready;await until(()=>w.document.getElementById('mumei-dash-run'));
+ w.document.getElementById('mumei-dash-run').click();await until(()=>finish);
+ assert.equal(w.document.getElementById('mumei-dash-run').textContent,'停止');w.document.getElementById('mumei-dash-run').click();
+ finish(Response.json({data:{urlname:'tester'}}));await until(()=>w.document.getElementById('mumei-dash-run').textContent==='読込');
+ assert.equal(h.calls.filter(x=>x.action==='ingest').length,0);
+ w.document.getElementById('mumei-dash-run').click();await until(()=>h.calls.some(x=>x.action==='ingest'));
+ assert.equal(h.calls.filter(x=>x.action==='ingest').length,1);
+ assert.equal(w.document.getElementById('mumei-dash-mode').textContent,'手動');
 });

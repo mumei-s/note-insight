@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.3",
   "notificationVersion": "3.6.26",
-  "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-04T19:46:11+09:00",
+  "dashboardVersion": "1.6.5",
+  "releasedAt": "2026-10-04T20:58:51+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の先頭ページが全件フィルター対象でも、ONのまま下へ進んで次の通知を表示できるよう修正。",
+  "note": "ダッシュボードの小型読み込みパネルを表示し、自動／手動切替、読込／停止、OFF、ON/OFFは設定からの案内を追加。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
