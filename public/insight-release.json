@@ -1,7 +1,7 @@
 {
   "appVersion": "2026.10.05.3",
   "notificationVersion": "3.6.32",
-  "dashboardVersion": "1.7.0",
+  "dashboardVersion": "1.7.1",
   "releasedAt": "2026-10-05T02:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.0
+// @version      1.7.1
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.0';
+  const VERSION='1.7.1';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -698,7 +698,8 @@
     document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
     if(lastPresentation){status.textContent=lastPresentation.message;status.dataset.kind=lastPresentation.kind;renderCompactStatus(lastPresentation.message,lastPresentation.kind)}else setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
     panel.querySelector('#mumei-dash-run').onclick=()=>busy?stopReading():needsPair?void connectAndRead():void syncNow();
-    panel.querySelector('#mumei-dash-insight').onclick=()=>{if(busy){queuePartial(lastCollection);stopReading()}location.assign('https://mumei-s.github.io/note-insight/?insightMode=normal&insightFocus=analysis#dashboard')};
+    const insight=panel.querySelector('#mumei-dash-insight');
+    insight.onclick=async()=>{insight.disabled=true;try{if(busy){stopReading();queuePartial(lastCollection);if(saveKey)await saveQueue.settled(saveKey);await saveQueue.settled(CHECKPOINT_KEY)}location.assign('https://mumei-s.github.io/note-insight/?insightMode=normal&insightFocus=analysis#dashboard')}catch(e){setStatus(String(e?.message||'取得済みデータの退避を確認できませんでした'),'warn','',true);insight.disabled=false}};
     paintMode();
     const off=panel.querySelector('#mumei-dash-feature-off');
     off.hidden=!window.__mumeiDashboardFeatureV1;

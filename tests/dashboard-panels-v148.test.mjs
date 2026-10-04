@@ -521,3 +521,10 @@ test('HTTP 402は保存先利用制限として表示して再保存を続けな
 test('公式ダッシュボードのINSIGHTボタンはメインの分析位置を指定し、分析を開かない',async t=>{
  const h=page(t,tabRows('戻り先のテスト'),{paired:false});await pause(50);const b=h.w.document.getElementById('mumei-dash-insight');assert.equal(b.textContent,'INSIGHT');b.click();assert.equal(h.nav.length,1);const url=new URL(h.nav[0]);assert.equal(url.origin,'https://mumei-s.github.io');assert.equal(url.searchParams.get('insightMode'),'normal');assert.equal(url.searchParams.get('insightFocus'),'analysis');assert.equal(url.hash,'#dashboard');assert.equal(h.saves.length,0);
 });
+
+test('読込中にINSIGHTへ戻る場合、保存待ちの退避が終わるまでページ移動を待つ',async t=>{
+ const h=page(t,tabRows('戻る前に退避する記事')+'<div aria-busy="true">公式の応答待ち</div>');
+ for(let i=0;i<50&&h.w.document.getElementById('mumei-dashboard-sync')?.getAttribute('aria-busy')!=='true';i++)await pause(10);await pause(80);
+ const waiting=[];let release;const gate=new Promise(r=>release=r);h.w.__mumeiDashboardSaveQueueV1.settled=async key=>{waiting.push(key);await gate};
+ const b=h.w.document.getElementById('mumei-dash-insight');b.click();await pause(10);assert.equal(b.disabled,true);assert.equal(h.nav.length,0);assert.ok(waiting[0]?.startsWith('mumei-dashboard-save-queue-v1:'));release();await pause(20);assert.equal(h.nav.length,1);assert.ok(waiting.includes('mumei-dashboard-read-checkpoint-v1'));assert.equal(new URL(h.nav[0]).searchParams.get('insightFocus'),'analysis');
+});
