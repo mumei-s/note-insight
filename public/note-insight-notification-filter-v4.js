@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.0';
+const VERSION='4.2.1';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -67,23 +67,40 @@ async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)retu
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE)}
 function setHidden(el,want){if(!el)return;forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
-function clearHides(){for(const el of document.querySelectorAll(`.${OWN},.${LEGACY}`))setHidden(el,false)}
+function clearHides(){clearContinuation();for(const el of document.querySelectorAll(`.${OWN},.${LEGACY}`))setHidden(el,false)}
+// Collapsing the entire loaded page must not collapse note's pagination surface.
+// Leave a scroll runway before its native loader, without exposing a muted row
+// or moving the viewport. The next page is still loaded by note itself.
+let continuation=null;
+function clearContinuation(){continuation?.remove();continuation=null}
+function scrollSurface(r){for(let el=r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement)if(/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))return el;return null}
+function continueFilteredPage(st,list,surface){
+ const allHidden=st.enabled&&list.length>0&&list.every(el=>el.classList.contains(OWN));
+ if(!allHidden){clearContinuation();return}
+ const last=list.at(-1),parent=last?.parentElement;if(!parent)return;
+ if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.setAttribute('role','status');continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';parent.insertBefore(continuation,last.nextSibling)}
+ if(continuation.previousElementSibling!==last)parent.insertBefore(continuation,last.nextSibling);
+ const height=Math.max(160,Math.min(innerHeight,surface?.clientHeight||innerHeight)+96)+'px';
+ if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
+ const message=`${list.length}件をフィルターで非表示にしています。下へスクロールして続きを表示できます。`;
+ if(continuation.textContent!==message)continuation.textContent=message;
+}
 let lastResult=null;
 function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r||!shown(r))return;if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r);for(const el of list){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}reportResult(st,list)}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=scrollSurface(r);for(const el of list){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);reportResult(st,list)}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='attributes'&&m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN);return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard');r.style.removeProperty('overscroll-behavior-y')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface)for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false);releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 let lastTouchY=null;
 function scrollConsumer(target,dy){for(let el=target instanceof Element?target:null;el&&root?.contains(el);el=el.parentElement){const max=el.scrollHeight-el.clientHeight;if(max>2){if(dy>0&&el.scrollTop<max-1)return el;if(dy<0&&el.scrollTop>1)return el}if(el===root)break}return null}
 window.addEventListener('touchstart',e=>{if(root&&shown(root)&&e.touches?.length===1&&root.contains(e.target))lastTouchY=e.touches[0].clientY;else lastTouchY=null},{capture:true,passive:true});
-window.addEventListener('touchmove',e=>{if(lastTouchY==null||!root||!shown(root)||!root.contains(e.target)||e.touches?.length!==1)return;const y=e.touches[0].clientY,dy=lastTouchY-y;lastTouchY=y;if(!scrollConsumer(e.target,dy)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
+window.addEventListener('touchmove',e=>{if(lastTouchY==null||!root||!shown(root)||!root.contains(e.target)||e.touches?.length!==1)return;const y=e.touches[0].clientY,dy=lastTouchY-y;lastTouchY=y;if(continuation?.isConnected)return;if(!scrollConsumer(e.target,dy)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
 window.addEventListener('touchend',()=>{lastTouchY=null},{capture:true,passive:true});
-window.addEventListener('wheel',e=>{if(!root||!shown(root)||!root.contains(e.target))return;if(!scrollConsumer(e.target,e.deltaY)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
+window.addEventListener('wheel',e=>{if(!root||!shown(root)||!root.contains(e.target)||continuation?.isConnected)return;if(!scrollConsumer(e.target,e.deltaY)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
 function discover(){retries=0;schedule(40,true)}
 window.addEventListener(EVT,()=>{invalidate();schedule(0,true)});
 window.addEventListener('mumei-notification-feature-changed',()=>{invalidate();clearTimeout(timer);timer=0;pendingForce=false;if(featureOn())schedule(0,true);else{attach(null);clearHides()}});

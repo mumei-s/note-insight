@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.3",
-  "notificationVersion": "3.6.25",
+  "notificationVersion": "3.6.26",
   "dashboardVersion": "1.6.4",
-  "releasedAt": "2026-10-04T08:47:00+09:00",
+  "releasedAt": "2026-10-04T19:46:11+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "分析4パネルの余白と設定の押下範囲を修正。noteの同期パネルONとINSIGHTプロの入口を区別し、一覧に浮かび上がりときらめきを追加。",
+  "note": "本人通知の先頭ページが全件フィルター対象でも、ONのまま下へ進んで次の通知を表示できるよう修正。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

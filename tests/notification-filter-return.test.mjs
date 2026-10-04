@@ -58,7 +58,7 @@ test('同じ一覧の再表示・後着通知・本文の差替えを反映し�
 
 test('親画面ごと非表示になった一覧も復帰し、待機中に表示変更を繰り返さない',async t=>{
  const e=setup(t);await until(()=>hidden(e.panel.querySelector('#muted')));const parent=e.panel.parentElement;
- parent.style.display='none';await wait(150);parent.style.display='';await until(()=>hidden(e.panel.querySelector('#muted')));
+ parent.style.display='none';await wait(150);parent.style.display='';await until(()=>hidden(e.panel.querySelector('#muted'))&&e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
  let changes=0;const observer=new e.w.MutationObserver(ms=>changes+=ms.length);observer.observe(e.panel,{attributes:true,subtree:true});
  await wait(300);observer.disconnect();assert.equal(changes,0,'待機中に書き換えループがない');
 });
@@ -189,4 +189,50 @@ test('全件がフィルター対象でもOFFボタンが残り、高さ0の一�
  assert.match(e.w.document.querySelector('.read-status').textContent,/すべてフィルター対象/);
  button().click();await until(()=>!hidden(only)&&button()?.dataset.on==='0','高さ0でもOFFで一覧全件を表示');
  assert.notEqual(e.w.getComputedStyle(only).display,'none');
+});
+
+for(const mode of ['modern','legacy'])test(`先頭12件が対象でもネイティブの続きを読めるスクロール領域を保つ (${mode})`,async t=>{
+ const e=setup(t,mode,true);
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="notificationList" id="list">'+Array.from({length:12},(_,i)=>row('first-'+i,'登録人物さんが共同マガジンに新しい記事を3本追加しました 1分前')).join('')+'<div id="native-loader"></div></div>';
+ await until(()=>e.panel.querySelectorAll('.mumei-muted-v2939').length===12);
+ const bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4');
+ assert.ok(bridge,'空白だけの画面にしない');
+ assert.ok(Number.parseFloat(bridge.style.minHeight)>e.w.innerHeight,'一覧が短くなってもネイティブ読込位置へ進める');
+ assert.equal(bridge.nextElementSibling.id,'native-loader','noteの読込位置の手前に領域を残す');
+ assert.match(bridge.textContent,/12件.*下へスクロール/);
+ const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});bridge.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false,'ページ本体のスクロールを妨げない');
+ for(const [type,y] of [['touchstart',400],['touchmove',100]]){const ev=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(ev,'touches',{value:[{clientY:y}]});bridge.dispatchEvent(ev);assert.equal(ev.defaultPrevented,false,'スマホのスワイプを妨げない')}
+ e.panel.querySelector('#native-loader').insertAdjacentHTML('beforebegin',row('next-visible','別の人物さんがあなたの記事にスキしました 2分前'));
+ await until(()=>!e.panel.querySelector('#mumei-notification-filter-continuation-v4'),'対象外が届けば補助領域を消す');
+ assert.equal(hidden(e.panel.querySelector('#next-visible')),false);
+ assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#next-visible')).display,'none');
+ assert.equal(e.panel.querySelectorAll('.mumei-muted-v2939').length,12,'先頭の対象通知は復活させない');
+ assert.equal(e.values.get('mumei_insight_magazine_filter_enabled_v3:tester'),true);
+});
+
+test('続きのページも全件対象なら領域を1つだけ保ち、OFF・離脱・機能OFFで片付ける',async t=>{
+ const e=setup(t);await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
+ e.panel.insertAdjacentHTML('beforeend',row('second'));
+ await until(()=>hidden(e.panel.querySelector('#second'))&&e.panel.querySelector('#mumei-notification-filter-continuation-v4')?.textContent.startsWith('2件'));
+ assert.equal(e.panel.querySelectorAll('#mumei-notification-filter-continuation-v4').length,1);
+ let changes=0;const observer=new e.w.MutationObserver(ms=>changes+=ms.length);observer.observe(e.panel,{attributes:true,childList:true,characterData:true,subtree:true});await wait(300);observer.disconnect();assert.equal(changes,0,'スクロール待ちで書換えループを起こさない');
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await until(()=>!e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
+ assert.ok([...e.panel.querySelectorAll('.m-navbarNoticeItem')].every(el=>!hidden(el)));
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',true);await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
+ e.panel.hidden=true;await until(()=>!e.panel.querySelector('#mumei-notification-filter-continuation-v4'),'閉じたパネルに領域を残さない');
+ e.panel.hidden=false;await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
+ e.w.__mumeiNotificationFeatureV1={isEnabled:()=>false};e.w.dispatchEvent(new e.w.Event('mumei-notification-feature-changed'));
+ assert.equal(e.panel.querySelector('#mumei-notification-filter-continuation-v4'),null);
+});
+
+test('自動高さのスクロール枠でも補助領域が膨らみ続けず、固定高さの枠には合わせる',async t=>{
+ const e=setup(t);e.panel.style.overflowY='auto';
+ Object.defineProperty(e.panel,'clientHeight',{configurable:true,get:()=>Number.parseFloat(e.panel.querySelector('#mumei-notification-filter-continuation-v4')?.style.minHeight)||900});
+ await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4'));
+ const bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4'),height=bridge.style.minHeight;
+ for(let i=0;i<4;i++)await e.w.__mumeiNotificationFilterV4.refresh();
+ assert.equal(bridge.style.minHeight,height);
+ assert.ok(Number.parseFloat(height)<=e.w.innerHeight+96);
+ Object.defineProperty(e.panel,'clientHeight',{value:400,configurable:true});await e.w.__mumeiNotificationFilterV4.refresh();
+ assert.equal(bridge.style.minHeight,'496px');assert.equal(e.panel.scrollTop,0,'読込位置へ強制スクロールしない');
 });
