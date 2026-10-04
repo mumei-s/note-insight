@@ -29,6 +29,29 @@ function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),be
 }
 async function saved(h,count=1){for(let i=0;i<100&&h.saves.length<count;i++)await pause(20);assert.equal(h.saves.length,count,h.w.document.querySelector('.status')?.textContent);await pause(20)}
 
+async function readFinished(h){for(let i=0;i<200&&h.w.document.getElementById('mumei-dashboard-sync')?.getAttribute('aria-busy')==='true';i++)await pause(20);assert.equal(h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy'),'false')}
+const tabRows=label=>`<table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${label}</td><td>8</td></tr></tbody></table>`;
+test('スマホで隠れた旧記事タブの選択を参照せず、表示中のメンバーシップを保存する',async t=>{
+ const h=page(t,'<p>ページビュー 8</p><div hidden><button aria-selected="true">記事</button></div><div id="mobile"><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button></div><section id="content">'+tabRows('記事本文')+'</section>',{before:w=>{
+  for(const tab of w.document.querySelectorAll('#mobile button'))tab.onclick=()=>{for(const el of w.document.querySelectorAll('#mobile button'))el.setAttribute('aria-selected',String(el===tab));w.document.getElementById('content').innerHTML=tabRows(tab.textContent==='記事'?'記事本文':'メンバーシップ本文')};
+ }});await saved(h);await readFinished(h);assert.deepEqual(h.saves[0].articles.map(r=>r.contentType),['article','membership']);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/TAB_NOT_OPEN/);
+});
+test('メンバーシップ名と記事数表が表示されたら古い選択属性だけで切替失敗にしない',async t=>{
+ const h=page(t,'<p>ページビュー 8</p><button role="tab" aria-selected="true">記事</button><button role="tab" id="member" aria-selected="false">メンバーシップ</button><section id="content">'+tabRows('記事本文')+'</section>',{before:w=>{
+  w.document.getElementById('member').onclick=()=>{w.document.getElementById('content').innerHTML='<p>メンバーシップ名</p><strong>無名S note Member Ship</strong><table><thead><tr><th>タイトル</th><th>記事数</th></tr></thead><tbody><tr><td>Monetize Crew</td><td>13</td></tr></tbody></table>'};
+ }});await saved(h);await readFinished(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/TAB_NOT_OPEN/);assert.equal(h.saves[0].contentSections.article.scope,'current-period-expanded');
+});
+test('公式の選択表示が遅れて更新されても、切替を確認してから保存する',async t=>{
+ let rendered=false,timer;const h=page(t,'<p>ページビュー 8</p><button role="tab" aria-selected="true">記事</button><button role="tab" id="member" aria-selected="false">メンバーシップ</button><section id="content">'+tabRows('記事本文')+'</section>',{before:w=>{
+  w.document.getElementById('member').onclick=()=>{timer=setTimeout(()=>{rendered=true;for(const el of w.document.querySelectorAll('[role=tab]'))el.setAttribute('aria-selected',String(el.id==='member'));w.document.getElementById('content').innerHTML=tabRows('遅れて出たメンバーシップ')},500)};
+ }});t.after(()=>clearTimeout(timer));await saved(h);await readFinished(h);assert.equal(rendered,true);assert.ok(h.saves[0].articles.some(r=>r.title==='遅れて出たメンバーシップ'&&r.contentType==='membership'));assert.deepEqual(h.warnings,[]);
+});
+test('本当にタブを切り替えられなくても取得済み分を途中保存し、読込完了とは扱わない',async t=>{
+ const h=page(t,'<p>ページビュー 8</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>'+tabRows('保持する記事'));
+ for(let i=0;i<300&&!h.saves.length;i++)await pause(20);await saved(h);await readFinished(h);assert.equal(h.saves[0].articles[0].title,'保持する記事');assert.equal(h.saves[0].contentSections.article.scope,'partial-read');assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);assert.ok(h.diagnostics.length===0);h.w.document.getElementById('mumei-dash-history').open=true;await pause(20);assert.match(h.w.document.querySelector('#mumei-dash-history textarea').value,/TAB_NOT_OPEN/);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/同期完了/);
+ const member=h.w.document.querySelector('[aria-selected="false"]');member.onclick=()=>{for(const tab of h.w.document.querySelectorAll('[role=tab]'))tab.setAttribute('aria-selected',String(tab===member));h.w.document.querySelector('table').outerHTML=tabRows('続きのメンバーシップ')};h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);await readFinished(h);assert.deepEqual(h.saves[1].articles.map(r=>r.title),['保持する記事','続きのメンバーシップ']);assert.equal(h.saves[1].contentSections.article.scope,'current-period-expanded');
+});
+
 test('画面表示前にnoteがクエリを消しても到着時の連携依頼を失わない',async t=>{
  const calls=[];
  const h=page(t,'<p>ページビュー 8</p>',{paired:false,url:'https://note.com/sitesettings/stats?mumei_dashboard_pair=12345678&mumei_dashboard_sync=1&mumei_dashboard_account=tester',before:w=>{
@@ -84,12 +107,12 @@ test('複数の公式JSONを消さずに合わせ、日別未取得時は同期�
 
 test('期間を変えた後の公式データを明示読み込みで保存し、前の期間の取得値を混ぜない',async t=>{
   const h=page(t,'<p id="range">2026/9/20〜2026/9/20</p><p>ページビュー 2</p>',{stats:async url=>({page_views:{[url.includes('2026-09-21')?'2026-09-21':'2026-09-20']:url.includes('2026-09-21')?9:2}}),before:w=>{w.performance.getEntriesByType=()=>[{name:'https://note.com/api/v1/stats/daily?date=2026-09-20'}]}});
-  await h.w.fetch('/api/v1/stats/daily?date=2026-09-20');await saved(h);
+  await h.w.fetch('/api/v1/stats/daily?date=2026-09-20');await saved(h);await readFinished(h);
   h.w.document.getElementById('range').textContent='2026/9/21〜2026/9/21';
-  await h.w.fetch('/api/v1/stats/daily?date=2026-09-21');h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);
+  await h.w.fetch('/api/v1/stats/daily?date=2026-09-21');h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);await readFinished(h);
   assert.equal(h.saves[1].periodStart,'2026-09-21');assert.equal(h.saves[1].periodEnd,'2026-09-21');
   assert.deepEqual(JSON.parse(JSON.stringify(h.saves[1].metricSeries.map(r=>[r.date,r.pageViews]))),[['2026-09-21',9]]);
-  h.w.document.getElementById('mumei-dash-run').click();await pause(250);assert.equal(h.saves.length,2,'同じデータを二重保存しない');
+  h.w.document.getElementById('mumei-dash-run').click();await pause(250);await readFinished(h);assert.equal(h.saves.length,2,'同じデータを二重保存しない');
 });
 
 test('未連携の通常訪問では手順を表示し、保存やパネル展開を勝手に進めない',async t=>{

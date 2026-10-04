@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.7",
   "notificationVersion": "3.6.29",
-  "dashboardVersion": "1.6.7",
-  "releasedAt": "2026-10-04T23:57:27+09:00",
+  "dashboardVersion": "1.6.8",
+  "releasedAt": "2026-10-05T00:56:03+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "現在の参加画面で本人の承認を自動通知。本人確認済みの再参加は通知後に自動再開。",
+  "note": "Dashboard：表示中のメンバーシップを正しく判定。公式タブの切り替えを待ち、失敗時も取得済み分を保存。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

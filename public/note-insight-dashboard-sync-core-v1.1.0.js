@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.7
+// @version      1.6.8
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.7';
+  const VERSION='1.6.8';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -69,7 +69,8 @@
   const isDashboard=()=>featureOn()&&isDashboardRoute()&&document.visibilityState!=='hidden'&&!notificationSurface();
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const graphqlUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://graphql.note.com'&&u.pathname==='/graphql'}catch{return false}};
-  const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(text(el.getAttribute('aria-label')||el.textContent));
+  const contentLabel=el=>text(el?.getAttribute('aria-label')||el?.textContent);
+  const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(contentLabel(el));
   const connectionKey=()=>JSON.stringify([localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
   const dashboardRouteRoot=()=>location.pathname.match(/^\/(?:sitesettings\/stats|dashboard)(?=\/|$)/)?.[0]||'';
   const usableLease=()=>viewLease&&viewLease.root===dashboardRouteRoot()&&viewLease.connection===connectionKey();
@@ -221,16 +222,24 @@
     }
     return text([el.getAttribute('aria-label'),el.textContent,controlled?.getAttribute('aria-label'),controlled?.querySelector('h2,h3,h4,caption')?.textContent,heading].filter(Boolean).join(' '));
   }
-  function panelControls(){return [...dashboardRoot().querySelectorAll('details:not([open]) > summary,button,[role="button"],[role="tab"]')].filter(el=>{
+  function panelControls(){const active=activeContentLabel();return [...dashboardRoot().querySelectorAll('details:not([open]) > summary,button,[role="button"],[role="tab"]')].filter(el=>{
     if(!readable(el)||el.disabled||el.getAttribute('aria-disabled')==='true'||el.hasAttribute('aria-haspopup')||el.matches('a,[type="submit"]'))return false;
-    if(contentTab(el))return text(el.getAttribute('aria-label')||el.textContent)!=='マガジン'&&el.getAttribute('aria-selected')!=='true'&&el.getAttribute('aria-pressed')!=='true';
+    if(contentTab(el))return contentLabel(el)!=='マガジン'&&(active?contentLabel(el)!==active:el.getAttribute('aria-selected')!=='true'&&el.getAttribute('aria-pressed')!=='true');
     if(el.matches('[role="tab"]'))return false;
     if(/^(?:過去.*|.*日間|.*順|期間.*|並び替え.*)$/.test(text(el.getAttribute('aria-label')||el.textContent)))return false;
     const disclosure=el.matches('details:not([open]) > summary')||el.getAttribute('aria-expanded')==='false';
     const named=!el.hasAttribute('aria-expanded')&&/^(?:グラフを(?:表示|開く)|詳細を表示|詳細を見る|もっと(?:見る|みる)|さらに表示|続きを表示|開く|表示する)$/.test(text(el.getAttribute('aria-label')||el.textContent));
     return (disclosure||named)&&metricPanel.test(panelLabel(el));
   })}
-  function activeContentLabel(){return text([...dashboardRoot().querySelectorAll('[aria-selected="true"],[aria-pressed="true"]')].find(contentTab)?.textContent)}
+  function activeContentLabel(){
+    const root=dashboardRoot();
+    // Mobile and desktop navigation can coexist; hidden old selection is not the visible tab.
+    // Membership name plus an article-count table provides direct evidence of that content view.
+    const membership=[...root.querySelectorAll('dt,label,p,span,div')].some(el=>text(el.textContent)==='メンバーシップ名'&&readable(el));
+    if(membership&&[...root.querySelectorAll('table thead,[role="columnheader"]')].some(el=>readable(el)&&/記事数/.test(text(el.textContent))&&!/PV|ビュー|インプレッション/.test(text(el.textContent))))return 'メンバーシップ';
+    const selected=[...root.querySelectorAll('[aria-selected="true"],[aria-pressed="true"],[aria-current="page"],[aria-current="true"],[data-state="active"],[data-state="selected"]')].filter(el=>contentTab(el)&&readable(el));
+    const labels=[...new Set(selected.map(contentLabel))];return labels.length===1?labels[0]:'';
+  }
   function controlKey(el,progress){
     if(contentTab(el))return 'tab:'+text(el.getAttribute('aria-label')||el.textContent);
     const label=panelLabel(el),base=JSON.stringify([progress.activeLabel,el.id,el.getAttribute('aria-controls'),label]);
@@ -306,7 +315,7 @@
     if(!metricSelect()&&!metricTrigger())return;
     const progress=checkpoint.progress,graph=progress.graph||(progress.graph={done:[],original:selectedChartMetric(),complete:false});
     if(graph.complete)return;
-    const collect=()=>{read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
+    const collect=()=>{const visible=activeContentLabel();if(visible)progress.activeLabel=visible;read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
     collect();
     // Finish on the initial metric; no endless switching on subsequent saves/retries.
     const fields=[...Object.keys(chartMetricLabels).filter(f=>f!==graph.original),graph.original].filter(Boolean);
@@ -322,7 +331,7 @@
   }
   async function expandDashboardPanels(href,initialPeriod,read,checkpoint){
     const progress=checkpoint.progress;
-    const collect=()=>{read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
+    const collect=()=>{const visible=activeContentLabel();if(visible)progress.activeLabel=visible;read.collect(progress.activeLabel);checkpoint.result=read.result;saveCheckpoint(checkpoint)};
     if(progress.pending){
       readStage=progress.pending.label;await waitForDashboard(href,initialPeriod);
       const target=panelControls().find(el=>controlKey(el,progress)===progress.pending.key);
@@ -346,7 +355,7 @@
       if(!usableLease())viewLease={href,period:initialPeriod,root:dashboardRouteRoot(),connection:connectionKey()};
       control.scrollIntoView?.({block:'center',behavior:'instant'});control.click();progress.opened++;
       setStatus(`公式パネルを読込中… ${label}（取得済み ${read.result.articles.length}件）`);
-      await waitForDashboard(href,initialPeriod);
+      await waitForDashboard(href,initialPeriod,tab?label:'');
       if(panelControls().some(el=>controlKey(el,progress)===key&&el.getAttribute('aria-expanded')==='false')){progress.pending=null;saveCheckpoint(checkpoint);throw new Error('公式パネルを開けませんでした：'+label+' [PANEL_NOT_OPEN]')}
       if(tab&&activeContentLabel()&&activeContentLabel()!==label){progress.pending=null;saveCheckpoint(checkpoint);throw new Error('公式タブを切り替えられませんでした：'+label+' [TAB_NOT_OPEN]')}
       if(tab)progress.activeLabel=label;
@@ -358,18 +367,20 @@
     // Live help text and response timestamps are not dashboard values.
     return JSON.stringify([tableArticles(),dailyTableMetrics(),chartDomMetrics(),detectTotals(),detectSummary(),detectTraffic(),panelControls().map(el=>[panelLabel(el),el.getAttribute('aria-expanded')])]);
   }
-  async function waitForDashboard(href,initialPeriod){
+  async function waitForDashboard(href,initialPeriod,expectedTab=''){
     let quiet=0,previous='';
     for(let tick=0;tick<100;tick++){
       ensureRunning();
       if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');
       const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]:not([aria-valuenow])')].some(readable);
       const signature=JSON.stringify([captureRevision,officialDataSignature()]);
-      quiet=!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
+      const active=activeContentLabel(),selectionReady=!expectedTab||!active||active===expectedTab;
+      quiet=selectionReady&&!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
       if(quiet>=(initialPeriod===null?6:2))return;
       if(tick%4===0)setStatus(`公式データを読込中…${pendingStats?' 通信 '+pendingStats+'件':''}`);
       await sleep(150);
     }
+    if(expectedTab&&activeContentLabel()&&activeContentLabel()!==expectedTab)throw new Error('公式タブを切り替えられませんでした：'+expectedTab+' [TAB_NOT_OPEN]');
     throw new Error('公式データの待機が15秒を超えました [READ_WAIT]');
   }
 
@@ -438,7 +449,7 @@
     }
     return mergeMetrics(rows);
   }
-  function currentContentType(){const label=text([...dashboardRoot().querySelectorAll('[role="tab"][aria-selected="true"]')].find(contentTab)?.textContent);return label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article'}
+  function currentContentType(){const label=activeContentLabel();return label==='マガジン'?'magazine':label==='メンバーシップ'?'membership':'article'}
   function collector(seed){
     let activeType=currentContentType();
     const result=seed?JSON.parse(JSON.stringify(seed)):{articles:[],sources:[],trafficSeries:[],metricSeries:[],chartSeries:[],totals:{},summary:{}},freshTotals=new Set();
@@ -573,8 +584,8 @@
       if(!complete)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
     }catch(e){
       autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&checkpoint.scope.connection===connectionKey();
-      if(valid&&connectionVerified&&/STOPPED|SURFACE_LEFT|VIEW_CHANGED/.test(message)&&checkpoint.result){
-        try{await finishCaptured(checkpoint);const pending=queuePartial(checkpoint);if(pending){setStatus('取得済みデータを保存しています…');const result=await saveQueue.flush(saveKey,pending.queueId);if(result){checkpoint.pendingSave=null;saveCheckpoint(checkpoint);setStatus('取得済みデータを保存しました。読み込みで続きを取得できます。','paused','read',true);return;}}}catch(saveError){recordStatus('保存待ち：'+String(saveError?.message||saveError),'warn')}
+      if(valid&&connectionVerified&&/STOPPED|SURFACE_LEFT|VIEW_CHANGED|TAB_NOT_OPEN/.test(message)&&checkpoint.result){
+        try{await finishCaptured(checkpoint);const pending=queuePartial(checkpoint);if(pending){setStatus('取得済みデータを保存しています…');const result=await saveQueue.flush(saveKey,pending.queueId);if(result){checkpoint.pendingSave=null;saveCheckpoint(checkpoint);if(message.includes('[TAB_NOT_OPEN]'))recordStatus(message,'warn');setStatus('取得済みデータを保存しました。読み込みで続きを取得できます。','paused','read',true);return;}}}catch(saveError){recordStatus('保存待ち：'+String(saveError?.message||saveError),'warn')}
       }
       if(valid)saveCheckpoint(checkpoint);
       if(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)&&localStorage.getItem(TOKEN_KEY)===tokenAtStart)localStorage.removeItem(TOKEN_KEY);
