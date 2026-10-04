@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.3",
   "notificationVersion": "3.6.26",
-  "dashboardVersion": "1.6.5",
-  "releasedAt": "2026-10-04T20:58:51+09:00",
+  "dashboardVersion": "1.6.6",
+  "releasedAt": "2026-10-04T22:04:40+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "ダッシュボードの小型読み込みパネルを表示し、自動／手動切替、読込／停止、OFF、ON/OFFは設定からの案内を追加。",
+  "note": "note公式の/dashboardと従来の/sitesettings/statsの両方で小型読み込みパネルを表示。自動／手動、読込／停止、OFF、ON/OFFは設定から。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

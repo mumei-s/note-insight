@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.5
+// @version      1.6.6
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
+// @match        https://note.com/dashboard*
 // @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
@@ -17,15 +18,15 @@
     const resume=()=>{if(featureOn()){window.removeEventListener('mumei-dashboard-feature-changed',resume);startDashboardCore()}};
     window.addEventListener('mumei-dashboard-feature-changed',resume);return;
   }
-  if(!/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname)){
+  if(!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname)){
     // SPA navigation from a normal note page must start the reader only on the dashboard.
     document.addEventListener('mumei-dashboard-mount',function enterDashboard(){
-      if(!/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname))return;
+      if(!/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname))return;
       document.removeEventListener('mumei-dashboard-mount',enterDashboard);startDashboardCore();
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.5';
+  const VERSION='1.6.6';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -65,13 +66,13 @@
     for(const n of notices)for(const o of news){let p=n.parentElement;for(let i=0;i<6&&p&&p!==document.body;i++,p=p.parentElement)if(p.contains(o))return true}
     return false;
   }
-  const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/sitesettings\/stats(?:\/|$)/.test(location.pathname);
+  const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
   const isDashboard=()=>featureOn()&&isDashboardRoute()&&document.visibilityState!=='hidden'&&!notificationSurface();
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const graphqlUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://graphql.note.com'&&u.pathname==='/graphql'}catch{return false}};
   const contentTab=el=>/^(?:記事|マガジン|メンバーシップ)$/.test(text(el.getAttribute('aria-label')||el.textContent));
   const connectionKey=()=>JSON.stringify([localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
-  const dashboardRouteRoot=()=>location.pathname.match(/^\/sitesettings\/stats(?=\/|$)/)?.[0]||'';
+  const dashboardRouteRoot=()=>location.pathname.match(/^\/(?:sitesettings\/stats|dashboard)(?=\/|$)/)?.[0]||'';
   const usableLease=()=>viewLease&&viewLease.root===dashboardRouteRoot()&&viewLease.connection===connectionKey();
   function renderedPeriodKey(){
     const p=detectPeriod();

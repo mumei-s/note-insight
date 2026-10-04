@@ -473,8 +473,8 @@ for(const requested of ['all','week'])test('指定期間を一度だけ自動選
 });
 
 
-test('汎用/dashboardは公式Statsとして扱わない',async t=>{
- const h=page(t,'<p>アクセス状況 ページビュー 99</p>',{url:'https://note.com/dashboard',watchHref:true});
+for(const path of ['/dashboard-extra','/sitesettings/stats-extra'])test('公式ダッシュボードに似た別URLへパネルを出さない：'+path,async t=>{
+ const h=page(t,'<p>アクセス状況 ページビュー 99</p>',{url:'https://note.com'+path,watchHref:true});
  await pause(150);
  assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);
  assert.equal(h.saves.length,0);
