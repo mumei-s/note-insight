@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.4",
+  "appVersion": "2026.10.05.5",
   "notificationVersion": "3.6.34",
   "dashboardVersion": "1.7.2",
-  "releasedAt": "2026-10-05T02:10:00+09:00",
+  "releasedAt": "2026-10-05T03:57:01+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "公式🔔パネル案内：ON/OFF設定はメイン🔔から。",
+  "note": "通知の末尾判定・スクロール枠を保ち続きへを追加。Dashboardの別ページ残留を解消。ON/OFF設定はメイン🔔から。本人設定に現在ON/OFFと次の操作を明記。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

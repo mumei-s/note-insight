@@ -76,8 +76,8 @@ for(const mode of ['modern','legacy'])test(`本人設定の横長3行から保�
  w.postMessage=data=>w.setTimeout(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})),0);
  w.eval(readFileSync('public/note-insight-notification-feature-bridge-v1.js','utf8'));await w.__mumeiNotificationFeatureV1.ready;
  const button=w.document.getElementById('notification-panel-toggle');async function until(label){for(let n=0;n<50&&button.textContent!==label;n++)await pause(10);assert.equal(button.textContent,label);assert.equal(button.disabled,false)}
- await until('note公式🔔パネル ON');assert.equal(w.document.querySelector('.shortcuts').children.length,3);assert.match(page,/\.shortcuts\{display:grid;grid-template-columns:1fr/);
- fail=true;button.click();await until('note公式🔔パネル ON');assert.match(w.document.getElementById('notification-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
- fail=false;button.click();await until('note公式🔔パネル OFF');assert.equal(values.get(KEY),false);button.click();await until('note公式🔔パネル ON');assert.equal(values.get(PANEL),true);assert.deepEqual(requests,['stats']);
- w.dispatchEvent(new w.MessageEvent('message',{origin:'https://example.org',data:{source:'mumei-notification-feature-bridge-v1',type:'state',enabled:false}}));assert.equal(button.textContent,'note公式🔔パネル ON');
+ await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.equal(w.document.querySelector('.shortcuts').children.length,3);assert.match(page,/\.shortcuts\{display:grid;grid-template-columns:1fr/);
+ fail=true;button.click();await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.match(w.document.getElementById('notification-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
+ fail=false;button.click();await until('note公式🔔パネル｜現在：OFF｜ONにする');assert.equal(values.get(KEY),false);button.click();await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.equal(values.get(PANEL),true);assert.deepEqual(requests,['stats']);
+ w.dispatchEvent(new w.MessageEvent('message',{origin:'https://example.org',data:{source:'mumei-notification-feature-bridge-v1',type:'state',enabled:false}}));assert.equal(button.textContent,'note公式🔔パネル｜現在：ON｜OFFにする');
 });
