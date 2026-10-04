@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.05.1",
-  "notificationVersion": "3.6.30",
+  "notificationVersion": "3.6.31",
   "dashboardVersion": "1.7.0",
   "releasedAt": "2026-10-05T01:18:04+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知：自動読み込みを基本に、一時停止状態を保持し、明示的な再開で自動に戻る。",
+  "note": "本人通知：ON/OFFをツール保存先へ保存・再読込確認し、旧パネルOFFからも復帰できる。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

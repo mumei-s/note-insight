@@ -7,8 +7,9 @@ const NOTE=location.hostname==='note.com',OWNED='#mumei-inline-notification-cont
 let enabled=null,revision=0,queue=Promise.resolve();
 const modern=()=>Boolean(globalThis.GM);
 async function get(d=true){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(KEY,d);if(typeof GM_getValue==='function')return GM_getValue(KEY,d)}catch{}return d}
-async function set(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(KEY,Boolean(v));if(typeof GM_setValue==='function')return GM_setValue(KEY,Boolean(v))}catch{}}
-const send=()=>{if(!NOTE)window.postMessage({source:BRIDGE,type:'state',enabled:enabled===true},location.origin)};
+async function write(k,v){if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);throw new Error('ON/OFFを保存できるツールがありません')}
+async function verify(k,v){let actual;if(modern()&&typeof GM.getValue==='function')actual=await GM.getValue(k,null);else if(typeof GM_getValue==='function')actual=GM_getValue(k,null);else throw new Error('ON/OFFの保存を確認できません');if(actual!==v)throw new Error('ON/OFFの保存を確認できません')}
+const send=(error='')=>{if(!NOTE)window.postMessage({source:BRIDGE,type:'state',enabled:enabled===true,error},location.origin)};
 function apply(value){
  const next=Boolean(value),changed=enabled!==next;enabled=next;
  if(NOTE){
@@ -19,7 +20,8 @@ function apply(value){
  if(changed)send();return enabled
 }
 async function refresh(){const at=revision,value=await get(true);if(at===revision)apply(value);return enabled===true}
-window.__mumeiNotificationFeatureV1={isEnabled:()=>enabled===true,refresh,ready:null};
+function setEnabled(value){const next=Boolean(value);const job=queue.catch(()=>{}).then(async()=>{revision++;try{if(next){const panel='mumei_insight_notification_panel_enabled_v1';await write(panel,true);await verify(panel,true)}await write(KEY,next);await verify(KEY,next);apply(next);send();return next}catch(e){await refresh();send(String(e?.message||e));throw e}});queue=job;return job}
+window.__mumeiNotificationFeatureV1={version:'1.2.0',setEnabled,isEnabled:()=>enabled===true,refresh,ready:null};
 if(NOTE){
  const style=document.createElement('style');style.id='mumei-notification-feature-style-v1';
  style.textContent=OWNED.split(',').map(s=>'html[data-mumei-notification-feature="off"] '+s).join(',')+'{display:none!important}';
@@ -29,8 +31,8 @@ const listen=modern()&&typeof GM.addValueChangeListener==='function'?GM.addValue
 if(listen)try{Promise.resolve(listen(KEY,(_key,_old,value)=>{revision++;apply(value)})).catch(()=>{})}catch{}
 if(!NOTE)addEventListener('message',e=>{
  if(e.origin!==location.origin||e.data?.source!==PAGE)return;
- if(e.data?.type==='set')queue=queue.then(async()=>{revision++;await set(Boolean(e.data.enabled));await refresh();send()});
- else if(e.data?.type==='get')void queue.then(async()=>{await refresh();send()});
+ if(e.data?.type==='set')void setEnabled(e.data.enabled).catch(()=>{});
+ else if(e.data?.type==='get')void queue.catch(()=>{}).then(async()=>{await refresh();send()});
 });
 for(const name of ['focus','pageshow'])addEventListener(name,()=>void refresh());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refresh()});
