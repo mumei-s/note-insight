@@ -209,7 +209,7 @@ test('filter and backend restriction fixes stay isolated',()=>{
   assert.match(filter,/flatMap\(g=>Array\.isArray\(g\?\.ids\)\?g\.ids:\[\]\)/);
   assert.match(filter,/data-mumei-filter-scroll-guard/);
   assert.doesNotMatch(filter,/addEventListener\(['"]touchmove['"]/);
-  assert.doesNotMatch(filter,/preventDefault\(\);e\.stopPropagation\(\)/);
+  assert.doesNotMatch(filter.replace(/continuation\.querySelector\('button'\)\.onclick=e=>\{[^}]*\}/,''),/preventDefault\(\)/,'続きへボタン以外ではネイティブのジェスチャーを止めない');
   assert.match(network,/BACKEND_RESTRICTED/);
   assert.match(network,/Supabaseの利用制限中/);
   assert.match(network,/r\.status===402/);

@@ -73,8 +73,10 @@ function clearHides(){clearContinuation();for(const el of document.querySelector
 // Collapsing the entire loaded page must not collapse note's pagination surface.
 // Leave a scroll runway before its native loader, without exposing a muted row
 // or moving the viewport. The next page is still loaded by note itself.
-let continuation=null,scrollFallback=null;
-function clearContinuation(){continuation?.remove();continuation=null;for(const el of document.querySelectorAll(`[${EDGE}]`))pageEdge(el,false);if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
+let continuation=null,scrollFallback=null;const scrollGuards=new Map();
+function restoreScrollGuards(){for(const [el,{value,priority}]of scrollGuards){value?el.style.setProperty('overscroll-behavior-y',value,priority):el.style.removeProperty('overscroll-behavior-y')}scrollGuards.clear()}
+function nativeScrollGuard(surface,list){if(!surface)return;const wanted=new Map([[surface,'contain']]);for(let el=list.at(-1)?.parentElement;el&&el!==surface&&el!==document.body;el=el.parentElement)if(/auto|scroll/.test(getComputedStyle(el).overflowY)&&el.scrollHeight<=el.clientHeight+1)wanted.set(el,'auto');for(const [el,old]of scrollGuards)if(!wanted.has(el)){old.value?el.style.setProperty('overscroll-behavior-y',old.value,old.priority):el.style.removeProperty('overscroll-behavior-y');scrollGuards.delete(el)}for(const [el,value]of wanted){if(!scrollGuards.has(el))scrollGuards.set(el,{value:el.style.getPropertyValue('overscroll-behavior-y'),priority:el.style.getPropertyPriority('overscroll-behavior-y')});if(el.style.getPropertyValue('overscroll-behavior-y')!==value||el.style.getPropertyPriority('overscroll-behavior-y')!=='important')el.style.setProperty('overscroll-behavior-y',value,'important')}}
+function clearContinuation(){continuation?.remove();continuation=null;restoreScrollGuards();for(const el of document.querySelectorAll(`[${EDGE}]`))pageEdge(el,false);if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
 function provideScroll(parent,surface){
  if(surface)return surface;
  if(parent===document.body||parent===document.documentElement)return null;
@@ -93,6 +95,7 @@ function continueFilteredPage(st,list,surface){
  const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+96-visibleHeight)+'px';
  if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
  surface=provideScroll(parent,scrollSurface(root,list));
+ nativeScrollGuard(surface,list);
  // note may observe the final notification itself, rather than a separate loader.
  // Keep that exact node measurable while masking its content and interactions.
  for(const el of document.querySelectorAll(`[${EDGE}]`))if(el!==last)pageEdge(el,false);
@@ -108,8 +111,8 @@ function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)r
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='attributes'&&m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN);return true}
-function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard');r.style.removeProperty('overscroll-behavior-y')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard')}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 // Native touch and wheel gestures must reach note's actual scroll ancestor.
 // A panel can be nested inside that ancestor or use the document viewport.
 function discover(){retries=0;schedule(40,true)}

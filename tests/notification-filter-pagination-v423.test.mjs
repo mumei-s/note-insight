@@ -27,7 +27,7 @@ function fixture(t,mode,remaining=0){
 
 for(const mode of ['modern','legacy'])for(const remaining of [0,2])test(`全件非表示・2行の後も、伸びる内側リストではなく公式スクロール枠で次ページへ進む (${mode}, ${remaining}行)`,async t=>{
  const f=fixture(t,mode,remaining);await until(()=>f.panel.querySelectorAll('.mumei-muted-v2939').length===12);
- const bridge=f.panel.querySelector('#mumei-notification-filter-continuation-v4');assert.ok(bridge);assert.equal(bridge.nextElementSibling,f.loader);assert.ok(f.host.scrollHeight>f.host.clientHeight,'実際の公式枠にスクロール範囲が必要');assert.equal(f.list.style.maxHeight,'','内側に別のスクロール枠を作らない');
+ const bridge=f.panel.querySelector('#mumei-notification-filter-continuation-v4');assert.ok(bridge);assert.equal(bridge.nextElementSibling,f.loader);assert.ok(f.host.scrollHeight>f.host.clientHeight,'実際の公式枠にスクロール範囲が必要');assert.equal(f.list.style.maxHeight,'','内側に別のスクロール枠を作らない');assert.equal(f.list.style.overscrollBehaviorY,'auto','スクロール範囲がない内側の要素でスワイプを閉じ込めない');assert.equal(f.host.style.overscrollBehaviorY,'contain');
  let pages=0;f.host.addEventListener('scroll',()=>{if(pages||f.host.scrollTop+f.host.clientHeight<f.host.scrollHeight-1)return;pages++;f.loader.insertAdjacentHTML('beforebegin',row('next-page',false));});
  bridge.querySelector('button').click();await until(()=>f.panel.querySelector('#next-page'));assert.equal(pages,1);assert.equal(f.panel.querySelector('#next-page').classList.contains('mumei-muted-v2939'),false);assert.equal(f.values.get('mumei_insight_magazine_filter_enabled_v3:tester'),true);assert.equal(f.requests(),1,'ページ送りのために通知APIを再走査しない');assert.equal(f.w.document.body.style.overflow,'hidden');
 });
@@ -38,5 +38,5 @@ for(const mode of ['modern','legacy'])test(`公式が最後の通知行を監視
  // The native observer retains this node reference; userscript must not replace it.
  if(watched.getBoundingClientRect().height>0)f.loader.insertAdjacentHTML('beforebegin',row('native-observed-next',false));
  await f.w.__mumeiNotificationFilterV4.refresh();assert.ok(f.panel.querySelector('#native-observed-next'));assert.equal(watched.hasAttribute('data-mumei-filter-page-edge'),false);assert.equal(watched.hasAttribute('inert'),false);assert.equal(watched.hasAttribute('aria-hidden'),false);assert.equal(f.w.getComputedStyle(watched).display,'none');
- f.values.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await f.w.__mumeiNotificationFilterV4.refresh(true);assert.equal(f.panel.querySelector('#mumei-notification-filter-continuation-v4'),null);assert.equal(f.panel.querySelector('.mumei-muted-v2939'),null);assert.equal(f.host.style.overflowY,'auto');
+ f.values.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await f.w.__mumeiNotificationFilterV4.refresh(true);assert.equal(f.panel.querySelector('#mumei-notification-filter-continuation-v4'),null);assert.equal(f.panel.querySelector('.mumei-muted-v2939'),null);assert.equal(f.host.style.overflowY,'auto');assert.equal(f.host.style.overscrollBehaviorY,'');assert.equal(f.list.style.overscrollBehaviorY,'');
 });
