@@ -3,6 +3,7 @@ export const APPLICANT_KEY = "mumei-insight-applicant-token";
 export const PASSCODE_KEY = "mumei-insight-passcode";
 export const ACCOUNT_STORE_KEY = "mumei-insight-saved-accounts-v3";
 export const ACCESS_INTENT_KEY = "mumei-insight-access-intent";
+export const MANUAL_ACCESS_INTENT_KEY = "mumei-insight-manual-access-intent-v1";
 export const ACTIVE_ACCOUNT_KEY = "mumei-insight-active-account-v3";
 export const EXPLICIT_LOGOUT_KEY_PREFIX = "mumei-insight-explicit-logout:";
 const LEGACY_ACCOUNT_STORE_KEY = "mumei-insight-saved-accounts-v2";
@@ -256,10 +257,22 @@ export function forgetInsightAccount(noteId: string) {
 
 export function setAccessIntent(intent: "login" | "apply" | "switch") {
   sessionStorage.setItem(ACCESS_INTENT_KEY, intent);
+  sessionStorage.setItem(MANUAL_ACCESS_INTENT_KEY, intent);
 }
 
 export function consumeAccessIntent() {
-  const value = sessionStorage.getItem(ACCESS_INTENT_KEY) as "login" | "apply" | "switch" | null;
+  const value = sessionStorage.getItem(ACCESS_INTENT_KEY) || sessionStorage.getItem(MANUAL_ACCESS_INTENT_KEY);
   sessionStorage.removeItem(ACCESS_INTENT_KEY);
+  if (value !== "login" && value !== "apply" && value !== "switch") return null;
+  sessionStorage.setItem(MANUAL_ACCESS_INTENT_KEY, value);
   return value;
+}
+
+export function hasManualAccessIntent() {
+  return Boolean(sessionStorage.getItem(ACCESS_INTENT_KEY) || sessionStorage.getItem(MANUAL_ACCESS_INTENT_KEY) || sessionStorage.getItem("mumei-insight-account-switch-lock-v1") === "1");
+}
+
+export function clearAccessIntent() {
+  sessionStorage.removeItem(ACCESS_INTENT_KEY);
+  sessionStorage.removeItem(MANUAL_ACCESS_INTENT_KEY);
 }

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   INSIGHT_TOKEN_KEY,
   activateStoredInsightAccount,
+  clearAccessIntent,
   consumeAccessIntent,
   forgetMemberSession,
   getStoredInsightAccount,
@@ -107,10 +108,10 @@ function AccountList({ accounts, currentToken, busy, onUse, onRecover }: { accou
   return <div className="access2-saved">{accounts.map((account) => {
     const current = Boolean(account.memberToken && account.memberToken === currentToken);
     const canSwitch = Boolean(account.memberToken);
-    return <button type="button" className="access2-account" disabled={busy || current} key={account.noteId} onClick={() => canSwitch ? onUse(account) : onRecover(account)}>
+    return <button type="button" className="access2-account" disabled={busy} key={account.noteId} onClick={() => canSwitch ? onUse(account) : onRecover(account)}>
       {account.imageUrl ? <img src={account.imageUrl} alt="" referrerPolicy="no-referrer" /> : <span>{[...(account.displayName || account.noteId)][0]}</span>}
       <span><b>{account.displayName || `@${account.noteId}`}</b><small>@{account.noteId}</small></span>
-      <em>{current ? "使用中" : canSwitch ? "切替" : "再ログイン"}</em>
+      <em>{current ? "使用中 · 開く" : canSwitch ? "切替" : "再ログイン"}</em>
     </button>;
   })}</div>;
 }
@@ -129,7 +130,7 @@ export function AccessPortalV6() {
   const storedAccounts = useMemo(() => readStoredInsightAccounts().filter((item) => item.noteId), [version]);
 
   function refresh() { setVersion((value) => value + 1); }
-  function goDashboard() { sessionStorage.removeItem(SWITCH_LOCK_KEY); sessionStorage.removeItem(OWNER_VIEW_KEY); window.location.hash = "dashboard"; }
+  function goDashboard() { clearAccessIntent(); sessionStorage.removeItem(SWITCH_LOCK_KEY); sessionStorage.removeItem(OWNER_VIEW_KEY); window.location.hash = "dashboard"; }
   function currentJoinAccount() {
     const noteId = cleanId(localStorage.getItem(JOIN_NOTE_KEY) || "");
     return noteId ? getStoredInsightAccount(noteId) : null;
@@ -386,7 +387,7 @@ export function AccessPortalV6() {
   }
 
   return <div className="access2"><main className="access2-main">
-    <a href="#" className="access2-back" onClick={()=>sessionStorage.removeItem(SWITCH_LOCK_KEY)}>← TOP</a>
+    <a href="#" className="access2-back" onClick={()=>{clearAccessIntent();sessionStorage.removeItem(SWITCH_LOCK_KEY)}}>← TOP</a>
     <header className="access2-head"><small>INSIGHT MEMBER</small><h1>INSIGHT</h1><p>初回の本人確認後はログイン状態を保持。認証済みアカウントはタップだけで切り替えられます。</p></header>
     {error ? <div className="access2-alert">{error}</div> : null}
     {message ? <div className="access2-message">{message}</div> : null}
