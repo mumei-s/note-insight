@@ -1,5 +1,5 @@
 /* INSIGHT v22 — left-aligned brand glints and upper-panel sparkle.
-   Entry glints are one-shot; the main hero has a subtle ambient light. No auth/session/data behavior here. */
+   The creator hero keeps a light ambient flow; lower controls remain calm. No auth/session/data behavior here. */
 
 /* ===== CREATOR HERO ===== */
 .miv5-creator-first{
@@ -73,7 +73,7 @@
   background-clip:text;
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
-  animation:iv22LetterGlint 2.8s ease-out .24s 1 both;
+  animation:iv22LetterGlint 8s ease-in-out .24s infinite;
 }
 .miv5-hero-signature strong span:last-child{animation-delay:.48s}
 .miv5-hero-signature strong span::after{
@@ -84,7 +84,7 @@
   filter:drop-shadow(0 0 4px #89eaff);
   pointer-events:none;
   opacity:0;
-  animation:iv22StarGlint 2.6s ease-out .3s 1 both;
+  animation:iv22StarGlint 9s ease-in-out .3s infinite;
 }
 .miv5-hero-signature strong span:last-child::after{right:24%;top:48%;animation-delay:.62s}
 .miv5-hero-signature i{
@@ -95,8 +95,12 @@
   box-shadow:0 0 18px rgba(100,222,247,.55);
   opacity:0;
   transform:translateX(-70%);
-  animation:iv18HeroBeam 1.4s ease-out .18s 1 both;
+  animation:iv18HeroBeam 10s ease-in-out .18s infinite;
 }
+.miv5-creator-first[data-motion="off"]::before,
+.miv5-creator-first[data-motion="off"] .miv5-hero-signature strong span,
+.miv5-creator-first[data-motion="off"] .miv5-hero-signature strong span::after,
+.miv5-creator-first[data-motion="off"] .miv5-hero-signature i{animation-play-state:paused!important}
 .miv5-creator-avatar,
 .miv5-creator-copy,
 .miv5-creator-actions{position:relative!important;z-index:3!important}

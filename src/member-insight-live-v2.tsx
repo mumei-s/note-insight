@@ -31,6 +31,7 @@ import "./insight-launcher-v10.css";
 import "./insight-thumb-dock-v11.css";
 import "./insight-ux-v12";
 import "./member-insight-analysis-scene.css";
+import { useVisibleMotion } from "./insight-visible-motion";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
@@ -71,6 +72,7 @@ const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2
 const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms));
 
 export function MemberInsightLiveV2(){
+  const creatorMotion=useVisibleMotion<HTMLElement>();
   const explicitMode=requestedMode();
   const initialMode:Mode=explicitMode||"normal";
   const initialNavTab=String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
@@ -321,7 +323,7 @@ export function MemberInsightLiveV2(){
     analysis:{title:"分析",sub:"公式値と保存履歴を重ねて読む"},
   }[mode];
   return <div className={`miv5 mode-${mode}`}><div key={`light:${mode}:${navTab}`} className="miv5-page-light" aria-hidden="true"/>
-    <section className="miv5-creator-first" aria-label="現在のクリエイター"><div key={`${mode}:${navTab}`} className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
+    <section ref={creatorMotion.ref} data-motion={creatorMotion.motion?"on":"off"} className="miv5-creator-first" aria-label="現在のクリエイター"><div key={`${mode}:${navTab}`} className="miv5-hero-signature" aria-hidden="true"><strong><span>無名 S note</span><span>INSIGHT</span></strong><i/></div>
       <div className="miv5-creator-avatar"><CreatorAvatar name={creatorName} image={creatorImage} noteId={creatorId} eager/></div>
       <div className="miv5-creator-copy">
         <h1>{creatorName}</h1>

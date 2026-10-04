@@ -147,7 +147,8 @@ test('上部文字の二重透明化を防ぎ、下部は静止、動きを減�
   assert.match(upperCss, /\.miv5-launcher-halo\{[\s\S]*?display:block!important/);
   assert.match(upperCss, /strong span:last-child\{\s*justify-self:start;\s*margin-left:8%/);
   assert.match(upperCss, /\.miv5-launcher-item::before,\s*\.miv5-launcher-item::after\{[^}]*pointer-events:none/);
-  assert.equal((upperCss.match(/infinite/g)||[]).length,1,'常時演出はメイン最上部の背景だけ');
+  assert.equal((upperCss.match(/infinite/g)||[]).length,4,'常時演出は最上部の光・文字・星・背景に限定');
+  assert.match(upperCss,/data-motion="off"[\s\S]*?animation-play-state:paused!important/);
   assert.match(upperCss,/\.miv5\.mode-normal \.miv5-creator-first::before\{[^}]*pointer-events:none;[^}]*animation:mumeiHeroAmbient 14s/);
   assert.match(upperCss,/@media\(prefers-reduced-motion:reduce\)\{\s*\.miv5\.mode-normal \.miv5-creator-first::before\{animation:none!important/);
   assert.match(upperCss, /@keyframes iv22LetterGlint/);
