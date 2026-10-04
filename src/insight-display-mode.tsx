@@ -1,6 +1,6 @@
 import { useLayoutEffect, useSyncExternalStore } from "react";
 
-export type InsightDisplayMode = "pc" | "mobile";
+export type InsightDisplayMode = "pc" | "tablet" | "mobile";
 export const DISPLAY_MODE_KEY = "mumei-insight-display-mode-v1";
 const CHANGE = "mumei-insight-display-mode";
 let fallback: InsightDisplayMode | null = null;
@@ -8,8 +8,9 @@ let fallback: InsightDisplayMode | null = null;
 export function readDisplayMode(): InsightDisplayMode {
   let saved: string | null = fallback;
   try { saved = localStorage.getItem(DISPLAY_MODE_KEY) || saved; } catch { /* private browsing */ }
-  if (saved === "pc" || saved === "mobile") return saved;
-  return window.matchMedia?.("(min-width: 1024px)").matches ? "pc" : "mobile";
+  if (saved === "pc" || saved === "tablet" || saved === "mobile") return saved;
+  if (window.matchMedia?.("(min-width: 1200px)").matches) return "pc";
+  return window.matchMedia?.("(min-width: 600px)").matches ? "tablet" : "mobile";
 }
 
 export function setDisplayMode(mode: InsightDisplayMode) {
@@ -41,6 +42,7 @@ export function DisplayModeSwitch() {
   return <div className="insight-display-switch" role="group" aria-label="表示切り替え">
     <span>表示</span>
     <button type="button" aria-pressed={mode === "mobile"} onClick={() => setDisplayMode("mobile")}>スマホ版</button>
+    <button type="button" aria-pressed={mode === "tablet"} onClick={() => setDisplayMode("tablet")}>タブレット版</button>
     <button type="button" aria-pressed={mode === "pc"} onClick={() => setDisplayMode("pc")}>PC版</button>
   </div>;
 }

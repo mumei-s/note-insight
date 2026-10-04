@@ -25,12 +25,32 @@ test('TOPのPC/スマホ切替を保存し、同じデータ画面・入力・�
   assert.equal(mounts,1);
   assert.equal(h.w.localStorage.getItem('mumei-insight-access-token'),'fixture-session');
   await h.render(Shell,{});
+  await h.click([...h.w.document.querySelectorAll('button')].find(b=>b.textContent==='タブレット版'));
+  assert.equal(readDisplayMode(),'tablet');
+  assert.equal(h.w.document.documentElement.dataset.insightLayout,'tablet');
+  assert.equal(h.w.localStorage.getItem('mumei-insight-display-mode-v1'),'tablet');
+  assert.equal(h.w.document.querySelector('input'),input);
+  assert.equal(input.value,'書きかけの検索');
   await h.click([...h.w.document.querySelectorAll('button')].find(b=>b.textContent==='PC版'));
   assert.equal(h.w.document.documentElement.dataset.insightLayout,'pc');
   wide=false;
   await React.act(async()=>{h.w.dispatchEvent(new h.w.Event('resize'));await pause()});
   assert.equal(readDisplayMode(),'pc','選択後は画面幅が変わっても勝手に切り替えない');
   assert.equal(mounts,1);
+});
+
+test('未選択ではスマホ・タブレット縦横・PCの画面幅に合う表示を選ぶ',async t=>{
+  const h=await sceneFixture(t);let width=390;
+  h.w.matchMedia=query=>({matches:width>=Number(query.match(/min-width:\s*(\d+)/)[1])});
+  const {DisplayModeSwitch}=h.load('src/insight-display-mode.tsx');await h.render(DisplayModeSwitch,{});
+  for(const [next,expected] of [[390,'mobile'],[599,'mobile'],[600,'tablet'],[768,'tablet'],[820,'tablet'],[1024,'tablet'],[1199,'tablet'],[1200,'pc'],[1440,'pc']]){
+    width=next;await React.act(async()=>{h.w.dispatchEvent(new h.w.Event('resize'));await pause()});
+    assert.equal(h.w.document.documentElement.dataset.insightLayout,expected,`幅${next}`);
+  }
+  assert.equal(h.w.document.querySelectorAll('button').length,3);
+  await h.click([...h.w.document.querySelectorAll('button')].find(b=>b.textContent==='タブレット版'));
+  width=390;await React.act(async()=>{h.w.dispatchEvent(new h.w.Event('resize'));await pause()});
+  assert.equal(h.w.document.documentElement.dataset.insightLayout,'tablet','ユーザーの選択を優先');
 });
 
 test('未選択は画面幅に追従し、別タブで保存した切替も反映する',async t=>{

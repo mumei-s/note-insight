@@ -19,6 +19,7 @@ import {
 import "./insight-polish-v1.css";
 import { useInsightDisplayMode } from "./insight-display-mode";
 import "./insight-pc-layout.css";
+import "./insight-device-scale.css";
 
 // Maintenance is reserved for login/main-wide participant outages only.
 const PARTICIPANT_MAINTENANCE = false;
