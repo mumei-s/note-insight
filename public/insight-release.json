@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.1",
+  "appVersion": "2026.10.05.2",
   "notificationVersion": "3.6.32",
   "dashboardVersion": "1.7.0",
   "releasedAt": "2026-10-05T01:18:04+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知：小型パネルに一時停止／再開・OFFとメイン🔔本人設定への案内を追加。",
+  "note": "本人設定：フィルター・保存済み通知・公式🔔パネルON/OFFを横長3行で配置。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

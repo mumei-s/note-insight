@@ -68,3 +68,16 @@ test('最新版は更新案内を消し、未導入時はインストールへ�
   assert.equal(missing.w.document.getElementById('toolAction').hidden, false);
   assert.equal(missing.w.document.getElementById('update').textContent, '本人通知ツールをインストール');
 });
+
+for(const mode of ['modern','legacy'])test(`本人設定の横長3行から保存確認つきON/OFFを切り替え、旧OFF設定も復帰する (${mode})`,async t=>{
+ const {w,requests}=await connection(t);const KEY='mumei_insight_notification_feature_enabled_v1',PANEL='mumei_insight_notification_panel_enabled_v1',values=new Map([[KEY,true],[PANEL,false]]);
+ const get=(k,d)=>values.get(k)??d;let fail=false;const set=(k,v)=>{if(fail)throw new Error('保存不可');values.set(k,v)};
+ if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
+ w.postMessage=data=>w.setTimeout(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})),0);
+ w.eval(readFileSync('public/note-insight-notification-feature-bridge-v1.js','utf8'));await w.__mumeiNotificationFeatureV1.ready;
+ const button=w.document.getElementById('notification-panel-toggle');async function until(label){for(let n=0;n<50&&button.textContent!==label;n++)await pause(10);assert.equal(button.textContent,label);assert.equal(button.disabled,false)}
+ await until('note公式🔔パネル ON');assert.equal(w.document.querySelector('.shortcuts').children.length,3);assert.match(page,/\.shortcuts\{display:grid;grid-template-columns:1fr/);
+ fail=true;button.click();await until('note公式🔔パネル ON');assert.match(w.document.getElementById('notification-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
+ fail=false;button.click();await until('note公式🔔パネル OFF');assert.equal(values.get(KEY),false);button.click();await until('note公式🔔パネル ON');assert.equal(values.get(PANEL),true);assert.deepEqual(requests,['stats']);
+ w.dispatchEvent(new w.MessageEvent('message',{origin:'https://example.org',data:{source:'mumei-notification-feature-bridge-v1',type:'state',enabled:false}}));assert.equal(button.textContent,'note公式🔔パネル ON');
+});
