@@ -116,6 +116,21 @@ export function goTo(route: string) {
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
+export function focusMainAnalysis() {
+  if(new URLSearchParams(window.location.search).get("insightFocus")!=="analysis")return ()=>{};
+  let done=false;
+  const finish=()=>{
+    const button=document.querySelector<HTMLButtonElement>('.miv5.mode-normal .miv5-launcher-item.analysis > button');
+    if(!button||done)return;
+    done=true;observer.disconnect();window.clearTimeout(timer);
+    button.scrollIntoView({block:"start",behavior:"auto"});button.focus({preventScroll:true});
+    const url=new URL(window.location.href);url.searchParams.delete("insightFocus");window.history.replaceState(window.history.state,"",url.href);
+  };
+  const observer=new window.MutationObserver(finish),timer=window.setTimeout(()=>observer.disconnect(),30000);
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});finish();
+  return ()=>{done=true;observer.disconnect();window.clearTimeout(timer)};
+}
+
 function BottomNav({ route }: { route: string }) {
   const insightActive = route === "access/insight" || PARTICIPANT_CHILD_ROUTES.has(route) || route.startsWith("features/");
   const hasMember = Boolean(localStorage.getItem(MEMBER_KEY));
@@ -160,7 +175,7 @@ function BottomNav({ route }: { route: string }) {
         {INSIGHT_BOTTOM_ITEMS.map(([key,label])=><button type="button" key={key} className={itemTab===key?"active":""} onClick={()=>chooseItem(key)}>{label}</button>)}
       </div>:null}
       <button className={route === "home" ? "active" : ""} onClick={topPress} aria-label="TOP"><span aria-hidden="true">⌂</span><b>TOP</b></button>
-      <button className={insightActive ? "active" : ""} onClick={insightPress} aria-label="INSIGHT"><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
+      <button className={insightActive ? "active" : ""} onClick={insightPress} aria-label="INSIGHT メイン"><small className="app-main-label">メイン</small><span aria-hidden="true">◫</span><b>INSIGHT</b></button>
       <button className="note-exit" onClick={notePress} aria-label="noteへ"><span aria-hidden="true">↗</span><b>noteへ</b></button>
     </nav>
     <style>{`
@@ -178,6 +193,8 @@ function BottomNav({ route }: { route: string }) {
       .app-bottom-item-sheet button{min-height:38px!important;padding:4px 2px!important;border:1px solid rgba(101,199,225,.28)!important;border-radius:9px!important;background:#0f2736!important;color:#d9edf6!important;font-size:7px!important;font-weight:900!important}
       .app-bottom-item-sheet button.active{border-color:#83eaff!important;background:linear-gradient(145deg,#246681,#17475e)!important;color:#fff!important;box-shadow:0 0 16px rgba(83,211,242,.24)!important}
       .app-bottom-nav button span{font-size:19px;line-height:1}.app-bottom-nav button b{font-size:10px;line-height:1.15;max-width:100%;text-align:center;white-space:nowrap}
+      .app-bottom-nav .app-main-label{font-size:8px;line-height:1.1;color:#b8dce9;letter-spacing:.1em}
+      .miv5-launcher-item.analysis:focus-within{outline:1px solid #9ae9ff;outline-offset:3px}
       .app-bottom-nav button.active{background:#172235;color:#8feaff}.app-bottom-nav button.active b{color:#fff}
       .app-bottom-nav button.note-exit{color:#8feaff;border-left:1px solid rgba(43,57,76,.45)}
       .app-bottom-nav button.note-exit b{color:#c9f4ff}
@@ -361,6 +378,10 @@ export function App() {
 
   const ownerView = Boolean(ownerToken) && sessionStorage.getItem(OWNER_VIEW_KEY) === "1";
   const memberValid = Boolean(memberToken && validatedMemberToken === memberToken);
+  useEffect(() => {
+    if (route !== "dashboard" || !memberValid || checkingMember) return;
+    return focusMainAnalysis();
+  }, [route, memberValid, checkingMember]);
   let page;
   if (needsMember && memberToken && !memberValid && checkingMember) page = <InsightSessionTransition />;
   else if (route === "access/insight") page = <AccessPortalV6 />;

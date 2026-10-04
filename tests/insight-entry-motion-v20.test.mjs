@@ -93,7 +93,7 @@ test('黒い切替待ち画面はナビ非表示中も装飾され、確認完�
   assert.equal(w.document.querySelector('.app-session-check'), null);
   assert.ok(w.document.querySelector('.app-route-shell.is-ready'));
   const nav = w.document.querySelector('.app-bottom-nav');
-  assert.deepEqual([...nav.querySelectorAll('button[aria-label]')].map(el => el.getAttribute('aria-label')), ['TOP', 'INSIGHT', 'noteへ']);
+  assert.deepEqual([...nav.querySelectorAll('button[aria-label]')].map(el => el.getAttribute('aria-label')), ['TOP', 'INSIGHT メイン', 'noteへ']);
   assert.equal(nav.querySelector('.app-bottom-item-toggle').textContent.includes('項目を選ぶ'), true);
   await React.act(async () => nav.querySelector('.app-bottom-item-toggle').click());
   const labels = [...nav.querySelectorAll('.app-bottom-item-sheet button')].map(el => el.textContent);
@@ -176,4 +176,21 @@ test('クリエイターの名前・画像・noteリンクはアカウント切�
   await React.act(async () => root.render(React.createElement(MemberInsightLiveV2, { key: current.noteId })));
   verify();
   assert.doesNotMatch(w.document.querySelector('.miv5-creator-copy').textContent, /Creator A|ss_yr/);
+});
+
+test('公式パネルからメインへ戻ると、描画を待って分析ボタンにフォーカスし、分析は開かない', async t => {
+  const {w}=setup(t,'https://mumei-s.github.io/note-insight/?insightMode=normal&insightFocus=analysis&keep=1#dashboard');
+  const {focusMainAnalysis}=load(appSource,w,async()=>Response.json({ok:true}));
+  const cleanup=focusMainAnalysis();let clicks=0,scrolls=0;
+  const main=w.document.createElement('div');main.className='miv5 mode-normal';main.innerHTML='<div class="miv5-launcher-item analysis"><button>分析</button></div>';
+  const button=main.querySelector('button');button.onclick=()=>clicks++;button.scrollIntoView=options=>{scrolls++;assert.equal(options.block,'start')};w.document.body.append(main);
+  await new Promise(resolve=>w.setTimeout(resolve,0));
+  assert.equal(w.document.activeElement,button);assert.equal(clicks,0);assert.equal(scrolls,1);assert.equal(new URL(w.location.href).searchParams.has('insightFocus'),false);assert.equal(new URL(w.location.href).searchParams.get('keep'),'1');assert.equal(w.location.hash,'#dashboard');
+  main.append(w.document.createElement('span'));await new Promise(resolve=>w.setTimeout(resolve,0));assert.equal(scrolls,1);cleanup();
+});
+
+test('戻り先の指定がなければフォーカスを奪わず、離脱時は待機を解除する', async t => {
+  const {w}=setup(t);const {focusMainAnalysis}=load(appSource,w,async()=>Response.json({ok:true}));focusMainAnalysis()();
+  w.history.replaceState(null,'','?insightFocus=analysis#dashboard');const cleanup=focusMainAnalysis();cleanup();
+  w.document.body.insertAdjacentHTML('beforeend','<div class="miv5 mode-normal"><div class="miv5-launcher-item analysis"><button>分析</button></div></div>');await new Promise(resolve=>w.setTimeout(resolve,0));assert.notEqual(w.document.activeElement,w.document.querySelector('.analysis button'));
 });
