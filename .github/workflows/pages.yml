@@ -60,6 +60,8 @@ jobs:
       - run: npm run build
       - name: Check entry motion and retained notification behavior
         run: node --test tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs
+      - name: Check applicant approval and owner notification scope
+        run: node --test tests/application-approval.test.mjs
       - name: Check stable DM status and row-scoped filters
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
       - name: Check notification feed saved order
