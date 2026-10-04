@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.5",
-  "notificationVersion": "3.6.34",
-  "dashboardVersion": "1.7.2",
-  "releasedAt": "2026-10-05T03:57:01+09:00",
+  "appVersion": "2026.10.05.6",
+  "notificationVersion": "3.6.35",
+  "dashboardVersion": "1.7.3",
+  "releasedAt": "2026-10-05T04:50:29+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知の末尾判定・スクロール枠を保ち続きへを追加。Dashboardの別ページ残留を解消。ON/OFF設定はメイン🔔から。本人設定に現在ON/OFFと次の操作を明記。",
+  "note": "ON点灯/OFF消灯と短い表示。ON/OFFはメイン🔔から。クリエイター部は軽い常時演出。TOPに保存付きPC版/スマホ版切り替えを追加。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
