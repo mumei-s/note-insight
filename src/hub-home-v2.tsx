@@ -141,7 +141,7 @@ export function HubHome() {
 
   return <div className="hub-page"><main>
     <div className="hub-wrap hub-display-bar"><DisplayModeSwitch /></div>
-    <section className="hub-accountbar hub-wrap"><AccountBadge account={memberReady ? activeAccount : null} count={accounts.length} /><div className="hub-account-actions"><button className="login" onClick={() => openAccess(accounts.length ? "switch" : "login")}>ログイン</button><button className="join" onClick={() => openAccess("apply")}>参加</button><button className="minor" disabled={!memberReady} onClick={() => setConfirm("logout")}>ログアウト</button><button className="minor danger" disabled={!memberReady} onClick={() => setConfirm("leave")}>退会</button></div></section>
+    <section className="hub-accountbar hub-wrap"><AccountBadge account={memberReady ? activeAccount : null} count={accounts.length} /><div className="hub-account-actions"><button className="login" onClick={() => openAccess(accounts.length ? "switch" : "login")}>ログイン</button><button className="join" onClick={() => openAccess("apply")}>参加</button></div></section>
     {accountMessage ? <div className="hub-account-message hub-wrap">{accountMessage}</div> : null}
 
     <section ref={heroScene.ref} className="hub-hero hub-wrap hub-hero-scene" data-motion={heroScene.motion?"on":"off"}><div className="hub-hero-depth" aria-hidden="true"><i/><i/><i/><i/></div><div className="hub-hero-streaks" aria-hidden="true"><i/><i/><i/></div><div className="hub-hero-sparks" aria-hidden="true">{Array.from({length:9},(_,i)=><i key={i} style={{"--spark":i} as React.CSSProperties}/>)}</div><p>NOTE CREATOR ANALYTICS</p><h1><span>無名S note</span><strong>INSIGHT</strong></h1><span>noteの反応を「誰が・どの記事に・どれだけ応援しているか」まで蓄積して見る、参加制のクリエイター分析ツール。</span></section>
@@ -153,5 +153,6 @@ export function HubHome() {
     </section>
 
     <section ref={crossScene.ref} className="hub-wrap hub-cross" data-motion={crossScene.motion ? "on" : "off"}><article><small>CROSS PLATFORM</small><h2>どの端末・ブラウザからも</h2><p>同じnote IDで、PC2台でもスマホでも利用できます。新しい端末は「機種変更・再ログイン」から本人確認。保存した履歴は共通で、他の端末もログインしたまま使えます。</p></article></section>
+    <section className="hub-wrap hub-account-options" aria-label="アカウント操作"><details><summary>アカウント操作</summary><div className="hub-account-actions"><button className="minor" disabled={!memberReady} onClick={() => setConfirm("logout")}>ログアウト</button><button className="minor danger" disabled={!memberReady} onClick={() => setConfirm("leave")}>退会</button></div></details></section>
   </main><ConfirmDialog action={confirm} account={activeAccount} busy={busy} onCancel={() => setConfirm(null)} onYes={() => void confirmAction()} /></div>;
 }

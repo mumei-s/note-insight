@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.7",
+  "appVersion": "2026.10.05.8",
   "notificationVersion": "3.6.35",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-05T05:59:42+09:00",
+  "releasedAt": "2026-10-05T06:35:05+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "TOPでスマホ版/タブレット版/PC版を切り替え。文字・ボタン・人物アイコン・カード・グラフ・余白を表示サイズに合わせて調整。",
+  "note": "ログアウトと退会をTOP最下部のアカウント操作内へ移動し、誤押しを防止。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
