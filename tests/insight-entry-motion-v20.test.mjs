@@ -143,10 +143,13 @@ test('上部演出だけを再生し、操作ボタンと保存データ画面�
 test('上部文字の二重透明化を防ぎ、下部は静止、動きを減らす設定にも対応する', () => {
   assert.match(upperCss, /color:rgba\(214,248,255,\.20\)/);
   assert.match(upperCss, /100%\{opacity:1;transform:translateY\(0\)\}/);
-  assert.doesNotMatch(upperCss, /opacity:\.13|infinite|app-bottom-nav/);
+  assert.doesNotMatch(upperCss, /opacity:\.13|app-bottom-nav/);
   assert.match(upperCss, /\.miv5-launcher-halo\{[\s\S]*?display:block!important/);
   assert.match(upperCss, /strong span:last-child\{\s*justify-self:start;\s*margin-left:8%/);
   assert.match(upperCss, /\.miv5-launcher-item::before,\s*\.miv5-launcher-item::after\{[^}]*pointer-events:none/);
+  assert.equal((upperCss.match(/infinite/g)||[]).length,1,'常時演出はメイン最上部の背景だけ');
+  assert.match(upperCss,/\.miv5\.mode-normal \.miv5-creator-first::before\{[^}]*pointer-events:none;[^}]*animation:mumeiHeroAmbient 14s/);
+  assert.match(upperCss,/@media\(prefers-reduced-motion:reduce\)\{\s*\.miv5\.mode-normal \.miv5-creator-first::before\{animation:none!important/);
   assert.match(upperCss, /@keyframes iv22LetterGlint/);
   assert.match(upperCss, /@keyframes iv22StarGlint/);
   assert.match(upperCss, /@media\(prefers-reduced-motion:reduce\)/);

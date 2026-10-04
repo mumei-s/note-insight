@@ -1,5 +1,5 @@
 /* INSIGHT v22 — left-aligned brand glints and upper-panel sparkle.
-   Motion is one-shot only. No auth/session/data behavior here. */
+   Entry glints are one-shot; the main hero has a subtle ambient light. No auth/session/data behavior here. */
 
 /* ===== CREATOR HERO ===== */
 .miv5-creator-first{
@@ -27,6 +27,12 @@
   pointer-events:none;
 }
 .miv5-creator-first::before{content:none!important}
+.miv5.mode-normal .miv5-creator-first::before{
+  content:""!important;position:absolute;inset:-20%;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse at 20% 40%,rgba(92,220,242,.09),transparent 45%),radial-gradient(ellipse at 75% 60%,rgba(139,111,224,.07),transparent 40%);
+  animation:mumeiHeroAmbient 14s ease-in-out infinite alternate;
+}
+@keyframes mumeiHeroAmbient{from{transform:translateX(-3%) scale(1);opacity:.45}to{transform:translateX(3%) scale(1.08);opacity:1}}
 .miv5-hero-signature{
   position:absolute!important;
   inset:0!important;
@@ -391,6 +397,7 @@
 }
 
 @media(prefers-reduced-motion:reduce){
+  .miv5.mode-normal .miv5-creator-first::before{animation:none!important;transform:none!important;opacity:.4!important}
   .miv5-hero-signature strong,
   .miv5-hero-signature strong span,
   .miv5-hero-signature strong span::after,
