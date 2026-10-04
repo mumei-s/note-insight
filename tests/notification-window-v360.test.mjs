@@ -25,13 +25,14 @@ function harness(shared={gm:new Map(),local:new Map(),saved:[]},options={}){
  context.window=context;vm.createContext(context);vm.runInContext(source,context);
  return{api:context.__mumeiNotificationNetwork3300,shared,gm,context,events,failLocal(kind='quota'){localFailure=kind},blockRemove(){removeBlocked=true},failGM(fn=()=>true){gmFailure=fn},setRows(rows){notices=rows},rows:()=>notices,bad(){badEnvelope=true},setNotices(n){notices=Array.from({length:n},(_,i)=>({id:n-i,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${n-i}`,noticed_at:new Date(1700000000000+(n-i)*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}]}))},setOnSave(fn){onSave=fn},rejectNext(){rejectSave=true},changeAccount(){me='other'},get calls(){return apiCalls}};
 }
+async function pauseAfter20(h){h.setOnSave(()=>h.rejectNext());try{return await h.api.syncCurrent()}catch(e){assert.equal(e.progress.savedCount,20);return {saved:20,partial:true}}}
 test('300件は画面を動かさず古い順に保存し、2回目は新着5件のみ',async()=>{
  const h=harness();h.setNotices(300);const first=await h.api.syncCurrent();assert.equal(first.received,300);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
  const before=h.calls;h.setNotices(305);const second=await h.api.syncCurrent();assert.equal(second.received,5);assert.equal(h.calls-before,2);assert.deepEqual(h.shared.saved.slice(-5),[301,302,303,304,305]);
  const third=await h.api.syncCurrent();assert.equal(third.saved,0);
 });
-test('20件確認後の停止・新着によるページずれでも保存済みjournalから再開',async()=>{
- const h=harness();h.setNotices(300);h.setOnSave(()=>h.api.stop());const first=await h.api.syncCurrent();assert.equal(first.saved,20);assert.equal(first.partial,true);
+test('20件確認後の通信失敗・新着によるページずれでも保存済みjournalから再開',async()=>{
+ const h=harness();h.setNotices(300);const first=await pauseAfter20(h);assert.equal(first.saved,20);assert.equal(first.partial,true);
  const resumed=harness(h.shared);resumed.setNotices(305);const next=await resumed.api.syncCurrent();assert.equal(resumed.calls,0);assert.equal(next.saved,300);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
  await resumed.api.syncCurrent();assert.deepEqual(h.shared.saved.slice(-5),[301,302,303,304,305]);
 });
@@ -55,17 +56,17 @@ test('容量不足と通信失敗が重なっても未送信分を保持し、�
  const resumed=harness(h.shared);resumed.failLocal();resumed.setNotices(15);await resumed.api.syncCurrent();assert.equal(resumed.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:12},(_,i)=>i+1));await resumed.api.syncCurrent();assert.deepEqual(h.shared.saved.slice(-3),[13,14,15]);
 });
 test('旧ローカルの途中データを移行し、削除不能の古いコピーで保存位置を巻き戻さない',async()=>{
- const journalKey='mumei_notification_window_v360:tester',h=harness();h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();
+ const journalKey='mumei_notification_window_v360:tester',h=harness();h.setNotices(300);await pauseAfter20(h);
  const legacy={...h.shared.gm.get(journalKey)};delete legacy.__mumeiDurable;delete legacy.revision;assert.equal(legacy.schema,1);assert.equal(legacy.rows.length,280);h.shared.local.set(journalKey,JSON.stringify(legacy));h.shared.gm.delete(journalKey);
  const resumed=harness(h.shared);resumed.failLocal();resumed.blockRemove();resumed.setNotices(305);const result=await resumed.api.syncCurrent();assert.equal(result.saved,300);assert.equal(resumed.calls,0);
  const next=harness(h.shared);next.failLocal();next.blockRemove();next.setNotices(305);const delta=await next.api.syncCurrent();assert.equal(delta.saved,5);assert.deepEqual(h.shared.saved,Array.from({length:305},(_,i)=>i+1));
 });
 test('拡張保存の一時失敗はローカルへ退避し、復帰後は新しい途中データから再開',async()=>{
- const journalKey='mumei_notification_window_v360:tester',h=harness();h.failGM(k=>k===journalKey);h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();assert.equal(h.shared.saved.length,20);
+ const journalKey='mumei_notification_window_v360:tester',h=harness();h.failGM(k=>k===journalKey);h.setNotices(300);await pauseAfter20(h);assert.equal(h.shared.saved.length,20);
  const resumed=harness(h.shared);resumed.failLocal();resumed.setNotices(305);const result=await resumed.api.syncCurrent();assert.equal(result.saved,300);assert.equal(resumed.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
 });
 test('両方の保存先が使えない時は送信前に止め、以前の保存位置と未送信データを維持',async()=>{
- const h=harness();h.setNotices(300);h.setOnSave(()=>h.api.stop());await h.api.syncCurrent();const cpKey='mumei_insight_notification_checkpoint_v2922:tester',checkpoint=structuredClone(h.shared.gm.get(cpKey));
+ const h=harness();h.setNotices(300);await pauseAfter20(h);const cpKey='mumei_insight_notification_checkpoint_v2922:tester',checkpoint=structuredClone(h.shared.gm.get(cpKey));
  const resumed=harness(h.shared);resumed.failLocal();resumed.failGM();await assert.rejects(resumed.api.syncCurrent(),/途中保存ができません/);assert.equal(h.shared.saved.length,20);assert.deepEqual(h.shared.gm.get(cpKey),checkpoint);
  const recovered=harness(h.shared);recovered.setNotices(305);await recovered.api.syncCurrent();assert.equal(recovered.calls,0);assert.deepEqual(h.shared.saved,Array.from({length:300},(_,i)=>i+1));
 });
@@ -86,10 +87,10 @@ test('保存通信が無応答でも期限で停止し、遅い応答を無視�
  const old=JSON.parse(pending.data).notifications;pending.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:old.map(r=>r.meta.client_signature)})});await tick();assert.equal(h.shared.gm.get(jkey).saved,0);
  const before=h.calls;h.gm.xmlHttpRequest=original;const next=await settles(h.api.syncCurrent());assert.equal(h.calls,before);assert.equal(next.saved,69);assert.equal(timer.timers.size,0);
 });
-test('保存前の本人確認が無応答でも停止で解除し、再読込せず続行する',async()=>{
- const h=harness(),original=h.context.fetch;h.setNotices(69);let accounts=0,signal;
+test('保存前の本人確認が無応答でも期限で解除し、未保存データを保持する',async()=>{
+ const timer=clock(),h=harness(undefined,timer),original=h.context.fetch;h.setNotices(69);let accounts=0,signal;
  h.context.fetch=(url,init)=>{if(String(url).includes('current_user')&&++accounts>1){signal=init?.signal;return new Promise(()=>{})}return original(url,init)};
- const run=h.api.syncCurrent();await tick();h.api.stop();const stopped=await settles(run);assert.equal(stopped.partial,true);assert.equal(stopped.saved,0);assert.equal(signal.aborted,true);
+ const run=h.api.syncCurrent(),rejected=assert.rejects(run,/本人確認が時間切れ/);await tick();h.api.stop();assert.equal(signal.aborted,false,'停止は保存の本人照合を中断しない');timer.fire(15000);await settles(rejected);assert.equal(signal.aborted,true);
  h.context.fetch=original;const before=h.calls,next=await settles(h.api.syncCurrent());assert.equal(next.saved,69);assert.equal(h.calls,before);
 });
 test('通知本文の受信が止まっても期限で解除し、未取得のページから再開',async()=>{
@@ -98,9 +99,14 @@ test('通知本文の受信が止まっても期限で解除し、未取得の�
  const run=h.api.syncCurrent(),rejected=assert.rejects(run,/通知の取得が時間切れ/);await tick();timer.fire(15000);await settles(rejected);
  const journal=h.shared.gm.get('mumei_notification_window_v360:tester');assert.equal(journal.rows.length,12);assert.match(journal.nextRequest.url,/page=2/);h.context.fetch=original;const next=await settles(h.api.syncCurrent());assert.equal(next.saved,24);
 });
-test('送信中の停止は未確認の20件を保持し、Promiseの拒否も回収する',async()=>{
- const h=harness(),original=h.gm.xmlHttpRequest;h.setNotices(69);let reject;
- h.gm.xmlHttpRequest=()=>new Promise((_,no)=>reject=no);
- const run=h.api.syncCurrent();await tick();h.api.stop();const result=await settles(run);assert.equal(result.partial,true);assert.equal(result.saved,0);assert.equal(h.shared.gm.get('mumei_notification_network_outbox_v331:tester').length,20);reject(new Error('late extension rejection'));await tick();
- h.gm.xmlHttpRequest=original;assert.equal((await h.api.syncCurrent()).saved,69);
+test('送信中に停止しても確認応答を待ち、取得済み全69件を保存する',async()=>{
+ const h=harness(),original=h.gm.xmlHttpRequest;h.setNotices(69);let pending,aborted=0;
+ h.gm.xmlHttpRequest=opts=>{pending=opts;return {abort(){aborted++}}};const run=h.api.syncCurrent();await tick();h.api.stop();await tick();assert.equal(aborted,0);assert.equal(h.shared.gm.get('mumei_notification_network_outbox_v331:tester').length,20);
+ h.gm.xmlHttpRequest=original;original(pending);const result=await settles(run);assert.equal(result.saved,69);assert.equal(result.historyComplete,true);assert.deepEqual(h.shared.saved,Array.from({length:69},(_,i)=>i+1));
+});
+test('次ページの待機中に別ページへ移動しても、取得済みページは保存し、残りから再開する',async()=>{
+ const h=harness(),original=h.context.fetch;h.setNotices(24);let waiting=false;
+ h.context.fetch=(url,init)=>{if(String(url).includes('page=2')){waiting=true;return new Promise(()=>{})}return original(url,init)};
+ const run=h.api.syncCurrent();await tick();assert.equal(waiting,true);h.events.dispatchEvent(new Event('popstate'));const result=await settles(run);assert.equal(result.saved,12);assert.equal(result.partial,true);assert.equal(h.shared.gm.get('mumei_notification_window_v360:tester').phase,'collect');
+ h.context.fetch=original;const next=await settles(h.api.syncCurrent());assert.equal(next.saved,24);assert.deepEqual(h.shared.saved,[...Array.from({length:12},(_,i)=>i+13),...Array.from({length:12},(_,i)=>i+1)]);
 });
