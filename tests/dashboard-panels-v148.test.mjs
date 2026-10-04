@@ -22,8 +22,9 @@ function page(t,markup,{paired=true,identity=()=>'tester',stats=async()=>({}),be
     if(body.action==='sync-status'){const s=saves.at(-1);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify(body.snapshotId?{ok:true,paired:true,noteId:identity(),snapshotId:saves.length,confirmed:true,articleCount:s.articles.length,dailyPvDays:s.metricSeries.filter(r=>r.pageViews!=null).length,dailyMetricCount:s.metricSeries.length,chartMetricCount:s.chartSeries?.length||0,totals:s.totals}:{ok:true,paired:true,noteId:identity()})}));return}
     saves.push(body);queueMicrotask(()=>options.onload({status:200,responseText:JSON.stringify({ok:true,snapshotId:saves.length,articleCount:body.articles.length,dailyPvDays:body.metricSeries.filter(r=>r.pageViews!=null).length,capturedAt:'2026-09-22T12:00:00Z'})}))};
   w.__location={get href(){return w.location.href},get origin(){return w.location.origin},get pathname(){return w.location.pathname},get search(){return w.location.search},assign:href=>nav.push(href)};
-  before?.(w);const request=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='client-status'){diagnostics.push(b);queueMicrotask(()=>o.onload({status:200,responseText:'{"ok":true,"recorded":true}'}));return}request(o)};w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
+  before?.(w);const request=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='client-status'){diagnostics.push(b);queueMicrotask(()=>o.onload({status:200,responseText:'{"ok":true,"recorded":true}'}));return}request(o)};w.eval(readFileSync('public/note-insight-dashboard-save-queue-v1.js','utf8'));w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"));
   after?.(w);
+  if(paired&&/^\/(?:dashboard|sitesettings\/stats)(?:\/|$)/.test(w.location.pathname)&&!w.sessionStorage.getItem('mumei-dashboard-read-history-v1'))w.setTimeout(()=>w.document.dispatchEvent(new w.CustomEvent('mumei-dashboard-read',{detail:{automatic:false}})),50);
   return {w,saves,nav,diagnostics,warnings};
 }
 async function saved(h,count=1){for(let i=0;i<100&&h.saves.length<count;i++)await pause(20);assert.equal(h.saves.length,count,h.w.document.querySelector('.status')?.textContent);await pause(20)}
@@ -81,14 +82,14 @@ test('複数の公式JSONを消さずに合わせ、日別未取得時は同期�
   const missing=page(t,'<p>ページビュー 8</p>');await saved(missing);assert.doesNotMatch(missing.w.document.querySelector('.status').textContent,/同期完了/);assert.equal(missing.w.document.querySelector('.status').dataset.kind,'partial');assert.match(missing.w.document.querySelector('.status').textContent,/日別PV 0日.*未取得/);
 });
 
-test('期間を変えた後の公式データを自動保存し、前の期間の取得値を混ぜない',async t=>{
+test('期間を変えた後の公式データを明示読み込みで保存し、前の期間の取得値を混ぜない',async t=>{
   const h=page(t,'<p id="range">2026/9/20〜2026/9/20</p><p>ページビュー 2</p>',{stats:async url=>({page_views:{[url.includes('2026-09-21')?'2026-09-21':'2026-09-20']:url.includes('2026-09-21')?9:2}}),before:w=>{w.performance.getEntriesByType=()=>[{name:'https://note.com/api/v1/stats/daily?date=2026-09-20'}]}});
   await h.w.fetch('/api/v1/stats/daily?date=2026-09-20');await saved(h);
   h.w.document.getElementById('range').textContent='2026/9/21〜2026/9/21';
-  await h.w.fetch('/api/v1/stats/daily?date=2026-09-21');await saved(h,2);
+  await h.w.fetch('/api/v1/stats/daily?date=2026-09-21');h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);
   assert.equal(h.saves[1].periodStart,'2026-09-21');assert.equal(h.saves[1].periodEnd,'2026-09-21');
   assert.deepEqual(JSON.parse(JSON.stringify(h.saves[1].metricSeries.map(r=>[r.date,r.pageViews]))),[['2026-09-21',9]]);
-  h.w.document.getElementById('mumei-dash-read').click();await pause(250);assert.equal(h.saves.length,2,'同じデータを二重保存しない');
+  h.w.document.getElementById('mumei-dash-run').click();await pause(250);assert.equal(h.saves.length,2,'同じデータを二重保存しない');
 });
 
 test('未連携の通常訪問では手順を表示し、保存やパネル展開を勝手に進めない',async t=>{
@@ -100,7 +101,7 @@ test('連携が失効した場合は保存完了を出さず、接続し直す�
   const h=page(t,'<p>ページビュー 8</p>',{before:w=>{w.GM_xmlhttpRequest=opts=>queueMicrotask(()=>opts.onload({status:401,responseText:JSON.stringify({ok:false,error:'INGEST_TOKEN_INVALID'})}))}});
   for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('連携が無効');i++)await pause(20);
   assert.match(h.w.document.querySelector('.status').textContent,/連携が無効/);assert.equal(h.w.document.querySelector('.status').dataset.kind,'warn');
-  const action=h.w.document.getElementById('mumei-dash-read');assert.equal(action.dataset.action,'connect');assert.equal(action.textContent,'連携して読み込む');action.click();await pause(30);assert.equal(new URL(h.nav[0]).searchParams.get('account'),'tester');assert.equal(new URL(h.nav[0]).searchParams.get('auto'),'1');
+  const action=h.w.document.getElementById('mumei-dash-run');assert.equal(action.dataset.action,'connect');assert.equal(action.textContent,'連携');action.click();await pause(30);assert.equal(new URL(h.nav[0]).searchParams.get('account'),'tester');assert.equal(new URL(h.nav[0]).searchParams.get('auto'),'1');
   assert.equal(h.w.localStorage.getItem('mumei-dashboard-last-sync'),null);
 });
 
@@ -111,7 +112,7 @@ test('ARIA指定のない詳細ボタンでも、公式のグラフ部分を展�
 
 test('公式の未連携ボタンから設定・本人照合・日別保存・分析復帰までつながる',async t=>{
  const entry=page(t,'<p>ページビュー 8</p>',{paired:false});await pause(100);
- const connect=entry.w.document.getElementById('mumei-dash-read');assert.equal(connect.textContent,'連携して読み込む');assert.equal(connect.disabled,false);connect.click();await pause(30);
+ const connect=entry.w.document.getElementById('mumei-dash-run');assert.equal(connect.textContent,'連携');assert.equal(connect.disabled,false);connect.click();await pause(30);
  const setupUrl=new URL(entry.nav[0]);assert.equal(setupUrl.pathname,'/note-insight/dashboard-setup.html');assert.equal(setupUrl.searchParams.get('auto'),'1');assert.equal(setupUrl.searchParams.get('account'),'tester');
  const setup=new JSDOM(readFileSync('public/dashboard-setup.html','utf8'),{url:setupUrl.href,runScripts:'outside-only'}),w=setup.window,setupNav=[],pairCalls=[];
  const observers=[],Observer=w.MutationObserver;w.MutationObserver=class extends Observer{constructor(fn){super(fn);observers.push(this)}};t.after(()=>{observers.forEach(o=>o.disconnect());w.close()});w.localStorage.setItem('mumei-insight-access-token','member-fixture');w.localStorage.setItem('mumei-insight-active-account-v3','tester');
@@ -135,7 +136,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  for(let i=0;i<100&&!official.nav.length;i++)await pause(20);
  assert.deepEqual(requests.map(r=>r.action),['pair-exchange','sync-status','ingest','sync-status']);assert.equal(official.w.document.querySelector('details').open,true);assert.match(official.w.document.querySelector('.status').textContent,/同期完了.*日別PV 1日/);
  assert.equal(official.nav.length,1);const back=new URL(official.nav[0]);assert.equal(back.origin,'https://mumei-s.github.io');assert.equal(back.searchParams.get('dashboardSync'),'ok');assert.equal(back.searchParams.get('insightMode'),'analysis');
- assert.equal(official.w.document.getElementById('mumei-dash-read').dataset.action,'read');
+ assert.equal(official.w.document.getElementById('mumei-dash-run').dataset.action,'read');
  assert.equal(handoffStore.has('mumei-dashboard-handoff-v143'),false,'使い終わった連携情報は残さない');
 });
 
@@ -172,7 +173,7 @@ test('タブ切替でURLが変わっても記事とメンシプを往復せず�
  await saved(h);await pause(250);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves.length,1);assert.deepEqual(h.saves[0].articles.map(r=>r.contentType),['article','membership']);
 });
 
-test('同じ公式応答では再読込せず、遅れた更新もタブ再巡回なしで保存する',async t=>{
+test('同じ公式応答では勝手に再読込せず、明示読み込みで更新値を保存する',async t=>{
  const clicks=[];let checks=0,pv=12;
  const h=page(t,'<p id="pv">全体ビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button><section id="items"></section>',{stats:async()=>({page_views:{'2026-09-27':pv}}),before:w=>{
   const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{if(JSON.parse(o.data).action==='sync-status')checks++;send(o)};
@@ -181,15 +182,15 @@ test('同じ公式応答では再読込せず、遅れた更新もタブ再巡�
  }});
  await saved(h);const initialChecks=checks;await h.w.fetch('/api/v1/stats/daily');await pause(350);
  assert.equal(checks,initialChecks);assert.deepEqual(clicks,['メンバーシップ']);
- pv=20;h.w.document.getElementById('pv').textContent='全体ビュー 20';await h.w.fetch('/api/v1/stats/daily');await saved(h,2);
- assert.deepEqual(clicks,['メンバーシップ']);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.deepEqual(h.saves[1].articles.map(r=>r.contentType),['article','membership']);
+ pv=20;h.w.document.getElementById('pv').textContent='全体ビュー 20';await h.w.fetch('/api/v1/stats/daily');h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);
+ assert.deepEqual(clicks,['メンバーシップ','記事']);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.deepEqual(h.saves[1].articles.map(r=>r.contentType),['article','membership']);
 });
 
 test('失効をパネル操作の前に検知し、読取に見せかけた画面変更をしない',async t=>{
  const h=page(t,'<details><summary>記事アクセス</summary><p>ページビュー 12</p></details>',{before:w=>{
   w.GM_xmlhttpRequest=o=>{assert.equal(JSON.parse(o.data).action,'sync-status');queueMicrotask(()=>o.onload({status:401,responseText:'{"ok":false,"error":"INGEST_TOKEN_INVALID"}'}))};
  }});
- await pause(100);assert.equal(h.w.document.querySelector('details').open,false);assert.equal(h.w.localStorage.getItem('mumei-dashboard-ingest-token-v1'),null);assert.equal(h.w.document.getElementById('mumei-dash-read').dataset.action,'connect');assert.equal(h.saves.length,0);
+ await pause(100);assert.equal(h.w.document.querySelector('details').open,false);assert.equal(h.w.localStorage.getItem('mumei-dashboard-ingest-token-v1'),null);assert.equal(h.w.document.getElementById('mumei-dash-run').dataset.action,'connect');assert.equal(h.saves.length,0);
 });
 
 test('保存応答だけ成功でもDB照合で件数が違えば完了や自動復帰にしない',async t=>{
@@ -209,11 +210,11 @@ test('通常記事では通信を差し替えず、SPAで公式画面へ入っ�
  let original;
  const h=page(t,'<p>ページビュー 12</p>',{url:'https://note.com/tester/n/n123',before:w=>{original=w.fetch}});
  await pause(30);assert.equal(h.w.fetch,original);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);
- h.w.history.pushState(null,'','/sitesettings/stats');h.w.dispatchEvent(new h.w.PopStateEvent('popstate'));
+ h.w.history.pushState(null,'','/sitesettings/stats');h.w.dispatchEvent(new h.w.PopStateEvent('popstate'));await pause(50);h.w.document.getElementById('mumei-dash-run').click();
  await saved(h);assert.equal(h.saves[0].totals.pageViews,12);
 });
 
-test('保存中に遅い公式データが届いた時は追加保存するまで完了にしない',async t=>{
+test('保存中に遅い公式データが届いた時は追加データを案内し、明示読み込みで保存する',async t=>{
  let release;
  const h=page(t,'<p id="pv">ページビュー 12</p>',{stats:async()=>({page_views:{'2026-09-25':20}}),before:w=>{
   const send=w.GM_xmlhttpRequest;let first=true;
@@ -221,7 +222,7 @@ test('保存中に遅い公式データが届いた時は追加保存するま�
  }});
  for(let i=0;i<100&&!release;i++)await pause(20);assert.ok(release);
  h.w.document.getElementById('pv').textContent='ページビュー 20';await h.w.fetch('/api/v1/stats/daily');await pause(20);release();
- await saved(h,2);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
+ await saved(h);await pause(80);h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);assert.equal(h.saves[1].totals.pageViews,20);assert.equal(h.saves[1].metricSeries[0].pageViews,20);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
 });
 
 test('参加者を切り替えたら前の参加者の収集結果や遅延応答を再利用しない',async t=>{
@@ -232,15 +233,15 @@ test('参加者を切り替えたら前の参加者の収集結果や遅延応�
  const oldRequest=h.w.fetch('/api/v1/stats/late');account='participant_b';
  h.w.localStorage.setItem('mumei-dashboard-note-id-v1',account);h.w.localStorage.setItem('mumei-dashboard-ingest-token-v1','fixture-b');h.w.document.getElementById('items').innerHTML=table('次の参加者の記事');
  late({page_views:{'2026-09-26':999}});await oldRequest;
- await h.w.fetch('/api/v1/stats/daily');await saved(h,2);
+ await h.w.fetch('/api/v1/stats/daily');h.w.document.getElementById('mumei-dash-run').click();await saved(h,2);
  assert.equal(h.saves[1].noteId,'participant_b');assert.deepEqual(h.saves[1].articles.map(r=>r.title),['次の参加者の記事']);assert.deepEqual(h.saves[1].metricSeries.map(r=>[r.date,r.pageViews]),[['2026-09-27',3]]);
 });
 
-for(const change of ['period','route'])test('読取途中の実際の画面変更は保存を止める: '+change,async t=>{
+for(const change of ['period','route'])test('読取途中の画面変更でも変更前の取得済みデータは保存する: '+change,async t=>{
  const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false" id="next">メンバーシップ</button>',{before:w=>{
   w.document.getElementById('next').onclick=()=>{if(change==='period')w.document.getElementById('range').textContent='2026/8/2〜2026/8/29';else w.history.pushState(null,'','/tester/n/n123')};
  }});
- await pause(400);assert.equal(h.saves.length,0);if(change==='route')assert.equal(h.w.document.querySelector('#mumei-dashboard-sync'),null);else assert.match(h.w.document.querySelector('.status').textContent,/表示期間または画面が変わりました/);
+ await pause(400);assert.equal(h.saves.length,1);assert.equal(h.saves[0].periodStart,'2026-08-30');assert.equal(h.saves[0].contentSections.article.scope,'partial-read');if(change==='route')assert.equal(h.w.document.querySelector('#mumei-dashboard-sync'),null);else assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);
 });
 
 test('パネル読取が失敗した後の通信で自動巡回を再開せず、手動でだけ再試行する',async t=>{
@@ -249,17 +250,17 @@ test('パネル読取が失敗した後の通信で自動巡回を再開せず�
   w.document.getElementById('broken').onclick=()=>{clicks++;setTimeout(()=>{if(!w.closed)void w.fetch('/api/v1/stats/daily?attempt='+clicks)},180)};
  }});
  await pause(750);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/パネルを開けません/);
- h.w.document.getElementById('mumei-dash-read').click();await pause(400);assert.equal(clicks,2);
+ h.w.document.getElementById('mumei-dash-run').click();await pause(400);assert.equal(clicks,2);
 });
 
 test('同じ読込ツールが二重起動してもパネルと読込処理を一つに保つ',async t=>{
- const h=page(t,'<p>ページビュー 12</p>',{after:w=>{w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"))}});
+ const h=page(t,'<p>ページビュー 12</p>',{after:w=>{w.eval(readFileSync('public/note-insight-dashboard-save-queue-v1.js','utf8'));w.eval(core.replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(wrapper.replace("'use strict';","'use strict'; const location=window.__location;"))}});
  await saved(h);assert.equal(h.w.document.querySelectorAll('#mumei-dashboard-sync').length,1);assert.equal(h.saves.length,1);
 });
 
 test('起動部だけ新しく読込本体が古い時はクリック巡回せず更新入口を表示する',async t=>{
  const h=page(t,'<p>ページビュー 12</p><button id="content" role="tab">メンバーシップ</button>',{before:w=>{w.document.getElementById('content').onclick=()=>assert.fail('古い読込本体を動かさない')},after:w=>w.addEventListener('DOMContentLoaded',()=>{w.document.getElementById('mumei-dashboard-sync').dataset.coreVersion='1.5.3'})});
- await pause(180);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/更新が揃っていません/);assert.ok(h.w.document.querySelector('a#mumei-dash-update[href*="dashboard-setup.html"]'));assert.equal(h.w.document.getElementById('mumei-dash-read').disabled,true);
+ await pause(180);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/更新が揃っていません/);assert.ok(h.w.document.querySelector('a#mumei-dash-update[href*="dashboard-setup.html"]'));assert.equal(h.w.document.getElementById('mumei-dash-run').disabled,true);
 });
 
 test('自動起動の通知が重なっても保存後に内容タブを再巡回しない',async t=>{
@@ -300,8 +301,8 @@ test('途中のパネル失敗から再開しても取得済みの記事タブ�
   for(const tab of w.document.querySelectorAll('[role="tab"]'))tab.onclick=()=>{clicks.push(tab.textContent);for(const el of w.document.querySelectorAll('[role="tab"]'))el.setAttribute('aria-selected',String(el===tab));render(tab.textContent)};
  }});
  for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('PANEL_NOT_OPEN');i++)await pause(20);
- assert.match(h.w.document.querySelector('.status').textContent,/取得済み 記事2件/);assert.equal(h.saves.length,0);assert.equal(h.w.document.getElementById('mumei-dash-read').textContent,'続きから読込');
- allow=true;h.w.document.getElementById('mumei-dash-read').click();await saved(h);
+ assert.match(h.w.document.querySelector('.status').textContent,/取得済み 記事2件/);assert.equal(h.saves.length,0);assert.equal(h.w.document.getElementById('mumei-dash-run').textContent,'読み込み');
+ allow=true;h.w.document.getElementById('mumei-dash-run').click();await saved(h);
  assert.deepEqual(clicks,['メンバーシップ','グラフ','グラフ']);assert.deepEqual(h.saves[0].articles.map(r=>r.title),['記事','メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);
 });
 
@@ -312,8 +313,8 @@ for(const failure of ['ingest','confirmation'])test('保存の失敗はタブを
   const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>{const b=JSON.parse(o.data);if(b.action==='ingest')ingests++;if(fail&&(failure==='ingest'?b.action==='ingest':Boolean(b.snapshotId))){queueMicrotask(()=>o.onerror());return}send(o)};
  }});
  for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('NETWORK_ERROR');i++)await pause(20);
- assert.equal(ingests,1);assert.match(h.w.document.querySelector('.status').textContent,/取得済み/);assert.match(h.w.document.getElementById('mumei-dash-read').textContent,/保存.*再試行/);
- fail=false;h.w.document.getElementById('mumei-dash-read').click();
+ assert.equal(ingests,1);assert.match(h.w.document.querySelector('.status').textContent,/取得済み/);assert.equal(h.w.document.getElementById('mumei-dash-run').textContent,'読み込み');
+ fail=false;h.w.document.getElementById('mumei-dash-run').click();
  for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('同期完了');i++)await pause(20);
  assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);assert.deepEqual(clicks,['メンバーシップ']);assert.equal(ingests,failure==='ingest'?2:1);
 });
@@ -322,7 +323,7 @@ test('ページを開き直した後も保存待ちデータを復元し、別�
  const checkpointKey='mumei-dashboard-read-checkpoint-v1';
  const first=page(t,'<p>2026/9/1〜2026/9/27</p><p>ページビュー 12</p><table><thead><tr><th>記事</th><th>PV</th></tr></thead><tbody><tr><td>保持する記事</td><td>12</td></tr></tbody></table>',{before:w=>{const send=w.GM_xmlhttpRequest;w.GM_xmlhttpRequest=o=>JSON.parse(o.data).action==='ingest'?queueMicrotask(()=>o.onerror()):send(o)}});
  for(let i=0;i<100&&!first.w.document.querySelector('.status')?.textContent.includes('NETWORK_ERROR');i++)await pause(20);
- const cached=first.w.sessionStorage.getItem(checkpointKey);assert.ok(cached);assert.ok(!cached.includes('fixture'),'接続トークンを複製しない');
+ const cached=first.w.localStorage.getItem(checkpointKey);assert.ok(cached);assert.ok(!cached.includes('fixture'),'接続トークンを複製しない');
  const restored=page(t,'<p>ページビュー 12</p><button role="tab">メンバーシップ</button>',{before:w=>{w.sessionStorage.setItem(checkpointKey,cached);w.document.querySelector('button').onclick=()=>assert.fail('保存再試行にタブ切替は不要');setTimeout(()=>w.document.querySelector('main').insertAdjacentHTML('afterbegin','<p>2026/9/1〜2026/9/27</p>'),70)}});
  await saved(restored);assert.deepEqual(restored.saves[0].articles.map(r=>r.title),['保持する記事']);
  const another=page(t,'<p>ページビュー 5</p>',{identity:()=>'participant_b',before:w=>w.sessionStorage.setItem(checkpointKey,cached)});
@@ -358,24 +359,24 @@ for(const mode of ['date-remount','hidden-date','metric-tab','content-route'])te
 test('期間変更で停止したエラーは新期間の通信や起動通知で上書き・自動再開しない',async t=>{
  let clicks=0;
  const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button id="next" role="tab" aria-selected="false">メンバーシップ</button>',{stats:async()=>({page_views:{'2026-09-25':12}}),before:w=>{w.document.getElementById('next').onclick=()=>{clicks++;w.document.getElementById('range').textContent='2026/8/2〜2026/8/29'}}});
- for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('VIEW_CHANGED');i++)await pause(20);
- const status=h.w.document.querySelector('.status'),error=status.textContent;assert.match(error,/VIEW_CHANGED/);
+ for(let i=0;i<100&&!h.w.document.querySelector('.status')?.textContent.includes('取得済みデータを保存しました');i++)await pause(20);
+ const status=h.w.document.querySelector('.status'),error=status.textContent;assert.match(error,/取得済みデータを保存しました/);
  await h.w.fetch('/api/v1/stats/daily');h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'もう一度読み込みます'}}));await pause(300);
- assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,0);assert.equal(h.diagnostics.length,1);assert.equal(h.diagnostics[0].code,'VIEW_CHANGED');assert.equal(h.diagnostics[0].periodChanged,true);
+ assert.equal(status.textContent,error);assert.equal(clicks,1);assert.equal(h.saves.length,1);assert.equal(h.saves[0].periodStart,'2026-08-30');assert.equal(h.diagnostics.length,0);
  assert.ok(!JSON.stringify(h.diagnostics).includes('fixture'));
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);const area=details.querySelector('textarea'),frozen=area.value;
- assert.match(frozen,/VIEW_CHANGED/);assert.ok(frozen.includes('v'+coreVersion));
+ assert.match(frozen,/取得済みデータを保存しました/);assert.ok(frozen.includes('v'+coreVersion));
  h.w.document.dispatchEvent(new h.w.CustomEvent('mumei-dashboard-status',{detail:{message:'追加の状態'}}));await pause(20);assert.equal(area.value,frozen,'開いている履歴は読みながら書き換えない');
  let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>copied=value}});h.w.document.getElementById('mumei-dash-copy').click();await pause(10);assert.equal(copied,frozen);
 });
 
-test('停止操作後に通信が終わっても保存やパネル巡回を続けない',async t=>{
+test('停止操作後に通信が終われば保存し、パネル巡回は続けない',async t=>{
  let release;const clicks=[];
  const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>',{stats:()=>new Promise(resolve=>release=resolve),before:w=>{for(const el of w.document.querySelectorAll('[role=tab]'))el.onclick=()=>{clicks.push(el.textContent);void w.fetch('/api/v1/stats/daily')}}});
  for(let i=0;i<100&&!release;i++)await pause(20);assert.ok(release);
- h.w.document.getElementById('mumei-dash-stop').click();release({page_views:{'2026-09-26':12}});await pause(250);
- assert.equal(h.saves.length,0);assert.deepEqual(clicks,['メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/停止しました/);assert.equal(h.w.document.querySelector('.status').dataset.kind,'paused');assert.equal(h.w.document.getElementById('mumei-dash-read').disabled,false);
- h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(150);assert.equal(h.saves.length,0);assert.deepEqual(clicks,['メンバーシップ']);
+ h.w.document.getElementById('mumei-dash-run').click();release({page_views:{'2026-09-26':12}});await pause(250);
+ assert.equal(h.saves.length,1);assert.deepEqual(clicks,['メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);assert.equal(h.w.document.querySelector('.status').dataset.kind,'paused');assert.equal(h.w.document.getElementById('mumei-dash-run').disabled,false);
+ h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(150);assert.equal(h.saves.length,1);assert.deepEqual(clicks,['メンバーシップ']);
 });
 
 
@@ -384,7 +385,7 @@ test('ページを再表示しても最後のエラーと履歴を残し、自�
  const h=page(t,'<p>ページビュー 12</p>',{before:w=>w.sessionStorage.setItem('mumei-dashboard-read-history-v1',JSON.stringify({version:coreVersion,noteId:'tester',rows:[{at:'10:00:00',message,kind:'warn'}],sticky:{message,kind:'warn',action:'read'}}))});
  await pause(150);assert.equal(h.saves.length,0);assert.equal(h.w.document.querySelector('.status').textContent,message);
  const details=h.w.document.getElementById('mumei-dash-history');details.open=true;await pause(20);assert.match(details.querySelector('textarea').value,/10:00:00.*READ_WAIT/);
- h.w.document.getElementById('mumei-dash-read').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
+ h.w.document.getElementById('mumei-dash-run').click();await saved(h);assert.doesNotMatch(h.w.document.querySelector('.status').textContent,/READ_WAIT/);
 });
 
 const officialMetrics=[['IMPRESSION','インプレッション'],['PAGE_VIEW','ページビュー'],['LIKE','スキ'],['COMMENT','コメント'],['SALES','売上']];
@@ -398,7 +399,7 @@ for(const hidden of [false,true])test('公式GraphQLの5指標を自動で読み
  await saved(h);assert.deepEqual(changed,['PAGE_VIEW','LIKE','COMMENT','SALES','IMPRESSION']);assert.equal(network.length,5);
  assert.deepEqual(h.saves[0].metricSeries.map(r=>r.pageViews),[0,8]);assert.equal(h.saves[0].metricSeries[1].likes,3);assert.equal(h.saves[0].metricSeries[1].salesYen,3);
  assert.doesNotMatch(JSON.stringify(h.saves),/must never be saved/);assert.deepEqual(h.warnings,[]);
- h.w.document.getElementById('mumei-dash-read').click();await pause(400);assert.equal(network.length,5,'保存済み指標を再巡回しない');
+ h.w.document.getElementById('mumei-dash-run').click();for(let i=0;i<100&&network.length<10;i++)await pause(20);await pause(150);assert.equal(network.length,10,'明示読み込みでは現在の5指標を再確認する');assert.equal(h.saves.length,1,'同じ値は重複保存しない');
 });
 test('キャッシュから表示され通信しない公式グラフも、実際のDAY pointsから自動取得する',async t=>{
  const h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+officialMetricSelect(false)+'<figure data-name="StackedBarChart"></figure>',{before:w=>{
@@ -412,23 +413,19 @@ test('公式の「もっとみる」で記事の続きまで読み、マガジ�
   w.document.getElementById('more').onclick=()=>{clicks++;w.document.querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td>続きの記事${clicks}</td><td>2</td></tr>`);if(clicks===2)w.document.getElementById('more').remove()};
  }});await saved(h);assert.equal(clicks,2);assert.equal(magazine,0);assert.equal(h.saves[0].articles.length,3);
 });
-test('通常1行のパネルは縮小しても消えず、裏の自動読込と保存を続ける',async t=>{
- let finish;
- const h=page(t,'<p>ページビュー 8</p><details><summary>日別グラフ</summary></details>',{stats:()=>new Promise(r=>finish=r),before:w=>{w.document.querySelector('summary').onclick=()=>void w.fetch('/api/v1/stats/daily')}});
- for(let i=0;i<60&&!finish;i++)await pause(10);
- const drawer=h.w.document.getElementById('mumei-dash-details');assert.equal(drawer.hidden,true);
- h.w.document.getElementById('mumei-dash-toggle').click();assert.equal(drawer.hidden,false);
- h.w.document.getElementById('mumei-dash-close').click();assert.equal(drawer.hidden,true);assert.ok(h.w.document.getElementById('mumei-dashboard-sync'));
- finish({page_views:{'2026-09-20':8}});await saved(h);assert.match(h.w.document.getElementById('mumei-dash-brief').textContent,/保存済み/);
- h.w.document.getElementById('mumei-dash-toggle').click();assert.equal(drawer.hidden,false);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);assert.ok(h.w.document.getElementById('mumei-dashboard-clearance'));
+test('履歴の開閉だけで読み込みを止めず、重複する詳細・縮小を表示しない',async t=>{
+ const h=page(t,'<p>ページビュー 8</p><script type="application/json">{"page_views":{"2026-09-20":8}}</script>');
+ await saved(h);const history=h.w.document.getElementById('mumei-dash-history');history.open=true;await pause(20);
+ assert.match(history.querySelector('textarea').value,/保存/);history.open=false;
+ assert.ok(h.w.document.getElementById('mumei-dash-run'));assert.equal(h.w.document.getElementById('mumei-dash-details'),null);assert.equal(h.w.document.getElementById('mumei-dash-toggle'),null);
 });
 
-test('URLが変わらない🔔表示ではパネルと自動操作を止め、閉じると続きから再開する',async t=>{
+test('URLが変わらない🔔表示ではパネル操作を止め、取得済みの保存は継続する',async t=>{
  let finish;const h=page(t,'<p>ページビュー 8</p><details><summary>日別グラフ</summary></details>',{stats:()=>new Promise(r=>finish=r),before:w=>{w.document.querySelector('summary').onclick=()=>void w.fetch('/api/v1/stats/daily')}});
  for(let i=0;i<60&&!finish;i++)await pause(10);
  const notice=h.w.document.createElement('section');notice.setAttribute('role','dialog');notice.setAttribute('aria-label','通知');notice.innerHTML='<button>通知</button><button>お知らせ</button>';h.w.document.body.append(notice);
  await pause(80);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);assert.equal(h.w.document.getElementById('mumei-dashboard-clearance'),null);
- finish({page_views:{'2026-09-20':8}});await pause(120);assert.equal(h.saves.length,0,'通知を見ている間に保存を進めない');
+ finish({page_views:{'2026-09-20':8}});await saved(h);assert.equal(h.saves[0].contentSections.article.scope,'partial-read');
  notice.remove();await saved(h);assert.ok(h.w.document.getElementById('mumei-dashboard-sync'));assert.equal(h.saves[0].metricSeries[0].pageViews,8);assert.equal(h.diagnostics.length,0);
 });
 test('通知や通常記事へ移動したら残留パネルを消し、ダッシュボード復帰時だけ再表示する',async t=>{
@@ -438,7 +435,7 @@ test('通知や通常記事へ移動したら残留パネルを消し、ダッ�
  h.w.history.pushState(null,'','/sitesettings/stats');await pause(180);assert.ok(h.w.document.getElementById('mumei-dashboard-sync'));assert.notEqual(h.w.getComputedStyle(h.w.document.getElementById('mumei-dashboard-sync')).display,'none');
 });
 
-test('バックグラウンドでは新しい読込・保存を止め、表示復帰後に再開する',async t=>{
+test('バックグラウンドでは新しい読込を止め、取得済みの保存は継続する',async t=>{
  let visibility='visible',finish,identityCalls=0;
  const h=page(t,'<p>ページビュー 8</p><details><summary>日別グラフ</summary></details>',{stats:()=>new Promise(r=>finish=r),before:w=>{
   Object.defineProperty(w.document,'visibilityState',{get:()=>visibility});const fetch=w.fetch;w.fetch=(url,...args)=>{if(String(url).includes('current_user'))identityCalls++;return fetch(url,...args)};
@@ -446,9 +443,9 @@ test('バックグラウンドでは新しい読込・保存を止め、表示�
  }});
  for(let i=0;i<60&&!finish;i++)await pause(10);
  visibility='hidden';h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));const before=identityCalls;
- finish({page_views:{'2026-09-20':8}});await pause(120);assert.equal(h.saves.length,0);assert.equal(identityCalls,before);
- h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(100);assert.equal(identityCalls,before);
- visibility='visible';h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await saved(h);assert.equal(h.saves[0].metricSeries[0].pageViews,8);
+ finish({page_views:{'2026-09-20':8}});await saved(h);assert.equal(h.saves[0].metricSeries[0].pageViews,8);
+ h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(100);assert.ok(identityCalls>=before);
+ visibility='visible';h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));await pause(100);assert.equal(h.saves.length,1);assert.equal(h.saves[0].metricSeries[0].pageViews,8);
 });
 
 test('365日の週月グラフを日別未取得の原因として示し、合計の保存は区別する',async t=>{

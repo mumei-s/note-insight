@@ -54,6 +54,7 @@ jobs:
           node --check public/note-insight-dashboard-sync.user.js
           node --check public/note-insight-dashboard-feature-bridge-v1.js
           node --check public/note-insight-dashboard-sync-core-v1.1.0.js
+          node --check public/note-insight-dashboard-save-queue-v1.js
           node --check public/note-pon-editor-v6.user.js
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
@@ -65,8 +66,8 @@ jobs:
         run: node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs
       - name: Check analysis navigation, settings and retained data presentation
         run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs
-      - name: Check dashboard panel, mode and retained synchronization
-        run: node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-daily-v146.test.mjs
+      - name: Check manual dashboard panel and durable save queue
+        run: node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-save-queue.test.mjs tests/dashboard-daily-v146.test.mjs
       - name: Check owner DM retention and independent device sessions
         run: node --test --test-concurrency=1 tests/owner-dm-retention.test.mjs
       - name: Check DM request ordering and person switching

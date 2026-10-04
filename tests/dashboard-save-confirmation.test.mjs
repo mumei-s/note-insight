@@ -93,3 +93,9 @@ test('記事別データが1000件を超えてもページングして全件を�
  const h=await backend();h.tables.insight_dashboard_snapshots[0].period_type='all';h.tables.insight_dashboard_article_snapshots=Array.from({length:1301},(_,i)=>({snapshot_id:'7',article_key:String(i).padStart(4,'0'),page_views:i}));
  const result=await h.call({action:'analysis',period:'all',dashboardOnly:true});assert.equal(result.status,200);assert.equal(result.body.topArticles.length,1301);
 });
+
+test('途中保存は残しつつ、取得済みの完全な記事一覧を少ない件数で置き換えない',async()=>{
+ const h=await backend();h.tables.insight_dashboard_snapshots=[{id:'full',member_id:'owner',confirmed:true,captured_at:'2026-09-25',period_type:'month',dashboard_schema_version:5,total_page_views:100,metric_series:[],content_sections:{article:{scope:'current-period-expanded'}}},{id:'partial',member_id:'owner',confirmed:true,captured_at:'2026-09-26',period_type:'month',dashboard_schema_version:5,total_page_views:20,metric_series:[{date:'2026-09-26',pageViews:20}],content_sections:{article:{scope:'partial-read'}}}];
+ h.tables.insight_dashboard_article_snapshots=[{snapshot_id:'full',article_key:'keep',page_views:100},{snapshot_id:'partial',article_key:'part',page_views:20}];
+ const r=await h.call({action:'analysis',dashboardOnly:true});assert.equal(r.body.latestDashboard.pageViews,100);assert.deepEqual(r.body.topArticles.map(x=>x.article_key),['keep']);assert.ok(r.body.dailyHistory.some(x=>x.date==='2026-09-26'));
+});

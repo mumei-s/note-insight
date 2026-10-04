@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.6
-// @description  小型の読み込みパネル。基本は自動、手動切替・読込・停止・OFF対応。ON/OFFは設定から変更できます。
+// @version      1.6.7
+// @description  小型の手動読み込みパネル。読み込み・停止・履歴・OFF対応。取得済みデータは画面を離れても保存します。ON/OFFは設定から変更できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,7 +19,8 @@
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-feature-bridge-v1.js?v=101
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=166
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-save-queue-v1.js?v=100
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=167
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
@@ -27,7 +28,7 @@
 (function startDashboardWrapper() {
   'use strict';
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardWrapper()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.6';
+  const VERSION='1.6.7';
   let featureEpoch=0,resumeBoot=false;
   const featureOn=()=>window.__mumeiDashboardFeatureV1?.isEnabled?.()!==false;
   const autoOn=()=>window.__mumeiDashboardFeatureV1?.isAutomatic?.()??(localStorage.getItem('mumei_insight_dashboard_auto_enabled_v1')!=='false');
@@ -115,12 +116,12 @@
       if(back){const u=new URL(back);u.searchParams.set('dashboardSync','ok');u.searchParams.set('dashboardVersion',VERSION);u.searchParams.set('dashboardAt',new Date().toISOString());completionTimer=setTimeout(()=>{if(featureOn()&&looksDashboard()&&document.visibilityState!=='hidden'&&document.documentElement.getAttribute('data-mumei-dashboard-surface')!=='other')location.assign(u.href)},1800)}return true};
     if(done())return;const o=new MutationObserver(()=>{if(done())o.disconnect()});o.observe(panel(),{subtree:true,childList:true,characterData:true});setTimeout(()=>o.disconnect(),600000);
   }
-  async function startRead({automatic=true}={}){
+  async function startRead({automatic=false}={}){
     const epoch=featureEpoch;
     if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');showPanel();
     if(panel()?.dataset.coreVersion!==VERSION){
       setCoreStatus('ダッシュボードの更新が揃っていません。更新を確認してください。','warn');
-      const btn=document.getElementById('mumei-dash-read');if(btn)btn.disabled=true;
+      const btn=document.getElementById('mumei-dash-run');if(btn)btn.disabled=true;
       if(!document.getElementById('mumei-dash-update')){const a=document.createElement('a');a.id='mumei-dash-update';a.textContent='更新を確認';a.href='https://mumei-s.github.io/note-insight/dashboard-setup.html?v='+VERSION;a.style.cssText='color:#a5eaff;white-space:nowrap;padding:8px';panel()?.querySelector('.row')?.append(a)}
       return;
     }
@@ -138,7 +139,8 @@
         sessionStorage.removeItem(FLOW_KEY);panel()?.remove();lastAutoKey='';arrivalDirect=null;return;
       }
       if(document.documentElement.getAttribute('data-mumei-dashboard-surface')==='other')return;
-      ensureCorePanel();
+      if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');showPanel();
+      if(panel()?.dataset.coreVersion!==VERSION){setCoreStatus('ダッシュボードの更新が揃っていません。更新を確認してください。','warn');const btn=document.getElementById('mumei-dash-run');if(btn)btn.disabled=true;if(!document.getElementById('mumei-dash-update')){const a=document.createElement('a');a.id='mumei-dash-update';a.textContent='更新を確認';a.href='https://mumei-s.github.io/note-insight/dashboard-setup.html';panel()?.append(a)}return;}
       const direct=directPayload()||arrivalDirect,pending=direct?null:await loadPending();
       if(epoch!==featureEpoch||!featureOn())return;
       const requested=await pairRequest(direct||pending);if(requested)lastAutoKey='';
@@ -147,8 +149,8 @@
       const key=JSON.stringify([location.pathname,localStorage.getItem(NOTE_KEY),localStorage.getItem(TOKEN_KEY)]);
       if(key===lastAutoKey)return;
       if(!localStorage.getItem(TOKEN_KEY)){showPanel();setCoreStatus('未連携｜保存先を設定','warn','connect');return}
-      if(!autoOn()&&!requested)return;
-      lastAutoKey=key;await startRead({automatic:!requested});
+      showPanel();if(!requested)return;
+      lastAutoKey=key;await startRead({automatic:false});
     }catch(e){if(!featureOn())return;ensureCorePanel();showPanel();setCoreStatus(/ACCOUNT/.test(String(e?.message||e))?'アカウント不一致｜連携を確認':/LOGIN/.test(String(e?.message||e))?'noteへのログインが必要':/PAIR_CODE/.test(String(e?.message||e))?'連携の有効期限切れ｜もう一度連携': '連携できませんでした｜再試行','warn','connect')}
     finally{running=false;if(resumeBoot&&featureOn()){resumeBoot=false;run()}}
   }

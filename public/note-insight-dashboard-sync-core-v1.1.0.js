@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.6.6
-// @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ自動同期。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
+// @version      1.6.7
+// @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
 // @run-at       document-start
@@ -26,22 +26,21 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.6.6';
+  const VERSION='1.6.7';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const DASH_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
-  const MODE_KEY='mumei_insight_dashboard_auto_enabled_v1';
-  let fallbackAutomatic=localStorage.getItem(MODE_KEY)!=='false',activeReadAutomatic=false,modeResumePending=false;
-  const autoOn=()=>window.__mumeiDashboardFeatureV1?.isAutomatic?.()??fallbackAutomatic;
+  const autoOn=()=>false;let activeReadAutomatic=false;
   const CAPTURE=[];
   let panel=null,panelResizeObserver=null,status=null,busy=false,pendingStats=0,captureRevision=0,autoTimer=0,lastSnapshotSignature='',lastCollection=null,autoBlockedScope=null,lastCaptureDataSignature='',resumeLabel='',readStage='準備',cancelRequested=false,stickyStatus=null,lastPresentation=null,runStarted=0,viewLease=null,userViewChanged=false,featureResumePending=false;
-  const CHECKPOINT_KEY='mumei-dashboard-read-checkpoint-v1',CHECKPOINT_AGE=10*60*1000;
+  const CHECKPOINT_KEY='mumei-dashboard-read-checkpoint-v1',CHECKPOINT_AGE=30*86400000;
+  const saveQueue=window.__mumeiDashboardSaveQueueV1;let saveKey='';
   const HISTORY_KEY='mumei-dashboard-read-history-v1';
   let historyRows=[],historyAccount=localStorage.getItem(NOTE_KEY);
-  try{const saved=JSON.parse(sessionStorage.getItem(HISTORY_KEY)||'null');if(saved?.version===VERSION&&saved.noteId===localStorage.getItem(NOTE_KEY)&&Array.isArray(saved.rows)){historyRows=saved.rows.slice(-40);if(saved.sticky){stickyStatus=saved.sticky;lastPresentation=saved.sticky;autoBlockedScope={}}}}catch{}
+  try{const saved=JSON.parse(localStorage.getItem(HISTORY_KEY)||sessionStorage.getItem(HISTORY_KEY)||'null');if(saved?.noteId===localStorage.getItem(NOTE_KEY)&&Array.isArray(saved.rows)){historyRows=saved.rows.slice(-40);if(saved.sticky){stickyStatus=saved.sticky;lastPresentation=saved.sticky;autoBlockedScope={}}}}catch{}
   const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   const num=(v)=>{if(v==null)return 0;const s=String(v).replace(/[￥¥円,%\s]/g,'').replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
   const text=(v)=>String(v??'').replace(/\s+/g,' ').trim();
@@ -86,7 +85,7 @@
   const captureScope=()=>({href:dashboardLocation(),period:periodKey(),connection:connectionKey()});
   const currentCapture=scope=>scope.href===dashboardLocation()&&scope.period===periodKey()&&scope.connection===connectionKey();
   function captureJson(url,payload,scope=captureScope()){
-    if(!featureOn()||!isDashboardRoute()||!currentCapture(scope)||!payload||typeof payload!=='object'||(!statsUrl(url)&&!(graphqlUrl(url)&&scope.operation)&&!String(url).startsWith('hydration:')))return;
+    if(!((featureOn()&&isDashboardRoute()&&currentCapture(scope))||(busy&&lastCollection&&scope.href===lastCollection.scope.href&&scope.period===lastCollection.scope.period&&scope.connection===connectionKey()&&scope.connection===lastCollection.scope.connection))||!payload||typeof payload!=='object'||(!statsUrl(url)&&!(graphqlUrl(url)&&scope.operation)&&!String(url).startsWith('hydration:')))return;
     const idx=CAPTURE.findIndex(x=>x.url===String(url)&&currentCapture(x));
     if(idx>=0){if(JSON.stringify(CAPTURE[idx].payload)===JSON.stringify(payload)){CAPTURE[idx].at=Date.now();return}CAPTURE.splice(idx,1)}
     CAPTURE.push({url:String(url),payload,...scope,at:Date.now()});if(CAPTURE.length>40)CAPTURE.shift();
@@ -202,7 +201,7 @@
    // Only the latest observed request for each endpoint belongs to the selected view.
    const latest=new Map();
    const current=CAPTURE.filter(cap=>statsUrl(cap.url)&&currentCapture(cap));
-   const urls=current.length?current.filter(cap=>Date.now()-cap.at>10000).map(cap=>cap.url):CAPTURE.some(cap=>statsUrl(cap.url))?[]:(performance.getEntriesByType?.('resource')||[]).map(entry=>entry.name);
+   const urls=current.length?current.filter(cap=>cap.at<runStarted).map(cap=>cap.url):CAPTURE.some(cap=>statsUrl(cap.url))?[]:(performance.getEntriesByType?.('resource')||[]).map(entry=>entry.name);
    for(const name of urls){if(statsUrl(name)){const url=new URL(name,location.href);latest.set(url.origin+url.pathname,url.href)}}
    await Promise.all([...latest.values()].slice(-8).map(async url=>{const scope=captureScope(),c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await originalFetch(url,{method:'GET',credentials:'include',cache:'no-store',signal:c.signal});if(r.ok)captureJson(url,await r.json(),scope)}catch{}finally{clearTimeout(timer)}}));
   }
@@ -313,7 +312,9 @@
     const fields=[...Object.keys(chartMetricLabels).filter(f=>f!==graph.original),graph.original].filter(Boolean);
     for(const field of fields){
       if(graph.done.includes(field))continue;
-      readStage='公式グラフ：'+chartMetricLabels[field];setStatus(readStage+'を自動読込中…');
+      // A fresh response can contain several metrics; avoid reopening charts already read in this run.
+      if(CAPTURE.some(cap=>cap.at>=runStarted&&currentCapture(cap)&&((dailyMetrics(cap.payload,{field:cap.metric,period:checkpoint.period}).some(r=>r[field]!=null))||(chartMetrics(cap.payload,{field:cap.metric}).some(r=>r[field]!=null))))){graph.done.push(field);continue;}
+      readStage='公式グラフ：'+chartMetricLabels[field];setStatus(readStage+'を読み込み中…');
       if(!await selectChartMetric(field,href,period))continue;
       collect();graph.done.push(field);saveCheckpoint(checkpoint);
     }
@@ -359,20 +360,20 @@
   }
   async function waitForDashboard(href,initialPeriod){
     let quiet=0,previous='';
-    for(let tick=0;tick<60;tick++){
+    for(let tick=0;tick<100;tick++){
       ensureRunning();
       if(!isDashboard()||dashboardLocation()!==href||(initialPeriod!==null&&periodKey()!==initialPeriod))throw new Error('表示期間または画面が変わりました。変更前の読込は停止しました [VIEW_CHANGED]');
       const loading=[...dashboardRoot().querySelectorAll('[aria-busy="true"],[role="progressbar"]:not([aria-valuenow])')].some(readable);
       const signature=JSON.stringify([captureRevision,officialDataSignature()]);
       quiet=!pendingStats&&!loading&&signature===previous?quiet+1:0;previous=signature;
-      if(quiet>=6)return;
+      if(quiet>=(initialPeriod===null?6:2))return;
       if(tick%4===0)setStatus(`公式データを読込中…${pendingStats?' 通信 '+pendingStats+'件':''}`);
-      await sleep(250);
+      await sleep(150);
     }
     throw new Error('公式データの待機が15秒を超えました [READ_WAIT]');
   }
 
-  function mineNetwork(){const articles=[],sources=[],trafficSeries=[],metricRows=[],chartRows=[];for(const cap of CAPTURE){if(!currentCapture(cap))continue;
+  function mineNetwork(scope=null){const articles=[],sources=[],trafficSeries=[],metricRows=[],chartRows=[];for(const cap of CAPTURE){if(scope?cap.href!==scope.href||cap.period!==scope.period||cap.connection!==scope.connection:!currentCapture(cap))continue;
     const official=cap.payload?.data||{};
     for(const edge of official.dashboardNoteListConnection?.edges||[]){const o=edge.node,n=o?.note,m=o?.metrics;if(!n?.title||!m)continue;const url=text(n.link?.absoluteUrl),pv=pick(m,aliases.pageViews);articles.push({key:url||text(o.id),title:text(n.title),url,impressions:pick(m,aliases.impressions),pageViews:pv,views:pv,likes:pick(m,aliases.likes),comments:pick(m,aliases.comments),salesYen:pick(m,aliases.sales),contentType:'article',status:text(n.status).toLowerCase(),publishedAt:text(n.publishedAt)})}
     const referrers=official.dashboardNoteReferrersChart;
@@ -472,19 +473,46 @@
     if(!checkpoint.hash)return;
     // Store data and progress in this tab only; never copy the connection token.
     const {scope,...safe}=checkpoint;
-    try{sessionStorage.setItem(CHECKPOINT_KEY,JSON.stringify({...safe,version:VERSION}))}catch{/* Memory checkpoint still permits retry if browser storage is full. */}
+    try{localStorage.setItem(CHECKPOINT_KEY,JSON.stringify({...safe,version:VERSION}))}catch{/* Memory checkpoint still permits retry if browser storage is full. */}
   }
   async function getCheckpoint(scope){
     if(lastCollection&&currentCapture(lastCollection.scope)&&Date.now()-lastCollection.at<CHECKPOINT_AGE)return lastCollection;
     const hash=await checkpointHash(scope);
-    if(hash)try{const cached=JSON.parse(sessionStorage.getItem(CHECKPOINT_KEY)||'null');if(cached?.version===VERSION&&cached.hash===hash&&Date.now()-cached.at<CHECKPOINT_AGE&&cached.result&&cached.progress){lastCollection={...cached,scope};return lastCollection}}catch{}
+    if(hash)try{const cached=JSON.parse(localStorage.getItem(CHECKPOINT_KEY)||sessionStorage.getItem(CHECKPOINT_KEY)||'null');if(cached?.hash===hash&&Date.now()-cached.at<CHECKPOINT_AGE&&cached.result&&cached.progress){lastCollection={...cached,scope};return lastCollection}}catch{}
     // A loading page may not expose its period yet; keep the last checkpoint until a new read is collected.
     return {scope,hash,period:detectPeriod(),at:Date.now(),result:null,progress:{started:false,activeLabel:activeContentLabel()||'記事',done:[],opened:0,pending:null,complete:false},pendingSave:null};
   }
+  function payloadFor(checkpoint,paired,partial=false){
+    const mined=checkpoint.result,articles=mined.articles;
+    return {action:'ingest',schemaVersion:5,connectorVersion:VERSION,noteId:paired,articles,
+      totals:{impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals},
+      trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,chartSeries:mined.chartSeries,summary:mined.summary,
+      contentSections:{article:{count:articles.length,scope:partial?'partial-read':'current-period-expanded'},openedPanels:checkpoint.progress.opened},
+      officialCollectedAt:detectCollected(),...checkpoint.period,pages:1};
+  }
+  async function finishCaptured(checkpoint){
+    // Await responses already requested before stop/navigation; never open another panel.
+    for(let tick=0;pendingStats&&tick<67&&checkpoint.scope.connection===connectionKey();tick++)await sleep(150);
+    if(checkpoint.scope.connection!==connectionKey())return;
+    const mined=mineNetwork(checkpoint.scope),result=checkpoint.result;
+    result.articles=uniq([...result.articles,...mined.articles],r=>r.url||r.key||r.title);
+    result.sources=uniq([...result.sources,...mined.sources],r=>r.source.toLowerCase());
+    result.trafficSeries=uniq([...result.trafficSeries,...mined.trafficSeries],r=>r.date+':'+r.source);
+    result.metricSeries=mergeMetrics([...result.metricSeries,...mined.metricSeries]);
+    result.chartSeries=mergeChartMetrics([...result.chartSeries,...mined.chartSeries]);saveCheckpoint(checkpoint);
+  }
+  function queuePartial(checkpoint){
+    if(!saveKey||!checkpoint?.result||checkpoint.scope.connection!==connectionKey())return null;
+    if(!checkpoint.pendingSave){const result=checkpoint.result;if(!result.articles.length&&!result.metricSeries.length&&!Object.values(result.totals).some(v=>v!=null))return null;
+      checkpoint.pendingSave={payload:payloadFor(checkpoint,localStorage.getItem(NOTE_KEY)?.toLowerCase(),true),saved:null};}
+    saveQueue.stage(saveKey,checkpoint.pendingSave);saveCheckpoint(checkpoint);return checkpoint.pendingSave;
+  }
+  // Persist synchronously before a full navigation destroys this JavaScript context.
+  window.addEventListener('pagehide',()=>{if(busy)try{queuePartial(lastCollection)}catch{}});
   async function syncNow({automatic=false}={}){
     // A different/temporarily absent period must never restart a failed run.
     if(automatic&&(!autoOn()||autoBlockedScope||stickyStatus||cancelRequested))return;
-    if(busy||!isDashboard())return;clearTimeout(autoTimer);cancelRequested=false;userViewChanged=false;stickyStatus=null;resumeLabel='';busy=true;activeReadAutomatic=automatic;runStarted=Date.now();mount();setStatus('公式データを確認中…');
+    if(busy||!isDashboard()||panel?.dataset.coreVersion!==VERSION||document.documentElement.getAttribute('data-mumei-dashboard-wrapper')&&document.documentElement.getAttribute('data-mumei-dashboard-wrapper')!==VERSION)return;clearTimeout(autoTimer);cancelRequested=false;userViewChanged=false;stickyStatus=null;resumeLabel='';busy=true;activeReadAutomatic=automatic;runStarted=Date.now();mount();setStatus('公式データを確認中…');
     const tokenAtStart=localStorage.getItem(TOKEN_KEY);let runScope=captureScope(),checkpoint=null,connectionVerified=false;
     if(!automatic){autoBlockedScope=null;surfaceSuspended=false}
     const button=panel?.querySelector('#mumei-dash-read');if(button)button.disabled=true;
@@ -499,11 +527,12 @@
       setStatus('保存先の連携を確認中…');
       const connection=await xhr(DASH_API,{action:'sync-status',noteId:paired},{'X-Ingest-Token':token});
       if(connection.noteId!==paired||connection.paired!==true)throw new Error('保存先の確認ができませんでした');
-      connectionVerified=true;ensureRunning();
+      connectionVerified=true;saveKey=await saveQueue.prepare(paired,token);ensureRunning();
       for(let i=0;i<20;i++){if(!isDashboard()||dashboardLocation()!==startLocation)return;if(dashboardRoot().querySelector('details,[aria-expanded],table')||detectTotals().pageViews!==null||mineNetwork().metricSeries.length)break;await sleep(250)}
       await selectRequestedPeriod(startLocation);
       let selectedPeriod=periodKey(),scope=captureScope();runScope=scope;
       checkpoint=await getCheckpoint(scope);
+      if(checkpoint.progress.complete&&!checkpoint.pendingSave){checkpoint.progress={started:false,activeLabel:activeContentLabel()||'記事',done:[],opened:0,pending:null,complete:false};}
       if(!checkpoint.pendingSave){
         readStage=checkpoint.progress.pending?.label||'表示中の公式データ';
         await waitForDashboard(startLocation,checkpoint.progress.started?selectedPeriod:null);
@@ -516,30 +545,20 @@
         checkpoint.result=mined;saveCheckpoint(checkpoint);
         const totals={impressions:null,pageViews:null,likes:null,comments:null,salesYen:null,...mined.totals};
         if(!articles.length&&totals.pageViews===null&&totals.impressions===null&&!mined.metricSeries.length)throw new Error('表示中の公式データを取得できませんでした [NO_DATA]');
-        const payload={action:'ingest',schemaVersion:5,connectorVersion:VERSION,noteId:paired,articles,totals,
-          trafficSources:mined.sources,trafficSeries:mined.trafficSeries,metricSeries:mined.metricSeries,chartSeries:mined.chartSeries,summary:mined.summary,
-          contentSections:{article:{count:articles.length,scope:'current-period-expanded'},openedPanels:checkpoint.progress.opened},officialCollectedAt:detectCollected(),...checkpoint.period,pages:1};
+        const payload=payloadFor(checkpoint,paired);
         const signature=JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}]);
-        if(signature===lastSnapshotSignature){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',mined.metricSeries.some(r=>r.pageViews!==null)?'ok':'partial');return}
-        checkpoint.pendingSave={payload,readRevision:captureRevision,readSignature:officialDataSignature(),saved:null};saveCheckpoint(checkpoint);
+        const signatureHash=await checkpointHash({signature});
+        if(signature===lastSnapshotSignature||signatureHash===localStorage.getItem(saveKey+':last-saved')){setStatus(localStorage.getItem('mumei-dashboard-last-result:'+paired)||'取得済みデータを保存済み',mined.metricSeries.some(r=>r.pageViews!==null)?'ok':'partial');return}
+        checkpoint.pendingSave={payload,readRevision:captureRevision,readSignature:officialDataSignature(),saved:null};saveQueue.stage(saveKey,checkpoint.pendingSave);saveCheckpoint(checkpoint);
         }
       }
       const pending=checkpoint.pendingSave,{payload}=pending,{articles,totals}=payload,dailyPvDays=payload.metricSeries.filter(r=>r.pageViews!==null).length,chartCount=payload.chartSeries?.length||0;
-      const checkAccount=async()=>{ensureRunning();const actual=await currentNoteId();ensureRunning();if(!currentCapture(scope)||localStorage.getItem(NOTE_KEY)?.toLowerCase()!==paired||localStorage.getItem(TOKEN_KEY)!==token||actual!==paired)throw new Error('DASHBOARD_ACCOUNT_MISMATCH')};
-      readStage='取得済みデータの保存';await checkAccount();
-      if(!pending.saved){
-        setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存中…`);
-        const saved=await xhr(DASH_API,payload,{'X-Ingest-Token':token});
-        if(!saved.snapshotId)throw new Error('保存応答に記録番号がありません [SAVE_RESPONSE]');
-        pending.saved=saved;saveCheckpoint(checkpoint);
-      }
-      ensureRunning();const saved=pending.saved;readStage='保存結果の照合';
-      setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存を照合中…`);
-      const verified=await xhr(DASH_API,{action:'sync-status',noteId:paired,snapshotId:saved.snapshotId},{'X-Ingest-Token':token});
-      if(verified.noteId!==paired||String(verified.snapshotId)!==String(saved.snapshotId)||verified.confirmed!==true||Number(verified.articleCount)!==articles.length||Number(verified.dailyPvDays)!==dailyPvDays||Number(verified.dailyMetricCount)!==payload.metricSeries.length)throw new Error('保存件数が一致しません [SAVE_COUNT]');
-      if(chartCount&&Number(verified.chartMetricCount)!==chartCount)throw new Error('保存したグラフ件数が一致しません [SAVE_COUNT]');
-      for(const key of Object.keys(totals))if(totals[key]!==null&&optionalNumber(verified.totals?.[key])!==totals[key])throw new Error('保存した数値を確認できません [SAVE_VALUE]');
-      await checkAccount();
+      readStage='取得済みデータの保存';setStatus(`読込 記事${articles.length}件／日別PV ${dailyPvDays}日 → 保存中…`);
+      saveQueue.stage(saveKey,pending);
+      const queued=await saveQueue.flush(saveKey,pending.queueId);
+      if(!queued)throw new Error('保存結果を確認できませんでした [SAVE_RESPONSE]');
+      const {saved,verified}=queued;
+      localStorage.setItem(saveKey+':last-saved',await checkpointHash({signature:JSON.stringify([connectionKey(),{...payload,contentSections:{article:payload.contentSections.article}}])}));
       checkpoint.pendingSave=null;saveCheckpoint(checkpoint);resumeLabel='';
       const count=Number(verified.dailyPvDays),at=new Date(verified.capturedAt||saved.capturedAt||Date.now()).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
       localStorage.setItem('mumei-dashboard-last-sync',String(Date.now()));
@@ -553,17 +572,20 @@
       setStatus(message,complete?'ok':'partial');
       if(!complete)reportDiagnostic('[DAILY_NOT_FOUND]',checkpoint,scope,token);
     }catch(e){
-      autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&currentCapture(checkpoint.scope);
+      autoBlockedScope=runScope;clearTimeout(autoTimer);const message=cancelRequested?'停止しました [STOPPED]':String(e?.message||e),valid=checkpoint&&checkpoint.scope.connection===connectionKey();
+      if(valid&&connectionVerified&&/STOPPED|SURFACE_LEFT|VIEW_CHANGED/.test(message)&&checkpoint.result){
+        try{await finishCaptured(checkpoint);const pending=queuePartial(checkpoint);if(pending){setStatus('取得済みデータを保存しています…');const result=await saveQueue.flush(saveKey,pending.queueId);if(result){checkpoint.pendingSave=null;saveCheckpoint(checkpoint);setStatus('取得済みデータを保存しました。読み込みで続きを取得できます。','paused','read',true);return;}}}catch(saveError){recordStatus('保存待ち：'+String(saveError?.message||saveError),'warn')}
+      }
       if(valid)saveCheckpoint(checkpoint);
       if(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)&&localStorage.getItem(TOKEN_KEY)===tokenAtStart)localStorage.removeItem(TOKEN_KEY);
       resumeLabel=valid?(checkpoint.pendingSave?(checkpoint.pendingSave.saved?'保存確認を再試行':'保存を再試行'):'続きから読込'):'';
       if(connectionVerified&&!message.includes('[SURFACE_LEFT]'))reportDiagnostic(message,checkpoint,runScope,tokenAtStart);
       const kept=valid&&checkpoint.result?`｜取得済み 記事${checkpoint.result.articles.length}件・日別${checkpoint.result.metricSeries.length}日を保持`:'';
       setStatus(/INGEST_TOKEN_INVALID|INGEST_TOKEN_REQUIRED/.test(message)?'連携が無効｜接続し直してください':`${cancelRequested?'':'⚠ '}${readStage}：${message}${kept}`,cancelRequested?'paused':'warn',/INGEST_TOKEN|再連携|ACCOUNT_MISMATCH|からダッシュボードを連携/.test(message)?'connect':'read',true);
-    }finally{busy=false;activeReadAutomatic=false;panel?.querySelector('#mumei-dash-stop')?.setAttribute('hidden','');if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':resumeLabel||'再読込'}paintMode();if(featureResumePending&&featureOn()){featureResumePending=false;cancelRequested=false;stickyStatus=null;autoBlockedScope=null;surfaceSuspended=true;saveHistory()}if(modeResumePending){modeResumePending=false;if(autoOn())resumeAutomaticMode()}else resumeSurfaceRead()}
+    }finally{busy=false;activeReadAutomatic=false;panel?.querySelector('#mumei-dash-stop')?.setAttribute('hidden','');if(button){button.disabled=false;button.textContent=needsPair?'連携して読み込む':resumeLabel||'再読込'}paintMode();if(featureResumePending&&featureOn()){featureResumePending=false;cancelRequested=false;stickyStatus=null;autoBlockedScope=null;surfaceSuspended=true;saveHistory()}resumeSurfaceRead()}
   }
   let needsPair=false,connecting=false;
-  function saveHistory(){try{sessionStorage.setItem(HISTORY_KEY,JSON.stringify({version:VERSION,noteId:localStorage.getItem(NOTE_KEY),rows:historyRows,sticky:stickyStatus}))}catch{}}
+  function saveHistory(){try{localStorage.setItem(HISTORY_KEY,JSON.stringify({version:VERSION,noteId:localStorage.getItem(NOTE_KEY),rows:historyRows,sticky:stickyStatus}))}catch{}}
   function historyText(){return `ダッシュボード v${VERSION}\n`+historyRows.map(r=>`${r.at} ${r.message}`).join('\n')}
   function recordStatus(message,kind){
     if(historyAccount!==localStorage.getItem(NOTE_KEY)){historyAccount=localStorage.getItem(NOTE_KEY);historyRows=[];stickyStatus=null;lastPresentation=null;autoBlockedScope=null}
@@ -613,7 +635,7 @@
   document.addEventListener('click',userNavigation,true);document.addEventListener('change',userNavigation,true);window.addEventListener('popstate',userNavigation);
   document.addEventListener('mumei-dashboard-connection-ready',()=>{stickyStatus=null;autoBlockedScope=null;cancelRequested=false;needsPair=false;saveHistory()});
   document.addEventListener('mumei-dashboard-status',e=>{const d=e.detail||{};setStatus(String(d.message||''),String(d.kind||''),String(d.action||''))});
-  document.addEventListener('mumei-dashboard-read',e=>void syncNow({automatic:e.detail?.automatic!==false}));
+  document.addEventListener('mumei-dashboard-read',e=>{if(e.detail?.automatic===false)void syncNow()});
   function resumeSurfaceRead(){
     if(!autoOn()||!surfaceSuspended||busy||cancelRequested||!isDashboard())return;
     surfaceSuspended=false;stickyStatus=null;autoBlockedScope=null;userViewChanged=false;saveHistory();
@@ -630,33 +652,13 @@
     const line=panel?.querySelector('#mumei-dash-brief');if(!line)return;
     const counts=message.match(/記事\d+件・日別PV \d+日/)?.[0];
     const reason=/HTTP_402/.test(message)?'保存先が利用制限中':/VIEW_CHANGED/.test(message)?'期間・画面変更で停止':/SURFACE_LEFT/.test(message)?'画面を離れたため一時停止':/READ_WAIT|TIMEOUT/.test(message)?'公式データの応答待ちで停止':/SAVE_COUNT|SAVE_VALUE|SAVE_RESPONSE/.test(message)?'保存を確認できません':/ACCOUNT_MISMATCH|アカウント不一致/.test(message)?'アカウント不一致':/連携/.test(message)?'保存先の連携を確認':/PANEL_NOT_OPEN|TAB_NOT_OPEN|METRIC_NOT_SELECTED/.test(message)?'公式表示を開けず停止':'読込が止まりました';
-    line.textContent=kind==='warn'?reason:kind==='paused'?'読込停止｜読込で再開':kind==='partial'?(/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?(activeReadAutomatic?'自動':'手動')+'読込中'+(counts?'｜'+counts:''):needsPair?'未連携｜連携してください':autoOn()?'ダッシュボード同期':'手動｜読込で開始';
+    line.textContent=kind==='warn'?reason:kind==='paused'?'読込停止｜読込で再開':kind==='partial'?(/週・月単位/.test(message)?'記事保存済み｜グラフは週・月単位':'記事保存済み｜日別PV未取得'):kind==='ok'?`保存済み｜${counts||'保存確認済み'}`:busy?'読み込み中'+(counts?'｜'+counts:''):needsPair?'未連携｜連携してください':autoOn()?'ダッシュボード同期':'読み込みで開始';
     line.dataset.kind=kind;
   }
   function paintMode(){
-    const mode=panel?.querySelector('#mumei-dash-mode'),quick=panel?.querySelector('#mumei-dash-run');
-    if(mode){mode.textContent=autoOn()?'自動':'手動';mode.setAttribute('aria-pressed',String(autoOn()));mode.setAttribute('aria-label',(autoOn()?'自動読込中。手動に切り替える':'手動読込。自動に切り替える'));mode.dataset.mode=autoOn()?'automatic':'manual'}
-    if(quick){quick.textContent=busy?(cancelRequested?'停止中':'停止'):needsPair?'連携':'読込';quick.disabled=busy&&cancelRequested;quick.setAttribute('aria-label',busy?'ダッシュボードの読込を停止':'ダッシュボードを読み込む')}
+    const quick=panel?.querySelector('#mumei-dash-run');
+    if(quick){quick.dataset.action=needsPair?'connect':'read';quick.textContent=busy?(cancelRequested?'停止中':'停止'):needsPair?'連携':'読み込み';quick.disabled=busy&&cancelRequested;panel?.setAttribute('aria-busy',String(busy));quick.setAttribute('aria-label',busy?'ダッシュボードの読込を停止':'ダッシュボードを読み込む')}
   }
-  function resumeAutomaticMode(){
-    if(!autoOn()||!featureOn())return;
-    cancelRequested=false;stickyStatus=null;autoBlockedScope=null;surfaceSuspended=false;saveHistory();
-    if(isDashboard()){setStatus('自動読込を準備中');clearTimeout(autoTimer);autoTimer=setTimeout(()=>void syncNow({automatic:true}),80)}
-  }
-  async function toggleMode(){
-    const button=panel?.querySelector('#mumei-dash-mode');if(button?.disabled)return;
-    if(button)button.disabled=true;
-    try{const next=!autoOn(),bridge=window.__mumeiDashboardFeatureV1;if(bridge?.setAutomatic)await bridge.setAutomatic(next);else{localStorage.setItem(MODE_KEY,String(next));fallbackAutomatic=next;window.dispatchEvent(new CustomEvent('mumei-dashboard-mode-changed',{detail:{automatic:next}}))}}
-    catch(e){setStatus(String(e?.message||'読込モードを保存できませんでした'),'warn','',true)}
-    finally{if(button)button.disabled=false;paintMode()}
-  }
-  window.addEventListener('mumei-dashboard-mode-changed',()=>{
-    clearTimeout(autoTimer);
-    if(!autoOn()){modeResumePending=false;if(busy&&activeReadAutomatic)stopReading();else if(!busy&&!stickyStatus)setStatus('手動｜読込で開始')}
-    else if(busy)modeResumePending=true;
-    else resumeAutomaticMode();
-    paintMode();
-  });
   function mount(){
     if(!isDashboard()||!document.body)return;
     if(panel?.isConnected)return;panel=document.createElement('div');panel.id='mumei-dashboard-sync';panel.dataset.coreVersion=VERSION;
@@ -664,7 +666,6 @@
 #mumei-dashboard-sync{position:fixed;z-index:2147483646;left:8px;right:8px;max-width:520px;bottom:max(6px,env(safe-area-inset-bottom));font:10px/1.3 system-ui;color:#eaf6ff;background:#07131df5;border:1px solid #4cc9e8;border-radius:7px;padding:3px 5px;box-shadow:0 3px 12px #0006;box-sizing:border-box}
 #mumei-dashboard-sync .row{display:flex;gap:3px;align-items:center}
 #mumei-dashboard-sync button{flex-shrink:0;border:1px solid #5fd7f0;background:#103048;color:#eafaff;border-radius:5px;font:700 10px/1.2 system-ui;min-height:28px!important;height:28px!important;margin:0!important;padding:0 5px!important;white-space:nowrap;touch-action:manipulation}
-#mumei-dashboard-sync #mumei-dash-mode[data-mode=automatic]{background:#163b2b;border-color:#65cb91}
 #mumei-dashboard-sync .settings-note{display:block;text-align:right;color:#bed9e6;font:9px/1.4 system-ui;padding-top:2px}
 #mumei-dashboard-sync button:disabled{opacity:.55}
 #mumei-dashboard-sync #mumei-dash-brief{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -673,21 +674,20 @@
 #mumei-dashboard-sync [data-kind=warn],#mumei-dashboard-sync [data-kind=partial]{color:#ffd68a}
 #mumei-dashboard-sync #mumei-dash-details{max-height:35vh;overflow:auto;overscroll-behavior:contain;border-top:1px solid #466677;margin-top:3px;padding-bottom:4px}
 #mumei-dashboard-sync .tools{display:flex;align-items:center;gap:8px;margin:4px 0;color:#b9cddd}
-#mumei-dashboard-sync summary{cursor:pointer;padding:6px 0}
+#mumei-dashboard-sync .footer{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:3px}
+#mumei-dashboard-sync summary{cursor:pointer;padding:0;font:10px/1.4 system-ui}
+#mumei-dashboard-sync details[open]{flex:1;min-width:0}
+#mumei-dashboard-sync[aria-busy=true]::before{content:"";position:absolute;top:0;left:2%;width:24%;height:2px;border-radius:3px;background:#8aebff;animation:mumei-dash-progress 1s ease-in-out infinite;pointer-events:none}
+@keyframes mumei-dash-progress{50%{left:74%;opacity:.5}}
+@media(prefers-reduced-motion:reduce){#mumei-dashboard-sync[aria-busy=true]::before{animation:none;width:96%}}
 #mumei-dashboard-sync textarea{display:block;box-sizing:border-box;width:100%;height:16vh;min-height:70px;resize:none;color:#eaf6ff;background:#07131d;border:1px solid #466677;border-radius:6px;font:12px/1.5 system-ui;padding:6px}
 #mumei-dashboard-sync [hidden]{display:none!important}
 #mumei-dashboard-clearance{height:58px;pointer-events:none}
-</style><div class="row"><span id="mumei-dash-brief" role="status" aria-live="polite">自動読込を準備中</span><button id="mumei-dash-mode" type="button">自動</button><button id="mumei-dash-run" type="button">読込</button><button id="mumei-dash-toggle" type="button" aria-controls="mumei-dash-details" aria-expanded="false">詳細</button><button id="mumei-dash-feature-off" type="button" aria-label="ダッシュボード パネルをOFFにする。再びONにするには設定を開いてください">OFF</button></div><a id="mumei-dash-settings" class="settings-note" href="https://mumei-s.github.io/note-insight/dashboard-setup.html?from=note">ON/OFFは設定から</a><div id="mumei-dash-details" hidden><div class="status"></div><div class="tools"><button id="mumei-dash-read" type="button">再読込</button><button type="button" id="mumei-dash-stop" hidden>停止</button><span>v${VERSION}</span><button id="mumei-dash-close" type="button" aria-label="詳細を縮小する">縮小</button></div><details id="mumei-dash-history"><summary>履歴</summary><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details></div>`;
+</style><div class="row"><span id="mumei-dash-brief" role="status" aria-live="polite">読み込みで開始</span><button id="mumei-dash-run" type="button">読み込み</button><button id="mumei-dash-feature-off" type="button" aria-label="ダッシュボード パネルをOFFにする。再びONにするには設定を開いてください">OFF</button></div><div class="footer"><details id="mumei-dash-history"><summary>履歴</summary><div class="status"></div><textarea readonly aria-label="読込履歴"></textarea><button type="button" id="mumei-dash-copy">履歴をコピー</button></details><a id="mumei-dash-settings" class="settings-note" href="https://mumei-s.github.io/note-insight/dashboard-setup.html?from=note">ON/OFFは設定から</a></div>`;
     document.body.append(panel);status=panel.querySelector('.status');needsPair=!localStorage.getItem(TOKEN_KEY)||!localStorage.getItem(NOTE_KEY);
     if(lastPresentation){status.textContent=lastPresentation.message;status.dataset.kind=lastPresentation.kind;renderCompactStatus(lastPresentation.message,lastPresentation.kind)}else setStatus(needsPair?'未連携｜保存先を設定':`ダッシュボード v${VERSION}`,'',needsPair?'connect':'read');
-    panel.querySelector('#mumei-dash-read').onclick=()=>needsPair?void connectAndRead():void syncNow();
-    panel.querySelector('#mumei-dash-mode').onclick=()=>void toggleMode();
     panel.querySelector('#mumei-dash-run').onclick=()=>busy?stopReading():needsPair?void connectAndRead():void syncNow();
     paintMode();
-    const toggle=panel.querySelector('#mumei-dash-toggle'),drawer=panel.querySelector('#mumei-dash-details');
-    const expand=open=>{drawer.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'縮小':'詳細'};
-    toggle.onclick=()=>expand(drawer.hidden);panel.querySelector('#mumei-dash-close').onclick=()=>expand(false);
-    panel.querySelector('#mumei-dash-stop').onclick=stopReading;
     const off=panel.querySelector('#mumei-dash-feature-off');
     off.hidden=!window.__mumeiDashboardFeatureV1;
     off.onclick=async()=>{off.disabled=true;try{await window.__mumeiDashboardFeatureV1.setEnabled(false)}catch(e){setStatus(String(e?.message||'OFFを保存できませんでした'),'warn','',true);off.disabled=false}};
