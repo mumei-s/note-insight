@@ -140,7 +140,7 @@ for(const mode of ['modern','legacy'])for(const count of [1,3])test(`実Reader�
  e.panel.innerHTML='<header><a href="#notices">通知</a><a href="#news">お知らせ</a></header>'+Array.from({length:count},(_,i)=>notice(i,i===0?'「書きたい」気持ちをそ...':'【参加者募集中】NOT...')).join('');
  const rows=()=>[...e.panel.querySelectorAll('[id^="single-"]')];
  await until(()=>rows().every(hidden),'1人・1件でも、複数マガジンでも全対象を非表示');
- for(const el of rows())assert.equal(e.w.getComputedStyle(el).display,'none');
+ for(const el of rows()){if(el.hasAttribute('data-mumei-filter-page-edge')){assert.equal(e.w.getComputedStyle(el).opacity,'0');assert.equal(el.getAttribute('aria-hidden'),'true')}else assert.equal(e.w.getComputedStyle(el).display,'none')}
  e.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await until(()=>rows().every(el=>!hidden(el)),'OFFで全行を戻す');
  e.set('mumei_insight_magazine_filter_enabled_v3:tester',true);await until(()=>rows().every(hidden),'ONで全行に再適用');
  e.panel.hidden=true;await wait(120);e.panel.hidden=false;await until(()=>rows().every(hidden),'🔔再表示でも単独通知を隠す');
@@ -203,7 +203,7 @@ for(const mode of ['modern','legacy'])test(`先頭12件が対象でもネイテ�
  const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});bridge.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false,'ページ本体のスクロールを妨げない');
  for(const [type,y] of [['touchstart',400],['touchmove',100]]){const ev=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(ev,'touches',{value:[{clientY:y}]});bridge.dispatchEvent(ev);assert.equal(ev.defaultPrevented,false,'スマホのスワイプを妨げない')}
  e.panel.querySelector('#native-loader').insertAdjacentHTML('beforebegin',row('next-visible','別の人物さんがあなたの記事にスキしました 2分前'));
- await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4')?.textContent==='下へスクロールして続きを表示','対象外が届いても短い一覧の続きを読める');
+ await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4 span')?.textContent==='下へスクロールして続きを表示','対象外が届いても短い一覧の続きを読める');
  assert.equal(hidden(e.panel.querySelector('#next-visible')),false);
  assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#next-visible')).display,'none');
  assert.equal(e.panel.querySelectorAll('.mumei-muted-v2939').length,12,'先頭の対象通知は復活させない');

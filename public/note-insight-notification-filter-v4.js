@@ -2,11 +2,12 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.2';
+const VERSION='4.2.3';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
 const OWN='mumei-muted-v2939';
+const EDGE='data-mumei-filter-page-edge',edgeState=new WeakMap();
 const FORCE='data-mumei-v2939-force-visible';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
 const GRP='mumei_insight_notification_groups_v1:';
@@ -42,7 +43,7 @@ const listened=new Set();
 function invalidate(){cache=null;cacheAt=0;revision++}
 function listenAccount(id){if(listened.has(id))return;const listen=modern()&&GM.addValueChangeListener||typeof GM_addValueChangeListener==='function'&&GM_addValueChangeListener;if(!listen)return;listened.add(id);for(const prefix of [FIL,GRP,MUT,PROFILE])try{listen(key(prefix,id),()=>{if(accountId!==id)return;invalidate();schedule(0,true)})}catch{}}
 async function account(){if(accountId)return{id:accountId};if(accountJob)return accountJob;const activeRoot=root;const job=(async()=>{try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id)||root!==activeRoot||accountJob!==job)return null;accountId=id;listenAccount(id);return{id}}catch{return null}})();accountJob=job;try{return await job}finally{if(accountJob===job)accountJob=null}}
-function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${FORCE}="1"]{display:var(--mumei-v2939-display,block)!important}.${OWN}{display:none!important}`;document.documentElement.append(s)}
+function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${FORCE}="1"]{display:var(--mumei-v2939-display,block)!important}.${OWN}{display:none!important}.${OWN}[${EDGE}="1"]{display:block!important;box-sizing:border-box!important;height:1px!important;min-height:1px!important;max-height:1px!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important}`;document.documentElement.append(s)}
 function shown(el){if(!el?.isConnected||!el.getBoundingClientRect)return false;for(let p=el;p;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden')return false}const r=el.getBoundingClientRect();return r.width>0&&r.height>0}
 function exact(v){return[...document.querySelectorAll('button,a,[role="tab"],[role="button"],div,span')].find(el=>shown(el)&&clean(el.textContent)===v)||null}
 function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)&&shown(p)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>0&&rows(p).length)return p}}return null}
@@ -66,13 +67,14 @@ function magazineNoise(t){const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\
 async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;if(enabled)hydrateProfiles(a.id,ids,profiles);cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE)}
-function setHidden(el,want){if(!el)return;forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
-function clearHides(){clearContinuation();for(const el of document.querySelectorAll(`.${OWN},.${LEGACY}`))setHidden(el,false)}
+function pageEdge(el,on){if(!el)return;if(on){if(!edgeState.has(el))edgeState.set(el,{aria:el.getAttribute('aria-hidden'),inert:el.hasAttribute('inert')});if(el.getAttribute(EDGE)!=='1')el.setAttribute(EDGE,'1');if(el.getAttribute('aria-hidden')!=='true')el.setAttribute('aria-hidden','true');if(!el.hasAttribute('inert'))el.setAttribute('inert','')}else{const old=edgeState.get(el);if(el.hasAttribute(EDGE))el.removeAttribute(EDGE);if(old){old.aria===null?el.removeAttribute('aria-hidden'):el.setAttribute('aria-hidden',old.aria);if(!old.inert)el.removeAttribute('inert');edgeState.delete(el)}}}
+function setHidden(el,want){if(!el)return;if(!want)pageEdge(el,false);forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
+function clearHides(){clearContinuation();for(const el of document.querySelectorAll(`.${OWN},.${LEGACY},[${EDGE}]`))setHidden(el,false)}
 // Collapsing the entire loaded page must not collapse note's pagination surface.
 // Leave a scroll runway before its native loader, without exposing a muted row
 // or moving the viewport. The next page is still loaded by note itself.
 let continuation=null,scrollFallback=null;
-function clearContinuation(){continuation?.remove();continuation=null;if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
+function clearContinuation(){continuation?.remove();continuation=null;for(const el of document.querySelectorAll(`[${EDGE}]`))pageEdge(el,false);if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
 function provideScroll(parent,surface){
  if(surface)return surface;
  if(parent===document.body||parent===document.documentElement)return null;
@@ -80,18 +82,23 @@ function provideScroll(parent,surface){
  const top=Math.max(0,parent.getBoundingClientRect().top||0),height=Math.max(160,innerHeight-top-90);
  for(const [name,value,priority]of [['overflow-y','auto','important'],['max-height',height+'px','important'],['touch-action','pan-y','important'],['overscroll-behavior-y','contain','']])if(parent.style.getPropertyValue(name)!==value||parent.style.getPropertyPriority(name)!==priority)parent.style.setProperty(name,value,priority);return parent;
 }
-function scrollSurface(r){for(let el=r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement)if(/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))return el;return null}
+function scrollSurface(r,list=rows(r)){let fallback=null;for(let el=list.at(-1)?.parentElement||r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement){if(!/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))continue;if(el.clientHeight>0&&el.scrollHeight>el.clientHeight+1)return el;fallback=el}const doc=document.scrollingElement;if(doc&&doc.scrollHeight>innerHeight+1&&!/hidden|clip/.test(getComputedStyle(document.body).overflowY)&&!/hidden|clip/.test(getComputedStyle(document.documentElement).overflowY))return doc;return fallback}
+function advanceContinuation(){if(!featureOn()||!root||!shown(root)||!continuation?.isConnected)return;const list=rows(root),surface=scrollSurface(root,list)||scrollFallback?.el;if(!surface)return;surface.scrollTop=Math.max(0,surface.scrollHeight-surface.clientHeight);surface.dispatchEvent(new Event('scroll',{bubbles:false}));if(surface===document.scrollingElement)window.dispatchEvent(new Event('scroll'))}
 function continueFilteredPage(st,list,surface){
  const muted=list.filter(el=>el.classList.contains(OWN)),allHidden=muted.length===list.length;
  if(!st.enabled||!muted.length){clearContinuation();return}
  const last=list.at(-1),parent=last?.parentElement;if(!parent)return;
- if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.setAttribute('role','status');continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';parent.insertBefore(continuation,last.nextSibling)}
- surface=provideScroll(parent,surface);
+ if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';continuation.innerHTML='<span role="status"></span><button type="button" style="display:block;margin-top:12px;min-height:36px;padding:4px 16px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:700 12px system-ui">続きへ</button>';continuation.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();advanceContinuation()};parent.insertBefore(continuation,last.nextSibling)}
  if(continuation.previousElementSibling!==last)parent.insertBefore(continuation,last.nextSibling);
  const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+96-visibleHeight)+'px';
  if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
+ surface=provideScroll(parent,scrollSurface(root,list));
+ // note may observe the final notification itself, rather than a separate loader.
+ // Keep that exact node measurable while masking its content and interactions.
+ for(const el of document.querySelectorAll(`[${EDGE}]`))if(el!==last)pageEdge(el,false);
+ pageEdge(last,last.classList.contains(OWN));
  const message=allHidden?`${muted.length}件をフィルターで非表示にしています。下へスクロールして続きを表示できます。`:'下へスクロールして続きを表示';
- if(continuation.textContent!==message)continuation.textContent=message;
+ const label=continuation.querySelector('span');if(label.textContent!==message)label.textContent=message;
 }
 let lastResult=null;
 function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}

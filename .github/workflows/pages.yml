@@ -59,7 +59,7 @@ jobs:
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
       - name: Check entry motion and retained notification behavior
-        run: node --test tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs
+        run: node --test tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs tests/notification-filter-pagination-v423.test.mjs
       - name: Check applicant approval and owner notification scope
         run: node --test tests/application-approval.test.mjs
       - name: Check stable DM status and row-scoped filters
