@@ -17,6 +17,8 @@ import {
   restoreStoredMemberSession,
 } from "./insight-account-store";
 import "./insight-polish-v1.css";
+import { useInsightDisplayMode } from "./insight-display-mode";
+import "./insight-pc-layout.css";
 
 // Maintenance is reserved for login/main-wide participant outages only.
 const PARTICIPANT_MAINTENANCE = false;
@@ -224,6 +226,7 @@ function MaintenanceScreen() {
 }
 
 export function App() {
+  useInsightDisplayMode();
   const [route, setRoute] = useState(currentRoute);
   const [memberToken, setMemberToken] = useState(initialMemberToken);
   const [validatedMemberToken, setValidatedMemberToken] = useState("");

@@ -17,6 +17,7 @@ import {
 import type { StoredInsightAccount } from "./insight-account-store";
 import "./hub-home.css";
 import "./hub-home-v2.css";
+import { DisplayModeSwitch } from "./insight-display-mode";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const SELF = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
@@ -139,6 +140,7 @@ export function HubHome() {
   const primaryLabel = memberReady ? "自分のINSIGHTを開く →" : "ログインしてINSIGHTを開く →";
 
   return <div className="hub-page"><main>
+    <div className="hub-wrap hub-display-bar"><DisplayModeSwitch /></div>
     <section className="hub-accountbar hub-wrap"><AccountBadge account={memberReady ? activeAccount : null} count={accounts.length} /><div className="hub-account-actions"><button className="login" onClick={() => openAccess(accounts.length ? "switch" : "login")}>ログイン</button><button className="join" onClick={() => openAccess("apply")}>参加</button><button className="minor" disabled={!memberReady} onClick={() => setConfirm("logout")}>ログアウト</button><button className="minor danger" disabled={!memberReady} onClick={() => setConfirm("leave")}>退会</button></div></section>
     {accountMessage ? <div className="hub-account-message hub-wrap">{accountMessage}</div> : null}
 
