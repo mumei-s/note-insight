@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.6.0
-// @description  常用版。初投稿特別案件に加えて#ワーママ案件を独立追加。#ワーママは新着からタグ実在＋本文文脈を確認し、疑わしい記事とNG記事を除外。投稿記事数は制限しない。
+// @version      1.7.0
+// @description  ランダム極薄8デザイン＋#育児日記案件。既存全案件の貼り付け間隔を約1.35倍速化。NG検閲は維持し、健全な副業記事は除外しない。小型パネル版。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.6.0';
+const VERSION='1.7.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -30,10 +30,15 @@ const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
 const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
 const FIRST_TAGS=['はじめてのnote','初めてのnote'];
 const WORKMOM_TAG='ワーママ';
+const PARENTING_TAG='育児日記';
 const WORKMOM_CONTEXT={
  explicit:/(?:ワーママ|働くママ|働くお母さん|働く母|仕事と育児|育児と仕事|仕事と子育て|子育てと仕事)/i,
  parent:/(?:ママ|お母さん|母親|母として|育児|子育て|子ども|子供|保育園|保育所|学童|育休|産休|授乳|出産|妊娠)/i,
- work:/(?:仕事|働|勤務|職場|会社|復職|時短|フルタイム|パート|正社員|キャリア|在宅ワーク|テレワーク|共働き|残業|転職)/i
+ work:/(?:仕事|働|勤務|職場|会社|復職|時短|フルタイム|パート|正社員|キャリア|在宅ワーク|テレワーク|共働き|残業|転職|副業|フリーランス)/i
+};
+const PARENTING_CONTEXT={
+ explicit:/(?:育児日記|育児記録|子育て日記|子育て記録|育児|子育て)/i,
+ family:/(?:子ども|子供|赤ちゃん|乳児|幼児|園児|息子|娘|きょうだい|兄弟|姉妹|保育園|幼稚園|学童|小学生|離乳食|夜泣き|おむつ|寝かしつけ|育休|産休|出産)/i
 };
 const SPECIAL_NG=[
   {label:'ポルノ',re:/(?:ポルノ|アダルト|18禁|R-?18|エロ|性的|セックス|風俗|AV女優|ヌード|自慰|性行為|援助交際)/i},
@@ -45,7 +50,11 @@ const SPECIAL_NG=[
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-const CARD_GAP_FAST=5000,CARD_GAP_SLOW=10000;
+const SPEED_FACTOR=1.35;
+const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
+const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
+const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
+const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -474,6 +483,63 @@ async function collectWorkmom(mode,count){
  return out
 }
 
+function exactParentingTag(value){
+ return /(?:^|[^一-龯ぁ-んァ-ヶ々ーA-Za-z0-9_])#?育児日記(?:$|[^一-龯ぁ-んァ-ヶ々ーA-Za-z0-9_])/i.test(String(value||''))
+}
+async function parentingArticleAudit(row){
+ let note={},doc=null;
+ try{const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));note=p?.data||p||{}}catch{}
+ try{
+  const html=String(await xhr(row.url,'text',45000)||'');
+  doc=new DOMParser().parseFromString(html,'text/html')
+ }catch{}
+ const tagDump=JSON.stringify(note.hashtags||note.tags||note.hashtag_names||note.tag_names||note.note_hashtags||[]);
+ let exactTag=exactParentingTag(tagDump);
+ if(!exactTag&&doc){
+  exactTag=[...doc.querySelectorAll('a')].some(a=>{
+   const label=String(a.textContent||'').trim().replace(/^#/,'');
+   let href=String(a.getAttribute('href')||'');try{href=decodeURIComponent(href)}catch{}
+   return label===PARENTING_TAG||href.includes('/hashtag/'+PARENTING_TAG)
+  })
+ }
+ if(!exactTag)return{ok:false,reason:'#育児日記タグ確認不可'};
+ const parts=[
+  row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,
+  doc?.querySelector('article')?.textContent||doc?.querySelector('main')?.textContent||''
+ ];
+ const text=parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim();
+ // 検閲は既存共通ルールを必ず通す。副業という語そのものはNG条件に含めない。
+ const blocked=specialBlockedReason(text);if(blocked)return{ok:false,reason:blocked};
+ const relevant=PARENTING_CONTEXT.explicit.test(text)||PARENTING_CONTEXT.family.test(text);
+ if(!relevant)return{ok:false,reason:'育児文脈不足'};
+ return{ok:true,reason:''}
+}
+async function collectParenting(mode,count){
+ const limit=targetLimit(mode,count);if(limit===0)return[];
+ let cursor='0',pageNo=0,scanned=0;const tested=new Set(),out=[];
+ while(out.length<limit&&pageNo<250){
+  if(stopRequested)throw new Error('停止しました');
+  pageNo++;
+  setStatus('#育児日記案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+  const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(PARENTING_TAG)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
+  const q=normalizeSearch(p);if(!q.arr.length)break;
+  for(const raw of q.arr){
+   if(out.length>=limit)break;
+   const row=articleFromRaw(raw,{}),u=norm(row?.url);
+   if(!row||!u||u===norm(FINAL_URL)||tested.has(u))continue;
+   tested.add(u);scanned++;
+   setStatus('#育児日記案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit)+'｜'+row.creator);
+   const audit=await parentingArticleAudit({...row,url:u});
+   if(!audit.ok)continue;
+   out.push({...row,url:u,parenting:true});
+   await sleep(80)
+  }
+  if(q.last||q.cursor==null||String(q.cursor)===String(cursor))break;
+  cursor=String(q.cursor);await sleep(60)
+ }
+ return out
+}
+
 async function collectFirstNoteSpecial(mode,count,selectedTags){
  const limit=targetLimit(mode,count);
  if(limit===0)return[];
@@ -592,8 +658,8 @@ async function enrich(row){
   title:String(note.name||note.title||row.title||'無題の記事').trim()
  }
 }
-async function buildRows(input,special=false,workmom=false){
- const raw=workmom?await collectWorkmom(input.mode,input.count):special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice);
+async function buildRows(input,special=false,workmom=false,parenting=false){
+ const raw=parenting?await collectParenting(input.mode,input.count):workmom?await collectWorkmom(input.mode,input.count):special?await collectFirstNoteSpecial(input.mode,input.count,input.specialTags):await collectUnified(input.sources,input.mode,input.count,input.choice);
  const seen=new Set(),rows=[];
  for(const row of raw){
   const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
@@ -621,23 +687,72 @@ function rounded(ctx,x,y,w,h,r){const rr=Math.min(r,w/2,h/2);ctx.beginPath();ctx
 function circle(ctx,x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.closePath()}
 function fit(ctx,text,max){let s=String(text||'');if(ctx.measureText(s).width<=max)return s;while(s&&ctx.measureText(s+'…').width>max)s=[...s].slice(0,-1).join('');return s+'…'}
 function lines(ctx,text,maxWidth,maxLines){const chars=[...String(text||'')],out=[];let line='';for(let i=0;i<chars.length;i++){const test=line+chars[i];if(line&&ctx.measureText(test).width>maxWidth){out.push(line);line=chars[i];if(out.length===maxLines-1){line=chars.slice(i).join('');break}}else line=test}if(line&&out.length<maxLines){while(line&&ctx.measureText(line+(line.length<String(text||'').length?'…':'')).width>maxWidth)line=[...line].slice(0,-1).join('');out.push(line+(out.length===maxLines-1&&line.length<String(text||'').length?'…':''))}return out.slice(0,maxLines)}
+function designHash(value){
+ let h=2166136261;
+ for(const ch of String(value||'')){h^=ch.codePointAt(0)||0;h=Math.imul(h,16777619)}
+ return h>>>0
+}
+function randomThinTheme(row){
+ const themes=[
+  {bg:'#ffffff',panel:'#ffffff',ink:'#101827',muted:'#64748b',line:'#d8e1ea',accent:'#22c3ee',soft:'#edfaff',dark:false,kind:'minimal'},
+  {bg:'#eef8ff',panel:'#ffffff',ink:'#10243a',muted:'#557086',line:'#b9d9ec',accent:'#5faee3',soft:'#dff3ff',dark:false,kind:'wave'},
+  {bg:'#fff8ed',panel:'#fffdf8',ink:'#33271e',muted:'#806b58',line:'#ead6ba',accent:'#e4a24d',soft:'#fff0d7',dark:false,kind:'paper'},
+  {bg:'#0b1622',panel:'#101f2e',ink:'#f5fbff',muted:'#9cc6da',line:'#294b60',accent:'#4ee6d6',soft:'#153544',dark:true,kind:'cyber'},
+  {bg:'#f7f7f7',panel:'#ffffff',ink:'#151515',muted:'#666666',line:'#cdcdcd',accent:'#111111',soft:'#eeeeee',dark:false,kind:'mono'},
+  {bg:'#effcf6',panel:'#fbfffd',ink:'#17352b',muted:'#58776b',line:'#bfe3d4',accent:'#37b98a',soft:'#dff7ed',dark:false,kind:'ticket'},
+  {bg:'#f7f1ff',panel:'#ffffff',ink:'#24143a',muted:'#745b8d',line:'#d9c5ee',accent:'#9c6ade',soft:'#eee2ff',dark:false,kind:'orbit'},
+  {bg:'#fff0f2',panel:'#fffafb',ink:'#3a1d27',muted:'#8a6170',line:'#efc5cf',accent:'#e76f91',soft:'#ffe1e8',dark:false,kind:'stripe'}
+ ];
+ return themes[designHash(row?.key||row?.url||row?.creator)%themes.length]
+}
+function drawThinDecor(ctx,t){
+ ctx.fillStyle=t.bg;ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle=t.line;ctx.lineWidth=1.5;rounded(ctx,1,1,W-2,H-2,12);ctx.stroke();
+ if(t.kind==='minimal'){
+  ctx.fillStyle=t.accent;ctx.fillRect(0,0,6,H);
+  ctx.fillStyle=t.soft;ctx.beginPath();ctx.arc(545,22,46,0,Math.PI*2);ctx.fill()
+ }else if(t.kind==='wave'){
+  const g=ctx.createLinearGradient(0,0,W,0);g.addColorStop(0,t.bg);g.addColorStop(1,t.soft);ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.35;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,118);ctx.bezierCurveTo(180,70,340,150,560,92);ctx.stroke();ctx.globalAlpha=1
+ }else if(t.kind==='paper'){
+  ctx.fillStyle=t.soft;ctx.fillRect(0,0,74,H);
+  ctx.strokeStyle=t.line;ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(566,12);ctx.lineTo(566,H-12);ctx.stroke();ctx.setLineDash([])
+ }else if(t.kind==='cyber'){
+  ctx.fillStyle=t.panel;rounded(ctx,8,8,560,H-16,10);ctx.fill();
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.32;for(let x=18;x<560;x+=38){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+46,H);ctx.stroke()}ctx.globalAlpha=1
+ }else if(t.kind==='mono'){
+  ctx.fillStyle=t.accent;ctx.fillRect(0,0,12,H);
+  ctx.strokeStyle='#d7d7d7';for(let y=18;y<H;y+=18){ctx.beginPath();ctx.moveTo(18,y);ctx.lineTo(565,y);ctx.stroke()}
+ }else if(t.kind==='ticket'){
+  ctx.fillStyle=t.soft;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=t.panel;rounded(ctx,10,9,W-20,H-18,12);ctx.fill();
+  ctx.strokeStyle=t.accent;ctx.setLineDash([6,5]);ctx.strokeRect(572,9,1,H-18);ctx.setLineDash([])
+ }else if(t.kind==='orbit'){
+  ctx.fillStyle=t.soft;ctx.beginPath();ctx.arc(526,72,74,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.45;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(520,70,100,38,-.25,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1
+ }else if(t.kind==='stripe'){
+  ctx.fillStyle=t.soft;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=t.line;ctx.globalAlpha=.6;for(let x=-100;x<W;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+80,H);ctx.stroke()}ctx.globalAlpha=1
+ }
+}
 async function makeFile(row){
  const [avatar,thumb]=await Promise.all([bitmapFromUrl(row.actorImageUrl),bitmapFromUrl(row.thumbUrl)]);
- const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d');
- ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#d9dde3';ctx.lineWidth=1.5;rounded(ctx,1,1,W-2,H-2,12);ctx.stroke();
+ const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d'),theme=randomThinTheme(row);
+ drawThinDecor(ctx,theme);
  const ax=50,ay=70,ar=34;
- ctx.fillStyle='#eef2f6';circle(ctx,ax,ay,ar);ctx.fill();
+ ctx.fillStyle=theme.soft;circle(ctx,ax,ay,ar+2);ctx.fill();
+ ctx.strokeStyle=theme.accent;ctx.lineWidth=2;circle(ctx,ax,ay,ar+2);ctx.stroke();
  if(avatar){const iw=avatar.width||avatar.naturalWidth||1,ih=avatar.height||avatar.naturalHeight||1,scale=Math.max((ar*2)/iw,(ar*2)/ih),dw=iw*scale,dh=ih*scale;ctx.save();circle(ctx,ax,ay,ar);ctx.clip();ctx.drawImage(avatar,ax-dw/2,ay-dh/2,dw,dh);ctx.restore()}
- else{ctx.fillStyle='#64748b';ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('n',ax,57);ctx.textAlign='start'}
- const tx=100,tw=455;ctx.textBaseline='top';ctx.fillStyle='#111827';ctx.font='700 18px system-ui,-apple-system,sans-serif';lines(ctx,row.title,tw,2).forEach((s,i)=>ctx.fillText(s,tx,18+i*25));
- ctx.fillStyle='#475569';ctx.font='700 14px system-ui,-apple-system,sans-serif';ctx.fillText(fit(ctx,row.creator+'さん',tw),tx,86);
- ctx.fillStyle='#94a3b8';ctx.font='12px system-ui,-apple-system,sans-serif';ctx.fillText('note',tx,110);
- const ix=590,iy=8,iw=262,ih=124;ctx.fillStyle='#f1f5f9';rounded(ctx,ix,iy,iw,ih,8);ctx.fill();
+ else{ctx.fillStyle=theme.muted;ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('n',ax,57);ctx.textAlign='start'}
+ const tx=100,tw=455;ctx.textBaseline='top';ctx.fillStyle=theme.ink;ctx.font='700 18px system-ui,-apple-system,sans-serif';lines(ctx,row.title,tw,2).forEach((v,i)=>ctx.fillText(v,tx,18+i*25));
+ ctx.fillStyle=theme.muted;ctx.font='700 14px system-ui,-apple-system,sans-serif';ctx.fillText(fit(ctx,row.creator+'さん',tw),tx,86);
+ ctx.fillStyle=theme.accent;ctx.font='700 12px system-ui,-apple-system,sans-serif';ctx.fillText('note',tx,110);
+ const ix=590,iy=8,iw=262,ih=124;ctx.fillStyle=theme.panel;rounded(ctx,ix,iy,iw,ih,8);ctx.fill();ctx.strokeStyle=theme.line;ctx.lineWidth=1;rounded(ctx,ix,iy,iw,ih,8);ctx.stroke();
  if(thumb){const sw=thumb.width||thumb.naturalWidth||1,sh=thumb.height||thumb.naturalHeight||1,scale=Math.max(iw/sw,ih/sh),dw=sw*scale,dh=sh*scale;ctx.save();rounded(ctx,ix,iy,iw,ih,8);ctx.clip();ctx.drawImage(thumb,ix+(iw-dw)/2,iy+(ih-dh)/2,dw,dh);ctx.restore()}
- else{ctx.fillStyle='#64748b';ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('note',ix+iw/2,55);ctx.textAlign='start'}
+ else{ctx.fillStyle=theme.muted;ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.fillText('note',ix+iw/2,55);ctx.textAlign='start'}
  try{avatar?.close?.()}catch{}try{thumb?.close?.()}catch{}
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));
- return new page.File([blob],'mumei_profile_note_v13_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
+ return new page.File([blob],'mumei_profile_note_v17_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
 }
 function setSelectionForInsert(view,pos){
  const max=view.state.doc.content.size;
@@ -746,16 +861,18 @@ function inputValues(save=true){
  const specialTags=[...p.querySelectorAll('button[data-special-tag].on')].map(x=>String(x.dataset.specialTag||'')).filter(Boolean);
  const workmomMode=p.querySelector('[data-workmom-mode]')?.value==='all'?'all':'number';
  const workmomCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-workmom-count]')?.value||g.workmomCount||100)));
- const v={sources,mode,count,choice,specialMode,specialCount,specialTags,workmomMode,workmomCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ const parentingMode=p.querySelector('[data-parenting-mode]')?.value==='all'?'all':'number';
+ const parentingCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-parenting-count]')?.value||g.parentingCount||100)));
+ const v={sources,mode,count,choice,specialMode,specialCount,specialTags,workmomMode,workmomCount,parentingMode,parentingCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
 function amountLabel(mode,count){return mode==='all'?'全数':String(count)+'件'}
-async function createImageList({special=false,workmom=false}={}){
+async function createImageList({special=false,workmom=false,parenting=false}={}){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
   const input=inputValues();
-  if(!special&&!workmom){
+  if(!special&&!workmom&&!parenting){
    const sources=parseUnifiedSources(input.sources);
    if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
    if(input.mode==='number'&&input.count<=0)throw new Error('件数を1以上にするか「全数」を選んでください');
@@ -773,27 +890,29 @@ async function createImageList({special=false,workmom=false}={}){
   }
 
   if(special&&(!Array.isArray(input.specialTags)||!input.specialTags.length))throw new Error('初投稿タグを1つ以上選んでください');
-  const effective=workmom
-   ?{...input,mode:input.workmomMode,count:input.workmomCount}
-   :special
-    ?{...input,mode:input.specialMode,count:input.specialCount,specialTags:input.specialTags}
-    :input;
+  const effective=parenting
+   ?{...input,mode:input.parentingMode,count:input.parentingCount}
+   :workmom
+    ?{...input,mode:input.workmomMode,count:input.workmomCount}
+    :special
+     ?{...input,mode:input.specialMode,count:input.specialCount,specialTags:input.specialTags}
+     :input;
 
-  const rows=await buildRows(effective,special,workmom);
+  const rows=await buildRows(effective,special,workmom,parenting);
   if(!rows.length)throw new Error('貼り付け対象が0件です');
 
   // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
-  const requestedCount=workmom?(input.workmomMode==='all'?null:input.workmomCount):special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
+  const requestedCount=parenting?(input.parentingMode==='all'?null:input.parentingCount):workmom?(input.workmomMode==='all'?null:input.workmomCount):special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
   writeRun({
    version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],rows,
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
-   createdAt:Date.now(),stage:'images_building',special:Boolean(special),workmom:Boolean(workmom),
+   createdAt:Date.now(),stage:'images_building',special:Boolean(special),workmom:Boolean(workmom),parenting:Boolean(parenting),
    imageAnchorPos:imageInsertPos,
-   sources:workmom?'#'+WORKMOM_TAG:special?input.specialTags.map(x=>'#'+x).join(' '):input.sources,
+   sources:parenting?'#'+PARENTING_TAG:workmom?'#'+WORKMOM_TAG:special?input.specialTags.map(x=>'#'+x).join(' '):input.sources,
    mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
-  setStatus((workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
+  setStatus((parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄8種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
@@ -802,7 +921,7 @@ async function createImageList({special=false,workmom=false}={}){
    const made=await uploadOne(view,row,file,imageInsertPos);
    imageInsertPos=made.nextPos;
    recordImage(made.hit,row);
-   await sleep(1200)
+   await sleep(IMAGE_PASTE_GAP)
   }
 
   const runNow=readRun()||{};
@@ -828,7 +947,7 @@ async function createCardsAtTap(){
   let insertPos=cardAnchorFromSelection(view);
   let cardGapMs=CARD_GAP_FAST;
   writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:[],updatedAt:Date.now()});
-  setStatus('② 正規通知カード開始｜5秒待機から開始｜'+rows.length+'件');
+  setStatus('② 正規通知カード開始｜約1.35倍速・通常間隔 '+(CARD_GAP_FAST/1000).toFixed(1)+'秒｜'+rows.length+'件');
 
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
@@ -838,10 +957,9 @@ async function createCardsAtTap(){
    try{
     made=await createNativeCard(view,row,insertPos)
    }catch(firstError){
-    // まず5秒運用。1件でも生成エラーが出たら、その1件だけ10秒待って1回再試行し、
-    // 以降の間隔も10秒へ昇格する。成功中は5秒のまま。
+    // 通常5秒/再試行10秒相当の安全設計を約1.35倍速化。エラー時だけ低速側へ昇格する。
     cardGapMs=CARD_GAP_SLOW;
-    setStatus('② '+row.creator+'｜一時エラー → 10秒待って1回再試行',true);
+    setStatus('② '+row.creator+'｜一時エラー → '+(CARD_GAP_SLOW/1000).toFixed(1)+'秒待って1回再試行',true);
     await sleep(CARD_GAP_SLOW);
     if(stopRequested)throw new Error('手動停止');
     try{
@@ -857,8 +975,8 @@ async function createCardsAtTap(){
    await sleep(cardGapMs);
 
    if((i+1)%10===0&&i+1<rows.length){
-    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜403回避 30秒休止');
-    await sleep(30000)
+    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜403回避 '+(CARD_BLOCK_PAUSE/1000).toFixed(1)+'秒休止');
+    await sleep(CARD_BLOCK_PAUSE)
    }
   }
 
@@ -867,7 +985,7 @@ async function createCardsAtTap(){
   if(finalRow){
    let finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
    if(!finalHit){
-    setStatus('② 実績の算数｜カード未確認 → 5秒待って再生成');
+    setStatus('② 実績の算数｜カード未確認 → '+(CARD_GAP_FAST/1000).toFixed(1)+'秒待って再生成');
     await sleep(CARD_GAP_FAST);
     const tracked=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
     const retryPos=tracked.length?tracked[tracked.length-1].pos+tracked[tracked.length-1].node.nodeSize:Math.min(insertPos,view.state.doc.content.size);
@@ -906,9 +1024,11 @@ function resetFields(){
  if(sm)sm.value='number';if(sc)sc.value='100';
  const wm=p.querySelector('[data-workmom-mode]'),wc=p.querySelector('[data-workmom-count]');
  if(wm)wm.value='number';if(wc)wc.value='100';
+ const pm=p.querySelector('[data-parenting-mode]'),pc=p.querySelector('[data-parenting-count]');
+ if(pm)pm.value='number';if(pc)pc.value='100';
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.add('on'));
  p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
- applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode()
+ applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();applyParentingAmountMode()
 }
 async function resetAll(){
  if(busy)return;
@@ -941,6 +1061,10 @@ function applySpecialAmountMode(){
 }
 function applyWorkmomAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-workmom-mode]'),num=p?.querySelector('[data-workmom-count]');
+ if(num)num.style.display=sel?.value==='all'?'none':'block'
+}
+function applyParentingAmountMode(){
+ const p=document.getElementById(PANEL),sel=p?.querySelector('[data-parenting-mode]'),num=p?.querySelector('[data-parenting-count]');
  if(num)num.style.display=sel?.value==='all'?'none':'block'
 }
 function setCollapsed(on){
@@ -1016,27 +1140,27 @@ function mount(){
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
  p.innerHTML=`
  <style>
- #${PANEL}{position:fixed;right:5px;top:84px;z-index:2147483647;width:min(228px,calc(100vw - 10px));padding:5px;border:1px solid #365b70;border-radius:10px;background:#07131d;color:#edf8ff;box-shadow:0 7px 20px #0008;font:9px/1.25 system-ui;max-height:48vh}
- #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:154px;padding:4px}
- #${PANEL} .dragbar{position:absolute;left:0;right:0;top:-19px;height:19px;border:1px solid #365b70;border-bottom:0;border-radius:8px 8px 0 0;background:#0a2938;color:#c9f4ff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:8px;letter-spacing:.08em;touch-action:none;user-select:none;cursor:grab;z-index:2}\n #${PANEL} .head{display:grid;grid-template-columns:1fr 25px 25px;gap:2px;align-items:center;touch-action:none;user-select:none}
- #${PANEL} .title{font-weight:950;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
- #${PANEL} .body{max-height:calc(48vh - 30px);overflow:auto;padding-right:1px}
- #${PANEL} label{display:block;margin-top:4px;font-size:8px;color:#b9d8e8}
- #${PANEL} textarea{width:100%;height:48px;resize:vertical;margin-top:2px;padding:4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font:8.5px/1.25 system-ui}
- #${PANEL} input,#${PANEL} select{width:100%;height:26px;padding:2px 4px;border:1px solid #35576b;border-radius:6px;background:#0b1d28;color:#fff;font-size:9px}
- #${PANEL} .amount{display:grid;grid-template-columns:67px 1fr;gap:3px;margin-top:2px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:2px}#${PANEL} .special-tags{grid-template-columns:1fr 1fr}#${PANEL} .special-tags button{font-size:7.6px}
- #${PANEL} button{min-height:25px;border:1px solid #3b6378;border-radius:6px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:8.5px;touch-action:manipulation;pointer-events:auto;padding:2px 3px}
+ #${PANEL}{position:fixed;right:4px;top:76px;z-index:2147483647;width:min(132px,calc(100vw - 8px));padding:3px;border:1px solid #365b70;border-radius:8px;background:#07131d;color:#edf8ff;box-shadow:0 6px 16px #0008;font:7.2px/1.18 system-ui;max-height:34vh}
+ #${PANEL}.tiny{display:none}#${PANEL}.collapsed .body{display:none}#${PANEL}.collapsed{width:108px;padding:3px}
+ #${PANEL} .dragbar{position:absolute;left:0;right:0;top:-15px;height:15px;border:1px solid #365b70;border-bottom:0;border-radius:7px 7px 0 0;background:#0a2938;color:#c9f4ff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:6.4px;letter-spacing:.05em;touch-action:none;user-select:none;cursor:grab;z-index:2}\n #${PANEL} .head{display:grid;grid-template-columns:1fr 20px 20px;gap:1px;align-items:center;touch-action:none;user-select:none}
+ #${PANEL} .title{font-weight:950;font-size:7.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}
+ #${PANEL} .body{max-height:calc(34vh - 23px);overflow:auto;padding-right:1px}
+ #${PANEL} label{display:block;margin-top:2px;font-size:6.4px;color:#b9d8e8}
+ #${PANEL} textarea{width:100%;height:34px;resize:vertical;margin-top:1px;padding:2px;border:1px solid #35576b;border-radius:5px;background:#0b1d28;color:#fff;font:6.7px/1.15 system-ui}
+ #${PANEL} input,#${PANEL} select{width:100%;height:22px;padding:1px 2px;border:1px solid #35576b;border-radius:5px;background:#0b1d28;color:#fff;font-size:7px}
+ #${PANEL} .amount{display:grid;grid-template-columns:43px 1fr;gap:2px;margin-top:1px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:1px}#${PANEL} .special-tags{grid-template-columns:1fr 1fr}#${PANEL} .special-tags button{font-size:5.8px}
+ #${PANEL} button{min-height:22px;border:1px solid #3b6378;border-radius:5px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:6.8px;touch-action:manipulation;pointer-events:auto;padding:1px 2px}
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
- #${PANEL} .hint{margin-top:2px;font-size:7.5px;color:#91b5c8;line-height:1.25}
- #${PANEL} .phase{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
- #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"],#${PANEL} [data-a="workmom-images"]{background:#0b6176;border-color:#64d8ef}
+ #${PANEL} .hint{margin-top:2px;font-size:6.1px;color:#91b5c8;line-height:1.18}
+ #${PANEL} .phase{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:2px}
+ #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"],#${PANEL} [data-a="workmom-images"],#${PANEL} [data-a="parenting-images"]{background:#0b6176;border-color:#64d8ef}
  #${PANEL} [data-a="cards"]{background:#34518a;border-color:#7897df}
- #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
- #${PANEL} details{margin-top:4px;border:1px solid #29485b;border-radius:6px;background:#091923;padding:3px}
- #${PANEL} summary{cursor:pointer;font-weight:900;font-size:8.5px;color:#dff6ff;list-style:none}#${PANEL} summary::-webkit-details-marker{display:none}
- #${PANEL} .special-actions{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:3px}
- #${STATUS}{margin-top:4px;padding-top:4px;border-top:1px solid #284555;font-size:7.8px;color:#bfe8ff;word-break:break-word}#${STATUS}[data-bad="1"]{color:#ffb8b8}
- #${PANEL}-mini{position:fixed;right:7px;top:80px;z-index:2147483647;width:36px;height:36px;border:1px solid #5fd4ee;border-radius:50%;background:#082333;color:#fff;font:950 9px system-ui;display:none;align-items:center;justify-content:center;box-shadow:0 5px 16px #0008;touch-action:none;user-select:none}
+ #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:2px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
+ #${PANEL} details{margin-top:2px;border:1px solid #29485b;border-radius:5px;background:#091923;padding:2px}
+ #${PANEL} summary{cursor:pointer;font-weight:900;font-size:6.8px;color:#dff6ff;list-style:none}#${PANEL} summary::-webkit-details-marker{display:none}
+ #${PANEL} .special-actions{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:2px}
+ #${STATUS}{margin-top:2px;padding-top:2px;border-top:1px solid #284555;font-size:6.2px;color:#bfe8ff;word-break:break-word}#${STATUS}[data-bad="1"]{color:#ffb8b8}
+ #${PANEL}-mini{position:fixed;right:7px;top:80px;z-index:2147483647;width:30px;height:30px;border:1px solid #5fd4ee;border-radius:50%;background:#082333;color:#fff;font:950 7px system-ui;display:none;align-items:center;justify-content:center;box-shadow:0 5px 16px #0008;touch-action:none;user-select:none}
  </style>
  <div class="head"><div class="title">紹介貼付 v${VERSION}</div><button data-ui="collapse">－</button><button data-ui="tiny">×</button></div>
  <div class="body">
@@ -1059,9 +1183,16 @@ function mount(){
 
   <details data-workmom>
    <summary>＋ 案件：#ワーママ</summary>
-   <div class="hint">#ワーママ新着 → タグ実在＋本文文脈を確認。ワーママ記事と判断しにくいもの・NG記事は除外。投稿記事数の制限なし。</div>
+   <div class="hint">新着→タグ実在＋本文文脈確認。疑わしいもの・NG除外。投稿数制限なし。</div>
    <div class="amount"><select data-workmom-mode><option value="number">件数</option><option value="all">全数</option></select><input data-workmom-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.workmomCount??100)}"></div>
-   <button data-a="workmom-images" style="width:100%;margin-top:3px">① #ワーママ画像一覧</button>
+   <button data-a="workmom-images" style="width:100%;margin-top:2px">① #ワーママ</button>
+  </details>
+
+  <details data-parenting>
+   <summary>＋ 案件：#育児日記</summary>
+   <div class="hint">新着→#育児日記の実在＋育児文脈を確認。NG検閲あり。健全な副業は可。投稿数制限なし。</div>
+   <div class="amount"><select data-parenting-mode><option value="number">件数</option><option value="all">全数</option></select><input data-parenting-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.parentingCount??100)}"></div>
+   <button data-a="parenting-images" style="width:100%;margin-top:2px">① #育児日記</button>
   </details>
 
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
@@ -1076,9 +1207,10 @@ function mount(){
  p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';
  p.querySelector('[data-special-mode]').value=g.specialMode==='all'?'all':'number';
  p.querySelector('[data-workmom-mode]').value=g.workmomMode==='all'?'all':'number';
+ p.querySelector('[data-parenting-mode]').value=g.parentingMode==='all'?'all':'number';
  const savedSpecialTags=Array.isArray(g.specialTags)?g.specialTags:FIRST_TAGS;
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.toggle('on',savedSpecialTags.includes(x.dataset.specialTag)));
- applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();updateExcludedCount();
+ applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();applyParentingAmountMode();updateExcludedCount();
 
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
@@ -1087,6 +1219,7 @@ function mount(){
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
  p.querySelector('[data-special-mode]').addEventListener('change',()=>{applySpecialAmountMode();saveUiState()});
  p.querySelector('[data-workmom-mode]').addEventListener('change',()=>{applyWorkmomAmountMode();saveUiState()});
+ p.querySelector('[data-parenting-mode]').addEventListener('change',()=>{applyParentingAmountMode();saveUiState()});
  p.querySelectorAll('button[data-special-tag]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
   btn.classList.toggle('on');
@@ -1105,16 +1238,17 @@ function mount(){
   x.addEventListener('click',e=>e.stopPropagation());
   x.addEventListener('change',()=>saveUiState())
  });
- for(const sel of ['[data-count]','[data-special-count]','[data-workmom-count]']){
+ for(const sel of ['[data-count]','[data-special-count]','[data-workmom-count]','[data-parenting-count]']){
   const el=p.querySelector(sel);
   el?.addEventListener('input',()=>{const d=String(el.value||'').replace(/\D+/g,'').slice(0,4);if(el.value!==d)el.value=d})
  }
 
  p.querySelector('[data-ui="collapse"]').addEventListener('click',e=>{e.preventDefault();setCollapsed(!p.classList.contains('collapsed'))});
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
- p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false})});
- p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false})});
- p.querySelector('[data-a="workmom-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:true})});
+ p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:false})});
+ p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
+ p.querySelector('[data-a="workmom-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:true,parenting:false})});
+ p.querySelector('[data-a="parenting-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:true})});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="commit-excluded"]').addEventListener('click',e=>{e.preventDefault();commitSpecialLast()});
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
