@@ -73,3 +73,26 @@ test('複数フィルターIDを同時に全件判定し、ベル内スクロー
  assert.equal(w.document.getElementById('panel').getAttribute('data-mumei-filter-scroll-guard'),'1');
  assert.equal(w.document.getElementById('panel').style.getPropertyValue('overscroll-behavior-y'),'contain');
 });
+
+for(const mode of ['modern','legacy'])test(`自動が初期値で、一時停止はベルの再表示・focus・pageshowでも維持し、再開で自動に戻る (${mode})`,async t=>{
+ const dom=new JSDOM('<main id="native"><button>通知</button><button>お知らせ</button><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ const values=new Map([[KEY,true]]),get=(k,d)=>values.get(k)??d,set=(k,v)=>values.set(k,v);
+ if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,top:0,left:0,right:360,bottom:100});w.fetch=async()=>Response.json({data:{urlname:'tester'}});w.matchMedia=()=>({matches:true});
+ let starts=0,finish;w.__mumeiNotificationNetwork3300={syncCurrent:()=>{starts++;return new Promise(r=>finish=r)},stop:()=>{finish?.({saved:0});finish=null}};
+ for(const name of ['feature-bridge-v1.js','reader-v4.js','controls-v1.js'])w.eval(read(name));
+ const bar=()=>w.document.getElementById('mumei-inline-notification-controls-v1'),button=()=>bar()?.querySelector('[data-action=read]');await until(()=>starts===1&&button());assert.equal(button().textContent,'一時停止');button().click();await until(()=>button()?.textContent==='再開');assert.equal(button().dataset.paused,'1');const before=starts;
+ const native=w.document.getElementById('native');native.hidden=true;w.__mumeiNotificationControlsV1.mount();native.hidden=false;
+ for(const event of ['focus','pageshow','mumei-notification-feature-changed'])w.dispatchEvent(event==='mumei-notification-feature-changed'?new w.CustomEvent(event,{detail:{enabled:true}}):new w.Event(event));
+ w.document.dispatchEvent(new w.CustomEvent('mumei-notification-captured',{detail:{signature:'new'}}));w.__mumeiNotificationReaderV4.scheduleAuto(0);w.__mumeiNotificationControlsV1.mount();await pause(300);assert.equal(starts,before);assert.equal(button().textContent,'再開');
+ button().click();await until(()=>starts===before+1);assert.equal(w.__mumeiNotificationReaderV4.isPaused(),false);finish({saved:0});await pause(30);
+ bar().querySelector('[data-action=off]').click();await until(()=>!bar());assert.equal(values.get(KEY),false);assert.equal(w.document.getElementById('native'),native,'OFFはnote公式の機能を削除しない');
+ await w.__mumeiNotificationFeatureV1.setEnabled(true);await until(()=>bar());assert.equal(values.get('mumei_insight_notification_panel_enabled_v1'),true);assert.equal(w.__mumeiNotificationReaderV4.isPaused(),false);
+});
+
+for(const mode of ['modern','legacy'])test(`ON/OFFの保存失敗を成功扱いにせず、失敗後も再試行できる (${mode})`,async t=>{
+ const dom=new JSDOM('',{url:'https://mumei-s.github.io/note-insight/notification-connection.html',runScripts:'outside-only'}),w=dom.window;t.after(()=>w.close());const values=new Map([[KEY,true]]);let fail=true;
+ const get=(k,d)=>values.get(k)??d,set=(k,v)=>{if(fail)throw new Error('GM保存失敗');values.set(k,v)};
+ if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
+ w.eval(read('feature-bridge-v1.js'));const feature=w.__mumeiNotificationFeatureV1;await feature.ready;await assert.rejects(feature.setEnabled(false),/GM保存失敗/);assert.equal(feature.isEnabled(),true);fail=false;await feature.setEnabled(false);assert.equal(feature.isEnabled(),false);values.set('mumei_insight_notification_panel_enabled_v1',false);await feature.setEnabled(true);assert.equal(values.get('mumei_insight_notification_panel_enabled_v1'),true);assert.equal(feature.isEnabled(),true);
+});
