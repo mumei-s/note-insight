@@ -1159,7 +1159,19 @@ body:has(.miv5)::-webkit-scrollbar{width:0!important;height:0!important;backgrou
 .mis2[aria-busy="true"]::before,
 .minf[aria-busy="true"]::before,
 .micf[aria-busy="true"]::before{
-  content:"SYNC"!important;
+  content:"読込中"!important;
+  position:absolute!important;
+  left:auto!important;
+  bottom:auto!important;
+  width:max-content!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:24px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  border:0!important;
+  box-sizing:border-box!important;
+  transform:none!important;
   top:14px!important;
   right:9px!important;
   padding:4px 7px 4px 18px!important;
@@ -1172,7 +1184,20 @@ body:has(.miv5)::-webkit-scrollbar{width:0!important;height:0!important;backgrou
 .mis2[aria-busy="true"] .mis2-head::after,
 .minf[aria-busy="true"] .minf-head::after,
 .micf[aria-busy="true"] .micf-head::after{
-  content:"保存済み表示を維持しながら追加分を確認中"!important;
+  content:"保存分を表示 · 更新を確認中"!important;
+  position:static!important;
+  inset:auto!important;
+  width:auto!important;
+  height:auto!important;
+  display:block!important;
+  flex-basis:100%!important;
+  padding:2px 0!important;
+  margin:0!important;
+  border:0!important;
+  font:8px/1.5 system-ui!important;
+  white-space:normal!important;
+  transform:none!important;
+  pointer-events:none!important;
 }
 
 /* Participant loader also becomes a stream. */
