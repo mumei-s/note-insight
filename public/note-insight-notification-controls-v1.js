@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.1';
+const VERSION='1.5.2';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FIL='mumei_insight_magazine_filter_enabled_v3:',PANEL='mumei_insight_notification_panel_enabled_v1';
@@ -54,7 +54,7 @@ async function act(action,bar){
 }
 function makeBar(){
  const bar=document.createElement('div');bar.id=TOOLBAR;bar.setAttribute('data-mumei-notification-controls','1');
- bar.innerHTML='<button type="button" data-action="read">一時停止</button><button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT<small>【通知】</small></button><button type="button" data-action="off" aria-label="公式🔔パネルをOFFにする">OFF</button><a class="panel-settings" data-action="panel-settings" href="'+CONNECTION+'">ON/OFF設定はメイン🔔から</a><p class="read-status" role="status" aria-live="polite">新着を確認します</p>';
+ bar.innerHTML='<button type="button" data-action="read">一時停止</button><button type="button" data-action="filter">フィルター</button><button type="button" data-action="settings">設定</button><button type="button" data-action="insight">INSIGHT<small>【通知】</small></button><button type="button" data-action="off" aria-label="公式🔔パネルをOFFにする">OFF</button><a class="panel-settings" data-action="panel-settings" href="'+CONNECTION+'">ON/OFFはメイン🔔から</a><p class="read-status" role="status" aria-live="polite">新着を確認します</p>';
  return bar
 }
 function toolbarTarget(e){const t=e.target;return t instanceof Element?t.closest('#'+TOOLBAR+' [data-action]'):null}

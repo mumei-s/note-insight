@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.2
-// @description  小型の手動読み込みパネル。読み込み・一時停止・履歴・OFF対応。取得済みデータは画面を離れても保存します。ON/OFFは設定から変更できます。
+// @version      1.7.3
+// @description  小型の手動読み込みパネル。読み込み・一時停止・履歴・OFF対応。取得済みデータは画面を離れても保存します。ON/OFFはメイン🔔から変更できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -20,7 +20,7 @@
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-feature-bridge-v1.js?v=101
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-save-queue-v1.js?v=101
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=172
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=173
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // ==/UserScript==
@@ -28,7 +28,7 @@
 (function startDashboardWrapper() {
   'use strict';
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardWrapper()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.2';
+  const VERSION='1.7.3';
   let featureEpoch=0,resumeBoot=false;
   const featureOn=()=>window.__mumeiDashboardFeatureV1?.isEnabled?.()!==false;
   const autoOn=()=>window.__mumeiDashboardFeatureV1?.isAutomatic?.()??(localStorage.getItem('mumei_insight_dashboard_auto_enabled_v1')!=='false');

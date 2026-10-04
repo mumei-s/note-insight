@@ -87,7 +87,7 @@ for(const automatic of [true,false])test('以前の自動設定に関係なく�
  assert.equal(w.document.getElementById('mumei-dash-mode'),null);assert.equal(w.document.getElementById('mumei-dash-details'),null);
  assert.equal(w.document.getElementById('mumei-dash-run').textContent,'読み込み');
  assert.equal(h.calls.length,0);w.document.dispatchEvent(new w.Event('mumei-dashboard-read'));await pause(100);assert.equal(h.calls.length,0);
- assert.equal(w.document.getElementById('mumei-dash-settings').textContent,'ON/OFFは設定から');
+ assert.equal(w.document.getElementById('mumei-dash-settings').textContent,'ON/OFFはメイン🔔から');assert.equal(new URL(w.document.getElementById('mumei-dash-settings').href).pathname,'/note-insight/notification-connection.html');
  w.document.getElementById('mumei-dash-run').click();await until(()=>h.calls.some(x=>x.action==='ingest'));
  const count=h.calls.length,next=h.note();await pause(150);assert.equal(h.calls.length,count,'再訪で読み取りを始めない');
  assert.ok(next.document.getElementById('mumei-dash-history'));assert.equal(next.document.querySelectorAll('button').length,4,'読み込み・INSIGHT・OFF・履歴コピーだけ');
