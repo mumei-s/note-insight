@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.1';
+const VERSION='4.2.2';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -71,18 +71,26 @@ function clearHides(){clearContinuation();for(const el of document.querySelector
 // Collapsing the entire loaded page must not collapse note's pagination surface.
 // Leave a scroll runway before its native loader, without exposing a muted row
 // or moving the viewport. The next page is still loaded by note itself.
-let continuation=null;
-function clearContinuation(){continuation?.remove();continuation=null}
+let continuation=null,scrollFallback=null;
+function clearContinuation(){continuation?.remove();continuation=null;if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
+function provideScroll(parent,surface){
+ if(surface)return surface;
+ if(parent===document.body||parent===document.documentElement)return null;
+ if(scrollFallback?.el!==parent){if(scrollFallback)clearContinuation();const names=['overflow-y','max-height','touch-action','overscroll-behavior-y'];scrollFallback={el:parent,styles:names.map(name=>[name,parent.style.getPropertyValue(name),parent.style.getPropertyPriority(name)])};}
+ const top=Math.max(0,parent.getBoundingClientRect().top||0),height=Math.max(160,innerHeight-top-90);
+ for(const [name,value,priority]of [['overflow-y','auto','important'],['max-height',height+'px','important'],['touch-action','pan-y','important'],['overscroll-behavior-y','contain','']])if(parent.style.getPropertyValue(name)!==value||parent.style.getPropertyPriority(name)!==priority)parent.style.setProperty(name,value,priority);return parent;
+}
 function scrollSurface(r){for(let el=r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement)if(/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))return el;return null}
 function continueFilteredPage(st,list,surface){
- const allHidden=st.enabled&&list.length>0&&list.every(el=>el.classList.contains(OWN));
- if(!allHidden){clearContinuation();return}
+ const muted=list.filter(el=>el.classList.contains(OWN)),allHidden=muted.length===list.length;
+ if(!st.enabled||!muted.length){clearContinuation();return}
  const last=list.at(-1),parent=last?.parentElement;if(!parent)return;
  if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.setAttribute('role','status');continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';parent.insertBefore(continuation,last.nextSibling)}
+ surface=provideScroll(parent,surface);
  if(continuation.previousElementSibling!==last)parent.insertBefore(continuation,last.nextSibling);
- const height=Math.max(160,Math.min(innerHeight,surface?.clientHeight||innerHeight)+96)+'px';
+ const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+96-visibleHeight)+'px';
  if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
- const message=`${list.length}件をフィルターで非表示にしています。下へスクロールして続きを表示できます。`;
+ const message=allHidden?`${muted.length}件をフィルターで非表示にしています。下へスクロールして続きを表示できます。`:'下へスクロールして続きを表示';
  if(continuation.textContent!==message)continuation.textContent=message;
 }
 let lastResult=null;
@@ -95,12 +103,8 @@ function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='attributes'&&m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN);return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard');r.style.removeProperty('overscroll-behavior-y')}
 function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');r.style.setProperty('overscroll-behavior-y','contain');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
-let lastTouchY=null;
-function scrollConsumer(target,dy){for(let el=target instanceof Element?target:null;el&&root?.contains(el);el=el.parentElement){const max=el.scrollHeight-el.clientHeight;if(max>2){if(dy>0&&el.scrollTop<max-1)return el;if(dy<0&&el.scrollTop>1)return el}if(el===root)break}return null}
-window.addEventListener('touchstart',e=>{if(root&&shown(root)&&e.touches?.length===1&&root.contains(e.target))lastTouchY=e.touches[0].clientY;else lastTouchY=null},{capture:true,passive:true});
-window.addEventListener('touchmove',e=>{if(lastTouchY==null||!root||!shown(root)||!root.contains(e.target)||e.touches?.length!==1)return;const y=e.touches[0].clientY,dy=lastTouchY-y;lastTouchY=y;if(continuation?.isConnected)return;if(!scrollConsumer(e.target,dy)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
-window.addEventListener('touchend',()=>{lastTouchY=null},{capture:true,passive:true});
-window.addEventListener('wheel',e=>{if(!root||!shown(root)||!root.contains(e.target)||continuation?.isConnected)return;if(!scrollConsumer(e.target,e.deltaY)){e.preventDefault();e.stopPropagation()}},{capture:true,passive:false});
+// Native touch and wheel gestures must reach note's actual scroll ancestor.
+// A panel can be nested inside that ancestor or use the document viewport.
 function discover(){retries=0;schedule(40,true)}
 window.addEventListener(EVT,()=>{invalidate();schedule(0,true)});
 window.addEventListener('mumei-notification-feature-changed',()=>{invalidate();clearTimeout(timer);timer=0;pendingForce=false;if(featureOn())schedule(0,true);else{attach(null);clearHides()}});

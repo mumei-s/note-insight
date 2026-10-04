@@ -203,7 +203,7 @@ for(const mode of ['modern','legacy'])test(`先頭12件が対象でもネイテ�
  const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});bridge.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false,'ページ本体のスクロールを妨げない');
  for(const [type,y] of [['touchstart',400],['touchmove',100]]){const ev=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(ev,'touches',{value:[{clientY:y}]});bridge.dispatchEvent(ev);assert.equal(ev.defaultPrevented,false,'スマホのスワイプを妨げない')}
  e.panel.querySelector('#native-loader').insertAdjacentHTML('beforebegin',row('next-visible','別の人物さんがあなたの記事にスキしました 2分前'));
- await until(()=>!e.panel.querySelector('#mumei-notification-filter-continuation-v4'),'対象外が届けば補助領域を消す');
+ await until(()=>e.panel.querySelector('#mumei-notification-filter-continuation-v4')?.textContent==='下へスクロールして続きを表示','対象外が届いても短い一覧の続きを読める');
  assert.equal(hidden(e.panel.querySelector('#next-visible')),false);
  assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#next-visible')).display,'none');
  assert.equal(e.panel.querySelectorAll('.mumei-muted-v2939').length,12,'先頭の対象通知は復活させない');
@@ -235,4 +235,21 @@ test('自動高さのスクロール枠でも補助領域が膨らみ続けず�
  assert.ok(Number.parseFloat(height)<=e.w.innerHeight+96);
  Object.defineProperty(e.panel,'clientHeight',{value:400,configurable:true});await e.w.__mumeiNotificationFilterV4.refresh();
  assert.equal(bridge.style.minHeight,'496px');assert.equal(e.panel.scrollTop,0,'読込位置へ強制スクロールしない');
+});
+
+for(const remaining of [0,2])test('フィルター後の0行・2行でも固定枠内で続きへ進め、操作を遮断しない：'+remaining,async t=>{
+ const e=setup(t,'modern',true);e.w.document.body.style.overflow='hidden';
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div id="mobile-list" style="overflow-y:hidden;max-height:400px">'+Array.from({length:12},(_,i)=>row('muted-'+i)).join('')+Array.from({length:remaining},(_,i)=>row('visible-'+i,'別の人物さんがあなたの記事にスキしました')).join('')+'<div id="native-loader"></div></div>';
+ await until(()=>e.panel.querySelectorAll('.mumei-muted-v2939').length===12);
+ const list=e.panel.querySelector('#mobile-list'),bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4');assert.ok(bridge);assert.equal(list.style.overflowY,'auto');assert.equal(list.style.getPropertyPriority('overflow-y'),'important');assert.equal(bridge.nextElementSibling.id,'native-loader');
+ const target=remaining?e.panel.querySelector('#visible-0'):bridge;
+ for(const [type,y]of [['touchstart',300],['touchmove',100]]){const event=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'touches',{value:[{clientY:y}]});target.dispatchEvent(event);assert.equal(event.defaultPrevented,false)}
+ const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});target.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false);
+ e.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await until(()=>!e.panel.querySelector('#mumei-notification-filter-continuation-v4'));assert.equal(list.style.overflowY,'hidden');assert.equal(list.style.maxHeight,'400px');assert.equal(e.w.document.body.style.overflow,'hidden');
+});
+
+test('実際のスクロール祖先がフィルターRootの外側でもスワイプを許可する',async t=>{
+ const e=setup(t);const outer=e.panel.parentElement;outer.style.overflowY='auto';Object.defineProperty(outer,'clientHeight',{value:400});
+ e.panel.innerHTML='<button>通知</button><button>お知らせ</button>'+row('muted')+row('visible','別の人物さんがあなたの記事にスキしました');await until(()=>hidden(e.panel.querySelector('#muted')));
+ const target=e.panel.querySelector('#visible');const ev=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:300});target.dispatchEvent(ev);assert.equal(ev.defaultPrevented,false);assert.equal(e.panel.style.maxHeight,'','ネイティブ祖先をそのまま使う');
 });
