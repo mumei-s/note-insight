@@ -160,3 +160,14 @@ test('両方の分析レイヤーは立体円グラフの正確な比率と実�
  const slice=document.querySelector('.donut-slice circle').getAttribute('stroke-dasharray').split(' ').map(Number);assert.ok(Math.abs(slice[0]/(slice[0]+slice[1])-.75)<1e-12);assert.match(document.querySelector('figcaption').textContent,/75件75.0%/);assert.ok(document.querySelector('.donut-object'));
  await act(async()=>h.root.render(React.createElement(C,{label:'構成比',items:[{label:'スキ',value:0}]})));assert.match(document.body.textContent,/計算できる値がありません/);assert.doesNotMatch(document.body.textContent,/0.0%/);await act(async()=>h.root.unmount());h.dom.window.close();
 });
+
+
+test('先頭は最終保存のクリエイターになり、再表示でも差分位置と保存順を維持する',async()=>{
+ const h=setup();const rows=[{id:'old',notification_type:'rating',raw_text:'更新時の人物さんが高評価しました',actor_name:'更新時の人物',captured_at:'2026-09-20T00:00:00Z',occurred_at:'2027-01-01T00:00:00Z'},{id:'last',notification_type:'rating',raw_text:'最終保存の人物さんが高評価しました',actor_name:'最終保存の人物',captured_at:'2026-10-04T00:00:00Z',occurred_at:'2026-09-21T00:00:00Z'}];
+ localStorage.setItem('mumei-notification-board:tester',JSON.stringify(rows));localStorage.setItem('mumei-notification-recent-watermark:tester','2026-10-04T00:00:00Z');const requests=[];
+ globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons'))return{ok:true,json:async()=>({items:[]})};const body=JSON.parse(init?.body||'{}');requests.push(body);return{ok:true,json:async()=>({ok:true,noteId:'tester',rows:body.action==='recent'?[]:rows,total:2,categoryCounts:{all:2,rating:2},watermark:'2026-10-04T00:00:00Z'})}};
+ const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
+ await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,20))});
+ const body=document.querySelector('.minf-list').textContent;assert.ok(body.indexOf('最終保存の人物')<body.indexOf('更新時の人物'));assert.equal(requests.find(x=>x.action==='recent').since,'2026-10-04T00:00:00Z');
+ await act(async()=>h.root.unmount());h.dom.window.close();
+});

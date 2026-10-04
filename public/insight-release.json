@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.04.4",
+  "appVersion": "2026.10.04.5",
   "notificationVersion": "3.6.28",
   "dashboardVersion": "1.6.7",
-  "releasedAt": "2026-10-04T22:33:59+09:00",
+  "releasedAt": "2026-10-04T23:41:17+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知フィルターのスクロールを修正。Dashboardは小型の手動読み込み・履歴パネルと保存継続に対応。",
+  "note": "通知は最終保存の人物を先頭に表示。保存済み表示と新着の差分位置を保持。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

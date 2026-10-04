@@ -399,7 +399,7 @@ for(const hidden of [false,true])test('公式GraphQLの5指標を自動で読み
  await saved(h);assert.deepEqual(changed,['PAGE_VIEW','LIKE','COMMENT','SALES','IMPRESSION']);assert.equal(network.length,5);
  assert.deepEqual(h.saves[0].metricSeries.map(r=>r.pageViews),[0,8]);assert.equal(h.saves[0].metricSeries[1].likes,3);assert.equal(h.saves[0].metricSeries[1].salesYen,3);
  assert.doesNotMatch(JSON.stringify(h.saves),/must never be saved/);assert.deepEqual(h.warnings,[]);
- h.w.document.getElementById('mumei-dash-run').click();for(let i=0;i<100&&network.length<10;i++)await pause(20);await pause(150);assert.equal(network.length,10,'明示読み込みでは現在の5指標を再確認する');assert.equal(h.saves.length,1,'同じ値は重複保存しない');
+ h.w.document.getElementById('mumei-dash-run').click();for(let i=0;i<200&&(network.length<10||h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy')==='true');i++)await pause(20);assert.equal(h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy'),'false','非同期の読込・保存確認が完了してから画面を閉じる');assert.equal(network.length,10,'明示読み込みでは現在の5指標を再確認する');assert.equal(h.saves.length,1,'同じ値は重複保存しない');
 });
 test('キャッシュから表示され通信しない公式グラフも、実際のDAY pointsから自動取得する',async t=>{
  const h=page(t,'<p>2026/9/20〜2026/9/21</p><p>ページビュー 8</p>'+officialMetricSelect(false)+'<figure data-name="StackedBarChart"></figure>',{before:w=>{

@@ -11,17 +11,15 @@ type Row=Record<string,any>;
 type CachedView={rows:Row[];total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number};
 const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
 const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
-const INITIAL_CACHE_MAX_AGE=15_000;
 type BoardMeta={serverCheckedAt:number;serverUpdatedAt:string;serverSyncAt:string};
 function boardMetaKey(account:string){return `mumei-notification-board-meta:${account}`}
-function readBoardMeta(account:string):BoardMeta|null{if(!account)return null;try{const x=JSON.parse(localStorage.getItem(boardMetaKey(account))||"null");return x&&Number.isFinite(Number(x.serverCheckedAt))?{serverCheckedAt:Number(x.serverCheckedAt),serverUpdatedAt:String(x.serverUpdatedAt||""),serverSyncAt:String(x.serverSyncAt||"")}:null}catch{return null}}
 function markBoardFresh(account:string,updatedAt="",syncAt=""){if(!account)return;try{localStorage.setItem(boardMetaKey(account),JSON.stringify({serverCheckedAt:Date.now(),serverUpdatedAt:String(updatedAt||""),serverSyncAt:String(syncAt||"")}))}catch{}}
-function freshBoard(account:string){const meta=readBoardMeta(account);return meta&&Date.now()-meta.serverCheckedAt<=INITIAL_CACHE_MAX_AGE?readBoard(account):[]}
 function accountKey(memberId=""){return (requestedNotificationAccount()||memberId||currentStoredInsightAccount()?.noteId||"").toLowerCase()}
 function boardRow(r:Row){return r.meta?.noise_reason!=="non-notification-api-capture"&&r.notification_type!=="capture_noise"&&!(!r.target_url&&!r.meta?.kind&&/^(?:[\d,.万]+件){1,2}\d{1,2}月\d{1,2}日まで$/u.test(String(r.raw_text||"").replace(/\s+/g,"")))}
-function readBoard(account:string):Row[]{if(!account)return[];const cached=NOTIFICATION_RECENT_ALL.get(account);if(cached)return cached.filter(boardRow);try{const rows=JSON.parse(localStorage.getItem(`mumei-notification-board:${account}`)||"[]");if(Array.isArray(rows)){NOTIFICATION_RECENT_ALL.set(account,rows.filter(boardRow));return rows.filter(boardRow)}}catch{}return[]}
-function retainBoard(account:string,rows:Row[]){const map=new Map(readBoard(account).map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}const merged=[...map.values()].sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,2000);NOTIFICATION_RECENT_ALL.set(account,merged);
- for(const [key,view] of NOTIFICATION_VIEW_CACHE){if(!key.startsWith(account+"|"))continue;const[,kind,day,page]=key.split("|"),values=new Map(view.rows.map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));if(page!=="1"&&!values.has(id))continue;const match=boardRow(r)&&(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day);if(match)values.set(id,r);else values.delete(id)}NOTIFICATION_VIEW_CACHE.set(key,{...view,rows:[...values.values()].sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,PAGE)})}
+function notificationBoardOrder(a:Row,b:Row){return (Date.parse(b.captured_at)||0)-(Date.parse(a.captured_at)||0)||(Date.parse(b.occurred_at)||0)-(Date.parse(a.occurred_at)||0)||String(b.id||'').localeCompare(String(a.id||''))}
+function readBoard(account:string):Row[]{if(!account)return[];const cached=NOTIFICATION_RECENT_ALL.get(account);if(cached)return cached.filter(boardRow).sort(notificationBoardOrder);try{const rows=JSON.parse(localStorage.getItem(`mumei-notification-board:${account}`)||"[]");if(Array.isArray(rows)){NOTIFICATION_RECENT_ALL.set(account,rows.filter(boardRow).sort(notificationBoardOrder));return rows.filter(boardRow).sort(notificationBoardOrder)}}catch{}return[]}
+function retainBoard(account:string,rows:Row[]){const map=new Map(readBoard(account).map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}const merged=[...map.values()].sort(notificationBoardOrder).slice(0,2000);NOTIFICATION_RECENT_ALL.set(account,merged);
+ for(const [key,view] of NOTIFICATION_VIEW_CACHE){if(!key.startsWith(account+"|"))continue;const[,kind,day,page]=key.split("|"),values=new Map(view.rows.map(r=>[String(r.id||rowKey(r)),r]));for(const r of rows){const id=String(r.id||rowKey(r));if(page!=="1"&&!values.has(id))continue;const match=boardRow(r)&&(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day);if(match)values.set(id,r);else values.delete(id)}NOTIFICATION_VIEW_CACHE.set(key,{...view,rows:[...values.values()].sort(notificationBoardOrder).slice(0,PAGE)})}
  try{localStorage.setItem(`mumei-notification-board:${account}`,JSON.stringify(merged))}catch{}return merged}
 function filterBoard(account:string,kind:string,day:string){return readBoard(account).filter(r=>(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).slice(0,PAGE)}
 
@@ -42,7 +40,7 @@ function safeActorImage(v:any){const s=String(v||"");return s&&!/magazine_cover|
 function metaActor(r:Row){const xs=Array.isArray(r?.meta?.action_users)?r.meta.action_users:Array.isArray(r?.meta?.actionUsers)?r.meta.actionUsers:[],a=xs.find((x:any)=>x&&typeof x==="object")||null;if(!a)return{};const id=String(a.urlname||a.username||a.screen_name||"").replace(/^@/,""),url=String(a.url||a.profile_url||a.profileUrl||a.href||a.link||""),image=safeActorImage(a.user_profile_image_path||a.userProfileImagePath||a.profile_image_url||a.profileImageUrl||a.image_url||a.imageUrl||a.avatar_url||a.avatarUrl||a.icon_url||a.iconUrl),name=String(a.name||a.display_name||a.displayName||a.nickname||a.urlname||a.username||"");return{name:name||null,url:url||(id?("https://note.com/"+id):null),image:image||null}}
 
 function richness(r:Row){let n=0;if(r.actor_url)n+=8;if(safeActorImage(r.actor_image_url))n+=8;else if(r.actor_image_url)n+=1;if(r.target_url)n+=4;if(r.occurred_at)n+=2;if(r.target_title)n+=1;return n}
-function mergePair(a:Row,b:Row){const p=richness(b)>richness(a)?b:a,o=p===b?a:b,pi=safeActorImage(p.actor_image_url)||safeActorImage(o.actor_image_url)||null;return{...o,...p,actor_name:p.actor_name||o.actor_name||null,actor_url:p.actor_url||o.actor_url||null,actor_image_url:pi,target_url:p.target_url||o.target_url||null,target_title:p.target_title||o.target_title||null,source_url:p.source_url||o.source_url||null,occurred_at:p.occurred_at||o.occurred_at||null,captured_at:p.captured_at||o.captured_at||null}}
+function mergePair(a:Row,b:Row){const p=richness(b)>richness(a)?b:a,o=p===b?a:b,pi=safeActorImage(p.actor_image_url)||safeActorImage(o.actor_image_url)||null;return{...o,...p,actor_name:p.actor_name||o.actor_name||null,actor_url:p.actor_url||o.actor_url||null,actor_image_url:pi,target_url:p.target_url||o.target_url||null,target_title:p.target_title||o.target_title||null,source_url:p.source_url||o.source_url||null,occurred_at:p.occurred_at||o.occurred_at||null,captured_at:(Date.parse(p.captured_at)||0)>=(Date.parse(o.captured_at)||0)?p.captured_at||o.captured_at||null:o.captured_at}}
 function mergeActorIdentity(r:Row,known:Row):Row{return{...r,actor_name:r.actor_name||known.actor_name||null,actor_url:r.actor_url||known.actor_url||null,actor_image_url:safeActorImage(r.actor_image_url)||safeActorImage(known.actor_image_url)||null}}
 function mergeMagazineJoinRows(rows:Row[]){const out:Row[]=[],map=new Map<string,number>();for(const r of rows){if(String(r.notification_type||"")!=="magazine_join"){out.push(r);continue}const day=String(r.captured_at||r.occurred_at||"").slice(0,10),k=`magazine_join|${canonical(r.raw_text)}|${day}`;const i=map.get(k);if(i==null){map.set(k,out.length);out.push(r)}else out[i]=mergePair(out[i],r)}return out}
 function actorStem(r:Row){const raw=canonical(r.raw_text),type=String(r.notification_type||"");if(type==="my_article_magazine_added"){const end=raw.indexOf("に追加されました");return end>=0?raw.slice(0,end+8):""}if(type==="reply"){const token="さんがあなたのコメントに返信しました",end=raw.indexOf(token);return end>=0?raw.slice(0,end+token.length):""}if(type==="comment"){const token="さんがあなたの記事にコメントしました",end=raw.indexOf(token);return end>=0?raw.slice(0,end+token.length):""}return""}
@@ -79,8 +77,10 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const initialRows=readBoard(accountKey(memberNoteId)).slice(0,PAGE);
   const[rows,setRows]=useState<Row[]>(initialRows),[kind,setKind]=useState("all"),[selectedDay,setSelectedDay]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(initialRows.length),[loading,setLoading]=useState(initialRows.length===0),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>("");
   const[serverSync,setServerSync]=useState({received:0,confirmed:0,source:""});
+  const[checking,setChecking]=useState(false),pendingChecks=useRef(0);
+  const beginCheck=()=>{pendingChecks.current++;setChecking(true)},finishCheck=()=>{pendingChecks.current=Math.max(0,pendingChecks.current-1);if(!pendingChecks.current)setChecking(false)};
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
-  const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:""});
+  const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:localStorage.getItem(`mumei-notification-recent-watermark:${accountKey(memberNoteId)}`)||""});
   const lastReaderRun=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
   const view=useRef({kind,selectedDay});view.current={kind,selectedDay};
 
@@ -91,42 +91,42 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     if(silent&&request.current.controller)return;
     request.current.controller?.abort();const controller=new AbortController(),id=++request.current.id;request.current.controller=controller;
     const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",valid=()=>id===request.current.id&&!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
-    if(!silent)setLoading(true);setError("");
+    beginCheck();if(!silent)setLoading(true);setError("");
     try{const x=await post({kind:k,page:p,pageSize:PAGE,day:day||null,includeCategoryPreview:p===1,classificationRevision:repairRevision.current},controller.signal);if(!valid())return;
       const feedId=String(x.noteId||"").toLowerCase(),expected=accountKey(memberNoteId).toLowerCase();
       if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
-      const stored=new Map(readBoard(accountKey(memberNoteId)).map(r=>[String(r.id||rowKey(r)),r]));const list=mergeMagazineJoinRows(repairActorRows(x.rows||[])).map(r=>keepIcon(r,stored.get(String(r.id||rowKey(r)))));if(!valid())return;
+      const stored=new Map(readBoard(accountKey(memberNoteId)).map(r=>[String(r.id||rowKey(r)),r]));const list=mergeMagazineJoinRows(repairActorRows(x.rows||[])).map(r=>keepIcon(r,stored.get(String(r.id||rowKey(r))))).sort(notificationBoardOrder);if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}`;
       setRows(list);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
       NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:list,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
       retainBoard(cacheAccount,list);markBoardFresh(cacheAccount,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
       for(const [category,preview] of Object.entries(x.categoryPreview||{})){
-        const entries=mergeMagazineJoinRows(repairActorRows(preview as Row[]));retainBoard(cacheAccount,entries);
+        const entries=mergeMagazineJoinRows(repairActorRows(preview as Row[])).sort(notificationBoardOrder);retainBoard(cacheAccount,entries);
         NOTIFICATION_VIEW_CACHE.set(`${cacheAccount}|${category}|${day||""}|1`,{rows:entries,total:Number(nextCounts[category]||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now()});
       }
       if(Number(x.reclassifyPending)>0&&!repairRunning.current&&lastRepairSync.current!==String(x.lastSyncAt||"initial")){lastRepairSync.current=String(x.lastSyncAt||"initial");void reclassify(true)}
       // Identity enrichment never delays the notification text.
       void enrich(list).then(enriched=>{if(!valid())return;setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))));retainBoard(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:enriched})});
     }catch(e){if(valid()){const fallback=filterBoard(accountKey(memberNoteId),k,day);if(!rows.length&&fallback.length)setRows(fallback);setError((e instanceof Error?e.message:"通知履歴の読込に失敗しました")+(fallback.length?"｜最新確認に失敗したため前回保存分を表示しています":""))}}
-    finally{if(id===request.current.id){request.current.controller=null;setLoading(false)}}
+    finally{finishCheck();if(id===request.current.id){request.current.controller=null;setLoading(false)}}
   }
   async function refreshRecent(){
     if(page!==1||recentRequest.current.controller||document.visibilityState==="hidden")return;
-    const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId);recentRequest.current.controller=controller;
+    const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId);recentRequest.current.controller=controller;beginCheck();
     try{
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
       if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||String(x.noteId||"").toLowerCase()!==account)return;
-      recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);
+      recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
       markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
       const incoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow);retainBoard(account,incoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
-        return [...map.values()].filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort((a,b)=>Date.parse(b.occurred_at||b.captured_at)-Date.parse(a.occurred_at||a.captured_at)).slice(0,PAGE);
+        return [...map.values()].filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort(notificationBoardOrder).slice(0,PAGE);
       });
       void enrich(incoming).then(enriched=>{if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)return;retainBoard(account,enriched);setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))))});
       setCheckedAt(new Date());
     }catch{/* Cached board remains visible; the full feed reports persistent errors. */}
-    finally{if(recentRequest.current.controller===controller)recentRequest.current.controller=null}
+    finally{finishCheck();if(recentRequest.current.controller===controller)recentRequest.current.controller=null}
   }
   async function reclassify(auto=true){
     if(repairRunning.current)return false;
@@ -168,7 +168,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     const saved=filterBoard(account,kind,selectedDay),instant=cached?.rows||saved,hasSavedBoard=readBoard(account).length>0;
     setRows(instant);setPage(1);setLoading(!cached&&!hasSavedBoard&&instant.length===0);
     if(cached){setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
-    recentRequest.current.watermark="";void refreshRecent();void load(1,kind,true,selectedDay);
+    recentRequest.current.watermark=localStorage.getItem(`mumei-notification-recent-watermark:${account}`)||"";void refreshRecent();void load(1,kind,true,selectedDay);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
   },[kind,selectedDay,revision,memberNoteId]);
   useEffect(()=>{
@@ -197,7 +197,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const readerLabel=readerMode==="full"||readerMode==="window"?"取得範囲の保存完了":readerMode==="delta"?"差分完了":readerMode==="partial"?"途中保存":readerMode==="error"?"読取エラー":readerStatus?.historyComplete?"全履歴確認済み":"端末状態 未確認";
   const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   const serverLabel=syncAt?"サーバー反映済み":"サーバー反映 未確認";
-  return <section id="minf-notifications" className="minf" aria-busy={loading}>
+  return <section id="minf-notifications" className="minf" aria-busy={loading||checking}>
     <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><p>保存済み通知を即表示。分類・日付・精度確認は1パネルにまとめています。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
     <div className={`minf-quick ${readerClass}`} role="status">
       <div className="minf-quick-save"><span>最終保存</span><strong>{latest?date(latest):"確認中…"}</strong><i>{readerLabel}</i></div>
