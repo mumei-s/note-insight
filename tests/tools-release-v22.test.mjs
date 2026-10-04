@@ -21,4 +21,6 @@ test('ダッシュボードのcoreと配布ラッパーの版・requireを一致
  assert.equal(core.match(/@version\s+(\S+)/)[1],version);
  assert.ok(wrapper.includes('sync-core-v1.1.0.js?v='+version.replaceAll('.','')));
  assert.ok(wrapper.includes('dashboard-feature-bridge-v1.js?v=101'));
+ const queueVersion=read('public/note-insight-dashboard-save-queue-v1.js').match(/version:'([^']+)'/)[1];
+ assert.ok(wrapper.includes('dashboard-save-queue-v1.js?v='+queueVersion.replaceAll('.','')),'保存処理の更新が古いrequireキャッシュに隠れない');
 });

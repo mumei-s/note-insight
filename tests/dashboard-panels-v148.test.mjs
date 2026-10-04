@@ -31,6 +31,16 @@ async function saved(h,count=1){for(let i=0;i<100&&h.saves.length<count;i++)awai
 
 async function readFinished(h){for(let i=0;i<200&&h.w.document.getElementById('mumei-dashboard-sync')?.getAttribute('aria-busy')==='true';i++)await pause(20);assert.equal(h.w.document.getElementById('mumei-dashboard-sync').getAttribute('aria-busy'),'false')}
 const tabRows=label=>`<table><thead><tr><th>タイトル</th><th>PV</th></tr></thead><tbody><tr><td>${label}</td><td>8</td></tr></tbody></table>`;
+for(const mode of ['modern','legacy','none'])test('保存容量が一杯でも公式読込から送信・保存確認・完了表示まで進む：'+mode,async t=>{
+ const gmStore=new Map(),h=page(t,tabRows('容量不足でも保存する記事')+'<script type="application/json">{"page_views":{"2026-09-26":8}}</script>',{before:w=>{
+  if(mode==='modern')w.GM={getValue:async(k,d)=>gmStore.get(k)??d,setValue:async(k,v)=>gmStore.set(k,v)};
+  if(mode==='legacy'){w.GM_getValue=(k,d)=>gmStore.get(k)??d;w.GM_setValue=(k,v)=>gmStore.set(k,v)}
+  w.Storage.prototype.setItem=function(){throw new w.DOMException('Storage quota reached','QuotaExceededError')};
+ }});await saved(h);await readFinished(h);assert.match(h.w.document.querySelector('.status').textContent,/同期完了/);assert.equal(h.saves[0].articles[0].title,'容量不足でも保存する記事');assert.equal(h.saves[0].metricSeries[0].pageViews,8);assert.equal(h.warnings.length,0);
+ const key=await h.w.__mumeiDashboardSaveQueueV1.prepare('tester','fixture');assert.ok(h.w.__mumeiDashboardSaveQueueV1.cached(key+':last-saved'));
+ if(mode!=='none'){await h.w.__mumeiDashboardSaveQueueV1.settled('mumei-dashboard-read-checkpoint-v1');const checkpoint=JSON.parse(gmStore.get('mumei-dashboard-read-checkpoint-v1'));assert.equal(checkpoint.pendingSave,null);assert.equal(checkpoint.progress.complete,true);assert.equal(checkpoint.result.articles[0].title,'容量不足でも保存する記事')}
+ h.w.document.getElementById('mumei-dash-run').click();await pause(500);await readFinished(h);assert.equal(h.saves.length,1,'容量不足でも保存済みの同じ値は二重送信しない');
+});
 test('スマホで隠れた旧記事タブの選択を参照せず、表示中のメンバーシップを保存する',async t=>{
  const h=page(t,'<p>ページビュー 8</p><div hidden><button aria-selected="true">記事</button></div><div id="mobile"><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button></div><section id="content">'+tabRows('記事本文')+'</section>',{before:w=>{
   for(const tab of w.document.querySelectorAll('#mobile button'))tab.onclick=()=>{for(const el of w.document.querySelectorAll('#mobile button'))el.setAttribute('aria-selected',String(el===tab));w.document.getElementById('content').innerHTML=tabRows(tab.textContent==='記事'?'記事本文':'メンバーシップ本文')};
@@ -397,7 +407,7 @@ test('停止操作後に通信が終われば保存し、パネル巡回は続�
  let release;const clicks=[];
  const h=page(t,'<p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false">メンバーシップ</button>',{stats:()=>new Promise(resolve=>release=resolve),before:w=>{for(const el of w.document.querySelectorAll('[role=tab]'))el.onclick=()=>{clicks.push(el.textContent);void w.fetch('/api/v1/stats/daily')}}});
  for(let i=0;i<100&&!release;i++)await pause(20);assert.ok(release);
- h.w.document.getElementById('mumei-dash-run').click();release({page_views:{'2026-09-26':12}});await pause(250);
+ const action=h.w.document.getElementById('mumei-dash-run');assert.equal(action.textContent,'一時停止');assert.match(action.getAttribute('aria-label'),/一時停止.*保存/);action.click();assert.equal(action.textContent,'一時停止中');assert.equal(action.disabled,true);release({page_views:{'2026-09-26':12}});await pause(250);
  assert.equal(h.saves.length,1);assert.deepEqual(clicks,['メンバーシップ']);assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);assert.equal(h.w.document.querySelector('.status').dataset.kind,'paused');assert.equal(h.w.document.getElementById('mumei-dash-run').disabled,false);
  h.w.document.dispatchEvent(new h.w.Event('mumei-dashboard-read'));await pause(150);assert.equal(h.saves.length,1);assert.deepEqual(clicks,['メンバーシップ']);
 });

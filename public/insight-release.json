@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.7",
   "notificationVersion": "3.6.29",
-  "dashboardVersion": "1.6.8",
-  "releasedAt": "2026-10-05T00:56:03+09:00",
+  "dashboardVersion": "1.6.9",
+  "releasedAt": "2026-10-05T01:18:04+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "Dashboard：表示中のメンバーシップを正しく判定。公式タブの切り替えを待ち、失敗時も取得済み分を保存。",
+  "note": "Dashboard：noteの保存容量不足時はツール側へ退避して送信・保存確認を継続。停止ボタンを一時停止に変更。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
