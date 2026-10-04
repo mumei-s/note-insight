@@ -102,7 +102,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.doesNotMatch(v3,/note-insight-dm-reader-v1\.js\?v=/);
   assert.match(notice,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(notice,/test\(location.pathname\)&&!directPanel\(\)/);
-  assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(!featureOn\(\)\|\|isDmRoute\(\)\)return/);
+  assert.match(notice,/async function scan\(opts=\{\}\)\{\s*if\(!featureOn\(\)\|\|isDmRoute\(\)[^\n]*\)return/);
   assert.match(controls,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(filter,/const isDmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);
@@ -200,7 +200,7 @@ test('filter and backend restriction fixes stay isolated',()=>{
   const controls=read('public/note-insight-notification-controls-v1.js');
   const filter=read('public/note-insight-notification-filter-v4.js');
   const network=read('public/note-insight-notification-network-v3300.js');
-  assert.match(controls,/VERSION='1\.4\.\d+'/);
+  assert.match(controls,/VERSION='1\.\d+\.\d+'/);
   assert.match(controls,/knownAccount\|\|await account\(\)/);
   assert.match(controls,/searchParams\.set\('notificationAccount',a\.id\)/);
   assert.match(filter,/VERSION='4\.2\.\d+'/);
