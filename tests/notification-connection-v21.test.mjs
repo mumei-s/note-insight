@@ -40,6 +40,20 @@ test('本人通知の最上部から本人のフィルター・保存済み履�
   assert.deepEqual(requests, ['stats'], '操作導線の追加で再連携を自動実行しない');
 });
 
+for(const mode of ['modern','legacy'])test(`メイン🔔からダッシュボードを切り替え、通知の自動設定と保存状態は独立する (${mode})`,async t=>{
+ const {w,requests}=await connection(t);const KEY='mumei_insight_dashboard_feature_enabled_v1',NOTICE='mumei_insight_notification_feature_enabled_v1',values=new Map([[KEY,true],[NOTICE,true]]);
+ let fail=false;const get=(k,d)=>values.get(k)??d,set=(k,v)=>{if(fail)throw new Error('保存不可');values.set(k,v)};
+ if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
+ w.postMessage=data=>w.setTimeout(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})),0);
+ w.eval(readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8'));await w.__mumeiDashboardFeatureV1.ready;
+ const button=w.document.getElementById('dashboard-panel-toggle');
+ async function until(state){for(let n=0;n<50&&(button.dataset.state!==state||button.disabled);n++)await pause(10);assert.equal(button.dataset.state,state);assert.equal(button.disabled,false)}
+ await until('on');assert.equal(button.textContent,'ダッシュボード ON');
+ fail=true;button.click();await until('on');assert.match(w.document.getElementById('dashboard-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
+ fail=false;button.click();await until('off');assert.equal(button.textContent,'ダッシュボード OFF');assert.equal(values.get(KEY),false);assert.equal(values.get(NOTICE),true);
+ button.click();await until('on');assert.equal(values.get(KEY),true);assert.deepEqual(requests,['stats']);
+});
+
 test('添付の旧v3.6.20には更新ボタンを出し、導入後は自動で更新ありを消す', async t => {
   const { w, requests } = await connection(t);
   const action = w.document.getElementById('toolAction'), update = w.document.getElementById('update');
@@ -75,9 +89,9 @@ for(const mode of ['modern','legacy'])test(`本人設定の横長3行から保�
  if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
  w.postMessage=data=>w.setTimeout(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})),0);
  w.eval(readFileSync('public/note-insight-notification-feature-bridge-v1.js','utf8'));await w.__mumeiNotificationFeatureV1.ready;
- const button=w.document.getElementById('notification-panel-toggle');async function until(label){for(let n=0;n<50&&button.textContent!==label;n++)await pause(10);assert.equal(button.textContent,label);assert.equal(button.disabled,false)}
- await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.equal(w.document.querySelector('.shortcuts').children.length,3);assert.match(page,/\.shortcuts\{display:grid;grid-template-columns:1fr/);
- fail=true;button.click();await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.match(w.document.getElementById('notification-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
- fail=false;button.click();await until('note公式🔔パネル｜現在：OFF｜ONにする');assert.equal(values.get(KEY),false);button.click();await until('note公式🔔パネル｜現在：ON｜OFFにする');assert.equal(values.get(PANEL),true);assert.deepEqual(requests,['stats']);
- w.dispatchEvent(new w.MessageEvent('message',{origin:'https://example.org',data:{source:'mumei-notification-feature-bridge-v1',type:'state',enabled:false}}));assert.equal(button.textContent,'note公式🔔パネル｜現在：ON｜OFFにする');
+ const button=w.document.getElementById('notification-panel-toggle');async function until(label){for(let n=0;n<50&&(button.textContent!==label||button.disabled);n++)await pause(10);assert.equal(button.textContent,label);assert.equal(button.disabled,false)}
+ await until('note公式🔔パネル ON');assert.equal(button.dataset.state,'on');assert.equal(button.getAttribute('aria-checked'),'true');assert.equal(w.document.querySelector('.shortcuts').children.length,3);assert.match(page,/\.shortcuts\{display:grid;grid-template-columns:1fr/);
+ fail=true;button.click();await until('note公式🔔パネル ON');assert.match(w.document.getElementById('notification-panel-status').textContent,/保存不可/);assert.equal(values.get(KEY),true);
+ fail=false;button.click();await until('note公式🔔パネル OFF');assert.equal(button.dataset.state,'off');assert.equal(button.getAttribute('aria-checked'),'false');assert.equal(values.get(KEY),false);button.click();await until('note公式🔔パネル ON');assert.equal(values.get(PANEL),true);assert.deepEqual(requests,['stats']);
+ w.dispatchEvent(new w.MessageEvent('message',{origin:'https://example.org',data:{source:'mumei-notification-feature-bridge-v1',type:'state',enabled:false}}));assert.equal(button.textContent,'note公式🔔パネル ON');
 });
