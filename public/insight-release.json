@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.04.6",
-  "notificationVersion": "3.6.28",
+  "notificationVersion": "3.6.29",
   "dashboardVersion": "1.6.7",
-  "releasedAt": "2026-10-04T23:43:24+09:00",
+  "releasedAt": "2026-10-04T23:46:24+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "申請者本人への承認通知を自動表示。通知と照合の保存済み表示・差分位置を保持。",
+  "note": "通知は小型の読込・保存演出に対応。保存継続、最終保存の人物を先頭、表示と差分位置の保持を修正。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
