@@ -5,6 +5,8 @@ import { installApiBridge, registerServiceWorker } from "./api";
 import {
   EXPLICIT_LOGOUT_KEY_PREFIX,
   INSIGHT_TOKEN_KEY,
+  clearAccessIntent,
+  hasManualAccessIntent,
   currentStoredInsightAccount,
   getStoredInsightAccount,
   readStoredInsightAccounts,
@@ -25,6 +27,7 @@ const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 const requestedNotificationAccount = String(initialUrl.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
 let memberResumeRunning = false;
+let memberResumeGeneration = 0;
 
 // The public INSIGHT URL must stay inside INSIGHT. Notification capture runs from note itself;
 // opening/reloading the app must never bounce the user to note or the installer.
@@ -39,6 +42,7 @@ if (pwaTopLaunch) {
   window.history.replaceState({ route: "home" }, "", clean.toString());
 }
 if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
+if (!window.location.hash.includes("access/insight")) clearAccessIntent();
 
 installApiBridge();
 registerServiceWorker();
@@ -84,7 +88,13 @@ function transientStatus(status: number) {
   return status === 402 || status >= 500 || status === 408 || status === 425 || status === 429;
 }
 
+function autoResumeAllowed() {
+  const hash = window.location.hash;
+  return hash.includes("access/insight") ? !hasManualAccessIntent() : hash.includes("dashboard") || hash.includes("owner-insight");
+}
+
 async function validateCurrentMemberToken() {
+  const generation = memberResumeGeneration;
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (!token) return "missing" as const;
   try {
@@ -95,6 +105,7 @@ async function validateCurrentMemberToken() {
       cache: "no-store",
     });
     const payload = await readJson(response);
+    if (generation !== memberResumeGeneration || !autoResumeAllowed()) return "temporary" as const;
     if (response.ok && payload?.ok !== false && payload?.application) {
       const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
       rememberMemberSession(payload.application, token, stored?.passcode);
@@ -111,6 +122,7 @@ async function validateCurrentMemberToken() {
 }
 
 async function handleIdentityReverify(account: ReturnType<typeof readStoredInsightAccounts>[number]) {
+  const generation = memberResumeGeneration;
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
   if (!joinId || joinId !== account.noteId) return false;
   const statusResponse = await fetch(ACCESS, {
@@ -120,6 +132,7 @@ async function handleIdentityReverify(account: ReturnType<typeof readStoredInsig
     cache: "no-store",
   });
   const statusPayload = await readJson(statusResponse);
+  if (generation !== memberResumeGeneration || !autoResumeAllowed()) return false;
   if (!statusResponse.ok || statusPayload?.application?.status !== "approved") return false;
   rememberApplication(statusPayload.application, statusPayload.application?.verificationCode || account.passcode);
   showAccessNotice("OWNERが参加を許可しました。本人確認へ進んでください。");
@@ -135,11 +148,14 @@ async function tryReturningMemberResume() {
   const onAccessScreen = window.location.hash.includes("access/insight");
   const onMemberScreen = window.location.hash.includes("dashboard") || window.location.hash.includes("owner-insight");
   if (!onAccessScreen && !onMemberScreen) return;
+  if (!autoResumeAllowed()) return;
   if (memberResumeRunning) return;
   memberResumeRunning = true;
+  const generation = memberResumeGeneration;
 
   try {
     const tokenState = await validateCurrentMemberToken();
+    if (generation !== memberResumeGeneration || !autoResumeAllowed()) return;
     if (tokenState === "valid" || tokenState === "temporary") return;
 
     for (const account of resumeCandidates()) {
@@ -153,6 +169,7 @@ async function tryReturningMemberResume() {
           cache: "no-store",
         });
         const payload = await readJson(response);
+        if (generation !== memberResumeGeneration || !autoResumeAllowed()) return;
         if (response.ok && payload?.memberToken && payload?.application) {
           rememberMemberSession(payload.application, payload.memberToken, account.passcode);
           localStorage.removeItem(JOIN_NOTE_KEY);
@@ -221,6 +238,8 @@ window.addEventListener("mumei-insight-accounts", () => {
   }
 });
 window.addEventListener("hashchange", () => {
+  memberResumeGeneration++;
+  if (!window.location.hash.includes("access/insight")) clearAccessIntent();
   if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
   void tryReturningMemberResume();
 });

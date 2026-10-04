@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.8",
+  "appVersion": "2026.10.05.9",
   "notificationVersion": "3.6.35",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-05T06:35:05+09:00",
+  "releasedAt": "2026-10-05T06:53:21+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "ログアウトと退会をTOP最下部のアカウント操作内へ移動し、誤押しを防止。",
+  "note": "ログイン・参加・アカウント切替の画面は自動で先へ進めず、本人の操作で進むよう修正。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
