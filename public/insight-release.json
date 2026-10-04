@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.05.4",
   "notificationVersion": "3.6.33",
-  "dashboardVersion": "1.7.1",
+  "dashboardVersion": "1.7.2",
   "releasedAt": "2026-10-05T02:10:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知フィルター：公式の末尾判定を保ち、実際のスクロール枠で続きを表示。続きへボタンを追加。",
+  "note": "Dashboard：ページ側のHistoryイベントが届かない遷移でもパネルを除去。進行中の取得分は保存。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

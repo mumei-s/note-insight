@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.1
+// @version      1.7.2
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.1';
+  const VERSION='1.7.2';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -655,7 +655,7 @@
   function updateDashboardSurface(){
     const active=isDashboard(),returned=active&&!surfaceActive;surfaceActive=active;
     const surface=active?'dashboard':'other';if(document.documentElement.getAttribute('data-mumei-dashboard-surface')!==surface)document.documentElement.setAttribute('data-mumei-dashboard-surface',surface);
-    if(!active){clearTimeout(autoTimer);if(busy)surfaceSuspended=true;panelResizeObserver?.disconnect();panelResizeObserver=null;panel?.remove();document.getElementById('mumei-dashboard-clearance')?.remove();panel=null;status=null}
+    if(!active){clearTimeout(autoTimer);if(busy)surfaceSuspended=true;panelResizeObserver?.disconnect();panelResizeObserver=null;document.querySelectorAll('#mumei-dashboard-sync,#mumei-dashboard-clearance').forEach(el=>el.remove());panel=null;status=null}
     else{if(returned||!panel?.isConnected)mount();resumeSurfaceRead()}
     if(returned)document.dispatchEvent(new Event('mumei-dashboard-visible'));
   }
@@ -712,7 +712,7 @@
   }
   window.addEventListener('mumei-dashboard-feature-changed',()=>{
     clearTimeout(autoTimer);
-    if(!featureOn()){featureResumePending=false;stopReading();surfaceSuspended=false;panelResizeObserver?.disconnect();panelResizeObserver=null;panel?.remove();document.getElementById('mumei-dashboard-clearance')?.remove();panel=null;status=null}
+    if(!featureOn()){featureResumePending=false;stopReading();surfaceSuspended=false;panelResizeObserver?.disconnect();panelResizeObserver=null;document.querySelectorAll('#mumei-dashboard-sync,#mumei-dashboard-clearance').forEach(el=>el.remove());panel=null;status=null}
     else if(busy){featureResumePending=true}
     else{cancelRequested=false;stickyStatus=null;autoBlockedScope=null;saveHistory()}
     updateDashboardSurface();
@@ -721,6 +721,11 @@
   document.addEventListener('mumei-dashboard-mount',mount);
   let surfaceTimer=0;
   new MutationObserver(records=>{if(!featureOn()||!document?.documentElement||document.visibilityState==='hidden'||records.every(r=>r.target?.closest?.('#mumei-dashboard-sync,#mumei-dashboard-clearance')))return;clearTimeout(surfaceTimer);surfaceTimer=setTimeout(updateDashboardSurface,50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3']});
+  // note's page and a userscript can use different History objects. A route
+  // change may therefore bypass the wrapper hook and have no DOM mutation.
+  let surfaceHref=location.href;
+  setInterval(()=>{if(!featureOn()||document.visibilityState==='hidden')return;const href=location.href;if(href!==surfaceHref){surfaceHref=href;updateDashboardSurface()}},500);
+  window.addEventListener('pageshow',updateDashboardSurface);window.addEventListener('hashchange',updateDashboardSurface);
   window.addEventListener('popstate',updateDashboardSurface);document.addEventListener('visibilitychange',updateDashboardSurface);document.addEventListener('mumei-dashboard-surface',updateDashboardSurface);
   if(document.readyState!=='loading')mount();
 })();

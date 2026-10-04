@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import {webcrypto} from 'node:crypto';
 
-const core=readFileSync('public/note-insight-dashboard-sync-core-v1.1.0.js','utf8');
+const core=readFileSync(process.env.DASHBOARD_CORE_SOURCE||'public/note-insight-dashboard-sync-core-v1.1.0.js','utf8');
 const coreVersion=core.match(/const VERSION='([^']+)'/)[1];
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -527,4 +527,16 @@ test('読込中にINSIGHTへ戻る場合、保存待ちの退避が終わるま�
  for(let i=0;i<50&&h.w.document.getElementById('mumei-dashboard-sync')?.getAttribute('aria-busy')!=='true';i++)await pause(10);await pause(80);
  const waiting=[];let release;const gate=new Promise(r=>release=r);h.w.__mumeiDashboardSaveQueueV1.settled=async key=>{waiting.push(key);await gate};
  const b=h.w.document.getElementById('mumei-dash-insight');b.click();await pause(10);assert.equal(b.disabled,true);assert.equal(h.nav.length,0);assert.ok(waiting[0]?.startsWith('mumei-dashboard-save-queue-v1:'));release();await pause(20);assert.equal(h.nav.length,1);assert.ok(waiting.includes('mumei-dashboard-read-checkpoint-v1'));assert.equal(new URL(h.nav[0]).searchParams.get('insightFocus'),'analysis');
+});
+
+for(const path of ['/notifications','/tester/n/ordinary','/messages/rooms/123'])test('wrapperのHistory通知やDOM変更がなくても、別ページの残留パネルを消す：'+path,async t=>{
+ let nativePush;const h=page(t,'<p>ページビュー 8</p>',{paired:false,watchHref:true,before:w=>{nativePush=w.history.pushState.bind(w.history);w.document.documentElement.setAttribute('data-mumei-dashboard-wrapper',coreVersion)}});await pause(80);assert.ok(h.w.document.getElementById('mumei-dashboard-sync'));
+ const old=h.w.document.createElement('div');old.id='mumei-dashboard-sync';old.dataset.coreVersion='legacy';h.w.document.body.append(old);await pause(60);
+ nativePush(null,'',path);await pause(80);assert.equal(h.w.document.querySelectorAll('#mumei-dashboard-sync').length,0);assert.equal(h.w.document.getElementById('mumei-dashboard-clearance'),null);assert.equal(h.saves.length,0);
+ nativePush(null,'','/sitesettings/stats');await pause(80);assert.equal(h.w.document.querySelectorAll('#mumei-dashboard-sync').length,1);assert.equal(h.saves.length,0,'戻っても手動の読み込みを勝手に始めない');
+});
+
+test('wrapperが起動していなくても、別ページでパネルを消し、進行中の取得分は保存する',async t=>{
+ let finish,nativePush;const h=page(t,'<p>ページビュー 8</p><details><summary>日別グラフ</summary></details>',{watchHref:true,stats:()=>new Promise(r=>finish=r),before:w=>{nativePush=w.history.pushState.bind(w.history);w.document.documentElement.setAttribute('data-mumei-dashboard-wrapper',coreVersion);w.document.querySelector('summary').onclick=()=>void w.fetch('/api/v1/stats/daily')}});
+ for(let i=0;i<80&&!finish;i++)await pause(10);assert.ok(finish);nativePush(null,'','/tester/n/ordinary');await pause(80);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);finish({page_views:{'2026-09-20':8}});await saved(h);assert.equal(h.saves[0].contentSections.article.scope,'partial-read');assert.equal(h.saves[0].metricSeries[0].pageViews,8);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);
 });
