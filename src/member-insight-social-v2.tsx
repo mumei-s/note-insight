@@ -1,10 +1,17 @@
 import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { INSIGHT_TOKEN_KEY, readStoredInsightAccounts } from "./insight-account-store";
 import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import "./member-insight-social-v2.css";
 const EVENTS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-events",ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons",PAGE=50;type Row=Record<string,any>;type View="changes"|"people"|"investigate";
 async function post(extra:Record<string,unknown>={}){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),45000);try{try{const r=await fetch(EVENTS,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(extra),cache:"no-store",signal:controller.signal}),p=await r.json().catch(()=>({}));if(r.status===401||r.status===403)throw new Error(p?.error||`HTTP_${r.status}`);if(r.status===402)throw new Error("BACKEND_RESTRICTED_402");if(!r.ok||p?.ok===false)throw new Error(p?.error||"INSIGHT_API_ERROR");return p}catch(e){const msg=e instanceof Error?e.message:String(e);if(!memberReadAuthFailure(msg))try{return await memberDbReadFallback(EVENTS,extra)}catch{}throw e}}finally{window.clearTimeout(timer)}}
+// Saved views belong to the authenticated account; closing INSIGHT does not discard them.
+const SOCIAL_CACHE=new Map<string,{value:any;at:number}>(),SOCIAL_REQUESTS=new Map<string,Promise<any>>();
+function socialAccount(){const token=localStorage.getItem(INSIGHT_TOKEN_KEY);return token?readStoredInsightAccounts().find(a=>a.memberToken===token)?.noteId||'':''}
+function socialKey(extra:Record<string,unknown>){const account=socialAccount();return account?account+'|'+JSON.stringify(extra):''}
+function cachedSocial(extra:Record<string,unknown>){const key=socialKey(extra);if(!key)return null;let saved=SOCIAL_CACHE.get(key);if(!saved)try{const rows=JSON.parse(localStorage.getItem('mumei-social-view-cache-v1:'+socialAccount())||'[]');saved=rows.find((r:any)=>r.key===key);if(saved)SOCIAL_CACHE.set(key,saved)}catch{}return saved?.value||null}
+function retainSocial(extra:Record<string,unknown>,value:any){const account=socialAccount(),key=socialKey(extra);if(!key||String(value.noteId||'').toLowerCase()!==account)return;const item={value,at:Date.now()};SOCIAL_CACHE.set(key,item);try{const storage='mumei-social-view-cache-v1:'+account,rows=JSON.parse(localStorage.getItem(storage)||'[]');localStorage.setItem(storage,JSON.stringify([...rows.filter((r:any)=>r.key!==key),{key,...item}].slice(-40)))}catch{}}
+async function savedSocial(extra:Record<string,unknown>){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||'',key=token+'|'+JSON.stringify(extra),pending=SOCIAL_REQUESTS.get(key);if(pending)return pending;const job=post(extra).then(x=>{if(localStorage.getItem(INSIGHT_TOKEN_KEY)===token)retainSocial(extra,x);return x}).finally(()=>SOCIAL_REQUESTS.delete(key));SOCIAL_REQUESTS.set(key,job);return job}
 const n=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0)),date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)},isoDay=(v:string)=>v?`${v}T00:00:00+09:00`:null,nextDay=(v:string)=>v?new Date(new Date(`${v}T00:00:00+09:00`).getTime()+86400000).toISOString():null;
 function noteId(url:any){try{const id=new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]||"";return /^[A-Za-z0-9_-]+$/.test(id)?id.toLowerCase():""}catch{return""}}
 async function enrich(rows:Row[]){const ids=[...new Set(rows.map(r=>noteId(r.actor_url)).filter(Boolean))];if(!ids.length)return rows;try{const r=await fetch(ICON,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({noteIds:ids}),cache:"no-store"}),p=await r.json(),m=new Map((p.items||[]).map((x:any)=>[String(x.noteId||"").toLowerCase(),x.image]));return rows.map(x=>({...x,actor_image_url:m.get(noteId(x.actor_url))||x.actor_image_url||null}))}catch{return rows}}
@@ -20,10 +27,10 @@ function syncNote(r:any){if(!r)return"同期履歴なし";const a=Number(r.added
 const RELATION_FILTERS=[['following_only','相手からフォローなし'],['lost','相互から減'],['mutual','相互フォロー'],['gained','相互に増'],['follower_only','相手だけフォロー'],['unknown','未確認'],['all','すべて']];
 function relationLabel(r:Row){return r.lost_at?'相互から減':r.relation==='mutual'?'相互フォロー':r.relation==='following_only'?'相手からフォローなし':r.relation==='follower_only'?'相手だけフォロー':'相手の状態を未確認'}
 function MutualComparison({revision}:{revision:number}){
- const [data,setData]=useState<any>(null),[windowMode,setWindowMode]=useState('oldest'),[filter,setFilter]=useState('following_only'),[query,setQuery]=useState(''),[page,setPage]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [data,setData]=useState<any>(()=>cachedSocial({action:'comparison',window:'oldest',relationship:'following_only',query:'',page:1,pageSize:PAGE})),[windowMode,setWindowMode]=useState('oldest'),[filter,setFilter]=useState('following_only'),[query,setQuery]=useState(''),[page,setPage]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const request=useRef(0);
- useEffect(()=>{let disposed=false;const token=localStorage.getItem(INSIGHT_TOKEN_KEY);const refresh=async()=>{
-  const id=++request.current;setBusy(true);try{const x=await post({action:'comparison',window:windowMode,relationship:filter,query,page,pageSize:PAGE});if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){setData(x);setError('')}}catch(e){if(!disposed&&request.current===id)setError(e instanceof Error?e.message:'照合結果を読み込めませんでした')}finally{if(!disposed&&request.current===id)setBusy(false)}
+ useEffect(()=>{let disposed=false;const token=localStorage.getItem(INSIGHT_TOKEN_KEY),extra={action:'comparison',window:windowMode,relationship:filter,query,page,pageSize:PAGE};setData(cachedSocial(extra));const refresh=async()=>{
+  const id=++request.current;setBusy(true);try{const x=await savedSocial(extra);if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){setData(x);setError('')}}catch(e){if(!disposed&&request.current===id)setError(e instanceof Error?e.message:'照合結果を読み込めませんでした')}finally{if(!disposed&&request.current===id)setBusy(false)}
  };const first=window.setTimeout(()=>void refresh(),query?250:0),timer=window.setInterval(()=>{if(document.visibilityState==='visible')void refresh()},60000),focus=()=>void refresh();window.addEventListener('focus',focus);return()=>{disposed=true;request.current++;window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener('focus',focus)}},[revision,windowMode,filter,query,page]);
  const rows:Row[]=data?.rows||[],counts=data?.counts||{},status=data?.status,pages=Math.max(1,Math.ceil(Number(data?.total||0)/PAGE)),noteId=data?.noteId||'',scanUrl=noteId?`https://note.com/${encodeURIComponent(noteId)}?mumei_social_scan=1`:'';
  return <section id="mis2-social" className="mis2" aria-busy={busy}>
@@ -44,7 +51,8 @@ export function MemberInsightSocialV2({revision=0}:{revision?:number}){
  return <div className="mis2-social-root"><div className="mis2-viewtabs"><button className={!history?'active':''} aria-pressed={!history} onClick={()=>setHistory(false)}>相互の照合・減を確認</button><button className={history?'active':''} aria-pressed={history} onClick={()=>setHistory(true)}>個別の履歴</button></div>{history?<SocialHistory revision={revision}/>:<MutualComparison revision={revision}/>}</div>
 }
 function SocialHistory({revision=0}:{revision?:number}){
- const[rows,setRows]=useState<Row[]>([]),[total,setTotal]=useState(0),[page,setPage]=useState(1),[direction,setDirection]=useState("followers"),[change,setChange]=useState("all"),[day,setDay]=useState(""),[latest,setLatest]=useState<Record<string,any>>({}),[loading,setLoading]=useState(true),[error,setError]=useState(""),[view,setView]=useState<View>("people");
+ const initial=cachedSocial({action:"people",window:"latest",query:"",page:1,pageSize:PAGE,direction:"followers"});
+ const[rows,setRows]=useState<Row[]>(initial?.rows||[]),[total,setTotal]=useState(initial?.total||0),[page,setPage]=useState(1),[direction,setDirection]=useState("followers"),[change,setChange]=useState("all"),[day,setDay]=useState(""),[latest,setLatest]=useState<Record<string,any>>(initial?.latest||{followers:initial?.run}),[loading,setLoading]=useState(false),[error,setError]=useState(""),[view,setView]=useState<View>("people");
  const[windowMode,setWindowMode]=useState("latest"),[query,setQuery]=useState(""),[inspection,setInspection]=useState<any>(null),request=useRef(0),inspectionRequest=useRef(0);
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  async function load(p=1,silent=false){
@@ -52,7 +60,9 @@ function SocialHistory({revision=0}:{revision?:number}){
   if(!silent)setLoading(true);setError("");
   try{
    const peopleDirection=direction==="followings"?"followings":"followers";
-   const x=await post(view==="people"?{action:"people",window:windowMode,query,page:p,pageSize:PAGE,direction:peopleDirection}:{action:view==="investigate"?"investigation":"events",window:windowMode,query,page:p,pageSize:PAGE,direction,change:view==="investigate"?"removed":change,...range});
+   const extra=view==="people"?{action:"people",window:windowMode,query,page:p,pageSize:PAGE,direction:peopleDirection}:{action:view==="investigate"?"investigation":"events",window:windowMode,query,page:p,pageSize:PAGE,direction,change:view==="investigate"?"removed":change,...range};
+   if(!silent){const cached=cachedSocial(extra);setRows(cached?.rows||[]);setTotal(cached?.total||0);}
+   const x=await savedSocial(extra);
    if(!valid())return;const list=(x.rows||[]).filter((r:Row)=>!String(r.person_key||"").startsWith("aggregate:"));setRows(list);setTotal(Number(x.total||0));setPage(p);if(x.latest)setLatest(x.latest);else if(x.run)setLatest(v=>({...v,[peopleDirection]:x.run}));
    void enrich(list).then(value=>{if(valid())setRows(value)});
   }catch(e){if(valid())setError(e instanceof Error?e.message:"読込失敗")}finally{if(valid())setLoading(false)}

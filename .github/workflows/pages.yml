@@ -66,6 +66,8 @@ jobs:
         run: node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs
       - name: Check analysis navigation, settings and retained data presentation
         run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs
+      - name: Check retained social views and differences
+        run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs
       - name: Check manual dashboard panel and durable save queue
         run: node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-save-queue.test.mjs tests/dashboard-daily-v146.test.mjs
       - name: Check owner DM retention and independent device sessions
