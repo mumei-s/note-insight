@@ -30,6 +30,7 @@ type Application = {
   status: "pending" | "approved" | "active" | "rejected" | "revoked";
   verificationCode?: string | null;
   verifiedAt?: string | null;
+  approvedAt?: string | null;
 };
 type Stage = "loading" | "accounts" | "apply" | "pending" | "approved" | "recovery" | "recovery-check";
 type RecoveryState = { noteId: string; token: string; application: Application; verificationCode: string; at: number };
@@ -58,12 +59,13 @@ function authFailure(code: string) { return /INSIGHT_SESSION_INVALID|INSIGHT_MEM
 function backendUnavailable(code: string) { return /BACKEND_RESTRICTED_402|HTTP_402|ACCESS_ERROR|Failed to fetch|NetworkError|NETWORK|TIMEOUT/i.test(code); }
 function localActive(account: StoredInsightAccount | undefined | null) { return Boolean(account?.memberToken && account.status === "active"); }
 
-async function post(endpoint: string, action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
+async function post(endpoint: string, action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}, signal?: AbortSignal) {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify({ action, ...extra }),
     cache: "no-store",
+    signal,
   });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 402) throw new Error("BACKEND_RESTRICTED_402");
@@ -121,6 +123,7 @@ export function AccessPortalV6() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [approvalChecking, setApprovalChecking] = useState(false);
   const [version, setVersion] = useState(0);
   const currentToken = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   const storedAccounts = useMemo(() => readStoredInsightAccounts().filter((item) => item.noteId), [version]);
@@ -169,6 +172,8 @@ export function AccessPortalV6() {
   async function reactivateReturning(account: StoredInsightAccount) {
     if (!account.applicantToken) return false;
     const payload = await post(REACTIVATE, "resume", {}, { "X-Insight-Applicant": account.applicantToken });
+    const current=currentJoinAccount();
+    if(current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||payload.application?.noteId!==account.noteId)return false;
     rememberMemberSession(payload.application, payload.memberToken, account.passcode);
     localStorage.removeItem(JOIN_NOTE_KEY);
     clearRecoveryState();
@@ -183,8 +188,10 @@ export function AccessPortalV6() {
     if (!account?.applicantToken) return false;
     try {
       const payload = await post(ACCESS, "application-status", {}, { "X-Insight-Applicant": account.applicantToken });
-      const app = payload.application as Application;
+      const app = payload.application as Application, current = currentJoinAccount();
+      if(current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||app.noteId!==account.noteId)return false;
       rememberApplication(app, app.verificationCode || account.passcode);
+      if(app.status==="approved")announceApproval(app);
       setApplication(app);
       if (app.verificationCode) setVerificationCode(app.verificationCode);
       if ((app.status === "approved" || app.status === "active") && app.verifiedAt) return reactivateReturning(account);
@@ -224,6 +231,38 @@ export function AccessPortalV6() {
     window.addEventListener("mumei-insight-accounts", handler);
     return () => window.removeEventListener("mumei-insight-accounts", handler);
   }, []);
+
+  function announceApproval(app: Application) {
+    const account=currentJoinAccount();
+    if(!account?.applicantToken||account.noteId!==app.noteId)return;
+    const text=`@${app.noteId} の参加申請が承認されました。${app.verifiedAt?"参加を再開しています。":"本人確認へ進めます。"}`;
+    setMessage(text);
+    const key=`mumei-application-approval-notified:${app.id}`;
+    if(localStorage.getItem(key))return;
+    localStorage.setItem(key,app.approvedAt||String(Date.now()));
+    if(app.verifiedAt){const notice=document.createElement("p");notice.className="access2-approval-toast";notice.setAttribute("role","alert");notice.textContent=text;document.body.append(notice);window.setTimeout(()=>notice.remove(),12000)}
+    if("Notification" in window&&window.Notification.permission==="granted"){
+      try{new window.Notification("INSIGHT 参加承認",{body:text,tag:key})}catch{/* In-app approval remains visible. */}
+    }
+  }
+  useEffect(()=>{
+    if(stage!=="pending"||!application)return;
+    const account=currentJoinAccount();if(!account?.applicantToken||account.noteId!==application.noteId)return;
+    let disposed=false,inflight=false,controller:AbortController|null=null;
+    const check=async()=>{
+      if(disposed||inflight)return;inflight=true;setApprovalChecking(true);controller=new AbortController();const timer=window.setTimeout(()=>controller?.abort(),20000);
+      try{
+        const payload=await post(ACCESS,"application-status",{},{"X-Insight-Applicant":account.applicantToken!},controller.signal),app=payload.application as Application,current=currentJoinAccount();
+        if(disposed||current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||app.id!==application.id||app.noteId!==account.noteId)return;
+        if(app.status==="approved"){
+          rememberApplication(app,app.verificationCode||account.passcode);setApplication(app);if(app.verificationCode)setVerificationCode(app.verificationCode);announceApproval(app);if(app.verifiedAt)await reactivateReturning(account);else setStage("approved");
+        }
+      }catch{/* A temporary failure keeps the existing pending screen and manual check. */}
+      finally{window.clearTimeout(timer);inflight=false;if(!disposed)setApprovalChecking(false)}
+    };
+    const interval=window.setInterval(()=>void check(),15000),focus=()=>void check();window.addEventListener("focus",focus);window.addEventListener("pageshow",focus);void check();
+    return()=>{disposed=true;controller?.abort();window.clearInterval(interval);window.removeEventListener("focus",focus);window.removeEventListener("pageshow",focus)};
+  },[stage,application?.id]);
 
   async function switchAccount(account: StoredInsightAccount) {
     if (!account.memberToken) { openRecoveryFor(account); return; }
@@ -279,8 +318,10 @@ export function AccessPortalV6() {
     setSaving(true); setError(""); setMessage("");
     try {
       const payload = await post(ACCESS, "application-status", {}, { "X-Insight-Applicant": account.applicantToken });
-      const app = payload.application as Application;
+      const app = payload.application as Application, current = currentJoinAccount();
+      if(current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||app.noteId!==account.noteId)return false;
       rememberApplication(app, app.verificationCode || account.passcode);
+      if(app.status==="approved")announceApproval(app);
       setApplication(app);
       if (app.verificationCode) setVerificationCode(app.verificationCode);
       if ((app.status === "approved" || app.status === "active") && app.verifiedAt) {
@@ -362,7 +403,7 @@ export function AccessPortalV6() {
 
     {stage === "apply" ? <section className="access2-card"><small className="access2-note">STEP 1 / 2</small><h2>参加申請</h2><p>自分のnote ID、またはクリエイターページURLを入れてください。すでに参加中なら自動で再ログインへ案内します。</p><form onSubmit={apply}><input className="access2-input" value={noteInput} onChange={(event) => setNoteInput(event.target.value)} placeholder="note ID または https://note.com/..." autoComplete="off" required /><div className="access2-actions"><button className="access2-btn" disabled={saving}>{saving ? "申請中…" : "参加申請する"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>戻る</button></div></form></section> : null}
 
-    {stage === "pending" && application ? <section className="access2-card"><small className="access2-note">OWNER APPROVAL</small><h2>承認待ち</h2><Identity app={application} /><p>申請は届いています。OWNER承認後、初参加なら本人確認、本人確認済みの再参加ならそのまま自動再開します。</p><div className="access2-actions"><button className="access2-btn" disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を確認"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>あとで続ける</button></div></section> : null}
+    {stage === "pending" && application ? <section className="access2-card" aria-busy={approvalChecking}><small className="access2-note">OWNER APPROVAL</small><h2>承認待ち</h2><p className="access2-approval-progress" role="status">{approvalChecking?"申請状況を確認中…":"承認されると、この画面でお知らせします。"}</p><Identity app={application} /><p>申請は届いています。OWNER承認後、初参加なら本人確認、本人確認済みの再参加ならそのまま自動再開します。</p><div className="access2-actions"><button className="access2-btn" disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を確認"}</button><button type="button" className="access2-btn ghost" onClick={() => setStage("accounts")}>あとで続ける</button></div></section> : null}
 
     {stage === "approved" && application ? <section className="access2-card"><small className="access2-note">STEP 2 / 2</small><h2>note自己紹介欄で本人確認</h2><Identity app={application} /><p>下の確認コードを一時的にnote自己紹介欄へ入れて保存してください。認証後は削除して元に戻せます。コードをログイン欄へ入力する必要はありません。</p><code className="access2-code">{verificationCode}</code><div className="access2-actions"><button className="access2-btn secondary" onClick={() => { if (verificationCode) void navigator.clipboard?.writeText(verificationCode); }}>コードをコピー</button><a className="access2-btn secondary" href={`https://note.com/${application.noteId}`} target="_blank" rel="noreferrer" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>自分のnoteプロフィールを開く ↗</a><button className="access2-btn" disabled={saving} onClick={() => void verifyProfile()}>{saving ? "本人確認中…" : "保存したので本人確認する"}</button></div></section> : null}
 

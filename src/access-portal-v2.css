@@ -4,3 +4,4 @@
 .access2-card[aria-busy=true] .access2-approval-progress::before{content:"";width:6px;height:6px;border-radius:50%;background:#8ddff3;flex-shrink:0;animation:accessApprovalPulse .9s ease-in-out infinite}
 @keyframes accessApprovalPulse{50%{opacity:.35;transform:scale(.7)}}
 @media(prefers-reduced-motion:reduce){.access2-card[aria-busy=true] .access2-approval-progress::before{animation:none}}
+.access2-approval-toast{position:fixed;z-index:2147483000;bottom:18px;left:12px;right:12px;max-width:440px;margin:0 auto;padding:10px 14px;border:1px solid #80d5e5;border-radius:10px;background:#102633;color:#e6f8ff;font:600 13px/1.5 system-ui;box-sizing:border-box}

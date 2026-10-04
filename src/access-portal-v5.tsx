@@ -23,7 +23,6 @@ type Application = {
   imageUrl: string | null;
   status: "pending" | "approved" | "active" | "rejected" | "revoked";
   verificationCode?: string | null;
-  approvedAt?: string | null;
 };
 
 type Stage = "loading" | "home" | "apply" | "pending" | "approved" | "recovery";
@@ -48,13 +47,12 @@ function authFailure(code: string) {
   return /INSIGHT_SESSION_INVALID|INSIGHT_MEMBER_INACTIVE|INSIGHT_LOGIN_REQUIRED/.test(code);
 }
 
-async function callAccess(action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}, signal?: AbortSignal) {
+async function callAccess(action: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
   const response = await fetch(ACCESS, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify({ action, ...extra }),
     cache: "no-store",
-    signal,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) throw new Error(payload?.error || "ACCESS_ERROR");
@@ -88,7 +86,6 @@ export function AccessPortalV5() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
-  const [approvalChecking, setApprovalChecking] = useState(false);
 
   function goDashboard() {
     sessionStorage.removeItem(OWNER_VIEW_KEY);
@@ -105,12 +102,11 @@ export function AccessPortalV5() {
     if (!account?.applicantToken) return false;
     try {
       const payload = await callAccess("application-status", {}, { "X-Insight-Applicant": account.applicantToken });
-      const app = payload.application as Application, current = currentJoinAccount();
-      if (current?.noteId !== account.noteId || current.applicantToken !== account.applicantToken || app.noteId !== account.noteId) return false;
+      const app = payload.application as Application;
       rememberApplication(app, app.verificationCode || account.passcode);
       setApplication(app);
       if (app.verificationCode) setPasscode(app.verificationCode);
-      if (app.status === "approved") { announceApproval(app); setStage("approved"); }
+      if (app.status === "approved") setStage("approved");
       else if (app.status === "pending") setStage("pending");
       else if (app.status === "active") {
         localStorage.removeItem(JOIN_NOTE_KEY);
@@ -162,36 +158,6 @@ export function AccessPortalV5() {
 
   useEffect(() => { void bootstrap(); }, []);
 
-  function announceApproval(app: Application) {
-    const account=currentJoinAccount();
-    if(!account?.applicantToken||account.noteId!==app.noteId)return;
-    setMessage(`@${app.noteId} の参加申請が承認されました。本人確認へ進めます。`);
-    const key=`mumei-application-approval-notified:${app.id}`;
-    if(localStorage.getItem(key))return;
-    localStorage.setItem(key,app.approvedAt||String(Date.now()));
-    if("Notification" in window&&window.Notification.permission==="granted"){
-      try{new window.Notification("INSIGHT 参加承認",{body:`@${app.noteId} の申請が承認されました。本人確認へ進めます。`,tag:key})}catch{/* In-app approval remains visible. */}
-    }
-  }
-  useEffect(()=>{
-    if(stage!=="pending"||!application)return;
-    const account=currentJoinAccount();if(!account?.applicantToken||account.noteId!==application.noteId)return;
-    let disposed=false,inflight=false,controller:AbortController|null=null;
-    const check=async()=>{
-      if(disposed||inflight)return;inflight=true;setApprovalChecking(true);controller=new AbortController();const timer=window.setTimeout(()=>controller?.abort(),20000);
-      try{
-        const payload=await callAccess("application-status",{},{"X-Insight-Applicant":account.applicantToken!},controller.signal),app=payload.application as Application,current=currentJoinAccount();
-        if(disposed||current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||app.id!==application.id||app.noteId!==account.noteId)return;
-        if(app.status==="approved"){
-          rememberApplication(app,app.verificationCode||account.passcode);setApplication(app);if(app.verificationCode)setPasscode(app.verificationCode);announceApproval(app);setStage("approved");
-        }
-      }catch{/* A temporary failure keeps the existing pending screen and manual check. */}
-      finally{window.clearTimeout(timer);inflight=false;if(!disposed)setApprovalChecking(false)}
-    };
-    const interval=window.setInterval(()=>void check(),15000),focus=()=>void check();window.addEventListener("focus",focus);window.addEventListener("pageshow",focus);void check();
-    return()=>{disposed=true;controller?.abort();window.clearInterval(interval);window.removeEventListener("focus",focus);window.removeEventListener("pageshow",focus)};
-  },[stage,application?.id]);
-
   async function apply(event: FormEvent) {
     event.preventDefault();
     setSaving(true); setError(""); setMessage("");
@@ -220,12 +186,11 @@ export function AccessPortalV5() {
     setSaving(true); setError(""); setMessage("");
     try {
       const payload = await callAccess("application-status", {}, { "X-Insight-Applicant": account.applicantToken });
-      const app = payload.application as Application, current = currentJoinAccount();
-      if (current?.noteId !== account.noteId || current.applicantToken !== account.applicantToken || app.noteId !== account.noteId) return false;
+      const app = payload.application as Application;
       rememberApplication(app, app.verificationCode || account.passcode);
       setApplication(app);
       if (app.verificationCode) setPasscode(app.verificationCode);
-      if (app.status === "approved") { announceApproval(app); setStage("approved"); }
+      if (app.status === "approved") setStage("approved");
       else if (app.status === "pending") {
         setStage("pending");
         setMessage("まだ承認待ちです。承認後にここから本人確認へ進めます。");
@@ -311,10 +276,9 @@ export function AccessPortalV5() {
       </form>
     </section> : null}
 
-    {stage === "pending" && application ? <section className="access2-card" aria-busy={approvalChecking}>
+    {stage === "pending" && application ? <section className="access2-card">
       <small className="access2-note">OWNER APPROVAL</small>
       <h2>承認待ち</h2>
-      <p className="access2-approval-progress" role="status">{approvalChecking?"申請状況を確認中…":"承認されると、この画面でお知らせします。"}</p>
       <Identity app={application} />
       <p>申請は届いています。OWNER承認後、次の本人確認へ進みます。</p>
       <div className="access2-actions"><button className="access2-btn" disabled={saving} onClick={() => void refreshStatus()}>{saving ? "確認中…" : "承認状態を確認"}</button></div>
