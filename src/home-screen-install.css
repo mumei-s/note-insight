@@ -1,0 +1,16 @@
+.insight-home-install{padding:6px 12px;text-align:right;background:#050706;color:#eaf7f2}
+.insight-home-install-open{padding:8px 12px;border:1px solid #52665e;border-radius:12px;background:#13241e;color:#d6fbe9;font:inherit;font-size:13px;cursor:pointer}
+.insight-home-install-dialog{width:min(520px,calc(100vw - 24px));max-height:85svh;box-sizing:border-box;overflow:auto;padding:20px;border:1px solid #628175;border-radius:20px;background:#0b1712;color:#ecfff6;text-align:left;font:16px/1.6 system-ui,sans-serif}
+.insight-home-install-dialog::backdrop{background:#000b}
+.insight-home-install-dialog header{display:flex;gap:12px;align-items:center}
+.insight-home-install-dialog h2{font-size:20px;margin:0;flex:1}
+.insight-home-install-dialog header img{border-radius:12px}
+.insight-home-install-dialog button{min-height:44px;padding:9px 14px;border:1px solid #628175;border-radius:10px;color:#eafff4;background:#193b2d;font:inherit;cursor:pointer}
+.insight-home-install-dialog button:disabled{opacity:.6}
+.insight-home-install-selects{display:flex;gap:12px;flex-wrap:wrap}
+.insight-home-install-dialog label{display:block;flex:1;min-width:130px;font-size:14px}
+.insight-home-install-dialog select,.insight-home-install-dialog input{display:block;box-sizing:border-box;width:100%;min-height:44px;margin:4px 0 12px;padding:8px;border:1px solid #628175;border-radius:8px;background:#11261c;color:#fff;font:inherit}
+.insight-home-install-dialog ol{padding-left:24px}.insight-home-install-dialog li{margin:12px 0}
+.insight-home-install-hint{font-size:13px;color:#bbd1c6}
+.insight-home-install-dialog :focus-visible,.insight-home-install-open:focus-visible{outline:3px solid #a3ffcf;outline-offset:3px}
+@media(min-width:900px){.insight-home-install-open{font-size:15px}}

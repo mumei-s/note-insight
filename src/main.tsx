@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { HomeScreenInstall } from "./home-screen-install";
 import { installApiBridge, registerServiceWorker } from "./api";
 import {
   EXPLICIT_LOGOUT_KEY_PREFIX,
@@ -253,6 +254,7 @@ window.addEventListener("pageshow", () => { void tryReturningMemberResume(); voi
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <HomeScreenInstall />
     <App />
   </StrictMode>,
 );

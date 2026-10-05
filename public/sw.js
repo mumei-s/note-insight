@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v94-notification-controls-20261004";
+const CACHE_NAME = "mumei-note-insight-v95-home-screen-20261005";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
