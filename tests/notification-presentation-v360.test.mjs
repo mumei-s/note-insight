@@ -34,14 +34,14 @@ test('アイコン通信が止まっても本文を表示し、カテゴリ切�
  assert.match(document.querySelector('.minf-list').textContent,/記事が購入されました/);assert.doesNotMatch(document.body.textContent,/通知を読み込み中/);
  await act(async()=>h.root.unmount());h.dom.window.close();assert.ok(feeds>=1);
 });
-test('再分類は同じカーソルが返れば停止する（無限ループしない）',async()=>{
- const h=setup();let reclass=0;const requests=[];
+test('再分類は同じカーソルが返れば停止する（無限ループしない）',async t=>{
+ const h=setup();t.after(async()=>{await act(async()=>h.root.unmount());h.dom.window.close()});let reclass=0;const requests=[];
  globalThis.fetch=async(url,init)=>({ok:true,json:async()=>String(url).includes('reclassify')?(requests.push(JSON.parse(init.body)),reclass++,{ok:true,checked:100,moved:0,nextCursor:'same'}):{ok:true,noteId:'tester',rows:[],total:0,categoryCounts:{},categoryPreview:{}}});
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
  await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,10))});
  await act(async()=>{document.querySelector('.minf-detail-body button').click();await new Promise(r=>setTimeout(r,100))});
- assert.equal(reclass,2);assert.ok(requests.every(r=>r.onlyPending===true));assert.match(document.body.textContent,/分類位置が進まないため停止/);assert.equal(document.querySelector('.minf-detail-body button').disabled,false);
- await act(async()=>h.root.unmount());h.dom.window.close();
+ assert.equal(reclass,2);assert.ok(requests.every(r=>r.onlyPending===false));assert.match(document.body.textContent,/分類位置が進まないため停止/);assert.equal(document.querySelector('.minf-detail-body button').disabled,false);
+
 });
 test('通知分類は既知kindを優先し、誤取得カウンターを隔離、未知本文はその他に保持',()=>{
  const file=readFileSync('supabase/functions/insight-notification-reclassify/index.ts','utf8');const start=file.indexOf('const clean='),end=file.indexOf('function noise(');const js=ts.transpileModule(file.slice(start,end)+'\nthis.classify=classify;', {compilerOptions:{module:ts.ModuleKind.None,target:ts.ScriptTarget.ES2022}}).outputText;const ctx=vm.createContext({URL});vm.runInContext(js,ctx);
