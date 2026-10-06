@@ -16,3 +16,13 @@
 @keyframes miu-handled-flash{0%{box-shadow:0 0 0 0 #93eaff66}40%{box-shadow:0 0 12px 2px #93eaff44}100%{box-shadow:0 0 0 0 #93eaff00}}
 @keyframes miu-handled-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.miu .miu-handled.is-flashing,.miu .miu-handled.is-saving::before{animation:none}}
+
+/* Actions use the right edge; date and title retain their own left column. */
+.miu .miu-like{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:7px 9px;align-items:center}
+.miu .miu-like>.miu-like-person{grid-column:1;grid-row:1;min-width:0}
+.miu .miu-like>a{grid-column:1;grid-row:2;margin:2px 0;overflow-wrap:anywhere;line-height:1.4}
+.miu .miu-like>time{grid-column:1;grid-row:3;line-height:1.3}
+.miu .miu-like>.miu-like-actions{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
+.miu .miu-like-actions .miu-star,html[data-insight-layout] .miu .miu-like-actions .miu-star{min-height:30px!important;width:30px;height:30px;padding:2px!important;font-size:21px!important}
+.miu .miu-handled.is-saving::before{display:none}
+.miu .miu-handled.is-saving{cursor:pointer}
