@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.05.9",
+  "appVersion": "2026.10.06.1",
   "notificationVersion": "3.6.35",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-05T06:53:21+09:00",
+  "releasedAt": "2026-10-06T09:17:36+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "ログイン・参加・アカウント切替の画面は自動で先へ進めず、本人の操作で進むよう修正。",
+  "note": "スキ履歴・本人通知に対応済みを追加。返信とコメントスキの対象IDから本文を照合・保存。記事更新などの分類と未分類の手動再確認を修正。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
