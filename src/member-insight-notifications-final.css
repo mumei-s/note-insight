@@ -75,3 +75,18 @@
 .minf .minf-who>div{min-width:0}.minf .minf-star,html[data-insight-layout] .minf .minf-star{flex:0 0 32px;margin-left:auto;width:32px;min-height:32px!important;height:32px;padding:2px!important;border:0;border-radius:8px;background:transparent;color:#7c899b;font:21px/1 system-ui!important;cursor:pointer;transition:color .16s,box-shadow .16s}.minf .minf-star.active{color:#ffd86a}.minf .minf-star.is-flashing{animation:minf-handled-flash .65s ease-out}.minf .minf-star:disabled{opacity:.85}.minf .minf-star:active{box-shadow:0 0 10px #ffd86a44}
 .minf-handling-tabs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:6px 0}.minf .minf-handling-tabs button,html[data-insight-layout] .minf .minf-handling-tabs button{min-height:32px!important;padding:4px 9px;border:1px solid #345466;border-radius:8px;background:#0b1c27;color:#adcad8;font:700 var(--insight-meta-text,11px)/1.2 system-ui!important}.minf .minf-handling-tabs button.active{background:#174152;border-color:#6bd4eb;color:#e8fbff}.minf-handling-tabs small{margin-left:5px;color:#95bdcc}.minf-handling-tabs a{margin-left:auto;padding:4px;color:#d8c47b;text-decoration:none;font-size:var(--insight-meta-text,11px)}
 @media(prefers-reduced-motion:reduce){.minf .minf-star.is-flashing{animation:none}}
+
+/* Use the vacant right column, without a separate handling row at the bottom. */
+.minf .minf-list article,html[data-insight-layout] .minf .minf-list article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:5px 7px!important;align-content:start}
+.minf .minf-meta{grid-column:1/-1;grid-row:1;margin-bottom:2px}
+.minf .minf-who{grid-column:1;grid-row:2;margin:0;min-width:0}
+.minf .minf-row-actions{grid-column:2;grid-row:2/8;align-self:start;display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding-top:1px}
+.minf .minf-row-actions .minf-completion{margin:0;gap:0;flex-direction:column;align-items:flex-end}
+.minf .minf-row-actions .minf-star,html[data-insight-layout] .minf .minf-row-actions .minf-star{width:30px;min-height:30px!important;height:30px;flex-basis:30px;margin:0}
+.minf .minf-row-actions .minf-completion small{max-width:110px}
+.minf .minf-list article>:is(.minf-main,.minf-target,.minf-return-links,.minf-comment-context){grid-column:1;min-width:0;margin-top:1px;margin-bottom:1px}
+.minf .minf-comment-context{padding:5px 7px;border-radius:8px}
+.minf .minf-comment-context summary{min-height:28px;line-height:1.4}
+.minf .minf-comment-context p{margin:4px 0;line-height:1.5}
+.minf .minf-completion button.is-saving::before{display:none}
+.minf .minf-completion button.is-saving{cursor:pointer}

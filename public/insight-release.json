@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.06.3",
+  "appVersion": "2026.10.06.4",
   "notificationVersion": "3.6.36",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-06T13:25:29+09:00",
+  "releasedAt": "2026-10-06T15:05:07+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "対応済みを小型化・即時反応・発光演出。本人通知に対応状況別の表示と共通お気に入りを追加。公式🔔パネルの進捗・ON/OFF案内を一段に圧縮。",
+  "note": "対応済みと★を右側へ移動し、日時から分離して通知カードを圧縮。対応済みは押した瞬間に切替え、同期中の取り消しも即反応。最後の選択を順番に保存し、古い返事で表示を戻さない。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }
