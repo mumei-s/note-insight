@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.06.2",
-  "notificationVersion": "3.6.35",
+  "appVersion": "2026.10.06.3",
+  "notificationVersion": "3.6.36",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-06T09:17:36+09:00",
+  "releasedAt": "2026-10-06T13:25:29+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "スキ履歴・本人通知に対応済みを追加。返信とコメントスキの対象IDから本文を照合・保存。記事更新などの分類と未分類の手動再確認を修正。",
+  "note": "対応済みを小型化・即時反応・発光演出。本人通知に対応状況別の表示と共通お気に入りを追加。公式🔔パネルの進捗・ON/OFF案内を一段に圧縮。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

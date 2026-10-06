@@ -69,7 +69,7 @@ jobs:
       - name: Check magazine search and creator presentation
         run: node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs
       - name: Check analysis navigation, settings and retained data presentation
-        run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs tests/like-completion-current.test.mjs tests/notification-context-v28.test.mjs
+        run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs tests/like-completion-current.test.mjs tests/notification-context-v28.test.mjs tests/notification-handling-v29.test.mjs
       - name: Check retained notification differences and saving after stop
         run: node --experimental-vm-modules --test tests/notification-v2968.test.mjs tests/notification-window-v360.test.mjs
       - name: Check retained social views and differences
