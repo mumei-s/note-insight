@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { JSDOM } from 'jsdom';
 import * as React from 'react';
+import * as ReactDOM from 'react-dom';
 import * as jsx from 'react/jsx-runtime';
 import { resolve, dirname } from 'node:path';
 
@@ -18,7 +19,7 @@ export async function sceneFixture(t, { fetch = async () => Response.json({ item
     if (modules.has(path)) return modules.get(path);
     const exports = {}; modules.set(path, exports);
     const compiled = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('import.meta.env.BASE_URL', JSON.stringify('/note-insight/'));
-    vm.runInNewContext(compiled, { exports, require(name) { if (name === 'react') return React; if (name === 'react/jsx-runtime') return jsx; if (name.endsWith('.css')) return {}; if (name in dependencies) return dependencies[name]; const base = resolve(dirname(path), name); return load(base + (existsSync(base + '.ts') ? '.ts' : '.tsx')); }, window: w, document: w.document, location: w.location, history: w.history, localStorage: w.localStorage, sessionStorage: w.sessionStorage, MutationObserver: w.MutationObserver, fetch, URL, AbortController, setTimeout, clearTimeout, console, ...globals }, { filename: path });
+    vm.runInNewContext(compiled, { exports, require(name) { if (name === 'react') return React; if (name === 'react-dom') return ReactDOM; if (name === 'react/jsx-runtime') return jsx; if (name.endsWith('.css')) return {}; if (name in dependencies) return dependencies[name]; const base = resolve(dirname(path), name); return load(base + (existsSync(base + '.ts') ? '.ts' : '.tsx')); }, window: w, document: w.document, location: w.location, history: w.history, localStorage: w.localStorage, sessionStorage: w.sessionStorage, MutationObserver: w.MutationObserver, fetch, URL, AbortController, setTimeout, clearTimeout, console, ...globals }, { filename: path });
     return exports;
   }
   t.after(async () => { await React.act(async () => root.unmount()); w.close(); });

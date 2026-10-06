@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import {JSDOM} from 'jsdom';
 import * as React from 'react';
+import * as ReactDOM from 'react-dom';
 import * as jsx from 'react/jsx-runtime';
 import {createRoot} from 'react-dom/client';
 const {act}=React;
@@ -15,7 +16,7 @@ async function component(file,ctx,stubs={}){
   const path=resolve(file);if(modules.has(path))return modules.get(path);
   const exports={};modules.set(path,exports);
   const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText.replaceAll('import.meta.env.BASE_URL',JSON.stringify('/note-insight/'));
-  const require=name=>{if(name==='react')return React;if(name==='react/jsx-runtime')return jsx;if(name.endsWith('.css'))return{};if(name in stubs)return stubs[name];const base=resolve(dirname(path),name);return load(base+(existsSync(base+'.ts')?'.ts':'.tsx'))};
+  const require=name=>{if(name==='react')return React;if(name==='react-dom')return ReactDOM;if(name==='react/jsx-runtime')return jsx;if(name.endsWith('.css'))return{};if(name in stubs)return stubs[name];const base=resolve(dirname(path),name);return load(base+(existsSync(base+'.ts')?'.ts':'.tsx'))};
   vm.compileFunction(source,['exports','require'],{parsingContext:ctx,filename:path})(exports,require);return exports;
  }
  return load(file);
