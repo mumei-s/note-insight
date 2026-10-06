@@ -26,7 +26,7 @@ function actorFromText(v:string){const m=actionText(v).match(/^(.{1,160}?)\s*さ
 function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(ms)?new Date(ms):new Date();return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 
 const KIND_TYPES:Record<string,string>={
- like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
+ user_badge:"badge",thank_you_message:"purchase_message",like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
  board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
  circle_note_add:"membership_article_added",circle_plan_note_add:"membership_article_added",circle_note_update:"membership_article_updated",circle_plan_note_update:"membership_article_updated",circle_plan_magazine_add:"membership_magazine_added",
  circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
@@ -75,7 +75,7 @@ function classify(text:string,targetUrl:string|null,meta:any={}){
   if((/\/m\//.test(target)&&/をフォローしました/.test(t))||/マガジン.{0,120}をフォローしました/.test(t))return"magazine_follow";
   if(/(?:あなたをフォローしました|フォローされました|新しいフォロワー(?:が|です|のお知らせ)?|さん(?:他\d+名)?が(?:あなたを)?フォローしました)/.test(t))return"follow";
   if(/(?:に新しい記事を\d*本?追加しました|に記事を追加しました|マガジン.{0,80}(?:記事|新しい記事).{0,30}追加しました|メンバー特典マガジンに記事)/.test(t))return"magazine_article_added";
-  if(/(?:さんが(?:新しい)?記事を投稿しました|さんが(?:[^。]{0,120}メンバー特典マガジンの)?記事を更新しました)/.test(t))return"creator_article_posted";
+  if(/(?:さんが(?:新しい)?記事を投稿しました|さん(?:他\d+名)?が.{0,500}?記事を更新しました)/.test(t))return"creator_article_posted";
   if(/(?:あなたの記事.{0,20}話題です|あなたの記事.{0,20}話題になりました|あなたの記事\s*が話題です)/.test(t))return"buzz";
   if(/(?:あなたの記事が購入されました|あなたの有料記事が購入されました|購入がありました|さん(?:他\d+名)?が(?:あなたの)?(?:有料)?記事を購入しました[！!]?)/.test(t))return"purchase";
   if(t.length<350&&/(?:さん(?:から|より).{0,30}(?:チップ|サポート).{0,80}(?:届きました|届いた|届き|受け取りました|受け取った|受け取り|もらいました|もらい|いただきました|いただき|贈られました|送られました)|(?:チップ|サポート).{0,100}(?:が届きました|が届いた|を受け取りました|を受け取った|をもらいました|をいただきました|を贈られました|を送られました)|(?:支援|応援金).{0,100}(?:届きました|受け取りました|もらいました|いただきました))/.test(t))return"tip";
@@ -148,7 +148,7 @@ Deno.serve(async(req)=>{
       for(const result of found){if(result.error)throw result.error;for(const row of result.data||[])byId.set(row.id,row as ExistingRow)}
       const candidates=[...byId.values()];
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v27-membership",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v28-context",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
@@ -160,7 +160,7 @@ Deno.serve(async(req)=>{
     }
     const confirmed=[...new Set(confirmedClientSignatures)];
     await db.from("insight_notification_sync_runs").insert({member_id:who.memberId,inserted_count:confirmed.length,received_count:incoming.length,source:"browser-notification-stable-v3-confirmed"});
-    const result={ok:true,ingestedAt:new Date().toISOString(),classifierVersion:"action-v27-membership",noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
+    const result={ok:true,ingestedAt:new Date().toISOString(),classifierVersion:"action-v28-context",noteId:who.noteId,memberId:who.memberId,received:incoming.length,accepted:incoming.length-blocked-skipped,inserted,updated,deduped,blocked,skipped,sources:[...sources],confirmed:confirmed.length,confirmedClientSignatures:confirmed};
     if(incoming.length>0&&blocked===incoming.length)return out({...result,ok:false,error:"NOTIFICATION_SOURCE_BLOCKED"},422);
     return out(result);
   }catch(e){
