@@ -5,14 +5,15 @@ import ts from 'typescript';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('src/member-insight-social-v2.tsx','utf8'),part=source.slice(source.indexOf('const SOCIAL_CACHE='),source.indexOf('const n='));
 const query={action:'comparison',window:'oldest',relationship:'following_only',query:'',page:1,pageSize:50};
-function fixture(storage=new Map(),post=async()=>({noteId:'a',rows:[{person_key:'saved'}]})){
+function fixture(storage=new Map(),post=async()=>({noteId:'a',rows:[{person_key:'saved'}]}),pageStartedAt=0){
  const accounts=[{noteId:'a',memberToken:'secret-a'},{noteId:'b',memberToken:'secret-b'}];if(!storage.has('token'))storage.set('token','secret-a');
- const context=vm.createContext({localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},INSIGHT_TOKEN_KEY:'token',readStoredInsightAccounts:()=>accounts,post});
+ const context=vm.createContext({localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},INSIGHT_TOKEN_KEY:'token',readStoredInsightAccounts:()=>accounts,post,isFreshInsightView:at=>Number(at)>=pageStartedAt&&Date.now()-Number(at)<=60000});
  vm.runInContext(ts.transpileModule(part+'\nthis.api={cachedSocial,savedSocial};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);return{api:context.api,storage};
 }
-test('INSIGHTを閉じてコードを作り直しても本人の保存済み照合を即復元し、他人に流用しない',async()=>{
+test('確認済みの照合は画面再入場で復元し、新しいページでは通信失敗時の予備として保持し、他人に流用しない',async()=>{
  const a=fixture();await a.api.savedSocial(query);assert.equal(a.api.cachedSocial(query).rows[0].person_key,'saved');
  const reopened=fixture(a.storage);assert.equal(reopened.api.cachedSocial(query).rows[0].person_key,'saved');
+ const nextPage=fixture(a.storage,undefined,Date.now()+1);assert.equal(nextPage.api.cachedSocial(query),null);assert.equal(nextPage.api.cachedSocial(query,true).rows[0].person_key,'saved');
  const persisted=a.storage.get('mumei-social-view-cache-v1:a');assert.doesNotMatch(persisted,/secret-a/);
  a.storage.set('token','secret-b');assert.equal(reopened.api.cachedSocial(query),null);a.storage.delete('token');assert.equal(reopened.api.cachedSocial(query),null);
 });
