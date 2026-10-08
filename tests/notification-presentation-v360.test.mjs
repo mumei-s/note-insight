@@ -169,6 +169,6 @@ test('先頭は最終保存のクリエイターになり、再表示でも差�
  globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons'))return{ok:true,json:async()=>({items:[]})};const body=JSON.parse(init?.body||'{}');requests.push(body);return{ok:true,json:async()=>({ok:true,noteId:'tester',rows:body.action==='recent'?[]:rows,total:2,categoryCounts:{all:2,rating:2},watermark:'2026-10-04T00:00:00Z'})}};
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
  await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,20))});
- const body=document.querySelector('.minf-list').textContent;assert.ok(body.indexOf('最終保存の人物')<body.indexOf('更新時の人物'));assert.equal(requests.find(x=>x.action==='recent').since,'2026-10-04T00:00:00Z');
+ const body=document.querySelector('.minf-list').textContent;assert.ok(body.indexOf('最終保存の人物')<body.indexOf('更新時の人物'));assert.equal(requests.find(x=>x.action==='recent').since,null,'new launch verifies newest data instead of relying on the prior watermark');assert.equal(localStorage.getItem('mumei-notification-recent-watermark:tester'),'2026-10-04T00:00:00Z','verified checkpoint remains stored');
  await act(async()=>h.root.unmount());h.dom.window.close();
 });

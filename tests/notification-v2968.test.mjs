@@ -115,7 +115,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
   assert.match(dmFeed,/action==="people"/);assert.match(dmFeed,/action==="person_messages"/);assert.match(dmFeed,/person_key/);
   assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/visited\.has\("dm"\).*hidden=\{tab!=="dm"\}.*MemberInsightDm/);
-  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people"\)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/設定・状態<\/span>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people",\{\},controller\.signal\)/);assert.match(dmUi,/feed\("summary",\{\},controller\.signal\)/);assert.match(dmUi,/pair\("stats",\{\},controller\.signal\)/);assert.doesNotMatch(dmUi,/insight-notification-(?:feed|ingest)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/設定・状態<\/span>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
@@ -216,10 +216,28 @@ test('filter and backend restriction fixes stay isolated',()=>{
 });
 
 
-test('persisted notification board remains visible while the latest feed is checked',()=>{
-  const ui=read('src/member-insight-notifications-final.tsx');
-  assert.match(ui,/const initialRows=readBoard\(accountKey\(memberNoteId\)\)/);
+test('previous-page notification rows are kept as offline fallback without being called fresh',()=>{
+  const ui=read('src/member-insight-notifications-final.tsx'),lifecycle=read('src/insight-view-lifecycle.ts');
+  let now=Date.UTC(2026,9,8,9);
+  class Clock extends Date {static now(){return now}}
+  const savedRows=[{id:'stored',raw_text:'前回保存の通知',notification_type:'like',target_url:'https://note.com/tester/n/test',captured_at:'2026-10-08T00:00:00Z'}],storedJson=JSON.stringify(savedRows);
+  const storage=new Map([['mumei-notification-board:tester',storedJson],['mumei-notification-board-meta:tester',JSON.stringify({serverCheckedAt:now-600000})]]);
+  const context=vm.createContext({Date:Clock,localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,String(value))},requestedNotificationAccount:()=>'',currentStoredInsightAccount:()=>({noteId:'tester'}),memberNoteId:'tester',PAGE:100});
+  const freshCode=lifecycle.slice(0,lifecycle.indexOf('type RequestRecord')).replace(/\bexport\s+/g,''),boardCode=ui.slice(ui.indexOf('const NOTIFICATION_VIEW_CACHE'),ui.indexOf('const CATS=')),initial=ui.match(/const initialRows=[^;\n]+;/)?.[0];
+  assert.ok(initial,'exercise the production startup initializer');
+  vm.runInContext(ts.transpileModule(freshCode+'\n'+boardCode+'\nfunction initial(){'+initial+'return initialRows}\nglobalThis.api={initial,readBoard,hasFreshBoard,markBoardFresh};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+  assert.equal(context.api.initial().length,0,'disk rows from a prior page cannot appear as checked current data');
+  assert.equal(context.api.readBoard('tester')[0].raw_text,'前回保存の通知','stale rows remain available for offline recovery');
+  assert.equal(context.api.hasFreshBoard('tester'),false,'reading or memoizing disk rows cannot mark the board fresh');
+  assert.equal(storage.get('mumei-notification-board:tester'),storedJson,'fresh-first startup does not delete stored history');
+  context.api.markBoardFresh('tester');
+  assert.equal(context.api.initial()[0].id,'stored','server-checked rows are reusable when reopening the view');
+  now+=60001;
+  assert.equal(context.api.initial().length,0,'a verification older than the refresh interval requires a new read');
+  assert.equal(context.api.readBoard('tester').length,1,'expired verification keeps the offline fallback');
+  context.memberNoteId='other';assert.equal(context.api.initial().length,0,'the saved board cannot be reused for another account');
   assert.match(ui,/sort\(notificationBoardOrder\)/);
   assert.match(ui,/markBoardFresh\(cacheAccount/);
+  assert.match(ui,/if\(!rows\.length&&fallback\.length\)\{setRows\(fallback\)/);
   assert.match(ui,/最新確認に失敗したため前回保存分を表示しています/);
 });
