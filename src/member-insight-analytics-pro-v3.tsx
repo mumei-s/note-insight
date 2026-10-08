@@ -9,6 +9,7 @@ import { InsightDonut } from "./member-insight-analysis-donut";
 import { ArticleRanking } from "./member-insight-analysis-ranking";
 import { SavedHistory } from "./member-insight-analysis-history";
 import { GrowthAnalysis } from "./member-insight-analysis-growth";
+import { fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 
 const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
 const CACHE_PREFIX="mumei-insight-pro-cache-v3:";
@@ -34,16 +35,16 @@ function deltaPct(now:number,prev:number){if(!prev)return now?100:0;return (now-
 function jtime(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime()))return"—";return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)}
 function jstDay(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime()))return"";return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 function pearson(xs:number[],ys:number[]){if(xs.length!==ys.length||xs.length<7)return null;const ax=avg(xs),ay=avg(ys),dx=xs.map(x=>x-ax),dy=ys.map(y=>y-ay),den=Math.sqrt(sum(dx.map(x=>x*x))*sum(dy.map(y=>y*y)));if(!den)return null;return sum(dx.map((x,i)=>x*dy[i]))/den}
-async function api(endpoint:string,body:Record<string,unknown>){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),60000);try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"分析データを取得できませんでした");return p}finally{window.clearTimeout(timer)}}
-async function notificationSample(onPartial:(data:any)=>void){
- const summary=await loadNotificationSummary();
+async function api(endpoint:string,body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const r=await fetchInsightResource(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"分析データを取得できませんでした");return p}
+async function notificationSample(onPartial:(data:any)=>void,force=false,signal?:AbortSignal,revision?:number){
+ const summary=await loadNotificationSummary(0,force,signal,revision);
  const result={rows:[],dailyCounts:summary.dailyCounts||[],total:summary.total,truncated:false};
  onPartial(result);return result;
 }
 function cacheKey(period:Period="month"){const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();return id?CACHE_PREFIX+id+(period==="month"?"":":"+period):""}
 function readCache(period:Period="month"){const key=cacheKey(period);if(!key)return null;try{const raw=localStorage.getItem(key);if(!raw)return null;const x=JSON.parse(raw);if(!x?.data||!Number.isFinite(Number(x?.cachedAt)))return null;const latest=x.data.latestDashboard,span=latest?.periodStart&&latest?.periodEnd?Math.round((Date.parse(latest.periodEnd)-Date.parse(latest.periodStart))/86400000)+1:0,actual=x.data.selectedPeriod||(latest?.periodType==="all"?"all":span===7?"week":span===28?"month":null);if(actual&&actual!==period)return null;if(Date.now()-Number(x.cachedAt)>CACHE_MAX_AGE)return null;return x}catch{return null}}
 function cachePayload(data:any){const notices=data?.notifications||{};return{...data,notifications:{...notices,rows:(notices.rows||[]).slice(0,1000).map((r:Row)=>({occurred_at:r.occurred_at||null,captured_at:r.captured_at||null}))}}}
-function writeCache(data:any,period:Period="month"){const key=cacheKey(period);if(!key)return;try{localStorage.setItem(key,JSON.stringify({cachedAt:Date.now(),data:cachePayload(data)}))}catch{}}
+function writeCache(data:any,period:Period="month",cachedAt=Date.now()){const key=cacheKey(period);if(!key)return;try{localStorage.setItem(key,JSON.stringify({cachedAt,data:cachePayload(data)}))}catch{}}
 
 function dashboardHref(noteId:string,period:Period="month"){const role=String(noteId||"").toLowerCase()==="ss_yr"?"owner":"member",u=new URL(`${import.meta.env.BASE_URL}dashboard-setup.html`,window.location.origin);u.searchParams.set("role",role);u.searchParams.set("auto","1");if(noteId)u.searchParams.set("account",noteId.toLowerCase());u.searchParams.set("period",period);u.searchParams.set("v",CURRENT_DASHBOARD_VERSION);const back=new URL(window.location.href);back.searchParams.set("insightPeriod",period);u.searchParams.set("return",back.href);return u.href}
 function normalizeArticles(rows:Row[]):Article[]{const raw=(rows||[]).map(r=>{const pageViews=num(r.pageViews??r.views),impressions=num(r.impressions),likes=num(r.likes),comments=num(r.comments),salesYen=num(r.salesYen??r.sales_yen),comparable=impressions>0&&pageViews>=0&&pageViews<=impressions,conversion=comparable?pageViews/impressions*100:null,reactionsPer1k=pageViews>0?(likes+comments)/pageViews*1000:null,revenuePer1k=pageViews>0?salesYen/pageViews*1000:null;return{...r,pageViews,impressions,likes,comments,salesYen,conversion,reactionsPer1k,revenuePer1k,score:0} as Article});const pv=raw.map(r=>r.pageViews),react=raw.map(r=>r.reactionsPer1k??0),rev=raw.map(r=>r.revenuePer1k??0),sales=raw.map(r=>r.salesYen),conv=raw.filter(r=>r.conversion!=null).map(r=>r.conversion as number);for(const values of [pv,react,rev,sales,conv])values.sort((a,b)=>a-b);return raw.map(r=>{const c=r.conversion==null?50:percentile(conv,r.conversion);const score=Math.round(percentile(pv,r.pageViews)*.35+percentile(react,r.reactionsPer1k??0)*.25+percentile(rev,r.revenuePer1k??0)*.20+percentile(sales,r.salesYen)*.10+c*.10);return{...r,score}})}
@@ -87,25 +88,31 @@ function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <
 export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}:{revision?:number;onBack?:()=>void;view?:"dashboard"|"verdict"}){
   const[period,setPeriod]=useState<Period>(preferredPeriod);
   const initial=useMemo(()=>readCache(period),[]);
-  const[data,setData]=useState<any>(initial?.data||null),[loading,setLoading]=useState(!initial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(initial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
-  const requestSeq=useRef(0),refreshState=useRef({busy:false,at:0}),[noticesLoading,setNoticesLoading]=useState(false);
-  async function refresh(background=Boolean(data),passive=false){
-    if(passive&&(refreshState.current.busy||Date.now()-refreshState.current.at<60000))return;
-    refreshState.current={busy:true,at:Date.now()};
+  const freshInitial=isFreshInsightView(initial?.cachedAt)?initial:null;
+  const[data,setData]=useState<any>(freshInitial?.data||null),[loading,setLoading]=useState(!freshInitial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(freshInitial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
+  const requestSeq=useRef(0),refreshController=useRef<AbortController|null>(null),refreshState=useRef({busy:false,at:Number(freshInitial?.cachedAt||0)}),dataRef=useRef(data),[noticesLoading,setNoticesLoading]=useState(false);
+  dataRef.current=data;
+  async function refresh(background=Boolean(dataRef.current),passive=false,forceNotices=false){
+    if(passive&&(refreshState.current.busy||isFreshInsightView(refreshState.current.at)))return;
+    refreshController.current?.abort();
+    const controller=new AbortController();refreshController.current=controller;
+    refreshState.current.busy=true;
     const seq=++requestSeq.current,owner=cacheKey(period),token=localStorage.getItem(INSIGHT_TOKEN_KEY);
-    const current=()=>seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
-    if(background)setRefreshing(true);else setLoading(true);setNoticesLoading(view==="verdict");setError("");
-    let dashboard:any=null,followerCount:any=data?.followerCount||null,notifications=data?.notifications||{rows:[],total:0,truncated:false};
-    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications,followerCount};setData(next);setCachedAt(Date.now());writeCache(next,period)};
-    const followerTask=api(DASH,{action:"follower-count"}).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(()=>{if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
-    const noticeTask=view==="verdict"?notificationSample(next=>{if(current()){notifications=next;publish()}}).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)}):Promise.resolve();
-    try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period});publish()}
-    catch(e){if(current())setError(e instanceof Error?e.message:"分析データを取得できませんでした")}
-    finally{if(current()){setLoading(false);setRefreshing(false);refreshState.current.busy=false}}
-    await Promise.all([noticeTask,followerTask]);
+    const current=()=>!controller.signal.aborted&&seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
+    setRefreshing(true);if(!background)setLoading(true);setNoticesLoading(view==="verdict");setError("");
+    let dashboard:any=null,checkedAt=0,followerCount:any=dataRef.current?.followerCount||null,notifications=dataRef.current?.notifications||{rows:[],total:0,truncated:false};
+    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications,followerCount};dataRef.current=next;setData(next);setCachedAt(checkedAt);writeCache(next,period,checkedAt)};
+    const followerTask=api(DASH,{action:"follower-count"},controller.signal).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(()=>{if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
+    const noticeTask=view==="verdict"?notificationSample(next=>{if(current()){notifications=next;publish()}},forceNotices,controller.signal,revision).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)}):Promise.resolve();
+    try{
+      try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period},controller.signal);checkedAt=Date.now();if(current())refreshState.current.at=checkedAt;publish()}
+      catch(e){if(current()){const saved=readCache(period);if(!dataRef.current&&saved?.data){dataRef.current=saved.data;setData(saved.data);setCachedAt(Number(saved.cachedAt))}setError(e instanceof Error?e.message:"分析データを取得できませんでした")}}
+      finally{if(current())setLoading(false)}
+      await Promise.all([noticeTask,followerTask]);
+    }finally{if(current()){setRefreshing(false);refreshState.current.busy=false;refreshController.current=null}}
   }
-  useEffect(()=>{void refresh(Boolean(data));return()=>{requestSeq.current++}},[revision,period,view]);
-  useEffect(()=>{const resume=()=>{if(document.visibilityState==='visible')void refresh(true,true)};window.addEventListener('focus',resume);return()=>window.removeEventListener('focus',resume)},[period,view]);
+  useEffect(()=>{void refresh(Boolean(dataRef.current),false,revision>0);return()=>{requestSeq.current++;refreshController.current?.abort();refreshController.current=null;refreshState.current.busy=false}},[revision,period,view]);
+  useEffect(()=>{const resume=(event:Event)=>{if(document.visibilityState==='visible'&&!refreshState.current.busy)void refresh(Boolean(dataRef.current),event.type!=='online',event.type==='online')};for(const name of ['focus','pageshow','online'])window.addEventListener(name,resume);document.addEventListener('visibilitychange',resume);return()=>{for(const name of ['focus','pageshow','online'])window.removeEventListener(name,resume);document.removeEventListener('visibilitychange',resume)}},[period,view]);
   const articles=useMemo(()=>normalizeArticles((data?.topArticles||[]).filter((r:Row)=>!r.contentType||r.contentType==='article')),[data?.topArticles]);
 
 
@@ -125,14 +132,14 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}
   const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7,trafficRows.length>0,Boolean(latestFollower),num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
   const ranked=[...articles].sort((a,b)=>b.score-a.score);
   const syncHref=dashboardHref(noteId,period);
-  function changePeriod(next:Period){if(next===period)return;requestSeq.current++;const saved=readCache(next);setData(saved?.data||null);setCachedAt(saved?.cachedAt||0);setLoading(!saved?.data);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
+  function changePeriod(next:Period){if(next===period)return;requestSeq.current++;refreshController.current?.abort();const saved=readCache(next),fresh=isFreshInsightView(saved?.cachedAt)?saved:null;dataRef.current=fresh?.data||null;setData(dataRef.current);setCachedAt(fresh?.cachedAt||0);setLoading(!fresh?.data);refreshState.current.at=Number(fresh?.cachedAt||0);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
   const official=(key:string,value:any,currency=false)=>!hasOfficial(key,value)?"未取得":currency?money(value):n(value);
   const savedPeriod=latest.periodType==="all"?"全期間（note公式の集計）":latest.periodStart&&latest.periodEnd?`${latest.periodStart}〜${latest.periodEnd}`:'対象期間は未取得';
   const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!latestFollower?'現在のフォロワー数':null].filter(Boolean);
   const openAll=(open:boolean)=>root.current?.querySelectorAll<HTMLDetailsElement>("details.mipro-fold").forEach(x=>x.open=open);
   const cacheAge=cachedAt?Date.now()-cachedAt:0,cacheStale=Boolean(cachedAt&&cacheAge>6*60*60*1000);
   return <section className={`mipro mipro-view-${view}`} ref={root}>
-    <header className="mipro-head"><div><small>YOUR NOTE / INSIGHT</small><h2>{view==="verdict"?"総合判定":<>数字を、<br/>次のアイデアに。</>}</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>⚙ 設定・数値の更新</a><button disabled={refreshing} onClick={()=>void refresh(true)}>{refreshing?"確認中…":"保存データを再表示"}</button></div></header>
+    <header className="mipro-head"><div><small>YOUR NOTE / INSIGHT</small><h2>{view==="verdict"?"総合判定":<>数字を、<br/>次のアイデアに。</>}</h2><p><strong>@{noteId||"—"}</strong> の保存済みデータから分析を表示します。分析を開く・期間を切り替えるだけでは、noteの全記事を読み直しません。</p>{cachedAt?<span className={`mipro-cache-state ${cacheStale?"stale":""}`}>{refreshing?"↻ サーバーの保存済みデータを確認中":`公式データ保存 ${jtime(latest.capturedAt)}`}</span>:null}</div><div className="mipro-head-actions">{onBack?<button onClick={onBack}>←戻る</button>:null}<a href={syncHref}>⚙ 設定・数値の更新</a><button disabled={refreshing} onClick={()=>void refresh(true,false,true)}>{refreshing?"確認中…":"保存データを再表示"}</button></div></header>
     <div className="mipro-period-picker" role="group" aria-label="分析全体の期間"><div><span>分析する期間</span><small>集計・記事・グラフを一緒に切替</small></div><div>{(Object.keys(PERIODS) as Period[]).map(p=><button key={p} aria-pressed={period===p} onClick={()=>changePeriod(p)}>{PERIODS[p]}{data?.availablePeriods&&!data.availablePeriods.includes(p)?<small>未取得</small>:null}</button>)}</div></div>
     {loading?<p className="mipro-note" role="status">{PERIODS[period]}の保存済みデータを確認中…</p>:!data?.latestDashboard?<div className="mipro-empty-period"><small>{PERIODS[period]}</small><h3>この期間は、まだ取り込まれていません。</h3><p>{error||"期間を混ぜず、この期間の公式集計・記事別数値・推移を取得します。"}</p><a href={syncHref}>{PERIODS[period]}を自動で取り込む</a></div>:null}
     {data?.latestDashboard?<>

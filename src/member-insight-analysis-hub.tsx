@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useVisibleMotion } from "./insight-visible-motion";
 import { loadNotificationSummary } from "./member-insight-analysis-summary-client";
 import { MemberInsightAnalyticsProV3 } from "./member-insight-analytics-pro-v3";
+import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
+import { isFreshInsightView } from "./insight-view-lifecycle";
 import "./member-insight-analysis-hub.css";
 import "./member-insight-analysis-menu.css";
 
@@ -14,9 +16,22 @@ const TYPE_LABEL:Record<string,string>={like:"スキ",comment_like:"コメント
 function Bars({items,total}:{items:{k:string;v:number}[];total?:number}){const safe=Array.isArray(items)?items:[],max=Math.max(1,...safe.map(x=>Number(x.v||0)));return <>{safe.map(x=><div className="miah-bar" key={x.k}><span>{x.k}</span><i><b style={{width:`${Math.max(0,Math.min(100,Number(x.v||0)/max*100))}%`}}/></i><em>{n(x.v)}件{total?` ${(Number(x.v||0)/Math.max(1,total)*100).toFixed(0)}%`:""}</em></div>)}</>}
 function NotificationDeepAnalysis({revision=0}:{revision?:number}){
   const[period,setPeriod]=useState(0);
-  const[data,setData]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),requestSeq=useRef(0);
-  async function load(force=false){const seq=++requestSeq.current;setLoading(true);setError("");try{const next=await loadNotificationSummary(period,force);if(seq===requestSeq.current)setData(next)}catch(e){if(seq===requestSeq.current)setError(e instanceof Error?e.message:"本人通知分析に失敗しました")}finally{if(seq===requestSeq.current)setLoading(false)}}
-  useEffect(()=>{void load();return()=>{requestSeq.current++}},[period,revision]);
+  const[data,setData]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),requestSeq=useRef(0),controllerRef=useRef<AbortController|null>(null),lastChecked=useRef(0),busy=useRef(false);
+  async function load(force=false){
+    const seq=++requestSeq.current,token=localStorage.getItem(INSIGHT_TOKEN_KEY),controller=new AbortController();
+    controllerRef.current?.abort();controllerRef.current=controller;busy.current=true;
+    const current=()=>!controller.signal.aborted&&seq===requestSeq.current&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
+    setLoading(true);setError("");
+    try{const next=await loadNotificationSummary(period,force,controller.signal,revision);if(current()){lastChecked.current=Date.now();setData(next)}}
+    catch(e){if(current())setError(e instanceof Error?e.message:"本人通知分析に失敗しました")}
+    finally{if(current()){setLoading(false);busy.current=false;controllerRef.current=null}}
+  }
+  useEffect(()=>{void load(revision>0);return()=>{requestSeq.current++;controllerRef.current?.abort();controllerRef.current=null;busy.current=false}},[period,revision]);
+  useEffect(()=>{
+    const resume=(event:Event)=>{if(document.visibilityState!=="visible"||busy.current)return;if(event.type!=="online"&&isFreshInsightView(lastChecked.current))return;void load(event.type==="online")};
+    for(const name of ["focus","pageshow","online"])window.addEventListener(name,resume);document.addEventListener("visibilitychange",resume);
+    return()=>{for(const name of ["focus","pageshow","online"])window.removeEventListener(name,resume);document.removeEventListener("visibilitychange",resume)};
+  },[period,revision]);
   if(loading&&!data)return <section className="miah-notification"><b>🔔 本人通知分析を集計中…</b><span>保存済み通知の件数・日付・反応者を確認しています。</span></section>;
   if(error&&!data)return <section className="miah-notification error"><b>⚠ 本人通知分析</b><span>{error}</span><button className="miah-reload" onClick={()=>void load(true)}>再読込</button></section>;
   if(!data?.sample)return <section className="miah-notification"><b>🔔 本人通知分析</b><span>選択期間の本人通知はありません。</span><label>対象期間 <select value={period} onChange={e=>{setData(null);setPeriod(Number(e.target.value))}}><option value={0}>全保存履歴</option><option value={7}>直近7日</option><option value={30}>直近30日</option><option value={90}>直近90日</option></select></label><button onClick={()=>void load(true)}>↻ 再集計</button></section>;
