@@ -22,6 +22,7 @@ async function fixture(t, initialRows) {
     './creator-avatar': { CreatorAvatar: () => React.createElement('span', { className: 'midm-avatar' }) },
     './insight-account-store': { INSIGHT_TOKEN_KEY: 'fixture-token', currentStoredInsightAccount: () => ({ noteId: 'tester' }) },
     './insight-release': { CURRENT_DM_VERSION: '1.4.10', fetchInsightRelease: async () => ({ dmVersion: '1.4.10' }), versionDiffers: () => false },
+    './insight-view-lifecycle': { fetchInsightResource: (...args) => fetch(...args) },
   };
   const fetch = async (_url, init) => {
     const body = JSON.parse(init.body);

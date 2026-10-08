@@ -2,68 +2,78 @@ import { CreatorAvatar } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import { CURRENT_DM_VERSION, fetchInsightRelease, versionDiffers } from "./insight-release";
+import { fetchInsightResource } from "./insight-view-lifecycle";
 import "./member-insight-dm.css";
 
 const API="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-feed";
 const PAIR="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-import-token";
 const DM_TOOL_KEY="mumei-dm-tool-version";
 type Row=Record<string,any>;
-async function post(endpoint:string,body:Record<string,unknown>){
+async function post(endpoint:string,body:Record<string,unknown>,signal?:AbortSignal){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
   if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");
-  const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),30000);
   try{
-    const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:controller.signal});
+    const r=await fetchInsightResource(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal});
     const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"DM_API_ERROR");
     if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");return p;
   }catch(e){if(e instanceof Error&&e.name==='AbortError')throw new Error('DMの読込が30秒以内に完了しませんでした');throw e}
-  finally{window.clearTimeout(timer)}
 }
-const feed=(action:string,extra:Record<string,unknown>={})=>post(API,{action,...extra});
-const pair=(action:string,extra:Record<string,unknown>={})=>post(PAIR,{action,...extra});
+const feed=(action:string,extra:Record<string,unknown>={},signal?:AbortSignal)=>post(API,{action,...extra},signal);
+const pair=(action:string,extra:Record<string,unknown>={},signal?:AbortSignal)=>post(PAIR,{action,...extra},signal);
 const fmt=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)};
 function Avatar({row}:{row:Row}){return <CreatorAvatar person={row} name={String(row.peer_name||row.sender_name||row.peer_note_id||"DM")} className="midm-avatar"/>}
 function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boolean(r.peer_note_id||r.peer_url||r.peer_image_url||(name&&name!=="DM相手"))}
-export function MemberInsightDm({revision=0}:{revision?:number}){
+export function MemberInsightDm({revision=0,active=true}:{revision?:number;active?:boolean}){
   const[summary,setSummary]=useState<any>(null),[people,setPeople]=useState<Row[]>([]),[selected,setSelected]=useState<Row|null>(null),[messages,setMessages]=useState<Row[]>([]),[pairState,setPairState]=useState<any>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState("");
   const[toolVersion,setToolVersion]=useState(()=>String(localStorage.getItem(DM_TOOL_KEY)||"")),[latestDmVersion,setLatestDmVersion]=useState(CURRENT_DM_VERSION),[releaseChecked,setReleaseChecked]=useState(false);
-  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0),messageFlight=useRef<string>(""),messageView=useRef<string>(""),listRunning=useRef(false);
+  const[reader,setReader]=useState<any>(null),messageRequest=useRef(0),messageFlight=useRef<string>(""),messageView=useRef<string>(""),listRequest=useRef(0),listFlight=useRef<AbortController|null>(null),messageController=useRef<AbortController|null>(null),mounted=useRef(true),activeRef=useRef(active);activeRef.current=active;
   const[messageOwner,setMessageOwner]=useState(""),[messagesLoading,setMessagesLoading]=useState(false);
-  useEffect(()=>{const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();if(!id)return;
+  function pauseReads(){listRequest.current++;messageRequest.current++;listFlight.current?.abort();messageController.current?.abort();listFlight.current=null;messageController.current=null;messageFlight.current=""}
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;pauseReads()}},[]);
+  useEffect(()=>{if(!active){pauseReads();setLoading(false);setMessagesLoading(false)}},[active]);
+  useEffect(()=>{const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();if(!id||!active)return;
     const receive=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.source==="mumei-dm-status-bridge"&&event.data?.noteId===id)setReader(event.data.status||null)};
-    const ask=()=>window.postMessage({source:"mumei-dm-status-ui",type:"read",noteId:id},location.origin);
+    const ask=()=>{if(document.visibilityState==="visible")window.postMessage({source:"mumei-dm-status-ui",type:"read",noteId:id},location.origin)};
     window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
-    return()=>{messageRequest.current++;window.clearInterval(timer);window.removeEventListener("message",receive)};
-  },[]);
+    return()=>{window.clearInterval(timer);window.removeEventListener("message",receive)};
+  },[active]);
   async function load(silent=false){
-    if(listRunning.current)return;listRunning.current=true;
+    if(!activeRef.current||document.visibilityState!=="visible"||listFlight.current)return;
+    const id=++listRequest.current,token=localStorage.getItem(INSIGHT_TOKEN_KEY),controller=new AbortController();listFlight.current=controller;
+    const valid=()=>mounted.current&&activeRef.current&&document.visibilityState==="visible"&&id===listRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
     if(!silent)setLoading(true);setError("");
     try{
-      const[s,p,st]=await Promise.all([feed("summary"),feed("people"),pair("stats")]),filtered=(p.rows||[]).filter(validPerson);
-      setSummary(s);setPeople(filtered);setPairState(st);
-      setSelected(prev=>prev&&filtered.some((x:Row)=>x.person_key===prev.person_key)?prev:null)
-    }catch(e){setError(e instanceof Error?e.message:"DM読込失敗")}finally{listRunning.current=false;if(!silent)setLoading(false)}
+      const results=await Promise.allSettled([
+        feed("summary",{},controller.signal).then(s=>{if(valid())setSummary(s);return s}),
+        feed("people",{},controller.signal).then(p=>{if(valid()){const filtered=(p.rows||[]).filter(validPerson);setPeople(filtered);setSelected(prev=>prev?filtered.find((x:Row)=>x.person_key===prev.person_key)||null:null);setLoading(false)}return p}),
+        pair("stats",{},controller.signal).then(st=>{if(valid())setPairState(st);return st})
+      ]);
+      if(!valid())return;
+      const failed=results.find(x=>x.status==="rejected");if(failed?.status==="rejected")setError(failed.reason instanceof Error?failed.reason.message:"DM読込失敗");
+    }catch(e){if(valid())setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(listFlight.current===controller)listFlight.current=null;if(valid()&&!silent)setLoading(false)}
   }
   async function loadMessages(person:Row|null,silent=false){
+    if(person&&(!activeRef.current||document.visibilityState!=="visible"))return;
     const token=localStorage.getItem(INSIGHT_TOKEN_KEY),key=person?`${token}|${person.person_key}`:'';
     if(key&&messageFlight.current===key)return;
-    const seq=++messageRequest.current;
+    const seq=++messageRequest.current;messageController.current?.abort();
     if(!person){messageFlight.current='';messageView.current='';setMessages([]);setMessageOwner('');setMessagesLoading(false);return}
+    const controller=new AbortController();messageController.current=controller;
     const changed=messageView.current!==key;
     messageFlight.current=key;if(!silent||changed)setMessagesLoading(true);
     if(changed){messageView.current=key;setMessages([]);setMessageOwner(person.person_key)}
-    const current=()=>seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
+    const current=()=>mounted.current&&activeRef.current&&document.visibilityState==="visible"&&seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
     const publish=(rows:Row[])=>{if(!current())return;const seen=new Set<string>();setMessages(rows.filter(r=>{const k=String(r.message_key||r.id||'');if(!k||seen.has(k))return false;seen.add(k);return true}).slice().reverse())};
     try{
-      const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500});if(!current())return;
+      const first=await feed("person_messages",{personKey:person.person_key,page:1,pageSize:500},controller.signal);if(!current())return;
       let rows=[...(first.rows||[])];publish(rows);
       const pages=Math.ceil(Math.max(0,Number(first.total||0))/500);
       for(let page=2;page<=pages&&current();page++){
-        const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500});if(!current())return;
+        const x=await feed("person_messages",{personKey:person.person_key,page,pageSize:500},controller.signal);if(!current())return;
         if(!x.rows?.length)break;rows.push(...x.rows);publish(rows);
       }
     }catch(e){if(current())setError(e instanceof Error?e.message:"DM本文の読込に失敗しました")}
-    finally{if(current())setMessagesLoading(false);if(messageFlight.current===key)messageFlight.current=''}
+    finally{if(current())setMessagesLoading(false);if(messageController.current===controller){messageController.current=null;if(messageFlight.current===key)messageFlight.current=''}}
   }
   async function startPair(){
     if(busy)return;setBusy(true);setError("");setNotice("");
@@ -74,14 +84,15 @@ export function MemberInsightDm({revision=0}:{revision?:number}){
       window.open(url,"_blank","noopener,noreferrer")
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
-  useEffect(()=>{void load(false)},[revision]);
-  useEffect(()=>{void loadMessages(selected)},[selected?.person_key,revision]);
+  useEffect(()=>{if(active)void load(false)},[revision,active]);
+  useEffect(()=>{if(active)void loadMessages(selected,true)},[selected?.person_key,revision,active]);
   useEffect(()=>{
-    const refresh=()=>{if(document.visibilityState!=="visible")return;void load(true);if(selected)void loadMessages(selected,true)};
+    if(!active)return;
+    const refresh=()=>{if(document.visibilityState!=="visible"){pauseReads();setLoading(false);setMessagesLoading(false);return}void load(true);if(selected)void loadMessages(selected,true)};
     const timer=window.setInterval(refresh,2500);
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
     return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh)}
-  },[selected?.person_key]);
+  },[selected?.person_key,active]);
   useEffect(()=>{
     let dead=false;
     const on=()=>{const installed=String(localStorage.getItem(DM_TOOL_KEY)||"");setToolVersion(installed);void fetchInsightRelease().then(x=>{if(dead)return;setLatestDmVersion(String(x.dmVersion||CURRENT_DM_VERSION));setReleaseChecked(true)}).catch(()=>{if(!dead){setLatestDmVersion(CURRENT_DM_VERSION);setReleaseChecked(true)}})};
