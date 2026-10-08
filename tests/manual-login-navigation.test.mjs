@@ -55,3 +55,44 @@ test('離れた画面への遅延復帰応答は保存アカウントを書き�
   finish(Response.json({ok:true,application:app,memberToken:'late-token'}));await pending;
   assert.equal(h.w.location.hash,'');assert.equal(h.w.localStorage.getItem('mumei-insight-access-token'),null);
 });
+
+function applyStartupAccessIntent(h,url){
+  h.w.history.replaceState(null,'',url);
+  h.w.sessionStorage.clear();
+  const source=readFileSync('src/main.tsx','utf8');
+  const code=source.slice(source.indexOf('function applyRequestedAccessIntent('),source.indexOf('installApiBridge();'));
+  const context=vm.createContext({window:h.w,sessionStorage:h.w.sessionStorage,URL,...h.store,ACCOUNT_ROUTE_REFRESH_KEY:'mumei-account-route-refresh-v1'});
+  vm.runInContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+}
+const accessIntentKeys=['mumei-insight-access-intent','mumei-insight-manual-access-intent-v1','mumei-insight-account-switch-lock-v1'];
+
+for(const launch of ['', '&launch=top'])test(`新規タブの切替URL${launch?'はTOP起動指定があっても':'は'}保存ログインから自動復帰せずアカウント一覧を開く`,async t=>{
+  let calls=0;
+  const h=await recoveryFixture(t,async()=>{calls++;return Response.json({ok:true,application:app})});
+  assert.equal(h.w.sessionStorage.length,0,'新規タブ相当の状態から開始する');
+  applyStartupAccessIntent(h,`?accessIntent=switch${launch}#access/insight`);
+  assert.deepEqual(accessIntentKeys.map(key=>h.w.sessionStorage.getItem(key)),['switch','switch','1'],'Reactのブート前に手動切替の3キーを設定する');
+  assert.equal(h.w.location.hash,'#access/insight');
+  const clean=new URL(h.w.location.href);assert.equal(clean.searchParams.has('accessIntent'),false);assert.equal(clean.searchParams.has('launch'),false);
+  await h.ctx.resume();assert.equal(calls,0,'共通の自動復帰も切替画面を飛び越えない');
+  const {AccessPortalV6}=h.load('src/access-portal-v6.tsx');
+  await h.render(()=>React.createElement(React.StrictMode,{},React.createElement(AccessPortalV6)),{});
+  assert.equal(h.w.location.hash,'#access/insight');assert.equal(calls,0);
+  assert.match(h.w.document.body.textContent,/アカウント切替・再ログイン/);
+  assert.equal(h.w.document.querySelectorAll('.access2-account').length,1);
+  assert.equal(h.w.document.querySelector('.access2-account').disabled,false);
+  assert.equal(h.w.localStorage.getItem('mumei-insight-access-token'),'fixture-token');
+  assert.equal(h.store.hasManualAccessIntent(),true);
+});
+
+test('通常のダッシュボードURLにある切替マーカーは手動切替やアカウント一覧を発動しない',async t=>{
+  let calls=0;
+  const h=await recoveryFixture(t,async()=>{calls++;return Response.json({ok:true,application:app})});
+  applyStartupAccessIntent(h,'?accessIntent=switch#dashboard');
+  assert.equal(h.w.location.hash,'#dashboard');assert.equal(h.store.hasManualAccessIntent(),false);
+  assert.deepEqual(accessIntentKeys.map(key=>h.w.sessionStorage.getItem(key)),[null,null,null]);
+  assert.equal(new URL(h.w.location.href).searchParams.get('accessIntent'),'switch','切替ルート以外ではマーカーを適用しない');
+  await h.ctx.resume();assert.equal(h.w.location.hash,'#dashboard');assert.equal(calls,1,'通常のダッシュボードでは保存済みセッションの検証を続ける');
+  assert.equal(h.store.hasManualAccessIntent(),false);
+  assert.equal(h.w.localStorage.getItem('mumei-insight-access-token'),'fixture-token');
+});

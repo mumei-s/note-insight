@@ -7,6 +7,7 @@ import {
   EXPLICIT_LOGOUT_KEY_PREFIX,
   INSIGHT_TOKEN_KEY,
   clearAccessIntent,
+  setAccessIntent,
   hasManualAccessIntent,
   currentStoredInsightAccount,
   getStoredInsightAccount,
@@ -24,6 +25,16 @@ const OWNER_KEY = "mumei-unified-owner-token";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
 const OWNER_PENDING_SEEN_KEY = "mumei-owner-pending-seen-v1";
 const ACCOUNT_ROUTE_REFRESH_KEY = "mumei-account-route-refresh-v1";
+function applyRequestedAccessIntent() {
+  const url = new URL(window.location.href);
+  if (!/^#\/?access\/insight$/.test(url.hash) || url.searchParams.get("accessIntent") !== "switch") return;
+  setAccessIntent("switch");
+  sessionStorage.setItem("mumei-insight-account-switch-lock-v1", "1");
+  url.searchParams.delete("accessIntent");
+  url.searchParams.delete("launch");
+  window.history.replaceState(window.history.state, "", url.href);
+}
+applyRequestedAccessIntent();
 const initialUrl = new URL(window.location.href);
 const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 const requestedNotificationAccount = String(initialUrl.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
