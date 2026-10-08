@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
+import { isFreshInsightView } from "./insight-view-lifecycle";
 import "./member-insight-magazines.css";
 
 type Row = Record<string, any>;
@@ -17,19 +18,40 @@ function SearchProgress({ count }: { count: number }) {
   return <div className="mimag-progress" role="status"><i aria-hidden="true" /><div><b>{count ? `${number(count)}件を先に表示 · 追加確認中` : "マガジンの記事を検索しています"}</b><small>{seconds >= 8 ? `確認中 ${seconds}秒 · 中止しても表示済みの記事は残ります` : "記事タイトル・投稿者・日本時間の日付を確認中"}</small></div><span aria-hidden="true">{seconds}s</span></div>;
 }
 
-export function MemberInsightMagazines({ revision, accountKey, history, search, cached }: {
-  revision: number; accountKey: string; history: () => Promise<any>; search: (params: Record<string, unknown>, signal: AbortSignal) => Promise<any>; cached?: any;
+export function MemberInsightMagazines({ revision, accountKey, history, search, cached, active = true }: {
+  revision: number; accountKey: string; history: () => Promise<any>; search: (params: Record<string, unknown>, signal: AbortSignal) => Promise<any>; cached?: any; active?: boolean;
 }) {
-  const [rows, setRows] = useState<Row[]>(cached?.rows || []), [refreshed, setRefreshed] = useState(cached?.refreshedAt || ""), [loading, setLoading] = useState(!cached?.rows?.length);
+  const fresh = isFreshInsightView(Number(cached?.__cachedAt || cached?.cachedAt || 0));
+  const [rows, setRows] = useState<Row[]>(fresh ? cached?.rows || [] : []), [refreshed, setRefreshed] = useState(fresh ? cached?.refreshedAt || "" : ""), [loading, setLoading] = useState(!fresh);
   const [mode, setMode] = useState("all"), [query, setQuery] = useState(""), [open, setOpen] = useState<string | null>(null), [states, setStates] = useState<Record<string, SearchState>>({}), [loadError, setLoadError] = useState("");
   const id = useId().replace(/:/g, ""), run = useRef(0), activeRequest = useRef<AbortController | null>(null), activeKey = useRef<string | null>(null);
   const resultCache = useRef(new Map<string, { at: number; rows: Row[]; total: number }>());
+  const historyRequest = useRef(0), historyFlight = useRef<Promise<any> | null>(null), rowsRef = useRef(rows); rowsRef.current = rows;
   const patch = (key: string, change: Partial<SearchState>) => setStates(old => ({ ...old, [key]: { ...(old[key] || blank()), ...change } }));
   useEffect(() => {
+    if (!active) { stop(); setLoading(false); return; }
     let live = true;
-    void history().then(x => { if (live) { setRows(x.rows || []); setRefreshed(x.refreshedAt || ""); setLoadError(""); } }).catch(() => { if (live) setLoadError("マガジンの更新を確認できませんでした。表示済みの情報は引き続き使えます。"); }).finally(() => { if (live) setLoading(false); });
-    return () => { live = false; };
-  }, [revision, history, accountKey]);
+    const refresh = async () => {
+      if (!live || document.visibilityState !== "visible") { stop(); return; }
+      const request = ++historyRequest.current;
+      const valid = () => live && document.visibilityState === "visible" && request === historyRequest.current;
+      setLoading(!rowsRef.current.length);
+      const job = historyFlight.current || history(); historyFlight.current = job;
+      try {
+        const x = await job;
+        if (valid()) { setRows(x.rows || []); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : ""); }
+      } catch {
+        if (valid()) {
+          if (!rowsRef.current.length && cached?.rows) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
+          setLoadError("マガジンの更新を確認できませんでした。保存済みの情報を表示しています。");
+        }
+      } finally { if (historyFlight.current === job) historyFlight.current = null; if (valid()) setLoading(false); }
+    };
+    void refresh();
+    const resume = () => { void refresh(); };
+    window.addEventListener("focus", resume); window.addEventListener("pageshow", resume); document.addEventListener("visibilitychange", resume);
+    return () => { live = false; historyRequest.current++; window.removeEventListener("focus", resume); window.removeEventListener("pageshow", resume); document.removeEventListener("visibilitychange", resume); };
+  }, [revision, history, accountKey, active]);
   useEffect(() => () => { run.current++; activeRequest.current?.abort(); }, [accountKey]);
   const visible = useMemo(() => rows.filter(r => {
     const ownerId = creatorNoteId(r.owner), me = String(r.meNoteId || accountKey).toLowerCase(), owned = r.relation ? r.relation === "owner" : ownerId === me;
@@ -44,13 +66,14 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   }
   function toggle(key: string) { stop(); setOpen(old => old === key ? null : key); }
   async function searchArticles(r: Row, day: string, queryValue: string) {
+    if (!active || document.visibilityState !== "visible") return;
     const key = keyOf(r); if (!key) return;
     stop();
     const currentRun = ++run.current, controller = new AbortController(), q = queryValue.trim(), signature = JSON.stringify([accountKey, key, day, q.toLowerCase()]);
     activeRequest.current = controller; activeKey.current = key;
     const local = localMatches(r.recentArticles || [], day, q), saved = resultCache.current.get(signature);
-    patch(key, { day, query: queryValue, rows: saved?.rows || local, searched: true, signature, error: "", busy: !saved || Date.now() - saved.at > 60000, total: saved?.total });
-    if (saved && Date.now() - saved.at <= 60000) { activeRequest.current = null; activeKey.current = null; return; }
+    patch(key, { day, query: queryValue, rows: saved?.rows || local, searched: true, signature, error: "", busy: !saved || !isFreshInsightView(saved.at), total: saved?.total });
+    if (saved && isFreshInsightView(saved.at)) { activeRequest.current = null; activeKey.current = null; return; }
     try {
       const range = day ? { dateFrom: `${day}T00:00:00+09:00`, dateTo: new Date(Date.parse(`${day}T00:00:00+09:00`) + 86400000).toISOString() } : { dateFrom: null, dateTo: null };
       const x = await search({ magazineKey: key, query: q, ...range }, controller.signal);
