@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.08.2",
-  "notificationVersion": "3.6.37",
+  "appVersion": "2026.10.08.3",
+  "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-08T10:29:30+00:00",
+  "releasedAt": "2026-10-08T22:40:40+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の連携画面：右上をINSIGHTへ戻る操作に統一。戻り先未指定時の自己遷移を修正。アカウント切替の意図を保持し、切替後は現在の本人を再確認してから連携。前回の起動・復帰時の最新確認と本人通知3.6.37を維持。",
+  "note": "本人通知3.6.38：大量フィルター後の「続きへ」を再修正。公式の末尾検知を再実行し、元のスクロール枠・実DOM順を維持。公式の終端表示で案内を終了。戻る導線・保存処理・分析・DM同期は維持。",
   "dmVersion": "1.4.10",
   "dmLabel": "DM同期"
 }

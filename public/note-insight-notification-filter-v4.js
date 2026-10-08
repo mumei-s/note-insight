@@ -2,12 +2,12 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.4';
+const VERSION='4.2.5';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
 const OWN='mumei-muted-v2939';
-const EDGE='data-mumei-filter-page-edge',edgeState=new WeakMap();
+const EDGE='data-mumei-filter-page-edge',edgeState=new WeakMap(),nativeDisplay=new WeakMap();
 const FORCE='data-mumei-v2939-force-visible';
 const FIL='mumei_insight_magazine_filter_enabled_v3:';
 const GRP='mumei_insight_notification_groups_v1:';
@@ -43,7 +43,7 @@ const listened=new Set();
 function invalidate(){cache=null;cacheAt=0;revision++}
 function listenAccount(id){if(listened.has(id))return;const listen=modern()&&GM.addValueChangeListener||typeof GM_addValueChangeListener==='function'&&GM_addValueChangeListener;if(!listen)return;listened.add(id);for(const prefix of [FIL,GRP,MUT,PROFILE])try{listen(key(prefix,id),()=>{if(accountId!==id)return;invalidate();schedule(0,true)})}catch{}}
 async function account(){if(accountId)return{id:accountId};if(accountJob)return accountJob;const activeRoot=root;const job=(async()=>{try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id)||root!==activeRoot||accountJob!==job)return null;accountId=id;listenAccount(id);return{id}}catch{return null}})();accountJob=job;try{return await job}finally{if(accountJob===job)accountJob=null}}
-function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${FORCE}="1"]{display:var(--mumei-v2939-display,block)!important}.${OWN}{display:none!important}.${OWN}[${EDGE}="1"]{display:block!important;box-sizing:border-box!important;height:1px!important;min-height:1px!important;max-height:1px!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important}`;document.documentElement.append(s)}
+function installStyle(){if(document.getElementById(STYLE))return;const s=document.createElement('style');s.id=STYLE;s.textContent=`.${LEGACY}[${FORCE}="1"]{display:var(--mumei-v2939-display,block)!important}.${OWN}{display:none!important}.${OWN}[${EDGE}="1"]{opacity:0!important;pointer-events:none!important}`;document.documentElement.append(s)}
 function shown(el){if(!el?.isConnected||!el.getBoundingClientRect)return false;for(let p=el;p;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden')return false}const r=el.getBoundingClientRect();return r.width>0&&r.height>0}
 function exact(v){return[...document.querySelectorAll('button,a,[role="tab"],[role="button"],div,span')].find(el=>shown(el)&&clean(el.textContent)===v)||null}
 function commonShell(a,b){if(!a||!b)return null;let p=a;for(let i=0;i<10&&p&&p!==document.body;i++,p=p.parentElement){if(p.contains(b)&&shown(p)){const r=p.getBoundingClientRect();if(r.width>180&&r.height>0&&rows(p).length)return p}}return null}
@@ -56,7 +56,7 @@ function candidates(r){
  return [...new Set([...known,...fallback])]
 }
 function collection(el,xs){const nested=xs.filter(child=>child!==el&&el.contains(child)&&leadName(clean(child.textContent)));return nested.some((a,i)=>nested.slice(i+1).some(b=>!a.contains(b)&&!b.contains(a)))}
-function rows(r){const xs=candidates(r),single=xs.filter(el=>!collection(el,xs));return single.filter(el=>!single.some(parent=>parent!==el&&parent.contains(el)))}
+function rows(r){const xs=candidates(r),single=xs.filter(el=>!collection(el,xs));return single.filter(el=>!single.some(parent=>parent!==el&&parent.contains(el))).sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1)}
 function restoreCollections(){for(const el of document.querySelectorAll('.'+OWN))if(collection(el,candidates(el)))setHidden(el,false)}
 function creatorIdFromUrl(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean);if(!u.hostname.endsWith('note.com')||p.length!==1)return'';const id=(p[0]||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:creatorIdFromUrl(a.getAttribute('href')),txt:clean(a.textContent)})).filter(x=>x.id)}
@@ -67,18 +67,20 @@ function magazineNoise(t){const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\
 async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;if(enabled)hydrateProfiles(a.id,ids,profiles);cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE)}
-function pageEdge(el,on){if(!el)return;if(on){if(!edgeState.has(el))edgeState.set(el,{aria:el.getAttribute('aria-hidden'),inert:el.hasAttribute('inert')});if(el.getAttribute(EDGE)!=='1')el.setAttribute(EDGE,'1');if(el.getAttribute('aria-hidden')!=='true')el.setAttribute('aria-hidden','true');if(!el.hasAttribute('inert'))el.setAttribute('inert','')}else{const old=edgeState.get(el);if(el.hasAttribute(EDGE))el.removeAttribute(EDGE);if(old){old.aria===null?el.removeAttribute('aria-hidden'):el.setAttribute('aria-hidden',old.aria);if(!old.inert)el.removeAttribute('inert');edgeState.delete(el)}}}
-function setHidden(el,want){if(!el)return;if(!want)pageEdge(el,false);forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
+function pageEdge(el,on){if(!el)return;if(on){if(!edgeState.has(el)){edgeState.set(el,{aria:el.getAttribute('aria-hidden'),inert:el.hasAttribute('inert'),display:el.style.getPropertyValue('display'),priority:el.style.getPropertyPriority('display')});el.style.setProperty('display',nativeDisplay.get(el)||(el.tagName==='LI'?'list-item':'block'),'important')}if(el.getAttribute(EDGE)!=='1')el.setAttribute(EDGE,'1');if(el.getAttribute('aria-hidden')!=='true')el.setAttribute('aria-hidden','true');if(!el.hasAttribute('inert'))el.setAttribute('inert','')}else{const old=edgeState.get(el);if(el.hasAttribute(EDGE))el.removeAttribute(EDGE);if(old){old.aria===null?el.removeAttribute('aria-hidden'):el.setAttribute('aria-hidden',old.aria);if(!old.inert)el.removeAttribute('inert');old.display?el.style.setProperty('display',old.display,old.priority):el.style.removeProperty('display');edgeState.delete(el)}}}
+function setHidden(el,want){if(!el)return;if(!el.classList.contains(OWN)){const display=getComputedStyle(el).display;if(display!=='none')nativeDisplay.set(el,display)}if(!want)pageEdge(el,false);forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
 function clearHides(){clearContinuation();for(const el of document.querySelectorAll(`.${OWN},.${LEGACY},[${EDGE}]`))setHidden(el,false)}
 // Collapsing the entire loaded page must not collapse note's pagination surface.
 // Leave the scroll runway BEFORE the final native notification and loader.
 // Otherwise scrolling to the end pushes a row observed by note above the viewport.
 // Preserve both pagination targets without exposing a muted row
 // or moving the viewport. The next page is still loaded by note itself.
-let continuation=null,scrollFallback=null;const scrollGuards=new Map();
+// note's public InfiniteLoader uses a 200px root margin and a 1px sentinel.
+const NATIVE_LOAD_MARGIN=200;
+let continuation=null,scrollFallback=null,continuationSurface=null,continuationWait=0,continuationFrame=0,continuationAttempt=null;const scrollGuards=new Map();
 function restoreScrollGuards(){for(const [el,{value,priority}]of scrollGuards){value?el.style.setProperty('overscroll-behavior-y',value,priority):el.style.removeProperty('overscroll-behavior-y')}scrollGuards.clear()}
 function nativeScrollGuard(surface,list){if(!surface)return;const wanted=new Map([[surface,'contain']]);for(let el=list.at(-1)?.parentElement;el&&el!==surface&&el!==document.body;el=el.parentElement)if(/auto|scroll/.test(getComputedStyle(el).overflowY)&&el.scrollHeight<=el.clientHeight+1)wanted.set(el,'auto');for(const [el,old]of scrollGuards)if(!wanted.has(el)){old.value?el.style.setProperty('overscroll-behavior-y',old.value,old.priority):el.style.removeProperty('overscroll-behavior-y');scrollGuards.delete(el)}for(const [el,value]of wanted){if(!scrollGuards.has(el))scrollGuards.set(el,{value:el.style.getPropertyValue('overscroll-behavior-y'),priority:el.style.getPropertyPriority('overscroll-behavior-y')});if(el.style.getPropertyValue('overscroll-behavior-y')!==value||el.style.getPropertyPriority('overscroll-behavior-y')!=='important')el.style.setProperty('overscroll-behavior-y',value,'important')}}
-function clearContinuation(){continuation?.remove();continuation=null;restoreScrollGuards();for(const el of document.querySelectorAll(`[${EDGE}]`))pageEdge(el,false);if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
+function clearContinuation(){clearTimeout(continuationWait);cancelAnimationFrame(continuationFrame);continuationWait=0;continuationFrame=0;continuationAttempt=null;continuationSurface=null;continuation?.remove();continuation=null;restoreScrollGuards();for(const el of document.querySelectorAll(`[${EDGE}]`))pageEdge(el,false);if(scrollFallback){const {el,styles}=scrollFallback;for(const [name,value,priority]of styles){if(value)el.style.setProperty(name,value,priority);else el.style.removeProperty(name)}scrollFallback=null}}
 function provideScroll(parent,surface){
  if(surface)return surface;
  if(parent===document.body||parent===document.documentElement)return null;
@@ -86,28 +88,60 @@ function provideScroll(parent,surface){
  const top=Math.max(0,parent.getBoundingClientRect().top||0),height=Math.max(160,innerHeight-top-90);
  for(const [name,value,priority]of [['overflow-y','auto','important'],['max-height',height+'px','important'],['touch-action','pan-y','important'],['overscroll-behavior-y','contain','']])if(parent.style.getPropertyValue(name)!==value||parent.style.getPropertyPriority(name)!==priority)parent.style.setProperty(name,value,priority);return parent;
 }
-function scrollSurface(r,list=rows(r)){let fallback=null;for(let el=list.at(-1)?.parentElement||r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement){if(!/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))continue;if(el.clientHeight>0&&el.scrollHeight>el.clientHeight+1)return el;fallback=el}const doc=document.scrollingElement;if(doc&&doc.scrollHeight>innerHeight+1&&!/hidden|clip/.test(getComputedStyle(document.body).overflowY)&&!/hidden|clip/.test(getComputedStyle(document.documentElement).overflowY))return doc;return fallback}
-function advanceContinuation(){if(!featureOn()||!root||!shown(root)||!continuation?.isConnected)return;const list=rows(root),surface=scrollSurface(root,list)||scrollFallback?.el;if(!surface)return;surface.scrollTop=Math.max(0,surface.scrollHeight-surface.clientHeight);surface.dispatchEvent(new Event('scroll',{bubbles:false}));if(surface===document.scrollingElement)window.dispatchEvent(new Event('scroll'))}
+function scrollSurface(r,list=rows(r)){const last=list.at(-1),target=last&&nativePaginationTarget(last);if(target&&target!==last)for(let el=target.parentElement;el&&el!==document.body;el=el.parentElement)if(el.tagName==='UL'&&el.contains(last)&&/auto|scroll/.test(getComputedStyle(el).overflowY))return el;let fallback=null;for(let el=last?.parentElement||r;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement){if(!/(?:auto|scroll)/.test(getComputedStyle(el).overflowY))continue;if(el.clientHeight>0&&el.scrollHeight>el.clientHeight+1)return el;fallback=el}const doc=document.scrollingElement;if(doc&&doc.scrollHeight>innerHeight+1&&!/hidden|clip/.test(getComputedStyle(document.body).overflowY)&&!/hidden|clip/.test(getComputedStyle(document.documentElement).overflowY))return doc;return fallback}
+function retainedSurface(list){const last=list.at(-1);return continuationSurface?.isConnected&&last&&continuationSurface.contains(last)?continuationSurface:null}
+function nativePaginationTarget(last){for(let el=last.nextElementSibling,n=0;el&&n<5;el=el.nextElementSibling,n++){if(el.matches('div.h-px'))return el;if(el.getBoundingClientRect().height>64)break}return last}
+function nativeViewport(surface){const top=surface===document.scrollingElement?0:surface.getBoundingClientRect().top+(surface.clientTop||0);return{top,bottom:top+(surface===document.scrollingElement?innerHeight:surface.clientHeight)}}
+function positionNativeEnd(surface,last){
+ const target=nativePaginationTarget(last).getBoundingClientRect(),next=last.nextElementSibling,after=next?.getBoundingClientRect(),bottom=after&&after.height<=64&&after.bottom>=target.bottom?after.bottom:target.bottom;
+ const viewportBottom=nativeViewport(surface).bottom;
+ const max=Math.max(0,surface.scrollHeight-(surface.clientHeight||innerHeight));
+ surface.scrollTop=Math.max(0,Math.min(max,surface.scrollTop+bottom+16-viewportBottom));
+}
+function advanceContinuation(){
+ if(!featureOn()||!root||!shown(root)||!continuation?.isConnected||continuationAttempt)return;
+ const list=rows(root),last=list.at(-1),surface=retainedSurface(list)||scrollSurface(root,list)||scrollFallback?.el;if(!surface||!last)return;
+ const current=continuation,attempt={last,text:last.textContent,total:list.length};continuationAttempt=attempt;current.querySelector('span').textContent='noteの追加読み込みを待っています…';current.querySelector('button').disabled=true;
+ // A short inner list may acquire overflow only because of our runway. Keep
+ // note's original scroll root, and reveal the native target through inner clips.
+ const reveal=()=>{continuationFrame=0;if(continuation!==current||continuationAttempt!==attempt||!featureOn()||!root||!shown(root))return;for(let el=last.parentElement;el&&el!==surface&&el!==document.body;el=el.parentElement)if(/auto|scroll/.test(getComputedStyle(el).overflowY)&&el.scrollHeight>el.clientHeight+1)positionNativeEnd(el,last);positionNativeEnd(surface,last);surface.dispatchEvent(new Event('scroll',{bubbles:false}));if(surface===document.scrollingElement)window.dispatchEvent(new Event('scroll'))};
+ const nativeTarget=nativePaginationTarget(last),rect=nativeTarget.getBoundingClientRect(),viewport=nativeViewport(surface);
+ if(nativeTarget!==last&&rect.bottom>=viewport.top-NATIVE_LOAD_MARGIN&&rect.top<=viewport.bottom+NATIVE_LOAD_MARGIN){
+  // Synthetic scroll does not retrigger IntersectionObserver while its target
+  // stays inside the root margin. Give note one rendered frame outside first.
+  surface.scrollTop=Math.max(0,surface.scrollTop+rect.top-viewport.bottom-NATIVE_LOAD_MARGIN-32);
+  continuationFrame=requestAnimationFrame(()=>{continuationFrame=requestAnimationFrame(reveal)});
+ }else reveal();
+ continuationWait=setTimeout(()=>{continuationWait=0;if(continuation!==current||!current.isConnected)return;continuationAttempt=null;current.querySelector('button').disabled=false;current.querySelector('span').textContent='追加の通知はまだ表示されていません。もう一度「続きへ」で確認できます。'},2500);
+}
 function continueFilteredPage(st,list,surface){
  const muted=list.filter(el=>el.classList.contains(OWN)),allHidden=muted.length===list.length;
- if(!st.enabled||!muted.length){clearContinuation();return}
+ const ended=[...root.querySelectorAll('li,p')].some(el=>clean(el.textContent)==='最新の通知は以上です');
+ if(!st.enabled||!muted.length||ended){clearContinuation();return}
  const last=list.at(-1),parent=last?.parentElement;if(!parent)return;
  if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';continuation.innerHTML='<span role="status"></span><button type="button" style="display:block;margin-top:12px;min-height:36px;padding:4px 16px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:700 12px system-ui">続きへ</button>';continuation.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();advanceContinuation()};parent.insertBefore(continuation,last)}
  if(continuation.nextElementSibling!==last)parent.insertBefore(continuation,last);
- const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+96-visibleHeight)+'px';
+ const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+NATIVE_LOAD_MARGIN+96-visibleHeight)+'px';
  if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
- surface=provideScroll(parent,scrollSurface(root,list));
+ surface=provideScroll(parent,surface);continuationSurface=surface;
  nativeScrollGuard(surface,list);
  // note may observe the final notification itself, rather than a separate loader.
- // Keep that exact node measurable while masking its content and interactions.
+ // Preserve its native dimensions and descendants: note may observe an inner
+ // link/body with a nonzero threshold. A 1px clipped row loses that intersection.
  for(const el of document.querySelectorAll(`[${EDGE}]`))if(el!==last)pageEdge(el,false);
  pageEdge(last,last.classList.contains(OWN));
+ // A max-height UL can grow from its short pre-filter height after the runway
+ // is inserted. Size against that final viewport too, so the sentinel can
+ // actually leave note's 200px margin before the next manual re-entry.
+ const finalViewport=Math.min(innerHeight,surface?.clientHeight||innerHeight);
+ if(finalViewport>viewport)continuation.style.minHeight=Math.max(allHidden?160:96,finalViewport+NATIVE_LOAD_MARGIN+96-visibleHeight)+'px';
  const message=allHidden?`${muted.length}件をフィルターで非表示にしています。下へスクロールして続きを表示できます。`:'下へスクロールして続きを表示';
- const label=continuation.querySelector('span');if(label.textContent!==message)label.textContent=message;
+ if(continuationAttempt&&(continuationAttempt.last!==last||continuationAttempt.text!==last.textContent||list.length>continuationAttempt.total)){clearTimeout(continuationWait);cancelAnimationFrame(continuationFrame);continuationWait=0;continuationFrame=0;continuationAttempt=null;continuation.querySelector('button').disabled=false}
+ const label=continuation.querySelector('span');if(!continuationAttempt&&label.textContent!==message)label.textContent=message;
 }
 let lastResult=null;
 function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=scrollSurface(r);for(const el of list){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);reportResult(st,list)}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list);for(const el of list){const t=clean(el.textContent),lead=leadName(t);let hide=false;if(st.enabled&&st.ids.size&&lead&&magazineNoise(t)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}setHidden(el,hide)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);reportResult(st,list)}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}

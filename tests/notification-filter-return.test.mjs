@@ -232,9 +232,9 @@ test('自動高さのスクロール枠でも補助領域が膨らみ続けず�
  const bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4'),height=bridge.style.minHeight;
  for(let i=0;i<4;i++)await e.w.__mumeiNotificationFilterV4.refresh();
  assert.equal(bridge.style.minHeight,height);
- assert.ok(Number.parseFloat(height)<=e.w.innerHeight+96);
+ assert.ok(Number.parseFloat(height)<=e.w.innerHeight+200+96,'公式IOの200px marginを含めても領域が膨らみ続けない');
  Object.defineProperty(e.panel,'clientHeight',{value:400,configurable:true});await e.w.__mumeiNotificationFilterV4.refresh();
- assert.equal(bridge.style.minHeight,'496px');assert.equal(e.panel.scrollTop,0,'読込位置へ強制スクロールしない');
+ assert.equal(bridge.style.minHeight,'696px');assert.equal(e.panel.scrollTop,0,'読込位置へ強制スクロールしない');
 });
 
 for(const remaining of [0,2])test('フィルター後の0行・2行でも固定枠内で続きへ進め、操作を遮断しない：'+remaining,async t=>{

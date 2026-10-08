@@ -15,9 +15,9 @@ function fixture(t,mode,remaining=0){
  if(mode==='modern')w.GM={getValue:async(k,d)=>values.get(k)??d,setValue:async(k,v)=>values.set(k,v)};else{w.GM_getValue=(k,d)=>values.get(k)??d;w.GM_setValue=(k,v)=>values.set(k,v)}
  let requests=0;w.fetch=async()=>{requests++;return Response.json({data:{urlname:'tester'}})};
  const panel=w.document.getElementById('panel'),list=w.document.getElementById('list'),host=w.document.getElementById('native-scroll'),loader=w.document.getElementById('native-loader');
- function height(el){if(el.hidden||w.getComputedStyle(el).display==='none')return 0;if(el.hasAttribute('data-mumei-filter-page-edge'))return 1;if(el.id==='mumei-notification-filter-continuation-v4')return Number.parseFloat(el.style.minHeight)||0;if(el.classList.contains('m-navbarNoticeItem'))return 60;if(el===loader)return 16;return 40;}
+ function height(el){if(el.hidden||w.getComputedStyle(el).display==='none')return 0;if(el.hasAttribute('data-mumei-filter-page-edge'))return Number.parseFloat(w.getComputedStyle(el).height)||60;if(el.id==='mumei-notification-filter-continuation-v4')return Number.parseFloat(el.style.minHeight)||0;if(el.classList.contains('m-navbarNoticeItem'))return 60;if(el===loader)return 16;return 40;}
  const content=()=>[...list.children].reduce((n,el)=>n+height(el),0);
- w.HTMLElement.prototype.getBoundingClientRect=function(){const h=this===host?400:this===list?content():height(this);return {width:360,height:h,top:100,left:0,right:360,bottom:100+h}};
+ w.HTMLElement.prototype.getBoundingClientRect=function(){const h=this===host?400:this===list?content():height(this);let top=this===host?100:140-host.scrollTop;if(this.parentElement===list){for(const child of list.children){if(child===this)break;top+=height(child)}}return {width:360,height:h,top,left:0,right:360,bottom:top+h}};
  Object.defineProperties(list,{clientHeight:{get:content},scrollHeight:{get:content}});
  Object.defineProperties(host,{clientHeight:{get:()=>400},scrollHeight:{get:()=>Math.max(400,content()+40)}});
  w.__mumeiNotificationReaderV4={findPanel:()=>panel.hidden?null:list};
@@ -46,7 +46,7 @@ for(const mode of ['modern','legacy'])for(const remaining of [0,2])test(`続き�
  const nativeLast=f.list.querySelectorAll('.m-navbarNoticeItem')[11+remaining];
  const height=el=>{
   if(f.w.getComputedStyle(el).display==='none')return 0;
-  if(el.hasAttribute('data-mumei-filter-page-edge'))return 1;
+  if(el.hasAttribute('data-mumei-filter-page-edge'))return Number.parseFloat(f.w.getComputedStyle(el).height)||60;
   if(el.id==='mumei-notification-filter-continuation-v4')return Number.parseFloat(el.style.minHeight)||0;
   return el===f.loader?16:60;
  };
