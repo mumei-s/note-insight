@@ -21,7 +21,7 @@ test("INSIGHTから共通の本人通知連携画面へ入り状態を分離表�
   ]);
   assert.match(page, /「INSIGHT参加中」と「本人通知の端末連携」は別状態/);
   assert.match(page, /GitHubの作成や複製は不要/);
-  assert.match(page, /call\('pair-start'\)/);
+  assert.match(page, /call\('pair-start',expected\)/);
   assert.match(page, /NOTE_ACCOUNT_MISMATCH/);
   assert.match(page, /activeDeviceCount/);
   assert.match(launcher, /notification-connection\.html/);
