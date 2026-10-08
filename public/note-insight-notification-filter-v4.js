@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.3';
+const VERSION='4.2.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -71,7 +71,9 @@ function pageEdge(el,on){if(!el)return;if(on){if(!edgeState.has(el))edgeState.se
 function setHidden(el,want){if(!el)return;if(!want)pageEdge(el,false);forceVisible(el,!want);if(el.classList.contains(OWN)!==Boolean(want))el.classList.toggle(OWN,Boolean(want))}
 function clearHides(){clearContinuation();for(const el of document.querySelectorAll(`.${OWN},.${LEGACY},[${EDGE}]`))setHidden(el,false)}
 // Collapsing the entire loaded page must not collapse note's pagination surface.
-// Leave a scroll runway before its native loader, without exposing a muted row
+// Leave the scroll runway BEFORE the final native notification and loader.
+// Otherwise scrolling to the end pushes a row observed by note above the viewport.
+// Preserve both pagination targets without exposing a muted row
 // or moving the viewport. The next page is still loaded by note itself.
 let continuation=null,scrollFallback=null;const scrollGuards=new Map();
 function restoreScrollGuards(){for(const [el,{value,priority}]of scrollGuards){value?el.style.setProperty('overscroll-behavior-y',value,priority):el.style.removeProperty('overscroll-behavior-y')}scrollGuards.clear()}
@@ -90,8 +92,8 @@ function continueFilteredPage(st,list,surface){
  const muted=list.filter(el=>el.classList.contains(OWN)),allHidden=muted.length===list.length;
  if(!st.enabled||!muted.length){clearContinuation();return}
  const last=list.at(-1),parent=last?.parentElement;if(!parent)return;
- if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';continuation.innerHTML='<span role="status"></span><button type="button" style="display:block;margin-top:12px;min-height:36px;padding:4px 16px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:700 12px system-ui">続きへ</button>';continuation.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();advanceContinuation()};parent.insertBefore(continuation,last.nextSibling)}
- if(continuation.previousElementSibling!==last)parent.insertBefore(continuation,last.nextSibling);
+ if(!continuation?.isConnected||continuation.parentElement!==parent){clearContinuation();continuation=document.createElement(/^(UL|OL)$/.test(parent.tagName)?'li':'div');continuation.id='mumei-notification-filter-continuation-v4';continuation.style.cssText='box-sizing:border-box;display:block;padding:24px 16px;color:inherit;font:600 13px/1.7 system-ui;list-style:none';continuation.innerHTML='<span role="status"></span><button type="button" style="display:block;margin-top:12px;min-height:36px;padding:4px 16px;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:700 12px system-ui">続きへ</button>';continuation.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();advanceContinuation()};parent.insertBefore(continuation,last)}
+ if(continuation.nextElementSibling!==last)parent.insertBefore(continuation,last);
  const viewport=Math.min(innerHeight,surface?.clientHeight||innerHeight),visibleHeight=list.filter(el=>!el.classList.contains(OWN)).reduce((sum,el)=>sum+el.getBoundingClientRect().height,0),height=Math.max(allHidden?160:96,viewport+96-visibleHeight)+'px';
  if(continuation.style.minHeight!==height)continuation.style.minHeight=height;
  surface=provideScroll(parent,scrollSurface(root,list));

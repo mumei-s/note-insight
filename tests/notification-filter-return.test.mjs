@@ -198,7 +198,7 @@ for(const mode of ['modern','legacy'])test(`先頭12件が対象でもネイテ�
  const bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4');
  assert.ok(bridge,'空白だけの画面にしない');
  assert.ok(Number.parseFloat(bridge.style.minHeight)>e.w.innerHeight,'一覧が短くなってもネイティブ読込位置へ進める');
- assert.equal(bridge.nextElementSibling.id,'native-loader','noteの読込位置の手前に領域を残す');
+ assert.equal(bridge.nextElementSibling.id,'first-11','公式の最終通知行の手前に領域を残す');assert.equal(bridge.nextElementSibling.nextElementSibling.id,'native-loader');
  assert.match(bridge.textContent,/12件.*下へスクロール/);
  const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});bridge.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false,'ページ本体のスクロールを妨げない');
  for(const [type,y] of [['touchstart',400],['touchmove',100]]){const ev=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(ev,'touches',{value:[{clientY:y}]});bridge.dispatchEvent(ev);assert.equal(ev.defaultPrevented,false,'スマホのスワイプを妨げない')}
@@ -241,7 +241,7 @@ for(const remaining of [0,2])test('フィルター後の0行・2行でも固定�
  const e=setup(t,'modern',true);e.w.document.body.style.overflow='hidden';
  e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div id="mobile-list" style="overflow-y:hidden;max-height:400px">'+Array.from({length:12},(_,i)=>row('muted-'+i)).join('')+Array.from({length:remaining},(_,i)=>row('visible-'+i,'別の人物さんがあなたの記事にスキしました')).join('')+'<div id="native-loader"></div></div>';
  await until(()=>e.panel.querySelectorAll('.mumei-muted-v2939').length===12);
- const list=e.panel.querySelector('#mobile-list'),bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4');assert.ok(bridge);assert.equal(list.style.overflowY,'auto');assert.equal(list.style.getPropertyPriority('overflow-y'),'important');assert.equal(bridge.nextElementSibling.id,'native-loader');
+ const list=e.panel.querySelector('#mobile-list'),bridge=e.panel.querySelector('#mumei-notification-filter-continuation-v4');assert.ok(bridge);assert.equal(list.style.overflowY,'auto');assert.equal(list.style.getPropertyPriority('overflow-y'),'important');assert.equal(bridge.nextElementSibling.id,remaining?'visible-1':'muted-11');assert.equal(bridge.nextElementSibling.nextElementSibling.id,'native-loader');
  const target=remaining?e.panel.querySelector('#visible-0'):bridge;
  for(const [type,y]of [['touchstart',300],['touchmove',100]]){const event=new e.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'touches',{value:[{clientY:y}]});target.dispatchEvent(event);assert.equal(event.defaultPrevented,false)}
  const wheel=new e.w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400});target.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,false);
