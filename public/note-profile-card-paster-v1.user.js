@@ -586,58 +586,69 @@ async function collectParenting(mode,count){
  return out
 }
 
+async function specialTagAudit(row,tag){
+ let note={},doc=null;
+ try{const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(row.key));note=p?.data||p||{}}catch{}
+ try{const html=String(await xhr(row.url,'text',45000)||'');doc=new DOMParser().parseFromString(html,'text/html')}catch{}
+ const tagDump=JSON.stringify(note.hashtags||note.tags||note.hashtag_names||note.tag_names||note.note_hashtags||[]);
+ let exactTag=tagDump.includes(tag);
+ if(!exactTag&&doc){
+  exactTag=[...doc.querySelectorAll('a')].some(a=>{
+   const label=String(a.textContent||'').trim().replace(/^#/,'');
+   let href=String(a.getAttribute('href')||'');try{href=decodeURIComponent(href)}catch{}
+   return label===tag||href.includes('/hashtag/'+tag)
+  })
+ }
+ if(!exactTag)return{ok:false,reason:'#'+tag+'タグ確認不可'};
+ const parts=[row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,doc?.querySelector('article')?.textContent||doc?.querySelector('main')?.textContent||''];
+ const text=parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim();
+ const blocked=specialBlockedReason(text);if(blocked)return{ok:false,reason:blocked};
+ if(tag===SELF_INTRO_TAG){
+  const relevant=/(?:自己紹介|はじめまして|初めまして|プロフィール|私について|わたしについて|noteを始め|noteはじめ|発信内容)/i.test(text);
+  if(!relevant)return{ok:false,reason:'自己紹介文脈不足'}
+ }
+ return{ok:true,reason:''}
+}
 async function collectFirstNoteSpecial(mode,count,selectedTags){
  const limit=targetLimit(mode,count);
  if(limit===0)return[];
  const tags=(Array.isArray(selectedTags)?selectedTags:[]).filter(x=>FIRST_TAGS.includes(x));
- if(!tags.length)throw new Error('初投稿タグを1つ以上選んでください');
+ if(!tags.length)throw new Error('タグを1つ以上選んでください');
  await recoverSpecialExclusionsFromPublishedArticles();
  const excluded=specialExcludedSets();
- // 各タグの「新着」列を別ストリームとして保持し、先頭日時を比較して1件ずつ取り出す。
- // 両方ONでもタグA→タグBの順にはせず、2タグを混ぜた本当の最新順で判定する。
  const states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
  const tested=new Set(),out=[];
  async function fill(st){
   while(!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
-   setStatus('特別案件｜#'+st.tag+' 新着 '+st.page+'ページ取得｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+   setStatus('第二弾｜#'+st.tag+' 新着 '+st.page+'ページ｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
    const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.tag)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
-   const q=normalizeSearch(p);
-   const rows=[];
-   for(const raw of q.arr){
-    const row=articleFromRaw(raw,{});
-    const u=norm(row?.url);
-    if(row&&u&&u!==norm(FINAL_URL))rows.push({...row,url:u})
-   }
+   const q=normalizeSearch(p),rows=[];
+   for(const raw of q.arr){const row=articleFromRaw(raw,{}),u=norm(row?.url);if(row&&u&&u!==norm(FINAL_URL))rows.push({...row,url:u})}
    rows.sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
    st.buffer=rows;
-   if(q.last||!q.arr.length||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;
-   else st.cursor=String(q.cursor);
-   if(!st.buffer.length&&!st.done)await sleep(60)
+   if(q.last||!q.arr.length||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;else st.cursor=String(q.cursor);
+   if(!st.buffer.length&&!st.done)await sleep(45)
   }
  }
  for(const st of states)await fill(st);
  let scanned=0;
- while(out.length<limit&&states.some(st=>st.buffer.length||!st.done)&&scanned<10000){
+ while(out.length<limit&&states.some(st=>st.buffer.length||!st.done)&&scanned<20000){
   for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
   let chosenState=null,chosenRow=null,chosenTime=-Infinity;
-  for(const st of states){
-   const row=st.buffer[0];if(!row)continue;
-   const t=new Date(row.publishAt||0).getTime();
-   if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}
-  }
+  for(const st of states){const row=st.buffer[0];if(!row)continue;const t=new Date(row.publishAt||0).getTime();if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}}
   if(!chosenRow)break;
   chosenState.buffer.shift();scanned++;
-  const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase();
+  const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase(),key=noteKey(u);
   if(tested.has(u))continue;
   tested.add(u);
-  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(noteKey(u)))continue;
-  setStatus('特別案件｜'+tags.map(x=>'#'+x).join('＋')+' 混合最新順｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
-  if(!(await creatorSinglePublicArticle(chosenRow)))continue;
-  const text=await specialArticleText(chosenRow);
-  if(specialBlockedReason(text))continue;
-  out.push({...chosenRow,specialFirstNote:true});
-  await sleep(100)
+  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key))continue;
+  setStatus('第二弾｜#'+chosenState.tag+'｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
+  const audit=await specialTagAudit(chosenRow,chosenState.tag);
+  if(!audit.ok)continue;
+  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow)))continue;
+  out.push({...chosenRow,specialFirstNote:true,specialSourceTag:chosenState.tag});
+  await sleep(55)
  }
  return out
 }
