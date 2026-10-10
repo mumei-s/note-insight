@@ -849,6 +849,31 @@ async function makeFile(row){
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('画像生成失敗')),'image/png',1));
  return new page.File([blob],'mumei_profile_note_v17_'+String(row.index).padStart(3,'0')+'.png',{type:'image/png'})
 }
+function sectionHeadingText(groupIndex){
+ const from=groupIndex*10+1,to=from+9;
+ return String(groupIndex+1).padStart(2,'0')+'｜'+from+'〜'+to+'人目の「はじめまして」'
+}
+function insertHeadingAt(view,text,pos){
+ const type=view.state.schema.nodes.heading;if(!type)throw new Error('note見出しノードを取得できません');
+ const at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)||0));
+ let node;try{node=type.create({level:2},view.state.schema.text(text))}catch{node=type.create(null,view.state.schema.text(text))}
+ view.dispatch(view.state.tr.insert(at,node));
+ const actual=view.state.doc.nodeAt(at);
+ if(!actual||actual.type?.name!=='heading'||String(actual.textContent||'')!==text)throw new Error('10人区切り見出しの挿入確認に失敗しました');
+ return{pos:at,nextPos:at+actual.nodeSize}
+}
+function recordHeading(text){
+ const run=readRun();if(!run)return;
+ const headings=Array.isArray(run.sectionHeadings)?run.sectionHeadings:[];
+ if(!headings.includes(text))headings.push(text);
+ writeRun({...run,sectionHeadings:headings,updatedAt:Date.now()})
+}
+function resolveOwnedHeadingHits(view){
+ const run=readRun(),wanted=new Set(Array.isArray(run?.sectionHeadings)?run.sectionHeadings:[]),out=[];
+ if(!wanted.size)return out;
+ view.state.doc.descendants((node,pos)=>{if(node.type?.name==='heading'&&wanted.has(String(node.textContent||'')))out.push({node,pos})});
+ return out
+}
 function setSelectionForInsert(view,pos){
  const max=view.state.doc.content.size;
  const at=Math.max(0,Math.min(max,Number(pos)||0));
