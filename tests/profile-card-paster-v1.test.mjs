@@ -5,13 +5,13 @@ import { readFile } from "node:fs/promises";
 const root=new URL("../",import.meta.url);
 const read=p=>readFile(new URL(p,root),"utf8");
 
-test("v1.7 is editor-only and direct-updated",async()=>{
+test("v1.7.1 is editor-only and direct-updated",async()=>{
  const s=await read("public/note-profile-card-paster-v1.user.js");
  const h=await read("public/note-profile-card-paster-install.html");
- assert.match(s,/@version\s+1\.7\.0/);
+ assert.match(s,/@version\s+1\.7\.1/);
  assert.match(s,/@match\s+https:\/\/editor\.note\.com\/\*/);
  assert.doesNotMatch(s,/@match\s+https:\/\/note\.com\/\*/);
- assert.match(h,/v=1\.7\.0/);
+ assert.match(h,/v=1\.7\.1/);
  assert.match(h,/location\.replace/);
 });
 
@@ -78,4 +78,21 @@ test("panel footprint is substantially reduced and remains scrollable",async()=>
  assert.match(s,/max-height:34vh/);
  assert.match(s,/overflow:auto/);
  assert.match(s,/PANEL\+'-mini'/);
+});
+
+
+test("first-note second round restores exclusions from the supplied previous published article",async()=>{
+ const s=await read("public/note-profile-card-paster-v1.user.js");
+ assert.match(s,/SPECIAL_RECOVERY_URLS=\['https:\/\/note\.com\/ss_yr\/n\/n1b6e30eb9e41'\]/);
+ assert.match(s,/async function recoverSpecialExclusionsFromPublishedArticles/);
+ assert.match(s,/extractNoteKeysFromRecovery/);
+ const block=s.match(/async function collectFirstNoteSpecial[\s\S]*?\n\}/)?.[0]||"";
+ assert.match(block,/recoverSpecialExclusionsFromPublishedArticles\(\)/);
+ assert.match(block,/excluded\.keys\.has\(noteKey\(u\)\)/);
+});
+
+test("successful first-note image run automatically commits exclusions for the next round",async()=>{
+ const s=await read("public/note-profile-card-paster-v1.user.js");
+ assert.match(s,/commitSpecialLast\(\{silent:true\}\)/);
+ assert.match(s,/次回重複除外へ自動登録/);
 });
