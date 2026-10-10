@@ -8,6 +8,7 @@ async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new Te
 const clean=(v:unknown,max=4000)=>typeof v==="string"?v.replace(/\u0000/g,"").replace(/\s+/g," ").trim().slice(0,max):null;
 const bodyText=(v:unknown,max=12000)=>typeof v==="string"?v.replace(/\u0000/g,"").replace(/\r\n?/g,"\n").trim().slice(0,max):null;
 const cleanUrl=(v:unknown)=>{const s=clean(v,1600);if(!s)return null;try{const u=new URL(s);if(!u.hostname.endsWith("note.com"))return s;u.hash="";return u.toString()}catch{return s}};
+function profileNoteId(v:unknown){try{const u=new URL(String(v||"")),parts=u.pathname.split("/").filter(Boolean);return u.hostname==="note.com"&&parts.length===1&&/^[a-z0-9_-]+$/i.test(parts[0])?parts[0].toLowerCase():null}catch{return null}}
 async function identity(req:Request){
   const raw=req.headers.get("X-Ingest-Token")||"";if(!raw)throw new Error("DM_INGEST_TOKEN_REQUIRED");
   const now=new Date().toISOString();
@@ -35,13 +36,13 @@ Deno.serve(async req=>{
     }
     const threads=Array.isArray(body?.threads)?body.threads.slice(0,800):[];
     const messages=Array.isArray(body?.messages)?body.messages.slice(0,5000):[];
-    let upsertedThreads=0,upsertedMessages=0;const confirmed:string[]=[];
+    let upsertedThreads=0,upsertedMessages=0;const confirmed:string[]=[],registeredThreads=new Set<string>();
     for(const x of threads){
       const roomUrl=cleanUrl(x?.room_url),threadKey=clean(x?.thread_key,400)||roomUrl;
       if(!threadKey)continue;
       const {data:existing,error:lookupError}=await db.from("insight_dm_threads").select("meta,peer_note_id,peer_name,peer_url,peer_image_url,last_message_at").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(lookupError)throw lookupError;
       const row={member_id:who.memberId,thread_key:threadKey,room_url:roomUrl,peer_note_id:clean(x?.peer_note_id,120)||existing?.peer_note_id||null,peer_name:clean(x?.peer_name,300)||existing?.peer_name||null,peer_url:cleanUrl(x?.peer_url)||existing?.peer_url||null,peer_image_url:cleanUrl(x?.peer_image_url)||existing?.peer_image_url||null,last_message_at:x?.last_message_at||null,last_synced_at:new Date().toISOString(),meta:{...(existing?.meta||{}),...(x?.meta&&typeof x.meta==="object"?x.meta:{})}};
-      const{error}=await db.from("insight_dm_threads").upsert(row,{onConflict:"member_id,thread_key"});if(error)throw error;upsertedThreads++
+      const{error}=await db.from("insight_dm_threads").upsert(row,{onConflict:"member_id,thread_key"});if(error)throw error;upsertedThreads++;registeredThreads.add(threadKey)
     }
     for(const x of messages){
       const threadKey=clean(x?.thread_key,400),messageKey=clean(x?.message_key,800),direction=["inbound","outbound","unknown"].includes(String(x?.direction))?String(x.direction):"unknown";
@@ -52,6 +53,15 @@ Deno.serve(async req=>{
       if(messageKey.startsWith("api:")&&!messageKey.startsWith("api:"+threadKey+":"))throw new Error("DM_THREAD_MISMATCH");
       const row={member_id:who.memberId,thread_key:threadKey,message_key:messageKey,direction,sender_name:clean(x?.sender_name,300),sender_url:cleanUrl(x?.sender_url),sender_image_url:cleanUrl(x?.sender_image_url),body:bodyText(x?.body,12000),sent_at:x?.sent_at||null,raw_text:bodyText(x?.raw_text,16000),attachment_name:clean(x?.attachment_name,800),attachment_url:cleanUrl(x?.attachment_url),attachment_type:clean(x?.attachment_type,200),captured_at:new Date().toISOString(),meta:x?.meta&&typeof x.meta==="object"?x.meta:{}};
       const{error}=await db.from("insight_dm_messages").upsert(row,{onConflict:"member_id,message_key"});if(error)throw error;
+      if(!registeredThreads.has(threadKey)){
+        // Direct-room reads may never visit the room list. Register the room
+        // before acknowledging its message so the saved body is feed-reachable.
+        const senderId=profileNoteId(row.sender_url),isPeer=direction!=="outbound"&&senderId!==who.noteId&&(direction==="inbound"||Boolean(senderId));
+        const thread={member_id:who.memberId,thread_key:threadKey,room_url:/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadKey)?"https://note.com/messages/rooms/"+threadKey:null,peer_note_id:isPeer?senderId:null,peer_name:isPeer?(row.sender_name||senderId):null,peer_url:isPeer&&senderId?row.sender_url:null,peer_image_url:isPeer?row.sender_image_url:null,last_message_at:row.sent_at,last_synced_at:new Date().toISOString(),meta:{source:"note-dm-message-thread"}};
+        // A simultaneous room-list read may already have richer peer metadata.
+        const{error:threadError}=await db.from("insight_dm_threads").upsert(thread,{onConflict:"member_id,thread_key",ignoreDuplicates:true});if(threadError)throw threadError;
+        registeredThreads.add(threadKey);upsertedThreads++;
+      }
       if(messageKey.startsWith("api:")&&row.sent_at&&row.body){
         const{data:legacy,error:le}=await db.from("insight_dm_messages").select("id,message_key,meta").eq("member_id",who.memberId).eq("thread_key",threadKey).like("message_key","api-sig:%").eq("sent_at",row.sent_at).eq("body",clean(row.body,12000)).is("meta->>superseded_by",null).limit(2);if(le)throw le;
         if(legacy?.length===1){const{error:se}=await db.from("insight_dm_messages").update({meta:{...(legacy[0].meta||{}),superseded_by:messageKey}}).eq("id",legacy[0].id).eq("member_id",who.memberId);if(se)throw se}
@@ -60,5 +70,12 @@ Deno.serve(async req=>{
     }
     await db.from("insight_dm_sync_runs").insert({member_id:who.memberId,received_count:messages.length,upserted_count:upsertedMessages,thread_count:threads.length,source:"note-dm-reader-v1"});
     return out({ok:true,noteId:who.noteId,threadCount:upsertedThreads,messageCount:upsertedMessages,confirmedMessageKeys:[...new Set(confirmed)]})
-  }catch(e){const m=e instanceof Error?e.message:String(e);console.error(m);return out({ok:false,error:m},/REQUIRED|INVALID|UNKNOWN|MISMATCH/.test(m)?401:500)}
+  }catch(e){
+    const issue=e&&typeof e==="object"?e as{code?:unknown,message?:unknown}:null;
+    const message=e instanceof Error?e.message:typeof issue?.message==="string"?issue.message:"";
+    const code=typeof issue?.code==="string"&&/^[A-Z0-9_]{1,40}$/i.test(issue.code)?issue.code.toUpperCase():"";
+    const known=new Set(["DM_INGEST_TOKEN_REQUIRED","DM_INGEST_TOKEN_INVALID","DM_ACCOUNT_UNKNOWN","NOTE_ACCOUNT_MISMATCH","THREAD_REQUIRED","DM_THREAD_MISMATCH"]);
+    const safe=known.has(message)?message:code?"DM_STORAGE_"+code:"DM_INGEST_FAILED";
+    console.error(safe);return out({ok:false,error:safe},known.has(message)?401:500)
+  }
 });
