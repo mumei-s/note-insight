@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.7.1
-// @description  初投稿第二弾向け重複復元。前回公開記事から掲載済みnoteキーを自動除外し、今後は初投稿案件の成功分を自動で次回除外へ登録。ランダム極薄8種・検閲・1.35倍速・小型パネルは維持。
+// @version      1.8.0
+// @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.7.1';
+const VERSION='1.8.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -30,7 +30,9 @@ const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
 const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
 const SPECIAL_RECOVERY_IMPORTED='mumei_profile_card_paster_special_recovery_v171';
 const SPECIAL_RECOVERY_URLS=['https://note.com/ss_yr/n/n1b6e30eb9e41'];
-const FIRST_TAGS=['はじめてのnote','初めてのnote'];
+const FIRST_TAGS=['はじめてのnote','始めてのnote','自己紹介'];
+const STRICT_FIRST_TAGS=new Set(['はじめてのnote','始めてのnote']);
+const SELF_INTRO_TAG='自己紹介';
 const WORKMOM_TAG='ワーママ';
 const PARENTING_TAG='育児日記';
 const WORKMOM_CONTEXT={
@@ -52,7 +54,7 @@ const SPECIAL_NG=[
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-const SPEED_FACTOR=1.35;
+const SPEED_FACTOR=1.65;
 const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
 const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
