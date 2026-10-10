@@ -1,2 +1,2 @@
-INSIGHT 2026.10.04.1 / notification 3.6.25 / dashboard 1.6.4 / DM 1.4.10
-Compact member introduction and persistent playback levels; four analysis panels with settings in the gear page; charts lift, settle and sparkle.
+INSIGHT 2026.10.10.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.10
+Comment collection and save recovery; independent public sources; direct-room DM visibility.

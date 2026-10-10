@@ -74,6 +74,10 @@ jobs:
         run: node --experimental-vm-modules --test tests/notification-v2968.test.mjs tests/notification-window-v360.test.mjs
       - name: Check fresh startup, resume, and cancelled requests
         run: node --experimental-vm-modules --test tests/startup-freshness.test.mjs tests/comments-startup-freshness.test.mjs tests/secondary-view-freshness.test.mjs tests/analysis-view-freshness.test.mjs
+      - name: Check comment collection, independent public sync, and direct-room DM saving
+        run: node --experimental-vm-modules --test tests/comment-refresh-recovery.test.mjs tests/public-sync-isolation.test.mjs tests/dm-direct-room-ingest.test.mjs
+      - name: Check read RPC results and permissions
+        run: node --test tests/insight-rpc-read-performance.test.mjs
       - name: Check retained social views and differences
         run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs
       - name: Check manual dashboard panel and durable save queue

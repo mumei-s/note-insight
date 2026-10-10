@@ -8,9 +8,9 @@ const event=(key,body,extra={})=>({comment_key:key,body,actor_name:'相手',acto
 const saved=rows=>({version:1,rows,total:rows.length,latestAt:rows[0]?.occurred_at||null,savedAt:1});
 const response=(rows,total=rows.length)=>Response.json({ok:true,rows,total});
 async function settle(work=()=>{}){await React.act(async()=>{work();for(let i=0;i<5;i++)await pause()})}
-async function fixture(t,{snapshot=null,fetch,globals={},fallback=async()=>{throw new Error('offline')}}={}){
+async function fixture(t,{snapshot=null,fetch,refreshFetch=async()=>Response.json({ok:true,paused:true,reason:'maintenance'}),globals={},fallback=async()=>{throw new Error('offline')}}={}){
  const writes=[],reads=[];
- const h=await sceneFixture(t,{fetch,globals:{IntersectionObserver:class{observe(){}disconnect(){}},...globals},dependencies:{
+ const h=await sceneFixture(t,{fetch:(url,init)=>String(url).includes('/insight-comment-refresh')?refreshFetch(url,init):fetch(url,init),globals:{IntersectionObserver:class{observe(){}disconnect(){}},...globals},dependencies:{
   './creator-avatar':{CreatorAvatar:()=>React.createElement('span',{className:'fixture-avatar'})},
   './insight-member-db-fallback':{memberReadAuthFailure:message=>/INSIGHT_(SESSION_INVALID|LOGIN_REQUIRED)|HTTP_40[13]/.test(message),memberDbReadFallback:fallback},
   './insight-persistent-cache':{readInsightSnapshot:async key=>{reads.push(key);return typeof snapshot==='function'?snapshot(key):snapshot},writeInsightSnapshot:async(key,value)=>{writes.push({key,value})}},
@@ -152,4 +152,152 @@ test('取得とDB代替が中断を無視しても時間切れ後に保存履歴
  await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,45));await pause()});
  assert.match(h.body(),/通信停止中の保存履歴/);assert.match(h.body(),/通信を確認できないため保存済み履歴を表示中/);
  assert.equal(h.w.document.querySelector('.micf').getAttribute('aria-busy'),'false');assert.equal(h.writes.length,0);
+});
+
+test('件数が同じでも最新50件の外にある本文と♡の更新を保存履歴で覆わない',async t=>{
+ const rows=Array.from({length:80},(_,i)=>event('c'+i,'保存本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'}));
+ const current=rows.map(row=>row.comment_key==='c79'?{...row,body:'過去の本文も更新済み',is_creator_liked:true}:row),calls=[];
+ const h=await fixture(t,{snapshot:saved(rows),fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);calls.push(body);
+  return response(current.slice((body.page-1)*body.pageSize,body.page*body.pageSize),current.length);
+ }});
+ await h.start();await settle();
+ assert.match(h.body(),/過去の本文も更新済み/);assert.doesNotMatch(h.body(),/保存本文79/);
+ assert.equal(h.writes.at(-1).value.rows.find(row=>row.comment_key==='c79').is_creator_liked,true);
+ assert.ok(calls.some(call=>call.pageSize===500),'50件probeの件数一致だけで全件を確認済みにしない');
+});
+
+test('HTTP200の壊れた一覧を0件成功として保存せず前回履歴と取得失敗を残す',async t=>{
+ const h=await fixture(t,{snapshot:saved([event('saved','壊れた応答時の保存本文')]),fetch:async()=>new Response('{broken json',{status:200,headers:{'content-type':'application/json'}})});
+ await h.start();await settle();
+ assert.match(h.body(),/壊れた応答時の保存本文/);assert.match(h.body(),/通信を確認できないため保存済み履歴を表示中/);
+ assert.equal(h.writes.length,0,'一覧がない不正な成功応答で保存履歴を空にしない');
+});
+
+test('保存先の行を先に表示し、note取得後は同件数の古い本文も全件再読取する',async t=>{
+ let deliverRefresh,updated=false;
+ const requests=[],refreshRequests=[],rows=Array.from({length:80},(_,i)=>event('c'+i,'保存先本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'}));
+ const h=await fixture(t,{fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);requests.push({...body,updated});
+  const current=rows.map(row=>updated&&row.comment_key==='c79'?{...row,body:'noteで編集された過去本文',is_creator_liked:true}:row);
+  return response(current.slice((body.page-1)*body.pageSize,body.page*body.pageSize),current.length);
+ },refreshFetch:async(_url,init)=>{
+  refreshRequests.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});
+  return new Promise(resolve=>{deliverRefresh=()=>{updated=true;resolve(Response.json({ok:true,articles:2,changedComments:1,failedArticles:0}))}});
+ }});
+ await h.start();await settle();
+ assert.match(h.body(),/保存先本文79/);assert.doesNotMatch(h.body(),/noteで編集された過去本文|最新状態に更新/);
+ assert.deepEqual(refreshRequests,[{body:{action:'refresh',articleKey:null},token:'token-a'}]);
+ assert.equal([...h.w.document.querySelectorAll('.micf-tools button')].find(button=>button.textContent.includes('noteから')).disabled,true);
+ await settle(deliverRefresh);
+ assert.match(h.body(),/noteで編集された過去本文/);assert.doesNotMatch(h.body(),/保存先本文79/);
+ assert.ok(requests.some(request=>request.updated&&request.pageSize===500&&!request.dateFrom),'取得後は最新50件だけでなく全件を読み直す');
+ assert.equal(h.writes.at(-1).value.rows.length,80);
+ assert.equal(h.writes.at(-1).value.rows.at(-1).is_creator_liked,true);
+});
+
+test('note取得中の対応状況切替を保ち、取得完了時はそのフィルターだけ再読取する',async t=>{
+ let deliverRefresh,updated=false;
+ const calls=[],root=()=>({root_key:'root-1',root_body:updated?'取得後の返信済み会話':'保存済み返信済み会話',actor_name:'相手',actor_image_url:'https://images.test/peer.png',status:'replied'});
+ const h=await fixture(t,{fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);calls.push({...body,updated});
+  if(body.action==='comments_filtered')return response([root()]);
+  if(body.action==='batch')return response([]);
+  return response([]);
+ },refreshFetch:async()=>new Promise(resolve=>{deliverRefresh=()=>{updated=true;resolve(Response.json({ok:true,articles:1,failedArticles:0}))}})});
+ await h.start();await h.click([...h.w.document.querySelectorAll('.micf-tabs button')].find(button=>button.textContent==='自分返信'));
+ assert.match(h.body(),/保存済み返信済み会話/);
+ await settle(deliverRefresh);
+ assert.equal(h.w.document.querySelector('.micf-tabs .active').textContent,'自分返信');
+ assert.match(h.body(),/取得後の返信済み会話/);assert.doesNotMatch(h.body(),/保存済み返信済み会話/);
+ assert.ok(calls.some(call=>call.updated&&call.action==='comments_filtered'&&call.status==='replied'));
+ assert.ok(!calls.some(call=>call.updated&&!call.action),'現在の状況フィルターを全コメントへ戻さない');
+});
+
+test('一部記事のnote取得失敗は成功分を反映し、停止時は完了扱いせず保存先の行を保持する',async t=>{
+ let deliverRefresh,updated=false,refreshCalls=0,reads=0;
+ const h=await fixture(t,{fetch:async()=>{reads++;return response([event('c1',updated?'取得できた本文':'保存先の本文',{actor_image_url:'https://images.test/peer.png'})])},refreshFetch:async()=>{
+  refreshCalls++;
+  if(refreshCalls>1)return Response.json({ok:true,paused:true,reason:'maintenance'});
+  return new Promise(resolve=>{deliverRefresh=()=>{updated=true;resolve(Response.json({ok:false,articles:1,changedComments:1,failedArticles:1,errors:['NOTE_PUBLIC_403']}))}});
+ }});
+ await h.start();await settle(deliverRefresh);
+ assert.match(h.body(),/取得できた本文/);assert.match(h.body(),/1記事のコメントを取得できませんでした/);
+ const before=reads;
+ await h.click([...h.w.document.querySelectorAll('.micf-tools button')].find(button=>button.textContent==='noteからコメントを取得'));
+ assert.equal(reads,before,'maintenanceを取得成功と扱わない');
+ assert.match(h.body(),/noteのコメント取得は一時停止中/);assert.match(h.body(),/取得できた本文/);
+});
+
+test('note取得も画面離脱で中断し、遅い成功を後の画面や保存へ適用しない',async t=>{
+ let deliverRefresh,refreshSignal,reads=0;
+ const h=await fixture(t,{fetch:async()=>{reads++;return response([event('saved','画面離脱前の保存先本文',{actor_image_url:'https://images.test/peer.png'})])},refreshFetch:async(_url,init)=>{
+  refreshSignal=init.signal;return new Promise(resolve=>{deliverRefresh=()=>resolve(Response.json({ok:true,articles:1,failedArticles:0}))});
+ }});
+ await h.start();await settle();const before={reads,writes:h.writes.length};
+ await h.render(()=>React.createElement('p',null,'後の画面'),{});
+ assert.equal(refreshSignal.aborted,true);
+ await settle(deliverRefresh);
+ assert.equal(reads,before.reads);assert.equal(h.writes.length,before.writes);
+ assert.equal(h.w.document.body.textContent,'後の画面');
+});
+
+test('note取得はアカウントごとのtokenを送り、切替前の遅い成功で再読取しない',async t=>{
+ let deliverA,deliverB;
+ const reads=[],collections=[];
+ const h=await fixture(t,{fetch:async(_url,init)=>{const token=init.headers['X-Insight-Token'];reads.push(token);return response([event(token,token==='token-a'?'Aの保存先本文':'Bの保存先本文',{actor_image_url:'https://images.test/peer.png'})])},refreshFetch:async(_url,init)=>{
+  const token=init.headers['X-Insight-Token'];collections.push({token,signal:init.signal});
+  return new Promise(resolve=>{const deliver=()=>resolve(Response.json({ok:true,articles:1,failedArticles:0}));if(token==='token-a')deliverA=deliver;else deliverB=deliver});
+ }});
+ await h.start();await settle();
+ h.w.localStorage.setItem(tokenKey,'token-b');await h.start({noteId:'account_b'});await settle();
+ assert.equal(collections[0].signal.aborted,true);assert.deepEqual(collections.map(item=>item.token),['token-a','token-b']);
+ const count=reads.length;
+ await settle(deliverA);assert.equal(reads.length,count);assert.match(h.body(),/Bの保存先本文/);assert.doesNotMatch(h.body(),/Aの保存先本文/);
+ await settle(deliverB);assert.equal(reads.at(-1),'token-b');assert.equal(h.writes.at(-1).key,'comments-all:account_b');
+});
+
+test('note取得が中断を無視しても時間切れでボタンを戻し保存履歴を維持する',async t=>{
+ let fallbackCalls=0,collectionCalls=0;
+ const h=await fixture(t,{fetch:async()=>response([event('saved','note通信停止時の保存先本文',{actor_image_url:'https://images.test/peer.png'})]),refreshFetch:async()=>{collectionCalls++;return new Promise(()=>{})},fallback:async()=>{fallbackCalls++;throw new Error('read fallback must not collect')},globals:{setTimeout:(fn,ms,...args)=>setTimeout(fn,ms===40000?10:ms,...args)}});
+ await h.start();
+ await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));await pause()});
+ assert.match(h.body(),/note通信停止時の保存先本文/);assert.match(h.body(),/noteのコメント取得を確認できませんでした/);
+ const retry=[...h.w.document.querySelectorAll('.micf-tools button')].find(button=>button.textContent==='noteからコメントを取得');
+ assert.equal(retry.disabled,false);assert.equal(fallbackCalls,0,'読取RPCを取得成功の代替にしない');
+ await h.click(retry);assert.equal(collectionCalls,2,'時間切れ後は手動で再取得できる');
+});
+
+test('日付の記事を選んだ手動取得はarticleKeyを送り選択を保持する',async t=>{
+ const collections=[];
+ const h=await fixture(t,{fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);
+  if(body.action==='comment_articles')return response([{article_key:'nselected',title:'選択した記事',comment_count_day:1}]);
+  return response([event('c1','日付の記事コメント',{article_key:'nselected',actor_image_url:'https://images.test/peer.png'})]);
+ },refreshFetch:async(_url,init)=>{collections.push(JSON.parse(init.body));return Response.json({ok:true,skipped:true,reason:'recent'})}});
+ await h.start();await settle();
+ await h.change(h.w.document.querySelector('input[type="date"]'),'2026-10-09');await settle();
+ const select=h.w.document.querySelector('.micf-tools select');
+ await settle(()=>{Object.getOwnPropertyDescriptor(h.w.HTMLSelectElement.prototype,'value').set.call(select,'nselected');select.dispatchEvent(new h.w.Event('change',{bubbles:true}))});
+ assert.equal(select.value,'nselected');assert.equal(h.w.document.querySelector('input[type="date"]').value,'2026-10-09');
+ await h.click([...h.w.document.querySelectorAll('.micf-tools button')].find(button=>button.textContent==='noteからコメントを取得'));
+ assert.deepEqual(collections.at(-1),{action:'refresh',articleKey:'nselected'});
+ assert.equal(select.value,'nselected');assert.equal(h.w.document.querySelector('input[type="date"]').value,'2026-10-09');
+ assert.match(h.body(),/直前の取得があるため/);assert.doesNotMatch(h.body(),/noteから1記事のコメントを取得しました/);
+});
+
+test('続きのページが欠けた時は全履歴成功とせず不完全な保存で上書きしない',async t=>{
+ const rows=Array.from({length:500},(_,i)=>event('c'+i,'途中までのコメント'+i,{actor_image_url:'https://images.test/peer.png'}));
+ const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);return response(body.page===1?rows.slice(0,body.pageSize):[],620)}});
+ await h.start();await settle();
+ assert.match(h.body(),/途中までのコメント0/);assert.match(h.body(),/COMMENT_HISTORY_INCOMPLETE/);
+ assert.doesNotMatch(h.body(),/保存先の全履歴 読込完了/);assert.equal(h.writes.length,0);
+});
+
+test('本文を返さない401でも保存履歴やDB代替を認証の代わりに使わない',async t=>{
+ let fallbackCalls=0;
+ const h=await fixture(t,{snapshot:saved([event('old','失効セッションの保存本文')]),fetch:async()=>new Response('sign in',{status:401}),fallback:async()=>{fallbackCalls++;return {rows:[event('old','失効セッションの保存本文')],total:1}}});
+ await h.start();await settle();
+ assert.match(h.body(),/HTTP_401/);assert.doesNotMatch(h.body(),/失効セッションの保存本文/);
+ assert.equal(fallbackCalls,0);assert.equal(h.writes.length,0);
 });

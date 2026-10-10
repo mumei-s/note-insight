@@ -598,3 +598,8 @@ GitHub Pagesは `pages-v7-dashboard-flow-safety-20260925` で再Deployを発火�
 - PWA cache v61。
 
 Supabase 402自体はサービス制限なのでコードから解除できないが、既存active参加者7名のログイン状態とINSIGHT画面は継続利用できるようにする。
+
+
+## 2026-10-10 INSIGHT本体コメント取得の停止と全体点検
+
+最新実機「コメント取得されていない」を優先。comment batch409/23503が通知先のowner/application UUID不一致によりコメント保存まで巻き戻していた。正本scopeへ修復後、ご本人4,440→4,464件、最新10月8日のコメント保存を本番で確認。コメント画面からの本人限定取得を追加し、保存先読取とnote取得を別表示、本文/♡の古いsnapshot・不正JSON・ページ欠損も修正。スキ失敗によるコメント遮断と直接DM保存の表示漏れは別コミットで修正。一部記事のコメントAPI403は取得拒否として残し、成功分を保存・候補巡回する。詳細と実機未確認の境界は [WORK_FIXES_20261010_COMMENT_COLLECTION.md](WORK_FIXES_20261010_COMMENT_COLLECTION.md)。本体2026.10.10.1、Reader版は据え置き。分析/スキRPCのstatement timeoutも別SQL更新で検証する。

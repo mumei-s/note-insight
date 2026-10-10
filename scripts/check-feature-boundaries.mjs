@@ -7,6 +7,7 @@ const support = (p) =>
   /^\.github\//.test(p) ||
   /^(package|tsconfig|vite\.)/.test(p) ||
   p === 'public/insight-release.json' ||
+  p === 'public/deploy-version.txt' ||
   // Data-only evidence for the 2026-09-30 recovery, not a second feature.
   p === 'public/pro-recovery-20260930.json' ||
   p === 'src/insight-release.ts' ||
