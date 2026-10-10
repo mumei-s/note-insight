@@ -977,13 +977,9 @@ function inputValues(save=true){
  const count=Math.max(0,Math.min(5000,Number(p.querySelector('[data-count]')?.value||0)));
  const choice=p.querySelector('button[data-choice].on')?.dataset.choice||g.choice||'latest';
  const specialMode=p.querySelector('[data-special-mode]')?.value==='all'?'all':'number';
- const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||100)));
+ const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||200)));
  const specialTags=[...p.querySelectorAll('button[data-special-tag].on')].map(x=>String(x.dataset.specialTag||'')).filter(Boolean);
- const workmomMode=p.querySelector('[data-workmom-mode]')?.value==='all'?'all':'number';
- const workmomCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-workmom-count]')?.value||g.workmomCount||100)));
- const parentingMode=p.querySelector('[data-parenting-mode]')?.value==='all'?'all':'number';
- const parentingCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-parenting-count]')?.value||g.parentingCount||100)));
- const v={sources,mode,count,choice,specialMode,specialCount,specialTags,workmomMode,workmomCount,parentingMode,parentingCount,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
+ const v={sources,mode,count,choice,specialMode,specialCount,specialTags,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
 }
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
@@ -1081,7 +1077,7 @@ async function createCardsAtTap(){
   let insertPos=cardAnchorFromSelection(view);
   let cardGapMs=CARD_GAP_FAST;
   writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:[],updatedAt:Date.now()});
-  setStatus('② 正規通知カード開始｜約1.35倍速・通常間隔 '+(CARD_GAP_FAST/1000).toFixed(1)+'秒｜'+rows.length+'件');
+  setStatus('② 正規通知カード開始｜約1.65倍速・通常間隔 '+(CARD_GAP_FAST/1000).toFixed(1)+'秒｜'+rows.length+'件');
 
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
@@ -1155,14 +1151,10 @@ function resetFields(){
  p.querySelector('[data-mode]').value='number';
  p.querySelector('[data-count]').value='10';
  const sm=p.querySelector('[data-special-mode]'),sc=p.querySelector('[data-special-count]');
- if(sm)sm.value='number';if(sc)sc.value='100';
- const wm=p.querySelector('[data-workmom-mode]'),wc=p.querySelector('[data-workmom-count]');
- if(wm)wm.value='number';if(wc)wc.value='100';
- const pm=p.querySelector('[data-parenting-mode]'),pc=p.querySelector('[data-parenting-count]');
- if(pm)pm.value='number';if(pc)pc.value='100';
+ if(sm)sm.value='number';if(sc)sc.value='200';
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.add('on'));
  p.querySelectorAll('button[data-choice]').forEach(x=>x.classList.toggle('on',x.dataset.choice==='latest'));
- applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();applyParentingAmountMode()
+ applyAmountMode();applySpecialAmountMode()
 }
 async function resetAll(){
  if(busy)return;
@@ -1282,12 +1274,12 @@ function mount(){
  #${PANEL} label{display:block;margin-top:2px;font-size:6.4px;color:#b9d8e8}
  #${PANEL} textarea{width:100%;height:34px;resize:vertical;margin-top:1px;padding:2px;border:1px solid #35576b;border-radius:5px;background:#0b1d28;color:#fff;font:6.7px/1.15 system-ui}
  #${PANEL} input,#${PANEL} select{width:100%;height:22px;padding:1px 2px;border:1px solid #35576b;border-radius:5px;background:#0b1d28;color:#fff;font-size:7px}
- #${PANEL} .amount{display:grid;grid-template-columns:43px 1fr;gap:2px;margin-top:1px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:1px}#${PANEL} .special-tags{grid-template-columns:1fr 1fr}#${PANEL} .special-tags button{font-size:5.8px}
+ #${PANEL} .amount{display:grid;grid-template-columns:43px 1fr;gap:2px;margin-top:1px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:1px}#${PANEL} .special-tags{grid-template-columns:repeat(3,1fr)}#${PANEL} .special-tags button{font-size:5.6px}
  #${PANEL} button{min-height:22px;border:1px solid #3b6378;border-radius:5px;background:#102b3b;color:#eaf9ff;font-weight:850;font-size:6.8px;touch-action:manipulation;pointer-events:auto;padding:1px 2px}
  #${PANEL} .choices button.on{background:#145c73;border-color:#63d7f1;color:#fff}
  #${PANEL} .hint{margin-top:2px;font-size:6.1px;color:#91b5c8;line-height:1.18}
  #${PANEL} .phase{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:2px}
- #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"],#${PANEL} [data-a="workmom-images"],#${PANEL} [data-a="parenting-images"]{background:#0b6176;border-color:#64d8ef}
+ #${PANEL} [data-a="images"],#${PANEL} [data-a="special-images"]{background:#0b6176;border-color:#64d8ef}
  #${PANEL} [data-a="cards"]{background:#34518a;border-color:#7897df}
  #${PANEL} .tools{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:2px}#${PANEL} [data-a="delete"]{background:#5d1b25;border-color:#b95b68}#${PANEL} [data-a="reset"]{background:#4a3514;border-color:#a9833e}
  #${PANEL} details{margin-top:2px;border:1px solid #29485b;border-radius:5px;background:#091923;padding:2px}
@@ -1306,29 +1298,14 @@ function mount(){
 
   <div class="phase"><button data-a="images">①画像一覧</button><button data-a="cards">②ここからカード</button></div>
 
-  <details data-special>
-   <summary>＋ 特別案件：初投稿者</summary>
-   <div class="hint">タグは個別ON/OFF。両方ON＝2タグを混ぜて公開日時の最新順 → 公開記事1件のみ → NG記事除外</div>
-   <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめてのnote</button><button data-special-tag="初めてのnote">#初めてのnote</button></div>
-   <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??100)}"></div>
-   <button data-a="special-images" style="width:100%;margin-top:3px">① 初投稿者画像一覧</button>
+  <details data-special open>
+   <summary>＋ 第二弾：初投稿＋自己紹介</summary>
+   <div class="hint">#はじめてのnote / #始めてのnote＝公開1記事のみ。#自己紹介＝複数記事OK。3タグ混合新着・重複除外・NG検閲。200件＋実績の算数＝201件。10人ごと見出し。</div>
+   <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめて</button><button data-special-tag="始めてのnote">#始めて</button><button data-special-tag="自己紹介">#自己紹介</button></div>
+   <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??200)}"></div>
+   <button data-a="special-images" style="width:100%;margin-top:2px">① 200人＋見出し</button>
    <div class="special-actions"><button data-a="commit-excluded">成功分→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
   </details>
-
-  <details data-workmom>
-   <summary>＋ 案件：#ワーママ</summary>
-   <div class="hint">新着→タグ実在＋本文文脈確認。疑わしいもの・NG除外。投稿数制限なし。</div>
-   <div class="amount"><select data-workmom-mode><option value="number">件数</option><option value="all">全数</option></select><input data-workmom-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.workmomCount??100)}"></div>
-   <button data-a="workmom-images" style="width:100%;margin-top:2px">① #ワーママ</button>
-  </details>
-
-  <details data-parenting>
-   <summary>＋ 案件：#育児日記</summary>
-   <div class="hint">新着→#育児日記の実在＋育児文脈を確認。NG検閲あり。健全な副業は可。投稿数制限なし。</div>
-   <div class="amount"><select data-parenting-mode><option value="number">件数</option><option value="all">全数</option></select><input data-parenting-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.parentingCount??100)}"></div>
-   <button data-a="parenting-images" style="width:100%;margin-top:2px">① #育児日記</button>
-  </details>
-
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
   <div id="${STATUS}">①画像一覧は自動。②は本文で置く場所をタップしてから押す。</div>
@@ -1340,11 +1317,9 @@ function mount(){
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
  p.querySelector('[data-mode]').value=g.mode==='all'?'all':'number';
  p.querySelector('[data-special-mode]').value=g.specialMode==='all'?'all':'number';
- p.querySelector('[data-workmom-mode]').value=g.workmomMode==='all'?'all':'number';
- p.querySelector('[data-parenting-mode]').value=g.parentingMode==='all'?'all':'number';
  const savedSpecialTags=Array.isArray(g.specialTags)?g.specialTags:FIRST_TAGS;
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.toggle('on',savedSpecialTags.includes(x.dataset.specialTag)));
- applyAmountMode();applySpecialAmountMode();applyWorkmomAmountMode();applyParentingAmountMode();updateExcludedCount();
+ applyAmountMode();applySpecialAmountMode();updateExcludedCount();
 
  p.querySelectorAll('button[data-choice]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
@@ -1352,8 +1327,6 @@ function mount(){
  }));
  p.querySelector('[data-mode]').addEventListener('change',()=>{applyAmountMode();saveUiState()});
  p.querySelector('[data-special-mode]').addEventListener('change',()=>{applySpecialAmountMode();saveUiState()});
- p.querySelector('[data-workmom-mode]').addEventListener('change',()=>{applyWorkmomAmountMode();saveUiState()});
- p.querySelector('[data-parenting-mode]').addEventListener('change',()=>{applyParentingAmountMode();saveUiState()});
  p.querySelectorAll('button[data-special-tag]').forEach(btn=>btn.addEventListener('click',e=>{
   e.preventDefault();e.stopPropagation();
   btn.classList.toggle('on');
@@ -1372,7 +1345,7 @@ function mount(){
   x.addEventListener('click',e=>e.stopPropagation());
   x.addEventListener('change',()=>saveUiState())
  });
- for(const sel of ['[data-count]','[data-special-count]','[data-workmom-count]','[data-parenting-count]']){
+ for(const sel of ['[data-count]','[data-special-count]']){
   const el=p.querySelector(sel);
   el?.addEventListener('input',()=>{const d=String(el.value||'').replace(/\D+/g,'').slice(0,4);if(el.value!==d)el.value=d})
  }
@@ -1381,8 +1354,6 @@ function mount(){
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:false})});
  p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
- p.querySelector('[data-a="workmom-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:true,parenting:false})});
- p.querySelector('[data-a="parenting-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:true})});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="commit-excluded"]').addEventListener('click',e=>{e.preventDefault();commitSpecialLast()});
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
