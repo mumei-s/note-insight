@@ -804,6 +804,30 @@ function drawThinDecor(ctx,t){
  }else if(t.kind==='stripe'){
   ctx.fillStyle=t.soft;ctx.fillRect(0,0,W,H);
   ctx.strokeStyle=t.line;ctx.globalAlpha=.6;for(let x=-100;x<W;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+80,H);ctx.stroke()}ctx.globalAlpha=1
+ }else if(t.kind==='grid'){
+  ctx.strokeStyle=t.line;ctx.globalAlpha=.55;for(let x=0;x<570;x+=28){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=28){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(570,y);ctx.stroke()}ctx.globalAlpha=1
+ }else if(t.kind==='dots'){
+  ctx.fillStyle=t.accent;ctx.globalAlpha=.22;for(let y=14;y<H;y+=20)for(let x=14;x<570;x+=20){ctx.beginPath();ctx.arc(x,y,2.2,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1
+ }else if(t.kind==='diagonal'){
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.2;ctx.lineWidth=5;for(let x=-120;x<600;x+=44){ctx.beginPath();ctx.moveTo(x,H);ctx.lineTo(x+110,0);ctx.stroke()}ctx.globalAlpha=1
+ }else if(t.kind==='corner'){
+  ctx.strokeStyle=t.accent;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(8,46);ctx.lineTo(8,8);ctx.lineTo(140,8);ctx.stroke();ctx.beginPath();ctx.moveTo(430,H-8);ctx.lineTo(566,H-8);ctx.lineTo(566,H-46);ctx.stroke()
+ }else if(t.kind==='frame'){
+  ctx.strokeStyle=t.accent;ctx.lineWidth=2;rounded(ctx,14,12,544,H-24,14);ctx.stroke();ctx.globalAlpha=.25;ctx.strokeStyle=t.line;rounded(ctx,21,19,530,H-38,11);ctx.stroke();ctx.globalAlpha=1
+ }else if(t.kind==='split'){
+  ctx.fillStyle=t.soft;ctx.fillRect(0,0,205,H);ctx.fillStyle=t.accent;ctx.globalAlpha=.18;ctx.beginPath();ctx.moveTo(205,0);ctx.lineTo(290,0);ctx.lineTo(205,H);ctx.closePath();ctx.fill();ctx.globalAlpha=1
+ }else if(t.kind==='ribbon'){
+  ctx.fillStyle=t.accent;ctx.globalAlpha=.16;ctx.beginPath();ctx.moveTo(0,18);ctx.lineTo(570,0);ctx.lineTo(570,28);ctx.lineTo(0,46);ctx.closePath();ctx.fill();ctx.globalAlpha=1
+ }else if(t.kind==='bubbles'){
+  ctx.fillStyle=t.accent;ctx.globalAlpha=.14;for(const p of [[505,25,40],[545,88,30],[455,105,22],[170,18,16]]){ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1
+ }else if(t.kind==='sunrise'){
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.26;ctx.lineWidth=2;for(let a=0;a<Math.PI*2;a+=Math.PI/12){ctx.beginPath();ctx.moveTo(520,70);ctx.lineTo(520+Math.cos(a)*95,70+Math.sin(a)*95);ctx.stroke()}ctx.globalAlpha=1
+ }else if(t.kind==='zigzag'){
+  ctx.strokeStyle=t.accent;ctx.globalAlpha=.3;ctx.lineWidth=3;ctx.beginPath();for(let x=0;x<570;x+=24){const y=(x/24)%2?122:105;if(x===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke();ctx.globalAlpha=1
+ }else if(t.kind==='glass'){
+  const g=ctx.createLinearGradient(0,0,570,H);g.addColorStop(0,'rgba(255,255,255,.8)');g.addColorStop(.5,'rgba(255,255,255,.15)');g.addColorStop(1,'rgba(255,255,255,.65)');ctx.fillStyle=g;rounded(ctx,10,9,552,H-18,14);ctx.fill();ctx.strokeStyle=t.line;ctx.stroke()
+ }else if(t.kind==='notebook'){
+  ctx.fillStyle=t.soft;ctx.fillRect(0,0,28,H);ctx.strokeStyle=t.line;for(let y=18;y<H;y+=18){ctx.beginPath();ctx.moveTo(34,y);ctx.lineTo(566,y);ctx.stroke()}ctx.fillStyle=t.accent;for(let y=15;y<H;y+=22){ctx.beginPath();ctx.arc(14,y,3,0,Math.PI*2);ctx.fill()}
  }
 }
 async function makeFile(row){
