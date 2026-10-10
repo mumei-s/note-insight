@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.7.0
-// @description  ランダム極薄8デザイン＋#育児日記案件。既存全案件の貼り付け間隔を約1.35倍速化。NG検閲は維持し、健全な副業記事は除外しない。小型パネル版。
+// @version      1.7.1
+// @description  初投稿第二弾向け重複復元。前回公開記事から掲載済みnoteキーを自動除外し、今後は初投稿案件の成功分を自動で次回除外へ登録。ランダム極薄8種・検閲・1.35倍速・小型パネルは維持。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.7.0';
+const VERSION='1.7.1';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -28,6 +28,8 @@ const POS='mumei_profile_card_paster_pos_v1';
 const RUN_PREFIX='mumei_profile_card_paster_run_v15:';
 const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
 const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
+const SPECIAL_RECOVERY_IMPORTED='mumei_profile_card_paster_special_recovery_v171';
+const SPECIAL_RECOVERY_URLS=['https://note.com/ss_yr/n/n1b6e30eb9e41'];
 const FIRST_TAGS=['はじめてのnote','初めてのnote'];
 const WORKMOM_TAG='ワーママ';
 const PARENTING_TAG='育児日記';
@@ -377,8 +379,50 @@ function specialExcludedSets(){
  const arr=specialExcluded();
  return{
   urls:new Set(arr.map(x=>norm(x?.url)).filter(Boolean)),
-  creators:new Set(arr.map(x=>String(x?.urlname||'').toLowerCase()).filter(Boolean))
+  creators:new Set(arr.map(x=>String(x?.urlname||'').toLowerCase()).filter(Boolean)),
+  keys:new Set(arr.map(x=>String(x?.key||noteKey(x?.url)||'')).filter(Boolean))
  }
+}
+function extractNoteKeysFromRecovery(raw,sourceKey=''){
+ const text=String(raw||'');
+ const out=new Set();
+ const patterns=[
+  /https?:\/\/note\.com\/[A-Za-z0-9_.-]+\/n\/(n[a-f0-9]{12})/ig,
+  /https?:\/\/note\.com\/embed\/notes\/(n[a-f0-9]{12})/ig,
+  /\/n\/(n[a-f0-9]{12})/ig,
+  /\/embed\/notes\/(n[a-f0-9]{12})/ig
+ ];
+ for(const re of patterns){
+  let m;while((m=re.exec(text)))out.add(String(m[1]||''))
+ }
+ out.delete(String(sourceKey||''));out.delete(FINAL_KEY);
+ return out
+}
+async function recoverSpecialExclusionsFromPublishedArticles(){
+ const imported=readJSONKey(SPECIAL_RECOVERY_IMPORTED,{});
+ const current=specialExcluded(),seenKeys=new Set(current.map(x=>String(x?.key||noteKey(x?.url)||'')).filter(Boolean));
+ let added=0;
+ for(const url of SPECIAL_RECOVERY_URLS){
+  const sourceKey=noteKey(url);if(!sourceKey||imported?.[url])continue;
+  setStatus('初投稿者｜前回公開記事から重複除外を復元中…');
+  let combined='';
+  try{
+   const api=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(sourceKey));
+   combined+=JSON.stringify(api||{})
+  }catch{}
+  try{combined+=' '+String(await xhr(url,'text',60000)||'')}catch{}
+  const keys=extractNoteKeysFromRecovery(combined,sourceKey);
+  if(!keys.size)throw new Error('前回公開記事から掲載済み記事を確認できませんでした。重複防止のため初投稿案件を開始しません');
+  for(const key of keys){
+   if(seenKeys.has(key))continue;
+   seenKeys.add(key);current.push({url:'',urlname:'',creator:'',key,confirmedAt:Date.now(),recoveredFrom:url});added++
+  }
+  writeJSONKey(SPECIAL_EXCLUDED,current);
+  writeJSONKey(SPECIAL_RECOVERY_IMPORTED,{...(imported||{}),[url]:{at:Date.now(),count:keys.size}})
+ }
+ updateExcludedCount();
+ if(added)setStatus('前回公開記事から '+added+'件を重複除外へ復元しました ✅');
+ return added
 }
 function specialBlockedReason(text){
  const t=String(text||'');
@@ -545,6 +589,7 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  if(limit===0)return[];
  const tags=(Array.isArray(selectedTags)?selectedTags:[]).filter(x=>FIRST_TAGS.includes(x));
  if(!tags.length)throw new Error('初投稿タグを1つ以上選んでください');
+ await recoverSpecialExclusionsFromPublishedArticles();
  const excluded=specialExcludedSets();
  // 各タグの「新着」列を別ストリームとして保持し、先頭日時を比較して1件ずつ取り出す。
  // 両方ONでもタグA→タグBの順にはせず、2タグを混ぜた本当の最新順で判定する。
@@ -584,7 +629,7 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase();
   if(tested.has(u))continue;
   tested.add(u);
-  if(excluded.urls.has(u)||excluded.creators.has(creator))continue;
+  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(noteKey(u)))continue;
   setStatus('特別案件｜'+tags.map(x=>'#'+x).join('＋')+' 混合最新順｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
   if(!(await creatorSinglePublicArticle(chosenRow)))continue;
   const text=await specialArticleText(chosenRow);
@@ -598,21 +643,22 @@ function saveSpecialLast(rows){
  const list=(rows||[]).filter(x=>x?.specialFirstNote).map(x=>({url:norm(x.url),urlname:String(x.urlname||''),creator:String(x.creator||''),key:String(x.key||''),at:Date.now()}));
  writeJSONKey(SPECIAL_LAST,{at:Date.now(),count:list.length,items:list,committed:false})
 }
-function commitSpecialLast(){
+function commitSpecialLast({silent=false}={}){
  const last=readJSONKey(SPECIAL_LAST,null);
  const items=Array.isArray(last?.items)?last.items:[];
- if(!items.length){setStatus('前回の特別案件成功候補がありません',true);return}
- const current=specialExcluded(),seen=new Set(current.map(x=>norm(x.url)+'|'+String(x.urlname||'').toLowerCase()));
+ if(!items.length){if(!silent)setStatus('前回の特別案件成功候補がありません',true);return 0}
+ const current=specialExcluded(),seen=new Set(current.map(x=>String(x.key||noteKey(x.url)||'')+'|'+String(x.urlname||'').toLowerCase()));
  let added=0;
  for(const item of items){
-  const k=norm(item.url)+'|'+String(item.urlname||'').toLowerCase();
+  const k=String(item.key||noteKey(item.url)||'')+'|'+String(item.urlname||'').toLowerCase();
   if(seen.has(k))continue;
   seen.add(k);current.push({...item,confirmedAt:Date.now()});added++
  }
  writeJSONKey(SPECIAL_EXCLUDED,current);
  writeJSONKey(SPECIAL_LAST,{...last,committed:true,committedAt:Date.now()});
  updateExcludedCount();
- setStatus('前回成功分 '+added+'件を次回以降の除外対象へ登録しました ✅')
+ if(!silent)setStatus('成功分 '+added+'件を次回以降の除外対象へ登録しました ✅');
+ return added
 }
 function clearSpecialExcluded(){
  const n=specialExcluded().length;
@@ -928,7 +974,12 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   writeRun({...runNow,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   if(special)saveSpecialLast(rows);
   await saveOnce('① 画像🔗＋名前キャプション '+rows.length+'/'+rows.length+' 完了｜保存中…');
-  setStatus('①画像一覧 完了 ✅ '+rows.length+'件｜カードを置く位置を本文でタップ →「②ここから通知カード」')
+  if(special){
+   const autoAdded=commitSpecialLast({silent:true});
+   setStatus('①初投稿者画像一覧 完了 ✅ '+rows.length+'件｜今回成功分 '+autoAdded+'件を次回重複除外へ自動登録｜カード位置をタップ →「②ここから通知カード」')
+  }else{
+   setStatus('①画像一覧 完了 ✅ '+rows.length+'件｜カードを置く位置を本文でタップ →「②ここから通知カード」')
+  }
  }catch(e){
   setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true)
  }finally{busy=false;update()}
@@ -1178,7 +1229,7 @@ function mount(){
    <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめてのnote</button><button data-special-tag="初めてのnote">#初めてのnote</button></div>
    <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??100)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:3px">① 初投稿者画像一覧</button>
-   <div class="special-actions"><button data-a="commit-excluded">前回成功→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
+   <div class="special-actions"><button data-a="commit-excluded">成功分→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
   </details>
 
   <details data-workmom>
