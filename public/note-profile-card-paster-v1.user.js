@@ -753,14 +753,26 @@ function designHash(value){
 }
 function randomThinTheme(row){
  const themes=[
-  {bg:'#ffffff',panel:'#ffffff',ink:'#101827',muted:'#64748b',line:'#d8e1ea',accent:'#22c3ee',soft:'#edfaff',dark:false,kind:'minimal'},
-  {bg:'#eef8ff',panel:'#ffffff',ink:'#10243a',muted:'#557086',line:'#b9d9ec',accent:'#5faee3',soft:'#dff3ff',dark:false,kind:'wave'},
-  {bg:'#fff8ed',panel:'#fffdf8',ink:'#33271e',muted:'#806b58',line:'#ead6ba',accent:'#e4a24d',soft:'#fff0d7',dark:false,kind:'paper'},
-  {bg:'#0b1622',panel:'#101f2e',ink:'#f5fbff',muted:'#9cc6da',line:'#294b60',accent:'#4ee6d6',soft:'#153544',dark:true,kind:'cyber'},
-  {bg:'#f7f7f7',panel:'#ffffff',ink:'#151515',muted:'#666666',line:'#cdcdcd',accent:'#111111',soft:'#eeeeee',dark:false,kind:'mono'},
-  {bg:'#effcf6',panel:'#fbfffd',ink:'#17352b',muted:'#58776b',line:'#bfe3d4',accent:'#37b98a',soft:'#dff7ed',dark:false,kind:'ticket'},
-  {bg:'#f7f1ff',panel:'#ffffff',ink:'#24143a',muted:'#745b8d',line:'#d9c5ee',accent:'#9c6ade',soft:'#eee2ff',dark:false,kind:'orbit'},
-  {bg:'#fff0f2',panel:'#fffafb',ink:'#3a1d27',muted:'#8a6170',line:'#efc5cf',accent:'#e76f91',soft:'#ffe1e8',dark:false,kind:'stripe'}
+  {bg:'#ffffff',panel:'#ffffff',ink:'#101827',muted:'#64748b',line:'#d8e1ea',accent:'#22c3ee',soft:'#edfaff',kind:'minimal'},
+  {bg:'#eef8ff',panel:'#ffffff',ink:'#10243a',muted:'#557086',line:'#b9d9ec',accent:'#5faee3',soft:'#dff3ff',kind:'wave'},
+  {bg:'#fff8ed',panel:'#fffdf8',ink:'#33271e',muted:'#806b58',line:'#ead6ba',accent:'#e4a24d',soft:'#fff0d7',kind:'paper'},
+  {bg:'#0b1622',panel:'#101f2e',ink:'#f5fbff',muted:'#9cc6da',line:'#294b60',accent:'#4ee6d6',soft:'#153544',kind:'cyber'},
+  {bg:'#f7f7f7',panel:'#ffffff',ink:'#151515',muted:'#666666',line:'#cdcdcd',accent:'#111111',soft:'#eeeeee',kind:'mono'},
+  {bg:'#effcf6',panel:'#fbfffd',ink:'#17352b',muted:'#58776b',line:'#bfe3d4',accent:'#37b98a',soft:'#dff7ed',kind:'ticket'},
+  {bg:'#f7f1ff',panel:'#ffffff',ink:'#24143a',muted:'#745b8d',line:'#d9c5ee',accent:'#9c6ade',soft:'#eee2ff',kind:'orbit'},
+  {bg:'#fff0f2',panel:'#fffafb',ink:'#3a1d27',muted:'#8a6170',line:'#efc5cf',accent:'#e76f91',soft:'#ffe1e8',kind:'stripe'},
+  {bg:'#f3fbff',panel:'#ffffff',ink:'#12324a',muted:'#5d7587',line:'#c7ddea',accent:'#2b9ed8',soft:'#e5f5fc',kind:'grid'},
+  {bg:'#fffdf3',panel:'#fffef8',ink:'#362f19',muted:'#7d7350',line:'#eadf9d',accent:'#d8b931',soft:'#fff6be',kind:'dots'},
+  {bg:'#f4f8ff',panel:'#ffffff',ink:'#17243c',muted:'#65728b',line:'#ccd6eb',accent:'#5a74d6',soft:'#e7edff',kind:'diagonal'},
+  {bg:'#fff5fa',panel:'#ffffff',ink:'#351a2b',muted:'#856278',line:'#eccdde',accent:'#d956a0',soft:'#ffe5f3',kind:'corner'},
+  {bg:'#f3fff9',panel:'#ffffff',ink:'#15372a',muted:'#5f7d70',line:'#c5e7d7',accent:'#2da974',soft:'#e4f8ef',kind:'frame'},
+  {bg:'#fff8f1',panel:'#fffdf9',ink:'#3b281a',muted:'#876d59',line:'#ead5c0',accent:'#e37b3d',soft:'#ffead8',kind:'split'},
+  {bg:'#f9f6ff',panel:'#ffffff',ink:'#291c40',muted:'#75658a',line:'#d9cfeb',accent:'#7d5bc8',soft:'#eee6ff',kind:'ribbon'},
+  {bg:'#effcff',panel:'#fbffff',ink:'#12343b',muted:'#5a7880',line:'#bfe4e8',accent:'#26afbd',soft:'#ddf7fa',kind:'bubbles'},
+  {bg:'#fff7e8',panel:'#fffdfa',ink:'#382719',muted:'#88705a',line:'#efd9b7',accent:'#ef9c36',soft:'#ffebc8',kind:'sunrise'},
+  {bg:'#f6fbf4',panel:'#ffffff',ink:'#22351c',muted:'#6f8069',line:'#d2e3cc',accent:'#69a850',soft:'#eaf5e4',kind:'zigzag'},
+  {bg:'#eef5ff',panel:'#f9fbff',ink:'#16263d',muted:'#60738d',line:'#c3d3e9',accent:'#3f7fc5',soft:'#dce9f8',kind:'glass'},
+  {bg:'#fffef7',panel:'#ffffff',ink:'#28251b',muted:'#77705d',line:'#ddd4b6',accent:'#b69443',soft:'#f6efd7',kind:'notebook'}
  ];
  return themes[designHash(row?.key||row?.url||row?.creator)%themes.length]
 }
