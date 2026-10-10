@@ -947,8 +947,8 @@ function resolveOwnedCardHits(view){
  return hits
 }
 function trackedContentCount(view){
- if(!readRun())return{images:0,cards:0};
- return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length}
+ if(!readRun())return{images:0,cards:0,headings:0};
+ return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length}
 }
 async function deleteNotificationCards({confirm=true,save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
@@ -962,12 +962,12 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
 }
 async function deleteAllGenerated({save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
- const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view);
- const removedCards=cards.length,removedImages=images.length;
- deleteHits(view,[...cards,...images]);
+ const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view),headings=resolveOwnedHeadingHits(view);
+ const removedCards=cards.length,removedImages=images.length,removedHeadings=headings.length;
+ deleteHits(view,[...cards,...images,...headings]);
  writeRun(null);
- if(save&&(removedCards||removedImages))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'を削除して保存中…');
- return{removedCards,removedImages}
+ if(save&&(removedCards||removedImages||removedHeadings))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'・見出し'+removedHeadings+'を削除して保存中…');
+ return{removedCards,removedImages,removedHeadings}
 }
 
 function inputValues(save=true){
@@ -1005,7 +1005,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   let imageInsertPos=cardAnchorFromSelection(view);
 
   const leftover=trackedContentCount(view);
-  if(leftover.images||leftover.cards){
+  if(leftover.images||leftover.cards||leftover.headings){
    throw new Error('このページに今回作成分が残っています。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
   }
 
@@ -1024,7 +1024,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
   const requestedCount=parenting?(input.parentingMode==='all'?null:input.parentingCount):workmom?(input.workmomMode==='all'?null:input.workmomCount):special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
   writeRun({
-   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],rows,
+   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
    createdAt:Date.now(),stage:'images_building',special:Boolean(special),workmom:Boolean(workmom),parenting:Boolean(parenting),
    imageAnchorPos:imageInsertPos,
@@ -1036,6 +1036,15 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
+   if(special){
+    if(row.finalMarker){
+     const text='最後に｜実績の算数';
+     const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    }else if(i%10===0){
+     const text=sectionHeadingText(Math.floor(i/10));
+     const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    }
+   }
    setStatus('① 画像🔗＋名前キャプション '+(i+1)+'/'+rows.length+'｜'+row.creator);
    const file=await makeFile(row);
    const made=await uploadOne(view,row,file,imageInsertPos);
@@ -1162,8 +1171,8 @@ async function resetAll(){
  try{
   const result=await deleteAllGenerated({save:false});
   localStorage.removeItem(PREF);writeRun(null);resetFields();
-  if(result.removedCards||result.removedImages)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'を削除して保存中…');
-  setStatus('最初に戻しました ✅ 今回画像 '+result.removedImages+' / 通知カード '+result.removedCards+' を削除｜元本文は保持')
+  if(result.removedCards||result.removedImages||result.removedHeadings)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'・見出し'+result.removedHeadings+'を削除して保存中…');
+  setStatus('最初に戻しました ✅ 画像 '+result.removedImages+' / 通知 '+result.removedCards+' / 見出し '+result.removedHeadings+' を削除｜元本文は保持')
  }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
