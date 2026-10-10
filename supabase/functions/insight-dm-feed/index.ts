@@ -15,7 +15,7 @@ function personKey(r:any){
 function personRow(rows:any[]){
  const sorted=[...rows].sort((a,b)=>new Date(b?.last_message_at||b?.last_synced_at||0).getTime()-new Date(a?.last_message_at||a?.last_synced_at||0).getTime());
  const best=sorted.find(r=>r?.peer_note_id||r?.peer_url||r?.peer_name)||sorted[0]||{};
- return{person_key:personKey(best),peer_note_id:best.peer_note_id||null,peer_name:best.peer_name||best.peer_note_id||"DM相手",peer_url:best.peer_url||null,peer_image_url:best.peer_image_url||null,last_message_at:best.last_message_at||best.last_synced_at||null,room_count:rows.length,thread_keys:rows.map(r=>r.thread_key).filter(Boolean)}
+ return{person_key:personKey(best),peer_note_id:best.peer_note_id||null,peer_name:best.peer_name||best.peer_note_id||"DM会話",peer_url:best.peer_url||null,peer_image_url:best.peer_image_url||null,last_message_at:best.last_message_at||best.last_synced_at||null,room_count:rows.length,thread_keys:rows.map(r=>r.thread_key).filter(Boolean)}
 }
 Deno.serve(async req=>{
  if(req.method==="OPTIONS")return new Response("ok",{headers:H});
