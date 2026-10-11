@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.9
+// @version      1.9.0
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.9';
+const VERSION='1.9.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -1244,27 +1244,44 @@ async function createCardsAtTap(){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
-  const run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
-  if(!run||run.stage!=='images_ready'||!rows.length)throw new Error('先に①画像一覧を完成させてください');
-  if((run.cardKeys||[]).length)throw new Error('今回の通知カードが既にあります。続き作成はしません。通知カード一括削除後に新しく作成してください');
+  let run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
+  if(!run||!rows.length||!['images_ready','cards_building','complete'].includes(run.stage))throw new Error('先に①画像一覧を完成させてください');
   const imageCount=resolveOwnedImageHits(view).length;
   if(imageCount!==rows.length)throw new Error('今回画像が '+imageCount+'/'+rows.length+' 件です。画像一覧を確認してください');
 
-  // ユーザーが本文をタップした位置を、ボタンを押した瞬間のselectionから取得。
-  let insertPos=cardAnchorFromSelection(view);
-  let cardGapMs=CARD_GAP_FAST;
-  writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:[],updatedAt:Date.now()});
-  setStatus('② 正規通知カード開始｜約1.65倍速・通常間隔 '+(CARD_GAP_FAST/1000).toFixed(1)+'秒｜'+rows.length+'件');
+  let existing=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
+  let done=Math.min(existing.length,rows.length);
 
-  for(let i=0;i<rows.length;i++){
+  if(done>=rows.length){
+   writeRun({...run,stage:'complete',updatedAt:Date.now()});
+   setStatus('通知カードはすでに '+done+'/'+rows.length+' 件あります ✅');
+   return
+  }
+
+  // 初回だけ本文タップ位置。途中再開は最後に作れたカードの直後から続行。
+  let insertPos;
+  if(done>0){
+   const last=existing[done-1];
+   insertPos=last.pos+last.node.nodeSize
+  }else if(Number.isFinite(Number(run.cardAnchorPos))){
+   insertPos=Math.min(Number(run.cardAnchorPos),view.state.doc.content.size)
+  }else{
+   insertPos=cardAnchorFromSelection(view)
+  }
+
+  const existingRecs=Array.isArray(run.cardKeys)?run.cardKeys:[];
+  writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:existingRecs,updatedAt:Date.now()});
+  let cardGapMs=CARD_GAP_FAST;
+  setStatus('② 通知カードの続き｜'+done+'/'+rows.length+' 件済み');
+
+  for(let i=done;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
    let made=null;
-   setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator+'｜待機 '+(cardGapMs/1000)+'秒');
+   setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator+'｜待機 '+(cardGapMs/1000).toFixed(1)+'秒');
    try{
     made=await createNativeCard(view,row,insertPos)
    }catch(firstError){
-    // 通常5秒/再試行10秒相当の安全設計を約1.35倍速化。エラー時だけ低速側へ昇格する。
     cardGapMs=CARD_GAP_SLOW;
     setStatus('② '+row.creator+'｜一時エラー → '+(CARD_GAP_SLOW/1000).toFixed(1)+'秒待って1回再試行',true);
     await sleep(CARD_GAP_SLOW);
@@ -1276,9 +1293,6 @@ async function createCardsAtTap(){
     }
    }
    insertPos=made.nextPos;
-
-   // note側の非同期エラーが遅れて出ることがあるため、成功後も最初は5秒だけ観察。
-   // 途中で失敗が出た場合のみ以後10秒になる。
    await sleep(cardGapMs);
 
    if((i+1)%10===0&&i+1<rows.length){
@@ -1287,7 +1301,6 @@ async function createCardsAtTap(){
    }
   }
 
-  // +1件の「実績の算数」は最後にカード実体まで必ず再確認する。
   const finalRow=rows.find(x=>x?.finalMarker||norm(x?.url)===norm(FINAL_URL));
   if(finalRow){
    let finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
@@ -1304,16 +1317,17 @@ async function createCardsAtTap(){
    }
   }
 
-  const done=readRun()||{};
+  const doneRun=readRun()||{};
   const actualCards=resolveOwnedCardHits(view).length;
-  if(actualCards!==rows.length)throw new Error('通知カード実数 '+actualCards+'/'+rows.length+'｜不足を検出したため完了にしません');
-  writeRun({...done,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
+  if(actualCards!==rows.length)throw new Error('通知カード実数 '+actualCards+'/'+rows.length+'｜不足を検出。もう一度②を押せば続きから再開します');
+  writeRun({...doneRun,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
   await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
-  setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 指定位置から通知カード一覧 '+rows.length+'件')
+  setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 通知カード '+rows.length+'件')
  }catch(e){
-  setStatus('通知カード停止：'+(e?.message||String(e))+'｜完成分は本文に保持。続き作成はしません',true)
+  setStatus('通知カード停止：'+(e?.message||String(e))+'｜完成分は保持。もう一度②で続きから再開できます',true)
  }finally{busy=false;update()}
 }
+
 async function bulkDelete(){
  if(busy)return;busy=true;stopRequested=true;update();
  try{
@@ -1473,7 +1487,7 @@ function mount(){
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
   <div class="hint">指定件数＋最後に「実績の算数」1件（件数外）</div>
 
-  <div class="phase"><button data-a="images">①画像一覧</button><button data-a="cards">②ここからカード</button></div>
+  <div class="phase"><button data-a="images">①画像一覧</button><button data-a="cards">②カード続き/開始</button></div>
 
   <details data-special open>
    <summary>＋ 第二弾：初投稿＋自己紹介</summary>
