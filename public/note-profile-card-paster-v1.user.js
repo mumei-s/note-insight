@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.2
+// @version      1.8.3
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.2';
+const VERSION='1.8.3';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -46,12 +46,13 @@ const PARENTING_CONTEXT={
  family:/(?:子ども|子供|赤ちゃん|乳児|幼児|園児|息子|娘|きょうだい|兄弟|姉妹|保育園|幼稚園|学童|小学生|離乳食|夜泣き|おむつ|寝かしつけ|育休|産休|出産)/i
 };
 const SPECIAL_NG=[
-  {label:'ポルノ',re:/(?:ポルノ|アダルト|18禁|R-?18|エロ|性的|セックス|風俗|AV女優|ヌード|自慰|性行為|援助交際)/i},
-  {label:'ギャンブル',re:/(?:ギャンブル|パチンコ|パチスロ|競馬|競艇|競輪|カジノ|賭け|ブックメーカー)/i},
-  {label:'暴力',re:/(?:暴力|殺害|殺人|殴る|刺す|虐待|リンチ|銃撃|テロ|自傷|自殺)/i},
-  {label:'投資',re:/(?:投資|株式|株価|FX|仮想通貨|暗号資産|NISA|iDeCo|資産運用|デイトレ|トレード|配当|証券)/i},
-  {label:'その他NG',re:/(?:違法|詐欺|闇バイト|覚醒剤|大麻|薬物|ドラッグ|マルチ商法|ネットワークビジネス|宗教勧誘|ヘイト|差別煽動)/i}
+  {label:'ポルノ',re:/(?:ポルノ|アダルト動画|18禁|R-?18|エロ動画|セックス動画|AV女優|ヌード販売|自慰動画|性行為動画|援助交際)/i},
+  {label:'ギャンブル',re:/(?:ギャンブル必勝|パチンコ攻略|パチスロ攻略|競馬予想販売|競艇予想販売|競輪予想販売|オンラインカジノ|ブックメーカー)/i},
+  {label:'暴力',re:/(?:殺害予告|殺人予告|リンチ推奨|銃撃推奨|テロ賛美|自傷を勧め|自殺を勧め)/i},
+  {label:'危険な稼ぎ方',re:/(?:必ず儲かる|絶対稼げる|元本保証|高額報酬保証|投資サロン勧誘|FX自動売買勧誘|仮想通貨勧誘|暗号資産勧誘|闇バイト)/i},
+  {label:'その他NG',re:/(?:違法販売|詐欺商材|覚醒剤販売|大麻販売|薬物販売|マルチ商法勧誘|ネットワークビジネス勧誘|宗教勧誘|ヘイト扇動|差別煽動)/i}
 ];
+// 普通の副業・在宅ワーク・フリーランス・仕事紹介・収益化体験・一般的な投資体験の記述は、勧誘や危険表現がなければ除外しない。
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
@@ -618,10 +619,7 @@ async function specialTagAudit(row,tag){
  const parts=[row.title,note.name,note.title,note.description,note.body,note.body_html,note.bodyText,note.body_text,doc?.querySelector('article')?.textContent||doc?.querySelector('main')?.textContent||''];
  const text=parts.map(v=>String(v||'')).join(' ').replace(/\s+/g,' ').trim();
  const blocked=specialBlockedReason(text);if(blocked)return{ok:false,reason:blocked};
- if(tag===SELF_INTRO_TAG){
-  const relevant=/(?:自己紹介|はじめまして|初めまして|プロフィール|私について|わたしについて|noteを始め|noteはじめ|発信内容)/i.test(text);
-  if(!relevant)return{ok:false,reason:'自己紹介文脈不足'}
- }
+ // #自己紹介はタグ実在を確認できれば採用対象。本文表現の型までは強制しない。
  return{ok:true,reason:''}
 }
 async function collectFirstNoteSpecial(mode,count,selectedTags){
@@ -635,18 +633,19 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  const saved=readScan();
  const sig=JSON.stringify({tags:[...tags].sort(),limit:limit===Infinity?'all':limit});
  const anchorPos=Number(saved?.anchorPos||0)||null;
- let states,tested,out,scanned;
+ let states,tested,out,scanned,rejects;
  if(saved?.version===1&&saved.signature===sig&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
   states=saved.states.map(st=>({...st,buffer:Array.isArray(st.buffer)?st.buffer:[]}));
   tested=new Set(Array.isArray(saved.tested)?saved.tested:[]);
-  out=saved.out;scanned=Number(saved.scanned||tested.size||0);
+  out=saved.out;scanned=Number(saved.scanned||tested.size||0);rejects=saved.rejects&&typeof saved.rejects==='object'?saved.rejects:{};
   setStatus('途中保存から再開 ✅ 採用 '+out.length+'件｜確認済み '+tested.size+'件')
  }else{
   states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
-  tested=new Set();out=[];scanned=0;
-  writeScan({version:1,signature:sig,states,tested:[],out,scanned,anchorPos,active:true,updatedAt:Date.now()})
+  tested=new Set();out=[];scanned=0;rejects={};
+  writeScan({version:1,signature:sig,states,tested:[],out,scanned,rejects,anchorPos,active:true,updatedAt:Date.now()})
  }
- const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,anchorPos,active:true,updatedAt:Date.now()});
+ const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,rejects,anchorPos,active:true,updatedAt:Date.now()});
+ const reject=reason=>{const key=String(reason||'その他');rejects[key]=Number(rejects[key]||0)+1};
  async function fill(st){
   while(!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
@@ -670,14 +669,16 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   if(!chosenRow)break;
   chosenState.buffer.shift();scanned++;
   const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase(),key=noteKey(u);
-  if(tested.has(u)){checkpoint();continue}
+  if(tested.has(u)){reject('同一記事重複');checkpoint();continue}
   tested.add(u);checkpoint();
-  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key)){checkpoint();continue}
+  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key)){reject('前回掲載済み');checkpoint();continue}
   setStatus('第二弾｜#'+chosenState.tag+'｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
   const audit=await specialTagAudit(chosenRow,chosenState.tag);
-  if(!audit.ok){checkpoint();continue}
-  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow))){checkpoint();continue}
+  if(!audit.ok){reject(audit.reason);checkpoint();continue}
+  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow))){reject('公開記事が1件ではない');checkpoint();continue}
   out.push({...chosenRow,specialFirstNote:true,specialSourceTag:chosenState.tag});
+  const topRejects=Object.entries(rejects).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+' '+v).join(' / ');
+  setStatus('第二弾｜確認 '+tested.size+'｜採用 '+out.length+(topRejects?'｜除外上位 '+topRejects:''));
   checkpoint();
   await sleep(55)
  }
@@ -1343,7 +1344,7 @@ function mount(){
    <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめて</button><button data-special-tag="始めてのnote">#始めて</button><button data-special-tag="自己紹介">#自己紹介</button></div>
    <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??200)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:2px">① 200人＋見出し</button>
-   <div class="special-actions"><button data-a="commit-excluded">成功分→除外</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
+   <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
   </details>
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
@@ -1394,7 +1395,7 @@ function mount(){
  p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:false})});
  p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
- p.querySelector('[data-a="commit-excluded"]').addEventListener('click',e=>{e.preventDefault();commitSpecialLast()});
+ p.querySelector('[data-a="scan-stats"]').addEventListener('click',e=>{e.preventDefault();const scan=readScan(),r=scan?.rejects||{};const msg=Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'件').join('｜')||'除外内訳なし';setStatus('確認 '+(scan?.tested?.length||0)+'｜採用 '+(scan?.out?.length||0)+'｜'+msg)});
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
  p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
  p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
