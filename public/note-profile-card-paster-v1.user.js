@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.4
+// @version      1.8.5
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.4';
+const VERSION='1.8.5';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -61,7 +61,7 @@ const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
 const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
-let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;
+let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
 const scanKey=()=>SPECIAL_SCAN_PREFIX+(editorArticleKey()||'unknown');
 async function keepAwake(){
  if(!page.navigator?.wakeLock?.request||document.hidden)return false;
@@ -100,13 +100,23 @@ function getPrefs(){try{return JSON.parse(localStorage.getItem(PREF)||'{}')||{}}
 function setPrefs(v){try{localStorage.setItem(PREF,JSON.stringify(v))}catch{}}
 function setStatus(t,bad=false){const e=document.getElementById(STATUS);if(e){e.textContent=t;e.dataset.bad=bad?'1':'0'}}
 function xhr(url,responseType='text',timeout=60000){
- return new Promise((resolve,reject)=>GM_xmlhttpRequest({
-  method:'GET',url,responseType,timeout,
-  headers:{Accept:responseType==='blob'?'image/avif,image/webp,image/png,image/jpeg,*/*':'application/json,text/html,*/*'},
-  onload:r=>r.status>=200&&r.status<300?resolve(r.response):reject(new Error('GET '+r.status+' '+url)),
-  onerror:()=>reject(new Error('通信失敗 '+url)),
-  ontimeout:()=>reject(new Error('通信タイムアウト '+url))
- }))
+ return new Promise((resolve,reject)=>{
+  let req=null;
+  const finish=()=>{if(req)activeRequests.delete(req)};
+  req=GM_xmlhttpRequest({
+   method:'GET',url,responseType,timeout,
+   headers:{Accept:responseType==='blob'?'image/avif,image/webp,image/png,image/jpeg,*/*':'application/json,text/html,*/*'},
+   onload:r=>{finish();if(stopRequested){reject(new Error('停止しました'));return}r.status>=200&&r.status<300?resolve(r.response):reject(new Error('GET '+r.status+' '+url))},
+   onerror:()=>{finish();reject(new Error(stopRequested?'停止しました':'通信失敗 '+url))},
+   ontimeout:()=>{finish();reject(new Error(stopRequested?'停止しました':'通信タイムアウト '+url))},
+   onabort:()=>{finish();reject(new Error('停止しました'))}
+  });
+  if(req)activeRequests.add(req)
+ })
+}
+function abortActiveRequests(){
+ for(const req of [...activeRequests]){try{req.abort?.()}catch{}}
+ activeRequests.clear()
 }
 async function xhrJSON(url){const raw=await xhr(url,'text');try{return JSON.parse(String(raw||''))}catch{throw new Error('JSON解析失敗 '+url)}}
 
@@ -631,15 +641,14 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  await recoverSpecialExclusionsFromPublishedArticles();
  const excluded=specialExcludedSets();
  const saved=readScan();
- const hardLimit=200;
- const effectiveLimit=Math.min(Number.isFinite(limit)?limit:hardLimit,hardLimit);
- const sig=JSON.stringify({tags:[...tags].sort(),limit:hardLimit});
+ const effectiveLimit=limit;
+ const sig=JSON.stringify({tags:[...tags].sort(),limit:limit===Infinity?'all':limit});
  const anchorPos=Number(saved?.anchorPos||0)||null;
  let states,tested,out,scanned,rejects;
  if(saved?.version===1&&saved.signature===sig&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
   states=saved.states.map(st=>({...st,buffer:Array.isArray(st.buffer)?st.buffer:[]}));
   tested=new Set(Array.isArray(saved.tested)?saved.tested:[]);
-  out=saved.out.slice(0,200);scanned=Number(saved.scanned||tested.size||0);rejects=saved.rejects&&typeof saved.rejects==='object'?saved.rejects:{};
+  out=saved.out;scanned=Number(saved.scanned||tested.size||0);rejects=saved.rejects&&typeof saved.rejects==='object'?saved.rejects:{};
   setStatus('途中保存から再開 ✅ 採用 '+out.length+'件｜確認済み '+tested.size+'件')
  }else{
   states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
@@ -685,7 +694,7 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   await sleep(55)
  }
  checkpoint();
- return out.slice(0,effectiveLimit)
+ return out
 }
 function saveSpecialLast(rows){
  const list=(rows||[]).filter(x=>x?.specialFirstNote).map(x=>({url:norm(x.url),urlname:String(x.urlname||''),creator:String(x.creator||''),key:String(x.key||''),at:Date.now()}));
@@ -1011,8 +1020,8 @@ function inputValues(save=true){
  const mode=p.querySelector('[data-mode]')?.value==='all'?'all':'number';
  const count=Math.max(0,Math.min(5000,Number(p.querySelector('[data-count]')?.value||0)));
  const choice=p.querySelector('button[data-choice].on')?.dataset.choice||g.choice||'latest';
- const specialMode='number';
- const specialCount=200;
+ const specialMode=p.querySelector('[data-special-mode]')?.value==='all'?'all':'number';
+ const specialCount=Math.max(1,Math.min(1000,Number(p.querySelector('[data-special-count]')?.value||g.specialCount||200)));
  const specialTags=[...p.querySelectorAll('button[data-special-tag].on')].map(x=>String(x.dataset.specialTag||'')).filter(Boolean);
  const v={sources,mode,count,choice,specialMode,specialCount,specialTags,collapsed:Boolean(g.collapsed),tiny:Boolean(g.tiny)};
  if(save)setPrefs(v);return v
@@ -1210,7 +1219,7 @@ async function resetAll(){
  }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
-function stop(){stopRequested=true;const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});setStatus('停止要求済み｜途中保存は保持。自動再開はしません')}
+function stop(){stopRequested=true;abortActiveRequests();const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});setStatus('停止しました｜途中保存は保持。自動再開もしません')}
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
  p.querySelectorAll('textarea,input,select,button').forEach(x=>{
@@ -1342,9 +1351,9 @@ function mount(){
 
   <details data-special open>
    <summary>＋ 第二弾：初投稿＋自己紹介</summary>
-   <div class="hint">#はじめてのnote / #始めてのnote＝公開1記事のみ。#自己紹介＝複数記事OK。3タグ混合新着・重複除外・NG検閲。200件固定＋実績の算数＝201件。10人ごと見出し。</div>
+   <div class="hint">#はじめてのnote / #始めてのnote＝公開1記事のみ。#自己紹介＝複数記事OK。3タグ混合新着・重複除外・NG検閲。指定件数＋実績の算数1件。10人ごと見出し。</div>
    <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめて</button><button data-special-tag="始めてのnote">#始めて</button><button data-special-tag="自己紹介">#自己紹介</button></div>
-   <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="200" readonly></div>
+   <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??200)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:2px">① 200人＋見出し</button>
    <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
   </details>
@@ -1401,7 +1410,9 @@ function mount(){
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
  p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
  p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
- p.querySelector('[data-a="stop"]').addEventListener('click',e=>{e.preventDefault();stop()});
+ const stopBtn=p.querySelector('[data-a="stop"]');
+ stopBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();stop()},{capture:true});
+ stopBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();stop()});
 
  mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
  bindDirectDrag(p.querySelector('[data-dragbar]'),p);bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
