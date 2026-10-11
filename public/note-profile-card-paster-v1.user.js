@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.8
+// @version      1.8.9
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.8';
+const VERSION='1.8.9';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -953,6 +953,11 @@ function resolveOwnedHeadingHits(view){
  view.state.doc.descendants((node,pos)=>{if(node.type?.name==='heading'&&wanted.has(String(node.textContent||'')))out.push({node,pos})});
  return out
 }
+function findHeadingByText(view,text){
+ let hit=null;
+ view.state.doc.descendants((node,pos)=>{if(!hit&&node.type?.name==='heading'&&String(node.textContent||'')===String(text||''))hit={node,pos}});
+ return hit
+}
 function setSelectionForInsert(view,pos){
  const max=view.state.doc.content.size;
  const at=Math.max(0,Math.min(max,Number(pos)||0));
@@ -1155,49 +1160,86 @@ async function pasteSavedSpecial(){
   await keepAwake();
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
-  const leftover=trackedContentCount(view);
-  if(leftover.images||leftover.cards||leftover.headings)throw new Error('今回作成分が本文に残っています。重複貼り付け防止のため停止しました');
+
   const input=inputValues();
   const scan=readScan(),savedCount=Array.isArray(scan?.out)?scan.out.length:0;
-  if(!savedCount)throw new Error('保存済み採用分がありません');
-  const useCount=Math.min(savedCount,input.specialMode==='all'?savedCount:input.specialCount);
-  let imageInsertPos=cardAnchorFromSelection(view);
-  const rows=await buildRowsFromSavedSpecial(useCount);
-  writeRun({
-   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
-   cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
-   createdAt:Date.now(),stage:'images_building',special:true,
-   imageAnchorPos:imageInsertPos,
-   sources:'保存済み採用分',mode:'number',count:useCount,choice:input.choice
-  });
-  setStatus('保存済み採用 '+useCount+'件＋実績の算数1件を貼り付け開始');
-  for(let i=0;i<rows.length;i++){
+  let run=readRun();
+  const ownedImages=resolveOwnedImageHits(view).sort((a,b)=>a.pos-b.pos);
+  const ownedCards=resolveOwnedCardHits(view);
+  if(ownedCards.length)throw new Error('通知カードがすでにあります。画像の続き貼り付けはできません');
+
+  let rows=[];
+  if(run?.special&&Array.isArray(run.rows)&&run.rows.length){
+   rows=run.rows;
+  }else{
+   if(!savedCount)throw new Error('保存済み採用分がありません');
+   const useCount=Math.min(savedCount,input.specialMode==='all'?savedCount:input.specialCount);
+   rows=await buildRowsFromSavedSpecial(useCount);
+   run={
+    version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
+    cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
+    createdAt:Date.now(),stage:'images_building',special:true,
+    imageAnchorPos:cardAnchorFromSelection(view),
+    sources:'保存済み採用分',mode:'number',count:useCount,choice:input.choice
+   };
+   writeRun(run)
+  }
+
+  const total=rows.length;
+  let done=Math.min(ownedImages.length,total);
+  let imageInsertPos;
+  if(done>0){
+   const last=ownedImages[done-1];
+   imageInsertPos=last.pos+last.node.nodeSize;
+  }else{
+   imageInsertPos=Number(run?.imageAnchorPos);
+   if(!Number.isFinite(imageInsertPos))imageInsertPos=cardAnchorFromSelection(view)
+  }
+
+  if(done>=total){
+   writeRun({...run,stage:'images_ready',updatedAt:Date.now()});
+   setStatus('画像はすでに '+done+'/'+total+' 件あります ✅ 次は本文位置をタップ→②ここから通知カード');
+   return
+  }
+
+  writeRun({...run,stage:'images_building',rows,updatedAt:Date.now()});
+  setStatus('保存分の続きから再開｜'+done+'/'+total+' 件済み');
+
+  for(let i=done;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
+
    if(row.finalMarker){
     const text='最後に｜実績の算数';
-    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    const existing=findHeadingByText(view,text);
+    if(existing&&existing.pos>=imageInsertPos){imageInsertPos=existing.pos+existing.node.nodeSize;recordHeading(text)}
+    else if(!existing){const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)}
    }else if(i%10===0){
     const text=sectionHeadingText(Math.floor(i/10));
-    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+    const existing=findHeadingByText(view,text);
+    if(existing&&existing.pos>=imageInsertPos){imageInsertPos=existing.pos+existing.node.nodeSize;recordHeading(text)}
+    else if(!existing){const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)}
    }
-   setStatus('保存分貼付 '+(i+1)+'/'+rows.length+'｜'+row.creator);
+
+   setStatus('保存分の続き '+(i+1)+'/'+rows.length+'｜'+row.creator);
    const file=await makeFile(row);
    const made=await uploadOne(view,row,file,imageInsertPos);
    imageInsertPos=made.nextPos;
    recordImage(made.hit,row);
    await sleep(IMAGE_PASTE_GAP)
   }
-  const runNow=readRun()||{};
-  writeRun({...runNow,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+
+  run=readRun()||run;
+  writeRun({...run,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   saveSpecialLast(rows);
-  await saveOnce('保存済み採用分 '+rows.length+'/'+rows.length+' 完了｜保存中…');
+  await saveOnce('保存分の続き '+rows.length+'/'+rows.length+' 完了｜保存中…');
   const autoAdded=commitSpecialLast({silent:true});
-  setStatus('保存済み採用分の貼付完了 ✅ '+useCount+'人＋実績の算数｜次は本文位置をタップ→②ここから通知カード');
+  setStatus('保存分の続き貼付完了 ✅ '+rows.length+'件｜次は本文位置をタップ→②ここから通知カード')
  }catch(e){
   setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)
  }finally{await releaseAwake();busy=false;update()}
 }
+
 async function createCardsAtTap(){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
@@ -1439,7 +1481,7 @@ function mount(){
    <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめて</button><button data-special-tag="始めてのnote">#始めて</button><button data-special-tag="自己紹介">#自己紹介</button></div>
    <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??200)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:2px">① 指定件数＋見出し</button>
-   <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="paste-saved">保存分を貼る</button></div><div class="special-actions"><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button><span></span></div>
+   <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="paste-saved">保存分の続き</button></div><div class="special-actions"><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button><span></span></div>
   </details>
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
