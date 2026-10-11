@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.1
+// @version      1.8.2
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.1';
+const VERSION='1.8.2';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -67,7 +67,7 @@ async function keepAwake(){
  try{
   if(wakeLock&&!wakeLock.released)return true;
   wakeLock=await page.navigator.wakeLock.request('screen');
-  wakeLock.addEventListener?.('release',()=>{wakeLock=null},{once:true});
+  wakeLock.addEventListener?.('release',()=>{wakeLock=null;if(!document.hidden&&(busy||readScan()?.active))setTimeout(()=>void keepAwake(),350)},{once:true});
   return true
  }catch{return false}
 }
@@ -634,6 +634,7 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  const excluded=specialExcludedSets();
  const saved=readScan();
  const sig=JSON.stringify({tags:[...tags].sort(),limit:limit===Infinity?'all':limit});
+ const anchorPos=Number(saved?.anchorPos||0)||null;
  let states,tested,out,scanned;
  if(saved?.version===1&&saved.signature===sig&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
   states=saved.states.map(st=>({...st,buffer:Array.isArray(st.buffer)?st.buffer:[]}));
@@ -643,9 +644,9 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  }else{
   states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
   tested=new Set();out=[];scanned=0;
-  writeScan({version:1,signature:sig,states,tested:[],out,scanned,updatedAt:Date.now()})
+  writeScan({version:1,signature:sig,states,tested:[],out,scanned,anchorPos,active:true,updatedAt:Date.now()})
  }
- const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,updatedAt:Date.now()});
+ const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,anchorPos,active:true,updatedAt:Date.now()});
  async function fill(st){
   while(!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
@@ -662,7 +663,7 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  }
  for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
  while(out.length<limit&&states.some(st=>st.buffer.length||!st.done)&&scanned<20000){
-  if(document.hidden){checkpoint();setStatus('画面OFF/バックグラウンド検知｜途中保存済み。戻ったら同じボタンで続きから再開',true);throw new Error('画面OFFで一時停止しました。途中保存済みです')}
+  if(document.hidden){checkpoint();setStatus('バックグラウンド継続中｜進捗は逐次保存。Android側で停止された場合も復帰時に自動再開')}
   for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
   let chosenState=null,chosenRow=null,chosenTime=-Infinity;
   for(const st of states){const row=st.buffer[0];if(!row)continue;const t=new Date(row.publishAt||0).getTime();if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}}
@@ -1031,6 +1032,11 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   // ①画像一覧も、開始ボタンを押した瞬間の本文タップ位置を固定して使う。
   // 以後の通信・画像生成中に選択位置が変わっても、最下部へ飛ばさない。
   let imageInsertPos=cardAnchorFromSelection(view);
+  if(special){
+   const savedScan=readScan();
+   if(savedScan?.active&&Number.isFinite(Number(savedScan.anchorPos))&&Number(savedScan.anchorPos)>=0)imageInsertPos=Math.min(Number(savedScan.anchorPos),view.state.doc.content.size);
+   else writeScan({...savedScan,version:1,anchorPos:imageInsertPos,active:true,updatedAt:Date.now()})
+  }
 
   const leftover=trackedContentCount(view);
   if(leftover.images||leftover.cards||leftover.headings){
@@ -1195,13 +1201,13 @@ async function resetAll(){
  busy=true;stopRequested=true;update();
  try{
   const result=await deleteAllGenerated({save:false});
-  localStorage.removeItem(PREF);writeRun(null);resetFields();
+  localStorage.removeItem(PREF);writeRun(null);clearScan();resetFields();
   if(result.removedCards||result.removedImages||result.removedHeadings)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'・見出し'+result.removedHeadings+'を削除して保存中…');
   setStatus('最初に戻しました ✅ 画像 '+result.removedImages+' / 通知 '+result.removedCards+' / 見出し '+result.removedHeadings+' を削除｜元本文は保持')
  }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
-function stop(){stopRequested=true;setStatus('停止要求済み｜現在処理中の1件が終わったら停止')}
+function stop(){stopRequested=true;const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});setStatus('停止要求済み｜途中保存は保持。自動再開はしません')}
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
  p.querySelectorAll('textarea,input,select,button').forEach(x=>{
@@ -1398,7 +1404,31 @@ function mount(){
  bindDirectDrag(p.querySelector('[data-dragbar]'),p);bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
  if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)void keepAwake()});
-page.addEventListener('pageshow',()=>{const saved=readScan();if(saved?.out?.length)setTimeout(()=>setStatus('途中保存あり｜採用 '+saved.out.length+'件。①を押すと続きから再開'),500)});
+let autoResumeTimer=null;
+function scheduleAutoResume(){
+ clearTimeout(autoResumeTimer);
+ autoResumeTimer=setTimeout(()=>{
+  const saved=readScan();
+  if(!saved?.active||busy||document.hidden)return;
+  const p=document.getElementById(PANEL);
+  if(!p)return;
+  setStatus('途中保存から自動再開｜採用 '+(saved.out?.length||0)+'件・確認済み '+(saved.tested?.length||0)+'件');
+  void createImageList({special:true,workmom:false,parenting:false})
+ },900)
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden){
+  const saved=readScan();if(saved?.active)writeScan({...saved,updatedAt:Date.now()});
+ }else{
+  void keepAwake();
+  scheduleAutoResume()
+ }
+});
+page.addEventListener('pageshow',()=>{
+ void keepAwake();
+ const saved=readScan();
+ if(saved?.active)scheduleAutoResume();
+ else if(saved?.out?.length)setTimeout(()=>setStatus('途中保存あり｜採用 '+saved.out.length+'件'),500)
+});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
