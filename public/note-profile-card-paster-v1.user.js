@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.5
+// @version      1.8.6
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.5';
+const VERSION='1.8.6';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -655,10 +655,10 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   tested=new Set();out=[];scanned=0;rejects={};
   writeScan({version:1,signature:sig,states,tested:[],out,scanned,rejects,anchorPos,active:true,updatedAt:Date.now()})
  }
- const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,rejects,anchorPos,active:true,updatedAt:Date.now()});
+ const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,rejects,anchorPos,active:!stopRequested,updatedAt:Date.now()});
  const reject=reason=>{const key=String(reason||'その他');rejects[key]=Number(rejects[key]||0)+1};
  async function fill(st){
-  while(!st.done&&!st.buffer.length&&st.page<250){
+  while(!stopRequested&&!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
    setStatus('第二弾｜#'+st.tag+' 新着 '+st.page+'ページ｜採用 '+out.length+(mode==='all'?' / 全数':' / '+effectiveLimit));
    const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(st.tag)+'&size=20&start='+encodeURIComponent(st.cursor)+'&sort=new');
@@ -672,9 +672,10 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   }
  }
  for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
- while(out.length<effectiveLimit&&states.some(st=>st.buffer.length||!st.done)&&scanned<20000){
+ while(!stopRequested&&out.length<effectiveLimit&&states.some(st=>st.buffer.length||!st.done)&&scanned<20000){
   if(document.hidden){checkpoint();setStatus('バックグラウンド継続中｜進捗は逐次保存。Android側で停止された場合も復帰時に自動再開')}
   for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
+  if(stopRequested){checkpoint();throw new Error('停止しました')}
   let chosenState=null,chosenRow=null,chosenTime=-Infinity;
   for(const st of states){const row=st.buffer[0];if(!row)continue;const t=new Date(row.publishAt||0).getTime();if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}}
   if(!chosenRow)break;
@@ -685,8 +686,13 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
   if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key)){reject('前回掲載済み');checkpoint();continue}
   setStatus('第二弾｜#'+chosenState.tag+'｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+effectiveLimit));
   const audit=await specialTagAudit(chosenRow,chosenState.tag);
+  if(stopRequested){checkpoint();throw new Error('停止しました')}
   if(!audit.ok){reject(audit.reason);checkpoint();continue}
-  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow))){reject('公開記事が1件ではない');checkpoint();continue}
+  if(STRICT_FIRST_TAGS.has(chosenState.tag)){
+   const single=await creatorSinglePublicArticle(chosenRow);
+   if(stopRequested){checkpoint();throw new Error('停止しました')}
+   if(!single){reject('公開記事が1件ではない');checkpoint();continue}
+  }
   out.push({...chosenRow,specialFirstNote:true,specialSourceTag:chosenState.tag});
   const topRejects=Object.entries(rejects).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+' '+v).join(' / ');
   setStatus('第二弾｜確認 '+tested.size+'｜採用 '+out.length+(topRejects?'｜除外上位 '+topRejects:''));
@@ -1388,6 +1394,7 @@ function mount(){
 
  const formControls=p.querySelectorAll('textarea,input,select,button,summary');
  formControls.forEach(x=>{
+  if(x.dataset.a==='stop')return;
   x.addEventListener('pointerdown',e=>{e.stopPropagation()});
   x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true})
  });
@@ -1411,6 +1418,7 @@ function mount(){
  p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
  p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
  const stopBtn=p.querySelector('[data-a="stop"]');
+ stopBtn.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();stop()},{capture:true,passive:false});
  stopBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();stop()},{capture:true});
  stopBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();stop()});
 
