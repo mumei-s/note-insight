@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.7
+// @version      1.8.8
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.7';
+const VERSION='1.8.8';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -795,6 +795,28 @@ async function buildRows(input,special=false,workmom=false,parenting=false){
  return out.map((x,i)=>({...x,index:i+1,finalMarker:Boolean(x.finalMarker||norm(x.url)===norm(FINAL_URL))}))
 }
 
+async function buildRowsFromSavedSpecial(maxCount){
+ const scan=readScan(),saved=Array.isArray(scan?.out)?scan.out:[];
+ if(!saved.length)throw new Error('保存済みの採用候補がありません');
+ const n=Math.max(1,Math.min(saved.length,Number(maxCount)||saved.length));
+ const seen=new Set(),rows=[];
+ for(const row of saved.slice(0,n)){
+  const u=norm(row?.url);if(!u||u===norm(FINAL_URL)||seen.has(u))continue;
+  seen.add(u);rows.push({...row,url:u,specialFirstNote:true})
+ }
+ rows.push({
+  likerKey:'final-performance-math',urlname:'fuku444',creator:'実績の算数',
+  actorUrl:'https://note.com/fuku444',actorImageUrl:'',url:FINAL_URL,
+  title:'実績の算数│3日半で0→1達成',key:FINAL_KEY,publishAt:null,thumbUrl:'',finalMarker:true
+ });
+ const out=[];
+ for(let i=0;i<rows.length;i+=5){
+  if(stopRequested)throw new Error('停止しました');
+  setStatus('保存済み採用分｜画像情報 '+out.length+'/'+rows.length+'…');
+  out.push(...await Promise.all(rows.slice(i,i+5).map(enrich)))
+ }
+ return out.map((x,i)=>({...x,index:i+1,finalMarker:Boolean(x.finalMarker||norm(x.url)===norm(FINAL_URL))}))
+}
 async function bitmapFromUrl(url){
  if(!url)return null;
  try{const blob=await xhr(url,'blob',45000);if('createImageBitmap'in page)return await page.createImageBitmap(blob);return await new Promise((resolve,reject)=>{const img=new page.Image(),u=page.URL.createObjectURL(blob);img.onload=()=>{page.URL.revokeObjectURL(u);resolve(img)};img.onerror=()=>{page.URL.revokeObjectURL(u);reject(new Error('画像読込失敗'))};img.src=u})}catch{return null}
@@ -1127,6 +1149,55 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true)
  }finally{if(special)await releaseAwake();busy=false;update()}
 }
+async function pasteSavedSpecial(){
+ if(busy)return;busy=true;stopRequested=false;update();
+ try{
+  await keepAwake();
+  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  nativeImageCommand();noteUrlCommandFactory();selectionApi();
+  const leftover=trackedContentCount(view);
+  if(leftover.images||leftover.cards||leftover.headings)throw new Error('今回作成分が本文に残っています。重複貼り付け防止のため停止しました');
+  const input=inputValues();
+  const scan=readScan(),savedCount=Array.isArray(scan?.out)?scan.out.length:0;
+  if(!savedCount)throw new Error('保存済み採用分がありません');
+  const useCount=Math.min(savedCount,input.specialMode==='all'?savedCount:input.specialCount);
+  let imageInsertPos=cardAnchorFromSelection(view);
+  const rows=await buildRowsFromSavedSpecial(useCount);
+  writeRun({
+   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
+   cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
+   createdAt:Date.now(),stage:'images_building',special:true,
+   imageAnchorPos:imageInsertPos,
+   sources:'保存済み採用分',mode:'number',count:useCount,choice:input.choice
+  });
+  setStatus('保存済み採用 '+useCount+'件＋実績の算数1件を貼り付け開始');
+  for(let i=0;i<rows.length;i++){
+   if(stopRequested)throw new Error('手動停止');
+   const row=rows[i];
+   if(row.finalMarker){
+    const text='最後に｜実績の算数';
+    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+   }else if(i%10===0){
+    const text=sectionHeadingText(Math.floor(i/10));
+    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+   }
+   setStatus('保存分貼付 '+(i+1)+'/'+rows.length+'｜'+row.creator);
+   const file=await makeFile(row);
+   const made=await uploadOne(view,row,file,imageInsertPos);
+   imageInsertPos=made.nextPos;
+   recordImage(made.hit,row);
+   await sleep(IMAGE_PASTE_GAP)
+  }
+  const runNow=readRun()||{};
+  writeRun({...runNow,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+  saveSpecialLast(rows);
+  await saveOnce('保存済み採用分 '+rows.length+'/'+rows.length+' 完了｜保存中…');
+  const autoAdded=commitSpecialLast({silent:true});
+  setStatus('保存済み採用分の貼付完了 ✅ '+useCount+'人＋実績の算数｜次は本文位置をタップ→②ここから通知カード');
+ }catch(e){
+  setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)
+ }finally{await releaseAwake();busy=false;update()}
+}
 async function createCardsAtTap(){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
@@ -1368,7 +1439,7 @@ function mount(){
    <div class="choices special-tags"><button data-special-tag="はじめてのnote">#はじめて</button><button data-special-tag="始めてのnote">#始めて</button><button data-special-tag="自己紹介">#自己紹介</button></div>
    <div class="amount"><select data-special-mode><option value="number">件数</option><option value="all">全数</option></select><input data-special-count type="text" inputmode="numeric" pattern="[0-9]*" value="${Number(g.specialCount??200)}"></div>
    <button data-a="special-images" style="width:100%;margin-top:2px">① 指定件数＋見出し</button>
-   <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button></div>
+   <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="paste-saved">保存分を貼る</button></div><div class="special-actions"><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button><span></span></div>
   </details>
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
@@ -1421,6 +1492,7 @@ function mount(){
  p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="scan-stats"]').addEventListener('click',e=>{e.preventDefault();const scan=readScan(),r=scan?.rejects||{};const msg=Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'件').join('｜')||'除外内訳なし';setStatus('確認 '+(scan?.tested?.length||0)+'｜採用 '+(scan?.out?.length||0)+'｜'+msg)});
+ p.querySelector('[data-a="paste-saved"]').addEventListener('click',e=>{e.preventDefault();void pasteSavedSpecial()});
  p.querySelector('[data-a="clear-excluded"]').addEventListener('click',e=>{e.preventDefault();clearSpecialExcluded()});
  p.querySelector('[data-a="delete"]').addEventListener('click',e=>{e.preventDefault();void bulkDelete()});
  p.querySelector('[data-a="reset"]').addEventListener('click',e=>{e.preventDefault();void resetAll()});
