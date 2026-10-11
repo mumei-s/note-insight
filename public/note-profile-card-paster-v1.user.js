@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      1.8.0
+// @version      1.8.1
 // @description  初投稿第二弾200件＋実績の算数1件。#はじめてのnote/#始めてのnoteは公開1記事のみ、#自己紹介は複数記事可。10人ごと見出しで目次対応、ランダム極薄20柄、健全な副業・在宅ワーク可、さらに高速化。
 // @match        https://editor.note.com/*
 // @run-at       document-idle
@@ -20,7 +20,7 @@ const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='1.8.0';
+const VERSION='1.8.1';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -30,6 +30,7 @@ const SPECIAL_LAST='mumei_profile_card_paster_special_last_v15';
 const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
 const SPECIAL_RECOVERY_IMPORTED='mumei_profile_card_paster_special_recovery_v171';
 const SPECIAL_RECOVERY_URLS=['https://note.com/ss_yr/n/n1b6e30eb9e41'];
+const SPECIAL_SCAN_PREFIX='mumei_profile_special_scan_v181:';
 const FIRST_TAGS=['はじめてのnote','始めてのnote','自己紹介'];
 const STRICT_FIRST_TAGS=new Set(['はじめてのnote','始めてのnote']);
 const SELF_INTRO_TAG='自己紹介';
@@ -59,7 +60,21 @@ const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
 const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
-let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0;
+let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;
+const scanKey=()=>SPECIAL_SCAN_PREFIX+(editorArticleKey()||'unknown');
+async function keepAwake(){
+ if(!page.navigator?.wakeLock?.request||document.hidden)return false;
+ try{
+  if(wakeLock&&!wakeLock.released)return true;
+  wakeLock=await page.navigator.wakeLock.request('screen');
+  wakeLock.addEventListener?.('release',()=>{wakeLock=null},{once:true});
+  return true
+ }catch{return false}
+}
+async function releaseAwake(){try{await wakeLock?.release?.()}catch{}wakeLock=null}
+function readScan(){try{return JSON.parse(localStorage.getItem(scanKey())||'null')}catch{return null}}
+function writeScan(v){try{if(v==null)localStorage.removeItem(scanKey());else localStorage.setItem(scanKey(),JSON.stringify(v))}catch{}}
+function clearScan(){try{localStorage.removeItem(scanKey())}catch{}}
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const norm=v=>{try{const u=new URL(String(v||''),location.href);u.search='';u.hash='';return u.href}catch{return String(v||'').trim()}};
@@ -614,10 +629,23 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
  if(limit===0)return[];
  const tags=(Array.isArray(selectedTags)?selectedTags:[]).filter(x=>FIRST_TAGS.includes(x));
  if(!tags.length)throw new Error('タグを1つ以上選んでください');
+ await keepAwake();
  await recoverSpecialExclusionsFromPublishedArticles();
  const excluded=specialExcludedSets();
- const states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
- const tested=new Set(),out=[];
+ const saved=readScan();
+ const sig=JSON.stringify({tags:[...tags].sort(),limit:limit===Infinity?'all':limit});
+ let states,tested,out,scanned;
+ if(saved?.version===1&&saved.signature===sig&&Array.isArray(saved.states)&&Array.isArray(saved.out)){
+  states=saved.states.map(st=>({...st,buffer:Array.isArray(st.buffer)?st.buffer:[]}));
+  tested=new Set(Array.isArray(saved.tested)?saved.tested:[]);
+  out=saved.out;scanned=Number(saved.scanned||tested.size||0);
+  setStatus('途中保存から再開 ✅ 採用 '+out.length+'件｜確認済み '+tested.size+'件')
+ }else{
+  states=tags.map(tag=>({tag,cursor:'0',done:false,page:0,buffer:[]}));
+  tested=new Set();out=[];scanned=0;
+  writeScan({version:1,signature:sig,states,tested:[],out,scanned,updatedAt:Date.now()})
+ }
+ const checkpoint=()=>writeScan({version:1,signature:sig,states,tested:[...tested],out,scanned,updatedAt:Date.now()});
  async function fill(st){
   while(!st.done&&!st.buffer.length&&st.page<250){
    st.page++;
@@ -628,28 +656,31 @@ async function collectFirstNoteSpecial(mode,count,selectedTags){
    rows.sort((a,b)=>new Date(b.publishAt||0).getTime()-new Date(a.publishAt||0).getTime());
    st.buffer=rows;
    if(q.last||!q.arr.length||q.cursor==null||String(q.cursor)===String(st.cursor))st.done=true;else st.cursor=String(q.cursor);
+   checkpoint();
    if(!st.buffer.length&&!st.done)await sleep(45)
   }
  }
- for(const st of states)await fill(st);
- let scanned=0;
+ for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
  while(out.length<limit&&states.some(st=>st.buffer.length||!st.done)&&scanned<20000){
+  if(document.hidden){checkpoint();setStatus('画面OFF/バックグラウンド検知｜途中保存済み。戻ったら同じボタンで続きから再開',true);throw new Error('画面OFFで一時停止しました。途中保存済みです')}
   for(const st of states)if(!st.buffer.length&&!st.done)await fill(st);
   let chosenState=null,chosenRow=null,chosenTime=-Infinity;
   for(const st of states){const row=st.buffer[0];if(!row)continue;const t=new Date(row.publishAt||0).getTime();if(!chosenRow||t>chosenTime){chosenState=st;chosenRow=row;chosenTime=t}}
   if(!chosenRow)break;
   chosenState.buffer.shift();scanned++;
   const u=norm(chosenRow.url),creator=String(chosenRow.urlname||'').toLowerCase(),key=noteKey(u);
-  if(tested.has(u))continue;
-  tested.add(u);
-  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key))continue;
+  if(tested.has(u)){checkpoint();continue}
+  tested.add(u);checkpoint();
+  if(excluded.urls.has(u)||excluded.creators.has(creator)||excluded.keys.has(key)){checkpoint();continue}
   setStatus('第二弾｜#'+chosenState.tag+'｜確認 '+tested.size+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
   const audit=await specialTagAudit(chosenRow,chosenState.tag);
-  if(!audit.ok)continue;
-  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow)))continue;
+  if(!audit.ok){checkpoint();continue}
+  if(STRICT_FIRST_TAGS.has(chosenState.tag)&&!(await creatorSinglePublicArticle(chosenRow))){checkpoint();continue}
   out.push({...chosenRow,specialFirstNote:true,specialSourceTag:chosenState.tag});
+  checkpoint();
   await sleep(55)
  }
+ checkpoint();
  return out
 }
 function saveSpecialLast(rows){
@@ -988,6 +1019,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
  if(busy)return;busy=true;stopRequested=false;update();
  try{
   const input=inputValues();
+  if(special)await keepAwake();
   if(!special&&!workmom&&!parenting){
    const sources=parseUnifiedSources(input.sources);
    if(!sources.length)throw new Error('記事URL・マガジンURL・#タグを1つ以上入れてください');
@@ -1016,6 +1048,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
 
   const rows=await buildRows(effective,special,workmom,parenting);
   if(!rows.length)throw new Error('貼り付け対象が0件です');
+  if(special)clearScan();
 
   // 指定件数は実績の算数を含まない。buildRows が最後に +1件する。
   const requestedCount=parenting?(input.parentingMode==='all'?null:input.parentingCount):workmom?(input.workmomMode==='all'?null:input.workmomCount):special?(input.specialMode==='all'?null:input.specialCount):(input.mode==='all'?null:input.count);
@@ -1061,7 +1094,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   }
  }catch(e){
   setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true)
- }finally{busy=false;update()}
+ }finally{if(special)await releaseAwake();busy=false;update()}
 }
 async function createCardsAtTap(){
  if(busy)return;busy=true;stopRequested=false;update();
@@ -1365,5 +1398,7 @@ function mount(){
  bindDirectDrag(p.querySelector('[data-dragbar]'),p);bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
  if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
 }
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void keepAwake()});
+page.addEventListener('pageshow',()=>{const saved=readScan();if(saved?.out?.length)setTimeout(()=>setStatus('途中保存あり｜採用 '+saved.out.length+'件。①を押すと続きから再開'),500)});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
