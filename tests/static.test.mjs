@@ -142,3 +142,18 @@ test("the public participant cache is isolated behind RLS and an edge function",
   assert.match(edge, /action === "public"/);
   assert.match(edge, /action === "sync"/);
 });
+
+
+test("BOOST v6.4.0 stays single-file and bounded", async () => {
+  const boost = await readFile(new URL("../public/note-boost-v531.user.js", import.meta.url), "utf8");
+
+  assert.match(boost, /@version\s+6\.4\.0/);
+  assert.doesNotMatch(boost, /@require\s+/);
+  assert.match(boost, /sourceFromCirculation/);
+  assert.match(boost, /commentLikerPeople/);
+  assert.match(boost, /note_comments/);
+  assert.match(boost, /timeoutMs:6000/);
+  assert.match(boost, /noteBoostMagazineCacheV640/);
+  assert.match(boost, /マガジン先読み/);
+  assert.match(boost, /記事スキ＋他人コメントスキ/);
+});
