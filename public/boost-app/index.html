@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07131b">
 <title>note 巡回BOOST｜専用アプリ</title>
-<meta name="description" content="Yahoo! JAPANを普段使いのまま、巡回BOOSTだけEdgeで起動">
+<meta name="description" content="Yahoo! JAPANを普段使いのまま、巡回BOOSTだけEdgeで起動・更新">
 <meta property="og:title" content="note巡回BOOST｜専用アプリ">
-<meta property="og:description" content="Yahoo! JAPANを普段使いのまま、巡回BOOSTだけEdgeで起動">
+<meta property="og:description" content="巡回BOOSTはEdgeで起動・更新">
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#05090e;color:#eef7ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 70% 20%,#102c58 0,#07131b 35%,#03070b 75%)}main{width:min(460px,100%);border:1px solid #31516a;border-radius:22px;padding:28px 18px;background:#09141ddd;box-shadow:0 24px 70px #0009;text-align:center}h1{margin:0;font-size:28px;letter-spacing:.02em}strong{background:linear-gradient(90deg,#55d9ff,#917cff);-webkit-background-clip:text;color:transparent}p{color:#a6bac8;line-height:1.75;font-size:13px;margin:16px 0}.btn{display:block;width:100%;margin-top:16px;padding:17px;border-radius:15px;text-decoration:none;font-weight:900;color:#fff;border:1px solid #6fc9ff;background:linear-gradient(100deg,#0b6f8f,#335fd2);box-shadow:0 10px 30px #163b8055}.small{margin-top:14px;font-size:10px;color:#7891a2;line-height:1.6}
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#05090e;color:#eef7ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 70% 20%,#102c58 0,#07131b 35%,#03070b 75%)}main{width:min(460px,100%);border:1px solid #31516a;border-radius:22px;padding:28px 18px;background:#09141ddd;box-shadow:0 24px 70px #0009;text-align:center}h1{margin:0;font-size:28px;letter-spacing:.02em}strong{background:linear-gradient(90deg,#55d9ff,#917cff);-webkit-background-clip:text;color:transparent}p{color:#a6bac8;line-height:1.75;font-size:13px;margin:16px 0}.btn{display:block;width:100%;margin-top:14px;padding:17px;border-radius:15px;text-decoration:none;font-weight:900;color:#fff;border:1px solid #6fc9ff;background:linear-gradient(100deg,#0b6f8f,#335fd2);box-shadow:0 10px 30px #163b8055}.update{background:linear-gradient(100deg,#6b4a0b,#a46a13);border-color:#f1c05b}.small{margin-top:14px;font-size:10px;color:#7891a2;line-height:1.6}
 </style>
 </head>
 <body><main>
 <h1>note巡回<strong>BOOST</strong></h1>
-<p><b>普段のデフォルトはYahoo! JAPANのままでOK。</b><br>巡回BOOSTを使う時だけ、Tampermonkeyを入れているEdgeで専用画面を開きます。</p>
+<p><b>普段のデフォルトはYahoo! JAPANのままでOK。</b><br>BOOSTの更新も起動も、Tampermonkeyを入れているEdgeへ直接渡します。</p>
+<a class="btn update" id="updateEdge" href="intent://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js#Intent;scheme=https;package=com.microsoft.emmx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end">BOOST v6.5.0 をEdgeで更新</a>
 <a class="btn" id="openEdge" href="intent://note.com/?boost_app=1#Intent;scheme=https;package=com.microsoft.emmx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end">巡回BOOSTをEdgeで開く</a>
-<div class="small">Yahoo! JAPANの設定変更は不要です。<br>Tampermonkey「note 巡回BOOST｜専用アプリ v6.5.0」が必要です。</div>
+<div class="small">ChatGPT内ブラウザでは更新しません。<br>「BOOSTをEdgeで更新」→ Tampermonkeyの更新 → 「巡回BOOSTをEdgeで開く」の順です。</div>
 </main></body>
 </html>
