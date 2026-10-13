@@ -21,7 +21,7 @@ const raw=(key,urlname)=>({key,name:urlname+'記事',user:{urlname,nickname:urln
 test('a legacy installed core cannot prevent the current card action from being exported',()=>{
  const stale=()=>{throw Error('legacy card handler')};
  const c=runtime({__MUMEI_PROFILE_CARD_PASTER_V1__:true,__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__:stale});
- assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_VERSION__,'2.5.6');
+ assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_VERSION__,'2.5.7');
  assert.equal(c.window.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__,c.api.createCardsAtTap);
 });
 

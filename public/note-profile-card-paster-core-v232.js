@@ -3,7 +3,7 @@
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 const INSIGHT_BRIDGE_KEY='mumei_profile_card_likes_300_v2';
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.5.6';
+const VERSION='2.5.7';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -53,6 +53,7 @@ const CARD_SESSION='card-'+Date.now()+'-'+Math.random().toString(36).slice(2);
 page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
 page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
 page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=createCardsAtTap;
+page.__MUMEI_PROFILE_CARD_DELETE_CARDS__=bulkDelete;
 function fixedRunBusy(){try{return Boolean(page.__MUMEI_PROFILE_CARD_FIXED_BUSY__?.())}catch{return false}}
 function actionBlocked(){
  if(!busy&&!fixedRunBusy())return false;
@@ -1264,12 +1265,20 @@ function trackedContentCount(view){
  return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length,activities:resolveOwnedActivityHits(view).length}
 }
 async function deleteNotificationCards({confirm=true,save=true}={}){
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
- const hits=resolveOwnedCardHits(view);
+ const run=readRun();if(!run)throw new Error('この下書きのカード記録を確認できません。本文は保持しています');
+ if(run.articleKey&&run.articleKey!==editorArticleKey())throw new Error('保存記録が別の記事のため削除を停止しました');
+ const tracked=resolveOwnedCardHits(view),anchor=run.cardAnchorPos;
+ const hasAnchor=anchor!=null&&anchor!==''&&Number.isFinite(Number(anchor))&&Number(anchor)>=0&&Number(anchor)<=view.state.doc.content.size;
+ const scoped=hasAnchor?run:tracked.length?{...run,cardAnchorPos:Math.min(...tracked.map(hit=>hit.pos))}:null;
+ const hits=[...new Map([...tracked,...(scoped?generatedCardHits(view,scoped):[])].map(hit=>[hit.pos,hit])).values()];
+ if(!hits.length)return 0;
  if(confirm&&!page.confirm('今回作った正規通知カード '+hits.length+'件だけ削除します。紹介画像は残します。実行しますか？'))return null;
  const removed=deleteHits(view,hits);
- const run=readRun();
- if(run)writeRun({...run,cardKeys:[],pendingCard:null,stage:'images_ready',updatedAt:Date.now()});
+ const pending=run.pendingCard&&run.pendingCard.sessionId===CARD_SESSION&&!hits.some(hit=>genuineCard(hit,run.pendingCard.url))?run.pendingCard:null;
+ writeRun({...run,cardKeys:[],pendingCard:pending,stage:'images_ready',updatedAt:Date.now()});
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
  if(save&&removed)await saveOnce('正規通知カード '+removed+'件を一括削除｜下書き保存中…');
  return removed
 }
@@ -1610,7 +1619,7 @@ async function bulkDelete(){
  if(actionBlocked())return;busy=true;stopRequested=true;update();
  try{
   const removed=await deleteNotificationCards({confirm:true,save:true});
-  if(removed!==null)setStatus('正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持')
+  if(removed!==null)setStatus(removed?'正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持':'この本文に削除対象の通知カードはありません｜画像・プロフィールは保持')
  }catch(e){setStatus('通知カード一括削除停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }

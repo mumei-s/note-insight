@@ -14,6 +14,7 @@ import './profile-card-paster-storage-v253.test.mjs';
 import './profile-card-paster-recover-v253.test.mjs';
 import './profile-card-paster-cards-ready-v255.test.mjs';
 import './profile-card-paster-card-duplicates-v256.test.mjs';
+import './profile-card-paster-card-delete-v257.test.mjs';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 function runtime(overrides={}){
@@ -99,18 +100,18 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.6/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.7/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=256/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=257/);
 });
 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.6/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.7/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.5.6/);
+ assert.match(original,/@version\s+2.5.7/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
 
@@ -160,6 +161,13 @@ test('the visible duplicate audit action is single and invokes the current read-
  c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
  c.api.patchPanel();c.api.patchPanel();
  const buttons=c.document.querySelectorAll('[data-a="check-duplicates"]');assert.equal(buttons.length,1);buttons[0].click();assert.equal(audited,1);
+});
+
+test('the delete button invokes the current exported action rather than an older installed handler',()=>{
+ let current=0,legacy=0;const c=runtime({page:{__MUMEI_PROFILE_CARD_DELETE_CARDS__:()=>current++}});
+ c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="delete">通知カード削除</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ const button=c.document.querySelector('[data-a="delete"]');button.addEventListener('click',()=>legacy++);
+ c.api.patchPanel();c.api.patchPanel();button.click();assert.equal(current,1);assert.equal(legacy,0);
 });
 
 function blockView(initial=[],withSmall=false){
