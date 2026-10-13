@@ -3,6 +3,9 @@
 
   const OWNER_KEY = "mumei-unified-owner-token";
   const MEMBER_KEY = "mumei-insight-access-token";
+  const ACTIVE_ACCOUNT_KEY = "mumei-insight-active-account-v3";
+  const ACCOUNT_STORE_KEY = "mumei-insight-saved-accounts-v3";
+  const OWNER_NOTE_ID = "ss_yr";
   const OWNER_RETURN_KEY = "mumei-owner-return";
   const NAV_ID = "mumei-insight-owner-route-nav";
   const STYLE_ID = "mumei-insight-owner-route-nav-style";
@@ -24,13 +27,24 @@
     return Boolean(localStorage.getItem(OWNER_KEY));
   }
 
+  function ownerIdentityStored() {
+    const active = String(localStorage.getItem(ACTIVE_ACCOUNT_KEY) || "").trim().replace(/^@/, "").toLowerCase();
+    if (active === OWNER_NOTE_ID) return true;
+    try {
+      const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORE_KEY) || "[]");
+      return Array.isArray(accounts) && accounts.some((account) => String(account?.noteId || "").trim().replace(/^@/, "").toLowerCase() === OWNER_NOTE_ID);
+    } catch {
+      return false;
+    }
+  }
+
   function memberReady() {
     return Boolean(localStorage.getItem(MEMBER_KEY));
   }
 
   function visibleForCurrentRoute() {
     const route = rawRoute();
-    return ownerReady() || route === "owner" || route === "manage" || route.startsWith("owner-features/");
+    return ownerReady() || ownerIdentityStored() || route === "owner" || route === "manage" || route.startsWith("owner-features/");
   }
 
   function installStyle() {
@@ -101,8 +115,10 @@
   window.addEventListener("hashchange", refresh);
   window.addEventListener("popstate", refresh);
   window.addEventListener("mumei-route", refresh);
+  window.addEventListener("mumei-insight-accounts", refresh);
   window.addEventListener("pageshow", () => { mount(); refresh(); });
+  window.addEventListener("focus", refresh);
   window.addEventListener("storage", (event) => {
-    if (event.key === OWNER_KEY || event.key === MEMBER_KEY) refresh();
+    if ([OWNER_KEY, MEMBER_KEY, ACTIVE_ACCOUNT_KEY, ACCOUNT_STORE_KEY].includes(String(event.key || ""))) refresh();
   });
 })();
