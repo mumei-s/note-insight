@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.10';
+const VERSION='1.4.11';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -37,10 +37,14 @@ function reconcileSurface(){if(dmRoute())return true;interrupted=true;document.g
 const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function roomKeyFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m&&m[1]?m[1]:'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean),id=String(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['messages','settings','notifications'].includes(id)?id:''}catch{return''}}
-async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(r.ok){const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))return{id}}}catch{}return null}
+async function account(){
+ const controller=new AbortController();let timer;
+ const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('DM_IDENTITY_TIMEOUT'))},12000)});
+ try{return await Promise.race([(async()=>{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:controller.signal});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null})(),deadline])}catch{return null}finally{clearTimeout(timer)}
+}
 function hash(v){let a=2166136261,b=2246822519;for(let i=0;i<v.length;i++){const c=v.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,3266489917)}return((a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0'))}
 function relativeTime(raw){const m=clean(raw).match(/(\d+)\s*(秒|分|時間|日|週)前/u);if(!m)return null;const u={'秒':1000,'分':60000,'時間':3600000,'日':86400000,'週':604800000};return new Date(Date.now()-Number(m[1])*u[m[2]]).toISOString()}
-function roomAnchors(doc=document){const map=new Map(),base=doc.defaultView?.location?.href||location.href;for(const a of doc.querySelectorAll('a[href]')){if(!shown(a))continue;const href=a.getAttribute('href')||'',k=roomKeyFromUrl(href);if(!k)continue;const u=new URL(href,base);u.hash='';map.set(k,{a,url:u.href,key:k})}return[...map.values()].slice(0,MAX_ROOMS)}
+function roomAnchors(doc=document){const map=new Map(),base=doc.defaultView?.location?.href||location.href;for(const a of doc.querySelectorAll('a[href]')){if(!shown(a))continue;const href=a.getAttribute('href')||'',k=roomKeyFromUrl(href);if(!k)continue;const u=new URL(href,base);u.hash='';map.set(k,{a,url:u.href,key:k})}return[...map.values()]}
 function roomData(x){const a=x.a,candidate=a.closest('li,[role="listitem"],article')||a.parentElement,box=candidate&&new Set([...candidate.querySelectorAll('a[href]')].map(el=>roomKeyFromUrl(el.getAttribute('href'))).filter(Boolean)).size===1?candidate:a;const text=clean((box&&box.textContent)||a.textContent),img=box&&box.querySelector?box.querySelector('img[src]'):null;let peerUrl=null,peerId=null;for(const l of (box&&box.querySelectorAll?box.querySelectorAll('a[href]'):[])){const id=creatorId(l.getAttribute('href'));if(id){peerId=id;peerUrl=new URL(l.getAttribute('href'),location.href).href;break}}const dt=box&&box.querySelector?box.querySelector('time[datetime],[datetime]'):null,tm=dt&&dt.getAttribute('datetime')||relativeTime(text);let name=clean((img&&img.getAttribute('alt'))||a.getAttribute('aria-label')||a.textContent).replace(/\s+(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週)前).*$/u,'').replace(/とのメッセージ(?:（未読のメッセージがあります）)?$/u,'').trim().slice(0,300)||null;return{thread_key:x.key,room_url:x.url,peer_note_id:peerId,peer_name:name,peer_url:peerUrl,peer_image_url:img?String(img.currentSrc||img.src||''):null,last_message_at:tm,meta:{preview:text.slice(0,4000),source:'note-dm-room-list-v1'}}}
 function previewMessage(t){let raw=clean(t?.meta?.preview||'');if(!raw)return null;const name=clean(t?.peer_name||'');let body=raw;if(name&&body.startsWith(name))body=body.slice(name.length).trim();body=body.replace(/とのメッセージ(?:（未読のメッセージがあります）)?/u,'').replace(/(?:たった今|昨日|約?\d+\s*(?:秒|分|時間|日|週)前)$/u,'').trim();if(!body)return null;return{thread_key:t.thread_key,message_key:'preview:'+t.thread_key+':'+hash(body),direction:'unknown',sender_name:t.peer_name||null,sender_url:t.peer_url||null,sender_image_url:t.peer_image_url||null,body,sent_at:t.last_message_at||null,raw_text:raw,attachment_name:null,attachment_url:null,attachment_type:null,meta:{source:'note-dm-room-preview-v130',preview:true}}}
 const EDITOR='textarea,[contenteditable="true"],[contenteditable="plaintext-only"],[role="textbox"]';
@@ -169,7 +173,7 @@ function showStatus(state){
  if(!reconcileSurface()||window.top!==window.self||!document.body)return;
  let box=document.getElementById('mumei-dm-reader-status');
  if(!box){box=document.createElement('div');box.id='mumei-dm-reader-status';box.style.cssText='position:fixed;left:8px;right:8px;bottom:3px;z-index:2147483000;display:none;align-items:center;padding:1px 6px;background:#0b2231;color:#e9faff;border:1px solid #527d92;border-radius:5px;font:600 9px/14px system-ui;pointer-events:none';const line=document.createElement('span');line.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';line.setAttribute('role','status');box.append(line);document.body.append(box)}
- const complete=state.lastRunComplete===true,stored=Number(state.storedMessageCount||0),label=state.lastError?'再試行待ち':manualPaused?'一時停止':complete?'全件保存完了・新着待ち':state.phase==='delta'?'新着を保存中':'過去分を取得中';
+ const complete=state.lastRunComplete===true&&!state.lastError,stored=Number(state.storedMessageCount||0),label=state.lastError?'再試行待ち':manualPaused?'一時停止':complete?'全件保存完了・新着待ち':state.phase==='delta'?'新着を保存中':'過去分を取得中';
  const message=rootRoute()?`${complete?'全会話保存完了':label} · ${Number(state.currentThread||0)}/${Number(state.threadCount||0)}人 · 本文保存 ${stored}件`:`DM ${label} · 本文保存 ${stored}件`;
  if(box.firstElementChild.textContent!==message)box.firstElementChild.textContent=message;
  const title=String(state.lastError||'');if(box.title!==title)box.title=title;statusLayout();
@@ -192,19 +196,28 @@ function syncFrame(a,url,threadKey){
  })
 }
 async function syncRoomsInBackground(a,rooms){
- if(bgRunning||!Array.isArray(rooms)||!rooms.length)return;
- const previous=await get(key(QUEUE,a.id),null);
- if(bgLastAt&&Date.now()-bgLastAt<15000)return;
+ if(bgRunning||!Array.isArray(rooms))return;
+ const roomRegistry=key(QUEUE,a.id)+':rooms',previous=await get(key(QUEUE,a.id),null),remembered=await get(roomRegistry,[]);
+ if(bgRunning||bgLastAt&&Date.now()-bgLastAt<15000)return;
+ const discovered=new Map((Array.isArray(remembered)?remembered:[]).filter(r=>r&&typeof r.key==='string'&&typeof r.url==='string').map(r=>[r.key,r]));
+ for(const room of rooms)discovered.set(room.key,{key:room.key,url:room.url});
+ const list=[...discovered.values()];if(!list.length)return;
  bgRunning=true;bgLastAt=Date.now();interrupted=false;
- const list=rooms.slice(0,MAX_ROOMS),keys=new Set(list.map(r=>r.key)),completed=new Set((previous?.completed||[]).filter(k=>keys.has(k))),errors=[],checkedAt={...(previous?.checkedAt||{})},roomTotals={...(previous?.roomTotals||{})};
+ const keys=new Set(list.map(r=>r.key)),completed=new Set((previous?.completed||[]).filter(k=>keys.has(k))),errors=[],checkedAt={...(previous?.checkedAt||{})},roomTotals={...(previous?.roomTotals||{})};
+ // Keep every discovered room in the checkpoint. Limit work per pass instead
+ // of discarding the tail, and visit unconfirmed rooms before rechecking old ones.
+ const work=list.filter(r=>!completed.has(r.key)||Date.now()-Number(checkedAt[r.key]||0)>=30000).sort((a,b)=>Number(completed.has(a.key))-Number(completed.has(b.key))||Number(checkedAt[a.key]||0)-Number(checkedAt[b.key]||0)).slice(0,MAX_ROOMS);
  let read=0,saved=0;const storedTotal=()=>list.reduce((n,r)=>n+Number(roomTotals[r.key]||0),0);
  const checkpoint=async()=>{
   const value={completed:[...completed],checkedAt,roomTotals,read,saved,at:Date.now()};await set(key(QUEUE,a.id),value);
   await updateCheck(a,{lastRunAt:Date.now(),scope:'all',phase:'history',lastRunMode:'background',lastRunComplete:list.every(r=>completed.has(r.key)),lastReadCount:read,lastSavedCount:saved,storedMessageCount:storedTotal(),threadCount:list.length,currentThread:completed.size,lastError:errors.join(' / '),navigationMode:'background-hidden'});
  };
  try{
+  // Store room URLs once per discovered-list change, rather than on every
+  // message checkpoint, so a reload with a partial list retains its tail.
+  if(JSON.stringify(remembered)!==JSON.stringify(list))await set(roomRegistry,list);
   await checkpoint();
-  for(const room of list){
+  for(const room of work){
    if(interrupted||!dmRoute())break;
    if(completed.has(room.key)&&Date.now()-Number(checkedAt[room.key]||0)<30000)continue;
    let result;
@@ -218,8 +231,9 @@ async function syncRoomsInBackground(a,rooms){
    }catch(e){result={read:0,saved:0,...(e?.dmProgress||{}),complete:false,error:String(e?.message||e)}}
    await reportRoom(a,room.key,result);
    read+=Number(result.read||0);saved+=Number(result.saved||0);if(result.stored!=null)roomTotals[room.key]=result.stored;
-   if(result.complete&&!result.error&&!result.timeout){completed.add(room.key);checkedAt[room.key]=Date.now()}
-   else{completed.delete(room.key);const reason=result.error||(result.timeout?'TIMEOUT':'途中保存');errors.push(`${room.key}: ${reason}`);await updateCheck(a,{lastError:String(reason),lastThreadKey:room.key,lastStage:'message-body'});}
+   checkedAt[room.key]=Date.now();
+   if(result.complete&&!result.error&&!result.timeout){completed.add(room.key)}
+   else{completed.delete(room.key);const reason=result.error||(result.timeout?'TIMEOUT':'途中保存');errors.push(`${room.key}: ${reason}`);await updateCheck(a,{lastRunComplete:false,lastError:String(reason),lastThreadKey:room.key,lastStage:'message-body'});}
    await checkpoint();
   }
   const complete=list.length>0&&list.every(room=>completed.has(room.key));
@@ -239,7 +253,7 @@ async function run(){
  if(isParentWorker)return;
  if(rootRoute()&&!isBg){
   const rooms=roomAnchors(),threads=rooms.map(roomData);
-  if(threads.length)await save(a,threads,[]);
+  for(let i=0;i<threads.length;i+=MAX_ROOMS)await save(a,threads.slice(i,i+MAX_ROOMS),[]);
   if(!bgRunning)await updateCheck(a,{threadCount:threads.length,navigationMode:'passive'});
   void syncRoomsInBackground(a,rooms);
   return
