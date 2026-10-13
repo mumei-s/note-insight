@@ -57,7 +57,7 @@ jobs:
           node --check public/note-insight-dashboard-save-queue-v1.js
           node --check public/note-pon-editor-v6.user.js
       - name: Check profile thumbnails, unique creators and final extra entry
-        run: node --test tests/profile-card-paster-v230.test.mjs tests/profile-export-session.test.mjs
+        run: node --test tests/profile-card-paster-v230.test.mjs tests/profile-export-session.test.mjs tests/editor-isolation.test.mjs
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
       - name: Check entry motion and retained notification behavior
