@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.5.1
+// @version      2.5.2
 // @description  取得不可は飛ばし、スキ履歴から重複なし300人＋実績1件。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
 // @match        https://editor.note.com/*
 // @noframes
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=251
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=252
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -23,10 +23,10 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V251__)return;
-page.__MUMEI_LIKE300_FIX_V251__=true;
+if(page.__MUMEI_LIKE300_FIX_V252__)return;
+page.__MUMEI_LIKE300_FIX_V252__=true;
 
-const VERSION='2.5.1';
+const VERSION='2.5.2';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -451,6 +451,54 @@ async function buildRows(target=300){
  if(rows.length<target)throw new Error('貼り付け可能なクリエイター '+rows.length+'/'+target+'人｜公開記事なし・取得不可 '+skipped.length+'人を除外。300人に不足しています。スキ履歴を取得し直してください');
  return rows.slice(0,target).map((row,index)=>({...row,index:index+1}))
 }
+async function replaceUnavailableCreator(rows,index,error){
+ validateFixedRows(rows);
+ if(stopRequested||/停止しました|手動停止/.test(String(error?.message||error)))throw error||new Error('停止しました');
+ if(!Number.isInteger(index)||index<0||index>=300)throw new Error('最後の実績の算数は除外できません。画像の取得を再試行してください');
+ const failed=rows[index],bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null)),people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
+ if(!people.length)throw new Error('追加候補の保存データがありません。現在の貼り付けは保持しました');
+ const signature=String(bridge?.at||0)+'|300|eligible-v251',previousSignature=String(bridge?.at||0)+'|300|exact-v250';
+ let checkpoint;
+ try{checkpoint=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{checkpoint=null}
+ let selected,skipped,scanned;
+ if(checkpoint?.signature===signature||checkpoint?.signature===previousSignature){
+  selected=Array.isArray(checkpoint.rows)?checkpoint.rows:[];
+  skipped=checkpoint.signature===signature&&Array.isArray(checkpoint.skipped)?checkpoint.skipped:[];
+  scanned=Number(checkpoint.index||0);
+  let accepted=0;
+  const valid=Number.isInteger(scanned)&&scanned===selected.length+skipped.length&&scanned<=people.length&&selected.length<=300&&uniquePeople([...selected,...skipped]).length===scanned&&skipped.every(person=>String(person.reason||'').trim())&&people.slice(0,scanned).every(person=>skipped.some(entry=>sameCreator(entry,person))||sameCreator(selected[accepted++],person))&&accepted===selected.length;
+  if(!valid)throw new Error('追加候補の保存順序を確認できません。現在の貼り付けは保持しました');
+  if(!selected.some(person=>sameCreator(person,failed))&&!skipped.some(person=>sameCreator(person,failed)))throw new Error('取得できなかったクリエイターと保存済み一覧が一致しません。現在の貼り付けは保持しました');
+ }else{
+  const creators=rows.slice(0,300),positions=[];
+  let cursor=0;
+  for(const creator of creators){
+   let found=-1;
+   for(let candidate=cursor;candidate<people.length;candidate++){if(sameCreator(creator,people[candidate])){found=candidate;break}}
+   if(found<0)throw new Error('現在の一覧に対応する追加候補を確認できません。現在の貼り付けは保持しました');
+   positions.push(found);cursor=found+1;
+  }
+  scanned=cursor;selected=creators;
+  const included=new Set(positions);
+  skipped=people.slice(0,scanned).filter((person,position)=>!included.has(position)).map(person=>({urlname:canonicalUrlname(person),likerKey:creatorKey(person),reason:'前回の一覧で除外'}));
+ }
+ selected=selected.filter(person=>!sameCreator(person,failed));
+ if(!skipped.some(person=>sameCreator(person,failed)))skipped.push({urlname:canonicalUrlname(failed),likerKey:creatorKey(failed),reason:String(error?.message||error||'画像取得不可')});
+ try{localStorage.setItem(prepKey(),JSON.stringify({...checkpoint,signature,index:scanned,rows:selected,skipped,updatedAt:Date.now()}))}catch{throw new Error('取得不可のクリエイターの除外を保存できません。現在の貼り付けは保持しました')}
+ const filled=await buildRows(300);
+ if(rows.slice(0,index).some((row,position)=>!sameCreator(row,filled[position])))throw new Error('貼り付け済みの順序を維持できません。現在の貼り付けは保持しました');
+ const refreshed=filled.map((person,position)=>{if(position<index)return rows[position];const previous=rows.slice(0,300).find(row=>sameCreator(row,person));return previous?{...person,...previous,index:position+1}:{...person,index:position+1}});
+ refreshed.push({...rows[300],index:301});
+ for(let position=index;position<refreshed.length;position++){
+  const row=refreshed[position],before=refreshed[position-1]?.designIndex,next=refreshed[position+1]?.designIndex;
+  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50&&row.designIndex!==before)continue;
+  const choices=Array.from({length:50},(_,style)=>style).filter(style=>style!==before&&style!==next);
+  refreshed[position]={...row,designIndex:choices[Math.floor(Math.random()*choices.length)]};
+ }
+ validateFixedRows(refreshed);
+ try{const latest=JSON.parse(localStorage.getItem(prepKey())||'null');if(latest?.signature===signature)localStorage.setItem(prepKey(),JSON.stringify({...latest,rows:refreshed.slice(0,300),updatedAt:Date.now()}))}catch{throw new Error('補充した一覧を保存できません。現在の貼り付けは保持しました')}
+ return refreshed
+}
 async function enrichFinal(){
  const person={urlname:'fuku444',creator:'実績の算数',actorUrl:'https://note.com/fuku444',actorImageUrl:'',likerKey:'final-performance-math'};
  const row={...person,url:FINAL_URL,key:FINAL_KEY,title:'実績の算数│3日半で0→1達成',thumbUrl:'',publishAt:null};
@@ -563,7 +611,8 @@ async function makeFile(row){
  if(!avatar||!thumb){
   try{avatar?.close?.();thumb?.close?.()}catch{}
   const reason=images.find(result=>result.status==='rejected')?.reason?.message;
-  throw new Error(row.creator+'さん：'+(!avatar?'アイコン':'記事サムネイル')+'を表示できません'+(reason?'（'+reason+'）':''))
+  const error=new Error(row.creator+'さん：'+(!avatar?'アイコン':'記事サムネイル')+'を表示できません'+(reason?'（'+reason+'）':''));
+  error.code='ASSET_UNAVAILABLE';throw error;
  }
  const index=Number.isInteger(row.designIndex)?row.designIndex:assignDesigns([row])[0].designIndex;
  const theme=palettes[Math.floor(index/10)%palettes.length];
@@ -801,7 +850,18 @@ async function createFixed300(){
    if(stopRequested)throw new Error('停止しました');
    const row=rows[i];
    setStatus('画像確認｜'+(i+1)+'/'+rows.length+'｜'+row.creator);
-   const file=await makeFile(row);
+   let file;
+   try{file=await makeFile(row)}catch(error){
+    if(stopRequested||/停止しました|手動停止/.test(String(error?.message||error)))throw new Error('停止しました');
+    if(row.finalMarker||error?.code!=='ASSET_UNAVAILABLE')throw error;
+    setStatus(row.creator+'さんの画像を取得できないため除外｜次の候補を補充中');
+    const nextRows=validateFixedRows(await replaceUnavailableCreator(rows,i,error));
+    completedImagePrefix(nextRows,ownedImages(view));
+    rows=nextRows;
+    run=readRun()||run;
+    writeRun({...run,version:VERSION,rows,imageSkipped:[...(run.imageSkipped||[]),{urlname:row.urlname,likerKey:row.likerKey,reason:error.message}],updatedAt:Date.now()});
+    i--;continue;
+   }
    if(stopRequested)throw new Error('停止しました');
 
    if(row.finalMarker){

@@ -8,6 +8,8 @@ import './profile-card-paster-design-v250.test.mjs';
 import './profile-card-paster-core-v250.test.mjs';
 import './profile-card-paster-eligible-v251.test.mjs';
 import './profile-card-paster-loading-resume-v251.test.mjs';
+import './profile-card-paster-assets-flow-v252.test.mjs';
+import './profile-card-paster-assets-v252.test.mjs';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 function runtime(overrides={}){
@@ -93,18 +95,18 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.2/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=251/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=252/);
 });
 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.2/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.5.1/);
+ assert.match(original,/@version\s+2.5.2/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
 
