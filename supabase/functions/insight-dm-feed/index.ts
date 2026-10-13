@@ -23,15 +23,16 @@ Deno.serve(async req=>{
   if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
   const who=await auth(req),b=await req.json().catch(()=>({})),action=String(b.action||"summary");
   if(action==="summary"){
-    const[threadResult,messageResult,runResult,statusResult]=await Promise.all([
+    const[threadResult,messageResult,runResult,statusResult,savedResult]=await Promise.all([
       db.from("insight_dm_threads").select("id",{count:"exact",head:true}).eq("member_id",who.scope),
       db.from("insight_dm_messages").select("id",{count:"exact",head:true}).is("meta->>superseded_by",null).eq("member_id",who.scope),
       db.from("insight_dm_sync_runs").select("created_at,received_count,upserted_count,thread_count").eq("member_id",who.scope).order("created_at",{ascending:false}).limit(1).maybeSingle(),
-      db.from("insight_dm_threads").select("thread_key,peer_name,meta->reader_status").eq("member_id",who.scope).limit(500)
+      db.from("insight_dm_threads").select("thread_key,peer_name,meta->reader_status").eq("member_id",who.scope).limit(500),
+      db.from("insight_dm_messages").select("captured_at").is("meta->>superseded_by",null).eq("member_id",who.scope).order("captured_at",{ascending:false}).limit(1).maybeSingle()
     ]);
-    for(const r of [threadResult,messageResult,runResult,statusResult])if(r.error)throw r.error;
+    for(const r of [threadResult,messageResult,runResult,statusResult,savedResult])if(r.error)throw r.error;
     const readerStatus=(statusResult.data||[]).filter((r:any)=>r.reader_status).map((r:any)=>({threadKey:r.thread_key,peerName:r.peer_name,...r.reader_status})).sort((a:any,b:any)=>String(b.checked_at).localeCompare(String(a.checked_at)));
-    return out({ok:true,noteId:who.noteId,threads:threadResult.count||0,messages:messageResult.count||0,lastSync:runResult.data||null,readerStatus})
+    return out({ok:true,noteId:who.noteId,threads:threadResult.count||0,messages:messageResult.count||0,lastSync:runResult.data||null,lastMessageSavedAt:savedResult.data?.captured_at||null,readerStatus})
   }
   if(action==="threads"){
     const page=Math.max(1,Number(b.page||1)),size=Math.min(100,Math.max(1,Number(b.pageSize||50))),from=(page-1)*size,to=from+size-1;
