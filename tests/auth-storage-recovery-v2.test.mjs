@@ -7,11 +7,11 @@ import ts from 'typescript';
 const storeSource=fs.readFileSync(new URL('../src/insight-account-store.ts',import.meta.url),'utf8');
 const mainSource=fs.readFileSync(new URL('../src/main.tsx',import.meta.url),'utf8');
 
-function loadStore(seed={}){
+function loadStore(seed={}, rejectRepair=false){
   const values=new Map(Object.entries(seed));
   const localStorage={
     getItem:key=>values.has(key)?String(values.get(key)):null,
-    setItem:(key,value)=>values.set(key,String(value)),
+    setItem:(key,value)=>{if(rejectRepair&&key==='mumei-insight-saved-accounts-v3')throw new Error('QuotaExceededError');values.set(key,String(value))},
     removeItem:key=>values.delete(key),
   };
   const window={dispatchEvent(){}};
@@ -42,6 +42,15 @@ test('v3 profile metadata merges legacy v2 auth secrets instead of hiding them',
   const repaired=JSON.parse(values.get('mumei-insight-saved-accounts-v3'));
   assert.equal(repaired[0].applicantToken,'legacy-applicant');
   assert.equal(repaired[0].memberToken,'legacy-member');
+});
+
+test('a full browser store cannot crash reading or normalize away the saved login',()=>{
+  const original=JSON.stringify([{noteId:'SS_YR',memberToken:'saved-member'}]);
+  const {api,values}=loadStore({'mumei-insight-saved-accounts-v3':original,'mumei-insight-access-token':'saved-member'},true);
+  assert.equal(api.readStoredInsightAccounts()[0].memberToken,'saved-member');
+  assert.equal(api.currentStoredInsightAccount().noteId,'ss_yr');
+  assert.equal(values.get('mumei-insight-saved-accounts-v3'),original);
+  assert.equal(values.get('mumei-insight-access-token'),'saved-member');
 });
 
 test('explicit logout keeps identity recovery data but never resurrects legacy member token',()=>{

@@ -88,7 +88,9 @@ export function readStoredInsightAccounts(): StoredInsightAccount[] {
 
   const repaired = JSON.stringify(merged);
   if ((current.length || legacy.length) && localStorage.getItem(ACCOUNT_STORE_KEY) !== repaired) {
-    localStorage.setItem(ACCOUNT_STORE_KEY, repaired);
+    // Reading a saved login must still work when normalization cannot be persisted.
+    // Keep the original accounts intact; quota errors must not unmount TOP.
+    try { localStorage.setItem(ACCOUNT_STORE_KEY, repaired); } catch { /* return the merged view */ }
   }
   return merged;
 }
