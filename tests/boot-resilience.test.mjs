@@ -34,10 +34,10 @@ async function boot(mode) {
   for (const script of w.document.querySelectorAll('script:not([src])')) w.eval(script.textContent);
   if (mode === 'early-error-overlay') {
     // Model a promise failing after React clears the static markup but before
-    // its concurrent commit fills the root. The fallback is outside React.
+    // its concurrent commit fills the root. No independent fallback is allowed.
     w.document.getElementById('root').replaceChildren();
     w.dispatchEvent(new w.ErrorEvent('error', { error: new w.Error('optional startup task failed') }));
-    assert.ok(w.document.body.querySelector(':scope > #insight-static-boot'));
+    assert.equal(w.document.getElementById('insight-static-boot'), null, 'handoff errors must never create a second screen');
   }
   w.eval(bundle);
   await new Promise(resolve => setTimeout(resolve, 120));
@@ -73,7 +73,7 @@ test('a render exception shows the failure reason and retry controls instead of 
   } finally { w.close(); }
 });
 
-test('an early body fallback is removed when the real app commits and never covers a live route', async () => {
+test('handoff errors never create a body fallback or cover a live route', async () => {
   const dom = await boot('early-error-overlay'), w = dom.window;
   try {
     const top = w.document.querySelector('.hub-page');
@@ -83,4 +83,20 @@ test('an early body fallback is removed when the real app commits and never cove
     assert.equal(w.document.querySelector('.hub-page'), top, 'late failure must preserve the live app');
     assert.equal(w.document.getElementById('insight-static-boot'), null);
   } finally { w.close(); }
+});
+
+test('normal startup contains no emergency panel or extra navigation', () => {
+  const dom = new JSDOM(html, { url: 'https://mumei-s.github.io/note-insight/', runScripts: 'outside-only' });
+  try {
+    const w = dom.window;
+    for (const script of w.document.querySelectorAll('script:not([src])')) w.eval(script.textContent);
+    const boot = w.document.getElementById('insight-static-boot');
+    assert.ok(boot);
+    assert.equal(boot.querySelector('nav, a, .boot-card'), null);
+    assert.equal(w.document.getElementById('insight-display-repair').hidden, true);
+    const module = w.document.querySelector('script[type="module"]');
+    module.dispatchEvent(new w.Event('error'));
+    assert.match(boot.textContent, /E_SCRIPT_LOAD/);
+    assert.equal(w.document.getElementById('insight-display-repair').hidden, false);
+  } finally { dom.window.close(); }
 });
