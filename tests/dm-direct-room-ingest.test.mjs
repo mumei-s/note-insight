@@ -15,15 +15,20 @@ async function fixture(t,{memberId='member-a',noteId='tester',failThread=false,t
   await sql.exec('create table public.insight_notification_profiles(member_id text primary key);');
   await sql.query('insert into public.insight_notification_profiles values ($1),($2)',[memberId,'other-member']);
   await sql.exec(readFileSync('supabase/migrations/20260921035000_insight_dm_history.sql','utf8'));
-  let beforeThreadInsert=null;const logs=[];
+  let beforeThreadInsert=null;const logs=[],bodyFilters=[];
   const db={from(table){
-    const filters=[],params=[];let head=false,offset=0,size=null,sort=[];
+    const filters=[],params=[];let head=false,offset=0,size=null,sort=[],updateRow=null;
     const field=k=>k==='meta->>superseded_by'?"meta->>'superseded_by'":quote(k);
-    const condition=(k,op,v)=>{params.push(v);filters.push(field(k)+' '+op+' $'+params.length)};
+    const condition=(k,op,v)=>{if(k==='body')bodyFilters.push(v);params.push(v);filters.push(field(k)+' '+op+' $'+params.length)};
     const select=async()=>{
       if(table==='insight_dm_ingest_tokens')return{data:[{member_id:memberId}],error:null};
       if(table==='insight_member_sessions')return{data:[{application_id:memberId,expires_at:'2099-01-01',revoked_at:null}],error:null};
       if(table==='insight_access_applications')return{data:[{id:memberId,note_id:noteId,status:'active',verified_at:'2026-01-01'}],error:null};
+      if(bodyFilters.some(value=>encodeURIComponent(value).length>16000))return{data:null,error:{message:'request URI too large'}};
+      if(updateRow){
+        const columns=Object.keys(updateRow),args=columns.map(k=>updateRow[k]),where=filters.join(' and ').replace(/\$(\d+)/g,(_,n)=>'$'+(Number(n)+args.length));
+        try{await sql.query('update public.'+quote(table)+' set '+columns.map((k,i)=>quote(k)+'=$'+(i+1)).join(',')+(where?' where '+where:''),[...args,...params]);return{data:null,error:null}}catch(error){return{data:null,error}}
+      }
       const base='select * from public.'+quote(table)+(filters.length?' where '+filters.join(' and '):''),all=await sql.query(base,params);
       const tail=(sort.length?' order by '+sort.join(','):'')+(size===null?'':' limit '+size)+' offset '+offset;
       const result=await sql.query(base+tail,params);return{data:head?null:result.rows,count:all.rows.length,error:null};
@@ -34,12 +39,12 @@ async function fixture(t,{memberId='member-a',noteId='tester',failThread=false,t
       if(!insert){command+=' on conflict ('+options.onConflict.split(',').map(quote).join(',')+') do '+(options.ignoreDuplicates?'nothing':'update set '+columns.map(k=>quote(k)+'=excluded.'+quote(k)).join(','))}
       try{await sql.query(command,args);return{error:null}}catch(error){return{error}}
     };
-    const q={select(_columns,options={}){head=Boolean(options.head);return q},eq(k,v){condition(k,'=',v);return q},gt(k,v){condition(k,'>',v);return q},is(k,v){assert.equal(v,null);filters.push(field(k)+' is null');return q},like(k,v){condition(k,'like',v);return q},in(k,values){const slots=values.map(v=>{params.push(v);return'$'+params.length});filters.push(field(k)+' in ('+slots.join(',')+')');return q},order(k,options={}){sort.push(field(k)+(options.ascending===false?' desc':' asc')+(options.nullsFirst===false?' nulls last':''));return q},limit(n){size=n;return q},range(from,to){offset=from;size=to-from+1;return q},async maybeSingle(){const r=await select();return{...r,data:r.data?.[0]||null}},upsert:(row,options)=>write(row,options),insert:row=>write(row,null,true),then:(resolve,reject)=>select().then(resolve,reject)};return q;
+    const q={select(_columns,options={}){head=Boolean(options.head);return q},update(row){updateRow=row;return q},eq(k,v){condition(k,'=',v);return q},gt(k,v){condition(k,'>',v);return q},is(k,v){assert.equal(v,null);filters.push(field(k)+' is null');return q},like(k,v){condition(k,'like',v);return q},in(k,values){const slots=values.map(v=>{params.push(v);return'$'+params.length});filters.push(field(k)+' in ('+slots.join(',')+')');return q},order(k,options={}){sort.push(field(k)+(options.ascending===false?' desc':' asc')+(options.nullsFirst===false?' nulls last':''));return q},limit(n){size=n;return q},range(from,to){offset=from;size=to-from+1;return q},async maybeSingle(){const r=await select();return{...r,data:r.data?.[0]||null}},upsert:(row,options)=>write(row,options),insert:row=>write(row,null,true),then:(resolve,reject)=>select().then(resolve,reject)};return q;
   }};
   function handler(file){let handle;const context=vm.createContext({URL,Request,Response,TextEncoder,crypto:webcrypto,console:{error:value=>logs.push(value)},createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>handle=fn}});const source=readFileSync(file,'utf8').replace(/^import[^\n]+\n/,'');vm.runInContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);return handle}
   const ingest=handler('supabase/functions/insight-dm-ingest/index.ts'),feed=handler('supabase/functions/insight-dm-feed/index.ts');
   const request=(body)=>new Request('https://example.test/fixture',{method:'POST',headers:{'Content-Type':'application/json','X-Ingest-Token':'fixture','X-Insight-Token':'fixture'},body:JSON.stringify(body)});
-  return{sql,logs,send:async(messages,extra={})=>{const response=await ingest(request({noteId,threads:[],messages,...extra}));return{status:response.status,body:await response.json()}},feed:async body=>(await feed(request(body))).json(),feedResponse:body=>feed(request(body)),race:fn=>{beforeThreadInsert=fn},recover:()=>{failThread=false}};
+  return{sql,logs,bodyFilters,send:async(messages,extra={})=>{const response=await ingest(request({noteId,threads:[],messages,...extra}));return{status:response.status,body:await response.json()}},feed:async body=>(await feed(request(body))).json(),feedResponse:body=>feed(request(body)),race:fn=>{beforeThreadInsert=fn},recover:()=>{failThread=false}};
 }
 
 async function assertMessageDisplayed(t,h,name){
@@ -99,5 +104,22 @@ test('ownerの名前未取得はDBのnullを保ち、後から確実な相手情
 
 test('PostgRESTのplain objectエラーから安全なcodeだけを返し本文やdetailをログへ出さない',async t=>{
   const secret='PRIVATE_BODY https://example.test/?credential=secret',h=await fixture(t,{failThread:true,threadError:{code:'23503',message:secret,details:secret,hint:secret}}),response=await h.send([message()]);
-  assert.equal(response.status,500);assert.equal(response.body.error,'DM_STORAGE_23503');assert.deepEqual(h.logs,['DM_STORAGE_23503']);assert.doesNotMatch(JSON.stringify(response.body)+JSON.stringify(h.logs),/PRIVATE_BODY|credential|object Object/);
+  assert.equal(response.status,500);assert.equal(response.body.error,'DM_STORAGE_23503');assert.deepEqual(h.logs,['DM_STORAGE_23503','DM_FAILURE_STAGE_THREAD_REGISTER']);assert.doesNotMatch(JSON.stringify(response.body)+JSON.stringify(h.logs),/PRIVATE_BODY|credential|object Object/);
+});
+
+test('長文本文を検索URLへ載せず保存し、後続本文も確認して一意な旧コピーだけ整理する',async t=>{
+  const h=await fixture(t,{memberId:'owner',noteId:'ss_yr'}),body='長い本文の保存試験。'.repeat(700)+'\n最後の行';
+  await h.sql.exec(readFileSync('supabase/migrations/20261003152059_owner_dm_permanent_retention.sql','utf8'));
+  await h.sql.query('insert into insight_dm_messages(member_id,thread_key,message_key,body,sent_at,meta) values ($1,$2,$3,$4,$5,$6)',['owner',room,'api-sig:old',body.replace(/\s+/g,' ').trim(),message().sent_at,{original:true}]);
+  const result=await h.send([message('long',{body}),message('after',{sent_at:'2026-10-10T00:00:01Z'})]);
+  assert.equal(result.status,200);assert.equal(result.body.messageCount,2);assert.equal(result.body.confirmedMessageKeys.length,2);assert.deepEqual(h.bodyFilters,[]);
+  const stored=(await h.sql.query("select body,meta from insight_dm_messages where message_key='api-sig:old'")).rows[0];assert.equal(stored.body,body.replace(/\s+/g,' ').trim());assert.deepEqual(stored.meta,{original:true,superseded_by:message('long').message_key});
+  assert.equal((await h.sql.query('select body from insight_dm_messages where message_key=$1',[message('long').message_key])).rows[0].body,body);
+  assert.equal((await h.feed({action:'person_messages',personKey:'note:peer'})).rows.length,2);
+});
+
+test('同日時の候補が上限に達したら一意と断定せず履歴を隠さない',async t=>{
+  const h=await fixture(t);
+  for(let i=0;i<3;i++)await h.sql.query('insert into insight_dm_messages(member_id,thread_key,message_key,body,sent_at) values ($1,$2,$3,$4,$5)',['member-a',room,'api-sig:old-'+i,i===0?message().body.replace(/\s+/g,' '):'異なる本文'+i,message().sent_at]);
+  assert.equal((await h.send([message()])).status,200);assert.equal((await h.sql.query("select count(*)::int as n from insight_dm_messages where meta ? 'superseded_by'")).rows[0].n,0);
 });

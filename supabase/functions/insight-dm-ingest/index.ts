@@ -23,12 +23,14 @@ async function identity(req:Request){
 }
 Deno.serve(async req=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:H});
+  let stage="authenticate";
   try{
     if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
     const who=await identity(req),body=await req.json().catch(()=>({}));
     const noteId=String(body?.noteId||"").trim().replace(/^@/,"").toLowerCase();
     if(noteId&&noteId!==who.noteId)throw new Error("NOTE_ACCOUNT_MISMATCH");
     if(body.readerStatus){
+      stage="reader-status";
       const x=body.readerStatus,threadKey=clean(x.threadKey,400);if(!threadKey)throw new Error("THREAD_REQUIRED");
       const {data:thread,error}=await db.from("insight_dm_threads").select("meta").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(error)throw error;
       if(thread){const {error:e}=await db.from("insight_dm_threads").update({meta:{...(thread.meta||{}),reader_status:{checked_at:new Date().toISOString(),version:clean(x.version,30),read:Math.max(0,Math.min(5000,Number(x.read)||0)),saved:Math.max(0,Number(x.saved)||0),stored:Math.max(0,Number(x.stored)||0),mode:clean(x.mode,30),complete:x.complete===true,error:clean(x.error,200)}}}).eq("member_id",who.memberId).eq("thread_key",threadKey);if(e)throw e}
@@ -38,6 +40,7 @@ Deno.serve(async req=>{
     const messages=Array.isArray(body?.messages)?body.messages.slice(0,5000):[];
     let upsertedThreads=0,upsertedMessages=0;const confirmed:string[]=[],registeredThreads=new Set<string>();
     for(const x of threads){
+      stage="thread-upsert";
       const roomUrl=cleanUrl(x?.room_url),threadKey=clean(x?.thread_key,400)||roomUrl;
       if(!threadKey)continue;
       const {data:existing,error:lookupError}=await db.from("insight_dm_threads").select("meta,peer_note_id,peer_name,peer_url,peer_image_url,last_message_at").eq("member_id",who.memberId).eq("thread_key",threadKey).maybeSingle();if(lookupError)throw lookupError;
@@ -45,6 +48,7 @@ Deno.serve(async req=>{
       const{error}=await db.from("insight_dm_threads").upsert(row,{onConflict:"member_id,thread_key"});if(error)throw error;upsertedThreads++;registeredThreads.add(threadKey)
     }
     for(const x of messages){
+      stage="message-upsert";
       const threadKey=clean(x?.thread_key,400),messageKey=clean(x?.message_key,800),direction=["inbound","outbound","unknown"].includes(String(x?.direction))?String(x.direction):"unknown";
       if(!threadKey||!messageKey)continue;
       const sourceUrl=String(x?.meta?.request_url||x?.meta?.room_url||"");
@@ -54,6 +58,7 @@ Deno.serve(async req=>{
       const row={member_id:who.memberId,thread_key:threadKey,message_key:messageKey,direction,sender_name:clean(x?.sender_name,300),sender_url:cleanUrl(x?.sender_url),sender_image_url:cleanUrl(x?.sender_image_url),body:bodyText(x?.body,12000),sent_at:x?.sent_at||null,raw_text:bodyText(x?.raw_text,16000),attachment_name:clean(x?.attachment_name,800),attachment_url:cleanUrl(x?.attachment_url),attachment_type:clean(x?.attachment_type,200),captured_at:new Date().toISOString(),meta:x?.meta&&typeof x.meta==="object"?x.meta:{}};
       const{error}=await db.from("insight_dm_messages").upsert(row,{onConflict:"member_id,message_key"});if(error)throw error;
       if(!registeredThreads.has(threadKey)){
+        stage="thread-register";
         // Direct-room reads may never visit the room list. Register the room
         // before acknowledging its message so the saved body is feed-reachable.
         const senderId=profileNoteId(row.sender_url),isPeer=direction!=="outbound"&&senderId!==who.noteId&&(direction==="inbound"||Boolean(senderId));
@@ -63,8 +68,13 @@ Deno.serve(async req=>{
         registeredThreads.add(threadKey);upsertedThreads++;
       }
       if(messageKey.startsWith("api:")&&row.sent_at&&row.body){
-        const{data:legacy,error:le}=await db.from("insight_dm_messages").select("id,message_key,meta").eq("member_id",who.memberId).eq("thread_key",threadKey).like("message_key","api-sig:%").eq("sent_at",row.sent_at).eq("body",clean(row.body,12000)).is("meta->>superseded_by",null).limit(2);if(le)throw le;
-        if(legacy?.length===1){const{error:se}=await db.from("insight_dm_messages").update({meta:{...(legacy[0].meta||{}),superseded_by:messageKey}}).eq("id",legacy[0].id).eq("member_id",who.memberId);if(se)throw se}
+        stage="legacy-lookup";
+        // Match long/private text locally: putting the body in a GET URL can
+        // exceed request limits and block every later message in the queue.
+        const{data:candidates,error:le}=await db.from("insight_dm_messages").select("id,message_key,meta,body").eq("member_id",who.memberId).eq("thread_key",threadKey).like("message_key","api-sig:%").eq("sent_at",row.sent_at).is("meta->>superseded_by",null).limit(3);if(le)throw le;
+        const legacy=(candidates||[]).filter(r=>r.body===clean(row.body,12000));
+        // At the bound, uniqueness is unproven. Keep both copies visible.
+        if((candidates?.length||0)<3&&legacy.length===1){stage="legacy-reconcile";const{error:se}=await db.from("insight_dm_messages").update({meta:{...(legacy[0].meta||{}),superseded_by:messageKey}}).eq("id",legacy[0].id).eq("member_id",who.memberId);if(se)throw se}
       }
       upsertedMessages++;confirmed.push(messageKey)
     }
@@ -76,6 +86,6 @@ Deno.serve(async req=>{
     const code=typeof issue?.code==="string"&&/^[A-Z0-9_]{1,40}$/i.test(issue.code)?issue.code.toUpperCase():"";
     const known=new Set(["DM_INGEST_TOKEN_REQUIRED","DM_INGEST_TOKEN_INVALID","DM_ACCOUNT_UNKNOWN","NOTE_ACCOUNT_MISMATCH","THREAD_REQUIRED","DM_THREAD_MISMATCH"]);
     const safe=known.has(message)?message:code?"DM_STORAGE_"+code:"DM_INGEST_FAILED";
-    console.error(safe);return out({ok:false,error:safe},known.has(message)?401:500)
+    console.error(safe);console.error("DM_FAILURE_STAGE_"+stage.toUpperCase().replaceAll("-","_"));return out({ok:false,error:safe},known.has(message)?401:500)
   }
 });
