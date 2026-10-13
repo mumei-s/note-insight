@@ -1,2 +1,2 @@
-INSIGHT 2026.10.10.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.10
-Comment collection and save recovery; independent public sources; direct-room DM visibility.
+INSIGHT 2026.10.13.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+DM saving, confirmed history, and bounded reader recovery.
