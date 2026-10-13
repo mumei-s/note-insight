@@ -44,18 +44,20 @@ test('the exact latest creator order is retained despite parallel preparation co
  assert.deepEqual(Array.from(rows,row=>row.index),Array.from({length:10},(_,index)=>index+1));
 });
 
-test('a failed creator stops the batch without skipping that person or advancing the saved checkpoint',async()=>{
+test('an unavailable creator is skipped and the next creator fills the target without changing the accepted order',async()=>{
  const original=people(12),c=runtime({GM_getValue:()=>({at:2,people:original})});
  c.failed=true;c.calls=[];
  c.api.patch('preparePerson=async person=>{calls.push(person.urlname);if(failed&&person.urlname==="person5")throw Error("person5さんのサムネイルを確認できません");return {...person,profileText:"本人の紹介"}};sleep=async()=>{}');
- await assert.rejects(c.api.buildRows(10),/person5/);
+ const rows=await c.api.buildRows(10);
  const saved=JSON.parse(c.localStorage.getItem('mumei_profile_like300_fix_v230:n123456789abc'));
- assert.equal(saved.index,4);assert.equal(saved.rows.length,4);
- assert.deepEqual(Array.from(saved.rows,row=>row.urlname),original.slice(0,4).map(row=>row.urlname));
+ assert.equal(saved.index,11);assert.equal(saved.rows.length,10);assert.equal(saved.skipped.length,1);
+ assert.equal(saved.skipped[0].urlname,'person5');assert.match(saved.skipped[0].reason,/サムネイル/);
+ const expected=original.filter(row=>row.urlname!=='person5').slice(0,10).map(row=>row.urlname);
+ assert.deepEqual(Array.from(rows,row=>row.urlname),expected);
  c.failed=false;c.calls=[];
  const resumed=await c.api.buildRows(10);
- assert.equal(c.calls[0],'person4');assert.ok(c.calls.includes('person5'));
- assert.deepEqual(Array.from(resumed,row=>row.urlname),original.slice(0,10).map(row=>row.urlname));
+ assert.equal(c.calls.length,0);
+ assert.deepEqual(Array.from(resumed,row=>row.urlname),expected);
 });
 
 test('missing public article or thumbnail gives a creator-specific error rather than returning a replacement candidate',async()=>{
