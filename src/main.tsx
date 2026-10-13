@@ -1,4 +1,4 @@
-import { hasPendingBrowserWrites, prepareBrowserStorage } from "./insight-browser-storage";
+import { pendingBrowserWriteStatus, prepareBrowserStorage, retryBrowserStorage } from "./insight-browser-storage";
 import { Component, StrictMode, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -292,22 +292,32 @@ class StartupBoundary extends Component<{ children: ReactNode; optional?: boolea
 }
 
 function BrowserStorageNotice() {
-  const [pending, setPending] = useState(hasPendingBrowserWrites);
+  const [pending, setPending] = useState(pendingBrowserWriteStatus);
+  const [retrying, setRetrying] = useState(false);
   useEffect(() => {
-    const update = () => setPending(hasPendingBrowserWrites());
+    const update = () => setPending(pendingBrowserWriteStatus());
     window.addEventListener("mumei-insight-storage-quota", update); update();
     return () => window.removeEventListener("mumei-insight-storage-quota", update);
   }, []);
-  return pending ? <aside id="insight-storage-notice" role="status" style={{ position: "fixed", bottom: 115, left: 12, right: 12, zIndex: 2147483201, padding: "10px 14px", border: "1px solid #b19a53", borderRadius: 12, background: "#231e10", color: "#fff3bf", font: "12px/1.5 system-ui" }}>
-    ブラウザ内への保存ができないため、このタブで変更を一時保持しています。再読込すると未保存の変更は戻ります。保存済み履歴は残っています。
+  return pending.cacheCount || pending.changeCount ? <aside id="insight-storage-notice" role="status" style={{ margin: "8px 12px", padding: "8px 12px", border: "1px solid #b19a53", borderRadius: 12, background: "#231e10", color: "#fff3bf", font: "12px/1.5 system-ui" }}>
+    <details>
+      <summary style={{ cursor: "pointer" }}>{pending.changeCount ? "端末の変更を保存待ち" : "端末の表示用保存待ち"}</summary>
+      <p style={{ margin: "8px 0" }}>{pending.changeCount
+        ? "端末の変更をこのタブで一時保持しています。保存が完了する前に再読込すると、未保存の変更は戻ることがあります。保存済み履歴は残っています。"
+        : "取得済み履歴の表示用コピーを、このタブで一時保持しています。サーバーへの保存結果とは別です。端末保存が完了する前に再読込すると、新しい表示用コピーは戻ることがあります。保存済み履歴は残っています。"}</p>
+      <button type="button" disabled={retrying} onClick={async () => {
+        setRetrying(true);
+        try { await retryBrowserStorage(); } finally { setRetrying(false); }
+      }}>{retrying ? "再試行中…" : "保存を再試行"}</button>
+    </details>
   </aside> : null;
 }
 
 function mountInsight() { createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StartupBoundary optional><HomeScreenInstall /></StartupBoundary>
-    <StartupBoundary><App /></StartupBoundary>
     <BrowserStorageNotice />
+    <StartupBoundary><App /></StartupBoundary>
   </StrictMode>,
 ); }
 // Restore migrated cache values before any view reads them; failure leaves the

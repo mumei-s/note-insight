@@ -1,2 +1,2 @@
-INSIGHT 2026.10.13.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-DM saving, confirmed history, and bounded reader recovery.
+INSIGHT 2026.10.14.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Durable notification display copies and compact storage-pending notice.

@@ -30,6 +30,28 @@ async function boot(mode) {
       return set.call(this, key, value);
     };
   }
+  if (mode === 'notification-cache-quota') {
+    const boardKey = 'mumei-notification-board:tester';
+    w.__storedNotificationBoard = JSON.stringify([{ id: 'saved', raw_text: '保存済みの通知本文', meta: { exact: '以前の履歴' } }]);
+    w.__pendingNotificationBoard = JSON.stringify([{ id: 'new', raw_text: '新しい通知本文', meta: { exact: '取得した履歴' } }]);
+    w.localStorage.setItem(boardKey, w.__storedNotificationBoard);
+    w.localStorage.setItem('mumei-insight-access-token', 'saved-session');
+    w.localStorage.setItem('mumei-insight-saved-accounts-v3', JSON.stringify([{ noteId: 'tester', memberToken: 'saved-session' }]));
+    w.localStorage.setItem('mumei-insight-auto-sync-enabled', '1');
+    w.__rejectSettingWrite = false;
+    w.__quotaWriteAttempts = [];
+    const set = w.Storage.prototype.setItem;
+    w.Storage.prototype.setItem = function(key, value) {
+      if (this === w.localStorage && (key === boardKey || key === 'mumei-insight-auto-sync-enabled')) w.__quotaWriteAttempts.push(key);
+      if (this === w.localStorage && (key === boardKey || (key === 'mumei-insight-auto-sync-enabled' && w.__rejectSettingWrite))) {
+        throw new w.DOMException('Quota full', 'QuotaExceededError');
+      }
+      return set.call(this, key, value);
+    };
+    // Durable cache overflow is unavailable; the notice must describe a view
+    // copy waiting on this device rather than failed server notification saving.
+    Object.defineProperty(w, 'indexedDB', { value: undefined, configurable: true });
+  }
   w.__nativeStorageGet = w.Storage.prototype.getItem;
   for (const script of w.document.querySelectorAll('script:not([src])')) w.eval(script.textContent);
   if (mode === 'early-error-overlay') {
@@ -40,6 +62,7 @@ async function boot(mode) {
     assert.equal(w.document.getElementById('insight-static-boot'), null, 'handoff errors must never create a second screen');
   }
   w.eval(bundle);
+  if (mode === 'notification-cache-quota') w.localStorage.setItem('mumei-notification-board:tester', w.__pendingNotificationBoard);
   await new Promise(resolve => setTimeout(resolve, 120));
   return dom;
 }
@@ -99,4 +122,57 @@ test('normal startup contains no emergency panel or extra navigation', () => {
     assert.match(boot.textContent, /E_SCRIPT_LOAD/);
     assert.equal(w.document.getElementById('insight-display-repair').hidden, false);
   } finally { dom.window.close(); }
+});
+
+test('notification cache overflow uses a collapsed device-copy notice in normal flow ahead of the live app', async () => {
+  const dom = await boot('notification-cache-quota'), w = dom.window;
+  try {
+    const top = w.document.querySelector('.hub-page'), notice = w.document.getElementById('insight-storage-notice');
+    assert.ok(top, 'TOP remains available while the notification view copy is pending');
+    assert.ok(notice);
+    const details = notice.querySelector('details'), summary = details.querySelector('summary');
+    assert.equal(summary.textContent, '端末の表示用保存待ち');
+    assert.equal(details.open, false, 'long explanatory text starts collapsed');
+    assert.match(details.querySelector('p').textContent, /サーバーへの保存結果とは別/);
+    assert.match(details.querySelector('p').textContent, /保存済み履歴は残っています/);
+    assert.equal(details.querySelector('button').textContent, '保存を再試行');
+    assert.equal(notice.style.position, '');
+    assert.equal(notice.style.zIndex, '');
+    assert.ok(notice.compareDocumentPosition(top) & w.Node.DOCUMENT_POSITION_FOLLOWING, 'notice precedes App in document flow');
+    assert.equal(w.document.getElementById('root').contains(notice), true);
+    assert.equal(w.__nativeStorageGet.call(w.localStorage, 'mumei-notification-board:tester'), w.__storedNotificationBoard);
+    assert.equal(w.localStorage.getItem('mumei-notification-board:tester'), w.__pendingNotificationBoard);
+    assert.equal(w.localStorage.getItem('mumei-insight-access-token'), 'saved-session');
+    assert.equal(w.document.getElementById('insight-runtime-failure'), null);
+  } finally { w.close(); }
+});
+
+test('adding a pending setting changes the notice and retry saves it while an unavailable cache archive stays pending', async () => {
+  const dom = await boot('notification-cache-quota'), w = dom.window;
+  try {
+    const top = w.document.querySelector('.hub-page'), notice = w.document.getElementById('insight-storage-notice');
+    assert.equal(notice.querySelector('summary').textContent, '端末の表示用保存待ち');
+    w.__rejectSettingWrite = true;
+    w.localStorage.setItem('mumei-insight-auto-sync-enabled', '0');
+    await new Promise(resolve => setTimeout(resolve, 35));
+    assert.equal(notice.querySelector('summary').textContent, '端末の変更を保存待ち', 'cache-count/change-count changes update an already-visible notice');
+    assert.match(notice.querySelector('p').textContent, /未保存の変更は戻ることがあります/);
+    assert.equal(w.__nativeStorageGet.call(w.localStorage, 'mumei-insight-auto-sync-enabled'), '1');
+    assert.equal(w.localStorage.getItem('mumei-insight-auto-sync-enabled'), '0');
+    notice.querySelector('summary').click();
+    assert.equal(notice.querySelector('details').open, true);
+    w.__rejectSettingWrite = false;
+    const attempts = w.__quotaWriteAttempts.length;
+    notice.querySelector('button').click();
+    await new Promise(resolve => setTimeout(resolve, 70));
+    assert.ok(w.__quotaWriteAttempts.length > attempts, 'manual retry attempts to persist the now-writable setting');
+    assert.equal(w.__nativeStorageGet.call(w.localStorage, 'mumei-insight-auto-sync-enabled'), '0', 'retry commits the now-writable setting');
+    assert.equal(notice.querySelector('summary').textContent, '端末の表示用保存待ち', 'cache-only pending is distinguished after the setting commits');
+    assert.equal(notice.querySelector('button').disabled, false);
+    assert.equal(notice.querySelector('button').textContent, '保存を再試行');
+    assert.equal(w.document.querySelector('.hub-page'), top, 'retry preserves the live App DOM');
+    assert.equal(w.__nativeStorageGet.call(w.localStorage, 'mumei-notification-board:tester'), w.__storedNotificationBoard, 'failed archive retry keeps the original persisted history');
+    assert.equal(w.localStorage.getItem('mumei-notification-board:tester'), w.__pendingNotificationBoard);
+    assert.equal(w.localStorage.getItem('mumei-insight-access-token'), 'saved-session');
+  } finally { w.close(); }
 });

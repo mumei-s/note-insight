@@ -69,7 +69,7 @@ jobs:
       - name: Check stable DM status and row-scoped filters
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
       - name: Check notification feed saved order
-        run: node --test tests/notification-save-order.test.mjs
+        run: node --experimental-vm-modules --test tests/notification-save-order.test.mjs tests/notification-board-storage.test.mjs
       - name: Check magazine search and creator presentation
         run: node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs
       - name: Check analysis navigation, settings and retained data presentation
