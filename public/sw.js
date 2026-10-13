@@ -1,6 +1,6 @@
-const CACHE_NAME = "mumei-note-insight-v96-black-screen-recovery-20261013";
+const CACHE_NAME = "mumei-note-insight-v97-editor-isolation-20261013";
 const SCOPE = new URL(self.registration.scope);
-const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html", "./insight-owner-nav.js"];
+const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html", "./insight-owner-nav.js", "./insight-editor-isolation.js"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
 const indexUrl = new URL("./index.html", SCOPE).href;
 
@@ -34,7 +34,7 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET" || url.origin !== SCOPE.origin || !url.pathname.startsWith(SCOPE.pathname)) return;
 
   const relative = url.pathname.slice(SCOPE.pathname.length);
-  const updateResource = relative === "insight-release.json" || relative === "insight-owner-nav.js" || relative.endsWith(".user.js") || /^(?:notification|dashboard|tool)-(?:setup|update|install|browser-install|entry).*\.(?:html|js)$/.test(relative);
+  const updateResource = relative === "insight-release.json" || relative === "insight-owner-nav.js" || relative === "insight-editor-isolation.js" || relative.endsWith(".user.js") || /^(?:notification|dashboard|tool)-(?:setup|update|install|browser-install|entry).*\.(?:html|js)$/.test(relative);
   if (updateResource) {
     event.respondWith(fetch(request, { cache: "no-store" }).catch(async () => {
       const cache = await caches.open(CACHE_NAME);

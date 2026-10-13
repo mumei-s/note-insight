@@ -16,6 +16,13 @@
     const url = new URL(window.location.href);
     url.searchParams.delete("nav");
     url.hash = next === "home" ? "" : next;
+    // A route event cannot restart an unmounted/failed React root.
+    const root = document.getElementById("root");
+    if (!root?.children.length || document.getElementById("insight-static-boot")) {
+      url.searchParams.set("displayRepair", String(Date.now()));
+      window.location.assign(url.href);
+      return;
+    }
     window.history.pushState({ ...(window.history.state || {}), route: next }, "", url.toString());
     window.dispatchEvent(new Event("mumei-route"));
     window.scrollTo({ top: 0, behavior: "auto" });

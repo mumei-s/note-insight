@@ -31,7 +31,9 @@
     <link rel="icon" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <script src="./insight-editor-isolation.js?v=20261013-1"></script>
     <style>
+      #mumei-like300-bridge,#mumei-like300-fix,#mumei-like300-fix-editor,#mumei-like300-fix-editor-v221,#mumei-profile-card-paster-v1,#mumei-profile-card-paster-v1-mini{display:none!important;pointer-events:none!important}
       :root{color-scheme:dark;background:#03070b}
       html,body,#root{min-height:100%;margin:0;background:#03070b;color:#e8f6ff}
       body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -87,7 +89,9 @@
             if (target) target.textContent = message;
             return;
           }
-          root.innerHTML = bootMarkup(message);
+          // Never replace a live React tree for an unrelated image/network error.
+          if (root.children.length) return;
+          document.body.insertAdjacentHTML("beforeend", bootMarkup(message));
         }
 
         async function repairDisplay() {
@@ -119,7 +123,7 @@
         });
 
         window.addEventListener("error", (event) => {
-          if (event.target && event.target !== window) showFallback("表示ファイルを読み込めませんでした。下の修復ボタンで復旧できます。");
+          if (event.target === window || event.target instanceof HTMLScriptElement) showFallback("表示ファイルを読み込めませんでした。下の修復ボタンで復旧できます。");
         }, true);
         window.addEventListener("unhandledrejection", () => showFallback("INSIGHTの起動処理で停止しました。下の修復ボタンで復旧できます。"));
 
