@@ -108,14 +108,16 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
-  assert.equal(dmUser.match(/@version\s+([^\s]+)/)[1],JSON.parse(read('public/insight-release.json')).dmVersion);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);assert.match(dmUser,/note-insight-dm-network-v2\.js\?v=147/);assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=\d+/);
+  assert.equal(dmUser.match(/@version\s+([^\s]+)/)[1],JSON.parse(read('public/insight-release.json')).dmVersion);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);
+  assert.equal(dmUser.match(/note-insight-dm-network-v2\.js\?v=(\d+)/)[1],read('public/note-insight-dm-network-v2.js').match(/const VERSION='([^']+)'/)[1].replaceAll('.',''));
+  assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=\d+/);
   assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
   for(const name of ['insight_dm_threads','insight_dm_messages','insight_dm_sync_runs'])assert.match(migration,new RegExp(name));
   assert.match(dmIngest,/from\("insight_dm_messages"\)/);assert.match(dmIngest,/from\("insight_dm_threads"\)/);assert.doesNotMatch(dmIngest,/from\("insight_notifications"\)/);
   assert.match(dmFeed,/from\("insight_dm_messages"\)/);assert.match(dmFeed,/from\("insight_dm_threads"\)/);
   assert.match(dmFeed,/action==="people"/);assert.match(dmFeed,/action==="person_messages"/);assert.match(dmFeed,/person_key/);
   assert.doesNotMatch(live,/miv5-source-card dm|openMode\("dm"\)|💬 DM/);assert.match(unified,/MemberInsightDm/);assert.match(unified,/visited\.has\("dm"\).*hidden=\{tab!=="dm"\}.*MemberInsightDm/);
-  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people",\{\},controller\.signal\)/);assert.match(dmUi,/feed\("summary",\{\},controller\.signal\)/);assert.match(dmUi,/pair\("stats",\{\},controller\.signal\)/);assert.doesNotMatch(dmUi,/insight-notification-(?:feed|ingest)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/設定・状態<\/span>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
+  assert.match(dmUi,/PRIVATE DIRECT MESSAGES/);assert.match(dmUi,/fetchInsightRelease/);assert.match(dmUi,/dmUpdateAvailable/);assert.match(dmUi,/DM同期 v\{latestDmVersion\}へ更新/);assert.match(dmUi,/通常のnote DM画面はそのまま/);assert.match(dmUi,/midm-history-panel/);assert.match(dmUi,/feed\("people",\{\},controller\.signal,token\)/);assert.match(dmUi,/feed\("summary",\{\},controller\.signal,token\)/);assert.match(dmUi,/pair\("stats",\{\},controller\.signal,token\)/);assert.doesNotMatch(dmUi,/insight-notification-(?:feed|ingest)/);assert.match(dmUi,/person_messages/);assert.match(dmUi,/midm-version-state/);assert.match(dmUi,/設定・状態<\/span>/);assert.doesNotMatch(dm,/location\.replace|cloak\(true\)/);assert.match(dm,/syncRoomsInBackground/);assert.match(dm,/mumei_dm_parent/);assert.match(dm,/frame\.contentDocument/);assert.match(dm,/previewMessage/);assert.match(dm,/background-hidden/);assert.match(dm,/clearLegacyQueue/);assert.match(dm,/ROOM_ID_RE/);assert.doesNotMatch(dm,/threadKey===\'new\'/);
 });
 
 test('saved participants auto-recover accidental local logout but explicit logout stays logged out',()=>{
@@ -180,7 +182,7 @@ test('ordinary note pages never start follower scans or inspect auth/editor traf
   assert.doesNotMatch(noticeNet,/installFetch\(\);installXHR\(\);\s*window\.__mumeiNotificationNetwork3300/);
   assert.match(dmNet,/const dmSurface=/);
   assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
-  assert.match(dmNet,/const ensureDmHooks=\(\)=>\{if\(!dmSurface\(\)\)return;installFetch\(\);installXHR\(\)\}/);
+  assert.match(dmNet,/if\(!res\|\|!\/\^\\\/messages\\\/rooms/);
   assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=103/);
   assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=103/);
 });

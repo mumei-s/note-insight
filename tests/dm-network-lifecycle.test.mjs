@@ -101,7 +101,13 @@ test('通常のfetchは引数・戻り値・例外を保持し本人確認や保
  assert.equal(h.w.fetch(request),h.ordinaryFetchResult);assert.equal(h.fetchCalls.at(-1).input,request);assert.equal(request.bodyUsed,false);
  assert.throws(()=>h.w.fetch(h.throwInput),error=>error===h.nativeFetchError);
  assert.equal(h.fetchCalls.filter(call=>call.input===h.throwInput).length,1);
- await flush();assert.equal(h.identities.length,0);assert.equal(h.posts.length,0);
+ for(const path of ['/api/v3/text_notes','/api/v3/notes/draft','/api/v1/auth/login']){
+  const options={method:'POST',body:'private editor/auth fixture'};
+  assert.equal(h.w.fetch(path,options),h.ordinaryFetchResult);assert.equal(h.fetchCalls.at(-1).init,options);
+ }
+ const authReply=await h.w.fetch('/api/v2/current_user');assert.equal(authReply.bodyUsed,false);
+ assert.equal((await authReply.json()).data.urlname,'tester');
+ await flush();assert.equal(h.identities.length,1);assert.equal(h.posts.length,0);
 });
 
 test('通常のXHRはopen・header・sendの引数と戻り値を保持し例外でも一度だけ送信する',async t=>{
