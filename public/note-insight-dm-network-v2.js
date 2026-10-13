@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.7';
+const VERSION='1.4.11';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -12,7 +12,11 @@ const dmSurface=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);const raw=localStorage.getItem(k);return raw===null?d:JSON.parse(raw)}
 async function set(k,v){if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);localStorage.setItem(k,JSON.stringify(v))}
 function request(body,token){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('DM_REQUEST_UNAVAILABLE'));fn({method:'POST',url:INGEST,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p?.ok!==false?resolve(p):reject(new Error(p?.error||('HTTP_'+r.status)))},onerror:()=>reject(new Error('DM_NETWORK_ERROR')),ontimeout:()=>reject(new Error('DM_TIMEOUT'))})})}
-async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null}catch{return null}}
+async function account(){
+ const controller=new AbortController();let timer;
+ const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('DM_IDENTITY_TIMEOUT'))},12000)});
+ try{return await Promise.race([(async()=>{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:controller.signal});if(!r.ok)return null;const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u?.urlname||u?.url_name||u?.username||'').replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?{id}:null})(),deadline])}catch{return null}finally{clearTimeout(timer)}
+}
 const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function roomFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/(?:api\/v[0-9]+\/)?messages\/rooms\/([^/?#]+)/i)||u.pathname.match(/^\/api\/v[0-9]+\/[^/]+\/rooms\/([^/?#]+)\/messages(?:\/|$)/i),id=m?.[1]||'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function abs(v){try{return new URL(String(v||''),location.href).href}catch{return''}}
@@ -115,7 +119,7 @@ async function inspect(meta,res,transport){
  if(!res||!/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)||(!apiEndpoint(meta.url)&&!roomFromUrl(meta.url)))return;
  let txt='';try{txt=await res.text()}catch{return}if(!txt||txt.length>5000000)return;
  let json=null;try{json=JSON.parse(txt)}catch{}if(!responseHint(meta.url,meta.body,json))return;
- const capturedOwner=meta.owner?await meta.owner:null,a=await account();if(!a||capturedOwner&&capturedOwner.id!==a.id)return;selectOwner(a.id);learnRequest(meta,json,a.id);const rows=json?extract(json,meta.url,a.id):flightRows(txt,meta.url,a.id);if(!rows.length)return;remember(rows);
+ const capturedOwner=meta.owner?await meta.owner:null,a=await account();if(!a||meta.owner&&(!capturedOwner||capturedOwner.id!==a.id))return;selectOwner(a.id);learnRequest(meta,json,a.id);const rows=json?extract(json,meta.url,a.id):flightRows(txt,meta.url,a.id);if(!rows.length)return;remember(rows);
  saving=saving.then(()=>persist(rows,a.id)).catch(async e=>{const x=await account();if(x){const prev=await get(key(CHECK,x.id),{});await set(key(CHECK,x.id),{...prev,lastRunAt:Date.now(),lastRunComplete:false,lastRunMode:'network',lastError:String(e?.message||e),version:VERSION})}});
  await saving
 }
@@ -138,7 +142,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
   const stateKey=key(HISTORY,owner)+':'+thread;
   let state=await get(stateKey,{});if(!state||typeof state!=='object')state={};
   let read=0,newSaved=0,pages=0;const seen=new Set(),readKeys=new Set();
-  const canRead=async()=>{if(shouldStop())return false;const a=await account();if(a?.id!==owner)throw new Error('NOTE_ACCOUNT_CHANGED');return true};
+  const canRead=async()=>{if(shouldStop())return false;const a=await account();if(shouldStop())return false;if(a?.id!==owner)throw new Error('NOTE_ACCOUNT_CHANGED');return true};
   const checkpoint=async patch=>{state={...state,...patch,at:Date.now(),version:VERSION};await set(stateKey,state)};
   const base=apiEndpoint(template.url);base.pathname=base.pathname.replace(/\/rooms\/[^/]+\/messages/, '/rooms/'+thread+'/messages');base.searchParams.delete('before');base.searchParams.set('sort','desc');base.searchParams.set('perPage','20');
   const page=async before=>{
@@ -197,10 +201,12 @@ function installXHR(p=pageWindow()){
  const X=p?.XMLHttpRequest;if(!X?.prototype||X.prototype.__mumeiDmNetworkV2)return;const proto=X.prototype,open=proto.open,send=proto.send,setHeader=proto.setRequestHeader;
  if(setHeader)proto.setRequestHeader=function(k,v){if(this.__mumeiDmV2)this.__mumeiDmV2.headers[k]=v;return setHeader.call(this,k,v)};
  proto.open=function(method,url,...rest){const relevant=dmSurface()||apiEndpoint(url)||roomFromUrl(url);this.__mumeiDmV2=relevant?{method:String(method||'GET').toUpperCase(),url:abs(url),body:null,headers:{},owner:apiEndpoint(url)?account():null}:null;return open.call(this,method,url,...rest)};
- proto.send=function(body){try{if(!this.__mumeiDmV2)return send.call(this,body);this.__mumeiDmV2.body=body??null;this.addEventListener('load',()=>{const m=this.__mumeiDmV2||{};let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>5000000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(m.url,m.body,json))return;const fake={text:async()=>txt};void inspect(m,fake,'xhr')},{once:true})}catch{}return send.call(this,body)};
+ proto.send=function(body){try{if(this.__mumeiDmV2){this.__mumeiDmV2.body=body??null;this.addEventListener('load',()=>{const m=this.__mumeiDmV2||{};let txt='';try{txt=typeof this.responseText==='string'?this.responseText:''}catch{}if(!txt||txt.length>5000000)return;let json;try{json=JSON.parse(txt)}catch{return}if(!responseHint(m.url,m.body,json))return;const fake={text:async()=>txt};void inspect(m,fake,'xhr')},{once:true})}}catch{}return send.call(this,body)};
  try{Object.defineProperty(proto,'__mumeiDmNetworkV2',{value:true})}catch{}
 }
-const ensureDmHooks=()=>{if(!dmSurface())return;installFetch();installXHR()};
+// Hook before note's first DM request, including later SPA entry from a profile.
+// Unrelated note requests still use the original transport without inspection.
+const ensureDmHooks=()=>{installFetch();installXHR()};ensureDmHooks();
 const retry=()=>{if(!dmSurface())return;ensureDmHooks();saving=saving.then(()=>persist([])).catch(()=>{})};window.addEventListener('pageshow',retry);window.addEventListener('focus',retry);window.addEventListener('popstate',retry);setTimeout(retry,1200);
 window.__mumeiDmNetworkV2={version:VERSION,extract,snapshot,fromDocument,readRoom,readHistory,flightRows,observeWindow:p=>{installFetch(p);installXHR(p)},getCounts:()=>({captured,saved}),getRoomCount:k=>roomCounts.get(String(k||''))||{captured:0,saved:0}};
 })();
