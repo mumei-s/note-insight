@@ -1,6 +1,6 @@
-const CACHE_NAME = "mumei-note-insight-v100-cache-overflow-20261013";
+const CACHE_NAME = "mumei-note-insight-v101-original-navigation-20261013";
 const SCOPE = new URL(self.registration.scope);
-const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html", "./insight-owner-nav.js", "./insight-editor-isolation.js"];
+const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html", "./insight-editor-isolation.js"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));
 const indexUrl = new URL("./index.html", SCOPE).href;
 
