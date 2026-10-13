@@ -7,6 +7,15 @@ const source=readFileSync(new URL('../public/note-profile-card-paster-core-v232.
 const alpha='https://note.com/alpha/n/n111111111111';
 const beta='https://note.com/beta/n/n222222222222';
 const row={url:alpha,creator:'alpha'};
+test('recovers saved native cards using linked introduction images despite stale anchor and changed embed metadata',async()=>{
+ const image=node('image','image',{src:'https://assets.st-note.com/image.jpg',link:alpha});
+ const original=card('embbaseline123');
+ const restored=node('restored','embed',{src:'https://note.com/embed/notes/n111111111111'},1);
+ const unrelated=card('embother123',beta);
+ const c=runtime([original,restored,image,unrelated],checkpoint({cardAnchorPos:9999,cardKeys:[],cardBaselineKeys:['embbaseline123']}));
+ assert.equal(await c.api.deleteNotificationCards({confirm:false,save:false}),1);
+ assert.deepEqual(c.blocks,[original,image,unrelated]);
+});
 const card=(id,src=alpha)=>node(id,'embed',{embeddedContentKey:id,src,htmlForEmbed:'<div class="note-embed">article</div>'},1);
 function node(id,type,attrs={},nodeSize=2,textContent=''){
  return{id,type:{name:type},attrs,nodeSize,textContent,eq(other){return other===this}};
@@ -98,3 +107,4 @@ test('deletion awaits the durable metadata flush before saving or resolving',asy
  release();assert.equal(await result,1);assert.equal(resolved,true);
  assert.ok(c.events.indexOf('flush:done')<c.events.indexOf('save'));
 });
+
