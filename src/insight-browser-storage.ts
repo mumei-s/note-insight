@@ -1,8 +1,49 @@
-// Keep the app usable when Web Storage writes hit the browser's per-site quota.
-// The persisted values remain untouched. Failed changes live in this tab only.
+// Keep small session/settings values in Web Storage and overflow cache snapshots
+// in IndexedDB. Copy commits before freeing the original cache slot.
 type StorageState = { store: Storage; pending: Map<string, string> };
 const states: StorageState[] = [];
 const CHANGE = "mumei-insight-storage-quota";
+const archived = new Map<string, string>();
+let hydrateArchive = async () => {};
+let recoverQuota = async () => 0;
+const CACHE_PREFIXES = ["mumei-insight-data-cache-v1:", "mumei-insight-summary-cache-v1:", "mumei-insight-pro-cache-v3:", "mumei-social-view-cache-v1:"];
+const CACHE_KEYS = new Set(["mumei-public-creator-icons-v2", "mumei-insight-self-thumbs-v1"]);
+function isCacheKey(key: string) { return CACHE_KEYS.has(key) || CACHE_PREFIXES.some(prefix => key.startsWith(prefix)); }
+
+export async function prepareBrowserStorage() { await hydrateArchive(); await recoverQuota(); await archiveQueue.catch(() => {}); }
+
+function openArchive(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("ARCHIVE_UNAVAILABLE")); return; }
+    const request = indexedDB.open("mumei-insight-storage-overflow-v1", 1); let expired = false;
+    const timeout = window.setTimeout(() => { expired = true; reject(new Error("ARCHIVE_TIMEOUT")); }, 1500);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains("values")) request.result.createObjectStore("values", { keyPath: "key" });
+    };
+    request.onsuccess = () => { window.clearTimeout(timeout); if (expired) request.result.close(); else resolve(request.result); };
+    request.onerror = request.onblocked = () => { window.clearTimeout(timeout); reject(request.error || new Error("ARCHIVE_BLOCKED")); };
+  });
+}
+
+async function archiveTransaction(action: (store: IDBObjectStore) => void, read = false): Promise<void> {
+  const db = await openArchive();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("values", read ? "readonly" : "readwrite");
+      const timeout = window.setTimeout(() => { try { tx.abort(); } catch {} reject(new Error("ARCHIVE_COMMIT_TIMEOUT")); }, 3000);
+      tx.oncomplete = () => { window.clearTimeout(timeout); resolve(); };
+      tx.onerror = tx.onabort = () => { window.clearTimeout(timeout); reject(tx.error || new Error("ARCHIVE_COMMIT_FAILED")); };
+      action(tx.objectStore("values"));
+    });
+  } finally { db.close(); }
+}
+
+let archiveQueue: Promise<unknown> = Promise.resolve();
+function queueArchive(action: () => Promise<void>) {
+  const next = archiveQueue.catch(() => {}).then(action);
+  archiveQueue = next;
+  return next;
+}
 
 function isQuotaError(error: unknown) {
   const e = error as { name?: string; code?: number } | null;
@@ -14,7 +55,10 @@ export function hasPendingBrowserWrites() { return states.some(state => state.pe
 export function installBrowserStorageFallback() {
   const proto = typeof window !== "undefined" ? window.Storage?.prototype : undefined;
   if (!proto || (proto as Storage & { __mumeiQuotaFallback?: boolean }).__mumeiQuotaFallback) return;
-  const get = proto.getItem, set = proto.setItem, remove = proto.removeItem, clear = proto.clear;
+  const get = proto.getItem, set = proto.setItem, remove = proto.removeItem, clear = proto.clear, keyAt = proto.key;
+  const lengthOf = Object.getOwnPropertyDescriptor(proto, "length")!.get!;
+  let local: Storage | null = null;
+  try { local = window.localStorage; } catch { /* permission errors remain explicit */ }
   const stateFor = (store: Storage) => {
     let state = states.find(value => value.store === store);
     if (!state) { state = { store, pending: new Map() }; states.push(state); }
@@ -32,31 +76,102 @@ export function installBrowserStorageFallback() {
   // is removed to make space; permanent storage succeeds before a change leaves memory.
   const retry = (state: StorageState) => {
     for (const [key, value] of [...state.pending].sort((a, b) => a[1].length - b[1].length)) {
+      if (state.store === local && archived.has(key)) { persistCache(state, key, value); continue; }
       try { set.call(state.store, key, value); state.pending.delete(key); }
       catch { break; }
     }
     notify();
   };
+  const writing = new Map<string, { ticket: number; value: string }>(); let ticket = 0;
+  function persistCache(state: StorageState, key: string, value: string) {
+    if (writing.get(key)?.value === value) return;
+    const revision = ++ticket, previousValue = get.call(state.store, key);
+    writing.set(key, { ticket: revision, value });
+    void queueArchive(() => archiveTransaction(store => { store.put({ key, value }); })).then(() => {
+      // A newer queued write or explicit removal owns the in-memory state.
+      if (writing.get(key)?.ticket !== revision) return;
+      writing.delete(key); archived.set(key, value);
+      if (previousValue !== null && get.call(state.store, key) === previousValue) remove.call(state.store, key);
+      if (state.pending.get(key) === value) state.pending.delete(key);
+      retry(state);
+    }).catch(() => { if (writing.get(key)?.ticket === revision) writing.delete(key); notify(); });
+  }
+  let hydration: Promise<void> | null = null, recovery: Promise<number> | null = null;
+  hydrateArchive = () => hydration ||= archiveTransaction(store => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      for (const row of request.result || []) if (typeof row?.key === "string" && isCacheKey(row.key) && typeof row.value === "string") archived.set(row.key, row.value);
+    };
+  }, true).catch(() => {});
+  recoverQuota = () => {
+    if (recovery) return recovery;
+    recovery = (async () => {
+      await hydrateArchive();
+      if (!local || !stateFor(local).pending.size) return 0;
+      const candidates: Array<{ key: string; value: string }> = [];
+      for (let i = 0; i < lengthOf.call(local); i++) {
+        const key = keyAt.call(local, i), value = key && get.call(local, key);
+        if (key && isCacheKey(key) && value) candidates.push({ key, value });
+      }
+      candidates.sort((a, b) => b.value.length - a.value.length);
+      const moved: typeof candidates = []; let chars = 0;
+      for (const row of candidates) { moved.push(row); chars += row.value.length; if (chars >= 512_000) break; }
+      if (!moved.length) return 0;
+      // On failure the originals stay in Web Storage and temporary state remains visible.
+      await queueArchive(() => archiveTransaction(store => { for (const row of moved) store.put(row); }));
+      let freed = 0;
+      for (const row of moved) {
+        archived.set(row.key, row.value);
+        if (get.call(local, row.key) === row.value) { remove.call(local, row.key); freed += row.value.length; }
+      }
+      retry(stateFor(local));
+      return freed;
+    })().catch(() => 0).finally(() => { recovery = null; });
+    return recovery;
+  };
   proto.getItem = function(key: string) {
     const pending = stateFor(this).pending, name = String(key);
-    return pending.has(name) ? pending.get(name)! : get.call(this, name);
+    return pending.has(name) ? pending.get(name)! : get.call(this, name) ?? (this === local ? archived.get(name) ?? null : null);
   };
   proto.setItem = function(key: string, value: string) {
     const state = stateFor(this), name = String(key), text = String(value);
+    if (this === local && archived.has(name)) { state.pending.set(name, text); persistCache(state, name, text); return; }
     try {
       set.call(this, name, text); state.pending.delete(name); retry(state);
     } catch (error) {
       if (!isQuotaError(error)) throw error;
       state.pending.set(name, text); notify();
+      if (this === local) {
+        if (isCacheKey(name)) persistCache(state, name, text);
+        void recoverQuota();
+      }
     }
   };
   proto.removeItem = function(key: string) {
     remove.call(this, String(key));
-    const state = stateFor(this); state.pending.delete(String(key)); retry(state);
+    const state = stateFor(this), name = String(key); state.pending.delete(name);
+    if (this === local && archived.has(name)) {
+      archived.delete(name); writing.delete(name);
+      void queueArchive(() => archiveTransaction(store => { store.delete(name); })).catch(() => {});
+    }
+    retry(state);
   };
   proto.clear = function() {
     clear.call(this); stateFor(this).pending.clear(); notify();
+    if (this === local) {
+      archived.clear(); writing.clear();
+      void queueArchive(() => archiveTransaction(store => { store.clear(); })).catch(() => {});
+    }
   };
+  const visibleKeys = (store: Storage) => {
+    const keys = new Set<string>();
+    for (let i = 0; i < lengthOf.call(store); i++) { const key = keyAt.call(store, i); if (key) keys.add(key); }
+    if (store === local) for (const key of archived.keys()) keys.add(key);
+    for (const key of stateFor(store).pending.keys()) keys.add(key);
+    return [...keys];
+  };
+  proto.key = function(index: number) { return visibleKeys(this)[index] ?? null; };
+  Object.defineProperty(proto, "length", { configurable: true, get() { return visibleKeys(this).length; } });
   window.addEventListener("storage", event => {
     const state = states.find(value => value.store === event.storageArea);
     if (!state) return;

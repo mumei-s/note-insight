@@ -1,4 +1,4 @@
-import { hasPendingBrowserWrites } from "./insight-browser-storage";
+import { hasPendingBrowserWrites, prepareBrowserStorage } from "./insight-browser-storage";
 import { Component, StrictMode, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -303,10 +303,13 @@ function BrowserStorageNotice() {
   </aside> : null;
 }
 
-createRoot(document.getElementById("root")!).render(
+function mountInsight() { createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StartupBoundary optional><HomeScreenInstall /></StartupBoundary>
     <StartupBoundary><App /></StartupBoundary>
     <BrowserStorageNotice />
   </StrictMode>,
-);
+); }
+// Restore migrated cache values before any view reads them; failure leaves the
+// original Web Storage values intact and still allows TOP to render.
+void prepareBrowserStorage().finally(mountInsight);
