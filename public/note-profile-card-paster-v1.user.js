@@ -35,8 +35,8 @@ if(IS_INSIGHT_BRIDGE){
   if(!token){set('INSIGHTへログインしてから実行');return}
   const seen=new Set(),people=[];let p=1,total=Infinity;
   try{
-   while(people.length<300&&(p-1)*100<total&&p<=80){
-    set('スキ履歴 '+people.length+'/300｜'+p+'ページ');
+   while(people.length<450&&(p-1)*100<total&&p<=80){
+    set('スキ履歴候補 '+people.length+'人｜'+p+'ページ');
     const r=await fetch(HISTORY,{method:'POST',headers:{'Content-Type':'application/json','X-Insight-Token':token},body:JSON.stringify({action:'likes',page:p,pageSize:100,status:'all',sort:'newest',query:'',dateFrom:null,dateTo:null}),cache:'no-store'});
     const x=await r.json().catch(()=>({}));
     if(!r.ok||x?.ok===false)throw new Error(x?.error||('HTTP '+r.status));
@@ -57,13 +57,13 @@ if(IS_INSIGHT_BRIDGE){
       likedArticleUrl:String(row.article_url||''),
       likedArticleTitle:String(row.article_title||'')
      });
-     if(people.length>=300)break
+     if(people.length>=450)break
     }
     await gmSet(INSIGHT_BRIDGE_KEY,{version:2,at:Date.now(),count:people.length,people});
     p++
    }
    await gmSet(INSIGHT_BRIDGE_KEY,{version:2,at:Date.now(),count:people.length,people});
-   set('準備完了 ✅ '+people.length+'人｜note編集画面で「INSIGHTスキ300」を押す')
+   set('準備完了 ✅ 候補'+people.length+'人｜note編集画面で「INSIGHTスキ300」を押す')
   }catch(e){set('停止：'+(e?.message||String(e)))}
  }
  function mountBridge(){
@@ -91,6 +91,7 @@ const SPECIAL_EXCLUDED='mumei_profile_card_paster_special_excluded_v15';
 const SPECIAL_RECOVERY_IMPORTED='mumei_profile_card_paster_special_recovery_v171';
 const SPECIAL_RECOVERY_URLS=['https://note.com/ss_yr/n/n1b6e30eb9e41'];
 const SPECIAL_SCAN_PREFIX='mumei_profile_special_scan_v181:';
+const LIKE300_PREP_PREFIX='mumei_profile_like300_prep_v2:';
 const FIRST_TAGS=['はじめてのnote','始めてのnote','自己紹介'];
 const STRICT_FIRST_TAGS=new Set(['はじめてのnote','始めてのnote']);
 const SELF_INTRO_TAG='自己紹介';
@@ -123,6 +124,7 @@ const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
 const scanKey=()=>SPECIAL_SCAN_PREFIX+(editorArticleKey()||'unknown');
+const like300PrepKey=()=>LIKE300_PREP_PREFIX+(editorArticleKey()||'unknown');
 async function keepAwake(){
  if(!page.navigator?.wakeLock?.request||document.hidden)return false;
  try{
@@ -914,6 +916,56 @@ async function buildRowsFromSavedSpecial(maxCount){
  }
  return out.map((x,i)=>({...x,index:i+1,finalMarker:Boolean(x.finalMarker||norm(x.url)===norm(FINAL_URL))}))
 }
+async function prepareInsightLikePerson(person){
+ const id=String(person?.urlname||'').trim();
+ if(!id)return null;
+ const creator={likerKey:String(person.likerKey||id),urlname:id,creator:String(person.creator||id),actorUrl:String(person.actorUrl||('https://note.com/'+id)),actorImageUrl:mediaUrl(person.actorImageUrl||'')};
+ try{
+  const [contents,prof]=await Promise.all([
+   creatorContents(id,1,true),
+   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)).catch(()=>({}))
+  ]);
+  const list=contentList(contents);
+  const latest=articleFromRaw(list[0],creator);
+  if(!latest)return null;
+  const p=prof?.data?.creator||prof?.data?.user||prof?.data||prof||{};
+  const text=[
+   p.profile,p.description,p.bio,p.introduction,p.self_introduction,p.note_intro,
+   ...list.slice(0,6).flatMap(x=>[x?.name,x?.title,x?.description,x?.body_text]),
+   latest.title
+  ].filter(Boolean).join(' ');
+  return{...latest,likesHistory:true,activityLabel:activityLabelFromText(text),likedAt:String(person.likedAt||'')}
+ }catch{return null}
+}
+async function buildInsightLikeRows(target=300){
+ const bridge=await gmGet(INSIGHT_BRIDGE_KEY,null);
+ const people=Array.isArray(bridge?.people)?bridge.people:[];
+ if(!people.length)throw new Error('INSIGHT側のスキ履歴準備がありません。INSIGHTで「300人を準備」を先に押してください');
+ const sig=String(bridge?.at||0)+'|'+target;
+ let saved;try{saved=JSON.parse(localStorage.getItem(like300PrepKey())||'null')}catch{saved=null}
+ let rows=Array.isArray(saved?.rows)&&saved.signature===sig?saved.rows:[],index=saved?.signature===sig?Number(saved.index||0):0;
+ const seen=new Set(rows.map(x=>String(x.urlname||'').toLowerCase()).filter(Boolean));
+ while(index<people.length&&rows.length<target){
+  if(stopRequested)throw new Error('停止しました');
+  const batch=people.slice(index,index+4);index+=batch.length;
+  setStatus('INSIGHTスキ履歴｜活動確認 '+rows.length+'/'+target+'｜候補 '+index+'/'+people.length);
+  const prepared=await Promise.all(batch.map(prepareInsightLikePerson));
+  for(const row of prepared){
+   const id=String(row?.urlname||'').toLowerCase();
+   if(!row||!id||seen.has(id))continue;
+   seen.add(id);rows.push(row);
+   if(rows.length>=target)break
+  }
+  try{localStorage.setItem(like300PrepKey(),JSON.stringify({signature:sig,index,rows,updatedAt:Date.now()}))}catch{}
+  await sleep(80)
+ }
+ if(rows.length<target)throw new Error('公開記事を確認できたクリエイターが '+rows.length+'人でした。INSIGHT側で再準備して候補を増やしてください');
+ return rows.slice(0,target).map((x,i)=>({...x,index:i+1}))
+}
+function creatorHeadingText(groupIndex){
+ const from=groupIndex*10+1,to=Math.min(from+9,300);
+ return String(groupIndex+1).padStart(2,'0')+'｜'+from+'人目〜'+to+'人目のクリエイター様'
+}
 async function bitmapFromUrl(url){
  if(!url)return null;
  try{const blob=await xhr(url,'blob',45000);if('createImageBitmap'in page)return await page.createImageBitmap(blob);return await new Promise((resolve,reject)=>{const img=new page.Image(),u=page.URL.createObjectURL(blob);img.onload=()=>{page.URL.revokeObjectURL(u);resolve(img)};img.onerror=()=>{page.URL.revokeObjectURL(u);reject(new Error('画像読込失敗'))};img.src=u})}catch{return null}
@@ -1302,6 +1354,55 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   setStatus('停止：'+(e?.message||String(e))+'｜完成分は本文に保持。自動再開はしません',true)
  }finally{if(special)await releaseAwake();busy=false;update()}
 }
+async function createInsightLikes300(){
+ if(busy)return;busy=true;stopRequested=false;update();
+ try{
+  await keepAwake();
+  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  nativeImageCommand();noteUrlCommandFactory();selectionApi();
+  const leftover=trackedContentCount(view);
+  if(leftover.images||leftover.cards||leftover.headings)throw new Error('このページに今回作成分が残っています。重複防止のため整理してから実行してください');
+  let imageInsertPos=cardAnchorFromSelection(view);
+  const creators=await buildInsightLikeRows(300);
+  const finalRow={
+   likerKey:'final-performance-math',urlname:'fuku444',creator:'実績の算数',
+   actorUrl:'https://note.com/fuku444',actorImageUrl:'',url:FINAL_URL,
+   title:'実績の算数│3日半で0→1達成',key:FINAL_KEY,publishAt:null,thumbUrl:'',finalMarker:true,index:301
+  };
+  const rows=[...creators,finalRow];
+  writeRun({
+   version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],rows,
+   cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
+   createdAt:Date.now(),stage:'images_building',likesHistory:true,special:false,
+   imageAnchorPos:imageInsertPos,sources:'INSIGHT スキ履歴',mode:'number',count:300,choice:'latest'
+  });
+  setStatus('INSIGHTスキ履歴｜300人＋実績の算数｜極薄50種で貼り付け開始');
+  for(let i=0;i<rows.length;i++){
+   if(stopRequested)throw new Error('手動停止');
+   const row=rows[i];
+   if(row.finalMarker){
+    const text='最後に｜実績の算数';
+    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+   }else if(i%10===0){
+    const text=creatorHeadingText(Math.floor(i/10));
+    const h=insertHeadingAt(view,text,imageInsertPos);imageInsertPos=h.nextPos;recordHeading(text)
+   }
+   setStatus('INSIGHTスキ300｜画像 '+(i+1)+'/'+rows.length+'｜'+row.creator);
+   const file=await makeFile(row);
+   const made=await uploadOne(view,row,file,imageInsertPos);
+   imageInsertPos=made.nextPos;
+   recordImage(made.hit,row);
+   await sleep(IMAGE_PASTE_GAP)
+  }
+  const runNow=readRun()||{};
+  writeRun({...runNow,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+  await saveOnce('INSIGHTスキ300｜画像 '+rows.length+'/'+rows.length+' 完了｜保存中…');
+  setStatus('INSIGHTスキ300 完了 ✅ 300人＋実績の算数｜本文位置をタップ→②カード続き/開始')
+ }catch(e){
+  setStatus('INSIGHTスキ300 停止：'+(e?.message||String(e))+'｜完成分は本文に保持',true)
+ }finally{await releaseAwake();busy=false;update()}
+}
+
 async function pasteSavedSpecial(){
  if(busy)return;busy=true;stopRequested=false;update();
  try{
@@ -1645,6 +1746,11 @@ function mount(){
    <button data-a="special-images" style="width:100%;margin-top:2px">① 指定件数＋見出し</button>
    <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="paste-saved">保存分の続き</button></div><div class="special-actions"><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button><span></span></div>
   </details>
+  <details data-like300 open>
+   <summary>＋ INSIGHTスキ履歴300人</summary>
+   <div class="hint">新しい順｜同一人物除外｜各クリエイターの最新記事＋活動内容｜極薄50種｜10人ごと見出し</div>
+   <button data-a="like300-images" style="width:100%;margin-top:2px;background:#176b54;border-color:#5bd7a7">① INSIGHTスキ300</button>
+  </details>
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
   <div id="${STATUS}">①画像一覧は自動。②は本文で置く場所をタップしてから押す。</div>
@@ -1694,6 +1800,7 @@ function mount(){
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:false})});
  p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
+ p.querySelector('[data-a="like300-images"]').addEventListener('click',e=>{e.preventDefault();void createInsightLikes300()});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="scan-stats"]').addEventListener('click',e=>{e.preventDefault();const scan=readScan(),r=scan?.rejects||{};const msg=Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'件').join('｜')||'除外内訳なし';setStatus('確認 '+(scan?.tested?.length||0)+'｜採用 '+(scan?.out?.length||0)+'｜'+msg)});
  p.querySelector('[data-a="paste-saved"]').addEventListener('click',e=>{e.preventDefault();void pasteSavedSpecial()});
