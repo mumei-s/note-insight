@@ -1,4 +1,4 @@
-const CACHE_NAME = "mumei-note-insight-v98-startup-guard-20261013";
+const CACHE_NAME = "mumei-note-insight-v99-quota-continuity-20261013";
 const SCOPE = new URL(self.registration.scope);
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./recovery.html", "./insight-owner-nav.js", "./insight-editor-isolation.js"];
 const shellPaths = new Set(APP_SHELL.map(path => new URL(path, SCOPE).pathname));

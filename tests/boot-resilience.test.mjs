@@ -20,29 +20,32 @@ async function boot(mode) {
   w.ResizeObserver = class { observe() {} disconnect() {} };
   w.requestIdleCallback = cb => w.setTimeout(cb, 0);
   w.HTMLElement.prototype.scrollIntoView = () => {};
-  if (mode === 'quota') {
-    w.localStorage.setItem('mumei-insight-access-token', 'saved-session');
+  if (mode === 'quota' || mode === 'quota-missing-token' || mode === 'session-quota') {
+    if (mode !== 'quota-missing-token') w.localStorage.setItem('mumei-insight-access-token', 'saved-session');
     w.localStorage.setItem('mumei-insight-saved-accounts-v3', JSON.stringify([{ noteId: 'SS_YR', memberToken: 'saved-session' }]));
     const set = w.Storage.prototype.setItem;
     w.Storage.prototype.setItem = function(key, value) {
-      if (key === 'mumei-insight-saved-accounts-v3') throw new w.DOMException('Quota full', 'QuotaExceededError');
+      if ((mode === 'quota-missing-token' && this === w.localStorage) || (mode === 'session-quota' && this === w.sessionStorage) || (mode === 'quota' && key === 'mumei-insight-saved-accounts-v3')) throw new w.DOMException('Quota full', 'QuotaExceededError');
       return set.call(this, key, value);
     };
   }
+  w.__nativeStorageGet = w.Storage.prototype.getItem;
   w.eval(bundle);
   await new Promise(resolve => setTimeout(resolve, 120));
   return dom;
 }
 
-for (const mode of ['normal', 'quota', 'legacy-media', 'missing-media', 'optional-install-failure']) {
+for (const mode of ['normal', 'quota', 'quota-missing-token', 'session-quota', 'legacy-media', 'missing-media', 'optional-install-failure']) {
   test(`built TOP still renders under ${mode}`, async () => {
     const dom = await boot(mode), w = dom.window;
     try {
       assert.ok(w.document.querySelector('.hub-page'), 'TOP must render');
       assert.equal(w.document.getElementById('insight-runtime-failure'), null);
-      if (mode === 'quota') {
+      if (mode === 'quota' || mode === 'quota-missing-token' || mode === 'session-quota') {
         assert.equal(w.localStorage.getItem('mumei-insight-access-token'), 'saved-session');
-        assert.equal(JSON.parse(w.localStorage.getItem('mumei-insight-saved-accounts-v3'))[0].noteId, 'SS_YR');
+        assert.equal(JSON.parse(w.localStorage.getItem('mumei-insight-saved-accounts-v3'))[0].noteId, 'ss_yr');
+        if (mode !== 'session-quota') assert.equal(JSON.parse(w.__nativeStorageGet.call(w.localStorage, 'mumei-insight-saved-accounts-v3'))[0].noteId, 'SS_YR', 'persisted original must remain intact');
+        assert.ok(w.document.getElementById('insight-storage-notice'), 'temporary changes must be identified');
       }
       if (mode === 'optional-install-failure') assert.equal(w.document.querySelector('.insight-home-install'), null);
     } finally { w.close(); }

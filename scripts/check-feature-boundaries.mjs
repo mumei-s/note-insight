@@ -19,7 +19,7 @@ const rules = [
   ['recruitment-video', (p) => /^public\/recruitment\//.test(p)],
   // The route shell and its cache lifecycle are one deployment surface.
   // Other feature bodies remain separate; do not exempt all public/src files.
-  ['app-shell', (p) => p === 'src/App.tsx' || p === 'src/main.tsx' || /^src\/home-screen-install\.(tsx|css)$/.test(p) || ['public/sw.js', 'public/insight-editor-isolation.js', 'public/insight-owner-nav.js', 'public/recovery.html'].includes(p)],
+  ['app-shell', (p) => p === 'src/App.tsx' || p === 'src/main.tsx' || p === 'src/insight-browser-storage.ts' || /^src\/home-screen-install\.(tsx|css)$/.test(p) || ['public/sw.js', 'public/insight-editor-isolation.js', 'public/insight-owner-nav.js', 'public/recovery.html'].includes(p)],
   ['notification-installer', (p) => p === 'public/notification-browser-install.html' || p === 'public/tool-setup.html' || /^public\/notification-(?:install|update|entry).*\.html$/.test(p)],
   ['notification-filter-settings', (p) => p === 'public/notification-filter-settings.html' || p === 'public/notification-filter.html'],
   ['notification-reader', (p) => /^public\/note-insight-notification-(?:reader|autoscan)/.test(p)],

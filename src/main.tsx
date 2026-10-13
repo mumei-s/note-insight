@@ -1,4 +1,5 @@
-import { Component, StrictMode, type ReactNode } from "react";
+import { hasPendingBrowserWrites } from "./insight-browser-storage";
+import { Component, StrictMode, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { HomeScreenInstall } from "./home-screen-install";
@@ -266,7 +267,7 @@ window.addEventListener("pageshow", () => { void tryReturningMemberResume(); voi
 function startupFailureLabel(reason: unknown) {
   const error = reason as { name?: string; message?: string } | null;
   const name = String(error?.name || "Error"), message = String(error?.message || "");
-  if (/QuotaExceeded/i.test(name)) return "端末の保存容量不足（QuotaExceededError）";
+  if (/QuotaExceeded/i.test(name)) return "ブラウザ内の保存枠への書き込みが拒否されました（QuotaExceededError）";
   if (/SecurityError/i.test(name)) return "ブラウザの保存領域へアクセスできません（SecurityError）";
   if (/addEventListener|matchMedia/.test(message)) return "ブラウザの表示機能で停止しました（E_BROWSER_API）";
   return `表示処理で停止しました（${/^[A-Za-z]+Error$/.test(name) ? name : "E_RENDER"}）`;
@@ -290,9 +291,22 @@ class StartupBoundary extends Component<{ children: ReactNode; optional?: boolea
   }
 }
 
+function BrowserStorageNotice() {
+  const [pending, setPending] = useState(hasPendingBrowserWrites);
+  useEffect(() => {
+    const update = () => setPending(hasPendingBrowserWrites());
+    window.addEventListener("mumei-insight-storage-quota", update); update();
+    return () => window.removeEventListener("mumei-insight-storage-quota", update);
+  }, []);
+  return pending ? <aside id="insight-storage-notice" role="status" style={{ position: "fixed", bottom: 115, left: 12, right: 12, zIndex: 2147483201, padding: "10px 14px", border: "1px solid #b19a53", borderRadius: 12, background: "#231e10", color: "#fff3bf", font: "12px/1.5 system-ui" }}>
+    ブラウザ内への保存ができないため、このタブで変更を一時保持しています。再読込すると未保存の変更は戻ります。保存済み履歴は残っています。
+  </aside> : null;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StartupBoundary optional><HomeScreenInstall /></StartupBoundary>
     <StartupBoundary><App /></StartupBoundary>
+    <BrowserStorageNotice />
   </StrictMode>,
 );

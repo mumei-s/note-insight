@@ -79,7 +79,7 @@
 
         function failureMessage(error) {
           const name = String(error && error.name || "Error");
-          if (/QuotaExceeded/.test(name)) return "端末の保存容量不足で起動できません（QuotaExceededError）。ログイン情報は消していません。";
+          if (/QuotaExceeded/.test(name)) return "ブラウザ内の保存枠への書き込みが拒否されました（QuotaExceededError）。ログイン情報は消していません。";
           if (/SecurityError/.test(name)) return "ブラウザの保存領域へアクセスできません（SecurityError）。";
           return "起動処理で停止しました（" + (/^[A-Za-z]+Error$/.test(name) ? name : "E_BOOT") + "）。";
         }
