@@ -4,10 +4,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 const bundle = readFileSync('dist/assets/' + readdirSync('dist/assets').find(n => /^index-.*\.js$/.test(n)), 'utf8').replace(/export\{[^}]+\};?\s*$/, '');
+const html = readFileSync('index.html', 'utf8');
 
 async function boot(mode) {
   const console = new VirtualConsole();
-  const dom = new JSDOM('<div id="root"></div>', { url: 'https://mumei-s.github.io/note-insight/', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console });
+  const dom = new JSDOM(html, { url: 'https://mumei-s.github.io/note-insight/', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console });
   const w = dom.window;
   w.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'INSIGHT_LOGIN_REQUIRED' }) });
   w.matchMedia = query => {
@@ -30,6 +31,14 @@ async function boot(mode) {
     };
   }
   w.__nativeStorageGet = w.Storage.prototype.getItem;
+  for (const script of w.document.querySelectorAll('script:not([src])')) w.eval(script.textContent);
+  if (mode === 'early-error-overlay') {
+    // Model a promise failing after React clears the static markup but before
+    // its concurrent commit fills the root. The fallback is outside React.
+    w.document.getElementById('root').replaceChildren();
+    w.dispatchEvent(new w.ErrorEvent('error', { error: new w.Error('optional startup task failed') }));
+    assert.ok(w.document.body.querySelector(':scope > #insight-static-boot'));
+  }
   w.eval(bundle);
   await new Promise(resolve => setTimeout(resolve, 120));
   return dom;
@@ -61,5 +70,17 @@ test('a render exception shows the failure reason and retry controls instead of 
     assert.match(failure.textContent, /再表示/);
     assert.equal(new URL(failure.querySelector('a').href).hash, '');
     assert.ok(w.document.getElementById('root').children.length);
+  } finally { w.close(); }
+});
+
+test('an early body fallback is removed when the real app commits and never covers a live route', async () => {
+  const dom = await boot('early-error-overlay'), w = dom.window;
+  try {
+    const top = w.document.querySelector('.hub-page');
+    assert.ok(top, 'real TOP must render beneath the startup handoff');
+    assert.equal(w.document.getElementById('insight-static-boot'), null, 'recovery overlay must leave the DOM');
+    w.dispatchEvent(new w.ErrorEvent('error', { error: new w.Error('late optional task failed') }));
+    assert.equal(w.document.querySelector('.hub-page'), top, 'late failure must preserve the live app');
+    assert.equal(w.document.getElementById('insight-static-boot'), null);
   } finally { w.close(); }
 });
