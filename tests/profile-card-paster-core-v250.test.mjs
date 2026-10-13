@@ -21,14 +21,14 @@ const raw=(key,urlname)=>({key,name:urlname+'記事',user:{urlname,nickname:urln
 test('a legacy installed core cannot prevent the current card action from being exported',()=>{
  const stale=()=>{throw Error('legacy card handler')};
  const c=runtime({__MUMEI_PROFILE_CARD_PASTER_V1__:true,__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__:stale});
- assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_VERSION__,'2.5.5');
+ assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_VERSION__,'2.5.6');
  assert.equal(c.window.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__,c.api.createCardsAtTap);
 });
 
 test('card creation reconciles image readiness before checking the stored stage',async()=>{
- const c=runtime();c.saved={stage:'images_building',rows:[{url:'a'},{url:'b'}],cardKeys:[{},{}]};c.statuses=[];let healed=0;
+ const c=runtime();c.saved={stage:'images_building',cardAnchorPos:10,rows:[{url:'a'},{url:'b'}],cardKeys:[{},{}]};c.statuses=[];let healed=0;
  c.window.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__=async()=>{healed++;c.saved={...c.saved,stage:'images_ready'}};
- c.api.patch(`readRun=()=>saved;writeRun=value=>saved=value;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'b',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert completed cards')}`);
+ c.api.patch(`readRun=()=>saved;writeRun=value=>saved=value;reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};embedNodes=()=>[];findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'b',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert completed cards')}`);
  await c.api.createCardsAtTap();assert.equal(healed,1);assert.equal(c.saved.stage,'complete');assert.match(c.statuses.at(-1),/すでに 2\/2/);
 });
 
@@ -39,7 +39,7 @@ test('cards hydrate durable progress and preserve the tapped position before hyd
   hydrate:async()=>{await Promise.resolve();c.tap=999;c.saved={stage:'images_ready',cardAnchorPos:null,rows:[{url:'https://note.com/a/n/n111111111111',creator:'a'},{url:'https://note.com/b/n/n222222222222',creator:'b'}],cardKeys:[]}},
   flush:async()=>{c.checkpoints.push([c.saved.stage,c.saved.cardKeys.length])}
  };
- c.api.patch(`findView=()=>({state:{doc:{content:{size:1000}}}});cardAnchorFromSelection=()=>tap;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);sleep=async()=>{};saveOnce=async()=>{};createNativeCard=async(view,row,pos)=>{cards.push({url:row.url,pos,node:{nodeSize:1}});const run=readRun();writeRun({...run,cardKeys:[...run.cardKeys,{url:row.url}]});return{nextPos:pos+1}}`);
+ c.api.patch(`findView=()=>({state:{doc:{content:{size:1000}}}});reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};embedNodes=()=>[];cardAnchorFromSelection=()=>tap;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);sleep=async()=>{};saveOnce=async()=>{};createNativeCard=async(view,row,pos)=>{cards.push({url:row.url,pos,node:{nodeSize:1}});const run=readRun();writeRun({...run,cardKeys:[...run.cardKeys,{url:row.url}]});return{nextPos:pos+1}}`);
  await c.api.createCardsAtTap();
  assert.equal(c.cards[0].pos,42);assert.equal(c.saved.stage,'complete');
  assert.deepEqual(c.checkpoints,[['cards_building',0],['cards_building',1],['cards_building',2],['complete',2]]);
@@ -48,8 +48,8 @@ test('cards hydrate durable progress and preserve the tapped position before hyd
 
 test('cards refuse a missing middle prefix without inserting or deleting existing cards',async()=>{
  const c=runtime();c.statuses=[];
- c.saved={stage:'cards_building',rows:[{url:'a'},{url:'b'},{url:'c'}],cardKeys:[{},{}]};
- c.api.patch(`readRun=()=>saved;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'c',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert')};writeRun=()=>{throw Error('must not write')}`);
+ c.saved={stage:'cards_building',cardAnchorPos:10,rows:[{url:'a'},{url:'b'},{url:'c'}],cardKeys:[{},{}]};
+ c.api.patch(`readRun=()=>saved;reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};embedNodes=()=>[];findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'c',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert')};writeRun=()=>{throw Error('must not write')}`);
  await c.api.createCardsAtTap();
  assert.match(c.statuses.at(-1),/欠落または順序/);assert.equal(c.saved.cardKeys.length,2);
 });

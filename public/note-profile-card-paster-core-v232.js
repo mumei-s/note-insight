@@ -3,7 +3,7 @@
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 const INSIGHT_BRIDGE_KEY='mumei_profile_card_likes_300_v2';
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.5.5';
+const VERSION='2.5.6';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -49,6 +49,7 @@ const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
+const CARD_SESSION='card-'+Date.now()+'-'+Math.random().toString(36).slice(2);
 page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
 page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
 page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=createCardsAtTap;
@@ -249,32 +250,95 @@ function deleteExtraWorkUrl(view,url,beforeCount){
  const extra=list.slice(beforeCount).sort((a,b)=>b.pos-a.pos);
  return deleteHits(view,extra)
 }
+function cardAnchor(run,fallback=0,view=null){
+ const valid=run?.cardAnchorPos!=null&&run.cardAnchorPos!==''&&Number.isFinite(Number(run.cardAnchorPos));let anchor=valid?Math.max(0,Number(run.cardAnchorPos)):fallback;
+ if(view){const records=new Map((run?.cardKeys||[]).map(card=>[String(card.key||''),card])),baseline=new Set(run?.cardBaselineKeys||[]);for(const hit of embedNodes(view)){const rec=records.get(cardKey(hit));if(rec&&!baseline.has(cardKey(hit))&&genuineCard(hit,rec.url))anchor=valid?Math.min(anchor,hit.pos):hit.pos<anchor?hit.pos:anchor}}
+ return anchor
+}
+function generatedCardHits(view,run,rows=run?.rows||[]){
+ const urls=new Map(rows.map(row=>[norm(row.url),row])),keys=new Map(rows.map(row=>[noteKey(row.url),row])),baseline=new Set(run?.cardBaselineKeys||[]),anchor=cardAnchor(run,0,view),out=[];
+ for(const hit of embedNodes(view)){
+  if(hit.pos<anchor||baseline.has(cardKey(hit)))continue;
+  const src=cardUrl(hit);let row=urls.get(src);
+  if(!row){try{const u=new URL(src),key=u.origin==='https://note.com'?u.pathname.match(/^\/embed\/notes\/(n[a-f0-9]{12})\/?$/i)?.[1]:'';row=key?keys.get(key):null}catch{}}
+  if(row&&genuineCard(hit,row.url))out.push({...hit,targetUrl:norm(row.url)})
+ }
+ return out.sort((a,b)=>a.pos-b.pos)
+}
+function duplicateCardDetails(view,run,rows=run?.rows||[]){
+ const counts=new Map();for(const hit of generatedCardHits(view,run,rows))counts.set(hit.targetUrl,(counts.get(hit.targetUrl)||0)+1);
+ return rows.map(row=>({url:row.url,creator:row.creator,count:counts.get(norm(row.url))||0})).filter(row=>row.count>1)
+}
+function assertUniqueGeneratedCards(view,run,rows=run?.rows||[]){
+ const duplicates=duplicateCardDetails(view,run,rows);
+ if(duplicates.length)throw new Error('同じクリエイターのカードが重複しています：'+duplicates.slice(0,4).map(row=>row.creator+'さん '+row.count+'枚').join('・')+'。今ある内容は保持しました');
+}
+function emptyCardGap(view,from,to){
+ let pos=from;
+ while(pos<to){const node=view.state.doc.nodeAt?.(pos);if(node?.type?.name!=='paragraph'||String(node.textContent||'').trim()||!node.nodeSize)return false;pos+=node.nodeSize}
+ return pos===to
+}
+function recordNativeCard(hit,row){
+ const run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],rec={url:row.url,key:cardKey(hit),creator:row.creator};
+ const records=new Map(cards.map(card=>[String(card.key||''),card]));records.set(rec.key,rec);
+ writeRun({...run,cardKeys:[...records.values()],pendingCard:null,updatedAt:Date.now()});return rec
+}
+async function reconcileCompletedCards(view,run,rows){
+ assertUniqueGeneratedCards(view,run,rows);
+ const hits=generatedCardHits(view,run,rows),cards=new Map((run.cardKeys||[]).map(card=>[String(card.key||''),card]));
+ const anchor=cardAnchor(run,0,view);let pos=anchor,changed=false;
+ for(let index=0;index<hits.length;index++){
+  const hit=hits[index],row=rows[index];
+  if(!row||!genuineCard(hit,row.url)||!emptyCardGap(view,pos,hit.pos))throw new Error('カードの途中に欠落または順序の違いがあります。今ある内容は保持しました');
+  if(!cards.has(cardKey(hit))){cards.set(cardKey(hit),{url:row.url,key:cardKey(hit),creator:row.creator});changed=true}
+  pos=hit.pos+hit.node.nodeSize;
+ }
+ const completedPending=run.pendingCard&&hits.some(hit=>genuineCard(hit,run.pendingCard.url));
+ const normalizeAnchor=Number(run.cardAnchorPos)!==anchor;
+ if(changed||completedPending||normalizeAnchor){writeRun({...run,cardAnchorPos:anchor,cardKeys:[...cards.values()],pendingCard:completedPending?null:run.pendingCard,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
+ return changed||completedPending||normalizeAnchor?(readRun()||run):run
+}
+function knownCardFailure(error){return error?.cardTerminal===true||/\b(?:HTTP|status)\s*[:=]?\s*(?:400|401|403|404|409|410|413|415|422|429)\b/i.test(String(error?.message||error))||[400,401,403,404,409,410,413,415,422,429].includes(Number(error?.status||error?.statusCode))}
 async function createNativeCard(view,row,insertPos){
  let run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],baseline=new Set(run.cardBaselineKeys||[]);
+ assertUniqueGeneratedCards(view,run);
+ const existing=generatedCardHits(view,run).filter(hit=>genuineCard(hit,row.url));
+ if(existing.length){
+  const hit=existing[0];if(!emptyCardGap(view,insertPos,hit.pos))throw new Error('同じカードが別の位置にあります。再送せず、今ある内容を保持しました');
+  const rec=recordNativeCard(hit,row);await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();return{rec,nextPos:hit.pos+hit.node.nodeSize}
+ }
+ if(run.pendingCard&&norm(run.pendingCard.url)===norm(row.url)&&run.pendingCard.sessionId===CARD_SESSION)throw new Error('前のカード変換の結果を確認できないため再送を停止しました。下書き保存→再読み込み→②で再開してください。今ある内容は保持しています');
+ writeRun({...run,pendingCard:{sessionId:CARD_SESSION,url:row.url,pos:insertPos,startedAt:Date.now()},updatedAt:Date.now()});
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+ if(stopRequested)throw new Error('手動停止');
  const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
+ let requested=false,hit;
+ try{
+ if(stopRequested)throw new Error('手動停止');
  const work=insertWorkUrlAt(view,row.url,insertPos),workNode=work.node,attempt={error:null};
- const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});
+ const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});requested=true;
  const handled=command(view.state,(tr,consumedNode=workNode)=>{
   try{
    if(consumedNode!==workNode&&!consumedNode?.eq?.(workNode))throw new Error('通知カード用URLが変更されました');
    view.dispatch(tr)
   }catch(e){attempt.error=e}
  },view);
- if(!handled)throw new Error('note正規URLカード処理が未処理です');
- let hit;
+ if(!handled){const error=new Error('note正規URLカード処理が未処理です');error.cardTerminal=true;throw error}
  try{hit=await waitNewCard(view,row.url,beforeKeys,attempt,45000)}
  catch(e){
   const recovered=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,row.url)});
-  if(recovered)hit=recovered;else{deleteExtraWorkUrl(view,row.url,rawBefore);throw e}
+  if(recovered)hit=recovered;else throw e
  }
  deleteExtraWorkUrl(view,row.url,rawBefore);
  hit=embedNodes(view).find(h=>cardKey(h)===cardKey(hit))||hit;
  if(!genuineCard(hit,row.url))throw new Error('正規通知カードの照合に失敗しました');
- run=readRun()||run;cards=Array.isArray(run.cardKeys)?run.cardKeys:[];
- const rec={url:row.url,key:cardKey(hit),creator:row.creator};
- cards.push(rec);
- writeRun({...run,cardKeys:cards,updatedAt:Date.now()});
+ assertUniqueGeneratedCards(view,readRun()||run);
+ const rec=recordNativeCard(hit,row);
  return{rec,nextPos:hit.pos+hit.node.nodeSize}
+ }catch(error){
+  if(!requested||knownCardFailure(error)){deleteExtraWorkUrl(view,row.url,rawBefore);const current=readRun()||run;writeRun({...current,pendingCard:null,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
+  throw error
+ }
 }
 
 function parseLiker(item){
@@ -1171,14 +1235,30 @@ async function saveOnce(label='貼り付け完了｜下書き保存を1回だけ
  if(b){b.click();await sleep(6000)}
 }
 function resolveOwnedCardHits(view){
- const run=readRun(),cards=Array.isArray(run?.cardKeys)?run.cardKeys:[],baseline=new Set(run?.cardBaselineKeys||[]),hits=[];
+ const run=readRun(),cards=Array.isArray(run?.cardKeys)?run.cardKeys:[],baseline=new Set(run?.cardBaselineKeys||[]),hits=new Map();
  for(const rec of cards){
   if(baseline.has(String(rec.key||'')))continue;
   const hit=embedNodes(view).find(h=>cardKey(h)===String(rec.key||'')&&genuineCard(h,rec.url));
-  if(hit)hits.push(hit)
+  if(hit)hits.set(cardKey(hit),hit)
  }
- return hits
+ return[...hits.values()]
 }
+async function auditGeneratedDuplicates(){
+ try{
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
+ const view=findView(),run=readRun();if(!view||!Array.isArray(run?.rows))throw new Error('現在の記事の一覧を確認できません。本文は保持しています');
+ const rows=run.rows,urls=new Set(rows.map(row=>norm(row.url))),images=imageNodes(view).filter(hit=>hit.pos>=Math.max(0,Number(run.imageAnchorPos)||0)&&urls.has(norm(hit.node.attrs?.link))),imageCounts=new Map();
+ for(const hit of images){const url=norm(hit.node.attrs?.link);imageCounts.set(url,(imageCounts.get(url)||0)+1)}
+ const hasCardAnchor=run.cardAnchorPos!=null&&run.cardAnchorPos!==''&&Number.isFinite(Number(run.cardAnchorPos));
+ const cards=hasCardAnchor?generatedCardHits(view,run,rows):[];
+ const duplicateImages=rows.map(row=>({creator:row.creator,url:row.url,count:imageCounts.get(norm(row.url))||0})).filter(row=>row.count>1);
+ const duplicateCards=hasCardAnchor?duplicateCardDetails(view,run,rows):[];
+ const names=[...new Set([...duplicateImages,...duplicateCards].map(row=>row.creator))];
+ setStatus('重複確認｜画像 '+images.length+'件｜カード '+cards.length+'件｜'+(names.length?'重複 '+names.slice(0,5).join('・'):'現在の貼り付け範囲に重複なし'),names.length>0);
+ return{imageCount:images.length,cardCount:cards.length,duplicateImages,duplicateCards,duplicateCreators:names}
+ }catch(error){setStatus('重複確認停止：'+(error?.message||String(error)),true);return{error:error?.message||String(error)}}
+}
+page.__MUMEI_PROFILE_CARD_AUDIT_DUPLICATES__=auditGeneratedDuplicates;
 function trackedContentCount(view){
  if(!readRun())return{images:0,cards:0,headings:0,activities:0};
  return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length,activities:resolveOwnedActivityHits(view).length}
@@ -1465,6 +1545,9 @@ async function createCardsAtTap(){
   const imageCount=resolveOwnedImageHits(view).length;
   if(imageCount!==rows.length)throw new Error('今回画像が '+imageCount+'/'+rows.length+' 件です。画像一覧を確認してください');
 
+  if(run.cardAnchorPos==null||run.cardAnchorPos===''||!Number.isFinite(Number(run.cardAnchorPos)))run={...run,cardAnchorPos:tappedAnchor};
+  run=await reconcileCompletedCards(view,run,rows);
+
   let existing=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
   if(existing.length>rows.length||existing.some((hit,index)=>!genuineCard(hit,rows[index]?.url)))throw new Error('保存済みカードの途中に欠落または順序の違いがあります。今あるカードは保持しました');
   let done=Math.min(existing.length,rows.length);
@@ -1488,7 +1571,7 @@ async function createCardsAtTap(){
   }
 
   const existingRecs=Array.isArray(run.cardKeys)?run.cardKeys:[];
-  writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:existingRecs,updatedAt:Date.now()});
+  writeRun({...run,stage:'cards_building',cardAnchorPos:cardAnchor(run,insertPos,view),cardKeys:existingRecs,updatedAt:Date.now()});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   let cardGapMs=CARD_GAP_FAST;
   setStatus('② 通知カードの続き｜'+done+'/'+rows.length+' 件済み');
@@ -1498,19 +1581,7 @@ async function createCardsAtTap(){
    const row=rows[i];
    let made=null;
    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator+'｜待機 '+(cardGapMs/1000).toFixed(1)+'秒');
-   try{
-    made=await createNativeCard(view,row,insertPos)
-   }catch(firstError){
-    cardGapMs=CARD_GAP_SLOW;
-    setStatus('② '+row.creator+'｜一時エラー → '+(CARD_GAP_SLOW/1000).toFixed(1)+'秒待って1回再試行',true);
-    await sleep(CARD_GAP_SLOW);
-    if(stopRequested)throw new Error('手動停止');
-    try{
-     made=await createNativeCard(view,row,Math.min(insertPos,view.state.doc.content.size))
-    }catch(secondError){
-     throw new Error(row.creator+' カード生成失敗（再試行済み）：'+(secondError?.message||firstError?.message||String(secondError)))
-    }
-   }
+   made=await createNativeCard(view,row,insertPos);
    insertPos=made.nextPos;
    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    await sleep(cardGapMs);
@@ -1521,22 +1592,7 @@ async function createCardsAtTap(){
    }
   }
 
-  const finalRow=rows.find(x=>x?.finalMarker||norm(x?.url)===norm(FINAL_URL));
-  if(finalRow){
-   let finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
-   if(!finalHit){
-    setStatus('② 実績の算数｜カード未確認 → '+(CARD_GAP_FAST/1000).toFixed(1)+'秒待って再生成');
-    await sleep(CARD_GAP_FAST);
-    const tracked=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
-    const retryPos=tracked.length?tracked[tracked.length-1].pos+tracked[tracked.length-1].node.nodeSize:Math.min(insertPos,view.state.doc.content.size);
-    const made=await createNativeCard(view,finalRow,retryPos);
-    insertPos=made.nextPos;
-    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
-    await sleep(CARD_GAP_FAST);
-    finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
-    if(!finalHit)throw new Error('実績の算数カードだけ最終確認できませんでした')
-   }
-  }
+  assertUniqueGeneratedCards(view,readRun()||run,rows);
 
   const doneRun=readRun()||{};
   const actualCards=resolveOwnedCardHits(view).length;
