@@ -32,17 +32,115 @@
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <style>
+      :root{color-scheme:dark;background:#03070b}
+      html,body,#root{min-height:100%;margin:0;background:#03070b;color:#e8f6ff}
+      body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
       .evidence-fab,#insight-dashboard-evidence-link{display:none!important}
       div[style*="position: fixed"][style*="right: 14px"][style*="bottom: 14px"][style*="z-index: 80"]{display:none!important}
+      #insight-static-boot{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 42%,#0e2734 0,#061017 38%,#03070b 72%);box-sizing:border-box}
+      #insight-static-boot .boot-card{width:min(430px,100%);padding:25px 20px 21px;border:1px solid rgba(111,222,246,.33);border-radius:22px;background:rgba(5,15,23,.96);box-shadow:0 18px 60px rgba(0,0,0,.55),0 0 38px rgba(78,202,232,.08);text-align:center}
+      #insight-static-boot small{display:block;color:#7eafbf;font-size:11px;font-weight:800;letter-spacing:.18em}
+      #insight-static-boot h1{margin:8px 0 10px;color:#ecfbff;font-size:clamp(35px,12vw,58px);line-height:1;font-weight:950;letter-spacing:.13em;text-indent:.13em;text-shadow:0 0 25px rgba(102,225,250,.2)}
+      #insight-static-boot p{min-height:42px;margin:0 0 17px;color:#a8c8d4;font-size:12px;line-height:1.7}
+      #insight-static-boot nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+      #insight-static-boot a,#insight-static-boot button{display:grid;place-items:center;min-height:42px;padding:0 8px;border:1px solid rgba(94,199,225,.42);border-radius:11px;background:#102b3b;color:#e7faff;text-decoration:none;font:900 10px/1.2 system-ui;box-sizing:border-box}
+      #insight-static-boot a.manage{border-color:rgba(255,211,99,.55);background:#3c2e0e;color:#ffe38b}
+      #insight-static-boot button{grid-column:1/-1;background:#174f62;border-color:#70dff6}
+      #insight-static-boot .boot-note{margin:12px 0 0;color:#647f8b;font-size:9px;line-height:1.5}
+      @media(max-width:420px){#insight-static-boot{padding:16px}#insight-static-boot .boot-card{padding:22px 14px 18px}#insight-static-boot nav{gap:5px}#insight-static-boot a{font-size:8px}}
     </style>
     <title>無名S note｜INSIGHT</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="insight-static-boot" role="status" aria-live="polite">
+        <section class="boot-card">
+          <small>無名 S note</small>
+          <h1>INSIGHT</h1>
+          <p id="insight-static-message">画面を起動しています。黒いままにはせず、ここからTOP・INSIGHT・管理画面へ移動できます。</p>
+          <nav aria-label="緊急ナビゲーション">
+            <a href="./?nav=top">INSIGHT TOP</a>
+            <a href="./?nav=insight#dashboard">INSIGHT</a>
+            <a class="manage" href="./?nav=manage#manage">管理画面</a>
+            <button type="button" id="insight-display-repair">黒画面を修復して再読込</button>
+          </nav>
+          <p class="boot-note">ログイン情報・保存データは消しません。表示用キャッシュだけ更新します。</p>
+        </section>
+      </main>
+    </div>
     <script>
       (function () {
+        const BOOT_ID = "insight-static-boot";
+        const MESSAGE_ID = "insight-static-message";
+        const ROOT_ID = "root";
+
+        function bootMarkup(message) {
+          return '<main id="'+BOOT_ID+'" role="alert" aria-live="assertive"><section class="boot-card"><small>無名 S note</small><h1>INSIGHT</h1><p id="'+MESSAGE_ID+'">'+message+'</p><nav aria-label="緊急ナビゲーション"><a href="./?nav=top">INSIGHT TOP</a><a href="./?nav=insight#dashboard">INSIGHT</a><a class="manage" href="./?nav=manage#manage">管理画面</a><button type="button" id="insight-display-repair">黒画面を修復して再読込</button></nav><p class="boot-note">ログイン情報・保存データは消しません。表示用キャッシュだけ更新します。</p></section></main>';
+        }
+
+        function showFallback(message) {
+          const root = document.getElementById(ROOT_ID);
+          if (!root) return;
+          const current = document.getElementById(BOOT_ID);
+          if (current) {
+            const target = document.getElementById(MESSAGE_ID);
+            if (target) target.textContent = message;
+            return;
+          }
+          root.innerHTML = bootMarkup(message);
+        }
+
+        async function repairDisplay() {
+          const button = document.getElementById("insight-display-repair");
+          if (button) { button.disabled = true; button.textContent = "表示キャッシュを更新中…"; }
+          const message = document.getElementById(MESSAGE_ID);
+          if (message) message.textContent = "保存データは残したまま、古い表示キャッシュだけ削除しています。";
+          try {
+            if ("serviceWorker" in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.filter((registration) => String(registration.scope || "").includes("/note-insight/")).map((registration) => registration.unregister()));
+            }
+            if ("caches" in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.filter((key) => key.startsWith("mumei-note-insight-")).map((key) => caches.delete(key)));
+            }
+          } catch {}
+          const url = new URL(window.location.href);
+          url.searchParams.delete("nav");
+          url.searchParams.set("displayRepair", String(Date.now()));
+          window.location.replace(url.toString());
+        }
+
+        document.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target.closest("#insight-display-repair") : null;
+          if (!target) return;
+          event.preventDefault();
+          void repairDisplay();
+        });
+
+        window.addEventListener("error", (event) => {
+          if (event.target && event.target !== window) showFallback("表示ファイルを読み込めませんでした。下の修復ボタンで復旧できます。");
+        }, true);
+        window.addEventListener("unhandledrejection", () => showFallback("INSIGHTの起動処理で停止しました。下の修復ボタンで復旧できます。"));
+
+        window.setTimeout(() => {
+          const root = document.getElementById(ROOT_ID);
+          const boot = document.getElementById(BOOT_ID);
+          if (boot) showFallback("起動に時間がかかっています。TOP・管理画面へ直接移動するか、表示キャッシュを修復してください。");
+          else if (!root || !root.children.length) showFallback("画面が空になったため復旧画面へ切り替えました。");
+        }, 6500);
+
         try {
           const url = new URL(window.location.href);
+          const requestedNav = String(url.searchParams.get("nav") || "");
+          if (requestedNav === "insight" && !url.hash.includes("dashboard")) url.hash = "dashboard";
+          if (requestedNav === "manage" && !url.hash.includes("manage")) url.hash = "manage";
+          if (requestedNav === "top") url.hash = "";
+          if (requestedNav) {
+            url.searchParams.delete("nav");
+            history.replaceState(history.state, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : "") + url.hash);
+          }
+
           const mode = String(url.searchParams.get("insightMode") || "");
           const notificationAccount = String(url.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
           if (mode === "notifications") {
@@ -68,11 +166,11 @@
             history.replaceState(history.state, "", url.pathname + (url.search ? "?" + url.searchParams.toString() : "") + url.hash);
           }
         } catch {
-          // Notification entry/result handling must never block INSIGHT itself.
+          showFallback("起動前の画面処理で停止しました。表示修復を実行してください。");
         }
       })();
     </script>
-    <script defer src="./insight-owner-nav.js"></script>
+    <script defer src="./insight-owner-nav.js?v=20261013-2"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
