@@ -9,7 +9,7 @@ function runtime(overrides={}){
  const dom=new JSDOM('',{url:'https://editor.note.com/notes/n123456789abc/edit'});
  const context=vm.createContext({window:dom.window,document:dom.window.document,location:dom.window.location,localStorage:dom.window.localStorage,DOMParser:dom.window.DOMParser,GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('unexpected network')},setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,URL,Blob,File,console,...overrides});
  context.unsafeWindow={Blob,File,URL,...overrides.page};
- const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),patchPanel,prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
+ const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),patchPanel,clearCurrentPaste,insertActivityAt,restartFixed300,resumeFixed300,addDivider,prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
  vm.runInContext(exposed,context);return context;
 }
 
@@ -54,11 +54,11 @@ test('missing image stops before any partial thumbnail is returned',async()=>{
 test('paste inserts a profile paragraph before the image and the final extra entry has no profile',async()=>{
  const c=runtime();c.events=[];
  c.api.patch(`
-findView=()=>({});nativeImageCommand=()=>{};selectionApi=()=>{};
+findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};
 readRun=()=>globalThis.saved||null;writeRun=r=>{globalThis.saved=r};
 buildRows=async()=>Array.from({length:300},(_,i)=>({index:i+1,creator:'人'+i,urlname:'p'+i,profileText:'本人の紹介'}));
 enrichFinal=async()=>({index:301,creator:'実績の算数',finalMarker:true});
-embedNodes=()=>[];cardAnchorFromSelection=()=>0;ownedImages=()=>[];
+embedNodes=()=>[];cardAnchorFromSelection=()=>0;ownedImages=()=>[];isDivider=()=>false;addDivider=(view,hit)=>0;
 makeFile=async row=>{events.push(['make',row.index]);return {}};
 findHeading=()=>null;findActivity=()=>null;
 insertHeadingAt=(view,text,pos)=>{events.push(['heading',text]);return {nextPos:pos+1}};
@@ -78,8 +78,8 @@ test('current run with completed images can resume without forcing a reset',asyn
  c.api.patch(`
 const rows=Array.from({length:301},(_,i)=>({creator:'人',index:i+1,finalMarker:i===300}));
 let saved={likesHistoryFix230:true,rows,items:[{id:'done'}],imageAnchorPos:0};
-readRun=()=>saved;writeRun=r=>saved=r;findView=()=>({});nativeImageCommand=()=>{};selectionApi=()=>{};
-ownedImages=()=>Array.from({length:300},(_,i)=>({pos:i,node:{nodeSize:1}}));
+readRun=()=>saved;writeRun=r=>saved=r;findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};
+isDivider=()=>false;addDivider=()=>302;ownedImages=()=>Array.from({length:300},(_,i)=>({pos:i,node:{nodeSize:1}}));
 makeFile=async row=>{events.push(row.index);return {}};findHeading=()=>null;
 insertHeadingAt=(view,text,pos)=>({nextPos:pos+1});recordHeading=()=>{};
 uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
@@ -88,9 +88,9 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.2/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.3/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=232/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=233/);
 });
 
 
@@ -110,7 +110,47 @@ test('the previous export flow uses recent articles and accepts only the matchin
 test('the redundant prepare button is removed while the editor start remains',()=>{
  const c=runtime();c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-prep">INSIGHTで準備</button><button data-a="like300-images">①</button></div></details></div>';
  assert.equal(c.api.patchPanel(),true);assert.equal(c.document.querySelector('[data-a="like300-prep"]'),null);
- assert.equal(c.document.querySelector('[data-a="like300-fixed"]').textContent,'① プロフィール＋極薄300');
+ assert.equal(c.document.querySelector('[data-a="like300-fixed"]').textContent,'① 最初から');
+ assert.equal(c.document.querySelector('[data-a="like300-resume"]').textContent,'続きから');
+ c.api.patchPanel();assert.equal(c.document.querySelectorAll('[data-a="like300-resume"]').length,1);
+});
+
+function blockView(initial=[],withSmall=false){
+ let blocks=[...initial];
+ const type=name=>({name,create:(attrs,child)=>({type:types[name],attrs:attrs||{},textContent:child?.text||'',marks:child?.marks||[],nodeSize:1})});
+ const types={paragraph:type('paragraph'),heading:type('heading'),image:type('image'),horizontal_rule:type('horizontal_rule')};
+ types.horizontal_rule.createAndFill=()=>types.horizontal_rule.create();
+ const state={schema:{nodes:types,marks:withSmall?{small:{create:()=>({type:'small'})}}:{strong:{create:()=>({type:'strong'})}},text:(text,marks=[])=>({text,marks})}};
+ Object.defineProperty(state,'doc',{get:()=>({content:{size:blocks.length},nodeAt:pos=>blocks[pos]||null,descendants:fn=>blocks.forEach((node,pos)=>fn(node,pos))})});
+ Object.defineProperty(state,'tr',{get:()=>({steps:[],insert(pos,node){this.steps.push(['insert',pos,node]);return this},delete(from,to){this.steps.push(['delete',from,to]);return this}})});
+ return{state,dispatch(tr){for(const [action,pos,value] of tr.steps){if(action==='insert')blocks.splice(pos,0,value);else blocks.splice(pos,value-pos)}},blocks:()=>blocks};
+}
+test('full profiles use normal text, with small formatting only when the editor supports it',()=>{
+ for(const supportsSmall of [false,true]){
+  const c=runtime(),view=blockView([],supportsSmall),profile='紹介全文。'.repeat(100);
+  c.api.insertActivityAt(view,{creator:'花',profileText:profile},0);
+  assert.equal(view.blocks()[0].textContent,'プロフィール｜花さん：'+profile);
+  assert.deepEqual(Array.from(view.blocks()[0].marks,m=>m.type),supportsSmall?['small']:[]);
+ }
+});
+test('each image receives one native divider and restart removes only tracked paste content',()=>{
+ const c=runtime(),view=blockView(),nodes=view.state.schema.nodes;
+ const paragraph=text=>nodes.paragraph.create(null,{text}),image=(id,url)=>nodes.image.create({id,src:id,link:url});
+ view.dispatch(view.state.tr.insert(0,paragraph('既存の本文')).insert(1,nodes.heading.create(null,{text:'01｜紹介'})).insert(2,paragraph('本人のプロフィール')).insert(3,image('owned','https://note.com/p/n/n123456789abc')).insert(4,image('unrelated','https://note.com/other/n/n111111111111')));
+ c.saved={likesHistoryFix230:true,items:[{id:'owned',src:'owned',url:'https://note.com/p/n/n123456789abc'}],activityTexts:['本人のプロフィール'],sectionHeadings:['01｜紹介'],imageAnchorPos:1};
+ c.api.patch('readRun=()=>saved;writeRun=run=>{saved=run}');
+ const hit={pos:3,node:view.state.doc.nodeAt(3)},row={url:'https://note.com/p/n/n123456789abc'};
+ assert.equal(c.api.addDivider(view,hit,row),5);assert.equal(c.api.addDivider(view,hit,row),5);
+ assert.equal(view.blocks().filter(n=>n.type.name==='horizontal_rule').length,1);
+ assert.equal(c.api.clearCurrentPaste(view,c.saved),4);
+ assert.deepEqual(view.blocks().map(n=>n.textContent||n.attrs.id),['既存の本文','unrelated']);
+});
+test('restart reuses prepared rows from person one, while resume leaves the current content intact',async()=>{
+ const c=runtime();c.events=[];c.saved={likesHistoryFix230:true,rows:Array.from({length:301},(_,i)=>({index:i+1})),items:[{id:'done'}],activityTexts:['profile'],sectionHeadings:['heading'],dividerUrls:['url'],imageAnchorPos:2};
+ c.api.patch(`readRun=()=>saved;writeRun=run=>{saved=run};findView=()=>({state:{doc:{content:{size:10}}}});clearCurrentPaste=()=>{events.push('clear')};embedNodes=()=>[];createFixed300=async()=>{events.push('create')};startFixed300=()=>{throw Error('must not reopen INSIGHT')}`);
+ await c.api.resumeFixed300();assert.deepEqual(Array.from(c.events),['create']);assert.equal(c.saved.items.length,1);
+ await c.api.restartFixed300();assert.deepEqual(Array.from(c.events),['create','clear','create']);
+ assert.equal(c.saved.rows.length,301);assert.equal(c.saved.rows[0].index,1);assert.equal(c.saved.items.length,0);assert.equal(c.saved.activityTexts.length,0);assert.equal(c.saved.dividerUrls.length,0);assert.equal(c.saved.imageAnchorPos,2);
 });
 test('INSIGHT panels are removed including a legacy panel inserted later; app and login data stay intact',async()=>{
  const dom=new JSDOM('<main id="root">INSIGHTログイン画面</main><div id="mumei-like300-bridge">300人を準備</div>',{url:'https://mumei-s.github.io/note-insight/',runScripts:'outside-only'});

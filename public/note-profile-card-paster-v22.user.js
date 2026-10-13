@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.3.2
+// @version      2.3.3
 // @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、プロフィール本文を画像外の上段テキストとして挿入。
 // @match        https://editor.note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -33,10 +33,10 @@ if(location.hostname==='mumei-s.github.io'){
  return;
 }
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V232__)return;
-page.__MUMEI_LIKE300_FIX_V232__=true;
+if(page.__MUMEI_LIKE300_FIX_V233__)return;
+page.__MUMEI_LIKE300_FIX_V233__=true;
 
-const VERSION='2.3.2';
+const VERSION='2.3.3';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -579,13 +579,57 @@ function insertActivityAt(view,row,pos){
  if(!type)throw new Error('note段落を取得できません');
  const at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)||0));
  const text=activityText(row);
- const strong=view.state.schema.marks?.strong;
- const marks=strong?[strong.create()]:[];
+ const small=view.state.schema.marks?.small;
+ const marks=small?[small.create()]:[];
  const node=type.create(null,view.state.schema.text(text,marks));
  view.dispatch(view.state.tr.insert(at,node));
  const actual=view.state.doc.nodeAt(at);
  if(!actual||actual.type?.name!=='paragraph'||String(actual.textContent||'')!==text)throw new Error('プロフィールテキスト挿入に失敗しました');
  return{text,pos:at,nextPos:at+actual.nodeSize}
+}
+function dividerType(view){
+ const nodes=view.state.schema.nodes;
+ for(const name of ['horizontal_rule','horizontalRule','horizontal-rule','divider','separator','hr'])if(nodes[name])return nodes[name];
+ for(const type of Object.values(nodes)){try{const node=type.createAndFill?.();const dom=node&&type.spec?.toDOM?.(node);if(Array.isArray(dom)&&dom[0]==='hr')return type;}catch{}}
+ return null;
+}
+function isDivider(view,node){return !!node&&(node.type===dividerType(view)||node.type?.name==='paragraph'&&node.textContent==='────────────');}
+function addDivider(view,hit,row){
+ const pos=hit.pos+hit.node.nodeSize,existing=view.state.doc.nodeAt(pos);
+ if(isDivider(view,existing))return pos+existing.nodeSize;
+ const type=dividerType(view),node=type?(type.createAndFill?.()||type.create()):view.state.schema.nodes.paragraph.create(null,view.state.schema.text('────────────'));
+ view.dispatch(view.state.tr.insert(pos,node));
+ const run=readRun();if(run)writeRun({...run,dividerUrls:[...new Set([...(run.dividerUrls||[]),row.url])]});
+ return pos+node.nodeSize;
+}
+function clearCurrentPaste(view,run){
+ if(!run?.likesHistoryFix230)return 0;
+ const images=ownedImages(view),hits=[...images],dividerUrls=new Set(run.dividerUrls||[]);
+ for(const image of images){if(!dividerUrls.has(String(image.node.attrs?.link||'')))continue;const pos=image.pos+image.node.nodeSize,node=view.state.doc.nodeAt(pos);if(isDivider(view,node))hits.push({node,pos});}
+ const texts=new Set(run.activityTexts||[]),headings=new Set(run.sectionHeadings||[]),keys=new Set((run.cardKeys||[]).map(card=>typeof card==='string'?card:String(card.key||''))),anchor=Math.max(0,Number(run.imageAnchorPos)||0);
+ view.state.doc.descendants((node,pos)=>{
+  if(pos<anchor)return;
+  if(node.type?.name==='paragraph'&&texts.has(String(node.textContent||'')))hits.push({node,pos});
+  if(node.type?.name==='heading'&&headings.has(String(node.textContent||'')))hits.push({node,pos});
+  if(node.type?.name==='embed'&&keys.has(cardKey({node,pos})))hits.push({node,pos});
+ });
+ return deleteHits(view,hits);
+}
+function restartFixed300(){
+ if(busy||exportWaiter){setStatus('実行中です。先に「停止」を押してください',true);return;}
+ const run=readRun();
+ if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length===301){
+  const view=findView();if(!view){setStatus('note本文編集欄を取得できません',true);return;}
+  clearCurrentPaste(view,run);
+  writeRun({...run,version:VERSION,items:[],cardKeys:[],sectionHeadings:[],activityTexts:[],dividerUrls:[],stage:'images_building',imageAnchorPos:Math.min(view.state.doc.content.size,Math.max(0,Number(run.imageAnchorPos)||0)),cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),createdAt:Date.now()});
+  return createFixed300();
+ }
+ return startFixed300();
+}
+function resumeFixed300(){
+ const run=readRun();
+ if(!run?.likesHistoryFix230||!Array.isArray(run.rows)||run.rows.length!==301){setStatus('続きのデータがありません。「① 最初から」を押してください',true);return;}
+ return createFixed300();
 }
 function findHeading(view,text){
  let hit=null;
@@ -689,6 +733,7 @@ async function createFixed300(){
   let done=Math.min(doneImages.length,rows.length);
   let insertPos=done?doneImages[done-1].pos+doneImages[done-1].node.nodeSize:Number(run.imageAnchorPos);
   if(!Number.isFinite(insertPos))insertPos=cardAnchorFromSelection(view);
+  const nextNode=view.state.doc.nodeAt(insertPos);if(done&&isDivider(view,nextNode))insertPos+=nextNode.nodeSize;
 
   setStatus('修正版｜'+done+'/'+rows.length+'件済み。続きから貼り付け');
   for(let i=done;i<rows.length;i++){
@@ -722,6 +767,7 @@ async function createFixed300(){
    const made=await uploadOne(view,row,file,insertPos);
    insertPos=made.nextPos;
    recordImage(made.hit,row);
+   insertPos=addDivider(view,made.hit,row);
    await sleep(IMAGE_GAP)
   }
 
@@ -750,19 +796,23 @@ function patchPanel(){
  const summary=detail.querySelector('summary');
  if(summary)summary.textContent='＋ スキ履歴から300人';
  const hint=detail.querySelector('.hint');
- if(hint)hint.textContent='実アイコン＋最新記事サムネを極薄50種へ表示。プロフィール本文は画像の外側・直上に太字テキストで挿入。';
+ if(hint)hint.textContent='プロフィール全文・通常本文｜区切り線あり';
 
  const oldButton=detail.querySelector('[data-a="like300-images"],[data-a="like300-fixed"]');
  if(oldButton){
   const button=oldButton.cloneNode(true);
   button.dataset.a='like300-fixed';
-  button.textContent='① プロフィール＋極薄300';
+  button.textContent='① 最初から';
   button.style.background='#176b54';
   button.style.borderColor='#5bd7a7';
   oldButton.replaceWith(button);
-  button.addEventListener('click',event=>{event.preventDefault();void startFixed300()})
+  button.addEventListener('click',event=>{event.preventDefault();void restartFixed300()})
  }
 
+ let resume=detail.querySelector('[data-a="like300-resume"]');
+ if(resume)resume.remove();
+ resume=document.createElement('button');resume.dataset.a='like300-resume';resume.textContent='続きから';resume.style.cssText='background:#244c66;border-color:#69bfe8';
+ (detail.querySelector('.special-actions')||detail).appendChild(resume);resume.addEventListener('click',event=>{event.preventDefault();void resumeFixed300();});
  const prep=detail.querySelector('[data-a="like300-prep"]');
  prep?.remove();
  const actions=detail.querySelector('.special-actions');if(actions)actions.style.gridTemplateColumns='1fr';
