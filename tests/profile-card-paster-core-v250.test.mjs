@@ -11,11 +11,33 @@ function runtime(){
  const context=vm.createContext({window,unsafeWindow:window,document,location:new URL('https://editor.note.com/notes/n123456789abc/edit'),localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('Unexpected network')},URL,Event,setTimeout,clearTimeout,console});
  const end="if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();";
  assert.ok(source.includes(end),'core test must replace the actual mount entry');
- vm.runInContext(source.replace(end,"globalThis.api={patch:code=>eval(code),collectUnified,buildRows,stop,resetAll,createImageList,createInsightLikes300,createCardsAtTap,bulkDelete,pasteSavedSpecial,resolveOwnedActivityHits,resolveOwnedDividerHits,deleteAllGenerated};"),context);
+ vm.runInContext(source.replace('const sleep=','let sleep=').replace(end,"globalThis.api={patch:code=>eval(code),collectUnified,buildRows,stop,resetAll,createImageList,createInsightLikes300,createCardsAtTap,bulkDelete,pasteSavedSpecial,resolveOwnedActivityHits,resolveOwnedDividerHits,deleteAllGenerated};"),context);
  context.events=events;
  return context;
 }
 const raw=(key,urlname)=>({key,name:urlname+'記事',user:{urlname,nickname:urlname}});
+
+test('cards hydrate durable progress and preserve the tapped position before hydration changes selection',async()=>{
+ const c=runtime();c.saved=null;c.cards=[];c.statuses=[];c.checkpoints=[];c.tap=42;
+ c.window.__MUMEI_PROFILE_CARD_RUN_STORE__={
+  read:()=>c.saved,write:value=>{c.saved=value},
+  hydrate:async()=>{await Promise.resolve();c.tap=999;c.saved={stage:'images_ready',cardAnchorPos:null,rows:[{url:'https://note.com/a/n/n111111111111',creator:'a'},{url:'https://note.com/b/n/n222222222222',creator:'b'}],cardKeys:[]}},
+  flush:async()=>{c.checkpoints.push([c.saved.stage,c.saved.cardKeys.length])}
+ };
+ c.api.patch(`findView=()=>({state:{doc:{content:{size:1000}}}});cardAnchorFromSelection=()=>tap;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);sleep=async()=>{};saveOnce=async()=>{};createNativeCard=async(view,row,pos)=>{cards.push({url:row.url,pos,node:{nodeSize:1}});const run=readRun();writeRun({...run,cardKeys:[...run.cardKeys,{url:row.url}]});return{nextPos:pos+1}}`);
+ await c.api.createCardsAtTap();
+ assert.equal(c.cards[0].pos,42);assert.equal(c.saved.stage,'complete');
+ assert.deepEqual(c.checkpoints,[['cards_building',0],['cards_building',1],['cards_building',2],['complete',2]]);
+ assert.match(c.statuses.at(-1),/完了/);
+});
+
+test('cards refuse a missing middle prefix without inserting or deleting existing cards',async()=>{
+ const c=runtime();c.statuses=[];
+ c.saved={stage:'cards_building',rows:[{url:'a'},{url:'b'},{url:'c'}],cardKeys:[{},{}]};
+ c.api.patch(`readRun=()=>saved;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'c',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert')};writeRun=()=>{throw Error('must not write')}`);
+ await c.api.createCardsAtTap();
+ assert.match(c.statuses.at(-1),/欠落または順序/);assert.equal(c.saved.cardKeys.length,2);
+});
 
 test('normal magazine and tag sources execute, deduplicate creators across sources, and reserve the final creator',async()=>{
  const c=runtime();

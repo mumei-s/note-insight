@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.5.3
+// @version      2.5.4
 // @description  取得不可は飛ばし、スキ履歴から重複なし300人＋実績1件。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
 // @match        https://editor.note.com/*
 // @noframes
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=253
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=254
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -23,10 +23,10 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V253__)return;
-page.__MUMEI_LIKE300_FIX_V253__=true;
+if(page.__MUMEI_LIKE300_FIX_V254__)return;
+page.__MUMEI_LIKE300_FIX_V254__=true;
 
-const VERSION='2.5.3';
+const VERSION='2.5.4';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -1025,7 +1025,7 @@ async function createFixed300(){
   writeRun({...run,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   await flushRunBackup();
   if(typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function')await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__('極薄300人＋実績1件｜画像貼付完了。下書き保存中…');
-  setStatus('修正版完了 ✅ アイコン・記事サムネ・外部プロフィール文｜次は②カード続き/開始')
+  setStatus('極薄301件完了 ✅ カードを置く本文位置をタップ→②カード続き/開始')
  }catch(error){
   setStatus('修正版停止：'+(error?.message||String(error)),true)
  }finally{busy=false;notifyFixedState();await releaseAwake()}
@@ -1069,6 +1069,12 @@ function patchPanel(){
  const prep=detail.querySelector('[data-a="like300-prep"]');
  prep?.remove();
  const actions=detail.querySelector('.special-actions');if(actions)actions.style.gridTemplateColumns='1fr';
+ const cards=panel.querySelector('[data-a="cards"]');
+ if(cards){
+  cards.textContent='② カード続き／開始';
+  cards.style.cssText='background:#34518a;border-color:#7897df';
+  (actions||detail).appendChild(cards);
+ }
 
  const stop=panel.querySelector('[data-a="stop"]');
  stop?.addEventListener('pointerdown',()=>stopFix(),{capture:true});

@@ -6,7 +6,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='2.5.3';
+const VERSION='2.5.4';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -1454,16 +1454,21 @@ async function createCardsAtTap(){
  if(actionBlocked())return;busy=true;stopRequested=false;update();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  const tappedAnchor=cardAnchorFromSelection(view);
+  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
+  if(stopRequested)throw new Error('手動停止');
   let run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
   if(!run||!rows.length||!['images_ready','cards_building','complete'].includes(run.stage))throw new Error('先に①画像一覧を完成させてください');
   const imageCount=resolveOwnedImageHits(view).length;
   if(imageCount!==rows.length)throw new Error('今回画像が '+imageCount+'/'+rows.length+' 件です。画像一覧を確認してください');
 
   let existing=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
+  if(existing.length>rows.length||existing.some((hit,index)=>!genuineCard(hit,rows[index]?.url)))throw new Error('保存済みカードの途中に欠落または順序の違いがあります。今あるカードは保持しました');
   let done=Math.min(existing.length,rows.length);
 
   if(done>=rows.length){
    writeRun({...run,stage:'complete',updatedAt:Date.now()});
+   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    setStatus('通知カードはすでに '+done+'/'+rows.length+' 件あります ✅');
    return
   }
@@ -1473,14 +1478,15 @@ async function createCardsAtTap(){
   if(done>0){
    const last=existing[done-1];
    insertPos=last.pos+last.node.nodeSize
-  }else if(Number.isFinite(Number(run.cardAnchorPos))){
+  }else if(run.cardAnchorPos!=null&&run.cardAnchorPos!==''&&Number.isFinite(Number(run.cardAnchorPos))){
    insertPos=Math.min(Number(run.cardAnchorPos),view.state.doc.content.size)
   }else{
-   insertPos=cardAnchorFromSelection(view)
+   insertPos=tappedAnchor
   }
 
   const existingRecs=Array.isArray(run.cardKeys)?run.cardKeys:[];
   writeRun({...run,stage:'cards_building',cardAnchorPos:insertPos,cardKeys:existingRecs,updatedAt:Date.now()});
+  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   let cardGapMs=CARD_GAP_FAST;
   setStatus('② 通知カードの続き｜'+done+'/'+rows.length+' 件済み');
 
@@ -1503,6 +1509,7 @@ async function createCardsAtTap(){
     }
    }
    insertPos=made.nextPos;
+   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    await sleep(cardGapMs);
 
    if((i+1)%10===0&&i+1<rows.length){
@@ -1521,6 +1528,7 @@ async function createCardsAtTap(){
     const retryPos=tracked.length?tracked[tracked.length-1].pos+tracked[tracked.length-1].node.nodeSize:Math.min(insertPos,view.state.doc.content.size);
     const made=await createNativeCard(view,finalRow,retryPos);
     insertPos=made.nextPos;
+    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
     await sleep(CARD_GAP_FAST);
     finalHit=embedNodes(view).find(h=>genuineCard(h,FINAL_URL));
     if(!finalHit)throw new Error('実績の算数カードだけ最終確認できませんでした')
@@ -1531,6 +1539,7 @@ async function createCardsAtTap(){
   const actualCards=resolveOwnedCardHits(view).length;
   if(actualCards!==rows.length)throw new Error('通知カード実数 '+actualCards+'/'+rows.length+'｜不足を検出。もう一度②を押せば続きから再開します');
   writeRun({...doneRun,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
+  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
   setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 通知カード '+rows.length+'件')
  }catch(e){
