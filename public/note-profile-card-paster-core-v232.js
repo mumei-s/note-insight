@@ -3,7 +3,7 @@
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 const INSIGHT_BRIDGE_KEY='mumei_profile_card_likes_300_v2';
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.5.7';
+const VERSION='2.5.8';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1264,6 +1264,19 @@ function trackedContentCount(view){
  if(!readRun())return{images:0,cards:0,headings:0,activities:0};
  return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length,activities:resolveOwnedActivityHits(view).length}
 }
+function recoverNotificationCardHits(view,run){
+ const baseline=new Set(run.cardBaselineKeys||[]);
+ const urls=new Set((run.rows||[]).map(row=>norm(row.url)));
+ const linked=new Set(imageNodes(view).map(hit=>norm(hit.node.attrs?.link)).filter(url=>urls.has(url)&&noteKey(url)));
+ const wanted=new Set([...linked].map(noteKey));
+ const tracked=new Set((run.cardKeys||[]).filter(rec=>noteKey(rec.url)).map(rec=>String(rec.key||'')).filter(Boolean));
+ return embedNodes(view).filter(hit=>{
+  if(baseline.has(cardKey(hit)))return false;
+  const raw=String(hit.node.attrs?.src||'');
+  let key='';try{const u=new URL(raw);if(u.origin!=='https://note.com')return false;key=noteKey(u.href)||u.pathname.match(/^\/embed\/notes\/(n[a-f0-9]{12})\/?$/i)?.[1]||''}catch{return false}
+  return Boolean(key)&&(wanted.has(key)||tracked.has(cardKey(hit))&&(run.cardKeys||[]).some(rec=>rec.key===cardKey(hit)&&noteKey(rec.url)===key));
+ });
+}
 async function deleteNotificationCards({confirm=true,save=true}={}){
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
@@ -1272,7 +1285,7 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
  const tracked=resolveOwnedCardHits(view),anchor=run.cardAnchorPos;
  const hasAnchor=anchor!=null&&anchor!==''&&Number.isFinite(Number(anchor))&&Number(anchor)>=0&&Number(anchor)<=view.state.doc.content.size;
  const scoped=hasAnchor?run:tracked.length?{...run,cardAnchorPos:Math.min(...tracked.map(hit=>hit.pos))}:null;
- const hits=[...new Map([...tracked,...(scoped?generatedCardHits(view,scoped):[])].map(hit=>[hit.pos,hit])).values()];
+ const hits=[...new Map([...tracked,...(scoped?generatedCardHits(view,scoped):[]),...recoverNotificationCardHits(view,run)].map(hit=>[hit.pos,hit])).values()];
  if(!hits.length)return 0;
  if(confirm&&!page.confirm('今回作った正規通知カード '+hits.length+'件だけ削除します。紹介画像は残します。実行しますか？'))return null;
  const removed=deleteHits(view,hits);
