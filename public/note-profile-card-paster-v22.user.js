@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.2.0
-// @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、活動内容は画像外の上段テキストとして挿入。
+// @version      2.3.0
+// @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、プロフィール本文を画像外の上段テキストとして挿入。
 // @match        https://editor.note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-idle
@@ -23,21 +23,22 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V220__)return;
-page.__MUMEI_LIKE300_FIX_V220__=true;
+if(page.__MUMEI_LIKE300_FIX_V230__)return;
+page.__MUMEI_LIKE300_FIX_V230__=true;
 
-const VERSION='2.2.0';
+const VERSION='2.3.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
 const RUN_PREFIX='mumei_profile_card_paster_run_v15:';
-const PREP_PREFIX='mumei_profile_like300_fix_v220:';
+const PREP_PREFIX='mumei_profile_like300_fix_v230:';
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
 const W=860,H=140;
 const IMAGE_GAP=560;
 
 let busy=false;
+let wakeLock=null;
 let stopRequested=false;
 let viewCache=null;
 let imageCommandCache=null;
@@ -58,6 +59,10 @@ const runKey=()=>RUN_PREFIX+(editorArticleKey()||'unknown');
 const prepKey=()=>PREP_PREFIX+(editorArticleKey()||'unknown');
 function readRun(){try{return JSON.parse(localStorage.getItem(runKey())||'null')}catch{return null}}
 function writeRun(value){try{if(value==null)localStorage.removeItem(runKey());else localStorage.setItem(runKey(),JSON.stringify(value))}catch{}}
+async function keepAwake(){
+ try{if(page.navigator?.wakeLock?.request&&!document.hidden)wakeLock=await page.navigator.wakeLock.request('screen')}catch{}
+}
+async function releaseAwake(){try{await wakeLock?.release?.()}catch{}wakeLock=null}
 function setStatus(text,bad=false){
  const el=document.getElementById(STATUS);
  if(el){el.textContent=text;el.dataset.bad=bad?'1':'0'}
@@ -257,12 +262,12 @@ function articleFromRaw(raw,creator={}){
   urlname,
   creator:String(creator.creator||user.nickname||user.name||urlname||'noteクリエイター').trim(),
   actorUrl:String(creator.actorUrl||(urlname?'https://note.com/'+urlname:'')),
-  actorImageUrl:mediaUrl(creator.actorImageUrl||user.user_profile_image_url||user.profileImageUrl||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||user.icon_url||user.image_url||''),
+  actorImageUrl:mediaUrl(creator.actorImageUrl)||avatarUrl(user),
   url,
   title:String(note.name||note.title||'無題の記事').trim(),
   key,
   publishAt:String(note.publishAt||note.publish_at||note.published_at||note.created_at||'').trim()||null,
-  thumbUrl:mediaUrl(note.eyecatch_url||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch?.url||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url||'')
+  thumbUrl:thumbnailUrl(note)
  }
 }
 async function creatorContents(id){
@@ -275,24 +280,16 @@ async function articleMetaImage(url){
   return mediaUrl(doc.querySelector('meta[property="og:image"]')?.content||doc.querySelector('meta[name="twitter:image"]')?.content||'')
  }catch{return''}
 }
-function activityLabelFromText(text){
- const t=String(text||'').replace(/\s+/g,' ');
- const rules=[
-  [/(?:生成AI|ChatGPT|AI画像|AIイラスト|人工知能|プロンプト)/ig,'AI・創作'],
-  [/(?:小説|詩|短歌|俳句|エッセイ|創作|物語|漫画|イラスト)/ig,'創作・表現'],
-  [/(?:子育て|育児|家族|暮らし|日常|生活)/ig,'暮らし・日常'],
-  [/(?:仕事|働き方|キャリア|副業|フリーランス|転職|ビジネス)/ig,'仕事・働き方'],
-  [/(?:勉強|学習|資格|読書|本|教育|学び)/ig,'学び・読書'],
-  [/(?:写真|カメラ|旅行|旅|散歩|観光)/ig,'写真・旅'],
-  [/(?:料理|レシピ|食事|グルメ|カフェ)/ig,'食・料理'],
-  [/(?:音楽|映画|アニメ|ゲーム|舞台|ドラマ)/ig,'エンタメ'],
-  [/(?:プログラミング|開発|Web|アプリ|デザイン|IT)/ig,'IT・デザイン'],
-  [/(?:お金|家計|資産運用|投資|NISA|株)/ig,'お金・暮らし']
- ];
- const scored=rules.map(([re,label])=>({label,count:(t.match(re)||[]).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
- if(!scored.length)return'日々のことや気づきを発信';
- const labels=scored.slice(0,2).map(x=>x.label);
- return labels.join('／')+'を中心に発信'
+function profileText(profile){
+ const value=profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
+ const doc=new DOMParser().parseFromString(String(value).replace(/<br\s*\/?\s*>/gi,'\n'),'text/html');
+ return String(doc.body.textContent||'').replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ').trim()
+}
+function avatarUrl(user){
+ return mediaUrl(user?.profileImageUrl||user?.userProfileImagePath||user?.user_profile_image_url||user?.profile_image_url||user?.user_profile_image_path||user?.profile_image_path||user?.profileImagePath||user?.icon_url||user?.image_url||'')
+}
+function thumbnailUrl(note){
+ return mediaUrl(note?.eyecatch||note?.eyecatch_url||note?.spEyecatch||note?.thumbnailExternalUrl||note?.image_url||note?.imageUrl||note?.thumbnail_url||note?.thumbnailUrl||note?.eyecatch_image||note?.eyecatchImage||note?.image||note?.thumbnail||'')
 }
 async function preparePerson(person){
  const id=String(person?.urlname||'').trim();
@@ -300,7 +297,7 @@ async function preparePerson(person){
  try{
   const [contents,profilePayload]=await Promise.all([
    creatorContents(id),
-   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)).catch(()=>({}))
+   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id))
   ]);
   const list=contentList(contents);
   const baseCreator={
@@ -321,27 +318,11 @@ async function preparePerson(person){
   const note=notePayload?.data||notePayload||{};
   const user=note.user||note.author||{};
 
-  const avatar=mediaUrl(
-   profile.user_profile_image_url||profile.profile_image_url||profile.profileImageUrl||
-   profile.user_profile_image_path||profile.profile_image_path||profile.profileImagePath||
-   profile.icon_url||profile.image_url||
-   user.user_profile_image_url||user.profile_image_url||user.profileImageUrl||
-   user.user_profile_image_path||user.profile_image_path||user.profileImagePath||
-   user.icon_url||user.image_url||
-   person.actorImageUrl||latest.actorImageUrl||''
-  );
-  let thumb=mediaUrl(
-   note.eyecatch_url||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||
-   note.eyecatch?.url||note.eyecatch_image?.url||note.eyecatchImage?.url||
-   note.image?.url||note.thumbnail?.url||latest.thumbUrl||metaThumb||''
-  );
-  if(!thumb)thumb=avatar;
-
-  const activitySource=[
-   profile.profile,profile.description,profile.bio,profile.introduction,profile.self_introduction,profile.note_intro,
-   ...list.slice(0,6).flatMap(x=>[x?.name,x?.title,x?.description,x?.body_text]),
-   note.name,note.title,note.description,note.body_text
-  ].filter(Boolean).join(' ');
+  const avatar=avatarUrl(profile)||avatarUrl(user)||baseCreator.actorImageUrl||latest.actorImageUrl;
+  const thumb=thumbnailUrl(note)||latest.thumbUrl||metaThumb;
+  if(!avatar)throw new Error('アイコンURLを確認できません：'+id);
+  if(!thumb)throw new Error('記事サムネイルが未設定：'+id);
+  const biography=profileText(profile);
 
   return{
    ...latest,
@@ -349,20 +330,28 @@ async function preparePerson(person){
    actorImageUrl:avatar,
    thumbUrl:thumb,
    title:String(note.name||note.title||latest.title||'無題の記事').trim(),
-   activityLabel:activityLabelFromText(activitySource),
+   profileText:biography,
    likesHistory:true,
    likedAt:String(person.likedAt||'')
   }
  }catch{return null}
 }
+function uniquePeople(people){
+ const seen=new Set(['fuku444']);
+ return people.filter(person=>{
+  const id=String(person?.urlname||'').trim().toLowerCase();
+  if(!id||seen.has(id))return false;
+  seen.add(id);return true
+ })
+}
 async function buildRows(target=300){
  const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
- const people=Array.isArray(bridge?.people)?bridge.people:[];
+ const people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
  if(!people.length)throw new Error('INSIGHT側の準備データがありません。「INSIGHTで準備」を先に押してください');
  const signature=String(bridge?.at||0)+'|'+target;
  let saved;
  try{saved=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{saved=null}
- let rows=Array.isArray(saved?.rows)&&saved.signature===signature?saved.rows:[];
+ let rows=uniquePeople(Array.isArray(saved?.rows)&&saved.signature===signature?saved.rows:[]);
  let index=saved?.signature===signature?Number(saved.index||0):0;
  const seen=new Set(rows.map(x=>String(x.urlname||'').toLowerCase()).filter(Boolean));
 
@@ -370,7 +359,7 @@ async function buildRows(target=300){
   if(stopRequested)throw new Error('停止しました');
   const batch=people.slice(index,index+4);
   index+=batch.length;
-  setStatus('スキ履歴300｜アイコン・サムネ・活動確認 '+rows.length+'/'+target+'｜候補 '+index+'/'+people.length);
+  setStatus('スキ履歴300｜アイコン・サムネ・プロフィール確認 '+rows.length+'/'+target+'｜候補 '+index+'/'+people.length);
   const prepared=await Promise.all(batch.map(preparePerson));
   for(const row of prepared){
    const id=String(row?.urlname||'').toLowerCase();
@@ -397,24 +386,28 @@ async function enrichFinal(){
   const note=notePayload?.data||notePayload||{};
   const profile=profilePayload?.data?.creator||profilePayload?.data?.user||profilePayload?.data||profilePayload||{};
   const user=note.user||note.author||{};
-  const avatar=mediaUrl(profile.user_profile_image_url||profile.profile_image_url||profile.profileImageUrl||profile.user_profile_image_path||profile.profile_image_path||profile.profileImagePath||user.user_profile_image_url||user.profile_image_url||user.profileImageUrl||'');
-  const thumb=mediaUrl(note.eyecatch_url||note.image_url||note.thumbnail_url||note.eyecatch?.url||note.image?.url||metaThumb||avatar||'');
+  const avatar=avatarUrl(profile)||avatarUrl(user);
+  const thumb=thumbnailUrl(note)||metaThumb;
+
   return{...row,creator:String(profile.nickname||profile.name||user.nickname||user.name||'実績の算数'),actorImageUrl:avatar,thumbUrl:thumb,finalMarker:true,index:301}
  }catch{return{...row,finalMarker:true,index:301}}
 }
 
 async function bitmapFromUrl(url){
  if(!url)return null;
- try{
-  const blob=await xhr(url,'blob',45000);
-  if('createImageBitmap'in page)return await page.createImageBitmap(blob);
-  return await new Promise((resolve,reject)=>{
-   const image=new page.Image(),objectUrl=page.URL.createObjectURL(blob);
-   image.onload=()=>{page.URL.revokeObjectURL(objectUrl);resolve(image)};
-   image.onerror=()=>{page.URL.revokeObjectURL(objectUrl);reject(new Error('画像読込失敗'))};
-   image.src=objectUrl
-  })
- }catch{return null}
+ const response=await xhr(url,'blob',45000);
+ // Normalize the extension's Blob into the page realm before decoding.
+ const blob=new page.Blob([await response.arrayBuffer()],{type:response.type||'image/jpeg'});
+ if(typeof page.createImageBitmap==='function'){
+  try{return await page.createImageBitmap(blob)}catch{}
+ }
+ return new Promise((resolve,reject)=>{
+  const image=new page.Image(),objectUrl=page.URL.createObjectURL(blob);
+  const timer=setTimeout(()=>finish(new Error('画像のデコード待ちタイムアウト')),15000);
+  function finish(error){clearTimeout(timer);page.URL.revokeObjectURL(objectUrl);error?reject(error):resolve(image)}
+  image.onload=()=>finish();image.onerror=()=>finish(new Error('画像読込失敗'));
+  image.src=objectUrl
+ })
 }
 function rounded(ctx,x,y,w,h,r){
  const radius=Math.min(r,w/2,h/2);
@@ -475,8 +468,13 @@ function drawDecor(ctx,index,theme){
  ctx.restore()
 }
 async function makeFile(row){
- let [avatar,thumb]=await Promise.all([bitmapFromUrl(row.actorImageUrl),bitmapFromUrl(row.thumbUrl)]);
- if(!thumb&&avatar)thumb=avatar;
+ const images=await Promise.allSettled([bitmapFromUrl(row.actorImageUrl),bitmapFromUrl(row.thumbUrl)]);
+ const [avatar,thumb]=images.map(result=>result.status==='fulfilled'?result.value:null);
+ if(!avatar||!thumb){
+  try{avatar?.close?.();thumb?.close?.()}catch{}
+  const reason=images.find(result=>result.status==='rejected')?.reason?.message;
+  throw new Error(row.creator+'さん：'+(!avatar?'アイコン':'記事サムネイル')+'を表示できません'+(reason?'（'+reason+'）':''))
+ }
  const index=hash(row.key||row.url||row.creator)%50;
  const theme=palettes[Math.floor(index/10)%palettes.length];
  const canvas=document.createElement('canvas');
@@ -525,7 +523,7 @@ function headingText(group){
  const from=group*10+1,to=Math.min(from+9,300);
  return String(group+1).padStart(2,'0')+'｜'+from+'人目〜'+to+'人目のクリエイター様'
 }
-function activityText(row){return'活動内容｜'+String(row.activityLabel||'日々のことや気づきを発信')}
+function activityText(row){return'プロフィール｜'+row.creator+'さん：'+(row.profileText||'プロフィール未設定')}
 function insertHeadingAt(view,text,pos){
  const type=view.state.schema.nodes.heading;
  if(!type)throw new Error('note見出しノードを取得できません');
@@ -548,7 +546,7 @@ function insertActivityAt(view,row,pos){
  const node=type.create(null,view.state.schema.text(text,marks));
  view.dispatch(view.state.tr.insert(at,node));
  const actual=view.state.doc.nodeAt(at);
- if(!actual||actual.type?.name!=='paragraph'||String(actual.textContent||'')!==text)throw new Error('活動内容テキスト挿入に失敗しました');
+ if(!actual||actual.type?.name!=='paragraph'||String(actual.textContent||'')!==text)throw new Error('プロフィールテキスト挿入に失敗しました');
  return{text,pos:at,nextPos:at+actual.nodeSize}
 }
 function findHeading(view,text){
@@ -617,17 +615,18 @@ function removeActivityLines(){
 async function createFixed300(){
  if(busy)return;
  busy=true;stopRequested=false;
+ await keepAwake();
  try{
-  setStatus('修正版を開始｜実アイコン・記事サムネ・外部活動文を確認中');
+  setStatus('修正版を開始｜実アイコン・記事サムネ・外部プロフィール文を確認中');
   const view=findView();
   if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();selectionApi();
 
   const existing=readRun();
-  if((existing?.items?.length||0)||(existing?.cardKeys?.length||0))throw new Error('旧版の作成分が残っています。「最初に戻る」で消してから修正版を実行してください');
+  if(!existing?.likesHistoryFix230&&((existing?.items?.length||0)||(existing?.cardKeys?.length||0)))throw new Error('旧版の作成分が残っています。「最初に戻る」で消してから修正版を実行してください');
 
   let rows;
-  if(existing?.likesHistoryFix220&&Array.isArray(existing.rows)&&existing.rows.length===301)rows=existing.rows;
+  if(existing?.likesHistoryFix230&&Array.isArray(existing.rows)&&existing.rows.length===301)rows=existing.rows;
   else{
    const creators=await buildRows(300);
    const finalRow=await enrichFinal();
@@ -635,11 +634,11 @@ async function createFixed300(){
   }
 
   let run=readRun();
-  if(!run?.likesHistoryFix220){
+  if(!run?.likesHistoryFix230){
    run={
     version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],activityTexts:[],rows,
     cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
-    createdAt:Date.now(),stage:'images_building',likesHistory:true,likesHistoryFix220:true,
+    createdAt:Date.now(),stage:'images_building',likesHistory:true,likesHistoryFix230:true,
     imageAnchorPos:cardAnchorFromSelection(view),sources:'INSIGHT スキ履歴',mode:'number',count:300,choice:'latest'
    };
    writeRun(run)
@@ -657,6 +656,9 @@ async function createFixed300(){
   for(let i=done;i<rows.length;i++){
    if(stopRequested)throw new Error('停止しました');
    const row=rows[i];
+   setStatus('画像確認｜'+(i+1)+'/'+rows.length+'｜'+row.creator);
+   const file=await makeFile(row);
+   if(stopRequested)throw new Error('停止しました');
 
    if(row.finalMarker){
     const text='最後に｜実績の算数';
@@ -678,7 +680,7 @@ async function createFixed300(){
    }
 
    setStatus('修正版｜'+(i+1)+'/'+rows.length+'｜'+row.creator+'｜アイコン＋サムネ');
-   const file=await makeFile(row);
+   if(stopRequested)throw new Error('停止しました');
    const made=await uploadOne(view,row,file,insertPos);
    insertPos=made.nextPos;
    recordImage(made.hit,row);
@@ -687,10 +689,10 @@ async function createFixed300(){
 
   run=readRun()||run;
   writeRun({...run,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
-  setStatus('修正版完了 ✅ アイコン・記事サムネ・外部活動文｜次は②カード続き/開始')
+  setStatus('修正版完了 ✅ アイコン・記事サムネ・外部プロフィール文｜次は②カード続き/開始')
  }catch(error){
   setStatus('修正版停止：'+(error?.message||String(error)),true)
- }finally{busy=false}
+ }finally{busy=false;await releaseAwake()}
 }
 function stopFix(){
  stopRequested=true;
@@ -709,13 +711,13 @@ function patchPanel(){
  const summary=detail.querySelector('summary');
  if(summary)summary.textContent='＋ INSIGHTスキ履歴300人【修正版】';
  const hint=detail.querySelector('.hint');
- if(hint)hint.textContent='実アイコン＋最新記事サムネを極薄50種へ表示。活動内容は画像の外側・直上に太字テキストで挿入。';
+ if(hint)hint.textContent='実アイコン＋最新記事サムネを極薄50種へ表示。プロフィール本文は画像の外側・直上に太字テキストで挿入。';
 
  const oldButton=detail.querySelector('[data-a="like300-images"],[data-a="like300-fixed"]');
  if(oldButton){
   const button=oldButton.cloneNode(true);
   button.dataset.a='like300-fixed';
-  button.textContent='① アイコン＋サムネ付300';
+  button.textContent='① プロフィール＋極薄300';
   button.style.background='#176b54';
   button.style.borderColor='#5bd7a7';
   oldButton.replaceWith(button);
