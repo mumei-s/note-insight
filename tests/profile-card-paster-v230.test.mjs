@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
+import './profile-card-paster-data-v250.test.mjs';
+import './profile-card-paster-design-v250.test.mjs';
+import './profile-card-paster-core-v250.test.mjs';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 function runtime(overrides={}){
  const dom=new JSDOM('',{url:'https://editor.note.com/notes/n123456789abc/edit'});
  const context=vm.createContext({window:dom.window,document:dom.window.document,location:dom.window.location,localStorage:dom.window.localStorage,DOMParser:dom.window.DOMParser,GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('unexpected network')},setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,URL,Blob,File,console,...overrides});
  context.unsafeWindow={Blob,File,URL,...overrides.page};
- const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),patchPanel,clearCurrentPaste,insertActivityAt,restartFixed300,resumeFixed300,addDivider,prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
+ const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),patchPanel,clearCurrentPaste,insertActivityAt,restartFixed300,resumeFixed300,addDivider,prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,assignDesigns,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
  vm.runInContext(exposed,context);return context;
 }
 
@@ -56,8 +59,8 @@ test('paste inserts a profile paragraph before the image and the final extra ent
  c.api.patch(`
 findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};
 readRun=()=>globalThis.saved||null;writeRun=r=>{globalThis.saved=r};
-buildRows=async()=>Array.from({length:300},(_,i)=>({index:i+1,creator:'人'+i,urlname:'p'+i,profileText:'本人の紹介'}));
-enrichFinal=async()=>({index:301,creator:'実績の算数',finalMarker:true});
+buildRows=async()=>Array.from({length:300},(_,i)=>({index:i+1,creator:'人'+i,urlname:'p'+i,url:'https://note.com/p'+i+'/n/n123456789abc',profileText:'本人の紹介'}));
+enrichFinal=async()=>({index:301,urlname:'fuku444',url:'https://note.com/fuku444/n/nb4f6934381e9',creator:'実績の算数',finalMarker:true});
 embedNodes=()=>[];cardAnchorFromSelection=()=>0;ownedImages=()=>[];isDivider=()=>false;addDivider=(view,hit)=>0;
 makeFile=async row=>{events.push(['make',row.index]);return {}};
 findHeading=()=>null;findActivity=()=>null;
@@ -76,10 +79,10 @@ recordImage=()=>{};recordActivity=()=>{};recordHeading=()=>{};sleep=async()=>{};
 test('current run with completed images can resume without forcing a reset',async()=>{
  const c=runtime();c.events=[];
  c.api.patch(`
-const rows=Array.from({length:301},(_,i)=>({creator:'人',index:i+1,finalMarker:i===300}));
+const rows=Array.from({length:301},(_,i)=>({creator:'人',index:i+1,urlname:i===300?'fuku444':'p'+i,url:i===300?'https://note.com/fuku444/n/nb4f6934381e9':'https://note.com/p'+i+'/n/n123456789abc',finalMarker:i===300}));
 let saved={likesHistoryFix230:true,rows,items:[{id:'done'}],imageAnchorPos:0};
 readRun=()=>saved;writeRun=r=>saved=r;findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};
-isDivider=()=>false;addDivider=()=>302;ownedImages=()=>Array.from({length:300},(_,i)=>({pos:i,node:{nodeSize:1}}));
+isDivider=()=>false;addDivider=()=>302;ownedImages=()=>Array.from({length:300},(_,i)=>({pos:i,node:{nodeSize:1,attrs:{link:rows[i].url}}}));
 makeFile=async row=>{events.push(row.index);return {}};findHeading=()=>null;
 insertHeadingAt=(view,text,pos)=>({nextPos:pos+1});recordHeading=()=>{};
 uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
@@ -88,32 +91,32 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.4.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.0/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=241/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=250/);
 });
 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.4.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.0/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.4.1/);
+ assert.match(original,/@version\s+2.5.0/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
 
 
-test('the previous export flow uses recent articles and accepts only the matching popup response',async()=>{
+test('the independent export flow uses recent like history and accepts only the matching popup response',async()=>{
  let written;const c=runtime({GM_setValue:(key,value)=>{written={key,value}}}),popup={};let opened;
  c.window.open=url=>{opened=url;return popup};
  const pending=c.api.prepareInsightExport(),requestId=new URL(opened).searchParams.get('request');
- assert.equal(new URL(opened).pathname,'/note-insight/insight-likes-export.html');
- assert.equal(new URL(opened).searchParams.get('scope'),'recent-articles');
+ assert.equal(new URL(opened).pathname,'/note-insight/note-profile-card-paster-history-export.html');
+ assert.equal(new URL(opened).searchParams.get('scope'),'recent-likes');
  function deliver(origin,source,request){const event=new c.window.Event('message');Object.defineProperties(event,{origin:{value:origin},source:{value:source},data:{value:{type:'MUMEI_INSIGHT_LIKES_V1',requestId:request,ok:true,rows:[{urlname:'person'},{urlname:'PERSON'},{urlname:'fuku444'}]}}});c.window.dispatchEvent(event)}
  deliver('https://example.com',popup,requestId);deliver('https://mumei-s.github.io',{},requestId);deliver('https://mumei-s.github.io',popup,'other');
  assert.equal(written,undefined);deliver('https://mumei-s.github.io',popup,requestId);
- const people=await pending;assert.equal(people.length,1);assert.equal(written.value.version,231);assert.equal(written.value.scope,'recent-articles');
+ const people=await pending;assert.equal(people.length,1);assert.equal(written.value.version,231);assert.equal(written.value.scope,'recent-likes');
 });
 
 
@@ -157,7 +160,7 @@ test('each image receives one native divider and restart removes only tracked pa
 });
 test('restart reuses prepared rows from person one, while resume leaves the current content intact',async()=>{
  const c=runtime();c.events=[];c.saved={likesHistoryFix230:true,rows:Array.from({length:301},(_,i)=>({index:i+1})),items:[{id:'done'}],activityTexts:['profile'],sectionHeadings:['heading'],dividerUrls:['url'],imageAnchorPos:2};
- c.api.patch(`readRun=()=>saved;writeRun=run=>{saved=run};findView=()=>({state:{doc:{content:{size:10}}}});clearCurrentPaste=()=>{events.push('clear')};embedNodes=()=>[];createFixed300=async()=>{events.push('create')};startFixed300=()=>{throw Error('must not reopen INSIGHT')}`);
+ c.api.patch(`validateFixedRows=rows=>rows;readRun=()=>saved;writeRun=run=>{saved=run};findView=()=>({state:{doc:{content:{size:10}}}});clearCurrentPaste=()=>{events.push('clear')};embedNodes=()=>[];createFixed300=async()=>{events.push('create')};startFixed300=()=>{throw Error('must not reopen INSIGHT')}`);
  await c.api.resumeFixed300();assert.deepEqual(Array.from(c.events),['create']);assert.equal(c.saved.items.length,1);
  await c.api.restartFixed300();assert.deepEqual(Array.from(c.events),['create','clear','create']);
  assert.equal(c.saved.rows.length,301);assert.equal(c.saved.rows[0].index,1);assert.equal(c.saved.items.length,0);assert.equal(c.saved.activityTexts.length,0);assert.equal(c.saved.dividerUrls.length,0);assert.equal(c.saved.imageAnchorPos,2);
@@ -184,3 +187,4 @@ test('the shared dependency exits on INSIGHT before mounting or requesting histo
  dom.window.eval(core);assert.equal(dom.window.document.body.children.length,1);assert.equal(dom.window.document.getElementById('root').textContent,'INSIGHT');
  assert.match(source,/@require.*paster-core-v232.js/);assert.doesNotMatch(source,/@require.*ceca4b92/);dom.window.close();
 });
+

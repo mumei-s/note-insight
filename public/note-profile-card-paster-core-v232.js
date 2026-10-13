@@ -6,7 +6,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='2.4.1';
+const VERSION='2.5.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -49,6 +49,13 @@ const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
+page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
+page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
+function fixedRunBusy(){try{return Boolean(page.__MUMEI_PROFILE_CARD_FIXED_BUSY__?.())}catch{return false}}
+function actionBlocked(){
+ if(!busy&&!fixedRunBusy())return false;
+ setStatus('実行中です。先に「停止」を押してください',true);return true
+}
 const scanKey=()=>SPECIAL_SCAN_PREFIX+(editorArticleKey()||'unknown');
 const like300PrepKey=()=>LIKE300_PREP_PREFIX+(editorArticleKey()||'unknown');
 async function keepAwake(){
@@ -336,27 +343,28 @@ function targetLimit(mode,count){return mode==='all'?Infinity:Math.max(0,Number(
 async function collectUnified(raw,mode,count,choice){
  const sources=parseUnifiedSources(raw),limit=targetLimit(mode,count);
  if(!sources.length||limit===0)return[];
- const out=[],seenUrls=new Set(),seenCreators=new Set();
+ const out=[],seenUrls=new Set(),seenCreators=new Set(),collectedCreators=new Set(['fuku444']);
  const add=row=>{
   if(!row)return false;
   const u=norm(row.url);
-  if(!u||u===norm(FINAL_URL)||seenUrls.has(u))return false;
-  seenUrls.add(u);out.push({...row,url:u});return true
+  const creator=String(row.urlname||u.match(/^https:\/\/note\.com\/([^/?#]+)\/n\//i)?.[1]||row.likerKey||'').trim().toLowerCase();
+  if(!u||u===norm(FINAL_URL)||seenUrls.has(u)||(creator&&collectedCreators.has(creator)))return false;
+  seenUrls.add(u);if(creator)collectedCreators.add(creator);out.push({...row,url:u});return true
  };
- for(let si=0;si<sources.length&&out.length<effectiveLimit;si++){
+ for(let si=0;si<sources.length&&out.length<limit;si++){
   const src=sources[si];
   if(stopRequested)throw new Error('停止しました');
   if(src.type==='note'){
    const key=noteKey(src.value);if(!key)continue;
-   for(let pageNo=1;pageNo<=200&&out.length<effectiveLimit;pageNo++){
-    setStatus('入力 '+(si+1)+'/'+sources.length+'｜記事URLのスキ '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
+   for(let pageNo=1;pageNo<=200&&out.length<limit;pageNo++){
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜記事URLのスキ '+out.length+(mode==='all'?' / 全数':' / '+limit));
     const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(key)+'/likes?page='+pageNo+'&per=50');
     const list=Array.isArray(p?.data?.likes)?p.data.likes:[],creators=[];
     for(const item of list){
      const c=parseLiker(item);if(!c||seenCreators.has(c.likerKey))continue;
      seenCreators.add(c.likerKey);creators.push(c)
     }
-    for(let i=0;i<creators.length&&out.length<effectiveLimit;i+=5){
+    for(let i=0;i<creators.length&&out.length<limit;i+=5){
      const chosen=await Promise.all(creators.slice(i,i+5).map(c=>chooseCreatorArticle(c,choice)));
      for(const row of chosen){add(row);if(out.length>=limit)break}
     }
@@ -365,8 +373,8 @@ async function collectUnified(raw,mode,count,choice){
   }else if(src.type==='mag'){
    const key=magazineKey(src.value);if(!key)continue;
    let start=0;
-   while(out.length<effectiveLimit&&start<10000){
-    setStatus('入力 '+(si+1)+'/'+sources.length+'｜マガジン '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
+   while(out.length<limit&&start<10000){
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜マガジン '+out.length+(mode==='all'?' / 全数':' / '+limit));
     const p=await xhrJSON('https://note.com/api/v1/magazines/'+encodeURIComponent(key)+'/notes?start='+start+'&limit=100');
     const d=p?.data&&typeof p.data==='object'?p.data:{},list=Array.isArray(d.notes)?d.notes:[];
     for(const rawNote of list){add(articleFromRaw(rawNote,{}));if(out.length>=limit)break}
@@ -374,8 +382,8 @@ async function collectUnified(raw,mode,count,choice){
    }
   }else if(src.type==='tag'){
    let cursor='0';
-   for(let pageNo=1;pageNo<=250&&out.length<effectiveLimit;pageNo++){
-    setStatus('入力 '+(si+1)+'/'+sources.length+'｜#'+src.value+' '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
+   for(let pageNo=1;pageNo<=250&&out.length<limit;pageNo++){
+    setStatus('入力 '+(si+1)+'/'+sources.length+'｜#'+src.value+' '+out.length+(mode==='all'?' / 全数':' / '+limit));
     const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(src.value)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
     const q=normalizeSearch(p);if(!q.arr.length)break;
     for(const rawNote of q.arr){add(articleFromRaw(rawNote,{}));if(out.length>=limit)break}
@@ -521,10 +529,10 @@ async function workmomArticleAudit(row){
 async function collectWorkmom(mode,count){
  const limit=targetLimit(mode,count);if(limit===0)return[];
  let cursor='0',pageNo=0,scanned=0;const tested=new Set(),out=[];
- while(out.length<effectiveLimit&&pageNo<250){
+ while(out.length<limit&&pageNo<250){
   if(stopRequested)throw new Error('停止しました');
   pageNo++;
-  setStatus('#ワーママ案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
+  setStatus('#ワーママ案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
   const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(WORKMOM_TAG)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
   const q=normalizeSearch(p);if(!q.arr.length)break;
   for(const raw of q.arr){
@@ -532,7 +540,7 @@ async function collectWorkmom(mode,count){
    const row=articleFromRaw(raw,{}),u=norm(row?.url);
    if(!row||!u||u===norm(FINAL_URL)||tested.has(u))continue;
    tested.add(u);scanned++;
-   setStatus('#ワーママ案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit())+'｜'+row.creator);
+   setStatus('#ワーママ案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit)+'｜'+row.creator);
    const audit=await workmomArticleAudit({...row,url:u});
    if(!audit.ok)continue;
    out.push({...row,url:u,workmom:true});
@@ -578,10 +586,10 @@ async function parentingArticleAudit(row){
 async function collectParenting(mode,count){
  const limit=targetLimit(mode,count);if(limit===0)return[];
  let cursor='0',pageNo=0,scanned=0;const tested=new Set(),out=[];
- while(out.length<effectiveLimit&&pageNo<250){
+ while(out.length<limit&&pageNo<250){
   if(stopRequested)throw new Error('停止しました');
   pageNo++;
-  setStatus('#育児日記案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit()));
+  setStatus('#育児日記案件｜新着 '+pageNo+'ページ｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit));
   const p=await xhrJSON('https://note.com/api/v3/searches?context=note&q='+encodeURIComponent(PARENTING_TAG)+'&size=20&start='+encodeURIComponent(cursor)+'&sort=new');
   const q=normalizeSearch(p);if(!q.arr.length)break;
   for(const raw of q.arr){
@@ -589,7 +597,7 @@ async function collectParenting(mode,count){
    const row=articleFromRaw(raw,{}),u=norm(row?.url);
    if(!row||!u||u===norm(FINAL_URL)||tested.has(u))continue;
    tested.add(u);scanned++;
-   setStatus('#育児日記案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+liveLimit())+'｜'+row.creator);
+   setStatus('#育児日記案件｜確認 '+scanned+'｜採用 '+out.length+(mode==='all'?' / 全数':' / '+limit)+'｜'+row.creator);
    const audit=await parentingArticleAudit({...row,url:u});
    if(!audit.ok)continue;
    out.push({...row,url:u,parenting:true});
@@ -1079,6 +1087,20 @@ function resolveOwnedHeadingHits(view){
  view.state.doc.descendants((node,pos)=>{if(node.type?.name==='heading'&&wanted.has(String(node.textContent||'')))out.push({node,pos})});
  return out
 }
+function resolveOwnedActivityHits(view){
+ const run=readRun(),counts=new Map(),out=[];
+ for(const text of Array.isArray(run?.activityTexts)?run.activityTexts:[]){
+  const value=String(text||'');if(value)counts.set(value,(counts.get(value)||0)+1)
+ }
+ if(!counts.size)return out;
+ const anchor=Math.max(0,Number(run.imageAnchorPos)||0);
+ view.state.doc.descendants((node,pos)=>{
+  if(pos<anchor||node.type?.name!=='paragraph')return;
+  const text=String(node.textContent||''),remaining=counts.get(text)||0;
+  if(remaining>0){out.push({node,pos});counts.set(text,remaining-1)}
+ });
+ return out
+}
 function findHeadingByText(view,text){
  let hit=null;
  view.state.doc.descendants((node,pos)=>{if(!hit&&node.type?.name==='heading'&&String(node.textContent||'')===String(text||''))hit={node,pos}});
@@ -1157,8 +1179,8 @@ function resolveOwnedCardHits(view){
  return hits
 }
 function trackedContentCount(view){
- if(!readRun())return{images:0,cards:0,headings:0};
- return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length}
+ if(!readRun())return{images:0,cards:0,headings:0,activities:0};
+ return{images:resolveOwnedImageHits(view).length,cards:resolveOwnedCardHits(view).length,headings:resolveOwnedHeadingHits(view).length,activities:resolveOwnedActivityHits(view).length}
 }
 async function deleteNotificationCards({confirm=true,save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
@@ -1170,14 +1192,27 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
  if(save&&removed)await saveOnce('正規通知カード '+removed+'件を一括削除｜下書き保存中…');
  return removed
 }
+function resolveOwnedDividerHits(view,images){
+ const run=readRun(),marked=new Set((Array.isArray(run?.dividerUrls)?run.dividerUrls:[]).map(norm)),out=[];
+ for(const image of images){
+  if(!marked.has(norm(image.node.attrs?.link)))continue;
+  const pos=image.pos+image.node.nodeSize,node=view.state.doc.nodeAt(pos);
+  if(!node)continue;
+  let native=['horizontal_rule','horizontalRule','horizontal-rule','divider','separator','hr'].includes(node.type?.name);
+  if(!native){try{const dom=node.type?.spec?.toDOM?.(node);native=Array.isArray(dom)&&dom[0]==='hr'}catch{}}
+  if(native)out.push({node,pos})
+ }
+ return out
+}
 async function deleteAllGenerated({save=true}={}){
  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
- const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view),headings=resolveOwnedHeadingHits(view);
- const removedCards=cards.length,removedImages=images.length,removedHeadings=headings.length;
- deleteHits(view,[...cards,...images,...headings]);
+ const cards=resolveOwnedCardHits(view),images=resolveOwnedImageHits(view),headings=resolveOwnedHeadingHits(view),activities=resolveOwnedActivityHits(view);
+ const dividers=resolveOwnedDividerHits(view,images);
+ const removedCards=cards.length,removedImages=images.length,removedHeadings=headings.length,removedActivities=activities.length,removedDividers=dividers.length;
+ deleteHits(view,[...cards,...images,...headings,...activities,...dividers]);
  writeRun(null);
- if(save&&(removedCards||removedImages||removedHeadings))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'・見出し'+removedHeadings+'を削除して保存中…');
- return{removedCards,removedImages,removedHeadings}
+ if(save&&(removedCards||removedImages||removedHeadings||removedActivities||removedDividers))await saveOnce('最初に戻る｜通知'+removedCards+'・画像'+removedImages+'・見出し'+removedHeadings+'・プロフィール'+removedActivities+'・区切り線'+removedDividers+'を削除して保存中…');
+ return{removedCards,removedImages,removedHeadings,removedActivities,removedDividers}
 }
 
 function inputValues(save=true){
@@ -1195,7 +1230,7 @@ function inputValues(save=true){
 function choiceLabel(c){return c==='oldest'?'最初の記事':c==='fixed'?'固定→最新':'最新記事'}
 function amountLabel(mode,count){return mode==='all'?'全数':String(count)+'件'}
 async function createImageList({special=false,workmom=false,parenting=false}={}){
- if(busy)return;busy=true;stopRequested=false;update();
+ if(actionBlocked())return;busy=true;stopRequested=false;update();
  try{
   const input=inputValues();
   if(special)await keepAwake();
@@ -1217,7 +1252,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
   }
 
   const leftover=trackedContentCount(view);
-  if(leftover.images||leftover.cards||leftover.headings){
+  if(leftover.images||leftover.cards||leftover.headings||leftover.activities){
    throw new Error('このページに今回作成分が残っています。「正規通知カード一括削除」または「最初に戻る」で整理してから新規実行してください')
   }
 
@@ -1281,13 +1316,13 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
  }finally{if(special)await releaseAwake();busy=false;update()}
 }
 async function createInsightLikes300(){
- if(busy)return;busy=true;stopRequested=false;update();
+ if(actionBlocked())return;busy=true;stopRequested=false;update();
  try{
   await keepAwake();
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();noteUrlCommandFactory();selectionApi();
   const leftover=trackedContentCount(view);
-  if(leftover.images||leftover.cards||leftover.headings)throw new Error('このページに今回作成分が残っています。重複防止のため整理してから実行してください');
+  if(leftover.images||leftover.cards||leftover.headings||leftover.activities)throw new Error('このページに今回作成分が残っています。重複防止のため整理してから実行してください');
   let imageInsertPos=cardAnchorFromSelection(view);
   const creators=await buildInsightLikeRows(300);
   const finalRow={
@@ -1330,7 +1365,7 @@ async function createInsightLikes300(){
 }
 
 async function pasteSavedSpecial(){
- if(busy)return;busy=true;stopRequested=false;update();
+ if(actionBlocked())return;busy=true;stopRequested=false;update();
  try{
   await keepAwake();
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
@@ -1416,7 +1451,7 @@ async function pasteSavedSpecial(){
 }
 
 async function createCardsAtTap(){
- if(busy)return;busy=true;stopRequested=false;update();
+ if(actionBlocked())return;busy=true;stopRequested=false;update();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   let run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
@@ -1504,7 +1539,7 @@ async function createCardsAtTap(){
 }
 
 async function bulkDelete(){
- if(busy)return;busy=true;stopRequested=true;update();
+ if(actionBlocked())return;busy=true;stopRequested=true;update();
  try{
   const removed=await deleteNotificationCards({confirm:true,save:true});
   if(removed!==null)setStatus('正規通知カード '+removed+'件を一括削除しました ✅ 紹介画像は保持')
@@ -1523,25 +1558,26 @@ function resetFields(){
  applyAmountMode();applySpecialAmountMode()
 }
 async function resetAll(){
- if(busy)return;
+ if(actionBlocked())return;
  if(!page.confirm('今回作った紹介画像＋正規通知カードを削除し、入力・件数・途中記録を最初に戻します。元本文・元画像・元カードは残します。実行しますか？'))return;
  busy=true;stopRequested=true;update();
  try{
   const result=await deleteAllGenerated({save:false});
   localStorage.removeItem(PREF);writeRun(null);clearScan();resetFields();
-  if(result.removedCards||result.removedImages||result.removedHeadings)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'・見出し'+result.removedHeadings+'を削除して保存中…');
-  setStatus('最初に戻しました ✅ 画像 '+result.removedImages+' / 通知 '+result.removedCards+' / 見出し '+result.removedHeadings+' を削除｜元本文は保持')
+  if(result.removedCards||result.removedImages||result.removedHeadings||result.removedActivities||result.removedDividers)await saveOnce('最初に戻る｜通知'+result.removedCards+'・画像'+result.removedImages+'・見出し'+result.removedHeadings+'・プロフィール'+result.removedActivities+'・区切り線'+result.removedDividers+'を削除して保存中…');
+  setStatus('最初に戻しました ✅ 画像 '+result.removedImages+' / 通知 '+result.removedCards+' / 見出し '+result.removedHeadings+' / プロフィール '+result.removedActivities+' / 区切り線 '+result.removedDividers+' を削除｜元本文は保持')
  }catch(e){setStatus('最初に戻る停止：'+(e?.message||String(e)),true)}
  finally{busy=false;stopRequested=false;update()}
 }
-function stop(){stopRequested=true;abortActiveRequests();const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});setStatus('停止しました｜途中保存は保持。自動再開もしません')}
+function stop(){stopRequested=true;abortActiveRequests();const scan=readScan();if(scan)writeScan({...scan,active:false,updatedAt:Date.now()});window.dispatchEvent(new Event('mumei-profile-card-stop'));setStatus('停止しました｜途中保存は保持。自動再開もしません')}
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
  p.querySelectorAll('textarea,input,select,button').forEach(x=>{
   if(x.dataset.a==='stop'||x.dataset.ui||x.matches?.('[data-special-count]'))return;
-  x.disabled=busy
+  x.disabled=busy||fixedRunBusy()
  })
 }
+window.addEventListener('mumei-profile-card-fixed-state',update);
 function saveUiState(extra={}){const cur=inputValues(false),old=getPrefs();setPrefs({...old,...cur,...extra})}
 function applyAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-mode]'),num=p?.querySelector('[data-count]');
