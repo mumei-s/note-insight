@@ -4,9 +4,10 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 
 const source=readFileSync(new URL('../public/note-profile-card-paster-core-v232.js',import.meta.url),'utf8');
-function runtime(){
+function runtime(pageProps={}){
  const storage=new Map(),events=[];
  const window={addEventListener(){},dispatchEvent(event){events.push(event.type);return true}};
+ Object.assign(window,pageProps);
  const document={readyState:'loading',addEventListener(){},getElementById(){return null}};
  const context=vm.createContext({window,unsafeWindow:window,document,location:new URL('https://editor.note.com/notes/n123456789abc/edit'),localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('Unexpected network')},URL,Event,setTimeout,clearTimeout,console});
  const end="if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();";
@@ -16,6 +17,20 @@ function runtime(){
  return context;
 }
 const raw=(key,urlname)=>({key,name:urlname+'記事',user:{urlname,nickname:urlname}});
+
+test('a legacy installed core cannot prevent the current card action from being exported',()=>{
+ const stale=()=>{throw Error('legacy card handler')};
+ const c=runtime({__MUMEI_PROFILE_CARD_PASTER_V1__:true,__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__:stale});
+ assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_VERSION__,'2.5.5');
+ assert.equal(c.window.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__,c.api.createCardsAtTap);
+});
+
+test('card creation reconciles image readiness before checking the stored stage',async()=>{
+ const c=runtime();c.saved={stage:'images_building',rows:[{url:'a'},{url:'b'}],cardKeys:[{},{}]};c.statuses=[];let healed=0;
+ c.window.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__=async()=>{healed++;c.saved={...c.saved,stage:'images_ready'}};
+ c.api.patch(`readRun=()=>saved;writeRun=value=>saved=value;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>50;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>[{url:'a',pos:10,node:{nodeSize:1}},{url:'b',pos:20,node:{nodeSize:1}}];genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);createNativeCard=async()=>{throw Error('must not insert completed cards')}`);
+ await c.api.createCardsAtTap();assert.equal(healed,1);assert.equal(c.saved.stage,'complete');assert.match(c.statuses.at(-1),/すでに 2\/2/);
+});
 
 test('cards hydrate durable progress and preserve the tapped position before hydration changes selection',async()=>{
  const c=runtime();c.saved=null;c.cards=[];c.statuses=[];c.checkpoints=[];c.tap=42;

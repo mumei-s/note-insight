@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.5.4
+// @version      2.5.5
 // @description  取得不可は飛ばし、スキ履歴から重複なし300人＋実績1件。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
 // @match        https://editor.note.com/*
 // @noframes
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=254
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=255
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -23,10 +23,10 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V254__)return;
-page.__MUMEI_LIKE300_FIX_V254__=true;
+if(page.__MUMEI_LIKE300_FIX_V255__)return;
+page.__MUMEI_LIKE300_FIX_V255__=true;
 
-const VERSION='2.5.4';
+const VERSION='2.5.5';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -100,6 +100,7 @@ async function flushRunBackup(){return runStore.flush()}
 async function hydratePrepBackup(){return prepStore.hydrate()}
 async function flushPrepBackup(){return prepStore.flush()}
 page.__MUMEI_PROFILE_CARD_RUN_STORE__={read:readRun,write:writeRun,hydrate:hydrateRunBackup,flush:flushRunBackup};
+page.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__=ensureCardsRunReady;
 async function keepAwake(){
  try{if(page.navigator?.wakeLock?.request&&!document.hidden)wakeLock=await page.navigator.wakeLock.request('screen')}catch{}
 }
@@ -618,6 +619,24 @@ async function recoverCompatibleRun(view,existing){
  }
  return{...existing,version:VERSION,articleKey:editorArticleKey(),likesHistoryFix230:true,likesHistory:true,rows,items:records,count:300,choice:'latest',mode:'number',stage:owned.length===301?(['images_ready','cards_building','complete'].includes(existing.stage)?existing.stage:'images_ready'):'images_building',imageAnchorPos:Number.isFinite(Number(existing.imageAnchorPos))&&Number(existing.imageAnchorPos)>=0&&Number(existing.imageAnchorPos)<=anchor?Number(existing.imageAnchorPos):anchor,sectionHeadings:[...headings],activityTexts:[...activities],dividerUrls:[...dividers],cardKeys:Array.isArray(existing.cardKeys)?existing.cardKeys:[],cardBaselineKeys:Array.isArray(existing.cardBaselineKeys)?existing.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),sources:existing.sources||'スキ履歴（読み取りのみ）',recoveredAt:Date.now(),updatedAt:Date.now()}
 }
+async function ensureCardsRunReady(view){
+ await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
+ let run=readRun();
+ if(!run)return null;
+ if(Array.isArray(run.rows)&&run.rows.length&&['images_ready','cards_building','complete'].includes(run.stage))return run;
+ const checkpoint=readPrep();
+ const currentVersion=/^2\.5\.\d+(?:$|\b)/.test(String(run.version||''));
+ const fragment=currentVersion&&!Array.isArray(run.rows)&&Array.isArray(checkpoint?.rows)&&checkpoint.rows.length===300;
+ const savedPlan=currentVersion&&Array.isArray(run.rows)&&run.rows.length===301;
+ if(!run.likesHistoryFix230&&!(run.likesHistory&&Number(run.count)===300)&&!fragment&&!savedPlan)return run;
+ if(!run.likesHistoryFix230){run=await recoverCompatibleRun(view,run);}
+ let rows;try{rows=validateFixedRows(run.rows)}catch{run=await recoverCompatibleRun(view,run);rows=validateFixedRows(run.rows)}
+ const images=ownedImagesForRun(view,run);
+ const count=completedImagePrefix(rows,images);
+ if(count!==301)throw new Error('本文の画像を照合しました：'+count+'/301件。完成分は保持しています');
+ run={...run,rows,stage:'images_ready',imagesCompletedAt:run.imagesCompletedAt||Date.now(),updatedAt:Date.now()};
+ writeRun(run);await flushRunBackup();return readRun()
+}
 async function enrichFinal(){
  const person={urlname:'fuku444',creator:'実績の算数',actorUrl:'https://note.com/fuku444',actorImageUrl:'',likerKey:'final-performance-math'};
  const row={...person,url:FINAL_URL,key:FINAL_KEY,title:'実績の算数│3日半で0→1達成',thumbUrl:'',publishAt:null};
@@ -892,8 +911,9 @@ function recordImage(hit,row){
  if(!items.some(item=>key(item)===key(record)))items.push(record);
  writeRun({...run,version:VERSION,articleKey:editorArticleKey(),items,updatedAt:Date.now()})
 }
-function ownedImages(view){
- const run=readRun(),records=Array.isArray(run?.items)?run.items:[],all=imageNodes(view),owned=new Map();
+function ownedImages(view){return ownedImagesForRun(view,readRun())}
+function ownedImagesForRun(view,run){
+ const records=Array.isArray(run?.items)?run.items:[],all=imageNodes(view),owned=new Map();
  for(const record of records){
   const byId=record.id?all.find(x=>String(x.node.attrs?.id||'')===String(record.id)):null;
   if(byId&&norm(byId.node.attrs?.link)===norm(record.url)){owned.set(byId.pos,byId);continue}
@@ -1074,6 +1094,14 @@ function patchPanel(){
   cards.textContent='② カード続き／開始';
   cards.style.cssText='background:#34518a;border-color:#7897df';
   (actions||detail).appendChild(cards);
+  if(!cards.dataset.currentCardHandler){
+   cards.dataset.currentCardHandler='1';
+   cards.addEventListener('click',event=>{
+    const create=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;
+    if(typeof create!=='function')return;
+    event.preventDefault();event.stopImmediatePropagation();void create();
+   },{capture:true});
+  }
  }
 
  const stop=panel.querySelector('[data-a="stop"]');

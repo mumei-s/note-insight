@@ -12,6 +12,7 @@ import './profile-card-paster-assets-flow-v252.test.mjs';
 import './profile-card-paster-assets-v252.test.mjs';
 import './profile-card-paster-storage-v253.test.mjs';
 import './profile-card-paster-recover-v253.test.mjs';
+import './profile-card-paster-cards-ready-v255.test.mjs';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 function runtime(overrides={}){
@@ -97,18 +98,18 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.4/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.5.5/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=254/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=255/);
 });
 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.4/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.5.5/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.5.4/);
+ assert.match(original,/@version\s+2.5.5/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
 
@@ -143,6 +144,14 @@ test('the original card action stays visible beside continue without duplicating
  assert.equal(actions.lastElementChild,button);assert.equal(button.previousElementSibling.dataset.a,'like300-resume');
  assert.equal(c.document.querySelectorAll('[data-a="cards"]').length,1);
  button.click();assert.equal(clicked,1);
+});
+
+test('the visible card button uses the current exported action when an old installed listener remains',()=>{
+ let current=0,legacy=0;const c=runtime({page:{__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__:()=>current++}});
+ c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ const button=c.document.querySelector('[data-a="cards"]');button.addEventListener('click',()=>legacy++);
+ c.api.patchPanel();c.api.patchPanel();button.click();
+ assert.equal(current,1);assert.equal(legacy,0);
 });
 
 function blockView(initial=[],withSmall=false){

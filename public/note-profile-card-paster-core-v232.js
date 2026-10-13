@@ -3,10 +3,10 @@
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 const INSIGHT_BRIDGE_KEY='mumei_profile_card_likes_300_v2';
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
+const VERSION='2.5.5';
+if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
+page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
-
-const VERSION='2.5.4';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -51,6 +51,7 @@ const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
 page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
 page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
+page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=createCardsAtTap;
 function fixedRunBusy(){try{return Boolean(page.__MUMEI_PROFILE_CARD_FIXED_BUSY__?.())}catch{return false}}
 function actionBlocked(){
  if(!busy&&!fixedRunBusy())return false;
@@ -1456,6 +1457,8 @@ async function createCardsAtTap(){
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
   const tappedAnchor=cardAnchorFromSelection(view);
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
+  if(stopRequested)throw new Error('手動停止');
+  await page.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__?.(view);
   if(stopRequested)throw new Error('手動停止');
   let run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
   if(!run||!rows.length||!['images_ready','cards_building','complete'].includes(run.stage))throw new Error('先に①画像一覧を完成させてください');
