@@ -118,7 +118,7 @@ const SPECIAL_NG=[
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-const SPEED_FACTOR=1.65;
+const SPEED_FACTOR=2.0;
 const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
 const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
@@ -1320,7 +1320,7 @@ async function createImageList({special=false,workmom=false,parenting=false}={})
    mode:effective.mode,count:requestedCount,choice:input.choice
   });
 
-  setStatus((parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄8種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
+  setStatus((parenting?'#育児日記案件':workmom?'#ワーママ案件':special?'特別案件':'通常')+'｜ランダム極薄50種｜①画像一覧をタップ位置から '+rows.length+'件（指定'+(requestedCount??'全数')+'＋実績の算数1件）作成');
   for(let i=0;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
    const row=rows[i];
