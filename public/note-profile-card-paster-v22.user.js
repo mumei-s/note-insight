@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.3.1
+// @version      2.3.2
 // @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、プロフィール本文を画像外の上段テキストとして挿入。
 // @match        https://editor.note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/ceca4b92ceda9ed1bc444ccc82b629bf3b5c5f3a/public/note-profile-card-paster-v1.user.js
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -22,11 +22,21 @@
 'use strict';
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
+if(location.hostname==='mumei-s.github.io'){
+ if(!page.__MUMEI_LIKES_PANEL_CLEANUP_V232__){
+  page.__MUMEI_LIKES_PANEL_CLEANUP_V232__=true;
+  const ids=['mumei-like300-bridge','mumei-like300-fix','mumei-like300-fix-editor','mumei-like300-fix-editor-v221'];
+  const style=document.createElement('style');style.id='mumei-like300-panel-off-v232';style.textContent=ids.map(id=>'#'+id).join(',')+'{display:none!important}';(document.head||document.documentElement).appendChild(style);
+  const doc=document,remove=()=>{for(const id of ids)doc.getElementById(id)?.remove();};
+  remove();new MutationObserver(remove).observe(document.documentElement,{childList:true,subtree:true});
+ }
+ return;
+}
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V231__)return;
-page.__MUMEI_LIKE300_FIX_V231__=true;
+if(page.__MUMEI_LIKE300_FIX_V232__)return;
+page.__MUMEI_LIKE300_FIX_V232__=true;
 
-const VERSION='2.3.1';
+const VERSION='2.3.2';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -738,7 +748,7 @@ function patchPanel(){
  const detail=panel.querySelector('details[data-like300]');
  if(!detail)return false;
  const summary=detail.querySelector('summary');
- if(summary)summary.textContent='＋ INSIGHTスキ履歴300人';
+ if(summary)summary.textContent='＋ スキ履歴から300人';
  const hint=detail.querySelector('.hint');
  if(hint)hint.textContent='実アイコン＋最新記事サムネを極薄50種へ表示。プロフィール本文は画像の外側・直上に太字テキストで挿入。';
 
@@ -754,7 +764,8 @@ function patchPanel(){
  }
 
  const prep=detail.querySelector('[data-a="like300-prep"]');
- if(prep){const button=prep.cloneNode(true);button.textContent='スキ履歴を取得';prep.replaceWith(button);button.addEventListener('click',event=>{event.preventDefault();void prepareInsightExport().catch(error=>setStatus('取得停止：'+(error?.message||String(error)),true));});}
+ prep?.remove();
+ const actions=detail.querySelector('.special-actions');if(actions)actions.style.gridTemplateColumns='1fr';
  const reset=panel.querySelector('[data-a="reset"]');
  reset?.addEventListener('click',()=>removeActivityLines(),{capture:true});
  const stop=panel.querySelector('[data-a="stop"]');

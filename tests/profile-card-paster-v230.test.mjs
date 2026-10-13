@@ -9,7 +9,7 @@ function runtime(overrides={}){
  const dom=new JSDOM('',{url:'https://editor.note.com/notes/n123456789abc/edit'});
  const context=vm.createContext({window:dom.window,document:dom.window.document,location:dom.window.location,localStorage:dom.window.localStorage,DOMParser:dom.window.DOMParser,GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('unexpected network')},setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,URL,Blob,File,console,...overrides});
  context.unsafeWindow={Blob,File,URL,...overrides.page};
- const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
+ const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),patchPanel,prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
  vm.runInContext(exposed,context);return context;
 }
 
@@ -88,9 +88,9 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.2/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=231/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=232/);
 });
 
 
@@ -104,4 +104,25 @@ test('the previous export flow uses recent articles and accepts only the matchin
  deliver('https://example.com',popup,requestId);deliver('https://mumei-s.github.io',{},requestId);deliver('https://mumei-s.github.io',popup,'other');
  assert.equal(written,undefined);deliver('https://mumei-s.github.io',popup,requestId);
  const people=await pending;assert.equal(people.length,1);assert.equal(written.value.version,231);assert.equal(written.value.scope,'recent-articles');
+});
+
+
+test('the redundant prepare button is removed while the editor start remains',()=>{
+ const c=runtime();c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-prep">INSIGHTで準備</button><button data-a="like300-images">①</button></div></details></div>';
+ assert.equal(c.api.patchPanel(),true);assert.equal(c.document.querySelector('[data-a="like300-prep"]'),null);
+ assert.equal(c.document.querySelector('[data-a="like300-fixed"]').textContent,'① プロフィール＋極薄300');
+});
+test('INSIGHT panels are removed including a legacy panel inserted later; app and login data stay intact',async()=>{
+ const dom=new JSDOM('<main id="root">INSIGHTログイン画面</main><div id="mumei-like300-bridge">300人を準備</div>',{url:'https://mumei-s.github.io/note-insight/',runScripts:'outside-only'});
+ const w=dom.window;w.localStorage.setItem('mumei-insight-access-token','test-session');w.eval(source);
+ assert.equal(w.document.getElementById('mumei-like300-bridge'),null);
+ const legacy=w.document.createElement('div');legacy.id='mumei-like300-fix';w.document.body.appendChild(legacy);await new Promise(r=>setTimeout(r,0));
+ assert.equal(w.document.getElementById('mumei-like300-fix'),null);assert.equal(w.document.getElementById('root').textContent,'INSIGHTログイン画面');assert.equal(w.localStorage.getItem('mumei-insight-access-token'),'test-session');
+ dom.window.close();
+});
+
+test('the shared dependency exits on INSIGHT before mounting or requesting history',()=>{
+ const core=readFileSync('public/note-profile-card-paster-core-v232.js','utf8');const dom=new JSDOM('<main id="root">INSIGHT</main>',{url:'https://mumei-s.github.io/note-insight/',runScripts:'outside-only'});
+ dom.window.eval(core);assert.equal(dom.window.document.body.children.length,1);assert.equal(dom.window.document.getElementById('root').textContent,'INSIGHT');
+ assert.match(source,/@require.*paster-core-v232.js/);assert.doesNotMatch(source,/@require.*ceca4b92/);dom.window.close();
 });
