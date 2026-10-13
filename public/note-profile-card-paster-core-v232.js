@@ -6,7 +6,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='2.1.0';
+const VERSION='2.4.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -1673,9 +1673,9 @@ function mount(){
    <div class="special-actions"><button data-a="scan-stats">判定内訳</button><button data-a="paste-saved">保存分の続き</button></div><div class="special-actions"><button data-a="clear-excluded"><span data-excluded-count>除外 0件</span> 解除</button><span></span></div>
   </details>
   <details data-like300 open>
-   <summary>＋ INSIGHTスキ履歴300人</summary>
-   <div class="hint">新しい順｜同一人物除外｜各クリエイターの最新記事＋活動内容｜極薄50種｜10人ごと見出し</div>
-   <div class="special-actions"><button data-a="like300-prep" style="background:#244c66;border-color:#69bfe8">INSIGHTで準備</button><button data-a="like300-images" style="background:#176b54;border-color:#5bd7a7">① スキ300貼付</button></div>
+   <summary>＋ スキ履歴から300人</summary>
+   <div class="hint">新しい順｜同一人物除外｜最新記事サムネ＋アイコン｜プロフィール全文は画像の上｜極薄50種｜10人ごと見出し</div>
+   <div class="special-actions"><button data-a="like300-images" style="background:#176b54;border-color:#5bd7a7">① スキ300貼付</button></div>
   </details>
   <div class="tools"><button data-a="delete">通知カード削除</button><button data-a="reset">最初に戻る</button></div>
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
@@ -1726,8 +1726,7 @@ function mount(){
  p.querySelector('[data-ui="tiny"]').addEventListener('click',e=>{e.preventDefault();setTiny(true)});
  p.querySelector('[data-a="images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:false,workmom:false,parenting:false})});
  p.querySelector('[data-a="special-images"]').addEventListener('click',e=>{e.preventDefault();void createImageList({special:true,workmom:false,parenting:false})});
- p.querySelector('[data-a="like300-prep"]').addEventListener('click',e=>{e.preventDefault();window.open('https://mumei-s.github.io/note-insight/?like300prep=1#dashboard','_blank','noopener')});
- p.querySelector('[data-a="like300-images"]').addEventListener('click',e=>{e.preventDefault();void createInsightLikes300()});
+ p.querySelector('[data-a="like300-images"]').addEventListener('click',e=>{e.preventDefault();window.dispatchEvent(new Event('mumei-profile-card-start'))});
  p.querySelector('[data-a="cards"]').addEventListener('click',e=>{e.preventDefault();void createCardsAtTap()});
  p.querySelector('[data-a="scan-stats"]').addEventListener('click',e=>{e.preventDefault();const scan=readScan(),r=scan?.rejects||{};const msg=Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'件').join('｜')||'除外内訳なし';setStatus('確認 '+(scan?.tested?.length||0)+'｜採用 '+(scan?.out?.length||0)+'｜'+msg)});
  p.querySelector('[data-a="paste-saved"]').addEventListener('click',e=>{e.preventDefault();void pasteSavedSpecial()});

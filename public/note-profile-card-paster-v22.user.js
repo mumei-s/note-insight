@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.3.3
-// @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、プロフィール本文を画像外の上段テキストとして挿入。
+// @version      2.4.0
+// @description  スキ履歴の読み取りだけで300人を取得。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
 // @match        https://editor.note.com/*
-// @match        https://mumei-s.github.io/note-insight/*
+// @noframes
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=240
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -22,21 +22,11 @@
 'use strict';
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
-if(location.hostname==='mumei-s.github.io'){
- if(!page.__MUMEI_LIKES_PANEL_CLEANUP_V232__){
-  page.__MUMEI_LIKES_PANEL_CLEANUP_V232__=true;
-  const ids=['mumei-like300-bridge','mumei-like300-fix','mumei-like300-fix-editor','mumei-like300-fix-editor-v221'];
-  const style=document.createElement('style');style.id='mumei-like300-panel-off-v232';style.textContent=ids.map(id=>'#'+id).join(',')+'{display:none!important}';(document.head||document.documentElement).appendChild(style);
-  const doc=document,remove=()=>{for(const id of ids)doc.getElementById(id)?.remove();};
-  remove();new MutationObserver(remove).observe(document.documentElement,{childList:true,subtree:true});
- }
- return;
-}
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V233__)return;
-page.__MUMEI_LIKE300_FIX_V233__=true;
+if(page.__MUMEI_LIKE300_FIX_V240__)return;
+page.__MUMEI_LIKE300_FIX_V240__=true;
 
-const VERSION='2.3.3';
+const VERSION='2.4.0';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -86,7 +76,7 @@ function prepareInsightExport(){
  if(!popup)return Promise.reject(new Error('スキ履歴取得画面を開けません。ブラウザのポップアップを確認してください'));
  let resolve,reject;const promise=new Promise((ok,fail)=>{resolve=ok;reject=fail});
  const timer=setTimeout(()=>{if(exportWaiter?.requestId===requestId){exportWaiter=null;reject(new Error('スキ履歴の取得待ちが時間切れになりました'));}},120000);
- exportWaiter={requestId,popup,promise,resolve,reject,timer};setStatus('以前の方式でスキ履歴を取得中｜保存済みログインを使用');return promise;
+ exportWaiter={requestId,popup,promise,resolve,reject,timer};setStatus('スキ履歴だけを取得中｜取得後、この編集画面で貼り付け');return promise;
 }
 window.addEventListener('message',async event=>{
  const waiting=exportWaiter,payload=event.data;
@@ -101,6 +91,7 @@ window.addEventListener('message',async event=>{
  }catch(error){waiting.reject(error);}
 });
 function startFixed300(){
+ if(busy||exportWaiter){setStatus('実行中です。先に「停止」を押してください',true);return;}
  const run=readRun();
  if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length===301)return createFixed300();
  return prepareInsightExport().then(()=>createFixed300()).catch(error=>setStatus('取得停止：'+(error?.message||String(error)),true));
@@ -385,7 +376,7 @@ function uniquePeople(people){
 async function buildRows(target=300){
  const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
  const people=uniquePeople(Array.isArray(bridge?.people)?bridge.people:[]);
- if(!people.length)throw new Error('INSIGHT側の準備データがありません。「INSIGHTで準備」を先に押してください');
+ if(!people.length)throw new Error('スキ履歴の取得データがありません。「① 最初から」で取得してください');
  const signature=String(bridge?.at||0)+'|'+target;
  let saved;
  try{saved=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{saved=null}
@@ -409,7 +400,7 @@ async function buildRows(target=300){
   try{localStorage.setItem(prepKey(),JSON.stringify({signature,index,rows,updatedAt:Date.now()}))}catch{}
   await sleep(60)
  }
- if(rows.length<target)throw new Error('公開記事を確認できたクリエイターが '+rows.length+'人でした。INSIGHT側で再準備してください');
+ if(rows.length<target)throw new Error('公開記事を確認できたクリエイターが '+rows.length+'人でした。「① 最初から」でスキ履歴を再取得してください');
  return rows.slice(0,target).map((row,index)=>({...row,index:index+1}))
 }
 async function enrichFinal(){
@@ -721,7 +712,7 @@ async function createFixed300(){
     version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],activityTexts:[],rows,
     cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
     createdAt:Date.now(),stage:'images_building',likesHistory:true,likesHistoryFix230:true,
-    imageAnchorPos:cardAnchorFromSelection(view),sources:'INSIGHT スキ履歴',mode:'number',count:300,choice:'latest'
+    imageAnchorPos:cardAnchorFromSelection(view),sources:'スキ履歴（読み取りのみ）',mode:'number',count:300,choice:'latest'
    };
    writeRun(run)
   }else{
@@ -779,7 +770,7 @@ async function createFixed300(){
  }finally{busy=false;await releaseAwake()}
 }
 function stopFix(){
- if(exportWaiter){const waiting=exportWaiter;exportWaiter=null;clearTimeout(waiting.timer);waiting.reject(new Error('停止しました'));}
+ if(exportWaiter){const waiting=exportWaiter;exportWaiter=null;clearTimeout(waiting.timer);try{waiting.popup.close()}catch{}waiting.reject(new Error('停止しました'));}
  stopRequested=true;
  abortRequests();
  setStatus('修正版を停止しました｜完成分は保持')
@@ -824,6 +815,7 @@ function patchPanel(){
  return true
 }
 let attempts=0;
+window.addEventListener('mumei-profile-card-start',()=>void restartFixed300());
 const timer=setInterval(()=>{
  attempts++;
  if(patchPanel()||attempts>240)clearInterval(timer)
