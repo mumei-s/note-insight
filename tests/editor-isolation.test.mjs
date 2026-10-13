@@ -48,7 +48,7 @@ test('isolation is inactive in the editor, where the tool is allowed', () => {
   dom.window.close();
 });
 
-test('unrelated promise rejection cannot erase the rendered app; blank-root recovery remains available', () => {
+test('unrelated promise rejection preserves the app and never recreates a recovery screen during handoff', async () => {
   const html = readFileSync('index.html', 'utf8');
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
   const dom = new JSDOM('<div id="root"><main>INSIGHT TOP</main></div>', { url: 'https://mumei-s.github.io/note-insight/', runScripts: 'outside-only' });
@@ -58,7 +58,9 @@ test('unrelated promise rejection cannot erase the rendered app; blank-root reco
   assert.equal(root.textContent, 'INSIGHT TOP');
   root.replaceChildren();
   w.dispatchEvent(new w.Event('unhandledrejection'));
-  assert.ok(w.document.getElementById('insight-static-boot'));
-  assert.equal(root.children.length, 0, 'recovery must stay outside the React-owned root');
+  assert.equal(w.document.getElementById('insight-static-boot'), null);
+  assert.equal(root.children.length, 0, 'an optional error must leave the React-owned root alone');
+  await settle();
+  assert.equal(w.document.getElementById('insight-static-boot'), null);
   dom.window.close();
 });
