@@ -6,11 +6,13 @@ const CHANGE = "mumei-insight-storage-quota";
 const archived = new Map<string, string>();
 let hydrateArchive = async () => {};
 let recoverQuota = async () => 0;
-const CACHE_PREFIXES = ["mumei-insight-data-cache-v1:", "mumei-insight-summary-cache-v1:", "mumei-insight-pro-cache-v3:", "mumei-social-view-cache-v1:"];
+let retryPendingWrites = () => {};
+const CACHE_PREFIXES = ["mumei-insight-data-cache-v1:", "mumei-insight-summary-cache-v1:", "mumei-insight-pro-cache-v3:", "mumei-social-view-cache-v1:", "mumei-notification-board:", "mumei-notification-board-meta:", "mumei-notification-recent-watermark:"];
 const CACHE_KEYS = new Set(["mumei-public-creator-icons-v2", "mumei-insight-self-thumbs-v1"]);
 function isCacheKey(key: string) { return CACHE_KEYS.has(key) || CACHE_PREFIXES.some(prefix => key.startsWith(prefix)); }
 
-export async function prepareBrowserStorage() { await hydrateArchive(); await recoverQuota(); await archiveQueue.catch(() => {}); }
+export async function prepareBrowserStorage() { await hydrateArchive(); await recoverQuota(); retryPendingWrites(); await archiveQueue.catch(() => {}); }
+export async function retryBrowserStorage() { if (hasPendingBrowserWrites()) await prepareBrowserStorage(); }
 
 function openArchive(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -51,6 +53,14 @@ function isQuotaError(error: unknown) {
 }
 
 export function hasPendingBrowserWrites() { return states.some(state => state.pending.size > 0); }
+export function pendingBrowserWriteStatus() {
+  let cacheCount = 0, changeCount = 0;
+  for (const state of states) for (const key of state.pending.keys()) {
+    let isLocal = false; try { isLocal = state.store === window.localStorage; } catch {}
+    if (isLocal && isCacheKey(key)) cacheCount++; else changeCount++;
+  }
+  return { cacheCount, changeCount };
+}
 
 export function installBrowserStorageFallback() {
   const proto = typeof window !== "undefined" ? window.Storage?.prototype : undefined;
@@ -64,9 +74,10 @@ export function installBrowserStorageFallback() {
     if (!state) { state = { store, pending: new Map() }; states.push(state); }
     return state;
   };
-  let previous = false;
+  let previous = "";
   const notify = () => {
-    const pending = hasPendingBrowserWrites();
+    const { cacheCount, changeCount } = pendingBrowserWriteStatus();
+    const pending = cacheCount + ":" + changeCount;
     if (pending !== previous) {
       previous = pending;
       window.dispatchEvent(new Event(CHANGE));
@@ -75,13 +86,16 @@ export function installBrowserStorageFallback() {
   // When a later write/removal frees room, retry smaller changes first. No data
   // is removed to make space; permanent storage succeeds before a change leaves memory.
   const retry = (state: StorageState) => {
+    let full = false;
     for (const [key, value] of [...state.pending].sort((a, b) => a[1].length - b[1].length)) {
-      if (state.store === local && archived.has(key)) { persistCache(state, key, value); continue; }
+      if (state.store === local && isCacheKey(key)) { persistCache(state, key, value); continue; }
+      if (full) continue;
       try { set.call(state.store, key, value); state.pending.delete(key); }
-      catch { break; }
+      catch { full = true; }
     }
     notify();
   };
+  retryPendingWrites = () => { for (const state of states) retry(state); };
   const writing = new Map<string, { ticket: number; value: string }>(); let ticket = 0;
   function persistCache(state: StorageState, key: string, value: string) {
     if (writing.get(key)?.value === value) return;
@@ -111,7 +125,9 @@ export function installBrowserStorageFallback() {
       const candidates: Array<{ key: string; value: string }> = [];
       for (let i = 0; i < lengthOf.call(local); i++) {
         const key = keyAt.call(local, i), value = key && get.call(local, key);
-        if (key && isCacheKey(key) && value) candidates.push({ key, value });
+        // A newer pending copy already owns its queued archive transaction.
+        // Moving an older native value after that commit would overwrite it.
+        if (key && isCacheKey(key) && value && !writing.has(key) && !stateFor(local).pending.has(key)) candidates.push({ key, value });
       }
       candidates.sort((a, b) => b.value.length - a.value.length);
       const moved: typeof candidates = []; let chars = 0;
@@ -121,8 +137,9 @@ export function installBrowserStorageFallback() {
       await queueArchive(() => archiveTransaction(store => { for (const row of moved) store.put(row); }));
       let freed = 0;
       for (const row of moved) {
-        archived.set(row.key, row.value);
-        if (get.call(local, row.key) === row.value) { remove.call(local, row.key); freed += row.value.length; }
+        if (get.call(local, row.key) === row.value && !writing.has(row.key) && !stateFor(local).pending.has(row.key)) {
+          archived.set(row.key, row.value); remove.call(local, row.key); freed += row.value.length;
+        }
       }
       retry(stateFor(local));
       return freed;
@@ -135,7 +152,7 @@ export function installBrowserStorageFallback() {
   };
   proto.setItem = function(key: string, value: string) {
     const state = stateFor(this), name = String(key), text = String(value);
-    if (this === local && archived.has(name)) { state.pending.set(name, text); persistCache(state, name, text); return; }
+    if (this === local && archived.has(name)) { state.pending.set(name, text); notify(); persistCache(state, name, text); return; }
     try {
       set.call(this, name, text); state.pending.delete(name); retry(state);
     } catch (error) {
@@ -150,7 +167,7 @@ export function installBrowserStorageFallback() {
   proto.removeItem = function(key: string) {
     remove.call(this, String(key));
     const state = stateFor(this), name = String(key); state.pending.delete(name);
-    if (this === local && archived.has(name)) {
+    if (this === local && isCacheKey(name)) {
       archived.delete(name); writing.delete(name);
       void queueArchive(() => archiveTransaction(store => { store.delete(name); })).catch(() => {});
     }
@@ -179,6 +196,8 @@ export function installBrowserStorageFallback() {
     else state.pending.delete(event.key);
     notify();
   });
+  window.addEventListener("focus", () => { void retryBrowserStorage(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void retryBrowserStorage(); });
   Object.defineProperty(proto, "__mumeiQuotaFallback", { value: true });
 }
 
