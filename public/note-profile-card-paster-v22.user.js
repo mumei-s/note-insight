@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.5.2
+// @version      2.5.3
 // @description  取得不可は飛ばし、スキ履歴から重複なし300人＋実績1件。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
 // @match        https://editor.note.com/*
 // @noframes
@@ -13,7 +13,7 @@
 // @connect      note.com
 // @connect      assets.st-note.com
 // @connect      *
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=252
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-core-v232.js?v=253
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-profile-card-paster-v22.user.js
 // ==/UserScript==
@@ -23,10 +23,10 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V252__)return;
-page.__MUMEI_LIKE300_FIX_V252__=true;
+if(page.__MUMEI_LIKE300_FIX_V253__)return;
+page.__MUMEI_LIKE300_FIX_V253__=true;
 
-const VERSION='2.5.2';
+const VERSION='2.5.3';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -60,8 +60,46 @@ const noteKey=url=>String(url||'').match(/\/n\/(n[a-f0-9]{12})(?:[/?#]|$)/i)?.[1
 const editorArticleKey=()=>location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1]||'';
 const runKey=()=>RUN_PREFIX+(editorArticleKey()||'unknown');
 const prepKey=()=>PREP_PREFIX+(editorArticleKey()||'unknown');
-function readRun(){try{return JSON.parse(localStorage.getItem(runKey())||'null')}catch{return null}}
-function writeRun(value){try{if(value==null)localStorage.removeItem(runKey());else localStorage.setItem(runKey(),JSON.stringify(value))}catch{}}
+function createStoredState(localKey,backupPrefix){
+ let activeKey='',memory,hydratedKey='',revision=0,queue=Promise.resolve(),failure=null;
+ const select=()=>{const key=localKey();if(activeKey!==key){activeKey=key;memory=undefined;hydratedKey='';revision=0;}return key;};
+ const localRead=key=>{try{return JSON.parse(localStorage.getItem(key)||'null')}catch{return null}};
+ function read(){const key=select();if(memory===undefined)memory=localRead(key);return memory;}
+ function write(value){
+  const key=select(),articleKey=editorArticleKey()||'unknown';
+  const stamp=Math.max(Date.now(),revision+1,Number(memory?.updatedAt||0)+1);revision=stamp;
+  const snapshot=value==null?null:JSON.parse(JSON.stringify({...value,updatedAt:stamp}));memory=snapshot;
+  let localOk=false;try{if(snapshot==null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(snapshot));localOk=true}catch{}
+  const envelope={value:snapshot==null?null:JSON.parse(JSON.stringify(snapshot)),updatedAt:stamp,deleted:snapshot==null,articleKey};
+  queue=queue.then(async()=>{
+   let backupOk=false;try{if(typeof GM_setValue==='function'){await Promise.resolve(GM_setValue(backupPrefix+articleKey,envelope));backupOk=true}}catch{}
+   failure=localOk||backupOk?null:new Error('途中記録を保存できません。今ある貼り付けは保持しました');
+  });
+ }
+ async function hydrate(){
+  const key=select();if(hydratedKey===key)return read();
+  const initialRevision=revision,articleKey=editorArticleKey()||'unknown';
+  let backup=null;try{if(typeof GM_getValue==='function')backup=await Promise.resolve(GM_getValue(backupPrefix+articleKey,null))}catch{}
+  if(activeKey!==key||revision!==initialRevision)return read();
+  const local=localRead(key),localStamp=Number(local?.updatedAt||local?.createdAt||0);
+  const valid=backup&&backup.articleKey===articleKey&&Number.isFinite(Number(backup.updatedAt));
+  memory=valid&&Number(backup.updatedAt)>=localStamp?(backup.deleted?null:backup.value):local;
+  revision=Math.max(revision,localStamp,valid?Number(backup.updatedAt):0);hydratedKey=key;return memory;
+ }
+ async function flush(){await queue;if(failure)throw failure;}
+ return{read,write,hydrate,flush};
+}
+const runStore=createStoredState(runKey,'mumei_profile_card_run_backup_v253:');
+const prepStore=createStoredState(prepKey,'mumei_profile_card_prep_backup_v253:');
+function readRun(){return runStore.read()}
+function writeRun(value){runStore.write(value)}
+function readPrep(){return prepStore.read()}
+function writePrep(value){prepStore.write(value)}
+async function hydrateRunBackup(){return runStore.hydrate()}
+async function flushRunBackup(){return runStore.flush()}
+async function hydratePrepBackup(){return prepStore.hydrate()}
+async function flushPrepBackup(){return prepStore.flush()}
+page.__MUMEI_PROFILE_CARD_RUN_STORE__={read:readRun,write:writeRun,hydrate:hydrateRunBackup,flush:flushRunBackup};
 async function keepAwake(){
  try{if(page.navigator?.wakeLock?.request&&!document.hidden)wakeLock=await page.navigator.wakeLock.request('screen')}catch{}
 }
@@ -419,7 +457,7 @@ async function buildRows(target=300){
  const signature=String(bridge?.at||0)+'|'+target+'|eligible-v251';
  const previousSignature=String(bridge?.at||0)+'|'+target+'|exact-v250';
  let saved;
- try{saved=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{saved=null}
+ saved=readPrep()
  const compatible=saved?.signature===signature||saved?.signature===previousSignature;
  let rows=Array.isArray(saved?.rows)&&compatible?saved.rows:[];
  let skipped=Array.isArray(saved?.skipped)&&saved.signature===signature?saved.skipped:[];
@@ -427,7 +465,7 @@ async function buildRows(target=300){
  let accepted=0;
  const validCheckpoint=Number.isInteger(index)&&index===rows.length+skipped.length&&index<=people.length&&rows.length<=target&&uniquePeople([...rows,...skipped]).length===index&&skipped.every(person=>String(person.reason||'').trim())&&people.slice(0,index).every(person=>skipped.some(entry=>sameCreator(entry,person))||sameCreator(rows[accepted++],person))&&accepted===rows.length;
  if(!validCheckpoint)throw new Error('確認途中の保存データに重複・順序の不一致があります。スキ履歴を取得し直してください');
- if(saved?.signature===previousSignature){try{localStorage.setItem(prepKey(),JSON.stringify({...saved,signature,index,rows,skipped,updatedAt:Date.now()}))}catch{}}
+ if(saved?.signature===previousSignature){writePrep({...saved,signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();}
 
  while(index<people.length&&rows.length<target){
   if(stopRequested)throw new Error('停止しました');
@@ -445,7 +483,7 @@ async function buildRows(target=300){
   }
   if(uniquePeople([...rows,...prepared,...skipped,...rejected]).length!==rows.length+prepared.length+skipped.length+rejected.length)throw new Error('クリエイターの重複を検出しました。スキ履歴を取得し直してください');
   rows.push(...prepared);skipped.push(...rejected);index+=batch.length;
-  try{localStorage.setItem(prepKey(),JSON.stringify({signature,index,rows,skipped,updatedAt:Date.now()}))}catch{}
+  writePrep({signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();
   await sleep(60)
  }
  if(rows.length<target)throw new Error('貼り付け可能なクリエイター '+rows.length+'/'+target+'人｜公開記事なし・取得不可 '+skipped.length+'人を除外。300人に不足しています。スキ履歴を取得し直してください');
@@ -459,7 +497,7 @@ async function replaceUnavailableCreator(rows,index,error){
  if(!people.length)throw new Error('追加候補の保存データがありません。現在の貼り付けは保持しました');
  const signature=String(bridge?.at||0)+'|300|eligible-v251',previousSignature=String(bridge?.at||0)+'|300|exact-v250';
  let checkpoint;
- try{checkpoint=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{checkpoint=null}
+ checkpoint=readPrep()
  let selected,skipped,scanned;
  if(checkpoint?.signature===signature||checkpoint?.signature===previousSignature){
   selected=Array.isArray(checkpoint.rows)?checkpoint.rows:[];
@@ -484,7 +522,7 @@ async function replaceUnavailableCreator(rows,index,error){
  }
  selected=selected.filter(person=>!sameCreator(person,failed));
  if(!skipped.some(person=>sameCreator(person,failed)))skipped.push({urlname:canonicalUrlname(failed),likerKey:creatorKey(failed),reason:String(error?.message||error||'画像取得不可')});
- try{localStorage.setItem(prepKey(),JSON.stringify({...checkpoint,signature,index:scanned,rows:selected,skipped,updatedAt:Date.now()}))}catch{throw new Error('取得不可のクリエイターの除外を保存できません。現在の貼り付けは保持しました')}
+ writePrep({...checkpoint,signature,index:scanned,rows:selected,skipped,updatedAt:Date.now()});await flushPrepBackup();
  const filled=await buildRows(300);
  if(rows.slice(0,index).some((row,position)=>!sameCreator(row,filled[position])))throw new Error('貼り付け済みの順序を維持できません。現在の貼り付けは保持しました');
  const refreshed=filled.map((person,position)=>{if(position<index)return rows[position];const previous=rows.slice(0,300).find(row=>sameCreator(row,person));return previous?{...person,...previous,index:position+1}:{...person,index:position+1}});
@@ -496,8 +534,89 @@ async function replaceUnavailableCreator(rows,index,error){
   refreshed[position]={...row,designIndex:choices[Math.floor(Math.random()*choices.length)]};
  }
  validateFixedRows(refreshed);
- try{const latest=JSON.parse(localStorage.getItem(prepKey())||'null');if(latest?.signature===signature)localStorage.setItem(prepKey(),JSON.stringify({...latest,rows:refreshed.slice(0,300),updatedAt:Date.now()}))}catch{throw new Error('補充した一覧を保存できません。現在の貼り付けは保持しました')}
+ const latest=readPrep();if(latest?.signature===signature){writePrep({...latest,rows:refreshed.slice(0,300),updatedAt:Date.now()});await flushPrepBackup();}
  return refreshed
+}
+async function recoverCompatibleRun(view,existing){
+ if(!existing||existing.articleKey!==editorArticleKey())throw new Error('現在の記事に対応する保存データを確認できません。本文は保持しています');
+ let originalPlan=null;
+ try{if(Array.isArray(existing.rows)&&existing.rows.length===301)originalPlan=validateFixedRows(existing.rows)}catch{}
+ const currentFragment=/^2\.5\.\d+(?:$|\b)/.test(String(existing.version||''));
+ const knownHistory=existing.likesHistory===true&&Number(existing.count)===300&&originalPlan;
+ if(!currentFragment&&!knownHistory)throw new Error('この保存データをスキ300人の貼り付けとして確認できません。本文は保持しています');
+ const records=Array.isArray(existing.items)?existing.items:[],all=imageNodes(view),matched=new Map();
+ for(const record of records){
+  const byId=record.id?all.find(hit=>String(hit.node.attrs?.id||'')===String(record.id)):null;
+  if(byId&&norm(byId.node.attrs?.link)!==norm(record.url))throw new Error('保存済み画像のリンクが変更されています。本文は保持しています');
+  const bySrc=!byId&&record.src?all.filter(hit=>String(hit.node.attrs?.src||'')===String(record.src)&&norm(hit.node.attrs?.link)===norm(record.url)):[];
+  if(bySrc.length>1)throw new Error('保存済み画像を一つに特定できません。本文は保持しています');
+  const hit=byId||bySrc[0];
+  if(hit)matched.set(hit.pos,{...hit,record})
+ }
+ const owned=[...matched.values()].sort((first,second)=>first.pos-second.pos);
+ if(!owned.length&&(!originalPlan||records.length))throw new Error('現在の本文に対応する貼り付け済み画像を確認できません。本文は保持しています');
+ const verify=plan=>{
+  const verified=plan.map(row=>({...row}));
+  if(owned.length>verified.length)throw new Error('貼り付け済み画像が一覧を超えています');
+  for(let position=0;position<owned.length;position++){
+   const {node,record}=owned[position],row=verified[position];
+   if(norm(node.attrs?.link)!==norm(row.url)){
+    const owner=canonicalUrlname({actorUrl:record.url}),caption=String(node.textContent||'').trim();
+    if(!owner||owner!==canonicalUrlname(row)||!noteKey(record.url)||!record.creator||caption!==record.creator+'さん')throw new Error('貼り付け済み画像と保存済み一覧の順序が一致しません');
+    verified[position]={...row,url:norm(record.url),key:noteKey(record.url),creator:String(record.creator)};
+   }
+   if(record.creator&&String(node.textContent||'').trim()===record.creator+'さん')verified[position].creator=String(record.creator);
+   const previous=(Array.isArray(existing.rows)?existing.rows:[]).find(person=>sameCreator(person,verified[position])&&norm(person.url)===norm(verified[position].url));
+   if(previous&&Number.isInteger(previous.designIndex))verified[position].designIndex=previous.designIndex;
+  }
+  completedImagePrefix(verified,owned);return validateFixedRows(verified)
+ };
+ let rows;
+ if(originalPlan){try{rows=verify(originalPlan)}catch{}}
+ if(!rows){
+  let checkpoint;
+  checkpoint=readPrep()
+  if(Array.isArray(checkpoint?.rows)&&checkpoint.rows.length===300&&/\|300\|(?:eligible-v251|exact-v250)$/.test(String(checkpoint.signature||''))){
+   const final=originalPlan?.[300]||await enrichFinal();
+   try{rows=verify(validateFixedRows([...checkpoint.rows.map((row,position)=>({...row,index:position+1})),{...final,index:301}]))}catch{}
+  }
+ }
+ if(!rows){const creators=await buildRows(300);rows=verify(validateFixedRows([...creators,await enrichFinal()]))}
+ for(let position=0;position<rows.length;position++){
+  const row=rows[position],before=rows[position-1]?.designIndex,next=rows[position+1]?.designIndex;
+  if(position<owned.length&&(Array.isArray(existing.rows)?existing.rows:[]).some(person=>sameCreator(person,row)&&norm(person.url)===norm(row.url)&&person.designIndex===row.designIndex)&&Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50)continue;
+  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50&&row.designIndex!==before)continue;
+  const choices=Array.from({length:50},(_,style)=>style).filter(style=>style!==before&&style!==next);
+  rows[position]={...row,designIndex:choices[Math.floor(Math.random()*choices.length)]}
+ }
+ const blocks=[];
+ if(typeof view.state.doc.forEach==='function')view.state.doc.forEach((node,pos)=>blocks.push({node,pos}));
+ else view.state.doc.descendants((node,pos)=>{blocks.push({node,pos});return false});
+ const headings=new Set(existing.sectionHeadings||[]),activities=new Set(existing.activityTexts||[]),dividers=new Set(existing.dividerUrls||[]);
+ let anchor=owned[0]?.pos??(Number(existing.imageAnchorPos)||0);
+ const recoverProfile=(block,row)=>{
+  const prefix='プロフィール｜'+row.creator+'さん：';
+  if(block?.node?.type?.name!=='paragraph'||!String(block.node.textContent||'').startsWith(prefix))return false;
+  const text=String(block.node.textContent),profile=text.slice(prefix.length);
+  activities.add(text);row.profileText=profile==='プロフィール未設定'?'':profile;return true
+ };
+ for(let position=0;position<owned.length;position++){
+  const image=owned[position],blockIndex=blocks.findIndex(block=>block.pos===image.pos),row=rows[position];
+  if(blockIndex<0)throw new Error('貼り付け済み画像の本文位置を確認できません。本文は保持しています');
+  let before=blockIndex-1;
+  if(!row.finalMarker&&recoverProfile(blocks[before],row)){if(position===0)anchor=blocks[before].pos;before--}
+  const expected=row.finalMarker?'最後に｜実績の算数':position%10===0?headingText(Math.floor(position/10)):'';
+  if(expected&&blocks[before]?.node?.type?.name==='heading'&&String(blocks[before].node.textContent||'')===expected){headings.add(expected);if(position===0)anchor=blocks[before].pos}
+  if(isDivider(view,blocks[blockIndex+1]?.node))dividers.add(row.url);
+ }
+ if(owned.length&&owned.length<rows.length){
+  const last=owned[owned.length-1],at=blocks.findIndex(block=>block.pos===last.pos),row=rows[owned.length];
+  let after=at+1;if(isDivider(view,blocks[after]?.node))after++;
+  const expected=row.finalMarker?'最後に｜実績の算数':owned.length%10===0?headingText(Math.floor(owned.length/10)):'';
+  if(expected&&blocks[after]?.node?.type?.name==='heading'&&String(blocks[after].node.textContent||'')===expected){headings.add(expected);after++}
+  if(!row.finalMarker)recoverProfile(blocks[after],row)
+ }
+ return{...existing,version:VERSION,articleKey:editorArticleKey(),likesHistoryFix230:true,likesHistory:true,rows,items:records,count:300,choice:'latest',mode:'number',stage:owned.length===301?(['images_ready','cards_building','complete'].includes(existing.stage)?existing.stage:'images_ready'):'images_building',imageAnchorPos:Number.isFinite(Number(existing.imageAnchorPos))&&Number(existing.imageAnchorPos)>=0&&Number(existing.imageAnchorPos)<=anchor?Number(existing.imageAnchorPos):anchor,sectionHeadings:[...headings],activityTexts:[...activities],dividerUrls:[...dividers],cardKeys:Array.isArray(existing.cardKeys)?existing.cardKeys:[],cardBaselineKeys:Array.isArray(existing.cardBaselineKeys)?existing.cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),sources:existing.sources||'スキ履歴（読み取りのみ）',recoveredAt:Date.now(),updatedAt:Date.now()}
 }
 async function enrichFinal(){
  const person={urlname:'fuku444',creator:'実績の算数',actorUrl:'https://note.com/fuku444',actorImageUrl:'',likerKey:'final-performance-math'};
@@ -730,12 +849,13 @@ function restartFixed300(){
 }
 async function resumeFixed300(){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
- const run=readRun();
- if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length===301)return createFixed300();
  try{
+  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
+  const run=readRun();
+  if(run?.items?.length||run?.rows?.length)return createFixed300();
   const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
   if(!Array.isArray(bridge?.people)||!bridge.people.length){setStatus('読み込みの続きがありません。「① 最初から」でスキ履歴を取得してください',true);return;}
-  let saved;try{saved=JSON.parse(localStorage.getItem(prepKey())||'null')}catch{saved=null}
+  let saved;saved=readPrep()
   setStatus('読み込みの続きから｜確認済み '+(saved?.rows?.length||0)+'人｜取得できない人は飛ばします');
   return createFixed300();
  }catch(error){setStatus('読み込み再開停止：'+(error?.message||String(error)),true);}
@@ -808,13 +928,19 @@ async function createFixed300(){
  busy=true;stopRequested=false;notifyFixedState();
  await keepAwake();
  try{
+  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
+  if(stopRequested)throw new Error('停止しました');
   setStatus('修正版を開始｜実アイコン・記事サムネ・外部プロフィール文を確認中');
   const view=findView();
   if(!view)throw new Error('note本文編集欄を取得できません');
   nativeImageCommand();selectionApi();
 
-  const existing=readRun();
-  if(!existing?.likesHistoryFix230&&((existing?.items?.length||0)||(existing?.cardKeys?.length||0)))throw new Error('旧版の作成分が残っています。「最初に戻る」で消してから修正版を実行してください');
+  let existing=readRun();
+  if(existing&&!existing.likesHistoryFix230){
+   setStatus('保存済みの画像・プロフィールと途中記録を照合中｜貼り付けは保持');
+   existing=await recoverCompatibleRun(view,existing);
+   writeRun(existing);await flushRunBackup();
+  }
 
   let rows;
   if(existing?.likesHistoryFix230)rows=validateFixedRows(existing.rows);
@@ -838,6 +964,7 @@ async function createFixed300(){
    run={...run,rows,stage:'images_building',updatedAt:Date.now()};
    writeRun(run)
   }
+  await flushRunBackup();
 
   const doneImages=ownedImages(view);
   let done=completedImagePrefix(rows,doneImages);
@@ -860,6 +987,7 @@ async function createFixed300(){
     rows=nextRows;
     run=readRun()||run;
     writeRun({...run,version:VERSION,rows,imageSkipped:[...(run.imageSkipped||[]),{urlname:row.urlname,likerKey:row.likerKey,reason:error.message}],updatedAt:Date.now()});
+    await flushRunBackup();
     i--;continue;
    }
    if(stopRequested)throw new Error('停止しました');
@@ -889,11 +1017,13 @@ async function createFixed300(){
    insertPos=made.nextPos;
    recordImage(made.hit,row);
    insertPos=addDivider(view,made.hit,row);
+   await flushRunBackup();
    await sleep(IMAGE_GAP)
   }
 
   run=readRun()||run;
   writeRun({...run,stage:'images_ready',rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
+  await flushRunBackup();
   if(typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function')await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__('極薄300人＋実績1件｜画像貼付完了。下書き保存中…');
   setStatus('修正版完了 ✅ アイコン・記事サムネ・外部プロフィール文｜次は②カード続き/開始')
  }catch(error){

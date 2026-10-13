@@ -6,7 +6,7 @@ if(location.hostname!=='editor.note.com')return;
 if(page.__MUMEI_PROFILE_CARD_PASTER_V1__)return;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
 
-const VERSION='2.5.2';
+const VERSION='2.5.3';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const PREF='mumei_profile_card_paster_v1';
@@ -79,8 +79,8 @@ const noteKey=url=>String(url||'').match(/\/n\/(n[a-f0-9]{12})(?:[/?#]|$)/i)?.[1
 const magazineKey=url=>String(url||'').match(/\/(?:m|magazines)\/(m[a-z0-9]+)(?:[/?#]|$)/i)?.[1]||'';
 const editorArticleKey=()=>location.pathname.match(/^\/notes\/(n[a-z0-9]{8,})\/edit\/?$/i)?.[1]||'';
 const runKey=()=>RUN_PREFIX+(editorArticleKey()||'unknown');
-function readRun(){try{return JSON.parse(localStorage.getItem(runKey())||'null')}catch{return null}}
-function writeRun(v){try{if(v==null)localStorage.removeItem(runKey());else localStorage.setItem(runKey(),JSON.stringify(v))}catch{}}
+function readRun(){if(page.__MUMEI_PROFILE_CARD_RUN_STORE__)return page.__MUMEI_PROFILE_CARD_RUN_STORE__.read();try{return JSON.parse(localStorage.getItem(runKey())||'null')}catch{return null}}
+function writeRun(v){if(page.__MUMEI_PROFILE_CARD_RUN_STORE__){page.__MUMEI_PROFILE_CARD_RUN_STORE__.write(v);return;}try{if(v==null)localStorage.removeItem(runKey());else localStorage.setItem(runKey(),JSON.stringify(v))}catch{}}
 function mediaUrl(v){
  let raw='';
  if(typeof v==='string')raw=v;
