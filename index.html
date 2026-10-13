@@ -75,6 +75,14 @@
         const BOOT_ID = "insight-static-boot";
         const MESSAGE_ID = "insight-static-message";
         const ROOT_ID = "root";
+        let startupFailure = "";
+
+        function failureMessage(error) {
+          const name = String(error && error.name || "Error");
+          if (/QuotaExceeded/.test(name)) return "端末の保存容量不足で起動できません（QuotaExceededError）。ログイン情報は消していません。";
+          if (/SecurityError/.test(name)) return "ブラウザの保存領域へアクセスできません（SecurityError）。";
+          return "起動処理で停止しました（" + (/^[A-Za-z]+Error$/.test(name) ? name : "E_BOOT") + "）。";
+        }
 
         function bootMarkup(message) {
           return '<main id="'+BOOT_ID+'" role="alert" aria-live="assertive"><section class="boot-card"><small>無名 S note</small><h1>INSIGHT</h1><p id="'+MESSAGE_ID+'">'+message+'</p><nav aria-label="緊急ナビゲーション"><a href="./?nav=top">INSIGHT TOP</a><a href="./?nav=insight#dashboard">INSIGHT</a><a class="manage" href="./?nav=manage#manage">管理画面</a><button type="button" id="insight-display-repair">黒画面を修復して再読込</button></nav><p class="boot-note">ログイン情報・保存データは消しません。表示用キャッシュだけ更新します。</p></section></main>';
@@ -123,15 +131,24 @@
         });
 
         window.addEventListener("error", (event) => {
-          if (event.target === window || event.target instanceof HTMLScriptElement) showFallback("表示ファイルを読み込めませんでした。下の修復ボタンで復旧できます。");
+          if (event.target === window) {
+            startupFailure = failureMessage(event.error);
+            showFallback(startupFailure);
+          } else if (event.target instanceof HTMLScriptElement) {
+            startupFailure = "表示ファイルを読み込めませんでした（E_SCRIPT_LOAD）。";
+            showFallback(startupFailure);
+          }
         }, true);
-        window.addEventListener("unhandledrejection", () => showFallback("INSIGHTの起動処理で停止しました。下の修復ボタンで復旧できます。"));
+        window.addEventListener("unhandledrejection", (event) => {
+          startupFailure = failureMessage(event.reason);
+          showFallback(startupFailure);
+        });
 
         window.setTimeout(() => {
           const root = document.getElementById(ROOT_ID);
           const boot = document.getElementById(BOOT_ID);
-          if (boot) showFallback("起動に時間がかかっています。TOP・管理画面へ直接移動するか、表示キャッシュを修復してください。");
-          else if (!root || !root.children.length) showFallback("画面が空になったため復旧画面へ切り替えました。");
+          if (boot) showFallback(startupFailure || "起動に時間がかかっています。TOP・管理画面へ直接移動するか、表示キャッシュを修復してください。");
+          else if (!root || !root.children.length) showFallback(startupFailure || "画面が空になったため復旧画面へ切り替えました（E_EMPTY_ROOT）。");
         }, 6500);
 
         try {
@@ -174,7 +191,7 @@
         }
       })();
     </script>
-    <script defer src="./insight-owner-nav.js?v=20261013-2"></script>
+    <script defer src="./insight-owner-nav.js?v=20261013-3"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

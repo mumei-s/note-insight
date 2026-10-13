@@ -18,7 +18,7 @@
     url.hash = next === "home" ? "" : next;
     // A route event cannot restart an unmounted/failed React root.
     const root = document.getElementById("root");
-    if (!root?.children.length || document.getElementById("insight-static-boot")) {
+    if (!root?.children.length || document.getElementById("insight-static-boot") || document.getElementById("insight-runtime-failure")) {
       url.searchParams.set("displayRepair", String(Date.now()));
       window.location.assign(url.href);
       return;

@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { HomeScreenInstall } from "./home-screen-install";
@@ -263,9 +263,36 @@ window.setInterval(() => { if (document.visibilityState === "visible") void poll
 window.addEventListener("focus", () => { void tryReturningMemberResume(); void pollOwnerPendingApplications(); });
 window.addEventListener("pageshow", () => { void tryReturningMemberResume(); void pollOwnerPendingApplications(); });
 
+function startupFailureLabel(reason: unknown) {
+  const error = reason as { name?: string; message?: string } | null;
+  const name = String(error?.name || "Error"), message = String(error?.message || "");
+  if (/QuotaExceeded/i.test(name)) return "端末の保存容量不足（QuotaExceededError）";
+  if (/SecurityError/i.test(name)) return "ブラウザの保存領域へアクセスできません（SecurityError）";
+  if (/addEventListener|matchMedia/.test(message)) return "ブラウザの表示機能で停止しました（E_BROWSER_API）";
+  return `表示処理で停止しました（${/^[A-Za-z]+Error$/.test(name) ? name : "E_RENDER"}）`;
+}
+
+// Optional installation UI must never take the main app down with it.
+class StartupBoundary extends Component<{ children: ReactNode; optional?: boolean }, { failure: string }> {
+  state = { failure: "" };
+  static getDerivedStateFromError(error: unknown) { return { failure: startupFailureLabel(error) }; }
+  render() {
+    if (!this.state.failure) return this.props.children;
+    if (this.props.optional) return null;
+    const top = new URL(window.location.href); top.hash = ""; top.searchParams.set("startupRetry", String(Date.now()));
+    return <main id="insight-runtime-failure" role="alert" style={{ minHeight: "100vh", display: "grid", placeContent: "center", padding: 24, gap: 14, color: "#e8f6ff", background: "#03070b" }}>
+      <h1 style={{ margin: 0 }}>INSIGHT</h1>
+      <p style={{ margin: 0 }}>{this.state.failure}</p>
+      <p style={{ margin: 0, fontSize: 12 }}>ログイン情報と保存済みデータは保持しています。</p>
+      <button type="button" onClick={() => this.setState({ failure: "" })}>再表示</button>
+      <a href={top.href} style={{ color: "#8feaff" }}>TOPを開き直す</a>
+    </main>;
+  }
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <HomeScreenInstall />
-    <App />
+    <StartupBoundary optional><HomeScreenInstall /></StartupBoundary>
+    <StartupBoundary><App /></StartupBoundary>
   </StrictMode>,
 );

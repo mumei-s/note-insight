@@ -19,21 +19,26 @@ export function HomeScreenInstall() {
   const [browser, setBrowser] = useState(detectBrowser);
   const [device, setDevice] = useState(detectDevice);
   const [promptEvent, setPromptEvent] = useState<InstallEvent | null>(null);
-  const [installed, setInstalled] = useState(() => matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+  const [installed, setInstalled] = useState(() => Boolean(window.matchMedia?.("(display-mode: standalone)").matches) || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const copyField = useRef<HTMLInputElement>(null);
   const url = new URL(import.meta.env.BASE_URL, location.origin).href;
   useEffect(() => {
-    const media = matchMedia("(display-mode: standalone)");
+    const media = window.matchMedia?.("(display-mode: standalone)");
     const capture = (event: Event) => { event.preventDefault(); setPromptEvent(event as InstallEvent); };
     const done = () => { setInstalled(true); setPromptEvent(null); setNotice("追加されました。ホーム画面のINSIGHTアイコンから開けます。"); };
-    const changed = () => setInstalled(media.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+    const changed = () => setInstalled(Boolean(media?.matches) || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
     window.addEventListener("beforeinstallprompt", capture);
     window.addEventListener("appinstalled", done);
-    media.addEventListener("change", changed);
-    return () => { window.removeEventListener("beforeinstallprompt", capture); window.removeEventListener("appinstalled", done); media.removeEventListener("change", changed); };
+    if (typeof media?.addEventListener === "function") media.addEventListener("change", changed);
+    else media?.addListener?.(changed);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", capture); window.removeEventListener("appinstalled", done);
+      if (typeof media?.removeEventListener === "function") media.removeEventListener("change", changed);
+      else media?.removeListener?.(changed);
+    };
   }, []);
   async function install() {
     if (!promptEvent || busy) return;
