@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.3.0
+// @version      2.3.1
 // @description  INSIGHTスキ履歴300人修正版。実アイコン・最新記事サムネイルを極薄へ表示し、プロフィール本文を画像外の上段テキストとして挿入。
 // @match        https://editor.note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -23,10 +23,10 @@
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V230__)return;
-page.__MUMEI_LIKE300_FIX_V230__=true;
+if(page.__MUMEI_LIKE300_FIX_V231__)return;
+page.__MUMEI_LIKE300_FIX_V231__=true;
 
-const VERSION='2.3.0';
+const VERSION='2.3.1';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';
@@ -66,6 +66,34 @@ async function releaseAwake(){try{await wakeLock?.release?.()}catch{}wakeLock=nu
 function setStatus(text,bad=false){
  const el=document.getElementById(STATUS);
  if(el){el.textContent=text;el.dataset.bad=bad?'1':'0'}
+}
+let exportWaiter=null;
+function prepareInsightExport(){
+ if(exportWaiter)return exportWaiter.promise;
+ const requestId='likes300-'+Date.now()+'-'+Math.random().toString(36).slice(2),url=new URL('https://mumei-s.github.io/note-insight/insight-likes-export.html');
+ url.searchParams.set('request',requestId);url.searchParams.set('count','500');url.searchParams.set('unique','1');url.searchParams.set('scope','recent-articles');
+ const popup=window.open(url.href,'_blank');
+ if(!popup)return Promise.reject(new Error('スキ履歴取得画面を開けません。ブラウザのポップアップを確認してください'));
+ let resolve,reject;const promise=new Promise((ok,fail)=>{resolve=ok;reject=fail});
+ const timer=setTimeout(()=>{if(exportWaiter?.requestId===requestId){exportWaiter=null;reject(new Error('スキ履歴の取得待ちが時間切れになりました'));}},120000);
+ exportWaiter={requestId,popup,promise,resolve,reject,timer};setStatus('以前の方式でスキ履歴を取得中｜保存済みログインを使用');return promise;
+}
+window.addEventListener('message',async event=>{
+ const waiting=exportWaiter,payload=event.data;
+ if(!waiting||event.origin!=='https://mumei-s.github.io'||event.source!==waiting.popup||payload?.type!=='MUMEI_INSIGHT_LIKES_V1'||payload.requestId!==waiting.requestId)return;
+ exportWaiter=null;clearTimeout(waiting.timer);
+ try{
+  if(payload.ok!==true)throw new Error(String(payload.error||'スキ履歴取得失敗'));
+  const people=uniquePeople(Array.isArray(payload.rows)?payload.rows:[]);
+  if(!people.length)throw new Error('スキ履歴に対象のクリエイターがありません');
+  await Promise.resolve(GM_setValue(BRIDGE_KEY,{version:231,scope:'recent-articles',at:Date.now(),people}));
+  setStatus('スキ履歴 '+people.length+'人を受け取りました');waiting.resolve(people);
+ }catch(error){waiting.reject(error);}
+});
+function startFixed300(){
+ const run=readRun();
+ if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length===301)return createFixed300();
+ return prepareInsightExport().then(()=>createFixed300()).catch(error=>setStatus('取得停止：'+(error?.message||String(error)),true));
 }
 function mediaUrl(value){
  let raw='';
@@ -695,6 +723,7 @@ async function createFixed300(){
  }finally{busy=false;await releaseAwake()}
 }
 function stopFix(){
+ if(exportWaiter){const waiting=exportWaiter;exportWaiter=null;clearTimeout(waiting.timer);waiting.reject(new Error('停止しました'));}
  stopRequested=true;
  abortRequests();
  setStatus('修正版を停止しました｜完成分は保持')
@@ -709,7 +738,7 @@ function patchPanel(){
  const detail=panel.querySelector('details[data-like300]');
  if(!detail)return false;
  const summary=detail.querySelector('summary');
- if(summary)summary.textContent='＋ INSIGHTスキ履歴300人【修正版】';
+ if(summary)summary.textContent='＋ INSIGHTスキ履歴300人';
  const hint=detail.querySelector('.hint');
  if(hint)hint.textContent='実アイコン＋最新記事サムネを極薄50種へ表示。プロフィール本文は画像の外側・直上に太字テキストで挿入。';
 
@@ -721,9 +750,11 @@ function patchPanel(){
   button.style.background='#176b54';
   button.style.borderColor='#5bd7a7';
   oldButton.replaceWith(button);
-  button.addEventListener('click',event=>{event.preventDefault();void createFixed300()})
+  button.addEventListener('click',event=>{event.preventDefault();void startFixed300()})
  }
 
+ const prep=detail.querySelector('[data-a="like300-prep"]');
+ if(prep){const button=prep.cloneNode(true);button.textContent='スキ履歴を取得';prep.replaceWith(button);button.addEventListener('click',event=>{event.preventDefault();void prepareInsightExport().catch(error=>setStatus('取得停止：'+(error?.message||String(error)),true));});}
  const reset=panel.querySelector('[data-a="reset"]');
  reset?.addEventListener('click',()=>removeActivityLines(),{capture:true});
  const stop=panel.querySelector('[data-a="stop"]');

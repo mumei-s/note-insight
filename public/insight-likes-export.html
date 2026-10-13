@@ -26,7 +26,7 @@
   const requestId = String(q.get('request') || '');
   const count = Math.max(1, Math.min(1500, Number(q.get('count') || 100)));
   const unique = q.get('unique') !== '0';
-  const recentArticles = requestId.startsWith('prince500-');
+  const recentArticles = q.get('scope') === 'recent-articles' || requestId.startsWith('prince500-');
 
   function show(text, kind='') {
     status.textContent = text;
@@ -43,13 +43,26 @@
   }
   close.onclick = () => window.close();
 
+  function savedMemberToken() {
+    const selected = String(localStorage.getItem('mumei-insight-active-account-v3') || '').toLowerCase();
+    if(selected && localStorage.getItem('mumei-insight-explicit-logout:'+selected)==='1')return '';
+    const current = localStorage.getItem(TOKEN_KEY) || '';
+    if(current)return current;
+    const accounts=new Map();
+    for(const key of ['mumei-insight-saved-accounts-v2','mumei-insight-saved-accounts-v3']){
+      try{const rows=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(rows))continue;for(const row of rows){const id=String(row?.noteId||'').toLowerCase();if(id&&row?.memberToken&&row.status==='active'&&localStorage.getItem('mumei-insight-explicit-logout:'+id)!=='1')accounts.set(id,row);}}catch{}
+    }
+    if(selected)return accounts.get(selected)?.memberToken||'';
+    return accounts.size===1?[...accounts.values()][0].memberToken:'';
+  }
+
   async function run() {
     if (!requestId) {
       show('取得要求IDがありません。note編集画面から開き直してください。','bad');
       close.hidden = false;
       return;
     }
-    const token = localStorage.getItem(TOKEN_KEY) || '';
+    const token = savedMemberToken();
     if (!token) {
       show('INSIGHTのログイン情報がありません。先にINSIGHTへログインしてから、note編集画面で取得を実行してください。','bad');
       send({ ok:false, error:'INSIGHT_LOGIN_REQUIRED' });

@@ -14,7 +14,7 @@ const support = (p) =>
   p === 'public/note-insight-notification-v3.user.js';
 
 const rules = [
-  ['profile-card-paster', (p) => /^public\/note-profile-card-(?:paster|likes300-fix)/.test(p)],
+  ['profile-card-paster', (p) => p === 'public/insight-likes-export.html' || /^public\/note-profile-card-(?:paster|likes300-fix)/.test(p)],
   ['data-lifecycle', (p) => p === 'src/insight-view-lifecycle.ts' || p === 'src/insight-member-db-fallback.ts'],
   ['recruitment-video', (p) => /^public\/recruitment\//.test(p)],
   // The route shell and its cache lifecycle are one deployment surface.

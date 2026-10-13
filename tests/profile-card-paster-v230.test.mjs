@@ -9,7 +9,7 @@ function runtime(overrides={}){
  const dom=new JSDOM('',{url:'https://editor.note.com/notes/n123456789abc/edit'});
  const context=vm.createContext({window:dom.window,document:dom.window.document,location:dom.window.location,localStorage:dom.window.localStorage,DOMParser:dom.window.DOMParser,GM_getValue:()=>null,GM_xmlhttpRequest(){throw Error('unexpected network')},setInterval:()=>1,clearInterval(){},setTimeout,clearTimeout,URL,Blob,File,console,...overrides});
  context.unsafeWindow={Blob,File,URL,...overrides.page};
- const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
+ const exposed=source.replace('const sleep=','let sleep=').replace(/let attempts=0;[\s\S]*?\n\}\)\(\);\s*$/,`globalThis.api={patch:code=>eval(code),prepareInsightExport,startFixed300,preparePerson,thumbnailUrl,avatarUrl,profileText,activityText,bitmapFromUrl,makeFile,uniquePeople,buildRows,createFixed300,headingText,enrichFinal};})();`);
  vm.runInContext(exposed,context);return context;
 }
 
@@ -88,7 +88,20 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.0/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.3.1/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=230/);
+ assert.match(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require.*paster-v22.user.js\?v=231/);
+});
+
+
+test('the previous export flow uses recent articles and accepts only the matching popup response',async()=>{
+ let written;const c=runtime({GM_setValue:(key,value)=>{written={key,value}}}),popup={};let opened;
+ c.window.open=url=>{opened=url;return popup};
+ const pending=c.api.prepareInsightExport(),requestId=new URL(opened).searchParams.get('request');
+ assert.equal(new URL(opened).pathname,'/note-insight/insight-likes-export.html');
+ assert.equal(new URL(opened).searchParams.get('scope'),'recent-articles');
+ function deliver(origin,source,request){const event=new c.window.Event('message');Object.defineProperties(event,{origin:{value:origin},source:{value:source},data:{value:{type:'MUMEI_INSIGHT_LIKES_V1',requestId:request,ok:true,rows:[{urlname:'person'},{urlname:'PERSON'},{urlname:'fuku444'}]}}});c.window.dispatchEvent(event)}
+ deliver('https://example.com',popup,requestId);deliver('https://mumei-s.github.io',{},requestId);deliver('https://mumei-s.github.io',popup,'other');
+ assert.equal(written,undefined);deliver('https://mumei-s.github.io',popup,requestId);
+ const people=await pending;assert.equal(people.length,1);assert.equal(written.value.version,231);assert.equal(written.value.scope,'recent-articles');
 });
