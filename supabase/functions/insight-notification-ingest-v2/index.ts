@@ -115,7 +115,40 @@ function allowedExplicitSource(source:string){
 }
 function storedSource(source:string){if(source==="note-notification-reader-v2963")return "note-notification-manual-sync-v2963";return /^note-notification-resume-(?:upward|downward)-v\d+$/.test(source)?"note-notification-manual-sync-v2959":source}
 
-type ExistingRow={id:string;fingerprint:string;notification_type:string|null;meta:any};
+type ExistingRow={id:string;fingerprint:string;notification_type:string|null;target_url:string|null;meta:any};
+function commentLocator(target:unknown,meta:any){
+  let found:{article:string;comment:string}|null=null,targetArticle="";
+  for(const [index,raw] of [target,meta?.all_area_url,meta?.featured_area_url].entries()){
+    if(!raw)continue;
+    try{
+      const u=new URL(String(raw)),article=u.protocol==="https:"&&u.hostname==="note.com"?u.pathname.match(/^\/[A-Za-z0-9_-]+\/n\/(n[A-Za-z0-9]+)$/):null,comment=u.searchParams.get("c");
+      if(index===0){if(!article)return null;targetArticle=article[1]}
+      if(!article||!comment||!/^nc[A-Za-z0-9]+$/.test(comment))continue;
+      if(targetArticle&&article[1]!==targetArticle||found&&(found.article!==article[1]||found.comment!==comment))return null;
+      found={article:article[1],comment};
+    }catch{if(index===0)return null}
+  }
+  return found;
+}
+function sameNotification(existing:ExistingRow,meta:any,fingerprint:string){
+  const before=String(existing.meta?.event_identity||""),after=String(meta?.event_identity||"");
+  if(before.startsWith("notice:")&&after.startsWith("notice:"))return before===after;
+  const client=String(existing.meta?.client_signature||"");
+  return Boolean(client&&client===String(meta?.client_signature||""))||existing.fingerprint===fingerprint;
+}
+function preserveCommentMeta(meta:any,target:string|null,fingerprint:string,candidates:ExistingRow[]){
+  if(typeof meta.comment_body==="string"&&meta.comment_body.trim())return meta;
+  const next=commentLocator(target,meta);if(!next||meta.comment_key&&meta.comment_key!==next.comment)return meta;
+  for(const existing of candidates){
+    const old=existing.meta||{},locator=commentLocator(existing.target_url,old);
+    if(typeof old.comment_body!=="string"||!old.comment_body.trim()||old.comment_key!==next.comment||!locator||locator.article!==next.article||locator.comment!==next.comment||!sameNotification(existing,meta,fingerprint))continue;
+    // Keep resolved text and its provenance together; notice metadata still comes from this capture.
+    const kept:Record<string,unknown>={...meta};
+    for(const key of ["comment_body","comment_key","comment_author","comment_body_source","comment_resolved_at"]){delete kept[key];if(Object.prototype.hasOwnProperty.call(old,key))kept[key]=old[key]}
+    return kept;
+  }
+  return meta;
+}
 Deno.serve(async(req)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:H});
   if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
@@ -141,14 +174,15 @@ Deno.serve(async(req)=>{
       const precise=String(meta.event_identity||"").startsWith("notice:")||String(meta.event_identity||"").startsWith("time:");
       const fingerprints=precise?[stableFingerprint]:[...new Set([stableFingerprint,legacyFingerprint,legacyOtherFingerprint])];
       const eventIdentity=String(meta.event_identity||"");
-      const queries=[db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints)];
-      if(eventIdentity.startsWith("notice:"))queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).contains("meta",{event_identity:eventIdentity}).limit(8));
-      if(clientSignature)queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8));
+      const queries=[db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints)];
+      if(eventIdentity.startsWith("notice:"))queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).contains("meta",{event_identity:eventIdentity}).limit(8));
+      if(clientSignature)queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8));
       const found=await Promise.all(queries),byId=new Map<string,ExistingRow>();
       for(const result of found){if(result.error)throw result.error;for(const row of result.data||[])byId.set(row.id,row as ExistingRow)}
       const candidates=[...byId.values()];
       const preferred=candidates.find(x=>x.fingerprint===stableFingerprint)||candidates.find(x=>x.notification_type&&x.notification_type!=="other")||candidates[0]||null;
-      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...meta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v28-context",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
+      const keptMeta=preserveCommentMeta(meta,targetUrl,stableFingerprint,preferred?[preferred,...candidates.filter(x=>x.id!==preferred.id)]:candidates);
+      const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...keptMeta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v28-context",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
         const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
         if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
