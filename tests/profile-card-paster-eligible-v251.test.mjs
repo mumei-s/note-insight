@@ -52,11 +52,11 @@ test('zero-public and unfetchable creators are skipped while 300 eligible unique
 
 test('manual stopping is never swallowed and a checkpoint containing skips resumes from the scanned position',async()=>{
  const original=people(12),c=runtime({GM_getValue:()=>({at:4,people:original})});c.stop=true;c.calls=[];
- c.api.patch(`preparePerson=async person=>{calls.push(person.urlname);if(person.urlname==='person1'){const error=Error('公開記事なし');error.code='NO_PUBLIC_ARTICLE';throw error}if(stop&&person.urlname==='person5')throw Error('停止しました');return person};sleep=async()=>{}`);
+ c.api.patch(`preparePerson=async person=>{calls.push(person.urlname);if(person.urlname==='person1'){const error=Error('公開記事なし');error.code='NO_PUBLIC_ARTICLE';throw error}if(stop&&person.urlname==='person7')throw Error('停止しました');return person};sleep=async()=>{}`);
  await assert.rejects(c.api.buildRows(8),/停止しました/);
- const saved=JSON.parse(c.localStorage.getItem(PREP_KEY));assert.equal(saved.index,4);assert.equal(saved.rows.length,3);assert.equal(saved.skipped.length,1);
+ const saved=JSON.parse(c.localStorage.getItem(PREP_KEY));assert.equal(saved.index,6);assert.equal(saved.rows.length,5);assert.equal(saved.skipped.length,1);
  c.stop=false;c.calls=[];const rows=await c.api.buildRows(8);
- assert.equal(c.calls[0],'person4');assert.ok(!c.calls.includes('person0'));
+ assert.equal(c.calls[0],'person6');assert.ok(!c.calls.includes('person0'));
  assert.deepEqual(Array.from(rows,row=>row.urlname),original.filter(row=>row.urlname!=='person1').slice(0,8).map(row=>row.urlname));
 });
 
@@ -73,6 +73,7 @@ test('exhausting unavailable candidates reports actual eligible and skipped coun
  const c=runtime({GM_getValue:()=>({at:6,people:people(7)})});c.events=[];
  c.api.patch(`findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};readRun=()=>null;preparePerson=async()=>{throw Error('HTTP 403')};makeFile=async()=>{events.push('image');return{}};setStatus=(text,bad)=>{events.push({text,bad})};sleep=async()=>{}`);
  await c.api.createFixed300();
- assert.equal(c.events.filter(event=>event==='image').length,0);assert.match(c.events.at(-1).text,/0\/300人.*7人/);assert.equal(c.events.at(-1).bad,true);
+ assert.equal(c.events.filter(event=>event==='image').length,0);assert.match(c.events.at(-1).text,/0\/10人.*7人/);assert.equal(c.events.at(-1).bad,true);
  const saved=JSON.parse(c.localStorage.getItem(PREP_KEY));assert.equal(saved.index,7);assert.equal(saved.rows.length,0);assert.equal(saved.skipped.length,7);
 });
+

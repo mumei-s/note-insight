@@ -43,8 +43,8 @@ const SPECIAL_NG=[
 const W=860,H=140;
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
-const SPEED_FACTOR=2.0;
-const IMAGE_PASTE_GAP=Math.round(1200/SPEED_FACTOR);
+const SPEED_FACTOR=4.0;
+const IMAGE_PASTE_GAP=180;
 const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
@@ -158,7 +158,7 @@ async function waitNewNoteImage(view,beforeIds,timeout=150000){
   if(fresh.length===1)return fresh[0];
   if(fresh.length>1)return fresh.at(-1);
   if(stopRequested)throw new Error('停止しました');
-  await sleep(350)
+  await sleep(120)
  }
  throw new Error('note画像アップロード待ちタイムアウト')
 }
@@ -1901,3 +1901,4 @@ page.addEventListener('pageshow',()=>{
 });
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
+

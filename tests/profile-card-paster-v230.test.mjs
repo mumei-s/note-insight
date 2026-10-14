@@ -58,9 +58,9 @@ test('image decoding falls back to Image after createImageBitmap rejects',async(
  c.response=new Blob(['image'],{type:'image/png'});c.api.patch('xhr=async()=>response');
  assert.ok(await c.api.bitmapFromUrl('https://assets.st-note.com/test.png'));assert.ok(revoked);
 });
-test('missing image stops before any partial thumbnail is returned',async()=>{
- const c=runtime();c.api.patch(`bitmapFromUrl=async url=>url?{width:10,height:10,close(){}}:null`);
- await assert.rejects(c.api.makeFile({creator:'花',actorImageUrl:'',thumbUrl:'thumb'}),/アイコンを表示できません/);
+test('unavailable configured image stops before any partial thumbnail is returned',async()=>{
+ const c=runtime();c.api.patch(`bitmapFromUrl=async url=>url&&url!=='unavailable'?{width:10,height:10,close(){}}:null`);
+ await assert.rejects(c.api.makeFile({creator:'花',actorImageUrl:'unavailable',thumbUrl:'thumb'}),/アイコンを表示できません/);
  await assert.rejects(c.api.makeFile({creator:'花',actorImageUrl:'avatar',thumbUrl:''}),/記事サムネイルを表示できません/);
 });
 test('paste inserts a profile paragraph before the image and the final extra entry has no profile',async()=>{
@@ -100,7 +100,7 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.6.0/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.6.1/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
  assert.doesNotMatch(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require/);
 });
@@ -108,10 +108,10 @@ test('direct installer preserves the fix identity and all entries load the same 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.6.0/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.6.1/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.6.0/);
+ assert.match(original,/@version\s+2.6.1/);
  assert.doesNotMatch(original,/@require/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
@@ -203,6 +203,7 @@ test('each image receives one native divider and restart removes only tracked pa
 });
 test('restart reuses prepared rows from person one, while resume leaves the current content intact',async()=>{
  const c=runtime();c.events=[];c.saved={likesHistoryFix230:true,rows:Array.from({length:301},(_,i)=>({index:i+1})),items:[{id:'done'}],activityTexts:['profile'],sectionHeadings:['heading'],dividerUrls:['url'],imageAnchorPos:2};
+ c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><select data-mode><option value="number" selected>件数</option></select><input data-count value="300"></div>';
  c.api.patch(`validateFixedRows=rows=>rows;readRun=()=>saved;writeRun=run=>{saved=run};findView=()=>({state:{doc:{content:{size:10}}}});clearCurrentPaste=()=>{events.push('clear')};embedNodes=()=>[];createFixed300=async()=>{events.push('create')};startFixed300=()=>{throw Error('must not reopen INSIGHT')}`);
  await c.api.resumeFixed300();assert.deepEqual(Array.from(c.events),['create']);assert.equal(c.saved.items.length,1);
  await c.api.restartFixed300();assert.deepEqual(Array.from(c.events),['create','clear','create']);
