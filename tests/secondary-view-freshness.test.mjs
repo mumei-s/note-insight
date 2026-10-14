@@ -89,7 +89,7 @@ test('フォロー照合は通信に失敗した場合に保存済み人物を�
   assert.match(h.text(), /前回の人物/); assert.match(h.text(), /読み込めませんでした/);
 });
 
-test('マガジンは非表示中に通信せず復帰と端末表示復帰で即時更新する', async t => {
+test('マガジンは非表示中に通信せず、新鮮な復帰では再利用して明示更新で再確認する', async t => {
   let calls = 0;
   const props = { revision: 0, accountKey: 'tester', active: false, cached: { rows: [{ key: 'old', title: '前回のマガジン' }], __cachedAt: Date.now() - 600000 }, history: async () => ({ rows: [{ key: 'new', title: `最新のマガジン${++calls}` }] }), search: async () => ({ rows: [] }) };
   const h = await fixture(t, 'src/member-insight-magazines.tsx', 'MemberInsightMagazines', props, async () => response({}));
@@ -98,16 +98,17 @@ test('マガジンは非表示中に通信せず復帰と端末表示復帰で�
   await h.act(() => { h.w.document.visibilityState = 'hidden'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
   assert.equal(calls, 1);
   await h.act(() => { h.w.document.visibilityState = 'visible'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
-  assert.equal(calls, 2); assert.match(h.text(), /最新のマガジン2/);
-  await h.render({ ...props, active: false }); await h.act(() => h.w.dispatchEvent(new h.w.Event('focus'))); assert.equal(calls, 2);
-  await h.render({ ...props, active: true }); assert.equal(calls, 3); assert.match(h.text(), /最新のマガジン3/);
+  assert.equal(calls, 1); assert.match(h.text(), /最新のマガジン1/);
+  await h.render({ ...props, active: false }); await h.act(() => h.w.dispatchEvent(new h.w.Event('focus'))); assert.equal(calls, 1);
+  await h.render({ ...props, active: true }); assert.equal(calls, 1); assert.match(h.text(), /最新のマガジン1/);
+  await h.render({ ...props, active: true, revision: 1 }); assert.equal(calls, 2); assert.match(h.text(), /最新のマガジン2/);
 });
 
-test('DMは画面を離れると定期通信を停止し復帰で本文を維持して再確認する', async t => {
+test('DMは非表示中の通信を止め、変更のない復帰では本文を維持してsummaryだけ確認する', async t => {
   const h = await fixture(t, 'src/member-insight-dm.tsx', 'MemberInsightDm', { active: false }, async (_url, body) => {
     if (body.action === 'people') return response({ rows: [{ person_key: 'person-a', peer_name: '相手A', peer_note_id: 'a' }] });
     if (body.action === 'person_messages') return response({ rows: [{ message_key: 'saved', body: '保存された本文' }], total: 1 });
-    return response({ paired: true, messages: 1, readerStatus: [] });
+    return response({ paired: true, messages: 1, threads: 1, readerStatus: [], lastMessageSavedAt: '2026-10-14T01:00:00Z', lastSync: { created_at: '2026-10-14T01:00:00Z', upserted_count: 1 } });
   });
   assert.equal(h.calls.length, 0);
   await h.render({ active: true }); assert.equal(h.calls.length, 3);
@@ -115,11 +116,11 @@ test('DMは画面を離れると定期通信を停止し復帰で本文を維持
   await h.render({ active: false }); const stoppedAt = h.calls.length;
   await h.act(() => { for (const timer of h.intervals.filter(x => !x.cancelled)) timer.fn(); h.w.dispatchEvent(new h.w.Event('focus')); });
   assert.equal(h.calls.length, stoppedAt);
-  await h.render({ active: true }); assert.equal(h.calls.length, stoppedAt + 4); assert.match(h.text(), /保存された本文/);
+  await h.render({ active: true }); assert.equal(h.calls.length, stoppedAt + 1); assert.match(h.text(), /保存された本文/);
   await h.act(() => { h.w.document.visibilityState = 'hidden'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
   const hiddenAt = h.calls.length;
   await h.act(() => { for (const timer of h.intervals.filter(x => !x.cancelled && x.ms === 2500)) timer.fn(); });
   assert.equal(h.calls.length, hiddenAt);
   await h.act(() => { h.w.document.visibilityState = 'visible'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
-  assert.equal(h.calls.length, hiddenAt + 4); assert.match(h.text(), /保存された本文/);
+  assert.equal(h.calls.length, hiddenAt + 1); assert.match(h.text(), /保存された本文/);
 });
