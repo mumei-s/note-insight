@@ -1,2 +1,2 @@
-INSIGHT 2026.10.15.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Retained verified views, safe notification pagination and exact saved reply bodies.
+INSIGHT 2026.10.15.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Notification connection shows active key count, not physical device count.
