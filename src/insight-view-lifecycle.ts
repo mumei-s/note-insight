@@ -1,9 +1,15 @@
 // A previous page's snapshot is an offline fallback, not a verified current view.
 const sessionStartedAt = Date.now();
 
-export function isFreshInsightView(cachedAt: unknown, maxAge = 60_000) {
+// A successful view from this page may stay visible while its latest check runs.
+// Its display lifetime is independent of the short network recheck interval.
+export function canRetainInsightView(cachedAt: unknown) {
   const savedAt = Number(cachedAt), now = Date.now();
-  return Number.isFinite(savedAt) && savedAt >= sessionStartedAt && savedAt <= now && now - savedAt <= maxAge;
+  return Number.isFinite(savedAt) && savedAt >= sessionStartedAt && savedAt <= now;
+}
+
+export function isFreshInsightView(cachedAt: unknown, maxAge = 60_000) {
+  return canRetainInsightView(cachedAt) && Date.now() - Number(cachedAt) <= maxAge;
 }
 
 type RequestRecord = { source: string; action: string; durationMs: number; status: number; outcome: string };
