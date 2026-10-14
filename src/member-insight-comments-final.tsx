@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import { readInsightSnapshot, writeInsightSnapshot } from "./insight-persistent-cache";
-import { fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
+import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import "./member-insight-comments-final.css";
 
 const HISTORY="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-history";
@@ -21,6 +21,15 @@ type CapturedRequest={token:string;signal:AbortSignal};
 type CommentRequest=CapturedRequest&{seq:number};
 type CommentCache={rows:Row[];total:number;at:number;revision:number};
 const COMMENT_CACHE=new Map<string,CommentCache>();
+type CommentView={status:string;day:string;articleKey:string;draft:string;query:string;renderLimit:number};
+const COMMENT_VIEWS=new Map<string,CommentView>();
+const COMMENT_ARTICLES=new Map<string,{rows:Row[];at:number;revision:number}>();
+const COMMENT_COLLECTION=new Map<string,{at:number;revision:number;message:string}>();
+const COMMENT_AUX=new Map<string,{detail:Record<string,Row[]>;hearts:Record<string,Heart>}>();
+let lastVerifiedScope="";
+const defaultView=():CommentView=>({status:"all",day:"",articleKey:"",draft:"",query:"",renderLimit:120});
+function viewCacheKey(scope:string,view:Pick<CommentView,"status"|"day"|"articleKey"|"query">){return`${scope}|${view.status}|${view.day}|${view.articleKey}|${view.status==="all"?"":view.query}`}
+function remember<T>(map:Map<string,T>,key:string,value:T){map.set(key,value);if(map.size>40)map.delete(map.keys().next().value!)}
 function bounded<T>(work:Promise<T>,signal:AbortSignal,timeoutMs=15000):Promise<T>{
  return new Promise((resolve,reject)=>{
   let timer=0;
@@ -89,17 +98,24 @@ function mergeEvents(base:Row[],incoming:Row[]){
   return [...map.values()].sort((a,b)=>Date.parse(String(b.occurred_at||0))-Date.parse(String(a.occurred_at||0)))
 }
 export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
- const[rows,setRows]=useState<Row[]>([]),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(""),[day,setDay]=useState(""),[draft,setDraft]=useState(""),[query,setQuery]=useState(""),[total,setTotal]=useState(0),[status,setStatus]=useState("all"),[detail,setDetail]=useState<Record<string,Row[]>>({}),[hearts,setHearts]=useState<Record<string,Heart>>({}),[loading,setLoading]=useState(true),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">("initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(120),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
+ const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",viewScope=`${memberNoteId.trim().toLowerCase()}|${token}`,savedView=COMMENT_VIEWS.get(viewScope)||defaultView(),initialKey=viewCacheKey(viewScope,savedView),initialCached=COMMENT_CACHE.get(initialKey),initialRetained=initialCached&&canRetainInsightView(initialCached.at)?initialCached:null,initialAux=initialRetained?COMMENT_AUX.get(initialKey):null;
+ const[rows,setRows]=useState<Row[]>(initialRetained?.rows||[]),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(savedView.articleKey),[day,setDay]=useState(savedView.day),[draft,setDraft]=useState(savedView.draft),[query,setQuery]=useState(savedView.query),[total,setTotal]=useState(initialRetained?.total||0),[status,setStatus]=useState(savedView.status),[detail,setDetail]=useState<Record<string,Row[]>>(initialAux?.detail||{}),[hearts,setHearts]=useState<Record<string,Heart>>(initialAux?.hearts||{}),[loading,setLoading]=useState(!initialRetained),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">(initialRetained?"idle":"initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(savedView.renderLimit),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
  const loadSeq=useRef(0),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
- const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
- const cacheKey=`${memberNoteId.trim().toLowerCase()}|${token}|${status}|${day}|${articleKey}|${status==="all"?"":query}`,persistKey=snapshotKey(memberNoteId);
+ const stateScope=useRef(viewScope),controlsReady=stateScope.current===viewScope;
+ const cacheKey=viewCacheKey(viewScope,{status,day,articleKey,query}),persistKey=snapshotKey(memberNoteId);
+ useEffect(()=>{
+  if(stateScope.current===viewScope)return;
+  stateScope.current=viewScope;const next=COMMENT_VIEWS.get(viewScope)||defaultView();
+  setStatus(next.status);setDay(next.day);setArticleKey(next.articleKey);setDraft(next.draft);setQuery(next.query);setRenderLimit(next.renderLimit);setRows([]);setTotal(0);setDetail({});setHearts({});
+ },[viewScope]);
+ useEffect(()=>{if(controlsReady)remember(COMMENT_VIEWS,viewScope,{status,day,articleKey,draft,query,renderLimit})},[viewScope,controlsReady,status,day,articleKey,draft,query,renderLimit]);
  const globalAll=status==="all"&&!day&&!articleKey;
  function current(request:CommentRequest){return request.seq===loadSeq.current&&!request.signal.aborted&&request.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")}
  function beginLoad():CommentRequest{activeRequest.current?.abort();window.clearTimeout(syncTimer.current);const controller=new AbortController();activeRequest.current=controller;return{seq:++loadSeq.current,token,signal:controller.signal}}
  function finishSync(request:CommentRequest,message:string,delay=1200){if(!current(request))return;window.clearTimeout(syncTimer.current);setSyncMessage(message);setSyncPhase("result");syncTimer.current=window.setTimeout(()=>{if(current(request))setSyncPhase("idle")},delay)}
- function publish(request:CommentRequest,list:Row[],count:number){if(!current(request))return;setRows(list);setTotal(count);setLoading(false)}
- function cache(request:CommentRequest,list:Row[],count:number){if(!current(request))return;COMMENT_CACHE.set(cacheKey,{rows:list,total:count,at:Date.now(),revision});if(COMMENT_CACHE.size>40)COMMENT_CACHE.delete(COMMENT_CACHE.keys().next().value!)}
+ function publish(request:CommentRequest,list:Row[],count:number){if(!current(request))return;setRows(previous=>{if(!current(request))return previous;const images=new Map(previous.map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));return list.map(row=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}))});setTotal(count);setLoading(false)}
+ function cache(request:CommentRequest,list:Row[],count:number){if(!current(request))return;lastVerifiedScope=viewScope;remember(COMMENT_CACHE,cacheKey,{rows:list,total:count,at:Date.now(),revision})}
  async function saveSnapshot(request:CommentRequest,list:Row[],count:number){if(!persistKey||!current(request))return;await writeInsightSnapshot<CommentSnapshot>(persistKey,{version:1,rows:list,total:count,latestAt:latestAt(list),savedAt:Date.now()})}
  function enrichLater(list:Row[],request:CommentRequest){
   void enrich(list,request.signal).then(enriched=>{
@@ -117,11 +133,13 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    const h=await post(HEARTS,{action:"batch",rootKeys:keys.slice(i,i+80)},request);
    if(!current(request))return;
    const map:Record<string,Heart>={};for(const item of h.rows||[])map[String(item.rootKey)]=item;
-   setHearts(v=>current(request)?({...v,...map}):v);
+   setHearts(v=>{if(!current(request))return v;const next={...v,...map};remember(COMMENT_AUX,cacheKey,{detail:COMMENT_AUX.get(cacheKey)?.detail||{},hearts:next});return next});
   }catch{if(!current(request))return}}
  }
  async function loadAll(background=false,fallback?:CommentCache|CommentSnapshot){
   const request=beginLoad();let received=false;
+  const retained=background&&fallback&&canRetainInsightView("at" in fallback?fallback.at:fallback.savedAt)?fallback:null;
+  const displayed=(list:Row[])=>retained?(status==="all"?mergeEvents(retained.rows,list):uniqueRows([...list,...retained.rows])):list;
   setLoading(true);setError("");setSyncPhase(background?"delta":"initial");setSyncMessage("保存先のコメント履歴を確認中");
   try{
    if(status==="all"){
@@ -129,16 +147,17 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
     if(!current(request))return;
     const expected=Math.max(0,Number(first.total||0));
     let collected:Row[]=mergeEvents([],first.rows||[]),seen=new Set(collected.map(r=>String(r.comment_key||"")));
-    received=true;publish(request,collected,expected);enrichLater(collected,request);
+    received=true;publish(request,displayed(collected),expected);enrichLater(collected,request);
     const pages=Math.ceil(expected/EVENT_PAGE);
     for(let start=2;start<=pages;start+=EVENT_GROUP){
      const nums=Array.from({length:Math.min(EVENT_GROUP,pages-start+1)},(_,i)=>start+i),packets=await Promise.all(nums.map(page=>post(EVENTS,{...params,page},request)));
      if(!current(request))return;
      const added:Row[]=[];
      for(const packet of packets)for(const row of packet.rows||[]){const k=String(row.comment_key||"");if(!k||seen.has(k))continue;seen.add(k);added.push(row)}
-     if(added.length){collected=mergeEvents(collected,added);publish(request,collected,expected);enrichLater(added,request)}
+     if(added.length){collected=mergeEvents(collected,added);publish(request,displayed(collected),expected);enrichLater(added,request)}
     }
     if(collected.length!==expected)throw new Error("COMMENT_HISTORY_INCOMPLETE");
+    publish(request,collected,expected);
     cache(request,collected,expected);
     if(globalAll)void saveSnapshot(request,collected,expected);
     finishSync(request,"保存先の全履歴 読込完了");return;
@@ -147,16 +166,17 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    if(!current(request))return;
    const expected=Math.max(0,Number(first.total||0)),firstList=uniqueRows(first.rows||[]);
    let collected:Row[]=[...firstList],seen=new Set(collected.map(r=>String(r.root_key||"")));
-   received=true;publish(request,collected,expected);enrichLater(firstList,request);void loadHearts(firstList,request);
+   received=true;publish(request,displayed(collected),expected);enrichLater(firstList,request);void loadHearts(firstList,request);
    const pages=Math.ceil(expected/PAGE);
    for(let start=2;start<=pages;start+=FETCH_GROUP){
     const nums=Array.from({length:Math.min(FETCH_GROUP,pages-start+1)},(_,i)=>start+i),packets=await Promise.all(nums.map(page=>post(EXTRAS,{action:"comments_filtered",...params,page},request)));
     if(!current(request))return;
     const added:Row[]=[];
     for(const packet of packets)for(const row of packet.rows||[]){const k=String(row.root_key||"");if(!k||seen.has(k))continue;seen.add(k);added.push(row)}
-    if(added.length){collected=[...collected,...added];publish(request,collected,expected);enrichLater(added,request);void loadHearts(added,request)}
+    if(added.length){collected=[...collected,...added];publish(request,displayed(collected),expected);enrichLater(added,request);void loadHearts(added,request)}
    }
    if(collected.length!==expected)throw new Error("COMMENT_HISTORY_INCOMPLETE");
+   publish(request,collected,expected);
    cache(request,collected,expected);finishSync(request,"集計完了");
   }catch(e){
    if(!current(request))return;
@@ -190,14 +210,15 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   if(detail[k])return;
   const controller=activeRequest.current;if(!controller)return;
   const request={seq:loadSeq.current,token,signal:controller.signal};
-  try{const x=await post(HISTORY,{action:"comment_thread",rootKey:k},request);if(current(request))setDetail(v=>current(request)?({...v,[k]:x.rows||[]}):v)}catch(e){if(current(request))setError(e instanceof Error?e.message:"会話の読込に失敗しました")}
+  try{const x=await post(HISTORY,{action:"comment_thread",rootKey:k},request);if(current(request))setDetail(v=>{if(!current(request))return v;const next={...v,[k]:x.rows||[]};remember(COMMENT_AUX,cacheKey,{detail:next,hearts:COMMENT_AUX.get(cacheKey)?.hearts||{}});return next})}catch(e){if(current(request))setError(e instanceof Error?e.message:"会話の読込に失敗しました")}
  }
- reloadSaved.current=()=>{setDetail({});setHearts({});void loadAll(true,{rows,total,at:Date.now(),revision})};
- async function collectComments(selectedArticle:string|null=null){
+ reloadSaved.current=()=>{COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});void loadAll(true,{rows,total,at:Date.now(),revision})};
+ async function collectComments(selectedArticle:string|null=null,force=false){
   if(collectionController.current||!token||!persistKey)return;
   const controller=new AbortController(),seq=++collectionSeq.current,capturedToken=token;
   collectionController.current=controller;
   const active=()=>seq===collectionSeq.current&&!controller.signal.aborted&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"");
+  const announce=(message:string)=>{setCollectionMessage(message);remember(COMMENT_COLLECTION,viewScope,{at:Date.now(),revision,message})};
   setCollecting(true);setCollectionMessage("noteのコメントを取得中… 保存済み履歴はそのまま表示しています。");
   try{
    const response=await fetchInsightResource(COMMENT_REFRESH,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":capturedToken},body:JSON.stringify({action:"refresh",articleKey:selectedArticle}),cache:"no-store",signal:controller.signal},40000);
@@ -206,13 +227,15 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    if(!response.ok)throw new Error(result?.error||`HTTP_${response.status}`);
    const partial=Number.isSafeInteger(result?.failedArticles)&&result.failedArticles>0;
    if(result?.ok!==true&&!partial)throw new Error(result?.error||"COMMENT_REFRESH_FAILED");
-   if(result.paused){setCollectionMessage("noteのコメント取得は一時停止中です。保存済み履歴を表示しています。");return}
-   if(result.skipped){setCollectionMessage("直前の取得があるため、保存先の履歴を再確認しています。")}
-   else if(partial){setCollectionMessage(`${n(result.failedArticles)}記事のコメントを取得できませんでした。取得できた分を保存先から確認しています。`)}
-   else if(result.truncated){setCollectionMessage("今回取得できたコメントを反映しています。残りはもう一度取得できます。")}
-   else if(Number.isSafeInteger(result.articles)&&result.articles>=0){setCollectionMessage(`noteから${n(result.articles)}記事のコメントを取得しました。保存先の履歴を再確認しています。`)}
+   if(result.paused){announce("noteのコメント取得は一時停止中です。保存済み履歴を表示しています。");return}
+   if(result.skipped){announce("直前の取得があるため、保存先の履歴を表示しています。")}
+   else if(partial){announce(`${n(result.failedArticles)}記事のコメントを取得できませんでした。取得できた分を保存先から確認しています。`)}
+   else if(result.truncated){announce("今回取得できたコメントを反映しています。残りはもう一度取得できます。")}
+   else if(Number.isSafeInteger(result.articles)&&result.articles>=0){announce(`noteから${n(result.articles)}記事のコメントを取得しました。保存先の履歴を表示しています。`)}
    else throw new Error("COMMENT_REFRESH_RESPONSE_INVALID");
-   reloadSaved.current?.();
+   // A skipped/unchanged automatic collection adds nothing to the initial DB
+   // check. Explicit collection still verifies the current selected history.
+   if(force||(!result.skipped&&result.changedComments!==0))reloadSaved.current?.();
   }catch(e){
    if(active())setCollectionMessage(`noteのコメント取得を確認できませんでした。保存済み履歴を表示しています。${e instanceof Error?e.message:"取得失敗"}`);
   }finally{
@@ -220,30 +243,41 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   }
  }
  useEffect(()=>{
+  if(!controlsReady)return;
   setCollectionMessage("");setCollecting(false);
+  const saved=COMMENT_COLLECTION.get(viewScope);
+  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)){setCollectionMessage(saved.message);return}
   if(persistKey&&token)void collectComments();
   return()=>{collectionSeq.current++;collectionController.current?.abort();collectionController.current=null};
- },[persistKey,token]);
+ },[persistKey,token,viewScope,revision,controlsReady]);
  useEffect(()=>{
+  if(!controlsReady)return;
   const controller=new AbortController(),seq=++articleSeq.current,capturedToken=token;
-  setArticleKey("");setArticles([]);
-  if(day)void post(EXTRAS,{action:"comment_articles",...range},{token:capturedToken,signal:controller.signal}).then(x=>{if(!controller.signal.aborted&&seq===articleSeq.current&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||""))setArticles(x.rows||[])}).catch(()=>{});
+  const key=`${viewScope}|${day}`,saved=COMMENT_ARTICLES.get(key);
+  setArticles(saved&&canRetainInsightView(saved.at)?saved.rows:[]);
+  if(day&&!(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)))void post(EXTRAS,{action:"comment_articles",...range},{token:capturedToken,signal:controller.signal}).then(x=>{if(!controller.signal.aborted&&seq===articleSeq.current&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")){setArticles(x.rows||[]);remember(COMMENT_ARTICLES,key,{rows:x.rows||[],at:Date.now(),revision})}}).catch(()=>{});
   return()=>{controller.abort();articleSeq.current++};
- },[day,token]);
+ },[day,token,viewScope,revision,controlsReady]);
  const threadQuery=status==="all"?"":query;
  useEffect(()=>{
-  setDetail({});setHearts({});setRows([]);setTotal(0);setLoading(true);setError("");setSyncPhase("initial");setSyncMessage("保存先のコメント履歴を確認中");
+  if(!controlsReady)return;
   let cancelled=false;
+  const cleanup=()=>{cancelled=true;loadSeq.current++;activeRequest.current?.abort();window.clearTimeout(syncTimer.current)};
   const cached=COMMENT_CACHE.get(cacheKey);
   const cachedSnapshot=cached?{version:1 as const,rows:cached.rows,total:cached.total,latestAt:latestAt(cached.rows),savedAt:cached.at}:null;
+  const retained=cached&&canRetainInsightView(cached.at),aux=retained?COMMENT_AUX.get(cacheKey):null;
+  setError("");setRows(retained?cached.rows:[]);setTotal(retained?cached.total:0);
+  setDetail(aux?.detail||{});setHearts(aux?.hearts||{});
   if(cached){
-   const fresh=cached.revision===revision&&isFreshInsightView(cached.at);
-   if(fresh){setRows(cached.rows);setTotal(cached.total);setLoading(false)}
-   if(globalAll)void verifySavedHistory(cachedSnapshot!,fresh);else void loadAll(fresh,cached);
+   const fresh=lastVerifiedScope===viewScope&&cached.revision===revision&&isFreshInsightView(cached.at);
+   if(fresh){beginLoad();setLoading(false);setSyncPhase("idle");return cleanup}
+   COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});
+   void loadAll(Boolean(retained),cached);
   }else if(globalAll&&persistKey){
    // Reading the saved snapshot and checking the server run together. A slow local
    // database must not delay the first fresh response.
    const request=beginLoad();
+   setLoading(true);setSyncPhase("initial");setSyncMessage("保存先のコメント履歴を確認中");
    let snapshotReady=false,saved:CommentSnapshot|null=null;
    const savedRead=readInsightSnapshot<CommentSnapshot>(persistKey).then(snapshot=>{snapshotReady=true;saved=snapshot;return snapshot});
    void post(EVENTS,{page:1,pageSize:50},request).then(async probe=>{
@@ -267,10 +301,11 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
     setError(message);
    });
   }else void loadAll(false);
-  return()=>{cancelled=true;loadSeq.current++;activeRequest.current?.abort();window.clearTimeout(syncTimer.current)};
- },[status,day,articleKey,threadQuery,revision,persistKey,token]);
+  return cleanup;
+ },[status,day,articleKey,threadQuery,revision,persistKey,token,controlsReady]);
  useEffect(()=>()=>{activeRequest.current?.abort();window.clearTimeout(syncTimer.current)},[]);
- useEffect(()=>{setRenderLimit(120)},[status,day,articleKey,query]);
+ const renderedCriteria=useRef(JSON.stringify([viewScope,status,day,articleKey,query]));
+ useEffect(()=>{const key=JSON.stringify([viewScope,status,day,articleKey,query]);if(controlsReady&&renderedCriteria.current!==key){renderedCriteria.current=key;setRenderLimit(120)}},[viewScope,controlsReady,status,day,articleKey,query]);
  useEffect(()=>{
   const el=moreRef.current;if(!el)return;
   const io=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))setRenderLimit(v=>Math.min(v+120,Math.max(rows.length,120)))},{rootMargin:"360px 0px"});
@@ -280,11 +315,12 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const visibleEventRows=useMemo(()=>eventRows.slice(0,renderLimit),[eventRows,renderLimit]);
  const visibleThreadRows=useMemo(()=>rows.slice(0,renderLimit),[rows,renderLimit]);
  const complete=!loading&&!error&&rows.length>=total,shownTotal=status==="all"&&query.trim()?eventRows.length:total;
+ if(!controlsReady)return <section className="micf"><h2>コメント・返信履歴</h2><p className="micf-empty">コメント履歴を確認中…</p></section>;
  return <section className="micf" aria-busy={syncPhase==="initial"&&loading}>
   <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存済みの全コメント・全返信を、会話数ではなく1件ずつ全部表示します。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{n(shownTotal)}件</strong></header>
   {syncPhase!=="idle"?<div className={`micf-sync-scene ${syncPhase}`}><div className="micf-sync-track"><i/><i/><i/><i/></div><b>{syncMessage}</b><span>{syncPhase==="initial"?`${n(rows.length)} / ${total?n(total):"…"}件`:"保存済み表示はそのまま"}</span></div>:<div className="micf-load-state done"><b>{complete?"全履歴 保存済み":"保存済み履歴"}</b><span>{n(rows.length)} / {n(total)}件</span></div>}
   <div className="micf-tabs">{[["all","すべて（全コメント）"],["pending","要対応"],["unreplied","未返信"],["followup_pending","相手返信"],["heart_closed","あなたの♡で終了"],["replied","自分返信"]].map(x=><button key={x[0]} className={status===x[0]?"active":""} onClick={()=>setStatus(x[0])}>{x[1]}</button>)}</div>
-  <div className="micf-tools"><label><span>コメント日</span><input type="date" value={day} onChange={e=>setDay(e.target.value)}/></label><select value={articleKey} onChange={e=>setArticleKey(e.target.value)} disabled={!day}><option value="">{day?`この日の記事すべて (${articles.length})`:"日付を選択すると記事一覧"}</option>{articles.map(a=><option key={a.article_key} value={a.article_key}>{a.title}（{n(a.comment_count_day)}件）</option>)}</select><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="名前・記事・コメント本文" onKeyDown={e=>{if(e.key==="Enter")setQuery(draft)}}/><button onClick={()=>setQuery(draft)}>検索</button>{day?<button onClick={()=>{setDay("");setArticleKey("")}}>日付解除</button>:null}<button type="button" onClick={()=>void collectComments(articleKey||null)} disabled={collecting||!persistKey}>{collecting?"noteから取得中…":"noteからコメントを取得"}</button></div>
+  <div className="micf-tools"><label><span>コメント日</span><input type="date" value={day} onChange={e=>{setDay(e.target.value);setArticleKey("")}}/></label><select value={articleKey} onChange={e=>setArticleKey(e.target.value)} disabled={!day}><option value="">{day?`この日の記事すべて (${articles.length})`:"日付を選択すると記事一覧"}</option>{articles.map(a=><option key={a.article_key} value={a.article_key}>{a.title}（{n(a.comment_count_day)}件）</option>)}</select><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="名前・記事・コメント本文" onKeyDown={e=>{if(e.key==="Enter")setQuery(draft)}}/><button onClick={()=>setQuery(draft)}>検索</button>{day?<button onClick={()=>{setDay("");setArticleKey("")}}>日付解除</button>:null}<button type="button" onClick={()=>void collectComments(articleKey||null,true)} disabled={collecting||!persistKey}>{collecting?"noteから取得中…":"noteからコメントを取得"}</button></div>
   {collectionMessage?<div className="micf-load-state" role="status" aria-live="polite"><b>{collectionMessage}</b></div>:null}
   {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length?<p className="micf-empty">コメント全履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}</article>})}</div>{visibleEventRows.length<eventRows.length?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(eventRows.length)}件を表示</b><span>下へ進むと続きを表示します</span></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(rows.length)}件を表示</b><span>下へ進むと続きを表示します</span></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
  </section>
