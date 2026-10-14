@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
-import { isFreshInsightView } from "./insight-view-lifecycle";
+import { canRetainInsightView, isFreshInsightView } from "./insight-view-lifecycle";
+import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import "./member-insight-magazines.css";
 
 type Row = Record<string, any>;
@@ -21,28 +22,44 @@ function SearchProgress({ count }: { count: number }) {
 export function MemberInsightMagazines({ revision, accountKey, history, search, cached, active = true }: {
   revision: number; accountKey: string; history: () => Promise<any>; search: (params: Record<string, unknown>, signal: AbortSignal) => Promise<any>; cached?: any; active?: boolean;
 }) {
-  const fresh = isFreshInsightView(Number(cached?.__cachedAt || cached?.cachedAt || 0));
-  const [rows, setRows] = useState<Row[]>(fresh ? cached?.rows || [] : []), [refreshed, setRefreshed] = useState(fresh ? cached?.refreshedAt || "" : ""), [loading, setLoading] = useState(!fresh);
+  const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "", scope = JSON.stringify([accountKey, token]), verificationSignature = JSON.stringify([scope, revision]);
+  const retained = canRetainInsightView(Number(cached?.__cachedAt || cached?.cachedAt || 0));
+  const [rows, setRows] = useState<Row[]>(retained ? cached?.rows || [] : []), [refreshed, setRefreshed] = useState(retained ? cached?.refreshedAt || "" : ""), [loading, setLoading] = useState(!retained);
   const [mode, setMode] = useState("all"), [query, setQuery] = useState(""), [open, setOpen] = useState<string | null>(null), [states, setStates] = useState<Record<string, SearchState>>({}), [loadError, setLoadError] = useState("");
   const id = useId().replace(/:/g, ""), run = useRef(0), activeRequest = useRef<AbortController | null>(null), activeKey = useRef<string | null>(null);
   const resultCache = useRef(new Map<string, { at: number; rows: Row[]; total: number }>());
-  const historyRequest = useRef(0), historyFlight = useRef<Promise<any> | null>(null), rowsRef = useRef(rows); rowsRef.current = rows;
+  const historyRequest = useRef(0), historyFlight = useRef<{ signature: string; promise: Promise<any> } | null>(null), verifiedHistory = useRef<{ signature: string; at: number } | null>(null);
+  const rowsRef = useRef(rows), statesRef = useRef(states), openRef = useRef(open), cachedScope = useRef(scope), previousScope = useRef(scope), currentView = useRef({ signature: verificationSignature, active });
+  rowsRef.current = rows; statesRef.current = states; openRef.current = open; currentView.current = { signature: verificationSignature, active };
   const patch = (key: string, change: Partial<SearchState>) => setStates(old => ({ ...old, [key]: { ...(old[key] || blank()), ...change } }));
   useEffect(() => {
+    if (previousScope.current !== scope) {
+      previousScope.current = scope; verifiedHistory.current = null; resultCache.current.clear(); stop();
+      rowsRef.current = []; setRows([]); setRefreshed(""); setLoadError(""); setStates({}); setOpen(null);
+    }
     if (!active) { stop(); setLoading(false); return; }
     let live = true;
     const refresh = async () => {
-      if (!live || document.visibilityState !== "visible") { stop(); return; }
+      if (!live || document.visibilityState !== "visible") { historyRequest.current++; stop(); setLoading(false); return; }
+      if (verifiedHistory.current?.signature === verificationSignature && isFreshInsightView(verifiedHistory.current.at)) { setLoading(false); return; }
       const request = ++historyRequest.current;
-      const valid = () => live && document.visibilityState === "visible" && request === historyRequest.current;
+      const valid = () => live && currentView.current.active && document.visibilityState === "visible" && request === historyRequest.current && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
+      stop();
       setLoading(!rowsRef.current.length);
-      const job = historyFlight.current || history(); historyFlight.current = job;
+      const job = historyFlight.current?.signature === verificationSignature ? historyFlight.current : { signature: verificationSignature, promise: Promise.resolve().then(history) }; historyFlight.current = job;
       try {
-        const x = await job;
-        if (valid()) { setRows(x.rows || []); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : ""); }
+        const x = await job.promise;
+        if (!valid()) return;
+        if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error("INVALID_MAGAZINE_HISTORY");
+        setRows(x.rows); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : "");
+        if (!x.__offlineCache) {
+          verifiedHistory.current = { signature: verificationSignature, at: Date.now() }; resultCache.current.clear();
+          const key = openRef.current, state = key ? statesRef.current[key] : null, magazine = key ? x.rows.find((row: Row) => keyOf(row) === key) : null;
+          if (magazine && state?.searched) void searchArticles(magazine, state.day, state.query);
+        }
       } catch {
         if (valid()) {
-          if (!rowsRef.current.length && cached?.rows) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
+          if (!rowsRef.current.length && cachedScope.current === scope && Array.isArray(cached?.rows)) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
           setLoadError("マガジンの更新を確認できませんでした。保存済みの情報を表示しています。");
         }
       } finally { if (historyFlight.current === job) historyFlight.current = null; if (valid()) setLoading(false); }
@@ -50,8 +67,8 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     void refresh();
     const resume = () => { void refresh(); };
     window.addEventListener("focus", resume); window.addEventListener("pageshow", resume); document.addEventListener("visibilitychange", resume);
-    return () => { live = false; historyRequest.current++; window.removeEventListener("focus", resume); window.removeEventListener("pageshow", resume); document.removeEventListener("visibilitychange", resume); };
-  }, [revision, history, accountKey, active]);
+    return () => { live = false; historyRequest.current++; stop(); window.removeEventListener("focus", resume); window.removeEventListener("pageshow", resume); document.removeEventListener("visibilitychange", resume); };
+  }, [revision, history, accountKey, token, active]);
   useEffect(() => () => { run.current++; activeRequest.current?.abort(); }, [accountKey]);
   const visible = useMemo(() => rows.filter(r => {
     const ownerId = creatorNoteId(r.owner), me = String(r.meNoteId || accountKey).toLowerCase(), owned = r.relation ? r.relation === "owner" : ownerId === me;
@@ -69,7 +86,8 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     if (!active || document.visibilityState !== "visible") return;
     const key = keyOf(r); if (!key) return;
     stop();
-    const currentRun = ++run.current, controller = new AbortController(), q = queryValue.trim(), signature = JSON.stringify([accountKey, key, day, q.toLowerCase()]);
+    const currentRun = ++run.current, controller = new AbortController(), q = queryValue.trim(), signature = JSON.stringify([verificationSignature, key, day, q.toLowerCase()]);
+    const valid = () => currentRun === run.current && !controller.signal.aborted && currentView.current.active && document.visibilityState === "visible" && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
     activeRequest.current = controller; activeKey.current = key;
     const local = localMatches(r.recentArticles || [], day, q), saved = resultCache.current.get(signature);
     patch(key, { day, query: queryValue, rows: saved?.rows || local, searched: true, signature, error: "", busy: !saved || !isFreshInsightView(saved.at), total: saved?.total });
@@ -77,16 +95,17 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     try {
       const range = day ? { dateFrom: `${day}T00:00:00+09:00`, dateTo: new Date(Date.parse(`${day}T00:00:00+09:00`) + 86400000).toISOString() } : { dateFrom: null, dateTo: null };
       const x = await search({ magazineKey: key, query: q, ...range }, controller.signal);
-      if (currentRun !== run.current || controller.signal.aborted) return;
+      if (!valid()) return;
+      if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error("INVALID_MAGAZINE_SEARCH");
       const merged = new Map<string, Row>();
       // Keep local hits only from this magazine and these exact criteria.
       for (const a of [...local, ...localMatches(x.rows || [], day, q)]) merged.set(String(a.url || a.key), a);
       const result = [...merged.values()].sort((a, b) => (Date.parse(b.publishAt || b.publish_at) || 0) - (Date.parse(a.publishAt || a.publish_at) || 0));
       const total = Math.max(result.length, Number(x.total || 0));
-      resultCache.current.set(signature, { at: Date.now(), rows: result, total });
+      resultCache.current.set(signature, { at: x.__offlineCache ? 0 : Date.now(), rows: result, total });
       patch(key, { rows: result, total, error: x.__offlineCache ? "保存済みの検索結果です。最新確認は再検索できます。" : "" });
     } catch {
-      if (currentRun === run.current && !controller.signal.aborted) patch(key, { error: "追加確認が完了しませんでした。表示済みの記事は残しています。再検索できます。" });
+      if (valid()) patch(key, { error: "追加確認が完了しませんでした。表示済みの記事は残しています。再検索できます。" });
     } finally {
       if (currentRun === run.current) { patch(key, { busy: false }); activeRequest.current = null; activeKey.current = null; }
     }
