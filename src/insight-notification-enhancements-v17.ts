@@ -2,7 +2,6 @@ export {};
 
 const STYLE_ID="mumei-notification-enhancements-v17-style";
 const CAT_ORDER_KEY="mumei-notification-category-order-v17";
-const COMMENTS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-comment-events";
 const FEED_MARK="insight-notification-feed-final";
 const TOKEN_KEY="mumei-insight-access-token";
 const HOLD_MS=520;
@@ -10,14 +9,11 @@ let timer=0;
 let suppressClickUntil=0;
 let draggingId="";
 let dragOrder:string[]=[];
-const feedBodies:any[]=[];
-const dayCache=new Map<string,any[]>();
+const feedBodies:{identity:string;body:string;token:string}[]=[];
 
 function clean(v:any){return String(v||"").replace(/\s+/g," ").trim()}
-function idFromProfile(url:any){try{return new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]?.toLowerCase()||""}catch{return""}}
-function articleKey(url:any){try{const u=new URL(String(url||"")),p=u.pathname.split("/").filter(Boolean),i=p.indexOf("n");return i>=0&&p[i+1]?`${String(p[0]||"").toLowerCase()}/${p[i+1]}`:""}catch{return""}}
-function timeMs(text:any){const m=String(text||"").match(/(\d{4})[\/.年-](\d{1,2})[\/.月-](\d{1,2})[^\d]+(\d{1,2}):(\d{2})/);return m?Date.parse(`${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}T${String(m[4]).padStart(2,"0")}:${m[5]}:00+09:00`):0}
-function jstDay(text:any){const m=String(text||"").match(/(\d{4})[\/.年-](\d{1,2})[\/.月-](\d{1,2})/);return m?`${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`:""}
+function currentToken(){try{return localStorage.getItem(TOKEN_KEY)||""}catch{return""}}
+function commentIdentity(raw:any){try{const u=new URL(String(raw||"")),m=u.pathname.match(/^\/([A-Za-z0-9_-]+)\/n\/(n[A-Za-z0-9]+)$/),key=u.searchParams.get("c");return /^https?:$/.test(u.protocol)&&u.hostname==="note.com"&&m&&key&&/^nc[A-Za-z0-9]+$/.test(key)?{identity:`${m[1].toLowerCase()}/${m[2]}:${key}`,key}:null}catch{return null}}
 
 function installStyle(){
   if(document.getElementById(STYLE_ID))return;
@@ -51,30 +47,33 @@ function bindCategoryReorder(){
   tabs.addEventListener("pointerup",stop);tabs.addEventListener("pointercancel",stop);tabs.addEventListener("pointerleave",e=>{if(!draggingId&&e.pointerId===pointer)stop()});tabs.addEventListener("click",e=>{if(Date.now()<suppressClickUntil){e.preventDefault();e.stopImmediatePropagation()}},true);
 }
 
-function pushFeedBody(r:any){const body=clean(r?.meta?.body||r?.meta?.comment_body||r?.comment_body||r?.body||r?.message||r?.detail||r?.raw_text);if(!body)return;feedBodies.push({body,actor:idFromProfile(r.actor_url),article:articleKey(r.target_url||r.source_url),at:Date.parse(String(r.occurred_at||r.captured_at||""))||0,type:String(r.display_category||r.notification_type||"")});if(feedBodies.length>1000)feedBodies.splice(0,feedBodies.length-1000)}
-const fetchBeforeV17=window.fetch.bind(window);
-window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{const response=await fetchBeforeV17(input as any,init);try{const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;if(url.includes(FEED_MARK)){const clone=response.clone();void clone.json().then(p=>{for(const r of p?.rows||[])pushFeedBody(r)}).catch(()=>{})}}catch{}return response}) as typeof window.fetch;
-
-async function loadCommentWindow(day:string){
-  if(dayCache.has(day))return dayCache.get(day)!;const token=localStorage.getItem(TOKEN_KEY)||"";if(!token)return[];const base=Date.parse(`${day}T00:00:00+09:00`),dateFrom=new Date(base-86400000).toISOString(),dateTo=new Date(base+2*86400000).toISOString(),rows:any[]=[];
-  for(let page=1;page<=4;page++){try{const r=await fetchBeforeV17(COMMENTS,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({page,pageSize:500,dateFrom,dateTo}),cache:"no-store"}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)break;rows.push(...(p.rows||[]));if(rows.length>=Number(p.total||0)||!(p.rows||[]).length)break}catch{break}}
-  dayCache.set(day,rows);return rows;
+// Notification body/raw_text and the card description are action summaries, not replies.
+// The legacy view may use only a separately resolved body with an exact comment locator.
+function pushFeedBody(r:any,token:string){
+  if(!token||token!==currentToken())return;const meta=r?.meta||{},verified=meta.comment_body_source==="exact-comment-id",canonical=meta.source==="canonical-public-comments";
+  if(!verified&&!canonical)return;const value=meta.comment_body||r?.comment_body||(canonical?meta.body:"");if(typeof value!=="string"||!value.trim())return;
+  const key=String(meta.comment_key||r?.comment_identity?.commentKey||""),identity=[r?.target_url,r?.source_url,meta.all_area_url,meta.featured_area_url,r?.comment_identity?.url].map(commentIdentity).find(x=>x?.key===key);if(!identity)return;
+  feedBodies.push({identity:identity.identity,body:value.replace(/\r\n?/g,"\n").trim(),token});if(feedBodies.length>1000)feedBodies.splice(0,feedBodies.length-1000);
 }
-function commentTarget(article:HTMLElement){return{actor:idFromProfile((article.querySelector('.minf-who a[href*="note.com/"]') as HTMLAnchorElement|null)?.href||""),article:articleKey((article.querySelector('.minf-main[href*="/n/"],.minf-target[href*="/n/"]') as HTMLAnchorElement|null)?.href||""),at:timeMs(article.querySelector("time")?.textContent||""),type:clean(article.querySelector(".mumei-comment-toggle")?.textContent||"")}}
-function bestCached(t:any){let best:any=null,score=-1;for(const r of feedBodies){let s=0;if(t.actor&&r.actor===t.actor)s+=100;if(t.article&&r.article===t.article)s+=110;const gap=t.at&&r.at?Math.abs(t.at-r.at):Infinity;if(gap<=5*60000)s+=100;else if(gap<=60*60000)s+=60;else if(gap<=24*3600000)s+=15;if(s>score){score=s;best=r}}return score>=170?best:null}
-function bestApi(t:any,rows:any[]){let best:any=null,score=-1;for(const r of rows){const body=clean(r.body||r.comment_body||r.text||r.message||r.detail);if(!body)continue;let s=0;const actor=idFromProfile(r.actor_url),akey=articleKey(r.article_url);if(t.actor&&actor===t.actor)s+=110;if(t.article&&akey===t.article)s+=120;const at=Date.parse(String(r.occurred_at||""))||0,gap=t.at&&at?Math.abs(t.at-at):Infinity;if(gap<=5*60000)s+=100;else if(gap<=60*60000)s+=60;else if(gap<=24*3600000)s+=15;if(s>score){score=s;best={...r,body}}}return score>=180?best:null}
-async function ensureCommentBody(article:HTMLElement){
-  if(!article.classList.contains("mumei-comment-open"))return;let box=article.querySelector<HTMLElement>(".mumei-comment-body");if(!box){box=document.createElement("div");box.className="mumei-comment-body";article.querySelector(".minf-main")?.insertAdjacentElement("afterend",box)}if(!box||box.dataset.v17Loaded==="1"||box.dataset.v17Loading==="1")return;
-  box.dataset.v17Loading="1";box.innerHTML="<b>コメント本文</b><p>本文を取得中…</p>";const t=commentTarget(article);
-  try{const cached=bestCached(t);let body=clean(cached?.body),source="通知feedの保存本文";if(!body){const day=jstDay(article.querySelector("time")?.textContent||""),rows=day?await loadCommentWindow(day):[],hit=bestApi(t,rows);body=clean(hit?.body);source="通常コメント履歴から照合"}if(!body){body=clean(article.querySelector(".minf-main small")?.textContent||"");source=body?"通知本文を表示":"本文照合結果なし"}box.innerHTML="";const b=document.createElement("b"),p=document.createElement("p"),small=document.createElement("small");b.textContent=/返信/.test(t.type)?"返信本文":"コメント本文";p.textContent=body||"保存済み本文を特定できませんでした。対象記事から確認できます。";small.textContent=source;box.append(b,p,small);box.dataset.v17Loaded="1"}finally{delete box.dataset.v17Loading}
+const fetchBeforeV17=window.fetch.bind(window);
+window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{const token=currentToken();let requestToken="";try{requestToken=new Headers(init?.headers||(typeof Request!=="undefined"&&input instanceof Request?input.headers:undefined)).get("X-Insight-Token")||""}catch{}const response=await fetchBeforeV17(input as any,init);try{const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;if(response.ok&&url.includes(FEED_MARK)&&(!requestToken||requestToken===token)){const clone=response.clone();void clone.json().then(p=>{if(p?.ok===false||token!==currentToken())return;for(const r of p?.rows||[])pushFeedBody(r,token)}).catch(()=>{})}}catch{}return response}) as typeof window.fetch;
+
+function removeLegacyBody(article:HTMLElement){for(const box of article.querySelectorAll(".mumei-comment-body"))box.remove()}
+function cachedBody(identity:string,token:string){for(let i=feedBodies.length-1;i>=0;i--)if(feedBodies[i].identity===identity&&feedBodies[i].token===token)return feedBodies[i];return null}
+function ensureCommentBody(article:HTMLElement){
+  if(article.dataset.commentContextNative==="true"){removeLegacyBody(article);return}
+  if(!article.isConnected||!article.classList.contains("mumei-comment-open"))return;let box=article.querySelector<HTMLElement>(".mumei-comment-body");if(!box){box=document.createElement("div");box.className="mumei-comment-body";article.querySelector(".minf-main")?.insertAdjacentElement("afterend",box)}if(!box)return;
+  const identity=[...article.querySelectorAll<HTMLAnchorElement>("a.minf-main,a.minf-target")].map(a=>commentIdentity(a.href)).find(Boolean),token=currentToken(),cached=identity?cachedBody(identity.identity,token):null;
+  box.innerHTML="";const b=document.createElement("b"),p=document.createElement("p"),small=document.createElement("small");b.textContent=cached?(/返信/.test(clean(article.querySelector(".mumei-comment-toggle")?.textContent))?"返信本文":"コメント本文"):"本文未取得";p.textContent=cached?.body||"対象IDに一致する保存本文がありません。対象ページから確認できます。";small.textContent=cached?"対象コメントIDを確認済み":"通知文は返信本文として表示しません。";box.append(b,p,small);box.dataset.v17Loaded="1";
 }
 function bindCommentBody(){
+  for(const article of document.querySelectorAll<HTMLElement>('#minf-notifications article[data-comment-context-native="true"]'))removeLegacyBody(article);
   if(document.documentElement.dataset.mumeiCommentBodyV17==="1")return;document.documentElement.dataset.mumeiCommentBodyV17="1";
-  const open=(target:EventTarget|null)=>{const el=target instanceof Element?target.closest("#minf-notifications .mumei-comment-toggle"):null;if(!el)return;const article=el.closest("article") as HTMLElement|null;if(article)window.setTimeout(()=>void ensureCommentBody(article),60)};
+  const open=(target:EventTarget|null)=>{const el=target instanceof Element?target.closest("#minf-notifications .mumei-comment-toggle"):null;if(!el)return;const article=el.closest("article") as HTMLElement|null;if(article&&article.dataset.commentContextNative!=="true")window.setTimeout(()=>ensureCommentBody(article),60)};
   document.addEventListener("click",e=>open(e.target),true);document.addEventListener("keydown",e=>{const k=e as KeyboardEvent;if(k.key==="Enter"||k.key===" ")open(e.target)},true);
 }
 function run(){installStyle();applyCategoryOrder();bindCategoryReorder();bindCommentBody()}
 function schedule(ms=100){window.clearTimeout(timer);timer=window.setTimeout(run,ms)}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>schedule(0),{once:true});else schedule(0);
-new MutationObserver(()=>schedule(120)).observe(document.documentElement,{subtree:true,childList:true});
+new MutationObserver(()=>schedule(120)).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["data-comment-context-native"]});
 window.addEventListener("pageshow",()=>schedule(40));
