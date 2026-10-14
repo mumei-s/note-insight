@@ -178,16 +178,16 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     }catch(e){if(valid()){const account=accountKey(memberNoteId),cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${k}|${day||""}|${p}|${handlingStatus}`),saved=readBoard(account).filter(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)),fallback=cached?.rows||saved.slice((p-1)*PAGE,p*PAGE);if(!rows.length&&fallback.length){setRows(fallback);setTotal(cached?.total??saved.length);setPage(p);if(cached){setCategoryCounts(cached.categoryCounts);setStatusCounts(cached.statusCounts||{});setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}}setError((e instanceof Error?e.message:"通知履歴の読込に失敗しました")+(fallback.length?"｜最新確認に失敗したため前回保存分を表示しています":""))}}
     finally{finishCheck();if(id===request.current.id){request.current.controller=null;setLoading(false);if(recentDeferred.current){recentDeferred.current=false;void refreshRecent()}}}
   }
-  async function refreshRecent(){
+  async function refreshRecent(allowDuringFull=false){
     if(view.current.page!==1||recentRequest.current.controller||document.visibilityState==="hidden")return;
-    if(request.current.controller){recentDeferred.current=true;return}
+    if(request.current.controller&&!allowDuringFull){recentDeferred.current=true;return}
     const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId),selection=JSON.stringify(view.current);recentRequest.current.controller=controller;beginCheck();let paginationChanged=false;
     try{
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
       if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||String(x.noteId||"").toLowerCase()!==account||view.current.page!==1||JSON.stringify(view.current)!==selection)return;
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
       markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
-      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map(readBoard(account).map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
+      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map(readBoard(account).map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=Boolean(serverIncoming.length&&request.current.controller)||serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
         return [...map.values()].filter(r=>matchesHandling(r,handlingStatus)&&(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort(notificationBoardOrder).slice(0,PAGE);
@@ -234,13 +234,13 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   useEffect(()=>()=>{repairStop.current=true},[]);
   const loadedSelection=useRef(""),loadedRevision=useRef(revision);
   useEffect(()=>{
-    const account=accountKey(memberNoteId),selection=JSON.stringify([account,sessionToken,kind,selectedDay,handlingStatus]),changed=Boolean(loadedSelection.current&&loadedSelection.current!==selection),p=changed?1:page,force=loadedRevision.current!==revision;
+    const opening=!loadedSelection.current,account=accountKey(memberNoteId),selection=JSON.stringify([account,sessionToken,kind,selectedDay,handlingStatus]),changed=Boolean(loadedSelection.current&&loadedSelection.current!==selection),p=changed?1:page,force=loadedRevision.current!==revision;
     loadedSelection.current=selection;loadedRevision.current=revision;
     const stored=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|${p}|${handlingStatus}`),cached=stored?.token===sessionToken&&canRetainInsightView(stored.cachedAt)?stored:undefined,fresh=hasFreshBoard(account);
     const saved=fresh&&p===1?filterBoard(account,kind,selectedDay,handlingStatus):[],instant=overlayEdits(cached?.rows||saved,p===1).filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)),hasSavedBoard=fresh&&p===1&&readBoard(account).length>0;
     setRows(instant);setPage(p);setLoading(!cached&&!hasSavedBoard&&instant.length===0);
     if(cached){setStatusCounts(cached.statusCounts||{});setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
-    recentRequest.current.watermark=fresh?(localStorage.getItem(`mumei-notification-recent-watermark:${account}`)||""):"";void load(p,kind,true,selectedDay,force);
+    recentRequest.current.watermark=fresh?(localStorage.getItem(`mumei-notification-recent-watermark:${account}`)||""):"";void load(p,kind,true,selectedDay,force);if(opening&&p===1&&!(cached?.complete&&cached.revision===revision&&isFreshInsightView(cached.cachedAt)))void refreshRecent(true);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
   },[kind,handlingStatus,selectedDay,revision,memberNoteId,sessionToken]);
   useEffect(()=>{

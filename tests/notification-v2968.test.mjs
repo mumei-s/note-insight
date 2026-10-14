@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as React from 'react';
+import {sceneFixture,pause} from './react-scene-fixture.mjs';
 
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function helpers(p,names){let source=read(p).replace(/^import .*;\n/gm,'');const ctx={createClient:()=>({}),Deno:{env:{get:()=>''},serve:()=>{}},console,URL,Date,Intl,Map,Set,Number,JSON};vm.createContext(ctx);source+='\nglobalThis.result={'+names.join(',')+'};';vm.runInContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,ctx);return ctx.result}
@@ -218,28 +220,20 @@ test('filter and backend restriction fixes stay isolated',()=>{
 });
 
 
-test('previous-page notification rows are kept as offline fallback without being called fresh',()=>{
-  const ui=read('src/member-insight-notifications-final.tsx'),lifecycle=read('src/insight-view-lifecycle.ts');
-  let now=Date.UTC(2026,9,8,9);
-  class Clock extends Date {static now(){return now}}
-  const savedRows=[{id:'stored',raw_text:'前回保存の通知',notification_type:'like',target_url:'https://note.com/tester/n/test',captured_at:'2026-10-08T00:00:00Z'}],storedJson=JSON.stringify(savedRows);
-  const storage=new Map([['mumei-notification-board:tester',storedJson],['mumei-notification-board-meta:tester',JSON.stringify({serverCheckedAt:now-600000})]]);
-  const context=vm.createContext({Date:Clock,localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,String(value))},requestedNotificationAccount:()=>'',currentStoredInsightAccount:()=>({noteId:'tester'}),memberNoteId:'tester',PAGE:100});
-  const freshCode=lifecycle.slice(0,lifecycle.indexOf('type RequestRecord')).replace(/\bexport\s+/g,''),boardCode=ui.slice(ui.indexOf('const NOTIFICATION_VIEW_CACHE'),ui.indexOf('const CATS=')),initial=ui.match(/const initialRows=[^;\n]+;/)?.[0];
-  assert.ok(initial,'exercise the production startup initializer');
-  vm.runInContext(ts.transpileModule(freshCode+'\n'+boardCode+'\nfunction initial(){'+initial+'return initialRows}\nglobalThis.api={initial,readBoard,hasFreshBoard,markBoardFresh};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
-  assert.equal(context.api.initial().length,0,'disk rows from a prior page cannot appear as checked current data');
-  assert.equal(context.api.readBoard('tester')[0].raw_text,'前回保存の通知','stale rows remain available for offline recovery');
-  assert.equal(context.api.hasFreshBoard('tester'),false,'reading or memoizing disk rows cannot mark the board fresh');
-  assert.equal(storage.get('mumei-notification-board:tester'),storedJson,'fresh-first startup does not delete stored history');
-  context.api.markBoardFresh('tester');
-  assert.equal(context.api.initial()[0].id,'stored','server-checked rows are reusable when reopening the view');
-  now+=60001;
-  assert.equal(context.api.initial().length,0,'a verification older than the refresh interval requires a new read');
-  assert.equal(context.api.readBoard('tester').length,1,'expired verification keeps the offline fallback');
-  context.memberNoteId='other';assert.equal(context.api.initial().length,0,'the saved board cannot be reused for another account');
-  assert.match(ui,/sort\(notificationBoardOrder\)/);
-  assert.match(ui,/markBoardFresh\(cacheAccount/);
-  assert.match(ui,/if\(!rows\.length&&fallback\.length\)\{setRows\(fallback\)/);
-  assert.match(ui,/最新確認に失敗したため前回保存分を表示しています/);
+test('previous-page notification rows appear only after a failed current server check',async t=>{
+  let deliver;
+  const savedRows=[{id:'stored',raw_text:'前回保存の通知',notification_type:'tip',captured_at:'2026-10-08T00:00:00Z'}],storedJson=JSON.stringify(savedRows);
+  const h=await sceneFixture(t,{globals:{URLSearchParams},dependencies:{'./creator-avatar':{CreatorAvatar:()=>React.createElement('span'),creatorNoteId:()=>''},'./insight-account-store':{INSIGHT_TOKEN_KEY:'mumei-insight-access-token',currentStoredInsightAccount:()=>({noteId:'tester'})}},fetch:()=>new Promise(resolve=>{deliver=resolve})});
+  h.w.localStorage.setItem('mumei-insight-access-token','fixture');
+  h.w.localStorage.setItem('mumei-notification-board:tester',storedJson);
+  h.w.localStorage.setItem('mumei-notification-board-meta:tester',JSON.stringify({serverCheckedAt:Date.now()-600000}));
+  h.w.localStorage.setItem('mumei-notification-reclassify-version:tester','action-v28-context:evidence-v2-articles');
+  const Component=h.load('src/member-insight-notifications-final.tsx').MemberInsightNotificationsFinal;
+  await h.render(Component,{noteId:'tester'});
+  assert.doesNotMatch(h.w.document.querySelector('.minf').textContent,/前回保存の通知/,'previous-launch disk rows do not flash as verified current data');
+  assert.equal(h.w.localStorage.getItem('mumei-notification-board:tester'),storedJson);
+  await React.act(async()=>{deliver(Response.json({ok:false,error:'OFFLINE'},{status:502}));for(let i=0;i<5;i++)await pause()});
+  assert.match(h.w.document.querySelector('.minf-list').textContent,/前回保存の通知/);
+  assert.match(h.w.document.querySelector('.minf-error').textContent,/最新確認に失敗したため前回保存分を表示しています/);
+  assert.equal(h.w.localStorage.getItem('mumei-notification-board:tester'),storedJson,'server failure does not erase saved history');
 });
