@@ -1,2 +1,2 @@
-INSIGHT 2026.10.14.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Durable notification display copies and compact storage-pending notice.
+INSIGHT 2026.10.15.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Retained verified views, safe notification pagination and exact saved reply bodies.

@@ -88,6 +88,8 @@ jobs:
         run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs
       - name: Check manual dashboard panel and durable save queue
         run: node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-save-queue.test.mjs tests/dashboard-daily-v146.test.mjs
+      - name: Check retained views, reply bodies and notification pagination
+        run: node --experimental-vm-modules --test tests/view-retention-lifecycle.test.mjs tests/notification-pagination-lifecycle.test.mjs tests/notification-view-reuse.test.mjs tests/notification-legacy-body-v17.test.mjs tests/notification-comment-retention-ingest.test.mjs tests/unified-view-retention.test.mjs tests/dm-view-retention.test.mjs tests/magazine-view-retention.test.mjs
       - name: Check owner DM retention and independent device sessions
         run: node --test --test-concurrency=1 tests/owner-dm-retention.test.mjs
       - name: Check DM request ordering and person switching
