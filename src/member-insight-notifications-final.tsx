@@ -186,7 +186,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
       if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||String(x.noteId||"").toLowerCase()!==account||view.current.page!==1||JSON.stringify(view.current)!==selection)return;
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
-      markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
+      if(hasFreshBoard(account))markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
       const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map(readBoard(account).map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=Boolean(serverIncoming.length&&request.current.controller)||serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}

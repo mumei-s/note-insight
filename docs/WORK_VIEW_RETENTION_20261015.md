@@ -31,3 +31,5 @@
 本人scopeの掲示板返信9件は、保存済み実本文・返信ID・専用本文取得情報が0件だった。元APIprobe175件にも掲示板recordが無く、元APIに返信IDが存在しないとは断定できない。実掲示板返信本文の回復・新しい取得経路は未解決で、通知文を実本文として出して解消扱いしない。
 
 本体`2026.10.15.1`。本人通知`3.6.38`・Dashboard`1.7.3`・DM`1.4.11`のReader版は据え置き。各sceneの実React、旧sourceでの再現、本文保存実handler/PGlite、全Pages CI対象、TypeScript/Viteで検証し、公開manifest・本体JS/CSSの一致とCI/Pages成功を確認する。元Androidの本人ログイン後の実操作成功は別途確認が必要。
+
+ローカル最終確認: 全Pages CI対象18群782件、userscript構文23本、TypeScript/Viteが成功。各機能を分けたコミットは機能境界チェックを通過。初回recentの独立表示と、空recentだけで前回boardを最新扱いしない条件も実Reactで検証済み。
