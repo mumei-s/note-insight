@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note 極薄サムネイル
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
-// @version      2.6.1
+// @version      2.6.2
 // @description  極薄サムネイル単独版。URL・マガジン・タグ・スキ履歴から指定件数または取得分全数を紹介。
 // @match        https://editor.note.com/*
 // @noframes
@@ -21,14 +21,14 @@
 'use strict';
 const owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.6.1')return;
-owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.6.1';
+if(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='2.6.2')return;
+owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='2.6.2';
 // BEGIN INCLUDED EDITOR CORE
 (function(){
 'use strict';
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-const VERSION='2.6.1';
+const VERSION='2.6.2';
 if(page.__MUMEI_PROFILE_CARD_CORE_VERSION__===VERSION)return;
 page.__MUMEI_PROFILE_CARD_CORE_VERSION__=VERSION;
 page.__MUMEI_PROFILE_CARD_PASTER_V1__=true;
@@ -1677,6 +1677,23 @@ function bindDirectDrag(handle,panel){
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
 function escAttr(v){return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function bindPanelInputEvents(panel){
+ const controlFor=event=>{const control=event.target?.closest?.('textarea,input,select,button,summary');return control&&panel.contains(control)?control:null};
+ const down=event=>{
+  const control=controlFor(event);if(!control)return;
+  event.stopPropagation();
+  // Text fields keep native caret placement and mobile keyboard. Delegation
+  // also covers action buttons cloned or added after the panel has mounted.
+  if(event.type==='mousedown'&&control.matches('button'))event.preventDefault();
+  if(control.matches('textarea,input')&&!control.disabled&&!control.readOnly&&document.activeElement!==control)control.focus({preventScroll:true});
+ };
+ panel.addEventListener('pointerdown',down);
+ panel.addEventListener('mousedown',down);
+ panel.addEventListener('touchstart',down,{passive:true});
+ for(const type of ['keydown','keypress','keyup','paste','cut','copy'])panel.addEventListener(type,event=>{
+  const control=controlFor(event);if(control?.matches('textarea,input,select'))event.stopPropagation();
+ });
+}
 function mount(){
  if(!document.body||document.getElementById(PANEL))return;
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
@@ -1733,6 +1750,7 @@ function mount(){
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
+ bindPanelInputEvents(p);
 
  const choice=['oldest','fixed','latest'].includes(g.choice)?g.choice:'latest';
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
@@ -1756,12 +1774,6 @@ function mount(){
   saveUiState({specialTags:on.map(x=>x.dataset.specialTag)})
  }));
 
- const formControls=p.querySelectorAll('textarea,input,select,button,summary');
- formControls.forEach(x=>{
-  if(x.dataset.a==='stop')return;
-  x.addEventListener('pointerdown',e=>{e.stopPropagation()});
-  x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true})
- });
  p.querySelectorAll('textarea,input').forEach(x=>{
   x.addEventListener('focus',e=>e.stopPropagation());
   x.addEventListener('click',e=>e.stopPropagation());
@@ -1833,10 +1845,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
 const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
 if(location.hostname!=='editor.note.com')return;
-if(page.__MUMEI_LIKE300_FIX_V261__)return;
-page.__MUMEI_LIKE300_FIX_V261__=true;
+if(page.__MUMEI_LIKE300_FIX_V262__)return;
+page.__MUMEI_LIKE300_FIX_V262__=true;
 
-const VERSION='2.6.1';
+const VERSION='2.6.2';
 const PANEL='mumei-profile-card-paster-v1';
 const STATUS='mumei-profile-card-paster-status-v1';
 const BRIDGE_KEY='mumei_profile_card_likes_300_v2';

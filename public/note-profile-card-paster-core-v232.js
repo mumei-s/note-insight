@@ -1753,6 +1753,23 @@ function bindDirectDrag(handle,panel){
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
 function escAttr(v){return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function bindPanelInputEvents(panel){
+ const controlFor=event=>{const control=event.target?.closest?.('textarea,input,select,button,summary');return control&&panel.contains(control)?control:null};
+ const down=event=>{
+  const control=controlFor(event);if(!control)return;
+  event.stopPropagation();
+  // Text fields keep native caret placement and mobile keyboard. Delegation
+  // also covers action buttons cloned or added after the panel has mounted.
+  if(event.type==='mousedown'&&control.matches('button'))event.preventDefault();
+  if(control.matches('textarea,input')&&!control.disabled&&!control.readOnly&&document.activeElement!==control)control.focus({preventScroll:true});
+ };
+ panel.addEventListener('pointerdown',down);
+ panel.addEventListener('mousedown',down);
+ panel.addEventListener('touchstart',down,{passive:true});
+ for(const type of ['keydown','keypress','keyup','paste','cut','copy'])panel.addEventListener(type,event=>{
+  const control=controlFor(event);if(control?.matches('textarea,input,select'))event.stopPropagation();
+ });
+}
 function mount(){
  if(!document.body||document.getElementById(PANEL))return;
  const g=getPrefs(),p=document.createElement('div');p.id=PANEL;
@@ -1809,6 +1826,7 @@ function mount(){
  </div>`;
  const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
  document.body.append(p,mini);
+ bindPanelInputEvents(p);
 
  const choice=['oldest','fixed','latest'].includes(g.choice)?g.choice:'latest';
  p.querySelector('[data-choice="'+choice+'"]').classList.add('on');
@@ -1832,12 +1850,6 @@ function mount(){
   saveUiState({specialTags:on.map(x=>x.dataset.specialTag)})
  }));
 
- const formControls=p.querySelectorAll('textarea,input,select,button,summary');
- formControls.forEach(x=>{
-  if(x.dataset.a==='stop')return;
-  x.addEventListener('pointerdown',e=>{e.stopPropagation()});
-  x.addEventListener('touchstart',e=>{e.stopPropagation()},{passive:true})
- });
  p.querySelectorAll('textarea,input').forEach(x=>{
   x.addEventListener('focus',e=>e.stopPropagation());
   x.addEventListener('click',e=>e.stopPropagation());
