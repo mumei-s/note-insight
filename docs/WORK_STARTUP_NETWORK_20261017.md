@@ -23,4 +23,20 @@
 
 通知feedは表示100件へ切る前に全履歴をEdgeへ転送していた。DB側でページ・集計を作り、ページとpreviewだけ返すRPCを別作業で検証中。初期案は本番read-onlyで41.39秒、二段化案も16.87秒のため、先行公開には含めない。全履歴を転送するfallbackも新設しない。速さと既存dedupe・分類・件数・権限の同値性が通るまで配備しない。
 
-コメントのcold取得は50件probe＋500件単位、DMの選択会話も本文ページを必要に応じて取得する。今回はこれらの保存先APIに内容revisionがなく、前回起動データを最新と誤認させる危険があるため、cold全件取得の契約自体は変えていない。通知返信のlocator変更時の本文保持条件も別途確認対象。掲示板返信の実本文・元IDが保存されていない問題は未解決のまま。
+コメントのcold取得は50件probe＋500件単位、DMの選択会話も本文ページを必要に応じて取得する。今回はこれらの保存先APIに内容revisionがなく、前回起動データを最新と誤認させる危険があるため、cold全件取得の契約自体は変えていない。掲示板返信の実本文・元IDが保存されていない問題は未解決のまま。
+
+## 追加版2026.10.17.2
+
+先行版17.1はNode22 CIの837件・Pages配備成功、公開root/index/manifest/deploy-version/JS/CSSの全bytes一致を確認した。
+
+通知feedの全履歴をDBからEdgeへ転送するループを、service_role専用RPCへ変更。DB内で既存順序のgreedy重複整理・分類・JST日付・対応状態・件数を計算し、表示100件と分類ごと最大12件のpreviewだけ返す。RPC失敗時の全履歴転送fallbackは作らない。Edgeの本人認証・scope検証は既存のまま、クライアント指定のscope/IDsは使用しない。
+
+`20261017092335_insight_notification_feed_page.sql`を適用後、`20261017093349_insight_notification_prepared_key.sql`で正規化・対象判定・semantic keyを保存時に計算するSTORED列へ移した。読み取り時の全文正規化を繰り返さず、INSERT/UPDATEと既存分類BEFORE trigger後の値を自動反映する。両関数はinvoker、空search_path、PUBLIC/anon/authenticatedのEXECUTEを取消しservice_roleだけ許可する。表示行をMATERIALIZEDで確定した後だけ全文meta/画像を復元し、内部キーは返却しない。
+
+本番のowner+application scope、元30,330行から論理19,227件、page100＋preview288を確認。応答1,343,632bytes、実関数呼出しは正規化保存前11.294秒→保存後7.064秒。初回照合や未確認ページの分類集計はまだ数秒かかり、即時化の完了とは扱わない。分類/日付を変えるたびにDB内の集計scan自体は残る。前回起動の古いデータを最新扱いして速く見せる変更はしない。
+
+本番の生成列は53,622行中50,217行が対象、key計9,280,149bytes、最大1,580bytes。tableはrewrite後100MB（元127MBは既存bloatを含む）。lock_timeout3秒/statement_timeout45秒を設定し適用成功。新規advisoryはsecurity/performanceとも0件。Edgeはv33の一致を確認してv34へ配備し、独自認証のverify_jwt=falseを維持。
+
+通知本文は同じ参照先の取得済み本文を保持し、参照先・本人tokenが変わった時だけ旧本文と遅い応答を破棄して再照合する。boardの通知文を実返信本文として埋める処理は追加しない。実Reactの新規6件と、本文/保存/ページ競合の関連31件が成功。DBの新規5件と関連49件では分類・重複・空/null/配列・JST・本人境界・遅いページ・保存更新を旧JS oracleと比較する。
+
+残存する特殊入力の限界：非文字列metaの数値を文字列化する場合、指数表記の境界は旧JS String(Number)との一般同値を保証していない。通常の通知文字列キーと実保存履歴の扱いを優先し、未検証の全JSON入力互換を主張しない。元Androidの本人セッション・体感速度・実契約の請求量は未確認。

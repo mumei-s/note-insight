@@ -1,2 +1,2 @@
-INSIGHT 2026.10.17.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Avoid hidden history requests, same-session reloads and duplicate notification page requests.
+INSIGHT 2026.10.17.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Bound notification transfers to the visible page and previews; reuse write-time semantic keys.
