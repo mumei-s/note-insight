@@ -10,7 +10,22 @@ import {createRoot} from 'react-dom/client';
 const {act}=React;
 const application={id:'own-application',noteId:'applicant',displayName:'申請者',imageUrl:null,status:'pending'};
 const appSource=readFileSync('src/App.tsx','utf8');
-const activePortal=appSource.match(/import\s+\{\s*(AccessPortalV\d+)\s*\}\s+from\s+"\.\/([^"\n]+)"/);
+const appAst=ts.createSourceFile('App.tsx',appSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let activePortal;
+function findPortal(node){
+ if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&/^AccessPortalV\d+$/.test(node.name.text)&&node.initializer){
+  const name=node.name.text,paths=[];let mappedExport=false;
+  function inspect(child){
+   if(ts.isCallExpression(child)&&child.expression.kind===ts.SyntaxKind.ImportKeyword&&ts.isStringLiteral(child.arguments[0]))paths.push(child.arguments[0].text);
+   if(ts.isPropertyAssignment(child)&&child.name.getText(appAst)==='default'&&ts.isPropertyAccessExpression(child.initializer)&&child.initializer.name.text===name)mappedExport=true;
+   ts.forEachChild(child,inspect);
+  }
+  inspect(node.initializer);
+  if(paths.length===1&&paths[0].startsWith('./')&&mappedExport)activePortal=[null,name,paths[0].slice(2)];
+ }
+ ts.forEachChild(node,findPortal);
+}
+findPortal(appAst);
 assert.ok(activePortal,'Appが実際に使う参加画面をテストする');
 assert.ok(appSource.includes(`page = <${activePortal[1]} />`));
 async function fixture(t,initial=application,notified=false){
