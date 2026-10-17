@@ -14,8 +14,8 @@ function boardFixture(t,{quota=5000000}={}){
  t.after(()=>w.close());const nativeSet=w.Storage.prototype.setItem,nativeGet=w.Storage.prototype.getItem;
  w.Storage.prototype.setItem=function(name,value){if(String(name).startsWith('mumei-notification-board:'))writes.push({key:String(name),value:String(value)});return nativeSet.call(this,name,value)};
  const source=readFileSync('src/member-insight-notifications-final.tsx','utf8'),compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
- const exports={},dependencies={react:React,'react/jsx-runtime':{},'react-dom':{},'./creator-avatar':{},'./insight-completion-queue':{},'./insight-account-store':{},'./insight-view-lifecycle':{}};
- vm.runInNewContext(compiled+'\nexports.boardFixture={readBoard,retainBoard,views:NOTIFICATION_VIEW_CACHE};',{exports,require:name=>dependencies[name]||{},window:w,document:w.document,localStorage:w.localStorage,location:w.location,URL,URLSearchParams,Date});
+ const exports={},dependencies={react:React,'react/jsx-runtime':{},'react-dom':{},'./creator-avatar':{},'./insight-completion-queue':{},'./insight-account-store':{INSIGHT_TOKEN_KEY:tokenKey},'./insight-view-lifecycle':{canRetainInsightView:at=>Number(at)>0}};
+ vm.runInNewContext(compiled+'\nexports.boardFixture={readBoard,retainBoard,filterBoard,views:NOTIFICATION_VIEW_CACHE};',{exports,require:name=>dependencies[name]||{},window:w,document:w.document,localStorage:w.localStorage,location:w.location,URL,URLSearchParams,Date});
  return{w,writes,...exports.boardFixture,nativeGet:name=>nativeGet.call(w.localStorage,name),seed:(name,value)=>nativeSet.call(w.localStorage,name,value)};
 }
 
@@ -34,6 +34,18 @@ test('同じboardの保存を省いても表示キャッシュの分類・対応
  h.views.set('tester|tip||1|completed',{rows:[],total:1});
  h.retainBoard('tester',[r]);
  assert.equal(h.writes.length,1);assert.equal(h.views.get('tester|tip||1|pending').rows.length,0);assert.equal(h.views.get('tester|tip||1|completed').rows[0].confirmed,true);
+});
+
+test('未取得分類の部分表示はMap順ではなく最後に確認した同一通知の本文を使う',t=>{
+ const h=boardFixture(t),old=row('1',{raw_text:'以前に確認した本文'}),latest={...old,raw_text:'今回確認した最新本文',meta:{reply_body:'最新の実本文'}};
+ h.seed(tokenKey,'current-token');
+ h.views.set('tester|all||1|all',{rows:[old],cachedAt:100,token:'current-token'});
+ h.views.set('tester|tip||1|pending',{rows:[old],cachedAt:150,token:'current-token'});
+ h.views.set('tester|all||1|all',{rows:[latest],cachedAt:200,token:'current-token'});
+ h.views.set('other|all||1|all',{rows:[{...latest,raw_text:'別の本人'}],cachedAt:999,token:'current-token'});
+ h.views.set('tester|tip||1|completed',{rows:[{...latest,raw_text:'別のsession'}],cachedAt:999,token:'old-token'});
+ const partial=h.filterBoard('tester','tip','');
+ assert.equal(partial.length,1);assert.equal(partial[0].raw_text,'今回確認した最新本文');assert.equal(partial[0].meta.reply_body,'最新の実本文');
 });
 
 test('実容量超過でも元の通知・本人tokenを残し、容量回復後は同じ内容を再保存する',t=>{

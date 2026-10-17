@@ -29,10 +29,10 @@ function retainBoard(account:string,rows:Row[]){if(!account||!rows.length)return
 function matchesHandling(r:Row,status:string){return status==="completed"?Boolean(r.confirmed):status==="pending"?!r.confirmed:true}
 function notificationRevision(r:Row){return JSON.stringify([r.notification_type,displayType(r),r.raw_text,r.actor_name,r.actor_url,r.target_url,r.target_title,r.source_url,r.occurred_at,r.captured_at,Boolean(r.confirmed),Boolean(r.favorite),r.favorite_creator_key,r.context_label,r.article_context,r.article_owner,r.membership_owner,r.meta?.classification_status,r.meta?.comment_body||r.comment_body||"",r.meta?.reply_body||r.reply_body||"",r.meta?.source==="canonical-public-comments"?r.meta?.body||"":"",r.meta?.comment_key||"",r.meta?.comment_author||r.comment_author||"",r.meta?.comment_body_source||"",r.meta?.comment_resolved_at||"",r.comment_identity?.articleKey,r.comment_identity?.commentKey,r.comment_identity?.url])}
 function filterBoard(account:string,kind:string,day:string,status="all"){
- const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",verified=new Map<string,Row>();
+ const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",verified=new Map<string,{row:Row;checkedAt:number}>();
  // A check of one page cannot verify unseen rows retained from a previous launch.
- for(const [key,view] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&view.token===token&&canRetainInsightView(view.cachedAt))for(const row of view.rows)verified.set(String(row.id||rowKey(row)),row);
- return [...verified.values()].filter(r=>matchesHandling(r,status)&&(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).sort(notificationBoardOrder).slice(0,PAGE)
+ for(const [key,view] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&view.token===token&&canRetainInsightView(view.cachedAt))for(const row of view.rows){const id=String(row.id||rowKey(row)),prior=verified.get(id);if(!prior||view.cachedAt>=prior.checkedAt)verified.set(id,{row,checkedAt:view.cachedAt})}
+ return [...verified.values()].map(value=>value.row).filter(r=>matchesHandling(r,status)&&(kind==="all"||displayType(r)===kind)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).sort(notificationBoardOrder).slice(0,PAGE)
 }
 
 
