@@ -45,9 +45,22 @@ self.addEventListener("fetch", event => {
 
   const appNavigation = url.pathname === SCOPE.pathname || url.pathname === new URL(indexUrl).pathname;
   const cacheable = shellPaths.has(url.pathname) || /^assets\/[a-zA-Z0-9_-]+[.-][a-zA-Z0-9_-]+\.(?:js|css|woff2?|png|svg)$/.test(relative);
+  // Vite changes this URL whenever the file contents change. Reuse an exact
+  // fingerprint rather than downloading the same bundle on every app opening.
+  // HTML, release checks, readers and API responses still go to the network.
+  const immutableAsset = /^assets\/[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]{8}\.(?:js|css|woff2?|png|svg)$/.test(relative);
   const key = appNavigation ? indexUrl : url.origin + url.pathname;
 
   event.respondWith((async () => {
+    if (immutableAsset) {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(key);
+        if (cached?.ok) return cached;
+      } catch {
+        // Unavailable/full Cache Storage must not prevent an online startup.
+      }
+    }
     try {
       const response = await fetch(request, { cache: "no-store" });
       if (response.ok && cacheable) {
