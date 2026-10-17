@@ -55,7 +55,7 @@ test('verified empty like history is retained; an empty API object is not a veri
 test('TTL expiry checks latest in the background while keeping the loaded like page',async t=>{
  let stale=false;const next=deferred();const h=await fixture(t,{respond:call=>stale&&call.action==='likes'?next.promise:undefined});await h.show();
  await h.click(h.w.document.querySelector('.miu-pager button:last-child'));await h.show({active:false});h.advance(60_001);stale=true;await h.show();
- assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),2);assert.equal(h.count('likes'),3);
+ assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);assert.equal(h.count('likes'),3);
  assert.match(h.w.document.querySelector('.miu-card-grid').textContent,/testerページ2/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
  await React.act(async()=>{next.resolve(Response.json({rows:[row('新しいページ2',2)],total:250}));await pause()});assert.match(h.w.document.body.textContent,/新しいページ2/);
 });
@@ -63,27 +63,27 @@ test('TTL expiry checks latest in the background while keeping the loaded like p
 test('a revision received while hidden checks latest on return and preserves the page',async t=>{
  const h=await fixture(t);await h.show();await h.click(h.w.document.querySelector('.miu-pager button:last-child'));
  await h.show({active:false});const count=h.calls.length;await h.show({active:false,revision:1});assert.equal(h.calls.length,count);await h.show({revision:1});
- assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,2);
+ assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,2);
  assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
 });
 
-test('explicit data update bypasses fresh summary and analysis retention',async t=>{
+test('explicit data update bypasses fresh summary retention without loading unseen analysis',async t=>{
  const h=await fixture(t);await h.show();await h.click(h.w.document.querySelector('.miu-topactions button.sync'));
- assert.equal(h.count('sync'),1);assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),2);
+ assert.equal(h.count('sync'),1);assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);
  assert.equal(h.count('likes'),2,'explicit update also checks the active saved history');
 });
 
 test('switching the token and account cannot retain the prior account rows or metrics',async t=>{
  let switched=false;const latest=deferred();const h=await fixture(t,{respond:call=>switched&&call.action==='likes'?latest.promise:undefined});await h.show();
  await h.show({active:false});h.w.localStorage.setItem('token','b');switched=true;await h.show();
- assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),2);assert.equal(h.count('likes'),2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).token,'b');
+ assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);assert.equal(h.count('likes'),2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).token,'b');
  assert.doesNotMatch(h.w.document.body.textContent,/testerページ1/);
  await React.act(async()=>{latest.resolve(Response.json({rows:[row('second最新')],total:1}));await pause()});assert.match(h.w.document.body.textContent,/second最新/);
 });
 
 test('a new token for the same account still checks all current data',async t=>{
  const h=await fixture(t);await h.show();await h.show({active:false});h.w.localStorage.setItem('token','c');await h.show();
- assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),2);assert.equal(h.count('likes'),2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).token,'c');
+ assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);assert.equal(h.count('likes'),2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).token,'c');
 });
 
 test('an account switch followed by a failed summary cannot restore the former account',async t=>{
@@ -114,6 +114,6 @@ test('leaving an unfinished like request does not mark it verified or accept its
 test('malformed summary JSON and empty objects are not written as successful summaries',async t=>{
  let malformed=true;const h=await fixture(t,{respond:call=>call.action==='summary'&&malformed?new Response('{broken',{headers:{'content-type':'application/json'}}):undefined});await h.show();
  assert.equal(h.w.localStorage.getItem('mumei-insight-summary-cache-v1:tester'),null);
- await h.show({active:false});malformed=false;await h.show();assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),1);
+ await h.show({active:false});malformed=false;await h.show();assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);
  assert.equal(JSON.parse(h.w.localStorage.getItem('mumei-insight-summary-cache-v1:tester')).data.member.noteId,'tester');
 });
