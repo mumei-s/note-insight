@@ -239,11 +239,14 @@ export function activateStoredInsightAccount(noteId: string) {
 
 export function forgetMemberSession(noteId: string) {
   const id = cleanId(noteId);
+  const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+  // An explicit logout may already hide this token from the normalized view.
+  const ownsToken = Boolean(token) && [ACCOUNT_STORE_KEY, LEGACY_ACCOUNT_STORE_KEY].some((key) =>
+    normalizeList(readJsonList(key)).some((item) => item.noteId === id && item.memberToken === token));
   const before = readStoredInsightAccounts();
-  const removed = before.find((item) => item.noteId === id);
   const accounts = before.map((item) => item.noteId === id ? { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status, updatedAt: Date.now() } : item);
   write(accounts);
-  if (removed?.memberToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === removed.memberToken) localStorage.removeItem(INSIGHT_TOKEN_KEY);
+  if (ownsToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === token) localStorage.removeItem(INSIGHT_TOKEN_KEY);
 }
 
 export function forgetInsightAccount(noteId: string) {
