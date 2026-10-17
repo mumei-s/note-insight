@@ -1,2 +1,2 @@
-INSIGHT 2026.10.17.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Bound notification transfers to the visible page and previews; reuse write-time semantic keys.
+INSIGHT 2026.10.17.3 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Load selected scenes, reuse fingerprinted assets, and fetch only the visible notification page.

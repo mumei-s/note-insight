@@ -40,3 +40,20 @@
 通知本文は同じ参照先の取得済み本文を保持し、参照先・本人tokenが変わった時だけ旧本文と遅い応答を破棄して再照合する。boardの通知文を実返信本文として埋める処理は追加しない。実Reactの新規6件と、本文/保存/ページ競合の関連31件が成功。DBの新規5件と関連49件では分類・重複・空/null/配列・JST・本人境界・遅いページ・保存更新を旧JS oracleと比較する。
 
 残存する特殊入力の限界：非文字列metaの数値を文字列化する場合、指数表記の境界は旧JS String(Number)との一般同値を保証していない。通常の通知文字列キーと実保存履歴の扱いを優先し、未検証の全JSON入力互換を主張しない。元Androidの本人セッション・体感速度・実契約の請求量は未確認。
+
+
+## 追加版2026.10.17.3：起動コードと表示ページを優先
+
+最新の「なおったわー、とりあえず履歴の読み込みがおそい、起動もね」を優先。通知Reader3.6.38／Dashboard1.7.3／DM1.4.11は変えず、本体の起動・表示経路を軽量化する。
+
+- Service WorkerはViteの8文字fingerprintを持つassetの同じURLだけ保存済みレスポンスを利用する。従来は起動のたびに同じJS/CSSもno-storeで通信し直していた。HTML・release manifest・Reader・設定画面は引き続きnetwork-first。新しいfingerprintは必ず新規取得し、Cache Storageが利用できない時もオンライン取得を妨げない。過去の表示データや認証を消さず、古い履歴を最新と見せない。既存cache名を保持するため前版が保存済みの同一fingerprintも再利用できる。
+- Appの選択した入口とLiveの選択したsceneを動的importへ分割する。保存済みtokenの認証確認と本体shellコード取得は並行し、認証前に履歴componentはmountしない。TOPは即時描画を維持。通常スキの画面は訪問後にmountを維持してページ・スクロールを保ち、通知へ直接入った時だけ未訪問の通常画面のコード取得を避ける。
+- 通知の全loadはincludeCategoryPreview:false。表示100件、分類・日付・対応状態・総件数の契約は維持し、未表示分類の本文を取得しない。分類を初めて開いた時にその100件を確認し、確認済み同一sessionのページ再利用を維持する。旧previewレスポンスを受理する互換性は残す。日時Intl formatterは一覧全体で1つを再利用する。
+
+本番read-onlyで同じscope・更新なしの単一SQL内比較：previewありは1,337,363bytes／3,495ms、表示100件のみは442,061bytes／3,043ms。selected rows jsonb・categoryCounts・statusCountsは完全一致、論理19,314件、非表示preview288件だけを取得対象から除外。応答は約67%小さくなる。DB内の全履歴分類・集計と大きいmetaの解析はまだ約3秒残り、冷えたDB・本人Androidの体感速度や通信契約の請求量を保証しない。今回はDB・Edgeを変更せず、追加のtable rewriteは行わない。
+
+新しいService Worker回帰6件では旧実装の再取得を検出し、新実装では再訪のasset通信0回、新release HTML・新hash・manifestはネットワークへ出ることを確認。通知の新規React3件は旧実装ですべて失敗し、新実装と関連46件が成功。元Androidの本人認証済み実操作は未確認。最終build・全CI・公開bytes確認の結果を続けて記録する。
+
+分割後は静的import依存と画面CSSを含む圧縮後コード量も確認する。同じgzip方式で公開旧assetの294,914bytesと比較し、TOP入口119,562bytes、通知sceneまで180,494bytes（38.80%減）、通常スキsceneまで189,712bytes（35.67%減）。単一entry JSだけの削減率を起動全体の削減率として扱わない。読込中の項目選択はhistory上の保留値を1度だけ消費し、非表示の通常画面は別Suspenseへ分離して選択中の通知表示を待たせない。動的ファイル取得失敗は自動retryせず、既存エラー画面の「再読み込み」で同じURLを再試行し、通常renderエラーの「再表示」は従来どおり維持する。認証の前に履歴はmountせず、失効時は認証入口へ戻す。新たなapp/scene/error回帰14件と既存関連53件が成功し、実ビルドの通知起動→コメント切替も検証する。
+
+公開前の最終確認は、Pages workflow全19 test groups・872件が成功（fail/cancelled/skipped/todoすべて0）、build成功、現行23 userscriptのsyntax成功。動的読込に合わせて承認画面テストは実App ASTの使用component/pathを抽出する形へ移し、既存5承認・認証ケースを維持した。GitHub Pages CIと公開root/index/manifest/deploy-version/SW＋全assetのHTTP200・全bytes・SHA256一致を確認してから利用者へ公開案内する。元Android本人sessionは未確認を維持する。
