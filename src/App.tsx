@@ -231,7 +231,7 @@ export function App() {
   const [route, setRoute] = useState(currentRoute);
   const [memberToken, setMemberToken] = useState(initialMemberToken);
   const [validatedMemberToken, setValidatedMemberToken] = useState("");
-  const [checkingMember, setCheckingMember] = useState(false);
+  const [checkingMember, setCheckingMember] = useState(() => memberRoute(route) && Boolean(memberToken));
 
   useEffect(() => {
     const sync = () => {
