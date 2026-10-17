@@ -35,6 +35,7 @@ import "./member-insight-analysis-scene.css";
 import { useVisibleMotion } from "./insight-visible-motion";
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
+const ACCESS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const AUTO_MS=15*60_000;
 const RELATION_MS=30*60_000;
@@ -77,12 +78,13 @@ export function MemberInsightLiveV2(){
   const explicitMode=requestedMode();
   const initialMode:Mode=explicitMode||"normal";
   const initialNavTab=String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[official,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[officialData,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0),officialRequest=useRef({id:0,controller:null as AbortController|null});
   const accountScope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase(),autoSyncKey=AUTO_SYNC_KEY+":"+accountScope,relationSyncKey=RELATION_SYNC_KEY+":"+accountScope;
+  const official=officialData?.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&officialData?.scope===accountScope?officialData:null;
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastSavedCheck=useRef(Date.now()),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
   useEffect(()=>{
@@ -119,8 +121,15 @@ export function MemberInsightLiveV2(){
   }
   async function loadOfficial(){
     officialRequest.current.controller?.abort();const controller=new AbortController(),id=++officialRequest.current.id;officialRequest.current.controller=controller;
-    try{const data=await post(MEMBER,"dashboard",{},30_000,controller.signal);if(id!==officialRequest.current.id||controller.signal.aborted)return false;setOfficial(data);return true}
-    catch{if(id===officialRequest.current.id&&!controller.signal.aborted)setStatus("TOPの最新確認に失敗しました。各項目は個別に確認しています。");return false}
+    const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",scope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();
+    const valid=()=>id===officialRequest.current.id&&!controller.signal.aborted&&token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&scope===String(currentStoredInsightAccount()?.noteId||"").toLowerCase();
+    try{
+      const data=await post(ACCESS,"session",{},30_000,controller.signal);if(!valid())return false;
+      const app=data?.application,noteId=typeof app?.noteId==="string"?app.noteId.trim().toLowerCase():"";
+      if(data?.ok!==true||app?.status!=="active"||!/^[a-z0-9_-]{1,80}$/.test(noteId)||(scope&&noteId!==scope))throw new Error("INSIGHT_IDENTITY_MISMATCH");
+      setOfficial({token,scope,member:{noteId,displayName:typeof app.displayName==="string"&&app.displayName.trim()?app.displayName:noteId,imageUrl:typeof app.imageUrl==="string"?app.imageUrl:null}});return true;
+    }
+    catch{if(valid())setStatus("TOPの最新確認に失敗しました。各項目は個別に確認しています。");return false}
     finally{if(id===officialRequest.current.id)officialRequest.current.controller=null}
   }
   async function checkRelease(){
@@ -150,7 +159,7 @@ export function MemberInsightLiveV2(){
         post(RELATIONS,"sync",{direction:"followings"},120_000),
       ]);
       const ok=results.some(x=>x.status==="fulfilled");
-      if(ok){lastRelationRun.current=now;try{localStorage.setItem(relationSyncKey,String(now))}catch{}setRevision(v=>v+1)}
+      if(ok){lastRelationRun.current=now;try{localStorage.setItem(relationSyncKey,String(now))}catch{}lastSavedCheck.current=Date.now();setRevision(v=>v+1)}
       return ok;
     }catch{return false}finally{relationRunning.current=false}
   }
@@ -168,7 +177,7 @@ export function MemberInsightLiveV2(){
       if(run!==publicSyncRun.current)return false;
       lastRun.current=now;try{localStorage.setItem(autoSyncKey,String(now))}catch{}
       setStatus(`更新済み ${timeNow()}・記事確認${fmt(p.scannedArticles||0)}件 / 保存${fmt(p.catalog?.stored||p.catalog?.official||0)}件`);
-      setRevision(v=>v+1);void loadOfficial();void relationSync(force);return true;
+      lastSavedCheck.current=Date.now();setRevision(v=>v+1);void loadOfficial();void relationSync(force);return true;
     }catch(e){
       if(run!==publicSyncRun.current)return false;
       const message=controller.signal.aborted?"更新を切り替えました":e instanceof Error?e.message:"一時エラー";
@@ -202,7 +211,7 @@ export function MemberInsightLiveV2(){
     manualRefreshRunning.current=true;
     if(showBusy)setDataBusy(true);
     try{
-      setRevision(v=>v+1);
+      lastSavedCheck.current=Date.now();setRevision(v=>v+1);
       if(showBusy)setStatus("各項目の最新データを確認中…");
       const ok=await loadOfficial();
       if(showBusy&&ok)setStatus(`TOPの最新データを反映 ${timeNow()}・各項目を確認中`);
@@ -296,7 +305,12 @@ export function MemberInsightLiveV2(){
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
     // Each panel verifies immediately on mount; no delayed duplicate startup reload.
     const timer=window.setInterval(()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void refreshSavedData(false)},15*60_000);
-    const visible=()=>{if(document.visibilityState==="visible"&&autoSyncEnabledRef.current)void refreshSavedData(false)};
+    const visible=()=>{
+      if(document.visibilityState!=="visible"||!autoSyncEnabledRef.current)return;
+      // A plain return must not invalidate every recently verified scene.
+      if(Date.now()-lastSavedCheck.current>=60_000)void refreshSavedData(false);
+      else if(!officialRequest.current.controller)void loadOfficial();
+    };
     document.addEventListener("visibilitychange",visible);window.addEventListener("pageshow",visible);window.addEventListener("online",visible);
     return()=>{window.clearInterval(timer);officialRequest.current.id++;officialRequest.current.controller?.abort();window.removeEventListener("pointerdown",touch);window.removeEventListener("touchstart",touch);window.removeEventListener("wheel",touch);window.removeEventListener("scroll",touch);document.removeEventListener("visibilitychange",visible);window.removeEventListener("pageshow",visible);window.removeEventListener("online",visible);publicSyncRun.current++;publicSyncController.current?.abort();publicSyncController.current=null;running.current=false}
   },[]);
