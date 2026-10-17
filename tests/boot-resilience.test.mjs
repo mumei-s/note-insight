@@ -1,16 +1,66 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
-const bundle = readFileSync('dist/assets/' + readdirSync('dist/assets').find(n => /^index-.*\.js$/.test(n)), 'utf8').replace(/export\{[^}]+\};?\s*$/, '');
-const html = readFileSync('index.html', 'utf8');
+const html = readFileSync('dist/index.html', 'utf8');
+const site = 'https://mumei-s.github.io/note-insight/';
 
-async function boot(mode) {
+// Execute the actual build as ES modules so lazy route chunks retain their
+// real imports, shared React runtime, and error handling. CSS has no layout in
+// JSDOM; acknowledge only files that were emitted by the production build.
+async function evaluateBuild(dom) {
+  const w = dom.window, context = dom.getInternalVMContext(), modules = new Map(), evaluations = new Map();
+  const localFile = url => {
+    const resolved = new URL(url, site);
+    assert.equal(resolved.origin, new URL(site).origin);
+    assert.ok(resolved.pathname.startsWith('/note-insight/assets/'));
+    return 'dist/' + resolved.pathname.slice('/note-insight/'.length);
+  };
+  const appendChild = w.Node.prototype.appendChild;
+  w.Node.prototype.appendChild = function(child) {
+    const appended = appendChild.call(this, child);
+    if (child.tagName === 'LINK' && child.rel === 'stylesheet') {
+      readFileSync(localFile(child.href));
+      w.setTimeout(() => child.dispatchEvent(new w.Event('load')), 0);
+    }
+    return appended;
+  };
+  const getModule = identifier => {
+    if (modules.has(identifier)) return modules.get(identifier);
+    const module = new vm.SourceTextModule(readFileSync(localFile(identifier), 'utf8'), {
+      context,
+      identifier,
+      initializeImportMeta: meta => { meta.url = identifier; },
+      importModuleDynamically: async (specifier, referencingModule) => {
+        const imported = getModule(new URL(specifier, referencingModule.identifier).href);
+        await evaluate(imported);
+        return imported;
+      },
+    });
+    (w.__builtModules ||= []).push(identifier);
+    modules.set(identifier, module);
+    return module;
+  };
+  const link = (specifier, referencingModule) => getModule(new URL(specifier, referencingModule.identifier).href);
+  const evaluate = module => {
+    if (!evaluations.has(module.identifier)) evaluations.set(module.identifier, (async () => {
+      if (module.status === 'unlinked') await module.link(link);
+      if (module.status === 'linked') await module.evaluate();
+      if (module.status === 'errored') throw module.error;
+    })());
+    return evaluations.get(module.identifier);
+  };
+  const entry = getModule(new URL(w.document.querySelector('script[type="module"][src]').getAttribute('src'), site).href);
+  await evaluate(entry);
+}
+
+async function boot(mode, { url = site, fetcher, prepare } = {}) {
   const console = new VirtualConsole();
-  const dom = new JSDOM(html, { url: 'https://mumei-s.github.io/note-insight/', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console });
+  const dom = new JSDOM(html, { url, runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console });
   const w = dom.window;
-  w.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'INSIGHT_LOGIN_REQUIRED' }) });
+  w.fetch = fetcher || (async () => ({ ok: false, status: 401, json: async () => ({ error: 'INSIGHT_LOGIN_REQUIRED' }) }));
   w.matchMedia = query => {
     if (mode === 'optional-install-failure' && query.includes('display-mode')) throw new Error('optional install unavailable');
     if (mode === 'app-failure' && query.includes('min-width')) throw new TypeError('matchMedia unavailable');
@@ -30,6 +80,7 @@ async function boot(mode) {
       return set.call(this, key, value);
     };
   }
+  prepare?.(w);
   if (mode === 'notification-cache-quota') {
     const boardKey = 'mumei-notification-board:tester';
     w.__storedNotificationBoard = JSON.stringify([{ id: 'saved', raw_text: '保存済みの通知本文', meta: { exact: '以前の履歴' } }]);
@@ -61,11 +112,49 @@ async function boot(mode) {
     w.dispatchEvent(new w.ErrorEvent('error', { error: new w.Error('optional startup task failed') }));
     assert.equal(w.document.getElementById('insight-static-boot'), null, 'handoff errors must never create a second screen');
   }
-  w.eval(bundle);
+  await evaluateBuild(dom);
   if (mode === 'notification-cache-quota') w.localStorage.setItem('mumei-notification-board:tester', w.__pendingNotificationBoard);
   await new Promise(resolve => setTimeout(resolve, 120));
   return dom;
 }
+
+async function waitFor(predicate) {
+  const deadline = Date.now() + 2000;
+  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(predicate(), 'the selected built scene must render');
+}
+
+test('built member entrance loads the selected notification scene and can open another lazy scene', async () => {
+  const calls = [];
+  const dom = await boot('member', {
+    url: site + '?insightMode=notifications#dashboard',
+    prepare(w) {
+      w.localStorage.setItem('mumei-insight-access-token', 'saved-session');
+      w.localStorage.setItem('mumei-insight-saved-accounts-v3', JSON.stringify([{ noteId: 'tester', memberToken: 'saved-session', status: 'active' }]));
+    },
+    fetcher: async (url, init = {}) => {
+      const body = JSON.parse(init.body || '{}');
+      calls.push({ url: String(url), body });
+      const result = String(url).endsWith('/insight-access')
+        ? { ok: true, application: { noteId: 'tester', displayName: '本人', status: 'active' } }
+        : { ok: true, noteId: 'tester', rows: [], total: 0, pages: 0, page: 1, pageSize: 100, counts: {}, days: [], previewRows: [], hasMore: false };
+      return { ok: true, status: 200, json: async () => result };
+    },
+  });
+  const w = dom.window;
+  try {
+    await waitFor(() => w.document.querySelector('.minf'));
+    assert.ok(w.__builtModules.some(url => /member-insight-notifications-final-/.test(url)));
+    assert.ok(!w.__builtModules.some(url => /member-insight-(?:unified-v4|comments-final|analysis-hub|favorites-final|social-v2)-/.test(url)), 'unselected histories are not downloaded');
+    assert.ok(calls.some(call => call.url.endsWith('/insight-notification-feed-final')));
+    assert.ok(!calls.some(call => /insight-(?:dm-feed|comments|dashboard-data)$/.test(call.url)));
+    w.dispatchEvent(new w.CustomEvent('mumei-insight-select-item', { detail: 'comments' }));
+    await waitFor(() => w.document.querySelector('.micf'));
+    assert.ok(w.__builtModules.some(url => /member-insight-comments-final-/.test(url)));
+    assert.equal(w.document.getElementById('insight-runtime-failure'), null);
+    assert.equal(w.localStorage.getItem('mumei-insight-access-token'), 'saved-session');
+  } finally { w.close(); }
+});
 
 for (const mode of ['normal', 'quota', 'quota-missing-token', 'session-quota', 'legacy-media', 'missing-media', 'optional-install-failure']) {
   test(`built TOP still renders under ${mode}`, async () => {
