@@ -5,10 +5,15 @@ import {readFileSync,readdirSync} from 'node:fs';
 import ts from 'typescript';
 import {PGlite} from '@electric-sql/pglite';
 
+// The frozen oracle runs in the UTC Edge runtime, including Date.parse(0).
+process.env.TZ='UTC';
 const root='supabase/functions/insight-notification-feed-final/index.ts';
 const migration=readFileSync('supabase/migrations/'+readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_feed_page.sql')),'utf8');
+const preparedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_prepared_key.sql'));
+assert.ok(preparedName,'the prepared-key migration is required by the feed RPC contract');
+const preparedMigration=readFileSync('supabase/migrations/'+preparedName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
-vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
 const member={id:'owner-app',scope:'owner',noteId:'ss_yr'},other={id:'participant',scope:'participant',noteId:'participant'};
 const columns='id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta';
@@ -23,10 +28,18 @@ before(async()=>{
   CREATE TABLE public.insight_notification_sync_runs(member_id text,created_at timestamptz,inserted_count integer,received_count integer,source text);
  `);
  await db.exec(migration);
+ await db.exec(preparedMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
- await db.query(`INSERT INTO public.insight_notifications SELECT * FROM jsonb_populate_recordset(NULL::public.insight_notifications,$1::jsonb)`,[JSON.stringify(rows)]);
+ await db.query(`INSERT INTO public.insight_notifications(${columns}) SELECT ${columns} FROM jsonb_populate_recordset(NULL::public.insight_notifications,$1::jsonb)`,[JSON.stringify(rows)]);
+}
+async function checkPreparedKeys(ids){
+ const rows=(await db.query(`SELECT to_jsonb(n)-'insight_feed_key' AS n,insight_feed_key AS key FROM public.insight_notifications n WHERE member_id=ANY($1)`,[ids])).rows;
+ for(const {n,key} of rows){
+  const eligible=(!['comment','reply'].includes(n.notification_type)||oracle.explicitManual(String(n.meta?.source||'')))&&oracle.useful(n);
+  assert.equal(key,eligible?oracle.semanticKey(n):null,'stored key '+n.id);
+ }
 }
 const row=(id,patch={})=>({id,member_id:id%2?'owner':'owner-app',notification_type:'other',raw_text:'通知 '+id,actor_name:'actor '+id,actor_url:'https://note.com/peer'+id,actor_image_url:null,target_title:null,target_url:'https://note.com/ss_yr/n/nArticle',source_url:null,occurred_at:'2026-10-16T15:05:00.123Z',captured_at:new Date(Date.parse('2026-10-17T00:00:00Z')-id*1000).toISOString(),is_read:false,meta:{source:'note-notification-reader-v3',event_identity:'notice:'+id,classifier:'action-v28-context',recovery_version:'evidence-v2-articles'},...patch});
 async function sqlPage(m=member,options={}){
@@ -110,6 +123,7 @@ test('SQL matches the frozen JavaScript oracle for classification, scope, JST, s
  rows.push(row(2021,{meta:{source:'note-notification-reader-v3',event_identity:'notice:777'}}),row(2022,{meta:{source:'note-notification-reader-v3',event_identity:'notice:777',comment_body:'merged body'}}));
  rows.push(...[[],{},['x',['y',null],'z'],false,0,''].flatMap((signature,i)=>[row(2031+i*2,{meta:{client_signature:signature}}),row(2032+i*2,{meta:{client_signature:signature}})]));
  await insert(rows);
+ await checkPreparedKeys(['owner','owner-app','participant','unrelated']);
  await db.exec(`INSERT INTO public.insight_manual_completions VALUES ('owner','ss_yr','notification','notice:1'),('owner','ss_yr','notification','notice:333'),('owner','ss_yr','notification','row:1011'),('owner-app','ss_yr','notification','notice:2'),('owner','elsewhere','notification','notice:3'),('owner','ss_yr','like','notice:4'),('participant','participant','notification','notice:1017');
  INSERT INTO public.insight_favorite_creators VALUES ('owner','alias-a','https://note.com/A'),('owner','legacy-peer','https://note.com/peer1'),('owner','m','https://note.com/M'),('participant','peer2','https://note.com/peer2');
  INSERT INTO public.insight_notification_sync_runs VALUES ('owner','2026-10-17T00:10:00Z',4,12,'browser-notification-stable-v3-confirmed'),('owner-app','2026-10-17T00:11:00Z',2,8,'browser-notification-stable-v3-confirmed'),('unrelated','2026-10-18',999,999,'browser-notification-stable-v3-confirmed'),('owner','2026-10-19',999,999,'other-source');`);
@@ -128,6 +142,58 @@ test('SQL matches the frozen JavaScript oracle for classification, scope, JST, s
  assert.equal(cases.find(r=>r.id===1034)?.comment_body,'42');
  assert.equal(cases.find(r=>r.id===1035)?.confirmed,true);assert.equal(cases.find(r=>r.id===1036)?.target_url,'');assert.equal(cases.find(r=>r.id===1036)?.source_url,'');assert.equal(cases.find(r=>r.id===2061)?.notification_type,'other');
  const switched=cases.find(r=>r.id===2052);assert.ok(switched);assert.equal(switched.actor_image_url,'image A');assert.equal(switched.meta.body,'B body');
+});
+
+test('prepared keys are stored, service-only, timezone independent and follow inserts, updates, deletion and BEFORE triggers',async()=>{
+ const {rows:[schema]}=await db.query(`SELECT a.attgenerated,t.typname,c.collname,p.provolatile,p.prosecdef,p.proparallel,p.proconfig,
+  has_function_privilege('anon',p.oid,'EXECUTE') AS anon,has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated,has_function_privilege('service_role',p.oid,'EXECUTE') AS service
+  FROM pg_attribute a JOIN pg_type t ON t.oid=a.atttypid JOIN pg_collation c ON c.oid=a.attcollation
+  CROSS JOIN pg_proc p WHERE a.attrelid='public.insight_notifications'::regclass AND a.attname='insight_feed_key' AND p.proname='insight_notification_feed_key'`);
+ assert.equal(schema.attgenerated,'s');assert.equal(schema.typname,'text');assert.equal(schema.collname,'C');
+ assert.equal(schema.provolatile,'i');assert.equal(schema.prosecdef,false);assert.equal(schema.proparallel,'s');assert.deepEqual(schema.proconfig,['search_path=""']);
+ assert.equal(schema.anon,false);assert.equal(schema.authenticated,false);assert.equal(schema.service,true);
+ const m={id:'prepared',scope:'prepared',noteId:'prepared'};
+ let current=row(900001,{member_id:m.id,raw_text:'保存した通知',occurred_at:null,captured_at:'2026-10-17T00:00:00Z',meta:{source:'note-notification-reader-v3'}});
+ await insert([current]);
+ const key=async()=>{await checkPreparedKeys([m.id]);await equivalent(m,{includeCategoryPreview:true});return(await db.query('SELECT insight_feed_key AS key FROM public.insight_notifications WHERE id=$1',[current.id])).rows[0]?.key};
+ let previous=await key();assert.ok(previous);
+ const writable=columns.split(',').filter(n=>n!=='id').join(',');
+ async function change(patch,shouldChange=true){
+  current={...current,...patch};
+  await db.query(`UPDATE public.insight_notifications SET (${writable})=(SELECT ${writable} FROM jsonb_populate_record(NULL::public.insight_notifications,$2::jsonb)) WHERE id=$1`,[current.id,JSON.stringify(current)]);
+  const next=await key();if(shouldChange)assert.notEqual(next,previous);else assert.equal(next,previous);previous=next;
+ }
+ await change({raw_text:'通知の本文を変更しました'});
+ await change({actor_url:'https://note.com/changed?x=1#part'});
+ await change({actor_url:null,actor_name:'Fallback NAME'});
+ await change({target_url:'https://note.com/another/n/nChanged'});
+ await change({target_url:null,source_url:'https://note.com/source/n/nSource'});
+ await change({notification_type:'my_article_magazine_added',source_url:null,target_title:'first magazine'});
+ await change({target_title:'updated magazine'});
+ await change({occurred_at:'2026-10-17T01:00:00Z'});
+ await change({occurred_at:null,captured_at:'2026-10-17T02:00:00Z'});
+ await change({meta:{source:'note-notification-reader-v3',event_identity:'notice:changed'}});
+ await change({meta:{source:'note-notification-reader-v3',client_signature:['prepared',['nested',null]]}});
+ await change({meta:{source:'canonical-public-comments'}});assert.equal(previous,null);
+ await change({notification_type:'reply',meta:{source:'automatic-capture'}},false);
+ await change({meta:{source:'note-notification-reader-v3',body:'new body'}});assert.ok(previous);
+ await change({meta:{source:'note-notification-reader-v3',noise_reason:'non-notification-api-capture'}});assert.equal(previous,null);
+ await change({notification_type:'other',meta:{source:'note-notification-reader-v3'}});assert.ok(previous);
+ await change({meta:{source:'note-notification-reader-v3',body:'記事であなたの画像を使用しました'}},false);
+ assert.equal((await sqlPage(m)).rows[0]?.notification_type,'image_used');
+ await db.exec("SET TIME ZONE 'Asia/Tokyo'");
+ const tokyo=(await db.query('SELECT public.insight_notification_feed_key(notification_type,raw_text,actor_name,actor_url,target_title,target_url,source_url,occurred_at,captured_at,meta) AS key FROM public.insight_notifications WHERE id=$1',[current.id])).rows[0].key;
+ await db.exec("SET TIME ZONE 'America/New_York'");
+ const ny=(await db.query('SELECT public.insight_notification_feed_key(notification_type,raw_text,actor_name,actor_url,target_title,target_url,source_url,occurred_at,captured_at,meta) AS key FROM public.insight_notifications WHERE id=$1',[current.id])).rows[0].key;
+ assert.equal(tokyo,ny);assert.equal(tokyo,previous);await db.exec("SET TIME ZONE 'UTC'");
+ await db.query('DELETE FROM public.insight_notifications WHERE id=$1',[current.id]);assert.equal((await equivalent(m,{})).total,0);
+ await db.exec(`CREATE FUNCTION public.feed_test_before() RETURNS trigger LANGUAGE plpgsql SET search_path='' AS $$ BEGIN IF NEW.member_id='prepared-trigger' THEN NEW.notification_type='other';NEW.meta=jsonb_build_object('source','note-notification-reader-v3','event_identity','notice:'||NEW.raw_text);END IF;RETURN NEW;END $$;
+  CREATE TRIGGER feed_test_before BEFORE INSERT OR UPDATE ON public.insight_notifications FOR EACH ROW EXECUTE FUNCTION public.feed_test_before();`);
+ await insert([row(900002,{member_id:'prepared-trigger',notification_type:'capture_noise',raw_text:'before-insert',meta:{source:'canonical-public-comments'}})]);
+ assert.equal((await db.query('SELECT insight_feed_key AS key FROM public.insight_notifications WHERE id=900002')).rows[0].key,'notice|notice:before-insert');
+ await db.exec("UPDATE public.insight_notifications SET raw_text='before-update' WHERE id=900002");
+ assert.equal((await db.query('SELECT insight_feed_key AS key FROM public.insight_notifications WHERE id=900002')).rows[0].key,'notice|notice:before-update');
+ await checkPreparedKeys(['prepared-trigger']);await db.exec('DROP TRIGGER feed_test_before ON public.insight_notifications;DROP FUNCTION public.feed_test_before();');
 });
 
 test('20k-row history has exact late pages and a bounded row payload',async()=>{
