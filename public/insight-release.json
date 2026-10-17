@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.15.2",
+  "appVersion": "2026.10.17.1",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-15T01:07:17+09:00",
+  "releasedAt": "2026-10-17T17:55:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の連携状態で、有効な連携キーの件数を端末台数として表示していた表記を修正。再連携前のキーも含むことを明記。",
+  "note": "起動時の非表示項目の取得、同じアカウント確認による画面全体の再読み込み、変更のない通知ページの二重取得を抑制。短い画面復帰では認証のみ確認し、取得済み表示を保持。",
   "dmVersion": "1.4.11",
   "dmLabel": "DM同期"
 }
