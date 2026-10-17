@@ -33,22 +33,21 @@ function currentFormat(r:any){
 function decorate(r:any,noteId:string){r=currentFormat(r);const article=articleOwner(r.target_url),targetOwner=/^https:\/\/note\.com\/[^/]+\/membership(?:[/?#]|$)/i.test(String(r.target_url||""))?ownerFromUrl(r.target_url):"",source=String(r?.meta?.source||""),selfArticle=source==="canonical-public-comments"||(article&&article===noteId),type=String(r.notification_type||""),structured=type==="other"&&String(r?.meta?.kind||"")==="qa_answer"?"question_answer":type;let contextLabel=structured==="question_answer"?"質問箱への回答":"",displayCategory=structured,articleContext=selfArticle?"self":article?"other":"unknown";if(type==="comment"){contextLabel=selfArticle?"自分の記事へのコメント":article?`@${article} の記事へのコメント`:"コメント"}else if(type==="reply"){displayCategory=selfArticle?"reply_self":article?"reply_other":"reply_unknown";contextLabel=selfArticle?"自分の記事のコメントへの返信":article?`@${article} の記事で自分のコメントへの返信`:"返信先の記事を確認待ち"}else if(type==="comment_like"){contextLabel=selfArticle?"自分の記事のコメントへの♡":article?`@${article} の記事コメントへの♡`:"コメントへの♡"}else if(type==="like"){contextLabel=selfArticle?"自分の記事へのスキ":article?`@${article} の記事へのスキ`:"記事へのスキ"}else if(type==="membership_reaction"){displayCategory=targetOwner===noteId?"membership_reaction_self":targetOwner?"membership_reaction_joined":"membership_reaction_unknown";contextLabel=displayCategory==="membership_reaction_self"?"自分のメンシプ反応":targetOwner?"参加中のメンシプ反応":"メンシプ所有者を確認待ち"}return{...r,comment_body:actualCommentBody(r)||null,comment_identity:commentIdentity(r),article_context:articleContext,article_owner:article||null,membership_owner:targetOwner||null,display_category:displayCategory,context_label:contextLabel}}
 async function commentRows(scope:string,kind:string|null,limit:number,offset=0){let q=db.from("insight_public_comments").select("comment_key,article_key,actor_name,actor_url,actor_image_url,body,occurred_at,is_root",{count:"exact"}).eq("member_id",scope).eq("is_creator",false);if(kind==="comment"||kind==="reply")q=q.eq("is_root",kind==="comment");const{data,error,count}=await q.order("occurred_at",{ascending:false}).range(offset,offset+limit-1);if(error)throw error;const keys=[...new Set((data||[]).map((r:any)=>r.article_key).filter(Boolean))];const{data:arts}=keys.length?await db.from("insight_public_articles").select("article_key,title,url").eq("member_id",scope).in("article_key",keys):{data:[] as any[]};const am=new Map((arts||[]).map((a:any)=>[a.article_key,a]));const rows=(data||[]).map((r:any)=>{const a:any=am.get(r.article_key)||{},type=r.is_root?"comment":"reply";return{id:`public-comment:${r.comment_key}`,member_id:scope,notification_type:type,raw_text:`${r.actor_name||"noteユーザー"}さんが「${a.title||"記事"}」に${type==="reply"?"返信":"コメント"}しました`,actor_name:r.actor_name,actor_url:r.actor_url,actor_image_url:r.actor_image_url,target_title:a.title||null,target_url:a.url||null,occurred_at:r.occurred_at,captured_at:r.occurred_at,is_read:false,meta:{source:"canonical-public-comments",comment_key:r.comment_key,body:r.body}}});return{rows,total:Number(count||0)}}
 async function status(scope:string,ids:string[]){const[n,s]=await Promise.all([db.from("insight_notifications").select("captured_at").in("member_id",ids).order("captured_at",{ascending:false}).limit(1).maybeSingle(),db.from("insight_notification_sync_runs").select("created_at,inserted_count,received_count,source").in("member_id",ids).eq("source","browser-notification-stable-v3-confirmed").order("created_at",{ascending:false}).limit(1).maybeSingle()]);const last=Date.parse(String(n.data?.captured_at||""))||0,source=String(s.data?.source||""),count=Number(s.data?.inserted_count||0);return{lastUpdatedAt:last?new Date(last).toISOString():null,lastSyncAt:s.data?.created_at||null,lastSyncSource:source||null,lastSyncInserted:count,lastSyncConfirmed:source==="browser-notification-stable-v3-confirmed"?count:0,lastSyncReceived:Number(s.data?.received_count||0)}}
-async function notificationRows(ids:string[],type:string|null,since=""){
- const all:any[]=[];for(let offset=0;;offset+=1000){let q=db.from("insight_notifications").select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta").in("member_id",ids);if(type)q=q.eq("notification_type",type);if(since)q=q.gte("captured_at",since);
- const{data,error}=await q.order("captured_at",{ascending:false}).order("id").range(offset,offset+999);if(error)throw error;all.push(...(data||[]));if((data||[]).length<1000)break}
- return all.filter((r:any)=>{const t=String(r.notification_type||"");return t!=="comment"&&t!=="reply"||explicitManual(String(r?.meta?.source||""))})
-}
-const snapshots=new Map<string,{at:number;revision:string;rows:any[];watermark:string}>(),pending=new Map<string,Promise<any[]>>();
-async function allRows(scope:string,ids:string[],revision="",classificationRevision="0"){
- const key=ids.join("|")+"|"+classificationRevision,cached=snapshots.get(key),fresh=Boolean(cached&&Date.now()-cached.at<30000);
- if(fresh&&cached!.revision===revision)return cached!.rows;
- const requestKey=key+"|"+revision;if(pending.has(requestKey))return pending.get(requestKey)!;
- const job=(async()=>{
-  const recent=await notificationRows(ids,null,fresh?cached!.watermark:"");
-  const merged=new Map((fresh?cached!.rows:[]).map(r=>[r.id,r]));for(const r of recent)merged.set(r.id,r);
-  const rows=dedupe([...merged.values()]),watermark=[...merged.values()].reduce((value,r)=>String(r.captured_at||"")>value?String(r.captured_at):value,"");
-  snapshots.set(key,{at:fresh?cached!.at:Date.now(),revision,rows,watermark});if(snapshots.size>20)snapshots.delete(snapshots.keys().next().value!);return rows;
- })();pending.set(requestKey,job);try{return await job}finally{pending.delete(requestKey)}
+// The service-only RPC performs exact classification/counting and returns a bounded page.
+// Do not fall back to a full notification scan when the migration is missing or unavailable.
+async function feedPage(m:any,b:any){
+ const pageValue=Math.floor(Number(b.page)||1),sizeValue=Math.floor(Number(b.pageSize)||100);
+ const page=Number.isFinite(pageValue)?Math.min(1_000_000,Math.max(1,pageValue)):1;
+ const pageSize=Number.isFinite(sizeValue)?Math.min(100,Math.max(20,sizeValue)):100;
+ const{data,error}=await db.rpc("insight_notification_feed_page",{
+  p_member_ids:scopedIds(m),p_scope:m.scope,p_note_id:m.noteId,
+  p_kind:txt(b.kind,"all"),p_day:/^\d{4}-\d{2}-\d{2}$/.test(txt(b.day))?txt(b.day):"",
+  p_handling_status:["pending","completed"].includes(txt(b.handlingStatus))?txt(b.handlingStatus):"all",
+  p_page:page,p_page_size:pageSize,p_preview:Boolean(b.includeCategoryPreview)
+ });
+ if(error)throw new Error("NOTIFICATION_FEED_READ_FAILED:"+String(error.code||error.message||"RPC"));
+ if(!data||data.ok!==true||!Array.isArray(data.rows))throw new Error("NOTIFICATION_FEED_READ_INVALID");
+ return data;
 }
 function baseKind(kind:string){if(kind==="reply_self"||kind==="reply_other"||kind==="reply_unknown")return"reply";if(kind==="membership_reaction_self"||kind==="membership_reaction_joined"||kind==="membership_reaction_unknown")return"membership_reaction";return kind==="all"?null:kind}
 function filterDisplay(rows:any[],kind:string,noteId:string){const decorated=rows.map(r=>decorate(r,noteId));if(kind==="all")return decorated;if(kind==="reply_self"||kind==="reply_other"||kind==="reply_unknown"||kind==="membership_reaction_self"||kind==="membership_reaction_joined"||kind==="membership_reaction_unknown")return decorated.filter(r=>String(r.display_category||"")===kind);return decorated}
@@ -108,13 +107,5 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  if(b.action==="favorite_toggle")return out(await notificationFavorite(m,b));
  if(b.action==="comment_detail")return out(await notificationComment(m,b));
  if(b.action==="recent")return out(await recentRows(m,b));
- const kind=txt(b.kind,"all"),page=Math.max(1,Math.floor(Number(b.page)||1)),size=Math.min(100,Math.max(20,Math.floor(Number(b.pageSize)||100))),offset=(page-1)*size,ids=m.scope===m.id?[m.id]:[m.scope,m.id],meta=await status(m.scope,ids),day=/^\d{4}-\d{2}-\d{2}$/.test(txt(b.day,""))?txt(b.day,""):"";
- const[completed,favorites]=await Promise.all([completionKeys(m),favoriteRows(m)]);
- const rows=decorateHandling((await allRows(m.scope,ids,String(meta.lastSyncAt||""),String(b.classificationRevision||0))).filter(r=>!["like","follow","comment"].includes(String(r.notification_type))),m,completed,favorites),handlingStatus=["pending","completed"].includes(txt(b.handlingStatus))?txt(b.handlingStatus):"all",{dated,selected,statusCounts}=selectHandling(rows,kind,day,handlingStatus);
- const categoryCounts:Record<string,number>={all:dated.length};for(const r of dated)categoryCounts[r.display_category]=(categoryCounts[r.display_category]||0)+1;
- // Format maintenance belongs to the authenticated owner inbox, never participants.
- const unknownKinds:string[]=[];
- const categoryPreview:Record<string,any[]>={};
- if(b.includeCategoryPreview)for(const r of dated){const k=r.display_category;if(!categoryPreview[k])categoryPreview[k]=[];if(categoryPreview[k].length<12)categoryPreview[k].push(r)}
- return out({ok:true,feedAt:new Date().toISOString(),classifierVersion:"action-v28-context",page,pageSize:size,total:selected.length,rows:selected.slice(offset,offset+size),categoryCounts,categoryPreview,statusCounts,handlingStatus,unknownKinds,unresolved:{remaining:rows.filter(r=>r.notification_type==="other").length,insufficient:rows.filter(r=>r.notification_type==="other"&&r.meta?.classification_status==="insufficient_evidence").length},reclassifyPending:rows.filter(r=>r.notification_type==="other"&&(r.meta?.reclassify_pending||r.meta?.classifier!=="action-v28-context"||r.meta?.recovery_version!=="evidence-v2-articles")).length,noteId:m.noteId,selectedDay:day||null,...meta});
+ return out(await feedPage(m,b));
  }catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});

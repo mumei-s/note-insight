@@ -86,7 +86,7 @@ test('active package keeps manifest and split full/delta Reader consistent',()=>
   assert.match(network,/async function syncHistory/);assert.match(network,/MAX_NOTICES=300,MAX_PAGES=3/);assert.match(network,/writeJournal/);assert.match(reader,/MAX_NOTICES=300/);assert.match(reader,/net\.syncCurrent/);
   assert.doesNotMatch(reader,/INSIGHT【通知】|フィルター ON|notification-filter-settings\.html|TOOLBAR_ID/);
   assert.match(controls,/INSIGHT【通知】/);assert.match(controls,/フィルター ON|フィルター OFF/);
-  assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/\["like","follow","comment"\]/);assert.match(read("src/member-insight-notifications-final.tsx"),/\["creator_article_posted","記事投稿・更新"\]/);
+  assert.match(index,/mode === "notifications"/);assert.doesNotMatch(index,/insight-tool-row/);assert.match(picker,/PUBLIC_DUPLICATE_LABELS/);assert.match(feed,/db\.rpc\("insight_notification_feed_page"/);const feedSql=read('supabase/migrations/'+fs.readdirSync(new URL('../supabase/migrations',import.meta.url)).find(f=>f.endsWith('_insight_notification_feed_page.sql')));assert.match(feedSql,/NOT IN \('like','follow','comment'\)/);assert.match(read("src/member-insight-notifications-final.tsx"),/\["creator_article_posted","記事投稿・更新"\]/);
 });
 
 test('notification and DM readers are hard separated with independent storage and APIs',()=>{
