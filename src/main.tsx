@@ -25,7 +25,6 @@ const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insigh
 const OWNER_KEY = "mumei-unified-owner-token";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
 const OWNER_PENDING_SEEN_KEY = "mumei-owner-pending-seen-v1";
-const ACCOUNT_ROUTE_REFRESH_KEY = "mumei-account-route-refresh-v1";
 function applyRequestedAccessIntent() {
   const url = new URL(window.location.href);
   if (!/^#\/?access\/insight$/.test(url.hash) || url.searchParams.get("accessIntent") !== "switch") return;
@@ -54,7 +53,6 @@ if (pwaTopLaunch) {
   clean.searchParams.delete("launch");
   window.history.replaceState({ route: "home" }, "", clean.toString());
 }
-if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
 if (!window.location.hash.includes("access/insight")) clearAccessIntent();
 
 installApiBridge();
@@ -70,6 +68,12 @@ function showAccessNotice(message: string) {
   }
   box.textContent = message;
   window.setTimeout(() => box?.remove(), 6500);
+}
+
+function memberSessionIdentity() {
+  const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
+  const account = token ? readStoredInsightAccounts().find((item) => item.memberToken === token) : null;
+  return JSON.stringify([token, account?.noteId || ""]);
 }
 
 async function readJson(response: Response) {
@@ -108,6 +112,7 @@ function autoResumeAllowed() {
 
 async function validateCurrentMemberToken() {
   const generation = memberResumeGeneration;
+  const identity = memberSessionIdentity();
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (!token) return "missing" as const;
   try {
@@ -118,7 +123,7 @@ async function validateCurrentMemberToken() {
       cache: "no-store",
     });
     const payload = await readJson(response);
-    if (generation !== memberResumeGeneration || !autoResumeAllowed()) return "temporary" as const;
+    if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed()) return "temporary" as const;
     if (response.ok && payload?.ok !== false && payload?.application) {
       const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
       rememberMemberSession(payload.application, token, stored?.passcode);
@@ -136,6 +141,7 @@ async function validateCurrentMemberToken() {
 
 async function handleIdentityReverify(account: ReturnType<typeof readStoredInsightAccounts>[number]) {
   const generation = memberResumeGeneration;
+  const identity = memberSessionIdentity();
   const joinId = (localStorage.getItem(JOIN_NOTE_KEY) || "").trim().toLowerCase();
   if (!joinId || joinId !== account.noteId) return false;
   const statusResponse = await fetch(ACCESS, {
@@ -145,7 +151,7 @@ async function handleIdentityReverify(account: ReturnType<typeof readStoredInsig
     cache: "no-store",
   });
   const statusPayload = await readJson(statusResponse);
-  if (generation !== memberResumeGeneration || !autoResumeAllowed()) return false;
+  if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed()) return false;
   if (!statusResponse.ok || statusPayload?.application?.status !== "approved") return false;
   rememberApplication(statusPayload.application, statusPayload.application?.verificationCode || account.passcode);
   showAccessNotice("OWNERが参加を許可しました。本人確認へ進んでください。");
@@ -165,10 +171,11 @@ async function tryReturningMemberResume() {
   if (memberResumeRunning) return;
   memberResumeRunning = true;
   const generation = memberResumeGeneration;
+  const identity = memberSessionIdentity();
 
   try {
     const tokenState = await validateCurrentMemberToken();
-    if (generation !== memberResumeGeneration || !autoResumeAllowed()) return;
+    if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed()) return;
     if (tokenState === "valid" || tokenState === "temporary") return;
 
     for (const account of resumeCandidates()) {
@@ -182,7 +189,7 @@ async function tryReturningMemberResume() {
           cache: "no-store",
         });
         const payload = await readJson(response);
-        if (generation !== memberResumeGeneration || !autoResumeAllowed()) return;
+        if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed() || localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") return;
         if (response.ok && payload?.memberToken && payload?.application) {
           rememberMemberSession(payload.application, payload.memberToken, account.passcode);
           localStorage.removeItem(JOIN_NOTE_KEY);
@@ -244,16 +251,26 @@ if (insightToken) {
   }).catch(() => { /* Long-session refresh must never block app startup. */ });
 }
 
+let knownMemberSession = memberSessionIdentity();
+let accountRefreshTimer = 0;
 window.addEventListener("mumei-insight-accounts", () => {
-  if (window.location.hash === "#dashboard" && localStorage.getItem(INSIGHT_TOKEN_KEY) && sessionStorage.getItem(ACCOUNT_ROUTE_REFRESH_KEY) !== "1") {
-    sessionStorage.setItem(ACCOUNT_ROUTE_REFRESH_KEY, "1");
-    window.setTimeout(() => window.location.reload(), 30);
-  }
+  window.clearTimeout(accountRefreshTimer);
+  // Account-store events may precede their final token write. Compare the
+  // completed operation, not profile updates from an ordinary session check.
+  accountRefreshTimer = window.setTimeout(() => {
+    accountRefreshTimer = 0;
+    const next = memberSessionIdentity();
+    if (next === knownMemberSession) return;
+    knownMemberSession = next;
+    memberResumeGeneration++;
+    window.dispatchEvent(new Event("mumei-insight-accounts"));
+    knownMemberSession = memberSessionIdentity();
+    if (window.location.hash === "#dashboard" || window.location.hash === "#owner-insight") window.location.reload();
+  }, 30);
 });
 window.addEventListener("hashchange", () => {
   memberResumeGeneration++;
   if (!window.location.hash.includes("access/insight")) clearAccessIntent();
-  if (!window.location.hash.includes("dashboard")) sessionStorage.removeItem(ACCOUNT_ROUTE_REFRESH_KEY);
   void tryReturningMemberResume();
 });
 
