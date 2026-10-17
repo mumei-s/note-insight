@@ -143,7 +143,9 @@ test('built member entrance loads the selected notification scene and can open a
   });
   const w = dom.window;
   try {
-    await waitFor(() => w.document.querySelector('.minf'));
+    // A concurrent commit can expose the scene before its passive effects run.
+    // Wait for both the real DOM and its initial history request on Node 22/24.
+    await waitFor(() => w.document.querySelector('.minf') && calls.some(call => call.url.endsWith('/insight-notification-feed-final')));
     assert.ok(w.__builtModules.some(url => /member-insight-notifications-final-/.test(url)));
     assert.ok(!w.__builtModules.some(url => /member-insight-(?:unified-v4|comments-final|analysis-hub|favorites-final|social-v2)-/.test(url)), 'unselected histories are not downloaded');
     assert.ok(calls.some(call => call.url.endsWith('/insight-notification-feed-final')));
