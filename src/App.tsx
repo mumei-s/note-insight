@@ -1,14 +1,6 @@
-import { useEffect, useState } from "react";
-import { AccessPortalV6 } from "./access-portal-v6";
-import { ArticleLikesPageV2 } from "./article-likes-page-v2";
-import { CombinedAnalyticsApp } from "./combined-analytics-app";
-import { EvidenceV2 } from "./evidence-v2";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "./fast-insight-v6-override.css";
-import { FeaturePage } from "./feature-page";
 import { HubHome } from "./hub-home";
-import { ManagementPage } from "./management-page";
-import { MemberInsightLiveV2 } from "./member-insight-live-v2";
-import { OwnerGate } from "./owner-gate";
 import {
   INSIGHT_TOKEN_KEY,
   readStoredInsightAccounts,
@@ -20,6 +12,19 @@ import "./insight-polish-v1.css";
 import { useInsightDisplayMode } from "./insight-display-mode";
 import "./insight-pc-layout.css";
 import "./insight-device-scale.css";
+import { loadInsightScreen } from "./insight-screen-loader";
+
+// Load the selected entrance only. Owner tools and old analysis screens do not
+// belong to the participant's startup transfer or JavaScript parse budget.
+const AccessPortalV6 = lazy(() => loadInsightScreen(() => import("./access-portal-v6")).then(module => ({ default: module.AccessPortalV6 })));
+const ArticleLikesPageV2 = lazy(() => loadInsightScreen(() => import("./article-likes-page-v2")).then(module => ({ default: module.ArticleLikesPageV2 })));
+const CombinedAnalyticsApp = lazy(() => loadInsightScreen(() => import("./combined-analytics-app")).then(module => ({ default: module.CombinedAnalyticsApp })));
+const EvidenceV2 = lazy(() => loadInsightScreen(() => import("./evidence-v2")).then(module => ({ default: module.EvidenceV2 })));
+const FeaturePage = lazy(() => loadInsightScreen(() => import("./feature-page")).then(module => ({ default: module.FeaturePage })));
+const ManagementPage = lazy(() => loadInsightScreen(() => import("./management-page")).then(module => ({ default: module.ManagementPage })));
+const loadMemberInsight = () => loadInsightScreen(() => import("./member-insight-live-v2"));
+const MemberInsightLiveV2 = lazy(() => loadMemberInsight().then(module => ({ default: module.MemberInsightLiveV2 })));
+const OwnerGate = lazy(() => loadInsightScreen(() => import("./owner-gate")).then(module => ({ default: module.OwnerGate })));
 
 // Maintenance is reserved for login/main-wide participant outages only.
 const PARTICIPANT_MAINTENANCE = false;
@@ -154,6 +159,9 @@ function BottomNav({ route }: { route: string }) {
 
   function chooseItem(tab:string){
     setItemOpen(false);setItemTab(tab);
+    // The route chunk can still be downloading after session verification.
+    // Keep a selection made in that interval until the shell can receive it.
+    window.history.replaceState({...window.history.state,insightPendingTab:tab},"",window.location.href);
     window.dispatchEvent(new CustomEvent("mumei-insight-select-item",{detail:tab}));
   }
 
@@ -165,6 +173,7 @@ function BottomNav({ route }: { route: string }) {
     if (!hasMember) { goTo("access/insight"); return; }
     if (route !== "dashboard") { goTo("dashboard"); return; }
     sessionStorage.removeItem("mumei-insight-entry-mode");
+    window.history.replaceState({...window.history.state,insightPendingTab:"likes"},"",window.location.href);
     window.dispatchEvent(new Event("mumei-insight-root"));
   }
   function notePress() { window.location.assign("https://note.com/"); }
@@ -304,6 +313,11 @@ export function App() {
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
   const needsMember = memberRoute(route);
   useEffect(() => {
+    // Fetch the selected shell while its session is being checked, without
+    // mounting it or starting history requests before authentication completes.
+    if (needsMember && memberToken) void loadMemberInsight().catch(() => {});
+  }, [needsMember, memberToken]);
+  useEffect(() => {
     let cancelled = false;
     if (!needsMember || !memberToken) { setCheckingMember(false); if (!memberToken) setValidatedMemberToken(""); return; }
     if (validatedMemberToken === memberToken) { setCheckingMember(false); return; }
@@ -406,7 +420,7 @@ export function App() {
   const hideBottomNav = route.startsWith("access/") || admin || checkingMember;
   return <>
     <style>{SESSION_TRANSITION_CSS}</style>
-    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""} ${checkingMember?"is-session-check":"is-ready"}`}><div key={route} className="app-route-light" aria-hidden="true"/><div className="app-route-page">{page}</div></div>
+    <div className={`app-route-shell ${ownerView ? "is-owner" : "is-member"} ${admin ? "is-admin" : ""} ${route==="dashboard"?"is-dashboard":""} ${checkingMember?"is-session-check":"is-ready"}`}><div key={route} className="app-route-light" aria-hidden="true"/><div className="app-route-page"><Suspense fallback={<p role="status" style={{ margin: 0, padding: "36px 20px", color: "#a8c8d4" }}>画面を読み込んでいます…</p>}>{page}</Suspense></div></div>
     {hideBottomNav ? null : <BottomNav route={route} />}
   </>;
 }

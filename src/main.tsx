@@ -284,6 +284,7 @@ window.addEventListener("pageshow", () => { void tryReturningMemberResume(); voi
 function startupFailureLabel(reason: unknown) {
   const error = reason as { name?: string; message?: string } | null;
   const name = String(error?.name || "Error"), message = String(error?.message || "");
+  if (name === "InsightScreenLoadError") return "画面ファイルを読み込めませんでした。通信を確認して再読み込みしてください（E_SCREEN_LOAD）";
   if (/QuotaExceeded/i.test(name)) return "ブラウザ内の保存枠への書き込みが拒否されました（QuotaExceededError）";
   if (/SecurityError/i.test(name)) return "ブラウザの保存領域へアクセスできません（SecurityError）";
   if (/addEventListener|matchMedia/.test(message)) return "ブラウザの表示機能で停止しました（E_BROWSER_API）";
@@ -291,9 +292,9 @@ function startupFailureLabel(reason: unknown) {
 }
 
 // Optional installation UI must never take the main app down with it.
-class StartupBoundary extends Component<{ children: ReactNode; optional?: boolean }, { failure: string }> {
-  state = { failure: "" };
-  static getDerivedStateFromError(error: unknown) { return { failure: startupFailureLabel(error) }; }
+class StartupBoundary extends Component<{ children: ReactNode; optional?: boolean }, { failure: string; screenLoadFailed: boolean }> {
+  state = { failure: "", screenLoadFailed: false };
+  static getDerivedStateFromError(error: unknown) { return { failure: startupFailureLabel(error), screenLoadFailed: (error as { name?: string } | null)?.name === "InsightScreenLoadError" }; }
   render() {
     if (!this.state.failure) return this.props.children;
     if (this.props.optional) return null;
@@ -302,7 +303,7 @@ class StartupBoundary extends Component<{ children: ReactNode; optional?: boolea
       <h1 style={{ margin: 0 }}>INSIGHT</h1>
       <p style={{ margin: 0 }}>{this.state.failure}</p>
       <p style={{ margin: 0, fontSize: 12 }}>ログイン情報と保存済みデータは保持しています。</p>
-      <button type="button" onClick={() => this.setState({ failure: "" })}>再表示</button>
+      <button type="button" onClick={() => this.state.screenLoadFailed ? window.location.reload() : this.setState({ failure: "", screenLoadFailed: false })}>{this.state.screenLoadFailed ? "再読み込み" : "再表示"}</button>
       <a href={top.href} style={{ color: "#8feaff" }}>TOPを開き直す</a>
     </main>;
   }

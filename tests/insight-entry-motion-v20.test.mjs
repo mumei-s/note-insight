@@ -41,6 +41,7 @@ function load(source, w, fetch, overrides = {}) {
   const modules = {
     react: React,
     'react/jsx-runtime': jsx,
+    './insight-screen-loader': { loadInsightScreen: load => load() },
     './creator-avatar': { CreatorAvatar: ({ image, name }) => React.createElement(image ? 'img' : 'span', image ? { src: image, alt: name } : {}, image ? undefined : name?.slice(0, 1)) },
     './insight-account-store': {
       INSIGHT_TOKEN_KEY: 'fixture-token-key', currentStoredInsightAccount: () => account,
@@ -61,6 +62,16 @@ function load(source, w, fetch, overrides = {}) {
     modules[name] = {};
     for (const specifier of node.importClause?.namedBindings?.elements || []) modules[name][specifier.name.text] = stub;
   }
+  // Dynamically loaded scenes keep the same feature stub as static scenes;
+  // resolving a chunk must not accidentally mount the real data component.
+  function dynamicImports(node) {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) {
+      const name = node.arguments[0].text;
+      if (!modules[name]) modules[name] = new Proxy({}, { get: (_target, property) => property === "then" ? undefined : stub });
+    }
+    ts.forEachChild(node, dynamicImports);
+  }
+  dynamicImports(ast);
   Object.assign(modules, overrides);
   const compiled = ts.transpileModule(source.replaceAll('import.meta.env.BASE_URL', '"/note-insight/"'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
