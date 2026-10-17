@@ -98,11 +98,30 @@ function NotificationFavorite({row,onSaved,onError}:{row:Row;onSaved:(row:Row,ph
  return <button className={`minf-star ${row.favorite?"active":""} ${busy?"is-flashing":""}`} aria-pressed={Boolean(row.favorite)} aria-label={row.favorite?"お気に入り解除":"お気に入り登録"} aria-busy={busy||Boolean(row.favorite_pending)} disabled={busy||Boolean(row.favorite_pending)} onClick={()=>void toggle()}>{row.favorite?"★":"☆"}</button>
 }
 function NotificationComment({row,onSaved}:{row:Row;onSaved:(row:Row)=>void}){
- const[body,setBody]=useState(()=>String(row.meta?.comment_body||row.meta?.reply_body||row.comment_body||row.reply_body||(row.meta?.source==="canonical-public-comments"?row.meta.body:"")||"")),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
- useEffect(()=>{const next=String(row.meta?.comment_body||row.meta?.reply_body||row.comment_body||row.reply_body||(row.meta?.source==="canonical-public-comments"?row.meta.body:"")||"");if(next)setBody(next)},[row.id,row.meta?.comment_body,row.meta?.reply_body,row.comment_body,row.reply_body,row.meta?.source,row.meta?.body]);
  const identity=row.comment_identity,key=String(identity?.commentKey||row.meta?.comment_key||""),liked=row.notification_type==="comment_like",board=["membership_board","membership_board_reply"].includes(String(row.display_category||row.notification_type)),reply=row.notification_type==="reply"||String(row.display_category||row.notification_type)==="membership_board_reply";
- async function resolve(){if(body||busy)return;const token=localStorage.getItem(INSIGHT_TOKEN_KEY);setBusy(true);setMessage("");try{const x=await post({action:"comment_detail",id:row.id});if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)return;if(x.body){setBody(String(x.body));onSaved({id:row.id,comment_body:x.body,comment_identity:{articleKey:x.articleKey,commentKey:x.commentKey,url:x.url},meta:{comment_body:x.body,comment_key:x.commentKey,comment_author:x.author,comment_body_source:"exact-comment-id"}})}else setMessage(board?"掲示板の本文はまだ取得・保存されていません。対象掲示板から確認できます。":x.status==="missing_id"?"この旧通知には対象コメントIDが保存されていません。":"対象本文を取得できませんでした。対象コメントから確認できます。")}catch{setMessage("本文を取得できませんでした。もう一度読み込めます。")}finally{setBusy(false)}}
- return <details className="minf-comment-context" onToggle={e=>{if(e.currentTarget.open)void resolve()}}><summary>{liked?"スキされたコメント本文":reply?"返信本文":board?"掲示板本文":"コメント本文"}{key?` · ${key}`:""}</summary><div>{busy?<p role="status" aria-busy="true">本文を照合中…</p>:body?<p style={{whiteSpace:"pre-wrap"}}>{body}</p>:<p>{message||"本文を読み込みます。"}</p>}{row.meta?.comment_author?<small>コメント投稿者：{row.meta.comment_author}</small>:null}{identity?.url||board&&href(row)?<a href={identity?.url||href(row)} target="_blank" rel="noreferrer">{board?"対象掲示板 ↗":"対象コメント ↗"}</a>:null}{!body&&!busy?<button onClick={()=>void resolve()}>本文を再読込</button>:null}</div></details>
+ const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",supplied=String(row.meta?.comment_body||row.meta?.reply_body||row.comment_body||row.reply_body||(row.meta?.source==="canonical-public-comments"?row.meta.body:"")||"");
+ const locator=JSON.stringify([token,row.member_id||"",row.id,identity?.articleKey||"",identity?.commentKey||"",identity?.url||"",row.comment_key||"",row.meta?.comment_key||"",row.target_url||"",row.source_url||"",row.meta?.all_area_url||"",row.meta?.featured_area_url||""]);
+ const[state,setState]=useState({locator,body:supplied,busy:false,message:""}),details=useRef<HTMLDetailsElement|null>(null),currentLocator=useRef(locator),request=useRef<{seq:number;controller:AbortController|null}>({seq:0,controller:null});currentLocator.current=locator;
+ const body=supplied||(state.locator===locator?state.body:""),busy=state.locator===locator&&state.busy,message=state.locator===locator?state.message:"";
+ useEffect(()=>{
+  request.current.seq++;request.current.controller?.abort();request.current.controller=null;
+  setState(previous=>({locator,body:supplied||(previous.locator===locator?previous.body:""),busy:false,message:""}));
+  if(details.current?.open&&!body)void resolve();
+  return()=>{request.current.seq++;request.current.controller?.abort();request.current.controller=null};
+ },[locator,supplied]);
+ async function resolve(){
+  if(body||request.current.controller||!token||token!==(localStorage.getItem(INSIGHT_TOKEN_KEY)||""))return;
+  const controller=new AbortController(),seq=++request.current.seq;request.current.controller=controller;
+  const valid=()=>seq===request.current.seq&&!controller.signal.aborted&&currentLocator.current===locator&&token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"");
+  setState(previous=>valid()?{locator,body:"",busy:true,message:""}:previous);
+  try{
+   const x=await post({action:"comment_detail",id:row.id},controller.signal);if(!valid())return;
+   if(x.body){const text=String(x.body);setState(previous=>valid()?{locator,body:text,busy:false,message:""}:previous);onSaved({id:row.id,comment_body:text,comment_identity:{articleKey:x.articleKey,commentKey:x.commentKey,url:x.url},meta:{comment_body:text,comment_key:x.commentKey,comment_author:x.author,comment_body_source:"exact-comment-id"}})}
+   else setState(previous=>valid()?{locator,body:"",busy:false,message:board?"掲示板の本文はまだ取得・保存されていません。対象掲示板から確認できます。":x.status==="missing_id"?"この旧通知には対象コメントIDが保存されていません。":"対象本文を取得できませんでした。対象コメントから確認できます。"}:previous);
+  }catch{if(valid())setState(previous=>valid()?{locator,body:"",busy:false,message:"本文を取得できませんでした。もう一度読み込めます。"}:previous)}
+  finally{if(request.current.controller===controller)request.current.controller=null;if(valid())setState(previous=>valid()?{...previous,busy:false}:previous)}
+ }
+ return <details ref={details} className="minf-comment-context" onToggle={e=>{if(e.currentTarget.open)void resolve()}}><summary>{liked?"スキされたコメント本文":reply?"返信本文":board?"掲示板本文":"コメント本文"}{key?` · ${key}`:""}</summary><div>{busy?<p role="status" aria-busy="true">本文を照合中…</p>:body?<p style={{whiteSpace:"pre-wrap"}}>{body}</p>:<p>{message||"本文を読み込みます。"}</p>}{row.meta?.comment_author?<small>コメント投稿者：{row.meta.comment_author}</small>:null}{identity?.url||board&&href(row)?<a href={identity?.url||href(row)} target="_blank" rel="noreferrer">{board?"対象掲示板 ↗":"対象コメント ↗"}</a>:null}{!body&&!busy?<button onClick={()=>void resolve()}>本文を再読込</button>:null}</div></details>
 }
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
