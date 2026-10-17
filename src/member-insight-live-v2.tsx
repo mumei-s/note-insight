@@ -1,6 +1,6 @@
 import { CreatorAvatar } from "./creator-avatar";
 import { fetchInsightResource } from "./insight-view-lifecycle";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount, setAccessIntent } from "./insight-account-store";
 import {
   CURRENT_INSIGHT_APP_VERSION,
@@ -12,12 +12,6 @@ import {
   type InsightRelease,
   versionDiffers,
 } from "./insight-release";
-import { MemberInsightUnifiedV4 } from "./member-insight-unified-v4";
-import { MemberInsightSocialV2 } from "./member-insight-social-v2";
-import { MemberInsightNotificationsFinal } from "./member-insight-notifications-final";
-import { MemberInsightAnalysisHub } from "./member-insight-analysis-hub";
-import { MemberInsightCommentsFinal } from "./member-insight-comments-final";
-import { MemberInsightFavoritesFinal } from "./member-insight-favorites-final";
 import "./member-insight-hotfix.css";
 import "./member-insight-live-v2.css";
 import "./insight-cinematic-shell-v1.css";
@@ -33,6 +27,14 @@ import "./insight-thumb-dock-v11.css";
 import "./insight-ux-v12";
 import "./member-insight-analysis-scene.css";
 import { useVisibleMotion } from "./insight-visible-motion";
+import { loadInsightScreen } from "./insight-screen-loader";
+
+const MemberInsightUnifiedV4 = lazy(() => loadInsightScreen(() => import("./member-insight-unified-v4")).then(module => ({ default: module.MemberInsightUnifiedV4 })));
+const MemberInsightSocialV2 = lazy(() => loadInsightScreen(() => import("./member-insight-social-v2")).then(module => ({ default: module.MemberInsightSocialV2 })));
+const MemberInsightNotificationsFinal = lazy(() => loadInsightScreen(() => import("./member-insight-notifications-final")).then(module => ({ default: module.MemberInsightNotificationsFinal })));
+const MemberInsightAnalysisHub = lazy(() => loadInsightScreen(() => import("./member-insight-analysis-hub")).then(module => ({ default: module.MemberInsightAnalysisHub })));
+const MemberInsightCommentsFinal = lazy(() => loadInsightScreen(() => import("./member-insight-comments-final")).then(module => ({ default: module.MemberInsightCommentsFinal })));
+const MemberInsightFavoritesFinal = lazy(() => loadInsightScreen(() => import("./member-insight-favorites-final")).then(module => ({ default: module.MemberInsightFavoritesFinal })));
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
 const ACCESS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
@@ -75,10 +77,18 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 
 export function MemberInsightLiveV2(){
   const creatorMotion=useVisibleMotion<HTMLElement>();
-  const explicitMode=requestedMode();
+  const[entryTab]=useState(()=>{
+    const tab=String(window.history.state?.insightPendingTab||"");
+    return INSIGHT_NAV_ITEMS.some(([key])=>key===tab)?tab:"";
+  });
+  const explicitMode=entryTab?(["comments","favorites","social","notifications"].includes(entryTab)?entryTab:"normal") as Mode:requestedMode();
   const initialMode:Mode=explicitMode||"normal";
-  const initialNavTab=String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
+  const initialNavTab=entryTab||String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[officialData,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const normalVisited=useRef(initialMode==="normal");
+  // Keep an opened normal view mounted for its page/scroll state, but do not
+  // download it when the initial destination is notifications or another scene.
+  if(mode==="normal")normalVisited.current=true;
   const[release,setRelease]=useState<InsightRelease|null>(null),[releaseChecked,setReleaseChecked]=useState(false),[releaseError,setReleaseError]=useState(false),[notificationInstalled,setNotificationInstalled]=useState(()=>localStorage.getItem(NOTIFICATION_VERSION_STORAGE_KEY)||""),[dashboardInstalled,setDashboardInstalled]=useState(()=>localStorage.getItem(DASHBOARD_VERSION_STORAGE_KEY)||"");
   const releaseRequest=useRef(0),officialRequest=useRef({id:0,controller:null as AbortController|null});
   const accountScope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase(),autoSyncKey=AUTO_SYNC_KEY+":"+accountScope,relationSyncKey=RELATION_SYNC_KEY+":"+accountScope;
@@ -113,8 +123,8 @@ export function MemberInsightLiveV2(){
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   function handleUnifiedTab(tab:string){
     const next:Mode=tab==="comments"?"comments":tab==="favorites"?"favorites":tab==="social"?"social":tab==="notifications"?"notifications":"normal";
-    const current=window.history.state||{};
-    if(mode===next&&current.insightTab===tab){setNavTab(tab);return}
+    const current={...window.history.state};delete current.insightPendingTab;
+    if(mode===next&&current.insightTab===tab){window.history.replaceState(current,"",window.location.href);setNavTab(tab);return}
     window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
     window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
     setNavTab(tab);setMode(next);window.dispatchEvent(new Event("mumei-insight-close-items"));window.dispatchEvent(new Event("mumei-insight-navigation"));
@@ -251,8 +261,8 @@ export function MemberInsightLiveV2(){
     }finally{setAppBusy(false)}
   }
   useEffect(()=>{
-    const requested=requestedMode();
-    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");const tab=["comments","favorites","social","notifications"].includes(requested)?requested:"likes";window.history.replaceState({...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0},"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
+    const requested=entryTab?initialMode:requestedMode();
+    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");const tab=entryTab||(["comments","favorites","social","notifications"].includes(requested)?requested:"likes");const state={...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0};delete state.insightPendingTab;window.history.replaceState(state,"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
     else{window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);setNavTab("likes");setMode("normal");window.dispatchEvent(new Event("mumei-insight-navigation"))}
     const pop=()=>{const next=history.state?.insightMode;const tab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(next)?next:"likes"));const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
@@ -263,7 +273,8 @@ export function MemberInsightLiveV2(){
   },[mode]);
   useEffect(()=>{
     const root=()=>{
-      window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);
+      const state={...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0};delete state.insightPendingTab;
+      window.history.replaceState(state,"",window.location.href);
       setNavTab("likes");setMode("normal");
       window.dispatchEvent(new Event("mumei-insight-navigation"));
       requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<HTMLElement>(".miu")?.scrollIntoView({block:"start",behavior:"auto"})));
@@ -371,11 +382,13 @@ export function MemberInsightLiveV2(){
       </nav>
     </section>
     {appFeedback?<section className={`miv5-app-feedback ${appFeedback.startsWith("⚠")?"error":""}`} role="status">{appFeedback}</section>:null}
-    <div className="miv5-unified-slot" hidden={mode!=="normal"}><MemberInsightUnifiedV4 revision={revision} active={mode==="normal"} onTabChange={handleUnifiedTab}/></div>
+    {normalVisited.current?<div className="miv5-unified-slot" hidden={mode!=="normal"}><Suspense fallback={<p className="miv5-scene-loading" role="status">画面を読み込んでいます…</p>}><MemberInsightUnifiedV4 revision={revision} active={mode==="normal"} onTabChange={handleUnifiedTab}/></Suspense></div>:null}
+    <Suspense fallback={<p className="miv5-scene-loading" role="status">画面を読み込んでいます…</p>}>
     {mode==="comments"?<div className="miv5-final-slot"><MemberInsightCommentsFinal revision={revision} noteId={noteId}/></div>:null}
     {mode==="favorites"?<div className="miv5-final-slot"><MemberInsightFavoritesFinal revision={revision}/></div>:null}
     {mode==="social"?<div className="miv5-final-slot"><MemberInsightSocialV2 revision={revision}/></div>:null}
     {mode==="notifications"?<div className="miv5-final-slot"><MemberInsightNotificationsFinal revision={revision} noteId={String(official?.member?.noteId||"")}/></div>:null}
     {mode==="analysis"?<div className="miv5-final-slot"><MemberInsightAnalysisHub revision={revision} onBack={backMode} noteId={noteId} dashboardInstalled={dashboardInstalled} notificationInstalled={notificationInstalled} dashboardLatest={dashboardLatest} notificationLatest={notificationLatest}/></div>:null}
+    </Suspense>
   </div>;
 }
