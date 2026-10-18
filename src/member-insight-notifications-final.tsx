@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import { pendingCompletion, queueCompletion } from "./insight-completion-queue";
+import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
 import "./member-insight-notifications-final.css";
 
@@ -13,7 +14,16 @@ const CLASSIFIER_VERSION="action-v28-context:evidence-v2-articles";
 type Row=Record<string,any>;
 type CachedView={rows:Row[];statusCounts?:Record<string,number>;total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string};cachedAt:number;complete?:boolean;revision?:number;token?:string};
 const NOTIFICATION_VIEW_CACHE=new Map<string,CachedView>();
-const NOTIFICATION_SELECTION_CACHE=new Map<string,{kind:string;handlingStatus:string;selectedDay:string;page:number}>();
+type NotificationSelection={kind:string;handlingStatus:string;selectedDay:string;page:number};
+type SavedNotificationView={selection:NotificationSelection;rows:Row[];statusCounts:Record<string,number>;total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string}};
+const NOTIFICATION_SELECTION_CACHE=new Map<string,NotificationSelection>();
+const selectionId=(selection:NotificationSelection)=>JSON.stringify([selection.kind,selection.handlingStatus,selection.selectedDay,selection.page]);
+function savedNotificationView(account:string,token:string){
+ const saved=readSavedInsightView<SavedNotificationView>("notifications",{account,token}),value=saved?.value,selection=value?.selection;
+ const counts=(v:unknown)=>v&&typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(n=>typeof n==="number"&&Number.isFinite(n)&&n>=0);
+ if(!saved||!value||!selection||!CATS.some(([id])=>id===selection.kind)||!["all","pending","completed"].includes(selection.handlingStatus)||typeof selection.selectedDay!=="string"||!/^$|^\d{4}-\d{2}-\d{2}$/.test(selection.selectedDay)||!Number.isSafeInteger(selection.page)||selection.page<1||!Array.isArray(value.rows)||value.rows.length>PAGE||!value.rows.every(row=>row&&typeof row==="object"&&!Array.isArray(row))||!Number.isFinite(value.total)||value.total<0||!counts(value.categoryCounts)||!counts(value.statusCounts)||!value.serverSync||typeof value.serverSync.received!=="number"||typeof value.serverSync.confirmed!=="number"||typeof value.serverSync.source!=="string"||typeof value.updatedAt!=="string"||typeof value.syncAt!=="string")return null;
+ return saved;
+}
 const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();
 type BoardMeta={serverCheckedAt:number;serverUpdatedAt:string;serverSyncAt:string};
 function boardMetaKey(account:string){return `mumei-notification-board-meta:${account}`}
@@ -40,7 +50,7 @@ const CATS=[["all","すべて"],["creator_article_posted","記事投稿・更新
 const LABEL:Record<string,string>=Object.fromEntries(CATS);
 const ICON_FALLBACK:Record<string,string>={like:"♥",comment_like:"♡",comment:"💬",reply_self:"↩",reply_other:"↩",reply:"↩",follow:"＋",creator_article_posted:"📝",magazine_follow:"📚",my_article_magazine_added:"📚",magazine_article_added:"📚",magazine_join:"📚",membership_board:"📌",membership_board_reply:"↩",membership_reaction_self:"♥",membership_reaction_joined:"♥",membership_reaction:"♥",membership_started:"🚀",membership_plan:"＋",membership_join:"👤",question_box_started:"？",purchase:"🛒",tip:"🎁",buzz:"🔥",rating:"🏆",points:"P",quote:"↗",image_used:"🖼",other:"🔔"};
 
-async function post(body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);const abort=()=>c.abort();signal?.addEventListener("abort",abort,{once:true});try{const r=await fetchInsightResource(FEED,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal},45_000);const p=await r.json().catch(()=>{throw new Error("通知の応答内容を確認できませんでした")});if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("INSIGHT_ACCOUNT_CHANGED");if(r.status===402)throw new Error("INSIGHT保存先がSupabaseの利用制限中です（HTTP 402）");if(!r.ok||p?.ok!==true)throw new Error(p?.error||"INSIGHT_API_ERROR");if((!body.action||body.action==="recent")&&(!Array.isArray(p.rows)||!p.noteId||(!body.action&&(!Number.isFinite(Number(p.total))||Number(p.total)<0))))throw new Error("通知一覧の応答が不完全です");return p}finally{window.clearTimeout(timer);signal?.removeEventListener("abort",abort)}}
+async function post(body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),45000);const abort=()=>c.abort();signal?.addEventListener("abort",abort,{once:true});try{const r=await fetchInsightResource(FEED,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal:c.signal},45_000);const p=await r.json().catch(()=>{throw Object.assign(new Error("通知の応答内容を確認できませんでした"),{status:r.status})});if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("INSIGHT_ACCOUNT_CHANGED");if(r.status===402)throw new Error("INSIGHT保存先がSupabaseの利用制限中です（HTTP 402）");if(!r.ok||p?.ok!==true)throw Object.assign(new Error(p?.error||"INSIGHT_API_ERROR"),{status:r.status});if((!body.action||body.action==="recent")&&(!Array.isArray(p.rows)||!p.noteId||(!body.action&&(!Number.isFinite(Number(p.total))||Number(p.total)<0))))throw new Error("通知一覧の応答が不完全です");return p}finally{window.clearTimeout(timer);signal?.removeEventListener("abort",abort)}}
 const notificationDateFormat=new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
 const date=(v:any)=>{if(!v)return"—";const d=new Date(String(v));return Number.isNaN(d.getTime())?"—":notificationDateFormat.format(d)};
 const dayLabel=(v:string)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return"全期間";const[y,m,d]=v.split("-").map(Number);return`${y}/${m}/${d}`};
@@ -132,16 +142,22 @@ function NotificationComment({row,onSaved}:{row:Row;onSaved:(row:Row)=>void}){
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
   const account=accountKey(memberNoteId),sessionToken=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",selectionKey=`${account}|${sessionToken}`;
-  const[initial]=useState(()=>{const selection=NOTIFICATION_SELECTION_CACHE.get(selectionKey)||{kind:"all",handlingStatus:"all",selectedDay:"",page:1},cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${selection.kind}|${selection.selectedDay}|${selection.page}|${selection.handlingStatus}`),usable=cached?.token===sessionToken&&cached.complete&&canRetainInsightView(cached.cachedAt)?cached:undefined;const rows=usable?.rows||(selection.page===1&&hasFreshBoard(account)?filterBoard(account,selection.kind,selection.selectedDay,selection.handlingStatus):[]);return{selection,cached:usable,rows}});
-  const[rows,setRows]=useState<Row[]>(initial.rows),[kind,setKind]=useState(initial.selection.kind),[handlingStatus,setHandlingStatus]=useState(initial.selection.handlingStatus),[statusCounts,setStatusCounts]=useState<Record<string,number>>(initial.cached?.statusCounts||{}),[selectedDay,setSelectedDay]=useState(initial.selection.selectedDay),[page,setPage]=useState(initial.selection.page),[total,setTotal]=useState(initial.cached?.total??initial.rows.length),[loading,setLoading]=useState(initial.rows.length===0),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(initial.cached?.updatedAt||""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>(initial.cached?.syncAt||"");
+  const[initial]=useState(()=>{
+    const saved=savedNotificationView(account,sessionToken),selection=NOTIFICATION_SELECTION_CACHE.get(selectionKey)||saved?.value.selection||{kind:"all",handlingStatus:"all",selectedDay:"",page:1},cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${selection.kind}|${selection.selectedDay}|${selection.page}|${selection.handlingStatus}`),usable=cached?.token===sessionToken&&cached.complete&&canRetainInsightView(cached.cachedAt)?cached:undefined,matchingSaved=saved&&selectionId(saved.value.selection)===selectionId(selection)?saved:null;
+    return{selection,cached:usable,saved:matchingSaved,rows:usable?.rows||matchingSaved?.value.rows||[]};
+  });
+  const initialView=initial.cached||initial.saved?.value;
+  const[rows,setRows]=useState<Row[]>(initial.rows),[kind,setKind]=useState(initial.selection.kind),[handlingStatus,setHandlingStatus]=useState(initial.selection.handlingStatus),[statusCounts,setStatusCounts]=useState<Record<string,number>>(initialView?.statusCounts||{}),[selectedDay,setSelectedDay]=useState(initial.selection.selectedDay),[page,setPage]=useState(initial.selection.page),[total,setTotal]=useState(initialView?.total??initial.rows.length),[loading,setLoading]=useState(!initialView),[error,setError]=useState(""),[updatedAt,setUpdatedAt]=useState<string>(initialView?.updatedAt||""),[checkedAt,setCheckedAt]=useState<Date|null>(null),[syncAt,setSyncAt]=useState<string>(initialView?.syncAt||"");
+  const[visibleSelection,setVisibleSelection]=useState(initialView?selectionId(initial.selection):""),[visibleOwner,setVisibleOwner]=useState(selectionKey),[savedDisplayAt,setSavedDisplayAt]=useState(initial.cached?0:initial.saved?.savedAt||0);
   useEffect(()=>{NOTIFICATION_SELECTION_CACHE.set(selectionKey,{kind,handlingStatus,selectedDay,page})},[selectionKey,kind,handlingStatus,selectedDay,page]);
-  const localEdits=useRef(new Map<string,Row>());
+  const localEdits=useRef(new Map<string,Row>()),lastSnapshot=useRef("");
   function overlayEdits(list:Row[],includeMissing=true):Row[]{const map=new Map(list.map(r=>[String(r.id),r]));for(const row of includeMissing?readBoard(accountKey(memberNoteId)):[])if(localEdits.current.has(String(row.id))&&!map.has(String(row.id)))map.set(String(row.id),row);return [...map.values()].map(r=>{const creator=noteId(r.actor_url),favorite=[...localEdits.current.values()].find(p=>"favorite" in p&&noteId(p.actor_url)===creator);return{...r,...(favorite?{favorite:favorite.favorite,favorite_pending:true}:{}),...localEdits.current.get(String(r.id))}})}
   function saveRow(patch:Row,phase:SavePhase="saved"){
     const handling="confirmed" in patch,favoriting="favorite" in patch;
     if(handling||favoriting){request.current.id++;request.current.controller?.abort();request.current.controller=null;recentRequest.current.controller?.abort();recentRequest.current.controller=null;setLoading(false)}
-    const account=accountKey(memberNoteId),id=String(patch.id),saved=readBoard(account).find(r=>String(r.id)===id)||rows.find(r=>String(r.id)===id),prior={...saved,...localEdits.current.get(id)},row:Row={...prior,...patch,meta:{...prior?.meta,...patch.meta}};
-    if(phase==="pending")localEdits.current.set(id,{...localEdits.current.get(id),actor_url:row.actor_url,...patch});
+    const account=accountKey(memberNoteId),id=String(patch.id),saved=rows.find(r=>String(r.id)===id)||readBoard(account).find(r=>String(r.id)===id),prior={...saved,...localEdits.current.get(id)},row:Row={...prior,...patch,meta:{...prior?.meta,...patch.meta}};
+    // Never revive a pre-mutation snapshot while an acknowledgement is pending.
+    if(phase==="pending"){lastSnapshot.current="";removeSavedInsightView("notifications",{account,token:sessionToken});localEdits.current.set(id,{...localEdits.current.get(id),actor_url:row.actor_url,...patch})}
     else{const edits={...localEdits.current.get(id)};for(const key of Object.keys(patch))delete edits[key];if(Object.keys(edits).some(k=>k!=="id"&&k!=="actor_url"))localEdits.current.set(id,edits);else localEdits.current.delete(id)}
     if(phase==="saved"){
       const acknowledged={...saved,...patch,meta:{...saved?.meta,...patch.meta}};let changed:Row[]=[acknowledged];
@@ -158,7 +174,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     setRows(v=>{const updated=v.map(r=>String(r.id)===id?{...row,favorite_pending:favoriting?phase==="pending":row.favorite_pending}:favoriting&&noteId(r.actor_url)===noteId(row.actor_url)?{...r,favorite:row.favorite,favorite_pending:phase==="pending"}:r);return updated.some(r=>String(r.id)===id)?updated:[row,...updated]});
   }
 
-  const[serverSync,setServerSync]=useState({received:0,confirmed:0,source:""});
+  const[serverSync,setServerSync]=useState(initialView?.serverSync||{received:0,confirmed:0,source:""});
   const[checking,setChecking]=useState(false),pendingChecks=useRef(0);
   const beginCheck=()=>{pendingChecks.current++;setChecking(true)},finishCheck=()=>{pendingChecks.current=Math.max(0,pendingChecks.current-1);if(!pendingChecks.current)setChecking(false)};
   const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
@@ -167,16 +183,21 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const lastReaderRun=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
   const view=useRef({kind,selectedDay,handlingStatus,page});view.current={kind,selectedDay,handlingStatus,page};
 
-  const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>({}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
+  const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>(initialView?.categoryCounts||{}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
   const[readerStatus,setReaderStatus]=useState<any>(null);
   const[unresolved,setUnresolved]=useState<{remaining:number;insufficient:number}|null>(null);
+  function discardSavedDisplay(token:string){
+    removeSavedInsightView("notifications",{account,token});NOTIFICATION_SELECTION_CACHE.delete(`${account}|${token}`);lastSnapshot.current="";
+    for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&cached.token===token)NOTIFICATION_VIEW_CACHE.delete(key);
+    setRows([]);setTotal(0);setStatusCounts({});setCategoryCounts({});setUpdatedAt("");setSyncAt("");setServerSync({received:0,confirmed:0,source:""});setVisibleSelection("");setSavedDisplayAt(0);
+  }
   async function load(p=1,k=kind,silent=false,day=selectedDay,force=false){
     if(silent&&request.current.controller&&!force)return;
     recentRequest.current.controller?.abort();recentRequest.current.controller=null;
     const cacheKey=`${accountKey(memberNoteId)}|${k}|${day||""}|${p}|${handlingStatus}`,cached=NOTIFICATION_VIEW_CACHE.get(cacheKey),token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",pageChanged=p!==view.current.page;
     if(!force&&cached?.complete&&cached.token===token&&cached.revision===revision&&isFreshInsightView(cached.cachedAt)){
       request.current.id++;request.current.controller?.abort();request.current.controller=null;
-      setRows(overlayEdits(cached.rows,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)));setPage(p);setTotal(cached.total);setStatusCounts(cached.statusCounts||{});setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync);setLoading(false);setError("");
+      setRows(overlayEdits(cached.rows,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)));setPage(p);setTotal(cached.total);setStatusCounts(cached.statusCounts||{});setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setLoading(false);setError("");
       if(pageChanged)document.querySelector("#minf-notifications .minf-filter-panel")?.scrollIntoView?.({block:"start"});return;
     }
     request.current.controller?.abort();const controller=new AbortController(),id=++request.current.id;request.current.controller=controller;
@@ -185,11 +206,11 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     // Fetch the selected page only; unseen category previews delay it and repeat on every refresh.
     try{const x=await post({kind:k,page:p,pageSize:PAGE,day:day||null,includeCategoryPreview:false,classificationRevision:repairRevision.current,handlingStatus},controller.signal);if(!valid())return;
       const feedId=String(x.noteId||"").toLowerCase(),expected=accountKey(memberNoteId).toLowerCase();
-      if(expected&&feedId!==expected){setRows([]);setTotal(0);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
+      if(expected&&feedId!==expected){discardSavedDisplay(token);setError(`通知アカウント不一致：@${expected} / @${feedId}。アカウント切替を確認してください。`);return}
       const lastPage=Math.max(1,Math.ceil(Number(x.total)/PAGE));if(p>lastPage){request.current.controller=null;await load(lastPage,k,silent,day,true);return}
       const stored=new Map(readBoard(accountKey(memberNoteId)).map(r=>[String(r.id||rowKey(r)),r]));const baseList=mergeMagazineJoinRows(repairActorRows(x.rows||[])).map(r=>keepIcon(r,stored.get(String(r.id||rowKey(r))))).sort(notificationBoardOrder),list=overlayEdits(baseList,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).sort(notificationBoardOrder);if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextStatusCounts=x.statusCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}|${handlingStatus}`;
-      setRows(list);setStatusCounts(nextStatusCounts);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
+      setRows(list);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setStatusCounts(nextStatusCounts);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
       NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:baseList,statusCounts:nextStatusCounts,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now(),complete:true,revision,token});
       const boardIncoming=[...baseList];
       for(const [category,preview] of Object.entries(x.categoryPreview||{})){
@@ -202,7 +223,13 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(Number(x.reclassifyPending)>0&&!repairRunning.current&&lastRepairSync.current!==String(x.lastSyncAt||"initial")){lastRepairSync.current=String(x.lastSyncAt||"initial");void reclassify(true)}
       // Identity enrichment never delays the notification text.
       void enrich(baseList).then(enriched=>{if(!valid())return;setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))));retainEnrichedIcons(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:cached.rows.map(row=>keepIcon(row,enriched.find(icon=>icon.id===row.id)))})});
-    }catch(e){if(valid()){const account=accountKey(memberNoteId),cached=NOTIFICATION_VIEW_CACHE.get(`${account}|${k}|${day||""}|${p}|${handlingStatus}`),saved=readBoard(account).filter(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)),fallback=cached?.rows||saved.slice((p-1)*PAGE,p*PAGE);if(!rows.length&&fallback.length){setRows(fallback);setTotal(cached?.total??saved.length);setPage(p);if(cached){setCategoryCounts(cached.categoryCounts);setStatusCounts(cached.statusCounts||{});setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}}setError((e instanceof Error?e.message:"通知履歴の読込に失敗しました")+(fallback.length?"｜最新確認に失敗したため前回保存分を表示しています":""))}}
+    }catch(e){if(valid()){
+      const failedAuth=[401,403].includes(Number((e as {status?:number})?.status));
+      if(failedAuth)discardSavedDisplay(token);
+      const saved=failedAuth?null:savedNotificationView(account,token),selection={kind:k,selectedDay:day,handlingStatus,page:p},fallback=saved&&selectionId(saved.value.selection)===selectionId(selection)?saved:null;
+      if(fallback&&!rows.length){const value=fallback.value;setRows(value.rows);setVisibleSelection(selectionId(selection));setSavedDisplayAt(fallback.savedAt);setTotal(value.total);setPage(p);setCategoryCounts(value.categoryCounts);setStatusCounts(value.statusCounts);setUpdatedAt(value.updatedAt);setSyncAt(value.syncAt);setServerSync(value.serverSync)}
+      setError((e instanceof Error?e.message:"通知履歴の読込に失敗しました")+(fallback?"｜最新確認に失敗したため前回保存分を表示しています":""));
+    }}
     finally{finishCheck();if(id===request.current.id){request.current.controller=null;setLoading(false);if(recentDeferred.current){recentDeferred.current=false;void refreshRecent()}}}
   }
   async function refreshRecent(allowDuringFull=false){
@@ -211,17 +238,21 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId),selection=JSON.stringify(view.current);recentRequest.current.controller=controller;beginCheck();let paginationChanged=false;
     try{
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
-      if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||String(x.noteId||"").toLowerCase()!==account||view.current.page!==1||JSON.stringify(view.current)!==selection)return;
+      if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||view.current.page!==1||JSON.stringify(view.current)!==selection)return;
+      if(String(x.noteId||"").toLowerCase()!==account){discardSavedDisplay(token||"");request.current.id++;request.current.controller?.abort();request.current.controller=null;setLoading(false);setError("通知アカウントが一致しないため前回表示分を閉じました。");return}
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
       if(hasFreshBoard(account))markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
-      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map(readBoard(account).map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
+      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map([...readBoard(account),...rows].map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
         return [...map.values()].filter(r=>matchesHandling(r,handlingStatus)&&(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort(notificationBoardOrder).slice(0,PAGE);
       });
       void enrich(serverIncoming).then(enriched=>{if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)return;retainEnrichedIcons(account,enriched);setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))))});
       setCheckedAt(new Date());
-    }catch{/* Cached board remains visible; the full feed reports persistent errors. */}
+    }catch(e){
+      if(!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&[401,403].includes(Number((e as {status?:number})?.status))){discardSavedDisplay(token||"");request.current.id++;request.current.controller?.abort();request.current.controller=null;setLoading(false);setError("ログインを確認できないため前回表示分を閉じました。")}
+      // Network failures keep the explicitly labelled previous display.
+    }
     finally{finishCheck();if(recentRequest.current.controller===controller)recentRequest.current.controller=null;if(paginationChanged&&!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&JSON.stringify(view.current)===selection)void load(view.current.page,view.current.kind,true,view.current.selectedDay,true)}
   }
   async function reclassify(auto=true){
@@ -263,13 +294,23 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   useEffect(()=>{
     const opening=!loadedSelection.current,account=accountKey(memberNoteId),selection=JSON.stringify([account,sessionToken,kind,selectedDay,handlingStatus]),changed=Boolean(loadedSelection.current&&loadedSelection.current!==selection),p=changed?1:page,force=loadedRevision.current!==revision;
     loadedSelection.current=selection;loadedRevision.current=revision;
+    const identityChanged=visibleOwner!==selectionKey;if(identityChanged)localEdits.current.clear();
     const stored=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|${p}|${handlingStatus}`),cached=stored?.token===sessionToken&&canRetainInsightView(stored.cachedAt)?stored:undefined,fresh=hasFreshBoard(account);
-    const saved=fresh&&p===1?filterBoard(account,kind,selectedDay,handlingStatus):[],instant=overlayEdits(cached?.rows||saved,p===1).filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)),hasSavedBoard=saved.length>0;
-    setRows(instant);setPage(p);setLoading(!cached&&!hasSavedBoard&&instant.length===0);
-    if(cached){setStatusCounts(cached.statusCounts||{});setTotal(cached.total);setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync)}else setTotal(categoryCounts[kind]??instant.length);
+    const persisted=savedNotificationView(account,sessionToken),target={kind,selectedDay,handlingStatus,page:p},saved=persisted&&selectionId(persisted.value.selection)===selectionId(target)?persisted:null,verified=fresh&&p===1?filterBoard(account,kind,selectedDay,handlingStatus):[],instant=overlayEdits(cached?.rows||saved?.value.rows||verified,p===1).filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)),display=cached||saved?.value;
+    setRows(instant);setVisibleOwner(selectionKey);setPage(p);setLoading(!display&&!verified.length);setVisibleSelection(display?selectionId(target):"");setSavedDisplayAt(cached?0:saved?.savedAt||0);
+    if(display){setStatusCounts(display.statusCounts||{});setTotal(display.total);setCategoryCounts(display.categoryCounts);setUpdatedAt(display.updatedAt);setSyncAt(display.syncAt);setServerSync(display.serverSync)}else{setTotal(identityChanged?instant.length:categoryCounts[kind]??instant.length);if(identityChanged){setStatusCounts({});setCategoryCounts({});setUpdatedAt("");setSyncAt("");setServerSync({received:0,confirmed:0,source:""});setCheckedAt(null)}}
     recentRequest.current.watermark=fresh?(localStorage.getItem(`mumei-notification-recent-watermark:${account}`)||""):"";void load(p,kind,true,selectedDay,force);if(opening&&p===1&&!(cached?.complete&&cached.revision===revision&&isFreshInsightView(cached.cachedAt)))void refreshRecent(true);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
   },[kind,handlingStatus,selectedDay,revision,memberNoteId,sessionToken]);
+  // Persist only the last displayed page. This copy never makes a view fresh and
+  // therefore cannot suppress the selected-page/recent server checks on reopening.
+  useEffect(()=>{
+    const selection={kind,handlingStatus,selectedDay,page};
+    if(visibleOwner!==selectionKey||!visibleSelection||visibleSelection!==selectionId(selection)||localEdits.current.size||!sessionToken||localStorage.getItem(INSIGHT_TOKEN_KEY)!==sessionToken)return;
+    const value={selection,rows:rows.filter(r=>matchesHandling(r,handlingStatus)).slice(0,PAGE),statusCounts,total,categoryCounts,updatedAt,syncAt,serverSync} satisfies SavedNotificationView,signature=JSON.stringify([selectionKey,savedDisplayAt,value]);
+    if(signature===lastSnapshot.current)return;
+    writeSavedInsightView("notifications",{account,token:sessionToken},value,savedDisplayAt||Date.now());lastSnapshot.current=signature;
+  },[account,sessionToken,visibleOwner,visibleSelection,kind,handlingStatus,selectedDay,page,rows,statusCounts,total,categoryCounts,updatedAt,syncAt,serverSync,savedDisplayAt]);
   useEffect(()=>{
     const noteId=accountKey(memberNoteId);
     if(!noteId||!localStorage.getItem(INSIGHT_TOKEN_KEY))return;
@@ -297,6 +338,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const readerClass=readerMode==="error"?"error":readerMode==="partial"?"partial":readerMode==="full"||readerMode==="delta"?"done":"idle";
   const serverLabel=syncAt?"サーバー反映済み":"サーバー反映 未確認";
   const pageControls=()=>pages>1?<nav className="minf-pager" aria-label="本人通知のページ送り"><button disabled={page<=1||loading} onClick={()=>void load(page-1,kind,false,selectedDay)}>← 前</button><label><span>ページ</span><select value={page} disabled={loading} onChange={e=>void load(Number(e.target.value),kind,false,selectedDay)}>{Array.from({length:pages},(_,i)=><option key={i+1} value={i+1}>{i+1} / {pages}</option>)}</select></label><button disabled={page>=pages||loading} onClick={()=>void load(page+1,kind,false,selectedDay)}>次 →</button>{loading?<small role="status">ページを読み込み中…</small>:null}</nav>:null;
+  if(visibleOwner!==selectionKey)return <section id="minf-notifications" className="minf" aria-busy="true"><p className="minf-empty">通知を読み込み中…</p></section>;
   return <section id="minf-notifications" className="minf" aria-busy={loading||checking}>
     <header className="minf-head"><div><small>PRIVATE NOTIFICATION HISTORY</small><h2>本人通知</h2><p>保存済み通知を即表示。分類・日付・精度確認は1パネルにまとめています。</p></div><div className="minf-actions"><a className="minf-note" href="https://note.com/">🔔 note通知</a></div></header>
     <div className={`minf-quick ${readerClass}`} role="status">
@@ -328,6 +370,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         {readerStatus?.lastError?<p className="minf-reader-error">⚠ {String(readerStatus.lastError)}</p>:null}
       </div>
     </details>
+    {savedDisplayAt?<p className="minf-saved-status" role="status">{error?"前回表示分・最新確認に失敗":"前回表示分・最新確認中"}<small> · {date(new Date(savedDisplayAt).toISOString())}</small></p>:null}
     {error?<p className="minf-error">{error}</p>:null}
     {pageControls()}
     {loading&&!rows.length?<p className="minf-empty">通知を読み込み中…</p>:rows.filter(r=>matchesHandling(r,handlingStatus)).length?<div className="minf-list">{rows.filter(r=>matchesHandling(r,handlingStatus)).map((r,i)=>{const h=href(r),actor=actorName(r),p=presentation(r),type=displayType(r),label=r.meta?.classification_status==="insufficient_evidence"?"本文不足・種別不明":LABEL[type]||"その他",actorTop=creatorTop(r.actor_url,selfId);return <article key={r.id||`${rowKey(r)}-${i}`} className={`type-${type}`} data-comment-context-native={["reply","comment_like","comment","membership_board","membership_board_reply"].includes(r.notification_type)||["membership_board","membership_board_reply"].includes(type)?"true":undefined}><div className="minf-meta"><span>{label}</span>{r.context_label?<b>{r.context_label}</b>:null}<time>{date(r.occurred_at||r.captured_at)}</time></div><div className="minf-who"><Avatar row={r} selfId={selfId}/><div>{actorTop?<a className="minf-actor" href={actorTop} target="_blank" rel="noreferrer">{actor}</a>:<span className="minf-actor static">{actor}</span>}</div></div><div className="minf-row-actions"><NotificationFavorite row={r} onSaved={saveRow} onError={setError}/><NotificationCompletion row={r} onSaved={saveRow} onError={setError}/></div>{h?<a className="minf-main" href={h} target="_blank" rel="noreferrer"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</a>:<div className="minf-main static"><strong>{p.title}</strong>{p.subject?<span>{p.subject}</span>:null}{p.detail?<small>{p.detail}</small>:null}</div>}{type==="my_article_magazine_added"?<div className="minf-return-links">{r.meta?.article_url?<a href={r.meta.article_url} target="_blank" rel="noreferrer">追加された自分の記事 ↗</a>:null}{r.meta?.magazine_url?<a href={r.meta.magazine_url} target="_blank" rel="noreferrer">追加先マガジン ↗</a>:null}</div>:null}{["reply","comment_like","comment","membership_board","membership_board_reply"].includes(r.notification_type)||["membership_board","membership_board_reply"].includes(type)?<NotificationComment row={r} onSaved={saveRow}/>:null}{targetLabel(r)&&h?<a className="minf-target" href={h} target="_blank" rel="noreferrer">{targetLabel(r)}</a>:null}</article>})}</div>:<p className="minf-empty">{selectedDay?`${dayLabel(selectedDay)} のこの分類には通知がありません。`:"この分類の通知はありません。"}</p>}
