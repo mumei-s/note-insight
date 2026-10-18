@@ -91,6 +91,7 @@ test('HTTP 402 keeps approved saved participants logged in',()=>{
   assert.match(access,/localActive\(account\)/);
   assert.match(unified,/SUMMARY_CACHE_PREFIX/);
   assert.match(unified,/emergencySummary\(\)/);
-  assert.match(unified,/ログイン状態と保存済み参加者画面を維持しています/);
+  assert.match(unified,/ログイン状態を維持しています/);
+  assert.match(unified,/最新確認に失敗したため前回保存分を表示しています/);
   assert.doesNotMatch(unified,/localStorage\.removeItem\(INSIGHT_TOKEN_KEY\);location\.hash="access\/insight";return}setError\(msg\)/);
 });
