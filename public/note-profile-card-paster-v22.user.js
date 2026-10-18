@@ -905,10 +905,8 @@ function drawGalleryCard(ctx,index,row,avatar,thumb){
   ctx.save();rounded(ctx,ix,iy,iw,ih,9);ctx.clip();ctx.drawImage(thumb,ix+(iw-dw)/2,iy+(ih-dh)/2,dw,dh);ctx.restore();
  }else{
   if(!confirmedGalleryThumbnailMissing(row))throw new Error('記事画像未設定の確認記録がありません');
-  ctx.save();ctx.fillStyle=theme.soft;rounded(ctx,ix,iy,iw,ih,9);ctx.fill();
-  ctx.strokeStyle=theme.accent;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);rounded(ctx,ix+9,iy+9,iw-18,ih-18,7);ctx.stroke();ctx.setLineDash([]);
-  ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle=theme.ink;ctx.font='700 17px system-ui,-apple-system,sans-serif';ctx.fillText('記事画像未設定',ix+iw/2,iy+40);
-  ctx.fillStyle=theme.muted;ctx.font='700 13px system-ui,-apple-system,sans-serif';ctx.fillText('最初の記事へ',ix+iw/2,iy+70);ctx.restore();
+  // Keep the article's image area blank when no thumbnail is configured.
+  // The creator, title, native caption and first-article link stay intact.
  }
  ctx.strokeStyle=theme.line;ctx.lineWidth=2;rounded(ctx,ix,iy,iw,ih,9);ctx.stroke()
 }
@@ -1233,18 +1231,21 @@ async function prepareGalleryPerson(person,index){
  if(stopRequested)throw new Error('停止しました');
  const profile=payload?.data?.creator||payload?.data?.user||payload?.data;
  if(!profile||typeof profile!=='object'||String(profile.urlname||'').toLowerCase()!==id||!String(profile.nickname||profile.name||'').trim()||!['profile','description','bio','introduction','self_introduction','note_intro'].some(key=>Object.prototype.hasOwnProperty.call(profile,key)))throw new Error(id+'さんのプロフィールを確認できません');
- let thumb=selected.thumbUrl;
+ let thumb=selected.thumbUrl,thumbnailMissingEvidence=null;
  if(!thumb){
   const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(selected.key));
   const note=p?.data||p||{},owner=note.user?.urlname||note.author?.urlname;
   if(note.key&&note.key!==selected.key||owner&&String(owner).toLowerCase()!==id)throw new Error(id+'さんの記事情報が一致しません');
-  thumb=thumbnailUrl(note)||await articleMetaImage(selected.url);
+  thumb=thumbnailUrl(note);
+  if(!thumb&&note.key===selected.key&&owner&&String(owner).toLowerCase()===id&&Object.prototype.hasOwnProperty.call(note,'eyecatch')&&(note.eyecatch===null||note.eyecatch==='')){
+   thumbnailMissingEvidence={key:selected.key,articleUrl:selected.url,checkedAt:new Date().toISOString(),reason:'The verified article API reports an unconfigured eyecatch'};
+  }else if(!thumb)thumb=await articleMetaImage(selected.url);
  }
- if(!thumb)throw new Error(id+'さんの最初の記事サムネイルを確認できません');
+ if(!thumb&&!thumbnailMissingEvidence)throw new Error(id+'さんの最初の記事サムネイルを確認できません');
  const avatar=avatarUrl(profile)||selected.actorImageUrl||'';
  const biography=profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
  if(typeof biography!=='string')throw new Error(id+'さんのプロフィール本文の形式を確認できません');
- return{...selected,index:index+1,urlname:id,likerKey:id,actorUrl:creator.actorUrl,creator:String(profile.nickname||profile.name||person.creator||id).trim(),actorImageUrl:avatar,avatarMissing:!avatar,thumbUrl:thumb,profileText:biography.replace(/\r\n?/g,'\n').trim(),gallery126:true,finalMarker:false};
+ return{...selected,index:index+1,urlname:id,likerKey:id,actorUrl:creator.actorUrl,creator:String(profile.nickname||profile.name||person.creator||id).trim(),actorImageUrl:avatar,avatarMissing:!avatar,thumbUrl:thumb||'',articleThumbnailMissing:Boolean(thumbnailMissingEvidence),thumbnailMissingEvidence,profileText:biography.replace(/\r\n?/g,'\n').trim(),gallery126:true,finalMarker:false};
 }
 async function buildGalleryRows({availableOnly=false}={}){
  const manifest=galleryManifest(),signature=manifest.sourceBlob+'|'+manifest.people.map(person=>person.urlname.toLowerCase()).join('|');

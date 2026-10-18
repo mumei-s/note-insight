@@ -93,11 +93,13 @@ test('long image names adapt down to 10px and always keep the honorific without 
  assert.equal(shortened.size,10);assert.equal(shortened.truncated,true);assert.ok(shortened.text.endsWith('…さん'));assert.ok(!shortened.text.endsWith('\u200d…さん'));assert.ok(ctx.measureText(shortened.text).width<=430);
 });
 
-test('only exact article-specific missing-thumbnail evidence enables an explicit text tile, while retaining the real icon',async()=>{
+test('a confirmed missing thumbnail leaves its area blank while retaining the creator and first article',async()=>{
  const {api,paint}=runtime(),row={...rows()[0],key:'n814d3f7335ce',url:'https://note.com/furikakemen/n/n814d3f7335ce',thumbUrl:'dead',articleThumbnailMissing:true,thumbnailMissingEvidence:{key:'n814d3f7335ce',articleUrl:'https://note.com/furikakemen/n/n814d3f7335ce'}};
  await api.makeFile(row);
  assert.deepEqual(paint.filter(command=>command[0]==='drawImage').map(command=>command[1].asset),['avatar']);
- for(const label of ['記事画像未設定','最初の記事へ'])assert.ok(paint.some(command=>command[0]==='fillText'&&command[1]===label));
+ assert.deepEqual(paint.filter(command=>command[0]==='fillText').map(command=>command[1]),[row.title,row.creator+'さん']);
+ assert.ok(!paint.some(command=>command[0]==='setLineDash'));
+ assert.equal(row.url,'https://note.com/furikakemen/n/n814d3f7335ce');
  for(const changed of [{articleThumbnailMissing:false},{thumbnailMissingEvidence:null},{thumbnailMissingEvidence:{...row.thumbnailMissingEvidence,key:'n000000000000'}},{thumbnailMissingEvidence:{...row.thumbnailMissingEvidence,articleUrl:'https://note.com/other/n/n814d3f7335ce'}},{gallery126:false}])await assert.rejects(api.makeFile({...row,...changed}),error=>error.code==='ASSET_UNAVAILABLE'&&/記事サムネイル/.test(error.message));
  await assert.rejects(api.makeFile({...row,actorImageUrl:'dead'}),error=>error.code==='ASSET_UNAVAILABLE'&&/アイコン/.test(error.message));
 });

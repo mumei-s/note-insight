@@ -126,6 +126,18 @@ test('gallery refuses an editor page without a unique draft identity before inse
  assert.equal(r.blocks.length,0);assert.equal(r.local.size,0);assert.match(r.c.statuses.at(-1),/保存先を確認できません/);
 });
 
+test('a verified first article without a configured thumbnail stays eligible with a blank image area',async()=>{
+ const r=runtime(),person=manifest.people[0];r.c.selected={...plan()[0],thumbUrl:''};
+ r.c.profileFixture={data:{urlname:person.urlname,nickname:'本人',profile:'実際の紹介'}};
+ r.c.noteFixture={data:{key:r.c.selected.key,user:{urlname:person.urlname},eyecatch:null}};
+ r.c.api.patch(`page.__MUMEI_PROFILE_CARD_GALLERY__.chooseOldestArticle=async()=>selected;xhrJSON=async url=>url.includes('/api/v3/notes/')?noteFixture:profileFixture;articleMetaImage=async()=>{throw Error('an unconfigured image must not need another download')};`);
+ const row=await r.api.prepareGalleryPerson(person,0);
+ assert.equal(row.url,r.c.selected.url);assert.equal(row.key,r.c.selected.key);assert.equal(row.profileText,'実際の紹介');assert.equal(row.thumbUrl,'');assert.equal(row.articleThumbnailMissing,true);
+ assert.equal(row.thumbnailMissingEvidence.key,row.key);assert.equal(row.thumbnailMissingEvidence.articleUrl,row.url);
+ r.c.noteFixture={data:{eyecatch:null}};
+ await assert.rejects(r.api.prepareGalleryPerson(person,0),/unconfigured image must not need another download/);
+});
+
 test('the explicitly selected available125 course keeps the zero-article creator pending and preserves original identities',async()=>{
  const r=runtime(),missingIndex=87,seed=plan();seed[missingIndex]=null;
  r.page.__MUMEI_PROFILE_CARD_GALLERY_MANIFEST__={...manifest,pendingPeople:[{urlname:manifest.people[missingIndex].urlname,reason:'NO_PUBLIC_ARTICLE',noteCount:0}],preparedRows:seed};
