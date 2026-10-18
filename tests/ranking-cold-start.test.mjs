@@ -75,3 +75,17 @@ for(const token of ['session-b',''])test(`cold ranking storage is not restored f
  assert.doesNotMatch(second.text(),/初回の本人/);assert.equal(second.w.document.querySelector('[data-insight-saved-view="comment_ranking"]'),null);
  if(token)await settle(()=>pending.resolve(Response.json({ok:true,rows:[],total:0})));
 });
+
+for(const[tab,action]of cases)test(`${action}: a late archive recovery fills the fresh document without restarting its current request`,async t=>{
+ const at=Date.now(),first=await documentFixture(t,{tab,now:at});await first.show();const disk=first.storage();await first.close();
+ const current=deferred(),currentSummary=deferred();
+ const second=await documentFixture(t,{tab,now:at+60_001,respond:call=>call.action===action?current.promise:call.action==='summary'?currentSummary.promise:undefined});await second.show();
+ assert.doesNotMatch(second.panel().textContent,/初回の本人/);assert.ok(second.panel().querySelector('.miu-load-scene'));
+ const original=second.calls.find(call=>call.action===action),count=second.calls.length;
+ await settle(()=>{for(const[key,value]of disk)second.w.localStorage.setItem(key,value);second.w.dispatchEvent(new second.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(second.panel().textContent,new RegExp(`初回の本人 ${action} 0`));assert.match(second.panel().textContent,/前回表示分.*最新を確認中/);
+ assert.equal(second.calls.length,count);assert.equal(original.signal.aborted,false,'archive recovery must not restart the current network request');
+ await settle(()=>{current.resolve(Response.json({ok:true,rows:pageRows(action,1,'最新の現在ページ'),total:201}));currentSummary.resolve(Response.json(summary('tester')))});
+ assert.match(second.panel().textContent,new RegExp(`最新の現在ページ ${action} 0`));assert.doesNotMatch(second.panel().textContent,/初回の本人/);
+ assert.equal(second.panel().querySelector('[data-insight-saved-view]'),null);
+});
