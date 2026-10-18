@@ -1,2 +1,2 @@
-INSIGHT 2026.10.17.3 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Load selected scenes, reuse fingerprinted assets, and fetch only the visible notification page.
+INSIGHT 2026.10.18.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Restore scoped saved pages while checking current rows; read older comments and DM pages on demand.

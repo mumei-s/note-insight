@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.17.3",
+  "appVersion": "2026.10.18.1",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-17T22:30:00+09:00",
+  "releasedAt": "2026-10-18T22:28:27+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "起動時は表示する画面だけ読み込み、変更のない本体ファイルは端末内で再利用。本人通知は表示する100件だけを取得し、非表示分類の先読みと日時描画の負荷を削減。",
+  "note": "前回表示した履歴と条件を本人ごとに保持して先に表示し、最新確認中を明示。コメント・DMは表示ページを確認し、過去ページは必要時に取得。",
   "dmVersion": "1.4.11",
   "dmLabel": "DM同期"
 }
