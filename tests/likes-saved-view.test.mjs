@@ -27,11 +27,12 @@ async function fixture(t,{respond}={}){
 test('前回表示100件とページ・選択条件を先に表示し、裏ではそのページだけ最新確認する',async t=>{
  const latest=deferred(),sum=deferred();const h=await fixture(t,{respond:c=>c.action==='likes'?latest.promise:c.action==='summary'?sum.promise:undefined});
  const state=selection({status:'completed',scope:'month',month:'2026-09',sort:'oldest',query:'保存した検索',page:2});
- h.seed({selection:state,rows:[{...row(),confirmed:true}],total:250});h.seedSummary();await h.show();
+ const savedAt=Date.parse('2026-10-01T12:34:00+09:00');h.seed({selection:state,rows:[{...row(),confirmed:true}],total:250},savedAt);h.seedSummary(savedAt);await h.show();
  assert.match(h.text(),/前回表示のスキ/);assert.match(h.text(),/保存スキ123/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
  assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'対応済み');assert.equal(h.w.document.querySelector('input[type="month"]').value,'2026-09');
  assert.equal(h.w.document.querySelector('select').value,'oldest');assert.equal(h.w.document.querySelector('input[placeholder="名前・ID・記事"]').value,'保存した検索');
  assert.match(h.w.document.querySelector('[data-insight-saved-view="likes"]').textContent,/前回表示分.*最新を確認中/);assert.match(h.w.document.querySelector('[data-insight-saved-view="summary"]').textContent,/前回表示分.*最新を確認中/);
+ for(const kind of ['likes','summary']){const label=h.w.document.querySelector(`[data-insight-saved-view="${kind}"]`).textContent;assert.match(label,/2026\/10\/1/);assert.match(label,/12:34/);assert.ok(!label.includes(String(savedAt)));}
  assert.deepEqual(h.calls.map(c=>c.action).sort(),['likes','summary']);const call=h.calls.find(c=>c.action==='likes');assert.equal(call.page,2);assert.equal(call.pageSize,100);assert.equal(call.query,'保存した検索');assert.equal(call.status,'completed');
  await settle(()=>{latest.resolve(Response.json({rows:[{...row('同件数でも最新本文を採用'),confirmed:true}],total:250}));sum.resolve(Response.json(summary()))});
  assert.match(h.text(),/同件数でも最新本文を採用/);assert.doesNotMatch(h.text(),/前回表示のスキ/);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);assert.equal(h.w.document.querySelector('[data-insight-saved-view="summary"]'),null);

@@ -74,7 +74,7 @@ const extra=(action:string,extra:Record<string,unknown>={})=>post(EXTRAS,action,
 const notify=(extra:Record<string,unknown>={})=>post(NOTIFY,"list",extra);
 const dashboard=(extra:Record<string,unknown>={})=>post(DASH,"analysis",extra);
 const n=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
-const date=(v:any,withTime=true)=>{if(!v)return"—";const d=new Date(String(v));if(Number.isNaN(d.getTime()))return String(v);return new Intl.DateTimeFormat("ja-JP",withTime?{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}:{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric"}).format(d)};
+const date=(v:any,withTime=true)=>{if(!v)return"—";const d=new Date(typeof v==="number"?v:String(v));if(Number.isNaN(d.getTime()))return String(v);return new Intl.DateTimeFormat("ja-JP",withTime?{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}:{timeZone:"Asia/Tokyo",year:"numeric",month:"numeric",day:"numeric"}).format(d)};
 const isoDay=(v:string)=>v?`${v}T00:00:00+09:00`:null;
 function nextDay(v:string){if(!v)return null;const d=new Date(`${v}T00:00:00+09:00`);return new Date(d.getTime()+86400000).toISOString()}
 function monthRange(v:string){if(!v)return{dateFrom:null,dateTo:null};const[y,m]=v.split("-").map(Number),ny=m===12?y+1:y,nm=m===12?1:m+1;return{dateFrom:`${v}-01T00:00:00+09:00`,dateTo:`${ny}-${String(nm).padStart(2,"0")}-01T00:00:00+09:00`}}
