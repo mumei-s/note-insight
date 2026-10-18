@@ -1269,13 +1269,45 @@ function recoverNotificationCardHits(view,run){
  const urls=new Set((run.rows||[]).map(row=>norm(row.url)));
  const linked=new Set(imageNodes(view).map(hit=>norm(hit.node.attrs?.link)).filter(url=>urls.has(url)&&noteKey(url)));
  const wanted=new Set([...linked].map(noteKey));
- const tracked=new Set((run.cardKeys||[]).filter(rec=>noteKey(rec.url)).map(rec=>String(rec.key||'')).filter(Boolean));
+ const tracked=new Map((run.cardKeys||[]).filter(rec=>noteKey(rec.url)&&rec.key).map(rec=>[String(rec.key),noteKey(rec.url)]));
+ const anchor=run.cardAnchorPos,hasAnchor=anchor!=null&&anchor!==''&&Number.isFinite(Number(anchor))&&Number(anchor)>=0&&Number(anchor)<=view.state.doc.content.size;
  return embedNodes(view).filter(hit=>{
   if(baseline.has(cardKey(hit)))return false;
   const raw=String(hit.node.attrs?.src||'');
   let key='';try{const u=new URL(raw);if(u.origin!=='https://note.com')return false;key=noteKey(u.href)||u.pathname.match(/^\/embed\/notes\/(n[a-f0-9]{12})\/?$/i)?.[1]||''}catch{return false}
-  return Boolean(key)&&(wanted.has(key)||tracked.has(cardKey(hit))&&(run.cardKeys||[]).some(rec=>rec.key===cardKey(hit)&&noteKey(rec.url)===key));
+  const recorded=Boolean(key)&&tracked.get(cardKey(hit))===key;
+  if(hasAnchor&&hit.pos<Number(anchor)&&!recorded)return false;
+  return recorded||Boolean(key)&&wanted.has(key);
  });
+}
+function deleteVerifiedNotificationCardHits(view,hits){
+ const before=view.state.doc,uniq=[...new Map(hits.map(hit=>[hit.pos,hit])).values()].sort((a,b)=>b.pos-a.pos);
+ let tr=view.state.tr;
+ for(const hit of uniq){
+  const node=before.nodeAt(hit.pos);
+  if(node?.type?.name!=='embed'||!node.eq(hit.node))throw new Error('通知カードの位置が変わったため削除を停止しました。保存記録は保持しています');
+  tr=tr.delete(hit.pos,hit.pos+node.nodeSize);
+ }
+ const expected=tr.doc;
+ if(!expected||typeof expected.eq!=='function')throw new Error('通知カード以外の本文を保持できるか確認できないため削除を停止しました');
+ if(view.state.doc!==before&&!view.state.doc.eq(before))throw new Error('本文が変更されたため削除を停止しました。保存記録は保持しています');
+ view.dispatch(tr);
+ if(!view.state.doc.eq(expected))throw new Error('通知カードの削除結果を確認できません。保存記録を保持しました。下書きを確認してください');
+ // The deletion transaction maps the selection itself. Appending a paragraph
+ // merely to move the caret would change non-card content after verification.
+ return uniq.length;
+}
+function notificationCardBaselinePositions(view,run){
+ const all=embedNodes(view),keys=new Set([...(run.cardBaselineKeys||[]),...(run.cardBaselineNodes||[]).map(record=>String(record.key||'')).filter(Boolean)]),positions=new Set(all.filter(hit=>keys.has(cardKey(hit))).map(hit=>hit.pos));
+ const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+ const signatures=new Map(all.filter(hit=>typeof hit.node.toJSON==='function').map(hit=>[hit.pos,stable(hit.node.toJSON())]));
+ for(const record of run.cardBaselineNodes||[]){
+  if(record.key&&all.some(hit=>cardKey(hit)===String(record.key)))continue;
+  const signature=record.json?stable(record.json):null;
+  const match=signature?all.find(hit=>!positions.has(hit.pos)&&signatures.get(hit.pos)===signature):null;
+  if(match)positions.add(match.pos);
+ }
+ return positions;
 }
 async function deleteNotificationCards({confirm=true,save=true}={}){
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
@@ -1285,10 +1317,12 @@ async function deleteNotificationCards({confirm=true,save=true}={}){
  const tracked=resolveOwnedCardHits(view),anchor=run.cardAnchorPos;
  const hasAnchor=anchor!=null&&anchor!==''&&Number.isFinite(Number(anchor))&&Number(anchor)>=0&&Number(anchor)<=view.state.doc.content.size;
  const scoped=hasAnchor?run:tracked.length?{...run,cardAnchorPos:Math.min(...tracked.map(hit=>hit.pos))}:null;
- const hits=[...new Map([...tracked,...(scoped?generatedCardHits(view,scoped):[]),...recoverNotificationCardHits(view,run)].map(hit=>[hit.pos,hit])).values()];
+ const generated=scoped?generatedCardHits(view,scoped).filter(hit=>!hasAnchor||hit.pos>=Number(anchor)):[];
+ const baseline=notificationCardBaselinePositions(view,run);
+ const hits=[...new Map([...tracked,...generated,...recoverNotificationCardHits(view,run)].filter(hit=>!baseline.has(hit.pos)).map(hit=>[hit.pos,hit])).values()];
  if(!hits.length)return 0;
  if(confirm&&!page.confirm('今回作った正規通知カード '+hits.length+'件だけ削除します。紹介画像は残します。実行しますか？'))return null;
- const removed=deleteHits(view,hits);
+ const removed=deleteVerifiedNotificationCardHits(view,hits);
  const pending=run.pendingCard&&run.pendingCard.sessionId===CARD_SESSION&&!hits.some(hit=>genuineCard(hit,run.pendingCard.url))?run.pendingCard:null;
  writeRun({...run,cardKeys:[],pendingCard:pending,stage:'images_ready',updatedAt:Date.now()});
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();

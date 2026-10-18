@@ -18,7 +18,7 @@ test('recovers saved native cards using linked introduction images despite stale
 });
 const card=(id,src=alpha)=>node(id,'embed',{embeddedContentKey:id,src,htmlForEmbed:'<div class="note-embed">article</div>'},1);
 function node(id,type,attrs={},nodeSize=2,textContent=''){
- return{id,type:{name:type},attrs,nodeSize,textContent,eq(other){return other===this}};
+ return{id,type:{name:type},attrs,nodeSize,textContent,eq(other){return other===this},toJSON(){return{type,attrs,textContent}}};
 }
 function checkpoint(overrides={}){
  return{articleKey:'n123456789abc',stage:'complete',rows:[row,{url:beta,creator:'beta'}],items:[{id:'image',url:alpha,src:'https://assets.st-note.com/image.jpg'}],activityTexts:['actual profile'],groupHeadings:['1〜10人目のクリエイター様'],dividerUrls:[alpha],cardAnchorPos:0,cardBaselineKeys:[],cardKeys:[],pendingCard:null,...overrides};
@@ -34,12 +34,12 @@ function runtime(nodes,initial=checkpoint(),durable=null){
  const window={addEventListener(){},dispatchEvent(){return true}};
  const document={readyState:'loading',addEventListener(){},getElementById(){return null}};
  const context=vm.createContext({unsafeWindow:page,window,document,location:new URL('https://editor.note.com/notes/n123456789abc/edit'),localStorage:{getItem:()=>null,setItem(){},removeItem(){}},GM_getValue:()=>null,URL,Event,setTimeout,clearTimeout,console});
- const positions=()=>{let pos=0;return c.blocks.map(block=>{const hit={pos,node:block};pos+=block.nodeSize;return hit})};
- const doc={descendants(fn){for(const hit of positions())fn(hit.node,hit.pos)},nodeAt:pos=>positions().find(hit=>hit.pos===pos)?.node||null};
- Object.defineProperty(doc,'content',{get:()=>({size:c.blocks.reduce((sum,block)=>sum+block.nodeSize,0)})});
- const state={doc};
- Object.defineProperty(state,'tr',{get:()=>({ranges:[],delete(from,to){this.ranges.push([from,to]);return this}})});
- c.view={state,dispatch(tr){c.dispatches.push(tr);c.deletions.push(...tr.ranges);const old=positions();c.blocks=old.filter(hit=>!tr.ranges.some(([from,to])=>hit.pos>=from&&hit.pos+hit.node.nodeSize<=to)).map(hit=>hit.node)}};
+ const positions=blocks=>{let pos=0;return blocks.map(block=>{const hit={pos,node:block};pos+=block.nodeSize;return hit})};
+ const makeDoc=blocks=>({blocks:blocks.slice(),content:{size:blocks.reduce((sum,block)=>sum+block.nodeSize,0)},descendants(fn){for(const hit of positions(this.blocks))fn(hit.node,hit.pos)},nodeAt(pos){return positions(this.blocks).find(hit=>hit.pos===pos)?.node||null},eq(other){return this.blocks.length===other?.blocks?.length&&this.blocks.every((block,index)=>block.eq(other.blocks[index]))}});
+ const state={doc:makeDoc(c.blocks)};
+ Object.defineProperty(state,'tr',{get:()=>({doc:state.doc,ranges:[],delete(from,to){this.ranges.push([from,to]);this.doc=makeDoc(positions(this.doc.blocks).filter(hit=>!(hit.pos>=from&&hit.pos+hit.node.nodeSize<=to)).map(hit=>hit.node));return this}})});
+ c.replaceBlocks=blocks=>{c.blocks=blocks.slice();state.doc=makeDoc(c.blocks)};
+ c.view={state,dispatch(tr){c.dispatches.push(tr);c.deletions.push(...tr.ranges);c.replaceBlocks(tr.doc.blocks)}};
  const entry="if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();";
  assert.ok(source.includes(entry));
  vm.runInContext(source.replace(entry,'globalThis.api={patch:code=>eval(code),deleteNotificationCards};'),context);
@@ -62,7 +62,7 @@ test('card deletion hydrates GM-only progress before resolving owned cards',asyn
 
 test('deletion removes tracked and untracked duplicate cards while preserving the baseline and all introduction nodes',async()=>{
  const heading=node('heading','heading',{},5,'1〜10人目のクリエイター様');
- const profile=node('profile','paragraph',{},7,'actual profile');
+ const profile=node('profile','paragraph',{formula:'\\footnotesize\\text{actual profile}'},7,'$${\\footnotesize\\text{actual profile}}$$');
  const image=node('image','image',{src:'https://assets.st-note.com/image.jpg',link:alpha},4,'alphaさん');
  const divider=node('divider','horizontal_rule',{},1);
  const original=card('embbaseline123');
@@ -106,5 +106,66 @@ test('deletion awaits the durable metadata flush before saving or resolving',asy
  assert.ok(c.events.includes('flush:start'));assert.ok(!c.events.includes('save'));assert.equal(resolved,false);
  release();assert.equal(await result,1);assert.equal(resolved,true);
  assert.ok(c.events.indexOf('flush:done')<c.events.indexOf('save'));
+});
+
+test('linked-image recovery preserves an untracked original card before a valid notification-card anchor',async()=>{
+ const original=card('emboriginal123');
+ const image=node('image','image',{link:alpha},4);
+ const generated=card('embgenerated123');
+ const saved=checkpoint({cardAnchorPos:5,cardKeys:[{key:'embgenerated123',url:alpha}]});
+ const c=runtime([original,image,generated],saved);
+ assert.equal(await c.api.deleteNotificationCards({confirm:false,save:false}),1);
+ assert.deepEqual(c.blocks,[original,image]);
+});
+
+test('a metadata-less original card fingerprint protects its earliest occurrence while removing an identical generated card',async()=>{
+ const original=node('original','embed',{src:'https://note.com/embed/notes/n111111111111',layout:'card'},1);
+ const image=node('image','image',{link:alpha},4);
+ const generated=node('generated','embed',{layout:'card',src:'https://note.com/embed/notes/n111111111111'},1);
+ const saved=checkpoint({cardAnchorPos:9999,cardBaselineNodes:[{key:'',src:original.attrs.src,json:original.toJSON()}]});
+ const c=runtime([original,image,generated],saved);
+ assert.equal(await c.api.deleteNotificationCards({confirm:false,save:false}),1);
+ assert.deepEqual(c.blocks,[original,image]);
+ assert.deepEqual(c.saved.cardBaselineNodes,saved.cardBaselineNodes);
+});
+
+test('incomplete native-card deletion rejects without clearing progress or reporting a save',async()=>{
+ const image=node('image','image',{link:alpha},4);
+ const first=card('embfirst123'),second=card('embsecond123');
+ const saved=checkpoint({cardKeys:[{key:'embfirst123',url:alpha},{key:'embsecond123',url:alpha}]});
+ const c=runtime([image,first,second],saved);
+ c.view.dispatch=()=>c.replaceBlocks([image,second]);
+ await assert.rejects(c.api.deleteNotificationCards({confirm:false,save:true}),/削除結果を確認できません/);
+ assert.equal(c.saved,saved);assert.equal(c.writes.length,0);
+ assert.ok(!c.events.includes('save'));assert.deepEqual(c.blocks,[image,second]);
+});
+
+test('native-card deletion rejects any accidental change to a profile formula, image, heading or divider',async()=>{
+ const preserved=[node('heading','heading',{},5,'1〜10人目のクリエイター様'),node('formula','paragraph',{formula:'\\footnotesize\\text{プロフィール}'},7,'$${\\footnotesize\\text{プロフィール}}$$'),node('image','image',{link:alpha},4),node('divider','horizontal_rule',{},1)];
+ for(let changed=0;changed<preserved.length;changed++){
+  const generated=card('embgenerated123');
+  const saved=checkpoint({cardKeys:[{key:'embgenerated123',url:alpha}]});
+  const c=runtime([...preserved,generated],saved);
+  c.view.dispatch=()=>c.replaceBlocks(preserved.filter((_,index)=>index!==changed));
+  await assert.rejects(c.api.deleteNotificationCards({confirm:false,save:false}),/削除結果を確認できません/);
+  assert.equal(c.saved,saved);assert.equal(c.writes.length,0);
+ }
+});
+
+test('a nonempty final profile or divider does not cause deletion to append a cursor paragraph',async()=>{
+ const profile=node('profile','paragraph',{},5,'$${\\footnotesize\\text{紹介}}$$'),divider=node('divider','horizontal_rule',{},1),current=card('embcurrent123');
+ const c=runtime([profile,divider,current],checkpoint({cardKeys:[{key:'embcurrent123',url:alpha}]}));
+ c.api.patch('ensureEndSelection=()=>{throw Error("must not append a paragraph after deletion")};');
+ assert.equal(await c.api.deleteNotificationCards({confirm:false,save:false}),1);
+ assert.deepEqual(c.blocks,[profile,divider]);
+});
+
+test('a document edit during confirmation fails preflight before any card deletion',async()=>{
+ const generated=card('embgenerated123'),replacement=card('embreplacement123');
+ const saved=checkpoint({cardKeys:[{key:'embgenerated123',url:alpha}]});
+ const c=runtime([generated],saved);
+ c.page.confirm=()=>{c.replaceBlocks([replacement]);return true};
+ await assert.rejects(c.api.deleteNotificationCards({confirm:true,save:false}),/位置が変わったため削除を停止/);
+ assert.deepEqual(c.blocks,[replacement]);assert.equal(c.dispatches.length,0);assert.equal(c.writes.length,0);assert.equal(c.saved,saved);
 });
 
