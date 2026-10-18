@@ -19,13 +19,16 @@ function database(records = new Map(), options = {}) {
           const tx = {}, operations = []; let scheduled = false;
           function schedule(request, result) {
             if (scheduled) return; scheduled = true;
-            queueMicrotask(() => {
+            const commit = () => {
               if (mode === 'readwrite' && options.failWrite) { tx.error = new Error('commit rejected'); tx.onabort?.(); return; }
               options.beforeCommit?.(mode);
               for (const operation of operations) operation();
               if (request) { request.result = result; request.onsuccess?.(); }
+              if (mode === 'readonly' && options.failReadCommit) { tx.error = new Error('read commit rejected'); tx.onabort?.(); return; }
               tx.oncomplete?.();
-            });
+            };
+            if (mode === 'readonly' && options.holdRead) options.holdRead(() => queueMicrotask(commit));
+            else queueMicrotask(commit);
           }
           tx.objectStore = () => ({
             getAll() { const request = {}; schedule(request, [...records.values()].map(row => ({ ...row }))); return request; },
@@ -80,6 +83,81 @@ test('actual full Web Storage becomes writable after a committed cache move, and
       assert.equal(second.w.localStorage.getItem(cacheKey), null);
     } finally { second.w.close(); }
   } finally { w.close(); }
+});
+
+const savedViewCode = ts.transpileModule(readFileSync('src/insight-saved-view.ts','utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+function savedViews(w) { w.eval('(function(){const exports={};\n'+savedViewCode+'\nwindow.savedViews=exports;})()'); return w.savedViews; }
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('新しいdocumentの一時的なarchive読取失敗後、pending書込がなくても保存表示を再試行で復元する',async()=>{
+  const db=database(),first=page(db,[['mumei-insight-access-token','private-token']]),scope={account:'tester',token:'private-token'},savedAt=Date.now()-86400000;
+  const value={rows:Array.from({length:100},(_,id)=>({id,body:'保存した本文'.repeat(30)})),total:100};
+  let second;
+  try{
+    const api=savedViews(first.w);api.writeSavedInsightView('likes-last',scope,value,savedAt);await first.w.prepareStorage();
+    const key=api.savedInsightViewKey('likes-last',scope),native=first.rawEntries();
+    assert.equal(first.get.call(first.w.localStorage,key),null);assert.ok(db.records.has(key));first.w.close();
+    const open=db.open.bind(db);let blocked=true,opens=0;
+    db.open=()=>{opens++;if(!blocked)return open();const request={error:new Error('temporarily blocked')};queueMicrotask(()=>request.onerror?.());return request};
+    second=page(db,native);const next=savedViews(second.w),events=[];second.w.addEventListener('mumei-insight-storage-hydrated',()=>events.push('ready'));
+    await second.w.prepareStorage();assert.equal(opens,1,'1回の起動準備で失敗した読取を連打しない');assert.equal(next.readSavedInsightView('likes-last',scope),null);assert.equal(second.w.hasPending(),false);
+    blocked=false;await second.w.retryStorage();
+    assert.equal(opens,2);const restored=next.readSavedInsightView('likes-last',scope);assert.deepEqual(JSON.parse(JSON.stringify(restored.value)),value);assert.equal(restored.savedAt,savedAt);assert.equal(events.length,1);
+    await second.w.retryStorage();assert.equal(opens,2,'復元成功後に不要なarchive再読込をしない');
+  }finally{first.w.close();second?.w.close()}
+});
+
+for(const stillBlocked of [false,true])test(`起動を待たせず1回だけarchiveを再試行し、自動確認を連打しない（再試行時${stillBlocked?'失敗':'回復'}）`,async()=>{
+  const db=database(new Map([[cacheKey,{key:cacheKey,value:cacheValue}]])),open=db.open.bind(db);let blocked=true,opens=0;
+  db.open=()=>{opens++;if(!blocked)return open();const request={error:new Error('temporarily blocked')};queueMicrotask(()=>request.onerror?.());return request};
+  const first=page(db,[['mumei-insight-access-token','saved-member']]),nativeTimeout=first.w.setTimeout.bind(first.w),retries=[],events=[];
+  first.w.setTimeout=(fn,ms,...args)=>{if(ms===250){retries.push(fn);return -1}return nativeTimeout(fn,ms,...args)};
+  first.w.addEventListener('mumei-insight-storage-hydrated',()=>events.push('ready'));
+  try{
+    await first.w.prepareStorage();assert.equal(opens,1);assert.equal(retries.length,1);assert.equal(first.w.localStorage.getItem(cacheKey),null);
+    blocked=stillBlocked;retries[0]();for(let i=0;i<10;i++)await tick();
+    assert.equal(opens,2);assert.equal(retries.length,1,'2回目の失敗を自動ループにしない');
+    if(stillBlocked){assert.equal(first.w.localStorage.getItem(cacheKey),null);assert.equal(events.length,0);blocked=false;await first.w.retryStorage();assert.equal(opens,3)}
+    assert.equal(first.w.localStorage.getItem(cacheKey),cacheValue);assert.equal(events.length,1);
+  }finally{first.w.close()}
+});
+
+test('一時的にblockedとなった古いopenの遅い成功は接続を閉じて再試行を妨げない',async()=>{
+  const requests=[],db={open(){const request={};requests.push(request);queueMicrotask(()=>request.onblocked?.());return request}},first=page(db,[['mumei-insight-access-token','saved-member']]);let closed=0;
+  try{
+    await first.w.prepareStorage();assert.equal(requests.length,1);
+    requests[0].result={close(){closed++}};requests[0].onsuccess();assert.equal(closed,1);
+  }finally{first.w.close()}
+});
+
+test('遅いarchive復元は新しい保存済み本文と明示削除を元の履歴に戻さない',async()=>{
+  const removedKey='mumei-insight-data-cache-v1:saved:removed',waiters=[],db=database(new Map([[cacheKey,{key:cacheKey,value:'old history'}],[removedKey,{key:removedKey,value:'removed history'}]]),{holdRead:release=>waiters.push(release)}),first=page(db,[['mumei-insight-access-token','saved-member']]);
+  try{
+    const preparing=first.w.prepareStorage();for(let i=0;i<10&&!waiters.length;i++)await tick();assert.equal(waiters.length,1);
+    first.w.localStorage.setItem(cacheKey,'new history'.repeat(400));first.w.localStorage.removeItem(removedKey);
+    for(let i=0;i<10&&db.records.get(cacheKey)?.value!=='new history'.repeat(400);i++)await tick();
+    assert.equal(db.records.get(cacheKey).value,'new history'.repeat(400));
+    waiters[0]();await preparing;
+    assert.equal(first.w.localStorage.getItem(cacheKey),'new history'.repeat(400));assert.equal(first.w.localStorage.getItem(removedKey),null);assert.equal(db.records.has(removedKey),false);
+  }finally{first.w.close()}
+});
+
+test('明示clear後に届く古いarchiveを表示せず、clear後の新しい保存は維持する',async()=>{
+  const nextKey='mumei-insight-data-cache-v1:saved:new',waiters=[],db=database(new Map([[cacheKey,{key:cacheKey,value:'cleared history'}]]),{holdRead:release=>waiters.push(release)}),first=page(db,[['mumei-insight-access-token','saved-member']]);
+  try{
+    const preparing=first.w.prepareStorage();for(let i=0;i<10&&!waiters.length;i++)await tick();
+    first.w.localStorage.clear();first.w.localStorage.setItem(nextKey,'after clear'.repeat(400));
+    for(let i=0;i<10&&!db.records.has(nextKey);i++)await tick();waiters[0]();await preparing;
+    assert.equal(first.w.localStorage.getItem(cacheKey),null);assert.equal(first.w.localStorage.getItem(nextKey),'after clear'.repeat(400));assert.equal(db.records.has(cacheKey),false);
+  }finally{first.w.close()}
+});
+
+test('読取transactionのcommit失敗は復元完了にせず、回復後にのみ履歴を公開する',async()=>{
+  const options={failReadCommit:true},db=database(new Map([[cacheKey,{key:cacheKey,value:cacheValue}]]),options),first=page(db,[['mumei-insight-access-token','saved-member']]);
+  try{
+    await first.w.prepareStorage();assert.equal(first.w.localStorage.getItem(cacheKey),null);assert.equal(first.w.hasPending(),false);
+    options.failReadCommit=false;await first.w.retryStorage();assert.equal(first.w.localStorage.getItem(cacheKey),cacheValue);
+  }finally{first.w.close()}
 });
 
 test('an aborted archive transaction never removes the original history or claims successful saving', async () => {

@@ -5,14 +5,15 @@ const states: StorageState[] = [];
 const CHANGE = "mumei-insight-storage-quota";
 const archived = new Map<string, string>();
 let hydrateArchive = async () => {};
-let recoverQuota = async () => 0;
+let archiveHydrated = false;
+let recoverQuota = async (_hydrate = true) => 0;
 let retryPendingWrites = () => {};
 const CACHE_PREFIXES = ["mumei-insight-data-cache-v1:", "mumei-insight-summary-cache-v1:", "mumei-insight-pro-cache-v3:", "mumei-social-view-cache-v1:", "mumei-notification-board:", "mumei-notification-board-meta:", "mumei-notification-recent-watermark:"];
 const CACHE_KEYS = new Set(["mumei-public-creator-icons-v2", "mumei-insight-self-thumbs-v1"]);
 function isCacheKey(key: string) { return CACHE_KEYS.has(key) || CACHE_PREFIXES.some(prefix => key.startsWith(prefix)); }
 
-export async function prepareBrowserStorage() { await hydrateArchive(); await recoverQuota(); retryPendingWrites(); await archiveQueue.catch(() => {}); }
-export async function retryBrowserStorage() { if (hasPendingBrowserWrites()) await prepareBrowserStorage(); }
+export async function prepareBrowserStorage() { await hydrateArchive(); await recoverQuota(false); retryPendingWrites(); await archiveQueue.catch(() => {}); }
+export async function retryBrowserStorage() { if (hasPendingBrowserWrites() || !archiveHydrated) await prepareBrowserStorage(); }
 
 function openArchive(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -23,7 +24,7 @@ function openArchive(): Promise<IDBDatabase> {
       if (!request.result.objectStoreNames.contains("values")) request.result.createObjectStore("values", { keyPath: "key" });
     };
     request.onsuccess = () => { window.clearTimeout(timeout); if (expired) request.result.close(); else resolve(request.result); };
-    request.onerror = request.onblocked = () => { window.clearTimeout(timeout); reject(request.error || new Error("ARCHIVE_BLOCKED")); };
+    request.onerror = request.onblocked = () => { expired = true; window.clearTimeout(timeout); reject(request.error || new Error("ARCHIVE_BLOCKED")); };
   });
 }
 
@@ -97,6 +98,9 @@ export function installBrowserStorageFallback() {
   };
   retryPendingWrites = () => { for (const state of states) retry(state); };
   const writing = new Map<string, { ticket: number; value: string }>(); let ticket = 0;
+  const mutations = new Map<string, number>(), removed = new Set<string>();
+  let archiveRevision = 0, cleared = false;
+  const changed = (key: string) => { mutations.set(key, ++archiveRevision); };
   function persistCache(state: StorageState, key: string, value: string) {
     if (writing.get(key)?.value === value) return;
     const revision = ++ticket, previousValue = get.call(state.store, key);
@@ -104,23 +108,45 @@ export function installBrowserStorageFallback() {
     void queueArchive(() => archiveTransaction(store => { store.put({ key, value }); })).then(() => {
       // A newer queued write or explicit removal owns the in-memory state.
       if (writing.get(key)?.ticket !== revision) return;
-      writing.delete(key); archived.set(key, value);
+      writing.delete(key); changed(key); archived.set(key, value);
       if (previousValue !== null && get.call(state.store, key) === previousValue) remove.call(state.store, key);
       if (state.pending.get(key) === value) state.pending.delete(key);
       retry(state);
     }).catch(() => { if (writing.get(key)?.ticket === revision) writing.delete(key); notify(); });
   }
   let hydration: Promise<void> | null = null, recovery: Promise<number> | null = null;
-  hydrateArchive = () => hydration ||= archiveTransaction(store => {
-    const request = store.getAll();
-    request.onsuccess = () => {
-      for (const row of request.result || []) if (typeof row?.key === "string" && isCacheKey(row.key) && typeof row.value === "string") archived.set(row.key, row.value);
-    };
-  }, true).catch(() => {});
-  recoverQuota = () => {
+  let hydrationRetried = false, hydrationRetryTimer: number | undefined;
+  hydrateArchive = () => {
+    if (hydration) return hydration;
+    const revision = archiveRevision;
+    let rows: Array<{ key: string; value: string }> = [];
+    const job = archiveTransaction(store => {
+      const request = store.getAll();
+      request.onsuccess = () => { rows = request.result || []; };
+    }, true).then(() => {
+      // A read that started before a new write or removal must not restore its
+      // older rows after that change. Publish only after the read commits.
+      for (const row of rows) if (!cleared && typeof row?.key === "string" && isCacheKey(row.key) && typeof row.value === "string" && !removed.has(row.key) && !writing.has(row.key) && !(local && stateFor(local).pending.has(row.key)) && (mutations.get(row.key) || 0) <= revision) archived.set(row.key, row.value);
+      archiveHydrated = true;
+      if (hydrationRetryTimer !== undefined) { window.clearTimeout(hydrationRetryTimer); hydrationRetryTimer = undefined; }
+      window.dispatchEvent(new Event("mumei-insight-storage-hydrated"));
+    }).catch(() => {
+      // The next explicit/focus retry may recover a temporarily blocked archive.
+      if (hydration === job) hydration = null;
+      if (!hydrationRetried) {
+        hydrationRetried = true;
+        // Let startup mount after its bounded first attempt. One later archive
+        // read may recover the display copy without restarting any API request.
+        hydrationRetryTimer = window.setTimeout(() => { hydrationRetryTimer = undefined; if (!archiveHydrated) void hydrateArchive(); }, 250);
+      }
+    });
+    hydration = job;
+    return job;
+  };
+  recoverQuota = (hydrate = true) => {
     if (recovery) return recovery;
     recovery = (async () => {
-      await hydrateArchive();
+      if (hydrate) await hydrateArchive();
       if (!local || !stateFor(local).pending.size) return 0;
       const candidates: Array<{ key: string; value: string }> = [];
       for (let i = 0; i < lengthOf.call(local); i++) {
@@ -138,7 +164,7 @@ export function installBrowserStorageFallback() {
       let freed = 0;
       for (const row of moved) {
         if (get.call(local, row.key) === row.value && !writing.has(row.key) && !stateFor(local).pending.has(row.key)) {
-          archived.set(row.key, row.value); remove.call(local, row.key); freed += row.value.length;
+          changed(row.key); archived.set(row.key, row.value); remove.call(local, row.key); freed += row.value.length;
         }
       }
       retry(stateFor(local));
@@ -152,6 +178,7 @@ export function installBrowserStorageFallback() {
   };
   proto.setItem = function(key: string, value: string) {
     const state = stateFor(this), name = String(key), text = String(value);
+    if (this === local && isCacheKey(name)) { changed(name); removed.delete(name); }
     if (this === local && archived.has(name)) { state.pending.set(name, text); notify(); persistCache(state, name, text); return; }
     try {
       set.call(this, name, text); state.pending.delete(name); retry(state);
@@ -168,6 +195,7 @@ export function installBrowserStorageFallback() {
     remove.call(this, String(key));
     const state = stateFor(this), name = String(key); state.pending.delete(name);
     if (this === local && isCacheKey(name)) {
+      changed(name); removed.add(name);
       archived.delete(name); writing.delete(name);
       void queueArchive(() => archiveTransaction(store => { store.delete(name); })).catch(() => {});
     }
@@ -176,6 +204,7 @@ export function installBrowserStorageFallback() {
   proto.clear = function() {
     clear.call(this); stateFor(this).pending.clear(); notify();
     if (this === local) {
+      cleared = true; archiveRevision++;
       archived.clear(); writing.clear();
       void queueArchive(() => archiveTransaction(store => { store.clear(); })).catch(() => {});
     }
