@@ -4,6 +4,7 @@ import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import { readInsightSnapshot, writeInsightSnapshot } from "./insight-persistent-cache";
 import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
+import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import "./member-insight-comments-final.css";
 
 const HISTORY="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-history";
@@ -13,13 +14,14 @@ const HEARTS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-comm
 const COMMENT_REFRESH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-comment-refresh";
 const ICON="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/creator-icons";
 const PAGE=100;
-const FETCH_GROUP=4;
 const EVENT_PAGE=500;
 const EVENT_GROUP=3;
+const SAVED_COMMENTS="comments-default";
 type Row=Record<string,any>;type Heart=Record<string,any>;
 type CapturedRequest={token:string;signal:AbortSignal};
 type CommentRequest=CapturedRequest&{seq:number};
-type CommentCache={rows:Row[];total:number;at:number;revision:number};
+type CommentCache={rows:Row[];total:number;at:number;revision:number;page?:number};
+type SavedComments={rows:Row[];total:number};
 const COMMENT_CACHE=new Map<string,CommentCache>();
 type CommentView={status:string;day:string;articleKey:string;draft:string;query:string;renderLimit:number};
 const COMMENT_VIEWS=new Map<string,CommentView>();
@@ -27,6 +29,10 @@ const COMMENT_ARTICLES=new Map<string,{rows:Row[];at:number;revision:number}>();
 const COMMENT_COLLECTION=new Map<string,{at:number;revision:number;message:string}>();
 const COMMENT_AUX=new Map<string,{detail:Record<string,Row[]>;hearts:Record<string,Heart>}>();
 let lastVerifiedScope="";
+function savedComments(scope:{account:string;token:string}){
+ const saved=readSavedInsightView<SavedComments>(SAVED_COMMENTS,scope),value=saved?.value;
+ return value&&Array.isArray(value.rows)&&value.rows.length<=EVENT_PAGE&&Number.isSafeInteger(value.total)&&value.total>=value.rows.length&&value.rows.every(row=>row&&String(row.comment_key||""))?saved:null;
+}
 const defaultView=():CommentView=>({status:"all",day:"",articleKey:"",draft:"",query:"",renderLimit:120});
 function viewCacheKey(scope:string,view:Pick<CommentView,"status"|"day"|"articleKey"|"query">){return`${scope}|${view.status}|${view.day}|${view.articleKey}|${view.status==="all"?"":view.query}`}
 function remember<T>(map:Map<string,T>,key:string,value:T){map.set(key,value);if(map.size>40)map.delete(map.keys().next().value!)}
@@ -98,25 +104,26 @@ function mergeEvents(base:Row[],incoming:Row[]){
   return [...map.values()].sort((a,b)=>Date.parse(String(b.occurred_at||0))-Date.parse(String(a.occurred_at||0)))
 }
 export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
- const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",viewScope=`${memberNoteId.trim().toLowerCase()}|${token}`,savedView=COMMENT_VIEWS.get(viewScope)||defaultView(),initialKey=viewCacheKey(viewScope,savedView),initialCached=COMMENT_CACHE.get(initialKey),initialRetained=initialCached&&canRetainInsightView(initialCached.at)?initialCached:null,initialAux=initialRetained?COMMENT_AUX.get(initialKey):null;
- const[rows,setRows]=useState<Row[]>(initialRetained?.rows||[]),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(savedView.articleKey),[day,setDay]=useState(savedView.day),[draft,setDraft]=useState(savedView.draft),[query,setQuery]=useState(savedView.query),[total,setTotal]=useState(initialRetained?.total||0),[status,setStatus]=useState(savedView.status),[detail,setDetail]=useState<Record<string,Row[]>>(initialAux?.detail||{}),[hearts,setHearts]=useState<Record<string,Heart>>(initialAux?.hearts||{}),[loading,setLoading]=useState(!initialRetained),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">(initialRetained?"idle":"initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(savedView.renderLimit),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
- const loadSeq=useRef(0),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
+ const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",viewScope=`${memberNoteId.trim().toLowerCase()}|${token}`,savedView=COMMENT_VIEWS.get(viewScope)||defaultView(),initialKey=viewCacheKey(viewScope,savedView),initialCached=COMMENT_CACHE.get(initialKey),initialRetained=initialCached&&canRetainInsightView(initialCached.at)?initialCached:null,initialAux=initialRetained?COMMENT_AUX.get(initialKey):null,storageScope={account:memberNoteId,token},initialSaved=!initialRetained&&savedView.status==="all"&&!savedView.day&&!savedView.articleKey?savedComments(storageScope):null,initialSavedRows=Array.isArray(initialSaved?.value.rows)?initialSaved.value.rows.slice(0,EVENT_PAGE):[];
+ const[rows,setRows]=useState<Row[]>(initialRetained?.rows||initialSavedRows),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(savedView.articleKey),[day,setDay]=useState(savedView.day),[draft,setDraft]=useState(savedView.draft),[query,setQuery]=useState(savedView.query),[total,setTotal]=useState(initialRetained?.total||Number(initialSaved?.value.total)||0),[status,setStatus]=useState(savedView.status),[detail,setDetail]=useState<Record<string,Row[]>>(initialAux?.detail||{}),[hearts,setHearts]=useState<Record<string,Heart>>(initialAux?.hearts||{}),[loading,setLoading]=useState(!initialRetained),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">(initialRetained?"idle":"initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(savedView.renderLimit),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
+ const [savedDisplay,setSavedDisplay]=useState(initialSavedRows.length?initialSaved?.savedAt||0:0),[loadedPage,setLoadedPage]=useState(initialRetained?.page||1),[moreLoading,setMoreLoading]=useState(false);
+ const loadSeq=useRef(0),pageBusy=useRef(false),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  const stateScope=useRef(viewScope),controlsReady=stateScope.current===viewScope;
  const cacheKey=viewCacheKey(viewScope,{status,day,articleKey,query}),persistKey=snapshotKey(memberNoteId);
  useEffect(()=>{
   if(stateScope.current===viewScope)return;
   stateScope.current=viewScope;const next=COMMENT_VIEWS.get(viewScope)||defaultView();
-  setStatus(next.status);setDay(next.day);setArticleKey(next.articleKey);setDraft(next.draft);setQuery(next.query);setRenderLimit(next.renderLimit);setRows([]);setTotal(0);setDetail({});setHearts({});
+  setStatus(next.status);setDay(next.day);setArticleKey(next.articleKey);setDraft(next.draft);setQuery(next.query);setRenderLimit(next.renderLimit);setRows([]);setTotal(0);setDetail({});setHearts({});setSavedDisplay(0);setLoadedPage(1);
  },[viewScope]);
  useEffect(()=>{if(controlsReady)remember(COMMENT_VIEWS,viewScope,{status,day,articleKey,draft,query,renderLimit})},[viewScope,controlsReady,status,day,articleKey,draft,query,renderLimit]);
  const globalAll=status==="all"&&!day&&!articleKey;
  function current(request:CommentRequest){return request.seq===loadSeq.current&&!request.signal.aborted&&request.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")}
- function beginLoad():CommentRequest{activeRequest.current?.abort();window.clearTimeout(syncTimer.current);const controller=new AbortController();activeRequest.current=controller;return{seq:++loadSeq.current,token,signal:controller.signal}}
+ function beginLoad():CommentRequest{pageBusy.current=false;setMoreLoading(false);activeRequest.current?.abort();window.clearTimeout(syncTimer.current);const controller=new AbortController();activeRequest.current=controller;return{seq:++loadSeq.current,token,signal:controller.signal}}
  function finishSync(request:CommentRequest,message:string,delay=1200){if(!current(request))return;window.clearTimeout(syncTimer.current);setSyncMessage(message);setSyncPhase("result");syncTimer.current=window.setTimeout(()=>{if(current(request))setSyncPhase("idle")},delay)}
- function publish(request:CommentRequest,list:Row[],count:number){if(!current(request))return;setRows(previous=>{if(!current(request))return previous;const images=new Map(previous.map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));return list.map(row=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}))});setTotal(count);setLoading(false)}
- function cache(request:CommentRequest,list:Row[],count:number){if(!current(request))return;lastVerifiedScope=viewScope;remember(COMMENT_CACHE,cacheKey,{rows:list,total:count,at:Date.now(),revision})}
- async function saveSnapshot(request:CommentRequest,list:Row[],count:number){if(!persistKey||!current(request))return;await writeInsightSnapshot<CommentSnapshot>(persistKey,{version:1,rows:list,total:count,latestAt:latestAt(list),savedAt:Date.now()})}
+ function publish(request:CommentRequest,list:Row[],count:number){if(!current(request))return;setRows(previous=>{if(!current(request))return previous;const images=new Map(previous.map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));return list.map(row=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}))});setTotal(count)}
+ function cache(request:CommentRequest,list:Row[],count:number,page=1){if(!current(request))return;lastVerifiedScope=viewScope;remember(COMMENT_CACHE,cacheKey,{rows:list,total:count,at:Date.now(),revision,page});if(globalAll)writeSavedInsightView<SavedComments>(SAVED_COMMENTS,storageScope,{rows:list.slice(0,EVENT_PAGE),total:count})}
+ async function saveSnapshot(request:CommentRequest,list:Row[],count:number){if(!persistKey||!current(request))return;await writeInsightSnapshot<CommentSnapshot>(persistKey,{version:1,rows:list.slice(0,EVENT_PAGE),total:count,latestAt:latestAt(list),savedAt:Date.now()})}
  function enrichLater(list:Row[],request:CommentRequest){
   void enrich(list,request.signal).then(enriched=>{
    if(!current(request))return;
@@ -136,75 +143,67 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    setHearts(v=>{if(!current(request))return v;const next={...v,...map};remember(COMMENT_AUX,cacheKey,{detail:COMMENT_AUX.get(cacheKey)?.detail||{},hearts:next});return next});
   }catch{if(!current(request))return}}
  }
- async function loadAll(background=false,fallback?:CommentCache|CommentSnapshot){
+ async function loadAll(background=false,fallback?:CommentCache|CommentSnapshot,exhaustive=status==="all"&&Boolean(query.trim())){
   const request=beginLoad();let received=false;
-  const retained=background&&fallback&&canRetainInsightView("at" in fallback?fallback.at:fallback.savedAt)?fallback:null;
-  const displayed=(list:Row[])=>retained?(status==="all"?mergeEvents(retained.rows,list):uniqueRows([...list,...retained.rows])):list;
-  setLoading(true);setError("");setSyncPhase(background?"delta":"initial");setSyncMessage("保存先のコメント履歴を確認中");
+  pageBusy.current=false;setMoreLoading(false);
+  setLoading(true);setError("");setSyncPhase(background?"delta":"initial");setSyncMessage(exhaustive?"全履歴を検索中… 検索結果は確認途中です":"保存先のコメント履歴を確認中");
   try{
-   if(status==="all"){
-    const params={pageSize:EVENT_PAGE,articleKey:articleKey||null,...range},first=await post(EVENTS,{...params,page:1},request);
-    if(!current(request))return;
-    const expected=Math.max(0,Number(first.total||0));
-    let collected:Row[]=mergeEvents([],first.rows||[]),seen=new Set(collected.map(r=>String(r.comment_key||"")));
-    received=true;publish(request,displayed(collected),expected);enrichLater(collected,request);
-    const pages=Math.ceil(expected/EVENT_PAGE);
-    for(let start=2;start<=pages;start+=EVENT_GROUP){
-     const nums=Array.from({length:Math.min(EVENT_GROUP,pages-start+1)},(_,i)=>start+i),packets=await Promise.all(nums.map(page=>post(EVENTS,{...params,page},request)));
-     if(!current(request))return;
-     const added:Row[]=[];
-     for(const packet of packets)for(const row of packet.rows||[]){const k=String(row.comment_key||"");if(!k||seen.has(k))continue;seen.add(k);added.push(row)}
-     if(added.length){collected=mergeEvents(collected,added);publish(request,displayed(collected),expected);enrichLater(added,request)}
-    }
-    if(collected.length!==expected)throw new Error("COMMENT_HISTORY_INCOMPLETE");
-    publish(request,collected,expected);
-    cache(request,collected,expected);
-    if(globalAll)void saveSnapshot(request,collected,expected);
-    finishSync(request,"保存先の全履歴 読込完了");return;
-   }
-   const params={pageSize:PAGE,status,query,articleKey:articleKey||null,...range},first=await post(EXTRAS,{action:"comments_filtered",...params,page:1},request);
+   const events=status==="all",pageSize=events?EVENT_PAGE:PAGE;
+   const params=events?{pageSize,articleKey:articleKey||null,...range}:{action:"comments_filtered",pageSize,status,query,articleKey:articleKey||null,...range};
+   const first=await post(events?EVENTS:EXTRAS,{...params,page:1},request);
    if(!current(request))return;
-   const expected=Math.max(0,Number(first.total||0)),firstList=uniqueRows(first.rows||[]);
-   let collected:Row[]=[...firstList],seen=new Set(collected.map(r=>String(r.root_key||"")));
-   received=true;publish(request,displayed(collected),expected);enrichLater(firstList,request);void loadHearts(firstList,request);
-   const pages=Math.ceil(expected/PAGE);
-   for(let start=2;start<=pages;start+=FETCH_GROUP){
-    const nums=Array.from({length:Math.min(FETCH_GROUP,pages-start+1)},(_,i)=>start+i),packets=await Promise.all(nums.map(page=>post(EXTRAS,{action:"comments_filtered",...params,page},request)));
-    if(!current(request))return;
-    const added:Row[]=[];
-    for(const packet of packets)for(const row of packet.rows||[]){const k=String(row.root_key||"");if(!k||seen.has(k))continue;seen.add(k);added.push(row)}
-    if(added.length){collected=[...collected,...added];publish(request,displayed(collected),expected);enrichLater(added,request);void loadHearts(added,request)}
+   const expected=Math.max(0,Number(first.total||0));
+   const images=new Map((fallback?.rows||[]).map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));
+   const firstRows=first.rows.map((row:Row)=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}));
+   let collected=events?mergeEvents([],firstRows):uniqueRows(firstRows),page=1;
+   const retained=background&&fallback&&"at" in fallback&&canRetainInsightView(fallback.at)?fallback:null;
+   const pages=exhaustive?Math.ceil(expected/pageSize):retained?Math.min(Math.ceil(retained.rows.length/pageSize),Math.ceil(renderLimit/pageSize),Math.ceil(expected/pageSize)):1;
+   const displayed=(list:Row[])=>retained&&page<pages?(events?mergeEvents(retained.rows,list):uniqueRows([...list,...retained.rows])):list;
+   if(collected.length!==Math.min(expected,pageSize))throw new Error("COMMENT_HISTORY_INCOMPLETE");
+   received=true;setSavedDisplay(0);setLoadedPage(1);publish(request,displayed(collected),expected);enrichLater(collected,request);if(!events)void loadHearts(collected,request);
+   if(pages>1){
+    for(let start=2;start<=pages;start+=EVENT_GROUP){
+     const nums=Array.from({length:Math.min(EVENT_GROUP,pages-start+1)},(_,i)=>start+i),packets=await Promise.all(nums.map(next=>post(events?EVENTS:EXTRAS,{...params,page:next},request)));
+     if(!current(request))return;
+     for(const packet of packets)collected=events?mergeEvents(collected,packet.rows):uniqueRows([...collected,...packet.rows]);
+     page=nums.at(-1)!;publish(request,displayed(collected),expected);setLoadedPage(page);
+    }
+    if(collected.length!==Math.min(expected,page*pageSize))throw new Error("COMMENT_HISTORY_INCOMPLETE");
    }
-   if(collected.length!==expected)throw new Error("COMMENT_HISTORY_INCOMPLETE");
-   publish(request,collected,expected);
-   cache(request,collected,expected);finishSync(request,"集計完了");
+   cache(request,collected,expected,page);
+   if(globalAll&&collected.length===expected)void saveSnapshot(request,collected,expected);
+   finishSync(request,exhaustive?"全履歴の検索完了":collected.length===expected?"保存先の全履歴を確認しました":"表示分を確認しました。続きは下へ進むと読み込みます");
   }catch(e){
    if(!current(request))return;
    const message=e instanceof Error?e.message:"コメント履歴の読込に失敗しました";
-   finishSync(request,"保存先の全履歴を確認できませんでした");
-   if(!received&&fallback&&!memberReadAuthFailure(message)){publish(request,fallback.rows,fallback.total);finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
+   if(memberReadAuthFailure(message)){setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);COMMENT_CACHE.delete(cacheKey);finishSync(request,"コメント履歴を確認できませんでした")}
+   else if(!received&&fallback){publish(request,fallback.rows.slice(0,EVENT_PAGE),fallback.total);setSavedDisplay("at" in fallback?fallback.at:fallback.savedAt);finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
+   else if(!received&&globalAll&&persistKey){
+    const previous=await bounded(readInsightSnapshot<CommentSnapshot>(persistKey),request.signal,1000).catch(()=>null);
+    if(!current(request))return;
+    if(previous?.version===1&&Array.isArray(previous.rows)&&previous.rows.every(row=>row&&String(row.comment_key||""))){publish(request,previous.rows.slice(0,EVENT_PAGE),Math.max(previous.rows.length,Number(previous.total)||0));setSavedDisplay(previous.savedAt||1);finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
+    else finishSync(request,"コメント履歴を確認できませんでした");
+   }else finishSync(request,"コメント履歴を確認できませんでした");
    setError(message);
   }finally{if(current(request))setLoading(false)}
  }
- async function verifySavedHistory(snapshot:CommentSnapshot,background=false,verifiedProbe?:Record<string,any>){
-  const request=beginLoad();
-  setLoading(!background);setError("");setSyncPhase(background?"delta":"initial");setSyncMessage("保存先のコメント履歴を確認中");
+ async function loadNextPage(){
+  if(pageBusy.current||loading||savedDisplay||rows.length>=total)return;
+  const controller=activeRequest.current;if(!controller)return;
+  const request={seq:loadSeq.current,token,signal:controller.signal},page=loadedPage+1,events=status==="all",pageSize=events?EVENT_PAGE:PAGE;
+  pageBusy.current=true;setMoreLoading(true);setError("");
   try{
-   const probe=verifiedProbe||await post(EVENTS,{page:1,pageSize:50},request);
+   const params=events?{pageSize,articleKey:articleKey||null,...range}:{action:"comments_filtered",pageSize,status,query,articleKey:articleKey||null,...range};
+   const packet=await post(events?EVENTS:EXTRAS,{...params,page},request);
    if(!current(request))return;
-   const serverTotal=Number(probe.total),savedImages=new Map(snapshot.rows.map(row=>[String(row.comment_key),row.actor_image_url]));
-   const list=mergeEvents([],probe.rows.map((row:Row)=>({...row,actor_image_url:row.actor_image_url||savedImages.get(String(row.comment_key))||null})));
-   publish(request,list,serverTotal);enrichLater(list,request);
-   // A count cannot verify edited bodies or heart changes outside the probe.
-   if(serverTotal>list.length){void loadAll(true,snapshot);return}
-   cache(request,list,serverTotal);void saveSnapshot(request,list,serverTotal);
-   finishSync(request,"保存先の全履歴を確認しました");
-  }catch(e){
-   if(!current(request))return;
-   const message=e instanceof Error?e.message:"コメント履歴の読込に失敗しました";
-   if(!memberReadAuthFailure(message))publish(request,snapshot.rows,snapshot.total);
-   finishSync(request,"通信を確認できないため保存済み履歴を表示中");setError(message);
-  }finally{if(current(request))setLoading(false)}
+   const count=Number(packet.total);
+   if(count!==total){void loadAll(true,{rows,total,at:Date.now(),revision});return}
+   const list=events?mergeEvents(rows,packet.rows):uniqueRows([...rows,...packet.rows]);
+   if(list.length!==Math.min(page*pageSize,count))throw new Error("COMMENT_HISTORY_INCOMPLETE");
+   publish(request,list,count);setLoadedPage(page);cache(request,list,count,page);enrichLater(packet.rows,request);if(!events)void loadHearts(packet.rows,request);
+   if(globalAll&&list.length===count)void saveSnapshot(request,list,count);
+  }catch(e){if(current(request)){const message=e instanceof Error?e.message:"続きの読込に失敗しました";setError(message);if(memberReadAuthFailure(message)){setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);COMMENT_CACHE.delete(cacheKey)}}}
+  finally{if(current(request)){pageBusy.current=false;setMoreLoading(false)}}
  }
  async function open(k:string){
   if(detail[k])return;
@@ -258,71 +257,52 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   if(day&&!(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)))void post(EXTRAS,{action:"comment_articles",...range},{token:capturedToken,signal:controller.signal}).then(x=>{if(!controller.signal.aborted&&seq===articleSeq.current&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")){setArticles(x.rows||[]);remember(COMMENT_ARTICLES,key,{rows:x.rows||[],at:Date.now(),revision})}}).catch(()=>{});
   return()=>{controller.abort();articleSeq.current++};
  },[day,token,viewScope,revision,controlsReady]);
- const threadQuery=status==="all"?"":query;
  useEffect(()=>{
   if(!controlsReady)return;
-  let cancelled=false;
-  const cleanup=()=>{cancelled=true;loadSeq.current++;activeRequest.current?.abort();window.clearTimeout(syncTimer.current)};
-  const cached=COMMENT_CACHE.get(cacheKey);
-  const cachedSnapshot=cached?{version:1 as const,rows:cached.rows,total:cached.total,latestAt:latestAt(cached.rows),savedAt:cached.at}:null;
-  const retained=cached&&canRetainInsightView(cached.at),aux=retained?COMMENT_AUX.get(cacheKey):null;
-  setError("");setRows(retained?cached.rows:[]);setTotal(retained?cached.total:0);
+  const cleanup=()=>{loadSeq.current++;activeRequest.current?.abort();window.clearTimeout(syncTimer.current)};
+  const cached=COMMENT_CACHE.get(cacheKey),retained=cached&&canRetainInsightView(cached.at),aux=retained?COMMENT_AUX.get(cacheKey):null;
+  const stored=!retained&&globalAll?savedComments(storageScope):null;
+  const savedRows=Array.isArray(stored?.value.rows)?stored.value.rows.slice(0,EVENT_PAGE):[];
+  setError("");setRows(retained?cached.rows:savedRows);setTotal(retained?cached.total:Number(stored?.value.total)||0);setLoadedPage(retained?cached.page||1:1);setSavedDisplay(savedRows.length?stored!.savedAt:0);
   setDetail(aux?.detail||{});setHearts(aux?.hearts||{});
-  if(cached){
-   const fresh=lastVerifiedScope===viewScope&&cached.revision===revision&&isFreshInsightView(cached.at);
-   if(fresh){beginLoad();setLoading(false);setSyncPhase("idle");return cleanup}
-   COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});
-   void loadAll(Boolean(retained),cached);
-  }else if(globalAll&&persistKey){
-   // Reading the saved snapshot and checking the server run together. A slow local
-   // database must not delay the first fresh response.
-   const request=beginLoad();
-   setLoading(true);setSyncPhase("initial");setSyncMessage("保存先のコメント履歴を確認中");
-   let snapshotReady=false,saved:CommentSnapshot|null=null;
-   const savedRead=readInsightSnapshot<CommentSnapshot>(persistKey).then(snapshot=>{snapshotReady=true;saved=snapshot;return snapshot});
-   void post(EVENTS,{page:1,pageSize:50},request).then(async probe=>{
-    if(cancelled||!current(request))return;
-    const list=mergeEvents([],probe.rows||[]),count=Math.max(0,Number(probe.total||0));
-    publish(request,list,count);enrichLater(list,request);
-    const snapshot=snapshotReady?saved:await bounded(savedRead,request.signal,1000).catch(()=>null);
-    if(cancelled||!current(request))return;
-    if(snapshot?.version===1&&Array.isArray(snapshot.rows)&&snapshot.rows.length&&count>=snapshot.total){
-     // Saved rows may supply avatars; only server-verified text is displayed.
-     void verifySavedHistory(snapshot,true,probe);
-    }else if(count>list.length)void loadAll(true);
-    else{cache(request,list,count);void saveSnapshot(request,list,count);finishSync(request,"保存先の全履歴 読込完了")}
-   }).catch(async e=>{
-    if(cancelled||!current(request))return;
-    const message=e instanceof Error?e.message:"コメント履歴の読込に失敗しました";
-    const snapshot=snapshotReady?saved:await bounded(savedRead,request.signal,1000).catch(()=>null);
-    if(cancelled||!current(request))return;
-    if(snapshot?.version===1&&Array.isArray(snapshot.rows)&&!memberReadAuthFailure(message)){publish(request,snapshot.rows,Number(snapshot.total||snapshot.rows.length));finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
-    else setLoading(false);
-    setError(message);
-   });
-  }else void loadAll(false);
+  const exhaustive=status==="all"&&Boolean(query.trim());
+  if(cached&&lastVerifiedScope===viewScope&&cached.revision===revision&&isFreshInsightView(cached.at)&&(!exhaustive||cached.rows.length>=cached.total)){
+   beginLoad();setLoading(false);setSyncPhase("idle");return cleanup;
+  }
+  COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});
+  const fallback=retained?cached:stored?{rows:savedRows,total:Number(stored.value.total)||savedRows.length,savedAt:stored.savedAt,version:1 as const,latestAt:latestAt(savedRows)}:undefined;
+  // A bounded, token-scoped saved view is visible immediately. It stays labelled
+  // as saved until the server confirms the current page; counts never prove body freshness.
+  if(fallback)void loadAll(true,fallback,exhaustive);
+  else void loadAll(false,undefined,exhaustive);
   return cleanup;
- },[status,day,articleKey,threadQuery,revision,persistKey,token,controlsReady]);
+ },[status,day,articleKey,query,revision,persistKey,token,controlsReady]);
  useEffect(()=>()=>{activeRequest.current?.abort();window.clearTimeout(syncTimer.current)},[]);
  const renderedCriteria=useRef(JSON.stringify([viewScope,status,day,articleKey,query]));
  useEffect(()=>{const key=JSON.stringify([viewScope,status,day,articleKey,query]);if(controlsReady&&renderedCriteria.current!==key){renderedCriteria.current=key;setRenderLimit(120)}},[viewScope,controlsReady,status,day,articleKey,query]);
+ function revealMore(){
+  const displayed=status==="all"&&query.trim()?eventRows.length:rows.length;
+  if(renderLimit<displayed)setRenderLimit(v=>Math.min(v+120,displayed));
+  else void loadNextPage();
+ }
  useEffect(()=>{
   const el=moreRef.current;if(!el)return;
-  const io=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))setRenderLimit(v=>Math.min(v+120,Math.max(rows.length,120)))},{rootMargin:"360px 0px"});
+  const io=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))revealMore()},{rootMargin:"360px 0px"});
   io.observe(el);return()=>io.disconnect()
- },[rows.length,status,query]);
+ },[rows.length,status,query,renderLimit,loading,loadedPage,savedDisplay]);
  const eventRows=useMemo(()=>{if(status!=="all")return rows;const q=query.trim().toLowerCase();if(!q)return rows;return rows.filter(r=>[r.actor_name,r.actor_url,r.article_title,r.body].some(v=>String(v||"").toLowerCase().includes(q)))},[rows,status,query]);
  const visibleEventRows=useMemo(()=>eventRows.slice(0,renderLimit),[eventRows,renderLimit]);
  const visibleThreadRows=useMemo(()=>rows.slice(0,renderLimit),[rows,renderLimit]);
- const complete=!loading&&!error&&rows.length>=total,shownTotal=status==="all"&&query.trim()?eventRows.length:total;
+ const complete=!loading&&!error&&!savedDisplay&&rows.length>=total,shownTotal=status==="all"&&query.trim()?eventRows.length:total;
  if(!controlsReady)return <section className="micf"><h2>コメント・返信履歴</h2><p className="micf-empty">コメント履歴を確認中…</p></section>;
  return <section className="micf" aria-busy={syncPhase==="initial"&&loading}>
-  <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存済みの全コメント・全返信を、会話数ではなく1件ずつ全部表示します。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{n(shownTotal)}件</strong></header>
+  <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存済みの全コメント・全返信を、会話数ではなく1件ずつ全部表示します。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{status==="all"&&query.trim()&&!complete?<small>検索中（暫定）</small>:null}{n(shownTotal)}件</strong></header>
+  {savedDisplay?<div className="micf-load-state" role="status"><b>{error?"前回保存分を表示・最新未確認":"前回保存分を表示・最新確認中"}</b><span>保存 {date(new Date(savedDisplay).toISOString())}</span></div>:null}
   {syncPhase!=="idle"?<div className={`micf-sync-scene ${syncPhase}`}><div className="micf-sync-track"><i/><i/><i/><i/></div><b>{syncMessage}</b><span>{syncPhase==="initial"?`${n(rows.length)} / ${total?n(total):"…"}件`:"保存済み表示はそのまま"}</span></div>:<div className="micf-load-state done"><b>{complete?"全履歴 保存済み":"保存済み履歴"}</b><span>{n(rows.length)} / {n(total)}件</span></div>}
   <div className="micf-tabs">{[["all","すべて（全コメント）"],["pending","要対応"],["unreplied","未返信"],["followup_pending","相手返信"],["heart_closed","あなたの♡で終了"],["replied","自分返信"]].map(x=><button key={x[0]} className={status===x[0]?"active":""} onClick={()=>setStatus(x[0])}>{x[1]}</button>)}</div>
   <div className="micf-tools"><label><span>コメント日</span><input type="date" value={day} onChange={e=>{setDay(e.target.value);setArticleKey("")}}/></label><select value={articleKey} onChange={e=>setArticleKey(e.target.value)} disabled={!day}><option value="">{day?`この日の記事すべて (${articles.length})`:"日付を選択すると記事一覧"}</option>{articles.map(a=><option key={a.article_key} value={a.article_key}>{a.title}（{n(a.comment_count_day)}件）</option>)}</select><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="名前・記事・コメント本文" onKeyDown={e=>{if(e.key==="Enter")setQuery(draft)}}/><button onClick={()=>setQuery(draft)}>検索</button>{day?<button onClick={()=>{setDay("");setArticleKey("")}}>日付解除</button>:null}<button type="button" onClick={()=>void collectComments(articleKey||null,true)} disabled={collecting||!persistKey}>{collecting?"noteから取得中…":"noteからコメントを取得"}</button></div>
   {collectionMessage?<div className="micf-load-state" role="status" aria-live="polite"><b>{collectionMessage}</b></div>:null}
-  {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length?<p className="micf-empty">コメント全履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}</article>})}</div>{visibleEventRows.length<eventRows.length?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(eventRows.length)}件を表示</b><span>下へ進むと続きを表示します</span></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(rows.length)}件を表示</b><span>下へ進むと続きを表示します</span></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
+  {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length?<p className="micf-empty">コメント履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}</article>})}</div>{visibleEventRows.length<eventRows.length||(!query.trim()&&rows.length<total)?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(query.trim()?eventRows.length:total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">{query.trim()&&!complete?(loading?"全履歴を検索中…":"全履歴の検索を完了できませんでした"):"この条件のコメント履歴はありません。"}</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length||rows.length<total?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
  </section>
 }
 

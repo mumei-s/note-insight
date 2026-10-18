@@ -8,7 +8,7 @@ const event=(key,body,extra={})=>({comment_key:key,body,actor_name:'相手',acto
 const saved=rows=>({version:1,rows,total:rows.length,latestAt:rows[0]?.occurred_at||null,savedAt:1});
 const response=(rows,total=rows.length)=>Response.json({ok:true,rows,total});
 async function settle(work=()=>{}){await React.act(async()=>{work();for(let i=0;i<5;i++)await pause()})}
-async function fixture(t,{snapshot=null,fetch,refreshFetch=async()=>Response.json({ok:true,paused:true,reason:'maintenance'}),globals={},fallback=async()=>{throw new Error('offline')}}={}){
+async function fixture(t,{snapshot=null,stored=null,storedToken="token-a",fetch,refreshFetch=async()=>Response.json({ok:true,paused:true,reason:'maintenance'}),globals={},fallback=async()=>{throw new Error('offline')}}={}){
  const writes=[],reads=[];
  const h=await sceneFixture(t,{fetch:(url,init)=>String(url).includes('/insight-comment-refresh')?refreshFetch(url,init):fetch(url,init),globals:{IntersectionObserver:class{observe(){}disconnect(){}},...globals},dependencies:{
   './creator-avatar':{CreatorAvatar:()=>React.createElement('span',{className:'fixture-avatar'})},
@@ -16,22 +16,25 @@ async function fixture(t,{snapshot=null,fetch,refreshFetch=async()=>Response.jso
   './insight-persistent-cache':{readInsightSnapshot:async key=>{reads.push(key);return typeof snapshot==='function'?snapshot(key):snapshot},writeInsightSnapshot:async(key,value)=>{writes.push({key,value})}},
  }});
  h.w.localStorage.setItem(tokenKey,'token-a');
+ const copies=h.load('src/insight-saved-view.ts');
+ if(stored)copies.writeSavedInsightView('comments-default',{account:'account_a',token:storedToken},{rows:stored.rows,total:stored.total},stored.savedAt||1);
  const Component=h.load(process.env.COMMENTS_REPRO_SOURCE||'src/member-insight-comments-final.tsx').MemberInsightCommentsFinal;
- return{...h,Component,writes,reads,start:props=>h.render(Component,{noteId:'account_a',...props}),body:()=>h.w.document.querySelector('.micf')?.textContent||''};
+ return{...h,Component,writes,reads,savedView:()=>copies.readSavedInsightView('comments-default',{account:'account_a',token:'token-a'}),start:props=>h.render(Component,{noteId:'account_a',...props}),body:()=>h.w.document.querySelector('.micf')?.textContent||''};
 }
 
-test('起動時は保存済み本文を先に出さず、最新本文と♡をアイコン待ちなしで表示する',async t=>{
+test('起動時は前回保存本文を確認中として表示し、最新本文と♡へアイコン待ちなしで置換する',async t=>{
  let deliver,iconCalls=0;
  const old=event('c1','古い本文',{is_creator_liked:false,actor_image_url:'https://images.test/saved.png'});
- const h=await fixture(t,{snapshot:saved([old]),fetch:async(url)=>{
+ const h=await fixture(t,{stored:saved([old]),fetch:async(url)=>{
   if(String(url).includes('creator-icons')){iconCalls++;return new Promise(()=>{})}
   return new Promise(resolve=>{deliver=()=>resolve(response([event('c1','最新の本文',{is_creator_liked:true})]))});
  }});
  await h.start();
- assert.doesNotMatch(h.body(),/古い本文|最新の本文/);
+ assert.match(h.body(),/古い本文/);assert.match(h.body(),/前回保存分を表示・最新確認中/);assert.doesNotMatch(h.body(),/最新の本文/);
  await settle(deliver);
  assert.match(h.body(),/最新の本文/);assert.doesNotMatch(h.body(),/古い本文/);
- assert.match(h.body(),/♥ あなたの♡/);assert.ok(iconCalls>0);
+ assert.match(h.body(),/♥ あなたの♡/);assert.equal(iconCalls,0,"保存済みアイコンを使い余分な取得をしない");
+ assert.doesNotMatch(h.body(),/前回保存分を表示・最新確認中/);
  assert.equal(h.writes.at(-1).value.rows[0].body,'最新の本文');
  assert.equal(h.writes.at(-1).value.rows[0].actor_image_url,'https://images.test/saved.png');
 });
@@ -81,20 +84,23 @@ test('期限を過ぎた同session履歴と明示更新は表示を保って新�
  await settle(deliver);assert.match(h.body(),/更新後のコメント/);
 });
 
-test('全履歴の複数ページを失わず保存し、アイコン不応答でも先に本文を表示する',async t=>{
- const events=Array.from({length:620},(_,i)=>event('c'+i,'履歴'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString()}));
+test('起動は500件だけ確認し、続きの操作で次ページを読み保存コピーは500件に制限する',async t=>{
+ const events=Array.from({length:620},(_,i)=>event('c'+i,'履歴'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString()})),calls=[];
  let page2;
  const h=await fixture(t,{fetch:async(url,init)=>{
   if(String(url).includes('creator-icons'))return new Promise(()=>{});
-  const body=JSON.parse(init.body);
+  const body=JSON.parse(init.body);calls.push(body);
   if(body.page===2)return new Promise(resolve=>{page2=()=>resolve(response(events.slice(500),620))});
   return response(events.slice(0,body.pageSize),620);
  }});
- await h.start();await settle();assert.match(h.body(),/履歴0/);assert.match(h.body(),/620件/);assert.equal(h.writes.length,0);
- await settle(page2);
- const list=h.writes.at(-1).value.rows;
- assert.equal(list.length,620);assert.equal(new Set(list.map(row=>row.comment_key)).size,620);
- assert.equal(list[0].comment_key,'c0');assert.equal(list.at(-1).comment_key,'c619');
+ await h.start();await settle();assert.match(h.body(),/履歴0/);assert.match(h.body(),/620件/);
+ assert.deepEqual(calls.map(x=>[x.page,x.pageSize]),[[1,500]]);assert.equal(h.savedView().value.rows.length,500);
+ for(let i=0;i<5;i++)await h.click(h.w.document.querySelector('.micf-more button'));
+ assert.deepEqual(calls.map(x=>x.page),[1,2]);await settle(page2);
+ await h.click(h.w.document.querySelector('.micf-more button'));
+ assert.equal(h.w.document.querySelectorAll('.micf-event-list article').length,620);assert.match(h.body(),/履歴619/);
+ assert.equal(h.savedView().value.rows.length,500);assert.equal(h.savedView().value.total,620);
+ assert.equal(h.writes.at(-1).value.rows.length,500,'legacy fallbackも全本文を複製しない');
 });
 
 test('対応状況フィルター・会話詳細・最後の返信への♡照合を維持する',async t=>{
@@ -290,6 +296,7 @@ test('続きのページが欠けた時は全履歴成功とせず不完全な�
  const rows=Array.from({length:500},(_,i)=>event('c'+i,'途中までのコメント'+i,{actor_image_url:'https://images.test/peer.png'}));
  const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);return response(body.page===1?rows.slice(0,body.pageSize):[],620)}});
  await h.start();await settle();
+ for(let i=0;i<5;i++)await h.click(h.w.document.querySelector(".micf-more button"));
  assert.match(h.body(),/途中までのコメント0/);assert.match(h.body(),/COMMENT_HISTORY_INCOMPLETE/);
  assert.doesNotMatch(h.body(),/保存先の全履歴 読込完了/);assert.equal(h.writes.length,0);
 });
@@ -302,11 +309,11 @@ test('本文を返さない401でも保存履歴やDB代替を認証の代わり
  assert.equal(fallbackCalls,0);assert.equal(h.writes.length,0);
 });
 
-test('620件を確認した直後の戻りは本文を保ちprobe/full/note取得を追加しない',async t=>{
+test('620件中の先頭500件を確認した直後の戻りで追加通信しない',async t=>{
  const rows=Array.from({length:620},(_,i)=>event('c'+i,'保持した本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'})),calls=[];
  let collections=0;
  const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);return response(rows.slice((body.page-1)*body.pageSize,body.page*body.pageSize),620)},refreshFetch:async()=>{collections++;return Response.json({ok:true,paused:true,reason:'maintenance'})}});
- await h.start();await settle();assert.equal(h.writes.at(-1).value.rows.length,620);
+ await h.start();await settle();assert.equal(h.savedView().value.rows.length,500);
  const before={reads:calls.length,collections,writes:h.writes.length};
  await h.render(()=>null,{});await h.start();await settle();
  assert.equal(calls.length,before.reads);assert.equal(collections,before.collections);assert.equal(h.writes.length,before.writes);
@@ -333,28 +340,28 @@ test('戻りで日付・記事・検索・対応状況と確認済み♡を復�
  assert.match(h.body(),/選択した会話/);assert.match(h.body(),/最終返信に相手さんの♡あり/);
 });
 
-test('期限超過の背景ページ取得で確認済みの末尾を消さず全件完了後に削除と更新を反映する',async t=>{
+test('期限超過でも現在の表示範囲だけ再確認し、表示中の古い末尾は更新完了まで保つ',async t=>{
  let now=Date.now(),updating=false,deliverPage2;
  class Clock extends Date{static now(){return now}}
- const rows=Array.from({length:620},(_,i)=>event('c'+i,'保存本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'})),current=rows.filter(row=>row.comment_key!=='c618').map(row=>row.comment_key==='c619'?{...row,body:'最新の末尾本文'}:row);
- const h=await fixture(t,{globals:{Date:Clock,IntersectionObserver:class{observe(){ }disconnect(){}}},fetch:async(_url,init)=>{
-  const body=JSON.parse(init.body),source=updating?current:rows;
+ const rows=Array.from({length:620},(_,i)=>event('c'+i,'保存本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'})),current=rows.filter(row=>row.comment_key!=='c618').map(row=>row.comment_key==='c619'?{...row,body:'最新の末尾本文'}:row),calls=[];
+ const h=await fixture(t,{globals:{Date:Clock},fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body),source=updating?current:rows;calls.push({...body,updating});
   if(updating&&body.page===2)return new Promise(resolve=>{deliverPage2=()=>resolve(response(current.slice(500),619))});
   return response(source.slice((body.page-1)*body.pageSize,body.page*body.pageSize),source.length);
  }});
- await h.start();await settle();await h.render(()=>null,{});now+=61000;updating=true;
- await h.start();await settle();
- assert.match(h.w.document.querySelector('.micf-more').textContent,/120 \/ 620件を表示/,'新しい500件だけで以前の620件を切り落とさない');
- assert.equal(h.w.document.querySelector('.micf-head strong').textContent,'619件');
- await settle(deliverPage2);
- assert.equal(h.writes.at(-1).value.rows.length,619);assert.equal(h.writes.at(-1).value.rows.at(-1).body,'最新の末尾本文');assert.ok(!h.writes.at(-1).value.rows.some(row=>row.comment_key==='c618'));
+ await h.start();await settle();for(let i=0;i<6;i++)await h.click(h.w.document.querySelector('.micf-more button'));
+ assert.match(h.body(),/保存本文619/);
+ await h.render(()=>null,{});now+=61000;updating=true;await h.start();await settle();
+ assert.match(h.body(),/保存本文619/,'表示中の末尾は更新途中で消さない');assert.equal(h.w.document.querySelector('.micf-head strong').textContent,'619件');
+ await settle(deliverPage2);assert.match(h.body(),/最新の末尾本文/);assert.doesNotMatch(h.body(),/保存本文618/);
+ assert.deepEqual(calls.filter(x=>x.updating).map(x=>x.page),[1,2]);assert.equal(h.savedView().value.rows.length,500);
 });
 
-test('自動note確認が変更なしなら最初に読んだ全履歴をもう一度取得しない',async t=>{
+test('自動note確認が変更なしなら最初の表示ページをもう一度取得しない',async t=>{
  let deliverRefresh;
  const calls=[],rows=Array.from({length:620},(_,i)=>event('c'+i,'履歴'+i,{actor_image_url:'https://images.test/peer.png'}));
  const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);return response(rows.slice((body.page-1)*body.pageSize,body.page*body.pageSize),620)},refreshFetch:async()=>new Promise(resolve=>{deliverRefresh=()=>resolve(Response.json({ok:true,articles:3,changedComments:0,unchangedComments:620,failedArticles:0}))})});
- await h.start();await settle();const before=calls.length;assert.equal(h.writes.at(-1).value.rows.length,620);
+ await h.start();await settle();const before=calls.length;assert.equal(h.savedView().value.rows.length,500);
  await settle(deliverRefresh);assert.equal(calls.length,before);assert.match(h.body(),/履歴0/);
 });
 
@@ -374,4 +381,79 @@ test('本人切替は以前の表示条件を混ぜず新scopeの最新確認を
  h.w.localStorage.setItem(tokenKey,'token-b');await h.start({noteId:'account_b'});await settle();
  assert.equal(h.w.document.querySelector('.micf-tabs .active').textContent,'すべて（全コメント）');assert.equal(h.w.document.querySelector('input[type="date"]').value,'');assert.match(h.body(),/Bの本文/);assert.doesNotMatch(h.body(),/Aの本文|Aの絞込み会話/);
  assert.ok(requests.some(request=>request.token==='token-b'&&!request.body.action));assert.ok(!requests.some(request=>request.token==='token-b'&&request.body.action==='comments_filtered'));
+});
+
+
+test('4,464件の通常起動は先頭500件だけを取得し全履歴確認済みと表示しない',async t=>{
+ const calls=[],rows=Array.from({length:500},(_,i)=>event('c'+i,'通常表示'+i,{actor_image_url:'https://images.test/peer.png'}));
+ const h=await fixture(t,{fetch:async(_url,init)=>{calls.push(JSON.parse(init.body));return response(rows,4464)}});
+ await h.start();await settle();assert.deepEqual(calls.map(p=>[p.page,p.pageSize]),[[1,500]]);
+ assert.equal(h.savedView().value.rows.length,500);assert.equal(h.savedView().value.total,4464);
+ assert.doesNotMatch(h.body(),/全履歴 保存済み|保存先の全履歴を確認しました/);
+ assert.match(h.body(),/表示分を確認しました/);
+});
+
+test('新しいdocumentでも同じtokenの前回表示分を同期表示し現在ページを裏で確認する',async t=>{
+ const first=await fixture(t,{fetch:async()=>response([event('c1','前回起動の本文',{actor_image_url:'https://images.test/peer.png'})])});
+ await first.start();const entries=Object.keys(first.w.localStorage).map(key=>[key,first.w.localStorage.getItem(key)]);await first.render(()=>null,{});
+ let deliver;const calls=[];
+ const second=await fixture(t,{fetch:async(_url,init)=>{calls.push(JSON.parse(init.body));return new Promise(resolve=>{deliver=()=>resolve(response([event('c1','今回確認した本文',{is_creator_liked:true,actor_image_url:'https://images.test/peer.png'})]))})}});
+ for(const [key,value]of entries)second.w.localStorage.setItem(key,value);
+ await second.start();assert.match(second.body(),/前回起動の本文/);assert.match(second.body(),/前回保存分を表示・最新確認中/);
+ assert.deepEqual(calls.map(p=>[p.page,p.pageSize]),[[1,500]]);
+ await settle(deliver);assert.match(second.body(),/今回確認した本文/);assert.doesNotMatch(second.body(),/前回起動の本文|前回保存分を表示/);
+});
+
+test('同じnoteでも別tokenの保存コピーは表示しない',async t=>{
+ const h=await fixture(t,{stored:saved([event('old','別tokenの私有本文')]),storedToken:'token-old',fetch:async()=>new Promise(()=>{})});
+ await h.start();assert.doesNotMatch(h.body(),/別tokenの私有本文|前回保存分を表示/);assert.equal(h.savedView(),null);
+});
+
+test('保存分を表示した後の401は本文と表示コピーを除き再利用しない',async t=>{
+ let deliver;const h=await fixture(t,{stored:saved([event('old','失効後に見せない本文')]),fetch:async()=>new Promise(resolve=>{deliver=()=>resolve(new Response('invalid',{status:401}))})});
+ await h.start();assert.match(h.body(),/失効後に見せない本文/);
+ await settle(deliver);assert.doesNotMatch(h.body(),/失効後に見せない本文/);assert.match(h.body(),/HTTP_401/);assert.equal(h.savedView(),null);
+});
+
+test('全体検索の明示時だけ古いページまで確認し検索途中は暫定と示す',async t=>{
+ const rows=Array.from({length:620},(_,i)=>event('c'+i,i===619?'末尾にある検索語':'通常本文'+i,{actor_image_url:'https://images.test/peer.png'})),calls=[];
+ let deliver;
+ const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);if(body.page===2)return new Promise(resolve=>{deliver=()=>resolve(response(rows.slice(500),620))});return response(rows.slice(0,500),620)}});
+ await h.start();assert.equal(calls.length,1);await h.change(h.w.document.querySelector('.micf-tools input[placeholder]'),'検索語');await h.click([...h.w.document.querySelectorAll('.micf-tools button')].find(x=>x.textContent==='検索'));await settle();
+ assert.deepEqual(calls.map(p=>p.page),[1,1,2]);assert.match(h.body(),/全履歴を検索中/);assert.match(h.body(),/検索中（暫定）/);assert.doesNotMatch(h.body(),/この条件のコメント履歴はありません/);
+ await settle(deliver);assert.match(h.body(),/末尾にある検索語/);assert.match(h.body(),/全履歴の検索完了/);assert.equal(h.w.document.querySelector('.micf-head strong').textContent,'1件');
+});
+
+test('対応状況の一覧も先頭100件だけ取得し続きを押した分だけ追加する',async t=>{
+ const roots=Array.from({length:250},(_,i)=>({root_key:'r'+i,root_body:'未返信会話'+i,status:'unreplied',actor_image_url:'https://images.test/peer.png'})),calls=[];
+ const h=await fixture(t,{fetch:async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);return body.action==='comments_filtered'?response(roots.slice((body.page-1)*100,body.page*100),250):response([])}});
+ await h.start();await h.click([...h.w.document.querySelectorAll('.micf-tabs button')].find(x=>x.textContent==='未返信'));await settle();
+ assert.deepEqual(calls.filter(p=>p.action==='comments_filtered').map(p=>[p.page,p.pageSize]),[[1,100]]);assert.equal(h.w.document.querySelectorAll('.micf-thread-list details').length,100);
+ await h.click(h.w.document.querySelector('.micf-more button'));assert.deepEqual(calls.filter(p=>p.action==='comments_filtered').map(p=>p.page),[1,2]);
+ assert.match(h.body(),/250件/);assert.doesNotMatch(h.body(),/全履歴 保存済み/);
+});
+
+test('続き取得中に確認済みの別フィルターへ移動しても続きボタンが固まらない',async t=>{
+ const events=Array.from({length:500},(_,i)=>event('c'+i,'全コメント'+i,{actor_image_url:'https://images.test/peer.png'})),roots=Array.from({length:250},(_,i)=>({root_key:'r'+i,root_body:'未返信'+i,status:'unreplied',actor_image_url:'https://images.test/peer.png'})),calls=[];
+ let deliver;
+ const h=await fixture(t,{fetch:async(_url,init)=>{const p=JSON.parse(init.body);calls.push(p);if(p.action==='comments_filtered')return response(roots.slice((p.page-1)*100,p.page*100),250);if(p.page===2)return new Promise(resolve=>{deliver=()=>resolve(response([event('late','中断された続き')],620))});return response(events,620)}});
+ const tab=name=>[...h.w.document.querySelectorAll('.micf-tabs button')].find(x=>x.textContent===name);
+ await h.start();await h.click(tab('未返信'));await h.click(tab('すべて（全コメント）'));
+ for(let i=0;i<5;i++)await h.click(h.w.document.querySelector('.micf-more button'));
+ await h.click(tab('未返信'));assert.equal(h.w.document.querySelector('.micf-more button').disabled,false);
+ await h.click(h.w.document.querySelector('.micf-more button'));assert.deepEqual(calls.filter(p=>p.action==='comments_filtered').map(p=>p.page),[1,2]);
+ await settle(deliver);assert.doesNotMatch(h.body(),/中断された続き/);assert.match(h.body(),/未返信0/);
+});
+
+test('壊れた保存行は描画せず最新確認を行う',async t=>{
+ const h=await fixture(t,{stored:{rows:[null],total:1,savedAt:1},fetch:async()=>new Promise(()=>{})});
+ await h.start();assert.doesNotMatch(h.body(),/前回保存分を表示/);assert.match(h.body(),/コメント履歴を読み込み中/);
+});
+
+
+test('全体検索の途中ページが失敗した時は部分結果を検索0件の確定として扱わない',async t=>{
+ const rows=Array.from({length:500},(_,i)=>event('c'+i,'先頭本文'+i,{actor_image_url:'https://images.test/peer.png'}));
+ const h=await fixture(t,{fetch:async(_url,init)=>{const p=JSON.parse(init.body);if(p.page===2)throw new Error('offline');return response(rows,620)}});
+ await h.start();await h.change(h.w.document.querySelector('.micf-tools input[placeholder]'),'未取得の検索語');await h.click([...h.w.document.querySelectorAll('.micf-tools button')].find(x=>x.textContent==='検索'));await settle();
+ assert.match(h.body(),/全履歴の検索を完了できませんでした/);assert.match(h.body(),/検索中（暫定）/);assert.doesNotMatch(h.body(),/この条件のコメント履歴はありません/);
 });
