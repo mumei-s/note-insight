@@ -10,7 +10,7 @@ const code=source.slice(source.indexOf('function galleryProfileGraphemes('),sour
  source.slice(source.indexOf('function findActivity('),source.indexOf('function recordHeading('));
 function api(intl=Intl){
  const context=vm.createContext({Intl:intl});
- vm.runInContext(code+';globalThis.api={galleryProfileGraphemes,galleryProfileLines,escapeGalleryProfileTex,activityText,insertActivityAt,findActivity};',context);
+ vm.runInContext(code+';globalThis.api={galleryProfileGraphemes,galleryProfileWidth,galleryProfileChunks,galleryProfileLines,galleryProfileLayout,escapeGalleryProfileTex,activityText,insertActivityAt,findActivity};',context);
  return context.api;
 }
 const row={gallery126:true,creator:'猫好き🌱',profileText:'会社員とイラスト制作。親子で楽しむ物語を毎日発信しています。'};
@@ -20,7 +20,7 @@ const renderedText=html=>html.replace(/<annotation[\s\S]*?<\/annotation>/g,'').r
 
 test('gallery profiles use the requested smaller note formula without changing the normal likes profile',()=>{
  const math=api().activityText(row);
- assert.ok(math.startsWith('$${\\footnotesize\\begin{array}{l}\\text{'));
+ assert.ok(math.startsWith('$${\\scriptsize\\begin{array}{l}\\text{'));
  assert.ok(math.endsWith('\\end{array}}$$'));
  assert.equal(math.match(/\$\$/g).length,2);
  assert.ok(math.includes('\\\\\\text{'));
@@ -28,8 +28,8 @@ test('gallery profiles use the requested smaller note formula without changing t
 });
 
 test('wrapping preserves the complete profile and never cuts a grapheme or loses an original line',()=>{
- const text='👨‍👩‍👧‍👦🇯🇵か\u3099🎃 お絵描きと物語。'.repeat(30)+'\nhttps://example.com/a_very_long_address?tag=cat&n=2\n\n最後まで残る文章';
- const lines=Array.from(api().galleryProfileLines(text));
+ const text='👨‍👩‍👧‍👦🇯🇵か\u3099🎃 お絵描きと物語。'.repeat(30)+'\nhttps://example.com/profile?tag=cat&n=2\n\n最後まで残る文章';
+ const lines=Array.from(api().galleryProfileLayout(text).lines);
  assert.equal(lines.join(''),text.replaceAll('\n',''));
  assert.ok(lines.includes(''));
  assert.ok(lines.length>10);
@@ -48,9 +48,55 @@ test('profile punctuation and apparent TeX commands are text, never executable m
 
 test('combining accents and punctuation keep their Unicode code points instead of becoming TeX accents',()=>{
  const escaped=api().escapeGalleryProfileTex('発信します( ´͈ ॢꇴ `͈ॢ)‼️ é --');
- for(const literal of ['\\char"348{}','\\char"962{}','\\char"203C{}','\\char"FE0F{}','\\char"E9{}','\\char"2D{}','\\verb|`|','\\space '])assert.ok(escaped.includes(literal),literal);
+ for(const literal of ['\\char"348{}','\\char"962{}','\\char"203C{}','\\char"FE0F{}','\\char"E9{}','\\char"2D{}','\\verb+`+','\\space '])assert.ok(escaped.includes(literal),literal);
  assert.ok(!escaped.includes('\u0348'));
  assert.ok(!escaped.includes('‼'));
+});
+
+test('Japanese closing punctuation stays with its text and opening brackets stay with their contents',()=>{
+ const mathApi=api(),text='ここは、心のサウナみたいなnoteです。日常の違和感を「じぶんを知る地図づくり」の活動につなげます。'.repeat(5);
+ const lines=Array.from(mathApi.galleryProfileLines(text));
+ assert.equal(lines.join(''),text);
+ for(const line of lines){
+  assert.ok(!/^[、。，．）」』】]/u.test(line),line);
+  assert.ok(!/[（「『【]$/u.test(line),line);
+  assert.ok(mathApi.galleryProfileWidth(line)<=16.00001,line);
+ }
+});
+
+test('URLs are indivisible and a long URL selects a smaller whole-profile font',()=>{
+ const mathApi=api(),url='https://hasyamo-site.hasyamo.workers.dev/',profile={gallery126:true,creator:'はしゃも',profileText:'制作・相談受付中。事例・ポートフォリオ：'+url};
+ const layout=mathApi.galleryProfileLayout('プロフィール｜'+profile.creator+'さん：'+profile.profileText);
+ assert.equal(layout.font,'tiny');
+ assert.equal(layout.lines.filter(line=>line.includes(url)).length,1);
+ assert.equal(layout.lines.join(''),'プロフィール｜'+profile.creator+'さん：'+profile.profileText);
+ assert.ok(mathApi.activityText(profile).startsWith('$${\\tiny\\begin{array}{l}'));
+ for(const line of layout.lines)assert.ok(mathApi.galleryProfileWidth(line)<=layout.maxWidth+.00001,line);
+ const bracketed='作品（https://note.com/like_kame6186）の中の人。';
+ assert.ok(mathApi.galleryProfileLayout(bracketed).lines.some(line=>line.includes('（https://note.com/like_kame6186）')));
+ assert.throws(()=>mathApi.galleryProfileLayout('https://example.com/'+('a'.repeat(200))),/全文を保ったまま/);
+});
+
+test('note ruby delimiters never appear literally in a gallery formula',()=>{
+ const mathApi=api(),bio='カワイイの中に日々の機微や人間の気配を感じるものが好きです。《めじゅ》と呼んでくださいね。',formula=mathApi.activityText({gallery126:true,creator:'だんだんありがと@めじゅ',profileText:bio+' ｜ 区切り | 端'});
+ assert.ok(!/[｜|《》]/u.test(formula));
+ for(const literal of ['\\char"FF5C{}','\\char"7C{}','\\char"300A{}','\\char"300B{}'])assert.ok(formula.includes(literal),literal);
+ const apostrophe=mathApi.escapeGalleryProfileTex("Beyoncé's `本`");
+ assert.ok(!apostrophe.includes('|'));
+ if(katex)assert.equal(renderedText(katex.renderToString(formula.slice(3,-3),{output:'mathml',strict:'ignore',trust:false,throwOnError:true})),'プロフィール｜だんだんありがと@めじゅさん：'+bio+' ｜ 区切り | 端');
+});
+
+test('every saved profile fits the phone budget and keeps every URL on one row',()=>{
+ const rows=JSON.parse(readFileSync('public/note-profile-card-halloween126.json','utf8')).preparedRows.filter(Boolean),mathApi=api();
+ assert.ok(rows.length>=125);
+ for(const prepared of rows){
+  const original='プロフィール｜'+prepared.creator+'さん：'+(prepared.profileText||'プロフィール未設定'),layout=mathApi.galleryProfileLayout(original);
+  assert.ok(['scriptsize','tiny'].includes(layout.font),prepared.urlname);
+  assert.equal(layout.lines.join(''),original.replace(/\r\n?|\n/g,''),prepared.urlname);
+  for(const line of layout.lines)assert.ok(mathApi.galleryProfileWidth(line)<=layout.maxWidth+.00001,prepared.urlname+':'+line);
+  for(const match of original.matchAll(/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+/giu))assert.equal(layout.lines.filter(line=>line.includes(match[0])).length,1,prepared.urlname+':'+match[0]);
+  assert.ok(!/[｜|《》]/u.test(mathApi.activityText(prepared)),prepared.urlname);
+ }
 });
 
 test('actual KaTeX preserves the kaomoji, consecutive spaces and accented Latin character',{skip:!katex},()=>{

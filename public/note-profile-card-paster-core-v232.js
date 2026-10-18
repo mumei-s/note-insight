@@ -49,11 +49,13 @@ const CARD_GAP_FAST=Math.round(5000/SPEED_FACTOR);
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=Math.round(30000/SPEED_FACTOR);
 let busy=false,stopRequested=false,viewCache=null,imageCommandCache=null,noteUrlCommandCache=null,selectionCache=null,dragging=false,longTimer=0,suppressClickUntil=0,wakeLock=null;const activeRequests=new Set();
+let cardPauseRequested=false,cardRunActive=false;
 const CARD_SESSION='card-'+Date.now()+'-'+Math.random().toString(36).slice(2);
 page.__MUMEI_PROFILE_CARD_CORE_BUSY__=()=>busy;
 page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__=saveOnce;
 page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=createCardsAtTap;
 page.__MUMEI_PROFILE_CARD_DELETE_CARDS__=bulkDelete;
+page.__MUMEI_PROFILE_CARD_PAUSE__=pauseCards;
 function fixedRunBusy(){try{return Boolean(page.__MUMEI_PROFILE_CARD_FIXED_BUSY__?.())}catch{return false}}
 function actionBlocked(){
  if(!busy&&!fixedRunBusy())return false;
@@ -1587,14 +1589,32 @@ async function pasteSavedSpecial(){
  }finally{await releaseAwake();busy=false;update()}
 }
 
+function pauseCards(){
+ if(!cardRunActive)return false;
+ cardPauseRequested=true;
+ setStatus('一時停止を受付｜処理中の通知カードを確定して保存します');
+ return true;
+}
+async function pauseCardsAtBoundary(done,total){
+ if(stopRequested)throw new Error('手動停止');
+ if(!cardPauseRequested||done>=total)return false;
+ const run=readRun()||{};
+ writeRun({...run,stage:'cards_building',paused:true,pauseStage:'cards',pausedAt:Date.now(),updatedAt:Date.now()});
+ await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+ await saveOnce('通知カード '+done+'/'+total+' 件で一時停止｜下書き保存中…');
+ if(stopRequested)throw new Error('手動停止');
+ setStatus('一時停止中｜通知カード '+done+'/'+total+' 件を保存済み。「再開」または②で続きから');
+ return true;
+}
 async function createCardsAtTap(){
- if(actionBlocked())return;busy=true;stopRequested=false;update();
+ if(actionBlocked())return;busy=true;stopRequested=false;cardPauseRequested=false;cardRunActive=true;update();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
-  const tappedAnchor=cardAnchorFromSelection(view);
+  const anchors={tappedAnchor:cardAnchorFromSelection(view)};
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
   if(stopRequested)throw new Error('手動停止');
-  await page.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__?.(view);
+  await page.__MUMEI_PROFILE_CARD_ENSURE_CARDS_READY__?.(view,anchors);
+  const tappedAnchor=anchors.tappedAnchor;
   if(stopRequested)throw new Error('手動停止');
   let run=readRun(),rows=Array.isArray(run?.rows)?run.rows:[];
   if(!run||!rows.length||!['images_ready','cards_building','complete'].includes(run.stage))throw new Error('先に①画像一覧を完成させてください');
@@ -1609,7 +1629,7 @@ async function createCardsAtTap(){
   let done=Math.min(existing.length,rows.length);
 
   if(done>=rows.length){
-   writeRun({...run,stage:'complete',updatedAt:Date.now()});
+   writeRun({...run,stage:'complete',paused:false,pauseStage:null,updatedAt:Date.now()});
    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
    setStatus('通知カードはすでに '+done+'/'+rows.length+' 件あります ✅');
    return
@@ -1627,19 +1647,21 @@ async function createCardsAtTap(){
   }
 
   const existingRecs=Array.isArray(run.cardKeys)?run.cardKeys:[];
-  writeRun({...run,stage:'cards_building',cardAnchorPos:cardAnchor(run,insertPos,view),cardKeys:existingRecs,updatedAt:Date.now()});
+  writeRun({...run,stage:'cards_building',paused:false,pauseStage:null,cardAnchorPos:cardAnchor(run,insertPos,view),cardKeys:existingRecs,updatedAt:Date.now()});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   let cardGapMs=CARD_GAP_FAST;
   setStatus('② 通知カードの続き｜'+done+'/'+rows.length+' 件済み');
 
   for(let i=done;i<rows.length;i++){
    if(stopRequested)throw new Error('手動停止');
+   if(await pauseCardsAtBoundary(i,rows.length))return;
    const row=rows[i];
    let made=null;
    setStatus('② 正規通知カード '+(i+1)+'/'+rows.length+'｜'+row.creator+'｜待機 '+(cardGapMs/1000).toFixed(1)+'秒');
    made=await createNativeCard(view,row,insertPos);
    insertPos=made.nextPos;
    await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+   if(await pauseCardsAtBoundary(i+1,rows.length))return;
    await sleep(cardGapMs);
 
    if((i+1)%10===0&&i+1<rows.length){
@@ -1653,13 +1675,13 @@ async function createCardsAtTap(){
   const doneRun=readRun()||{};
   const actualCards=resolveOwnedCardHits(view).length;
   if(actualCards!==rows.length)throw new Error('通知カード実数 '+actualCards+'/'+rows.length+'｜不足を検出。もう一度②を押せば続きから再開します');
-  writeRun({...doneRun,stage:'complete',cardsCompletedAt:Date.now(),updatedAt:Date.now()});
+  writeRun({...doneRun,stage:'complete',paused:false,pauseStage:null,cardsCompletedAt:Date.now(),updatedAt:Date.now()});
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   await saveOnce('② 正規通知カード '+rows.length+'/'+rows.length+' 完了｜最終保存中…');
   setStatus('完了 ✅ 画像一覧 '+rows.length+'件 → 通知カード '+rows.length+'件')
  }catch(e){
   setStatus('通知カード停止：'+(e?.message||String(e))+'｜完成分は保持。もう一度②で続きから再開できます',true)
- }finally{busy=false;update()}
+ }finally{cardRunActive=false;busy=false;update()}
 }
 
 async function bulkDelete(){
@@ -1697,7 +1719,7 @@ function stop(){stopRequested=true;abortActiveRequests();const scan=readScan();i
 function update(){
  const p=document.getElementById(PANEL);if(!p)return;
  p.querySelectorAll('textarea,input,select,button').forEach(x=>{
-  if(x.dataset.a==='stop'||x.dataset.ui||x.matches?.('[data-special-count]'))return;
+  if(x.dataset.a==='stop'||x.dataset.a==='pause'||x.dataset.galleryAction==='pause'||x.dataset.ui||x.matches?.('[data-special-count]'))return;
   x.disabled=busy||fixedRunBusy()
  })
 }
