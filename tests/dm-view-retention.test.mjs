@@ -26,21 +26,21 @@ async function fixture(t,{count=1200,legacy=false}={}){
  h.w.localStorage.setItem(tokenKey,'token-a');
  h.w.setInterval=(fn,ms)=>{const timer={fn,ms,cancelled:false};intervals.push(timer);return timer};h.w.clearInterval=timer=>{if(timer)timer.cancelled=true};
  const C=h.load('src/member-insight-dm.tsx').MemberInsightDm;
- return{...h,calls,renderDm:props=>h.render(C,{active:true,revision:0,...props}),open:()=>h.click(h.w.document.querySelector('.midm-threads button')),
-  poll:()=>settle(()=>intervals.findLast(timer=>timer.ms===2500&&!timer.cancelled).fn()),
+ return{...h,calls,renderDm:props=>h.render(C,{active:true,revision:0,...props}),open:()=>h.w.document.querySelector('.midm-threads button')?h.click(h.w.document.querySelector('.midm-threads button')):settle(),
+  poll:(advance=61000)=>settle(()=>{now+=advance;intervals.findLast(timer=>timer.ms===60000&&!timer.cancelled).fn()}),
   advance:ms=>{now+=ms},update:next=>{if('count'in next)count=next.count;if('savedAt'in next)savedAt=next.savedAt;if('runAt'in next)runAt=next.runAt;if('body'in next)body=next.body;if('failSummary'in next)failSummary=next.failSummary;if('failMessages'in next)failMessages=next.failMessages;if('people'in next)people=next.people;if('peoplePending'in next)peoplePending=next.peoplePending},
   count:action=>calls.filter(call=>call.action===action).length,text:()=>h.w.document.body.textContent};
 }
 
 test('検証済みDMは通常pollと60秒以内の復帰で再取得せず期限超は本文・選択を保持して確認する',async t=>{
  const h=await fixture(t);await h.renderDm();await h.open();await settle();
- assert.equal(h.count('person_messages'),3);const article=h.w.document.querySelector('.midm-message'),panel=h.w.document.querySelector('.midm-history-panel');panel.open=true;
+ assert.equal(h.count('person_messages'),1);const article=h.w.document.querySelector('.midm-message'),panel=h.w.document.querySelector('.midm-history-panel');panel.open=true;
  const before={summary:h.count('summary'),people:h.count('people'),stats:h.count('stats')};
- await h.poll();assert.equal(h.count('summary'),before.summary+1);assert.equal(h.count('person_messages'),3);assert.equal(h.count('people'),before.people);assert.equal(h.count('stats'),before.stats);
+ await h.poll(0);assert.equal(h.count('summary'),before.summary);assert.equal(h.count('person_messages'),1);assert.equal(h.count('people'),before.people);assert.equal(h.count('stats'),before.stats);
  h.advance(30000);await h.renderDm({active:false});await h.renderDm({active:true});await settle();
- assert.equal(h.count('summary'),before.summary+2);assert.equal(h.count('person_messages'),3);
- assert.equal(h.w.document.querySelector('.midm-message'),article);assert.equal(h.w.document.querySelector('.midm-history-panel'),panel);assert.equal(panel.open,true);assert.match(h.text(),/選択した相手/);assert.equal(h.w.document.querySelectorAll('.midm-message').length,1200);
- h.advance(60000);await h.renderDm({active:false});await h.renderDm({active:true});await settle();assert.equal(h.count('person_messages'),6);assert.equal(h.w.document.querySelector('.midm-message'),article);assert.equal(panel.open,true);
+ assert.equal(h.count('summary'),before.summary);assert.equal(h.count('person_messages'),1);
+ assert.equal(h.w.document.querySelector('.midm-message'),article);assert.equal(h.w.document.querySelector('.midm-history-panel'),panel);assert.equal(panel.open,true);assert.match(h.text(),/選択した相手/);assert.equal(h.w.document.querySelectorAll('.midm-message').length,500);
+ h.advance(60000);await h.renderDm({active:false});await h.renderDm({active:true});await settle();assert.equal(h.count('person_messages'),2);assert.equal(h.w.document.querySelector('.midm-message'),article);assert.equal(panel.open,true);
 });
 
 test('同じDM件数でも保存stampが変わった本文を読み直し編集を表示する',async t=>{
@@ -70,7 +70,7 @@ test('summary確認に失敗しても検証済みDM本文を保持し空や完�
  const h=await fixture(t,{count:1});await h.renderDm();await h.open();h.update({failSummary:true});await h.poll();assert.equal(h.count('person_messages'),1);assert.match(h.text(),/保存済み本文/);assert.match(h.text(),/SUMMARY_UNAVAILABLE/);
 });
 
-test('保存stampを返さない旧APIでは同数編集を見落とさないよう全件再確認する',async t=>{
+test('保存stampを返さない旧APIでも定期確認で表示ページの同数編集を確認する',async t=>{
  const h=await fixture(t,{count:1,legacy:true});await h.renderDm();await h.open();h.update({body:'旧APIの編集後本文'});await h.poll();assert.equal(h.count('person_messages'),2);assert.match(h.text(),/旧APIの編集後本文/);
 });
 

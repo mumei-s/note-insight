@@ -22,7 +22,8 @@ async function fixture(t, initialRows) {
     './creator-avatar': { CreatorAvatar: () => React.createElement('span', { className: 'midm-avatar' }) },
     './insight-account-store': { INSIGHT_TOKEN_KEY: 'fixture-token', currentStoredInsightAccount: () => ({ noteId: 'tester' }) },
     './insight-release': { CURRENT_DM_VERSION: '1.4.10', fetchInsightRelease: async () => ({ dmVersion: '1.4.10' }), versionDiffers: () => false },
-    './insight-view-lifecycle': { fetchInsightResource: (...args) => fetch(...args) },
+    './insight-view-lifecycle': { fetchInsightResource: (...args) => fetch(...args), isFreshInsightView: () => false },
+    './insight-saved-view': { readSavedInsightView: () => null, writeSavedInsightView: () => {}, removeSavedInsightView: () => {} },
   };
   const fetch = async (_url, init) => {
     const body = JSON.parse(init.body);
@@ -41,7 +42,7 @@ async function fixture(t, initialRows) {
   t.after(async () => { await React.act(async () => root.unmount()); w.close(); });
   await React.act(async () => { root.render(React.createElement(exports.MemberInsightDm)); await pause(); });
   await React.act(async () => { w.document.querySelector('.midm-threads button').click(); await pause(); });
-  return { w, refresh: async () => { hold = true; await React.act(async () => { intervals.filter(x => x.ms === 2500).at(-1).fn(); await pause(); }); },
+  return { w, refresh: async () => { hold = true; await React.act(async () => { intervals.filter(x => x.ms === 60000).at(-1).fn(); await pause(); }); },
     finish: async rows => { await React.act(async () => { finish(rows); await pause(); }); } };
 }
 
@@ -49,7 +50,7 @@ for (const rows of [[], [{ message_key: 'saved-a', body: '保存済みの本文'
   const h = await fixture(t, rows), view = h.w.document.querySelector('.midm-messages'), before = view.textContent;
   await h.refresh();
   assert.equal(h.w.document.querySelector('.midm-messages'), view);
-  assert.equal(view.textContent, before, '2500msの再確認で本文を消したり読込表示を再点灯させない');
+  assert.equal(view.textContent, before, '60秒の再確認で本文を消したり読込表示を再点灯させない');
   assert.doesNotMatch(view.textContent, /読み込み中/);
   await h.finish([...rows, { message_key: 'new-a', body: '新しく保存した本文' }]);
   assert.match(view.textContent, /新しく保存した本文/);

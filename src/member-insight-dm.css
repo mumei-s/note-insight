@@ -57,3 +57,5 @@
 .midm .midm-control details>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;min-height:42px;padding:7px 10px;font-size:13px;font-weight:700;color:#def8ff;background:#123044;border:1px solid #477d97;border-radius:8px;margin-top:6px}.midm-control details>summary b{font-size:11px;color:#9addf5}.midm .midm-control-detail{padding:6px 0;gap:5px}.midm .midm-head h2{margin:0 0 6px}.midm .midm-notice{font-size:11px;padding:6px;margin:6px 0}.midm .midm-threads button{padding:7px;gap:8px}.midm .midm-messages{min-height:0}
 
 .midm-read-status{display:grid;gap:3px;margin:6px 0;padding:7px 9px;border:1px solid #366174;border-radius:8px;background:#0c212e;font-size:12px}.midm-read-status span,.midm-read-status small{font-size:11px;color:#aac6d8;overflow-wrap:anywhere}
+
+.midm-message-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:12px}.midm-message-pages span{font-size:12px;color:#a9c6d5}.midm-message-pages button:disabled{opacity:.45;cursor:default}

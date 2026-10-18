@@ -11,8 +11,9 @@ const message=(body='保存済みの本文')=>({message_key:'saved',body,sent_at
 const summary=(messages=1)=>({messages,threads:1,readerStatus:[]});
 async function settle(fn=()=>{}){await React.act(async()=>{fn();for(let i=0;i<5;i++)await pause()})}
 async function fixture(t,handler,{globals={}}={}){
- let releaseChecks=0;
- const calls=[],intervals=[],h=await sceneFixture(t,{globals,dependencies:{
+ let releaseChecks=0,now=Date.now();
+ class Clock extends Date{static now(){return now}}
+ const calls=[],intervals=[],h=await sceneFixture(t,{globals:{Date:Clock,...globals},dependencies:{
   './creator-avatar':{CreatorAvatar:()=>React.createElement('span')},
   './insight-account-store':{INSIGHT_TOKEN_KEY:tokenKey,currentStoredInsightAccount:()=>({noteId:localStorage.getItem(tokenKey)==='token-b'?'account_b':'account_a'})},
   './insight-release':{CURRENT_DM_VERSION:'1.4.10',fetchInsightRelease:async()=>{releaseChecks++;return {dmVersion:'1.4.10'}},versionDiffers:()=>false},
@@ -24,7 +25,7 @@ async function fixture(t,handler,{globals={}}={}){
  const Component=h.load('src/member-insight-dm.tsx').MemberInsightDm;
  return{...h,calls,intervals,releaseChecks:()=>releaseChecks,start:(props={})=>h.render(Component,{active:true,revision:0,...props}),text:()=>h.w.document.body.textContent,
   open:()=>h.click(h.w.document.querySelector('.midm-threads button')),
-  poll:()=>settle(()=>intervals.filter(timer=>timer.ms===2500&&!timer.cancelled).at(-1).fn())};
+  poll:()=>settle(()=>{now+=61000;intervals.filter(timer=>timer.ms===60000&&!timer.cancelled).at(-1).fn()})};
 }
 function normal(body){
  if(body.action==='people')return response({rows:[person()]});
@@ -126,12 +127,15 @@ test('非表示で遅いDM取得を中断し通信を止め、復帰時の最新
  assert.match(h.text(),/復帰後の新しい本文/);assert.doesNotMatch(h.text(),/非表示前の遅い本文/);
 });
 
-test('500件を超える保存DMを全ページ表示して日時順を維持する',async t=>{
+test('500件を超える保存DMは表示ページだけ取得し過去を明示操作で表示する',async t=>{
  const rows=Array.from({length:620},(_,i)=>({message_key:'m'+i,body:'本文'+i,sent_at:new Date(Date.parse('2026-10-12T22:11:00Z')-i*1000).toISOString()}));
  const h=await fixture(t,async body=>body.action==='person_messages'?response({rows:rows.slice((body.page-1)*500,body.page*500),total:620}):normal(body));
  await h.start();await h.open();await settle();
  const displayed=[...h.w.document.querySelectorAll('.midm-message p')].map(row=>row.textContent);
- assert.equal(displayed.length,620);assert.equal(displayed[0],'本文619');assert.equal(displayed.at(-1),'本文0');
+ assert.equal(displayed.length,500);assert.equal(displayed[0],'本文499');assert.equal(displayed.at(-1),'本文0');
+ assert.deepEqual(h.calls.filter(call=>call.body.action==='person_messages').map(call=>call.body.page),[1]);
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='過去のDM'));
+ const older=[...h.w.document.querySelectorAll('.midm-message p')].map(row=>row.textContent);assert.equal(older.length,120);assert.equal(older[0],'本文619');assert.equal(older.at(-1),'本文500');
  assert.deepEqual(h.calls.filter(call=>call.body.action==='person_messages').map(call=>call.body.page),[1,2]);
  assert.equal(h.w.document.querySelector('.midm-error'),null);
 });
