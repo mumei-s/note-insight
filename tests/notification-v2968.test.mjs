@@ -220,21 +220,26 @@ test('filter and backend restriction fixes stay isolated',()=>{
 });
 
 
-test('previous-page notification rows appear only after a failed current server check',async t=>{
+test('credential-scoped previous notification page stays visible with an honest label after a failed current check',async t=>{
   let deliver;
-  const savedRows=[{id:'stored',raw_text:'前回保存の通知',notification_type:'tip',captured_at:'2026-10-08T00:00:00Z'}],storedJson=JSON.stringify(savedRows);
+  const savedRows=[{id:'stored',raw_text:'前回保存の通知',notification_type:'tip',captured_at:'2026-10-08T00:00:00Z'}],storedJson=JSON.stringify([{...savedRows[0],id:'legacy',raw_text:'連携前の旧board通知'}]);
   const h=await sceneFixture(t,{globals:{URLSearchParams},dependencies:{'./creator-avatar':{CreatorAvatar:()=>React.createElement('span'),creatorNoteId:()=>''},'./insight-account-store':{INSIGHT_TOKEN_KEY:'mumei-insight-access-token',currentStoredInsightAccount:()=>({noteId:'tester'})}},fetch:(_url,init)=>JSON.parse(init.body).action==='recent'?Promise.resolve(Response.json({ok:true,noteId:'tester',rows:[]})):new Promise(resolve=>{deliver=resolve})});
   h.w.localStorage.setItem('mumei-insight-access-token','fixture');
   h.w.localStorage.setItem('mumei-notification-board:tester',storedJson);
   const priorCheck=Date.now()-600000;h.w.localStorage.setItem('mumei-notification-board-meta:tester',JSON.stringify({serverCheckedAt:priorCheck}));
   h.w.localStorage.setItem('mumei-notification-reclassify-version:tester','action-v28-context:evidence-v2-articles');
+  h.load('src/insight-saved-view.ts').writeSavedInsightView('notifications',{account:'tester',token:'fixture'},{selection:{kind:'all',handlingStatus:'all',selectedDay:'',page:1},rows:savedRows,total:1,statusCounts:{all:1},categoryCounts:{all:1},updatedAt:'',syncAt:'',serverSync:{received:0,confirmed:0,source:''}},priorCheck);
   const Component=h.load('src/member-insight-notifications-final.tsx').MemberInsightNotificationsFinal;
   await h.render(Component,{noteId:'tester'});
-  assert.doesNotMatch(h.w.document.querySelector('.minf').textContent,/前回保存の通知/,'previous-launch disk rows do not flash as verified current data');
+  assert.match(h.w.document.querySelector('.minf-list').textContent,/前回保存の通知/,'the current credential-bound saved page is visible while the server check is pending');
+  assert.match(h.w.document.querySelector('.minf-saved-status').textContent,/前回表示分・最新確認中/);
+  assert.doesNotMatch(h.w.document.querySelector('.minf').textContent,/連携前の旧board通知/,'unbound legacy rows are not borrowed to populate the saved page');
   assert.equal(h.w.localStorage.getItem('mumei-notification-board:tester'),storedJson);
   await React.act(async()=>{deliver(Response.json({ok:false,error:'OFFLINE'},{status:502}));for(let i=0;i<5;i++)await pause()});
   assert.match(h.w.document.querySelector('.minf-list').textContent,/前回保存の通知/);
   assert.match(h.w.document.querySelector('.minf-error').textContent,/最新確認に失敗したため前回保存分を表示しています/);
+  assert.match(h.w.document.querySelector('.minf-saved-status').textContent,/前回表示分・最新確認に失敗/);
+  assert.doesNotMatch(h.w.document.querySelector('.minf').textContent,/連携前の旧board通知/,'network failure does not authorize an unbound legacy board');
   assert.equal(h.w.localStorage.getItem('mumei-notification-board:tester'),storedJson,'server failure does not erase saved history');
   assert.equal(JSON.parse(h.w.localStorage.getItem('mumei-notification-board-meta:tester')).serverCheckedAt,priorCheck,'an empty recent response cannot verify a previous-launch full board');
 });
