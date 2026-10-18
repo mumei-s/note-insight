@@ -17,7 +17,7 @@ async function fixture(t, file, component, props, handler, saved = {}) {
   for (const key of ['window', 'document', 'localStorage', 'HTMLElement', 'Element']) globalThis[key] = w[key];
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   w.localStorage.setItem('fixture-token', 'session-a');
-  for (const [key, value] of Object.entries(saved)) w.localStorage.setItem(key, value);
+  if (typeof saved !== 'function') for (const [key, value] of Object.entries(saved)) w.localStorage.setItem(key, value);
   Object.defineProperty(w.document, 'visibilityState', { value: 'visible', writable: true });
   const intervals = [], calls = [];
   w.setInterval = (fn, ms) => { const timer = { fn, ms, cancelled: false }; intervals.push(timer); return timer; };
@@ -26,12 +26,16 @@ async function fixture(t, file, component, props, handler, saved = {}) {
   const scope = { window: w, document: w.document, location: w.location, localStorage: w.localStorage, fetch, AbortController, console, setTimeout, clearTimeout, URL };
   const lifecycleExports = {};
   vm.runInNewContext(ts.transpileModule(readFileSync('src/insight-view-lifecycle.ts', 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { ...scope, exports: lifecycleExports });
+  const savedViewExports = {};
+  vm.runInNewContext(ts.transpileModule(readFileSync('src/insight-saved-view.ts', 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { ...scope, exports: savedViewExports });
+  if (typeof saved === 'function') saved(savedViewExports);
   const dependencies = {
     react: React, 'react/jsx-runtime': jsx,
     './creator-avatar': { CreatorAvatar: () => React.createElement('span'), creatorNoteId: row => row?.urlname || '' },
     './insight-account-store': { INSIGHT_TOKEN_KEY: 'fixture-token', currentStoredInsightAccount: () => ({ noteId: 'tester' }), readStoredInsightAccounts: () => [{ noteId: 'tester', memberToken: 'session-a' }] },
     './insight-release': { CURRENT_DM_VERSION: '1.4.10', fetchInsightRelease: async () => ({ dmVersion: '1.4.10' }), versionDiffers: () => false },
     './insight-view-lifecycle': lifecycleExports,
+    './insight-saved-view': savedViewExports,
     './insight-member-db-fallback': { memberDbReadFallback: async () => { throw new Error('fallback unavailable'); }, memberReadAuthFailure: msg => /LOGIN|SESSION|401|403/.test(msg) },
   };
   const exports = {};
@@ -72,21 +76,21 @@ test('お気に入りの古い遅延応答が新しい更新結果を上書き�
 });
 
 const socialQuery = { action: 'comparison', window: 'oldest', relationship: 'following_only', query: '', page: 1, pageSize: 50 };
-const socialSaved = { 'mumei-social-view-cache-v1:tester': JSON.stringify([{ key: 'tester|' + JSON.stringify(socialQuery), at: Date.now() - 600000, value: { noteId: 'tester', rows: [{ person_key: 'old', actor_name: '前回の人物', relation: 'following_only' }], total: 1 } }]) };
+const socialSaved = saved => saved.writeSavedInsightView('social-last', { account: 'tester', token: 'session-a' }, { query: socialQuery, payload: { ok: true, noteId: 'tester', rows: [{ person_key: 'old', actor_name: '前回の人物', relation: 'following_only' }], total: 1 } }, Date.now() - 600000);
 
-test('フォロー照合は前回ページの人物を先に出さず最新応答から開始する', async t => {
+test('フォロー照合は本人の前回ページを明示して表示し、最新応答へ置き換える', async t => {
   const latest = deferred();
   const h = await fixture(t, 'src/member-insight-social-v2.tsx', 'MemberInsightSocialV2', {}, async () => latest.promise, socialSaved);
   await h.act(() => new Promise(resolve => setTimeout(resolve, 5)));
-  assert.doesNotMatch(h.text(), /前回の人物/);
+  assert.match(h.text(), /前回の人物/); assert.match(h.text(), /前回表示分・最新確認中/);
   await h.act(() => latest.resolve(response({ noteId: 'tester', rows: [{ person_key: 'new', actor_name: '最新の人物', relation: 'following_only' }], total: 1 })));
-  assert.match(h.text(), /最新の人物/); assert.doesNotMatch(h.text(), /前回の人物/);
+  assert.match(h.text(), /最新の人物/); assert.doesNotMatch(h.text(), /前回の人物|前回表示分/);
 });
 
 test('フォロー照合は通信に失敗した場合に保存済み人物を復元する', async t => {
   const h = await fixture(t, 'src/member-insight-social-v2.tsx', 'MemberInsightSocialV2', {}, async () => { throw new Error('通信失敗'); }, socialSaved);
   await h.act(() => new Promise(resolve => setTimeout(resolve, 5)));
-  assert.match(h.text(), /前回の人物/); assert.match(h.text(), /読み込めませんでした/);
+  assert.match(h.text(), /前回の人物/); assert.match(h.text(), /最新確認できず/); assert.match(h.text(), /読み込めませんでした/);
 });
 
 test('マガジンは非表示中に通信せず、新鮮な復帰では再利用して明示更新で再確認する', async t => {
@@ -104,7 +108,7 @@ test('マガジンは非表示中に通信せず、新鮮な復帰では再利�
   await h.render({ ...props, active: true, revision: 1 }); assert.equal(calls, 2); assert.match(h.text(), /最新のマガジン2/);
 });
 
-test('DMは非表示中の通信を止め、変更のない復帰では本文を維持してsummaryだけ確認する', async t => {
+test('DMは非表示中の通信を止め、確認直後の復帰では本文を維持して通信を追加しない', async t => {
   const h = await fixture(t, 'src/member-insight-dm.tsx', 'MemberInsightDm', { active: false }, async (_url, body) => {
     if (body.action === 'people') return response({ rows: [{ person_key: 'person-a', peer_name: '相手A', peer_note_id: 'a' }] });
     if (body.action === 'person_messages') return response({ rows: [{ message_key: 'saved', body: '保存された本文' }], total: 1 });
@@ -116,11 +120,11 @@ test('DMは非表示中の通信を止め、変更のない復帰では本文を
   await h.render({ active: false }); const stoppedAt = h.calls.length;
   await h.act(() => { for (const timer of h.intervals.filter(x => !x.cancelled)) timer.fn(); h.w.dispatchEvent(new h.w.Event('focus')); });
   assert.equal(h.calls.length, stoppedAt);
-  await h.render({ active: true }); assert.equal(h.calls.length, stoppedAt + 1); assert.match(h.text(), /保存された本文/);
+  await h.render({ active: true }); assert.equal(h.calls.length, stoppedAt); assert.match(h.text(), /保存された本文/);
   await h.act(() => { h.w.document.visibilityState = 'hidden'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
   const hiddenAt = h.calls.length;
-  await h.act(() => { for (const timer of h.intervals.filter(x => !x.cancelled && x.ms === 2500)) timer.fn(); });
+  await h.act(() => { for (const timer of h.intervals.filter(x => !x.cancelled && x.ms === 60000)) timer.fn(); });
   assert.equal(h.calls.length, hiddenAt);
   await h.act(() => { h.w.document.visibilityState = 'visible'; h.w.document.dispatchEvent(new h.w.Event('visibilitychange')); });
-  assert.equal(h.calls.length, hiddenAt + 1); assert.match(h.text(), /保存された本文/);
+  assert.equal(h.calls.length, hiddenAt); assert.match(h.text(), /保存された本文/);
 });
