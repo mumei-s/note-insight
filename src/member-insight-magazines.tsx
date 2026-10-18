@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
-import { canRetainInsightView, isFreshInsightView } from "./insight-view-lifecycle";
+import { isFreshInsightView } from "./insight-view-lifecycle";
+import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import "./member-insight-magazines.css";
 
@@ -9,9 +10,19 @@ type SearchState = { day: string; query: string; rows: Row[]; searched: boolean;
 const blank = (): SearchState => ({ day: "", query: "", rows: [], searched: false, busy: false, error: "", signature: "" });
 const keyOf = (r: Row) => String(r.key || r.magazineKey || r.magazine_key || String(r.url || "").match(/\/m\/([^/?#]+)/)?.[1] || r.url || "");
 const number = (v: any) => Number(v || 0).toLocaleString("ja-JP");
-const date = (v: any) => { const d = new Date(String(v || "")); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }); };
+const date = (v: any) => { const d = new Date(typeof v==="number"?v:String(v || "")); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }); };
 const dayOf = (v: any) => { const d = new Date(String(v || "")); if (Number.isNaN(d.getTime())) return ""; const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d).map(x => [x.type, x.value])); return `${parts.year}-${parts.month}-${parts.day}`; };
 function localMatches(rows: Row[], day: string, query: string) { const q = query.trim().toLowerCase(); return rows.filter(a => (!day || dayOf(a.publishAt || a.publish_at) === day) && (!q || [a.title, a.author?.nickname, a.author?.urlname].some(v => String(v || "").toLowerCase().includes(q)))); }
+
+type SavedMagazines={mode:string;query:string;open:string|null;rows:Row[];total:number;visibleTotal:number;refreshed:string;states:Record<string,SearchState>};
+function readSavedMagazines(account:string,token:string){
+ const saved=readSavedInsightView<SavedMagazines>("magazines-last",{account,token}),x=saved?.value;
+ if(!saved||!x||!["all","owner","member"].includes(x.mode)||typeof x.query!=="string"||!(x.open===null||typeof x.open==="string")||!Array.isArray(x.rows)||x.rows.length>100||!x.rows.every(row=>row&&typeof row==="object"&&!Array.isArray(row))||!Number.isSafeInteger(x.total)||x.total<0||!Number.isSafeInteger(x.visibleTotal)||x.visibleTotal<x.rows.length||x.total<x.visibleTotal||typeof x.refreshed!=="string"||!x.states||typeof x.states!=="object"||Array.isArray(x.states))return null;
+ for(const state of Object.values(x.states))if(!state||typeof state.day!=="string"||typeof state.query!=="string"||!Array.isArray(state.rows)||state.rows.length>100||!state.rows.every(row=>row&&typeof row==="object"&&!Array.isArray(row))||typeof state.signature!=="string"||typeof state.searched!=="boolean")return null;
+ return saved;
+}
+function restoredStates(states:Record<string,SearchState>){return Object.fromEntries(Object.entries(states).map(([key,state])=>[key,{...state,busy:false,error:state.searched?"前回表示分です。最新確認は検索を押してください。":""}]))}
+function compactMagazine(row:Row):Row{return{key:keyOf(row),url:row.url,title:row.title,relation:row.relation,meNoteId:row.meNoteId,description:row.description,owner:row.owner,memberCount:row.memberCount??row.members?.length,followerCount:row.followerCount,noteCount:row.noteCount,members:Array.isArray(row.members)?row.members.slice(0,8):[],recentArticles:Array.isArray(row.recentArticles)?row.recentArticles.slice(0,12):[]}}
 
 function SearchProgress({ count }: { count: number }) {
   const [seconds, setSeconds] = useState(0);
@@ -23,19 +34,21 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   revision: number; accountKey: string; history: () => Promise<any>; search: (params: Record<string, unknown>, signal: AbortSignal) => Promise<any>; cached?: any; active?: boolean;
 }) {
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "", scope = JSON.stringify([accountKey, token]), verificationSignature = JSON.stringify([scope, revision]);
-  const retained = canRetainInsightView(Number(cached?.__cachedAt || cached?.cachedAt || 0));
-  const [rows, setRows] = useState<Row[]>(retained ? cached?.rows || [] : []), [refreshed, setRefreshed] = useState(retained ? cached?.refreshedAt || "" : ""), [loading, setLoading] = useState(!retained);
-  const [mode, setMode] = useState("all"), [query, setQuery] = useState(""), [open, setOpen] = useState<string | null>(null), [states, setStates] = useState<Record<string, SearchState>>({}), [loadError, setLoadError] = useState("");
+  const [initial] = useState(()=>readSavedMagazines(accountKey,token));
+  const [savedDisplay,setSavedDisplay]=useState(initial),[checking,setChecking]=useState(false);
+  const [rows, setRows] = useState<Row[]>(initial?.value.rows||[]), [refreshed, setRefreshed] = useState(initial?.value.refreshed||""), [loading, setLoading] = useState(!initial);
+  const [mode, setMode] = useState(initial?.value.mode||"all"), [query, setQuery] = useState(initial?.value.query||""), [open, setOpen] = useState<string | null>(initial?.value.open||null), [states, setStates] = useState<Record<string, SearchState>>(()=>restoredStates(initial?.value.states||{})), [loadError, setLoadError] = useState("");
   const id = useId().replace(/:/g, ""), run = useRef(0), activeRequest = useRef<AbortController | null>(null), activeKey = useRef<string | null>(null);
   const resultCache = useRef(new Map<string, { at: number; rows: Row[]; total: number }>());
   const historyRequest = useRef(0), historyFlight = useRef<{ signature: string; promise: Promise<any> } | null>(null), verifiedHistory = useRef<{ signature: string; at: number } | null>(null);
+  const lastHistoryAt=useRef(0),lastHistoryScope=useRef(""),restoredSearchKeys=useRef(new Set(Object.keys(initial?.value.states||{}))),refreshHistory=useRef(()=>{});
   const rowsRef = useRef(rows), statesRef = useRef(states), openRef = useRef(open), cachedScope = useRef(scope), previousScope = useRef(scope), currentView = useRef({ signature: verificationSignature, active });
   rowsRef.current = rows; statesRef.current = states; openRef.current = open; currentView.current = { signature: verificationSignature, active };
   const patch = (key: string, change: Partial<SearchState>) => setStates(old => ({ ...old, [key]: { ...(old[key] || blank()), ...change } }));
   useEffect(() => {
     if (previousScope.current !== scope) {
       previousScope.current = scope; verifiedHistory.current = null; resultCache.current.clear(); stop();
-      rowsRef.current = []; setRows([]); setRefreshed(""); setLoadError(""); setStates({}); setOpen(null);
+      const saved=readSavedMagazines(accountKey,token);setSavedDisplay(saved);rowsRef.current=saved?.value.rows||[];setRows(rowsRef.current);setRefreshed(saved?.value.refreshed||"");setLoadError("");setStates(restoredStates(saved?.value.states||{}));setOpen(saved?.value.open||null);setMode(saved?.value.mode||"all");setQuery(saved?.value.query||"");restoredSearchKeys.current=new Set(Object.keys(saved?.value.states||{}));lastHistoryAt.current=0;lastHistoryScope.current="";
     }
     if (!active) { stop(); setLoading(false); return; }
     let live = true;
@@ -45,25 +58,27 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
       const request = ++historyRequest.current;
       const valid = () => live && currentView.current.active && document.visibilityState === "visible" && request === historyRequest.current && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
       stop();
-      setLoading(!rowsRef.current.length);
+      setLoading(!rowsRef.current.length);setChecking(true);
       const job = historyFlight.current?.signature === verificationSignature ? historyFlight.current : { signature: verificationSignature, promise: Promise.resolve().then(history) }; historyFlight.current = job;
       try {
         const x = await job.promise;
         if (!valid()) return;
-        if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error("INVALID_MAGAZINE_HISTORY");
+        if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error(String(x?.error||"INVALID_MAGAZINE_HISTORY"));
         setRows(x.rows); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : "");
         if (!x.__offlineCache) {
-          verifiedHistory.current = { signature: verificationSignature, at: Date.now() }; resultCache.current.clear();
+          const at=Date.now();verifiedHistory.current = { signature: verificationSignature, at };lastHistoryAt.current=at;lastHistoryScope.current=scope;setSavedDisplay(null);resultCache.current.clear();
           const key = openRef.current, state = key ? statesRef.current[key] : null, magazine = key ? x.rows.find((row: Row) => keyOf(row) === key) : null;
-          if (magazine && state?.searched) void searchArticles(magazine, state.day, state.query);
+          if (magazine && state?.searched&&!restoredSearchKeys.current.has(key!)) void searchArticles(magazine, state.day, state.query);
         }
-      } catch {
+      } catch (error) {
         if (valid()) {
+          if(error instanceof Error&&/LOGIN|SESSION|INACTIVE/.test(error.message)){removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error.message);return;}
           if (!rowsRef.current.length && cachedScope.current === scope && Array.isArray(cached?.rows)) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
           setLoadError("マガジンの更新を確認できませんでした。保存済みの情報を表示しています。");
         }
-      } finally { if (historyFlight.current === job) historyFlight.current = null; if (valid()) setLoading(false); }
+      } finally { if (historyFlight.current === job) historyFlight.current = null; if (valid()){setLoading(false);setChecking(false);} }
     };
+    refreshHistory.current=()=>{void refresh()};
     void refresh();
     const resume = () => { void refresh(); };
     window.addEventListener("focus", resume); window.addEventListener("pageshow", resume); document.addEventListener("visibilitychange", resume);
@@ -76,6 +91,14 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     const q = query.trim().toLowerCase();
     return !q || [r.title, ownerId, r.owner?.nickname].some(v => String(v || "").toLowerCase().includes(q));
   }), [rows, mode, query, accountKey]);
+  useEffect(()=>{
+    if(savedDisplay||lastHistoryScope.current!==scope||!lastHistoryAt.current||previousScope.current!==scope)return;
+    const savedStates:Record<string,SearchState>={};
+    if(open&&states[open]&&!states[open].busy){const state=states[open];let criteria:any[]=[];try{criteria=JSON.parse(state.signature)}catch{}if(!state.searched||criteria[1]===open&&criteria[2]===state.day&&criteria[3]===state.query.trim().toLowerCase())savedStates[open]={...state,rows:state.rows.slice(0,100),busy:false,error:""};}
+    const copy:SavedMagazines={mode,query,open:open&&visible.slice(0,100).some(row=>keyOf(row)===open)?open:null,rows:visible.slice(0,100).map(compactMagazine),total:rows.length,visibleTotal:visible.length,refreshed,states:savedStates};
+    writeSavedInsightView("magazines-last",{account:accountKey,token},copy,lastHistoryAt.current);
+  },[rows,refreshed,mode,query,open,states,savedDisplay,scope]);
+  function changeSavedCriteria(){if(!savedDisplay)return;setSavedDisplay(null);rowsRef.current=[];setRows([]);setLoading(true);if(!checking)refreshHistory.current();}
   function stop() {
     run.current++; activeRequest.current?.abort(); activeRequest.current = null;
     if (activeKey.current) patch(activeKey.current, { busy: false });
@@ -84,7 +107,7 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   function toggle(key: string) { stop(); setOpen(old => old === key ? null : key); }
   async function searchArticles(r: Row, day: string, queryValue: string) {
     if (!active || document.visibilityState !== "visible") return;
-    const key = keyOf(r); if (!key) return;
+    const key = keyOf(r); if (!key) return;restoredSearchKeys.current.delete(key);
     stop();
     const currentRun = ++run.current, controller = new AbortController(), q = queryValue.trim(), signature = JSON.stringify([verificationSignature, key, day, q.toLowerCase()]);
     const valid = () => currentRun === run.current && !controller.signal.aborted && currentView.current.active && document.visibilityState === "visible" && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
@@ -110,10 +133,12 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
       if (currentRun === run.current) { patch(key, { busy: false }); activeRequest.current = null; activeKey.current = null; }
     }
   }
-  return <section className="miu-panel mimag"><header className="miu-section-head"><div><small>MAGAZINES</small><h2>共同マガジン</h2></div><strong>{number(visible.length)} / {number(rows.length)}誌</strong></header>
-    <div className="miu-tools"><div className="miu-tabs">{[["all", "すべて"], ["owner", "自分がオーナー"], ["member", "参加中"]].map(([key, label]) => <button key={key} className={mode === key ? "active" : ""} aria-pressed={mode === key} onClick={() => { stop(); setMode(key); setOpen(null); }}>{label}</button>)}</div><input value={query} onChange={e => { stop(); setOpen(null); setQuery(e.target.value); }} placeholder="マガジン名・オーナー" aria-label="マガジン名・オーナー" /></div>
+  if(previousScope.current!==scope)return <section className="miu-panel mimag"><p>マガジンの保存状態を確認中…</p></section>;
+  return <section className="miu-panel mimag"><header className="miu-section-head"><div><small>MAGAZINES</small><h2>共同マガジン</h2></div><strong>{number(savedDisplay?.value.visibleTotal??visible.length)} / {number(savedDisplay?.value.total??rows.length)}誌</strong></header>
+    <div className="miu-tools"><div className="miu-tabs">{[["all", "すべて"], ["owner", "自分がオーナー"], ["member", "参加中"]].map(([key, label]) => <button key={key} className={mode === key ? "active" : ""} aria-pressed={mode === key} onClick={() => { stop();if(key!==mode)changeSavedCriteria();setMode(key);setOpen(null); }}>{label}</button>)}</div><input value={query} onChange={e => { stop();changeSavedCriteria();setOpen(null);setQuery(e.target.value); }} placeholder="マガジン名・オーナー" aria-label="マガジン名・オーナー" /></div>
+    {savedDisplay?<p className="miu-source" data-insight-saved-view="magazines">前回表示分（確認 {date(savedDisplay.savedAt)}）{checking?"・最新を確認中":""}{savedDisplay.value.visibleTotal>rows.length?`・先頭${number(rows.length)}誌を表示`:""}</p>:null}
     {refreshed ? <p className="miu-source">最終同期 {date(refreshed)}</p> : null}{loadError ? <p className="miu-error">{loadError}</p> : null}
-    {loading && !rows.length ? <div className="miu-load-scene"><b>マガジンを確認中</b><i /></div> : visible.length ? <div className="miu-mag-grid">{visible.map((r, index) => {
+    {loading && !rows.length&&!savedDisplay ? <div className="miu-load-scene"><b>マガジンを確認中</b><i /></div> : visible.length ? <div className="miu-mag-grid">{visible.map((r, index) => {
       const key = keyOf(r), state = states[key] || blank(), expanded = open === key, members = Array.isArray(r.members) ? r.members : [], owner = r.owner || {}, panelId = `${id}-magazine-${index}`;
       const list: Row[] = state.searched ? state.rows : (r.recentArticles || []).slice(0, 12);
       return <article key={key} data-magazine-key={key}><div><b>{r.title || "共同マガジン"}</b>{r.description ? <small>{r.description}</small> : null}</div>
