@@ -42,3 +42,17 @@
 - 本体2026.10.19.2は旧版の「件数あり・本文0件」snapshotを復元対象から除外し、古い前分類209件を表示しない。正常な保存済み0件、対応済みの即時反映、現在ページ取得は維持。
 - DB回帰8件は全33分類のoracle比較、20k件pagination、scope/権限、呼出元generic planの復帰を含み成功。UIは全34選択肢の失敗→再試行→正常表示→cache再訪を独立照合。旧snapshotの回帰を含む関連49件とTypeScriptも成功。
 - DB追加設定は本番反映済み。呼出側からcustom設定を渡さずに行う本番再確認と19.2のCI・公開配信照合を継続する。元Androidの最終操作は未確認。
+
+## 19.2公開照合
+
+- PR #59はmain f565fbdeへmerge済み。Actions39269414208のbuild/deployが成功。公開manifestは2026.10.19.2、配信index JS/CSSは同版のローカルbuildとbyte一致。
+- 本番service_role・statement_timeout8s・呼出元plan_cache_mode=autoの再照合で、other209/100（7,161ms）、reply_other147/100（2,773ms）、purchase_message14/14（2,498ms）、all20,076/100（2,493ms）が成功。呼出元設定は実行前後auto。負荷が変わるため所要時間の保証ではない。
+
+## お店開始と対応済み表示
+
+- 最新依頼: 『お店をはじめました』分類を確認し、スキ履歴等の対応済み表示を明確化。ただし既存の対応済み状態は変更しない。
+- 保存済みowner通知でstructured kind=`store_create`が1件見つかり、従来otherへ分類されていた。正規のkindだけで`store_started`（表示名:お店をはじめました）を追加する。曖昧な「店」等の単語では分類しない。
+- スキ履歴と本人通知は既存のaria-pressed状態から明るい緑のチェック付きボタンと行の目印を出す。layout有効時の詳細度が状態色を打ち消す不具合も修正。ボタン高30px、状態管理・保存キー・完了レコードは変更しない。
+- スキ履歴CSSは31件の既存回帰とChrome390/820/1280px・動き軽減設定を確認。通知CSSは14件の既存回帰とChrome390pxで確認。
+- UI分類回帰9件が成功。お店分類の取得・件数表示・再訪cache・confirmed=trueの復元・分類を開くだけでは完了更新を送らないことを含む。buildも成功。
+- 本体2026.10.19.3。本人通知Reader3.6.38 / Dashboard1.7.3 / DM1.4.11は据え置き。
