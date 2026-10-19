@@ -32,3 +32,13 @@
 - DB migrationは適用済み。Edge feed v34の本文はmainと改行以外一致し、今回Edgeの再配備は不要。
 - 本体のmain直接公開は自動承認レビューが「直接公開の明示許可がない」として拒否。mainは50cb52dのまま。本体差分はPRで確認できる状態へ保存し、マージ・公開の許可を待つ。DB修正はすでに反映済み。
 - ローカルのworkflow対象1,041件に加え、DM遅延取得1件と23ファイルの構文確認、最終buildが成功。公開CIはmainの更新後に実行されるため未実行。本人Android端末での最終操作は自動テストやDB照合で確認済みとは扱わない。
+
+## 23時台：高評価以外の追加照合と公開承認
+
+- ユーザー「はい。ほかのやつもだからね」でPR #58の公開と他分類の継続修正を承認。PR #58をmainへmerge（ba627314）、Actions39268180801のbuild/deploy成功。
+- 実service_role・8秒制限の追加照合でother、reply_other、purchase_messageの57014を再現。第一段階の軽量化だけでは全条件の時間切れは解消していなかった。
+- 通常の実行計画を使ったotherは再確認でも失敗。`force_custom_plan`を同じ8秒制限で試した結果、other4,631ms（209/100）、reply_other5,505ms（147/100）、purchase_message2,809ms（14/14）が成功。all100件も7,784msで成功。単一の計測を速度保証にはしない。
+- `20261019142700_insight_notification_custom_plans.sql`は当該RPCだけに`plan_cache_mode=force_custom_plan`を設定。global設定、work_mem、8秒制限、保存内容・件数・権限・別機能は変更しない。function終了後に呼出元の設定へ復帰する。
+- 本体2026.10.19.2は旧版の「件数あり・本文0件」snapshotを復元対象から除外し、古い前分類209件を表示しない。正常な保存済み0件、対応済みの即時反映、現在ページ取得は維持。
+- DB回帰8件は全33分類のoracle比較、20k件pagination、scope/権限、呼出元generic planの復帰を含み成功。UIは全34選択肢の失敗→再試行→正常表示→cache再訪を独立照合。旧snapshotの回帰を含む関連49件とTypeScriptも成功。
+- DB追加設定は本番反映済み。呼出側からcustom設定を渡さずに行う本番再確認と19.2のCI・公開配信照合を継続する。元Androidの最終操作は未確認。
