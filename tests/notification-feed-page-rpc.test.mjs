@@ -15,6 +15,9 @@ const preparedMigration=readFileSync('supabase/migrations/'+preparedName,'utf8')
 const prunedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_displayable_groups.sql'));
 assert.ok(prunedName,'the excluded-only semantic-group pruning migration is required');
 const prunedMigration=readFileSync('supabase/migrations/'+prunedName,'utf8');
+const customPlanName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_custom_plans.sql'));
+assert.ok(customPlanName,'the function-scoped custom-plan migration is required');
+const customPlanMigration=readFileSync('supabase/migrations/'+customPlanName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -33,6 +36,7 @@ before(async()=>{
  await db.exec(migration);
  await db.exec(preparedMigration);
  await db.exec(prunedMigration);
+ await db.exec(customPlanMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -74,7 +78,7 @@ async function equivalent(m,options){
 test('empty page contract, explicit bounds and service-only invoker privileges',async()=>{
  await equivalent(member,{});
  const {rows:[rights]}=await db.query("SELECT prosecdef,provolatile,proconfig,has_function_privilege('anon',oid,'EXECUTE') AS anon,has_function_privilege('authenticated',oid,'EXECUTE') AS authenticated,has_function_privilege('service_role',oid,'EXECUTE') AS service FROM pg_proc WHERE proname='insight_notification_feed_page'");
- assert.equal(rights.prosecdef,false);assert.equal(rights.provolatile,'s');assert.deepEqual(rights.proconfig,['search_path=""']);assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
+ assert.equal(rights.prosecdef,false);assert.equal(rights.provolatile,'s');assert.deepEqual(rights.proconfig,['search_path=""','plan_cache_mode=force_custom_plan']);assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
  for(const params of [[[],member.scope,member.noteId,1,100],[['owner'],'wrong',member.noteId,1,100],[['owner'],'owner','',1,100],[['owner'],'owner','ss_yr',0,100],[['owner'],'owner','ss_yr',1000001,100],[['owner'],'owner','ss_yr',1,101],[['owner'],'owner','ss_yr',1,19]]){
   await assert.rejects(db.query("SELECT public.insight_notification_feed_page($1,$2,$3,'all','','all',$4,$5,false)",params),/INVALID_NOTIFICATION_FEED_PARAMETERS/);
  }
@@ -224,6 +228,19 @@ test('every visible notification category returns its counted rows, including hi
   assert.equal(result.statusCounts.all,counts.get(kind),kind+' selected status count');
   assert.ok(result.rows.every(r=>r.display_category===kind),kind+' display category');
  }
+});
+
+test('custom notification planning is function-scoped and restores the caller plan mode',async()=>{
+ const m={id:'category-fixture',scope:'category-fixture',noteId:'category_fixture'};
+ await db.exec('SET plan_cache_mode=force_generic_plan');
+ try{
+  const before=(await db.query("SELECT current_setting('plan_cache_mode') AS mode")).rows[0].mode;
+  assert.equal(before,'force_generic_plan');
+  const result=await equivalent(m,{kind:'rating',includeCategoryPreview:true});
+  assert.equal(result.total,20);assert.equal(result.rows.length,20);
+  assert.equal((await db.query("SELECT current_setting('plan_cache_mode') AS mode")).rows[0].mode,before);
+ }finally{await db.exec('RESET plan_cache_mode')}
+ assert.equal((await db.query("SELECT current_setting('plan_cache_mode') AS mode")).rows[0].mode,'auto');
 });
 
 test('early pruning skips excluded-only groups while retaining richer excluded rows in mixed groups and scope isolation',async()=>{

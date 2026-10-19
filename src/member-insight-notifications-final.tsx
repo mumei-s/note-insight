@@ -22,6 +22,7 @@ function savedNotificationView(account:string,token:string){
  const saved=readSavedInsightView<SavedNotificationView>("notifications",{account,token}),value=saved?.value,selection=value?.selection;
  const counts=(v:unknown)=>v&&typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(n=>typeof n==="number"&&Number.isFinite(n)&&n>=0);
  if(!saved||!value||!selection||!CATS.some(([id])=>id===selection.kind)||!["all","pending","completed"].includes(selection.handlingStatus)||typeof selection.selectedDay!=="string"||!/^$|^\d{4}-\d{2}-\d{2}$/.test(selection.selectedDay)||!Number.isSafeInteger(selection.page)||selection.page<1||!Array.isArray(value.rows)||value.rows.length>PAGE||!value.rows.every(row=>row&&typeof row==="object"&&!Array.isArray(row))||!Number.isFinite(value.total)||value.total<0||!counts(value.categoryCounts)||!counts(value.statusCounts)||!value.serverSync||typeof value.serverSync.received!=="number"||typeof value.serverSync.confirmed!=="number"||typeof value.serverSync.source!=="string"||typeof value.updatedAt!=="string"||typeof value.syncAt!=="string")return null;
+ if(value.total>0&&!value.rows.length)return null;
  return saved;
 }
 const NOTIFICATION_RECENT_ALL=new Map<string,Row[]>();

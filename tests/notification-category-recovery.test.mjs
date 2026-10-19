@@ -12,7 +12,7 @@ const response=(rows,total=rows.length)=>Response.json({ok:true,noteId:'tester',
 const timeout=()=>Response.json({ok:false,error:'NOTIFICATION_FEED_READ_FAILED:57014'},{status:500});
 async function settle(work=()=>{}){await React.act(async()=>{work();for(let i=0;i<6;i++)await pause()})}
 async function choose(h,kind){await settle(()=>{const select=h.w.document.querySelector('.minf-filter-panel select');select.value=kind;select.dispatchEvent(new h.w.Event('change',{bubbles:true}))})}
-async function fixture(t,{selected=async()=>response(ratingRows),saved}={}){
+async function fixture(t,{selected=async()=>response(ratingRows),all,saved}={}){
  const calls=[],timers=[];
  const h=await sceneFixture(t,{globals:{URLSearchParams},dependencies:{
   './creator-avatar':{CreatorAvatar:()=>null,creatorNoteId:()=>''},
@@ -21,7 +21,7 @@ async function fixture(t,{selected=async()=>response(ratingRows),saved}={}){
   if(String(url).includes('creator-icons'))return Response.json({items:[]});
   const body=JSON.parse(init.body);calls.push(body);
   if(body.action==='recent')return Response.json({ok:true,noteId:'tester',rows:[]});
-  if(body.kind==='all')return response(Array.from({length:100},(_,i)=>row('tip-'+i,'tip')),209);
+  if(body.kind==='all')return all?all(body):response(Array.from({length:100},(_,i)=>row('tip-'+i,'tip')),209);
   return selected(body);
  }});
  h.w.localStorage.setItem(tokenKey,token);
@@ -116,4 +116,27 @@ test('同じ分類・日付・対応状況・ページの前回表示は失敗�
  assert.equal(h.feeds().length,2);
  for(const body of h.feeds())assert.deepEqual([body.kind,body.day,body.handlingStatus,body.page,body.pageSize,body.includeCategoryPreview],['rating','2026-10-19','pending',2,100,false]);
  assert.equal(h.calls.some(body=>body.action==='recent'),false);
+});
+
+test('旧版の件数あり・本文0件の保存表示は復元せず、古い全209件も表示せず、失敗後に再試行できる',async t=>{
+ const saved={selection:{kind:'points',handlingStatus:'all',selectedDay:'',page:1},rows:[],total:20,statusCounts:{all:209,pending:209,completed:0},categoryCounts:{all:209,points:20},updatedAt:'',syncAt:'',serverSync:{received:0,confirmed:0,source:''}};
+ const pending=deferred(),retry=deferred();let attempts=0;
+ const h=await fixture(t,{saved,all:()=>++attempts===1?pending.promise:retry.promise});
+ assert.match(h.text(),/通知を読み込み中/);
+ assert.doesNotMatch(h.text(),/この分類の通知はありません|前回表示分/);
+ assert.doesNotMatch(h.w.document.querySelector('.minf-handling-tabs').textContent,/209/);
+ await settle(()=>pending.resolve(timeout()));
+ assert.match(h.text(),/通知履歴の読込に失敗/);
+ assert.doesNotMatch(h.text(),/この分類の通知はありません|前回表示分/);
+ assert.doesNotMatch(h.w.document.querySelector('.minf-handling-tabs').textContent,/209/);
+ assert.equal(h.retry().disabled,false);
+ await h.click(h.retry());await settle();
+ assert.match(h.text(),/通知を読み込み中/);
+ assert.doesNotMatch(h.text(),/この分類の通知はありません/);
+ await settle(()=>retry.resolve(response(ratingRows)));
+ assert.equal(h.w.document.querySelectorAll('.minf-list article').length,20);
+ assert.equal(h.w.document.querySelector('.minf-handling-tabs button small').textContent,'20');
+ assert.equal(h.saved().value.rows.length,20);
+ assert.equal(h.w.document.querySelector('.minf-error'),null);
+ assert.deepEqual(h.feeds().map(body=>[body.kind,body.page,body.pageSize,body.includeCategoryPreview]),[['all',1,100,false],['all',1,100,false]]);
 });

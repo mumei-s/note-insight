@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.19.1",
+  "appVersion": "2026.10.19.2",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-19T22:45:00+09:00",
+  "releasedAt": "2026-10-19T23:28:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知の分類取得で起きる時間切れを軽減。読込失敗を通知なしと誤表示せず、選択中の分類・日付・ページで再試行できます。",
+  "note": "本人通知の高評価以外の分類も取得条件ごとに最適化し、時間切れを軽減。旧版の件数あり・本文0件の保存表示も再確認します。",
   "dmVersion": "1.4.11",
   "dmLabel": "DM同期"
 }
