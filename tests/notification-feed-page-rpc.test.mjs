@@ -18,6 +18,9 @@ const prunedMigration=readFileSync('supabase/migrations/'+prunedName,'utf8');
 const customPlanName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_custom_plans.sql'));
 assert.ok(customPlanName,'the function-scoped custom-plan migration is required');
 const customPlanMigration=readFileSync('supabase/migrations/'+customPlanName,'utf8');
+const storeName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_store_started.sql'));
+assert.ok(storeName,'the observed store-create notification migration is required');
+const storeMigration=readFileSync('supabase/migrations/'+storeName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -37,6 +40,7 @@ before(async()=>{
  await db.exec(preparedMigration);
  await db.exec(prunedMigration);
  await db.exec(customPlanMigration);
+ await db.exec(storeMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
