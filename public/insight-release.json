@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.18.2",
+  "appVersion": "2026.10.19.1",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-18T23:06:39+09:00",
+  "releasedAt": "2026-10-19T22:45:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "スキ順位・初手コメ順位も前回の表示ページから再開。保存表示の復元待ちを回復し、集計の時間切れによる重複取得と不明なエラー表示を修正。",
+  "note": "本人通知の分類取得で起きる時間切れを軽減。読込失敗を通知なしと誤表示せず、選択中の分類・日付・ページで再試行できます。",
   "dmVersion": "1.4.11",
   "dmLabel": "DM同期"
 }

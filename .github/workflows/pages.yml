@@ -79,7 +79,7 @@ jobs:
       - name: Check fresh startup, resume, and cancelled requests
         run: node --experimental-vm-modules --test tests/startup-freshness.test.mjs tests/comments-startup-freshness.test.mjs tests/secondary-view-freshness.test.mjs tests/analysis-view-freshness.test.mjs
       - name: Check startup traffic, session reuse and account logout
-        run: node --experimental-vm-modules --test tests/account-logout-ownership.test.mjs tests/app-session-refresh.test.mjs tests/app-startup-session-gate.test.mjs tests/app-route-loading-budget.test.mjs tests/screen-loader-recovery.test.mjs tests/insight-scene-loading-budget.test.mjs tests/unified-startup-requests.test.mjs tests/notification-startup-request-budget.test.mjs tests/notification-selected-page-budget.test.mjs tests/insight-shell-request-budget.test.mjs tests/insight-shell-refresh-signals.test.mjs
+        run: node --experimental-vm-modules --test tests/account-logout-ownership.test.mjs tests/app-session-refresh.test.mjs tests/app-startup-session-gate.test.mjs tests/app-route-loading-budget.test.mjs tests/screen-loader-recovery.test.mjs tests/insight-scene-loading-budget.test.mjs tests/unified-startup-requests.test.mjs tests/notification-startup-request-budget.test.mjs tests/notification-selected-page-budget.test.mjs tests/notification-category-recovery.test.mjs tests/insight-shell-request-budget.test.mjs tests/insight-shell-refresh-signals.test.mjs
       - name: Check comment collection, independent public sync, and direct-room DM saving
         run: node --experimental-vm-modules --test tests/comment-refresh-recovery.test.mjs tests/public-sync-isolation.test.mjs tests/dm-direct-room-ingest.test.mjs
       - name: Check DM save recovery, fresh history, and reader startup

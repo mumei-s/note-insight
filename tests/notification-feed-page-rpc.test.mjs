@@ -12,6 +12,9 @@ const migration=readFileSync('supabase/migrations/'+readdirSync('supabase/migrat
 const preparedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_prepared_key.sql'));
 assert.ok(preparedName,'the prepared-key migration is required by the feed RPC contract');
 const preparedMigration=readFileSync('supabase/migrations/'+preparedName,'utf8');
+const prunedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_displayable_groups.sql'));
+assert.ok(prunedName,'the excluded-only semantic-group pruning migration is required');
+const prunedMigration=readFileSync('supabase/migrations/'+prunedName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -29,6 +32,7 @@ before(async()=>{
  `);
  await db.exec(migration);
  await db.exec(preparedMigration);
+ await db.exec(prunedMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -194,6 +198,59 @@ test('prepared keys are stored, service-only, timezone independent and follow in
  await db.exec("UPDATE public.insight_notifications SET raw_text='before-update' WHERE id=900002");
  assert.equal((await db.query('SELECT insight_feed_key AS key FROM public.insight_notifications WHERE id=900002')).rows[0].key,'notice|notice:before-update');
  await checkPreparedKeys(['prepared-trigger']);await db.exec('DROP TRIGGER feed_test_before ON public.insight_notifications;DROP FUNCTION public.feed_test_before();');
+});
+
+test('every visible notification category returns its counted rows, including high ratings outside the first all page',async()=>{
+ const m={id:'category-fixture',scope:'category-fixture',noteId:'category_fixture'};
+ const cats=JSON.parse(readFileSync('src/member-insight-notifications-final.tsx','utf8').match(/const CATS=(\[\[.*?\]\]) as const/s)[1]).map(([kind])=>kind).filter(kind=>kind!=='all');
+ const counts=new Map(),rows=[];let id=810000;
+ // Older rating rows deliberately fall outside the initial 100-row all view.
+ for(const kind of ['rating',...cats.filter(kind=>kind!=='rating')]){
+  const count=kind==='rating'?20:6;counts.set(kind,count);
+  for(let i=0;i<count;i++){
+   const type=kind.startsWith('reply_')?'reply':kind.startsWith('membership_reaction_')?'membership_reaction':kind;
+   const target=kind==='reply_other'?'https://note.com/other/n/nOther':kind==='reply_unknown'?null:kind==='membership_reaction_self'?`https://note.com/${m.noteId}/membership`:kind==='membership_reaction_joined'?'https://note.com/other/membership':kind==='membership_reaction_unknown'?null:`https://note.com/${m.noteId}/n/nArticle`;
+   rows.push(row(++id,{member_id:m.id,notification_type:type,raw_text:`保存済み ${kind} 通知 ${i}`,target_url:target,captured_at:new Date(Date.parse('2026-10-19T00:00:00Z')+id).toISOString()}));
+  }
+ }
+ await insert(rows);
+ const all=await equivalent(m,{includeCategoryPreview:true});
+ assert.equal(all.total,rows.length);assert.equal(all.rows.length,100);assert.ok(all.rows.every(r=>r.display_category!=='rating'));
+ for(const kind of cats){
+  const result=await equivalent(m,{kind,includeCategoryPreview:true});
+  assert.equal(result.categoryCounts[kind],counts.get(kind),kind+' category count');
+  assert.equal(result.total,counts.get(kind),kind+' selected total');
+  assert.equal(result.rows.length,counts.get(kind),kind+' nonempty selected page');
+  assert.equal(result.statusCounts.all,counts.get(kind),kind+' selected status count');
+  assert.ok(result.rows.every(r=>r.display_category===kind),kind+' display category');
+ }
+});
+
+test('early pruning skips excluded-only groups while retaining richer excluded rows in mixed groups and scope isolation',async()=>{
+ const m={id:'prune-fixture',scope:'prune-fixture',noteId:'prune_fixture'};
+ const meta=signature=>({source:'note-notification-reader-v3',client_signature:signature,classifier:'action-v28-context',recovery_version:'evidence-v2-articles'});
+ await insert([
+  row(820001,{member_id:m.id,notification_type:'rating',meta:{...meta('rating-wins'),body:'authoritative rating body'}}),
+  row(820002,{member_id:m.id,notification_type:'like',actor_image_url:'https://images.invalid/retained.png',meta:meta('rating-wins')}),
+  row(820003,{member_id:m.id,notification_type:'rating',actor_image_url:'https://images.invalid/weaker.png',meta:meta('excluded-wins')}),
+  row(820004,{member_id:m.id,notification_type:'comment',meta:{...meta('excluded-wins'),body:'richer excluded winner'}}),
+  row(820005,{member_id:m.id,notification_type:'follow',meta:meta('foreign-scope')}),
+  row(820006,{member_id:'prune-foreign',notification_type:'rating',meta:meta('foreign-scope')})
+ ]);
+ await db.exec(`INSERT INTO public.insight_notifications(${columns}) SELECT 830000+i,'prune-fixture',CASE i%3 WHEN 0 THEN 'like' WHEN 1 THEN 'follow' ELSE 'comment' END,'保存済みの除外対象 '||i,'excluded peer','https://note.com/excluded',NULL,NULL,NULL,NULL,'2026-10-19'::timestamptz,'2026-10-19'::timestamptz-i*interval '1 second',false,jsonb_build_object('source','note-notification-reader-v3','client_signature','excluded-only-'||i) FROM generate_series(1,2000) i;`);
+ const result=await equivalent(m,{includeCategoryPreview:true});
+ assert.equal(result.total,1);assert.equal(result.rows[0].id,820001);
+ assert.equal(result.rows[0].actor_image_url,'https://images.invalid/retained.png');
+ assert.equal(result.rows[0].meta.body,'authoritative rating body');
+ assert.equal((await equivalent({id:'prune-foreign',scope:'prune-foreign',noteId:'prune_foreign'},{})).total,1);
+ // Inspect actual source cardinality rather than a timing threshold: history
+ // consisting only of excluded kinds must not enter metadata decode/window work.
+ let inner=prunedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
+ const parameters={p_member_ids:"ARRAY['prune-fixture']::text[]",p_scope:"'prune-fixture'::text",p_note_id:"'prune_fixture'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
+ for(const [name,value] of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
+ const plan=(await db.query('EXPLAIN (ANALYZE,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0].Plan;
+ function findSource(node){return node['Subplan Name']==='CTE source_order'?node:(node.Plans||[]).map(findSource).find(Boolean)}
+ assert.equal(findSource(plan)?.['Actual Rows'],4,'only both complete mixed semantic groups enter source metadata decode');
 });
 
 test('20k-row history has exact late pages and a bounded row payload',async()=>{
