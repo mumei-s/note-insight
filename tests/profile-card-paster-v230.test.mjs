@@ -25,6 +25,16 @@ function runtime(overrides={}){
  vm.runInContext(exposed,context);return context;
 }
 
+function setPanelFixture(c,html){
+ c.document.body.innerHTML=html;
+ const panel=c.document.getElementById('mumei-profile-card-paster-v1');
+ if(panel&&!panel.querySelector('.body')){
+  const body=c.document.createElement('div');body.className='body';
+  while(panel.firstChild)body.appendChild(panel.firstChild);
+  panel.appendChild(body);
+ }
+}
+
 test('note API string eyecatch and both avatar field conventions are supported',()=>{
  const {api}=runtime();
  assert.equal(api.thumbnailUrl({eyecatch:'https://assets.st-note.com/article.png'}),'https://assets.st-note.com/article.png');
@@ -100,7 +110,7 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.6.5/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.6.6/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
  assert.doesNotMatch(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require/);
 });
@@ -108,10 +118,10 @@ test('direct installer preserves the fix identity and all entries load the same 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.6.5/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.6.6/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.6.5/);
+ assert.match(original,/@version\s+2.6.6/);
  assert.doesNotMatch(original,/@require/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
@@ -131,7 +141,7 @@ test('the independent export flow uses recent like history and accepts only the 
 
 
 test('the redundant prepare button is removed while the editor start remains',()=>{
- const c=runtime();c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-prep">INSIGHTで準備</button><button data-a="like300-images">①</button></div></details></div>';
+ const c=runtime();setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><b class="title"></b><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-prep">INSIGHTで準備</button><button data-a="like300-images">①</button></div></details></div>');
  assert.equal(c.api.patchPanel(),true);assert.equal(c.document.querySelector('[data-a="like300-prep"]'),null);
  assert.equal(c.document.querySelector('[data-a="like300-fixed"]').textContent,'① 最初から');
  assert.equal(c.document.querySelector('[data-a="like300-resume"]').textContent,'続きから');
@@ -140,7 +150,7 @@ test('the redundant prepare button is removed while the editor start remains',()
 
 test('the original card action stays visible beside continue without duplicating its listener',()=>{
  const c=runtime();let clicked=0;
- c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><div class="phase"><button data-a="cards">②</button></div><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><b class="title"></b><div class="phase"><button data-a="cards">②</button></div><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>');
  const button=c.document.querySelector('[data-a="cards"]');button.addEventListener('click',()=>clicked++);
  c.api.patchPanel();c.api.patchPanel();
  const actions=c.document.querySelector('[data-like300] .special-actions');
@@ -151,7 +161,7 @@ test('the original card action stays visible beside continue without duplicating
 
 test('the visible card button uses the current exported action when an old installed listener remains',()=>{
  let current=0,legacy=0;const c=runtime({page:{__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__:()=>current++}});
- c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>');
  const button=c.document.querySelector('[data-a="cards"]');button.addEventListener('click',()=>legacy++);
  c.api.patchPanel();c.api.patchPanel();button.click();
  assert.equal(current,1);assert.equal(legacy,0);
@@ -159,14 +169,14 @@ test('the visible card button uses the current exported action when an old insta
 
 test('the visible duplicate audit action is single and invokes the current read-only action',()=>{
  let audited=0;const c=runtime({page:{__MUMEI_PROFILE_CARD_AUDIT_DUPLICATES__:()=>audited++}});
- c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="cards">②</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>');
  c.api.patchPanel();c.api.patchPanel();
  const buttons=c.document.querySelectorAll('[data-a="check-duplicates"]');assert.equal(buttons.length,1);buttons[0].click();assert.equal(audited,1);
 });
 
 test('the delete button invokes the current exported action rather than an older installed handler',()=>{
  let current=0,legacy=0;const c=runtime({page:{__MUMEI_PROFILE_CARD_DELETE_CARDS__:()=>current++}});
- c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="delete">通知カード削除</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>';
+ setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><b class="title"></b><button data-a="delete">通知カード削除</button><details data-like300><summary></summary><div class="hint"></div><div class="special-actions"><button data-a="like300-images">①</button></div></details></div>');
  const button=c.document.querySelector('[data-a="delete"]');button.addEventListener('click',()=>legacy++);
  c.api.patchPanel();c.api.patchPanel();button.click();assert.equal(current,1);assert.equal(legacy,0);
 });
@@ -203,7 +213,7 @@ test('each image receives one native divider and restart removes only tracked pa
 });
 test('restart reuses prepared rows from person one, while resume leaves the current content intact',async()=>{
  const c=runtime();c.events=[];c.saved={likesHistoryFix230:true,rows:Array.from({length:301},(_,i)=>({index:i+1})),items:[{id:'done'}],activityTexts:['profile'],sectionHeadings:['heading'],dividerUrls:['url'],imageAnchorPos:2};
- c.document.body.innerHTML='<div id="mumei-profile-card-paster-v1"><select data-mode><option value="number" selected>件数</option></select><input data-count value="300"></div>';
+ setPanelFixture(c,'<div id="mumei-profile-card-paster-v1"><select data-mode><option value="number" selected>件数</option></select><input data-count value="300"></div>');
  c.api.patch(`validateFixedRows=rows=>rows;readRun=()=>saved;writeRun=run=>{saved=run};findView=()=>({state:{doc:{content:{size:10}}}});clearCurrentPaste=()=>{events.push('clear')};embedNodes=()=>[];createFixed300=async()=>{events.push('create')};startFixed300=()=>{throw Error('must not reopen INSIGHT')}`);
  await c.api.resumeFixed300();assert.deepEqual(Array.from(c.events),['create']);assert.equal(c.saved.items.length,1);
  await c.api.restartFixed300();assert.deepEqual(Array.from(c.events),['create','clear','create']);

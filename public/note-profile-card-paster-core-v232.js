@@ -1741,10 +1741,12 @@ function applyParentingAmountMode(){
  const p=document.getElementById(PANEL),sel=p?.querySelector('[data-parenting-mode]'),num=p?.querySelector('[data-parenting-count]');
  if(num)num.style.display=sel?.value==='all'?'none':'block'
 }
+function announcePanelReady(){window.dispatchEvent(new window.Event('mumei-profile-card-panel-ready'))}
 function setCollapsed(on){
  const p=document.getElementById(PANEL);if(!p)return;
  p.classList.toggle('collapsed',Boolean(on));p.classList.remove('tiny');
- saveUiState({collapsed:Boolean(on),tiny:false})
+ saveUiState({collapsed:Boolean(on),tiny:false});
+ if(!on)announcePanelReady()
 }
 function setTiny(on){
  const p=document.getElementById(PANEL),mini=document.getElementById(PANEL+'-mini');if(!p||!mini)return;
@@ -1759,13 +1761,15 @@ function setTiny(on){
   p.style.top=Math.max(4,Math.min(innerHeight-p.offsetHeight-4,r.top))+'px';p.style.right='auto';
   p.classList.remove('tiny','collapsed');mini.style.display='none';savePos(p)
  }
- saveUiState({tiny:Boolean(on),collapsed:false})
+ saveUiState({tiny:Boolean(on),collapsed:false});
+ if(!on)announcePanelReady()
 }
 function restorePos(el){
  try{const v=JSON.parse(localStorage.getItem(POS)||'null');if(!v)return;const left=Math.max(4,Math.min(innerWidth-el.offsetWidth-4,Number(v.left)||4)),top=Math.max(24,Math.min(innerHeight-el.offsetHeight-4,Number(v.top)||84));el.style.left=left+'px';el.style.top=top+'px';el.style.right='auto'}catch{}
 }
 function savePos(el){try{const r=el.getBoundingClientRect();localStorage.setItem(POS,JSON.stringify({left:Math.round(r.left),top:Math.round(r.top)}))}catch{}}
 function bindLongDrag(handle,panel){
+ if(!handle||!panel)return;
  let pid=null,startX=0,startY=0,baseL=0,baseT=0;
  const clear=()=>{clearTimeout(longTimer);longTimer=0};
  handle.addEventListener('pointerdown',e=>{
@@ -1784,6 +1788,7 @@ function bindLongDrag(handle,panel){
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
 function bindDirectDrag(handle,panel){
+ if(!handle||!panel)return;
  let pid=null,startX=0,startY=0,baseL=0,baseT=0,moved=false;
  handle.addEventListener('pointerdown',e=>{
   if(e.button!==undefined&&e.button!==0)return;
@@ -1809,6 +1814,14 @@ function bindDirectDrag(handle,panel){
  handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end)
 }
 function escAttr(v){return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+let mountedPanel=null,mountedPanelBody=null,stopDelegationBound=false;
+function restorePanel(){
+ const current=document.getElementById(PANEL);
+ if(current&&(current!==mountedPanel||current.querySelector('.body')!==mountedPanelBody||!document.getElementById(PANEL+'-mini')))current.remove();
+ mount();
+}
+page.__MUMEI_PROFILE_CARD_RESTORE_PANEL__=restorePanel;
+page.__MUMEI_PROFILE_CARD_REFRESH_UI__=update;
 function bindPanelInputEvents(panel){
  const controlFor=event=>{const control=event.target?.closest?.('textarea,input,select,button,summary');return control&&panel.contains(control)?control:null};
  const down=event=>{
@@ -1880,7 +1893,8 @@ function mount(){
   <button data-a="stop" style="width:100%;margin-top:3px">停止</button>
   <div id="${STATUS}">①画像一覧は自動。②は本文で置く場所をタップしてから押す。</div>
  </div>`;
- const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='紹介';
+ document.getElementById(PANEL+'-mini')?.remove();
+ const mini=document.createElement('button');mini.id=PANEL+'-mini';mini.type='button';mini.textContent='極薄';mini.title='極薄サムを開く（ハロウィンアート2026・再開）';mini.setAttribute('aria-label',mini.title);
  document.body.append(p,mini);
  bindPanelInputEvents(p);
 
@@ -1931,12 +1945,16 @@ function mount(){
  stopBtn.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();stop()},{capture:true,passive:false});
  stopBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();stop()},{capture:true});
  stopBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();stop()});
+ if(!stopDelegationBound){
+  stopDelegationBound=true;
  document.addEventListener('pointerdown',e=>{const t=e.target?.closest?.('#'+PANEL+' [data-a="stop"]');if(t){e.preventDefault();e.stopImmediatePropagation();stop()}},{capture:true});
  document.addEventListener('touchstart',e=>{const t=e.target?.closest?.('#'+PANEL+' [data-a="stop"]');if(t){e.preventDefault();e.stopImmediatePropagation();stop()}},{capture:true,passive:false});
+ }
 
  mini.addEventListener('click',e=>{if(dragging||Date.now()<suppressClickUntil){e.preventDefault();return}e.preventDefault();setTiny(false)});
  bindDirectDrag(p.querySelector('[data-dragbar]'),p);bindLongDrag(p.querySelector('.title'),p);bindLongDrag(mini,mini);restorePos(p);
- if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}update()
+ if(g.collapsed)p.classList.add('collapsed');if(g.tiny){p.classList.add('tiny');mini.style.display='flex'}
+ mountedPanel=p;mountedPanelBody=p.querySelector('.body');update();announcePanelReady()
 }
 let autoResumeTimer=null;
 function scheduleAutoResume(){

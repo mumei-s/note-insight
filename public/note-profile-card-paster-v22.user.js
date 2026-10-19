@@ -1605,58 +1605,66 @@ function stopFix(){
  setStatus('修正版を停止しました｜完成分は保持')
 }
 
+const panelBindings=new WeakMap();
+function bindPanelAction(control,key,listener,options){
+ if(!control)return;
+ let keys=panelBindings.get(control);if(!keys){keys=new Set();panelBindings.set(control,keys)}
+ if(keys.has(key))return;keys.add(key);control.addEventListener(key.split(':')[0],listener,options);
+}
 function patchPanel(){
  const panel=document.getElementById(PANEL);
- if(!panel)return false;
+ if(!panel||!panel.querySelector('.body')||!panel.querySelector('details[data-like300]'))return false;
  const title=panel.querySelector('.title');
- if(title)title.textContent='紹介貼付 v'+VERSION;
+ if(title&&title.textContent!=='紹介貼付 v'+VERSION)title.textContent='紹介貼付 v'+VERSION;
 
  if(!panel.querySelector('[data-gallery126]')){
   const gallery=document.createElement('details');gallery.dataset.gallery126='1';gallery.open=true;
-  gallery.innerHTML='<summary>🎃 ハロウィン参加者</summary><div class="hint">登録126人｜記事あり125人・やとさん1人は記事待ち｜126種類｜最初の記事｜プロフィール小文字</div><div class="special-actions"><button type="button" data-gallery-action="images">①記事あり125人の極薄</button><button type="button" data-gallery-action="pause">一時停止</button><button type="button" data-gallery-action="resume">再開</button><button type="button" data-gallery-action="cards">②通知カード</button><button type="button" data-gallery-action="delete">通知カードのみ削除</button><button type="button" data-gallery-action="profiles">プロフィールを整える</button><button type="button" data-gallery-action="all">126人全員を再確認</button></div>';
-  gallery.querySelector('[data-gallery-action="images"]').addEventListener('click',event=>{event.preventDefault();void startGallery126(true)});
-  gallery.querySelector('[data-gallery-action="resume"]').addEventListener('click',event=>{event.preventDefault();void resumeGallery126()});
-  gallery.querySelector('[data-gallery-action="pause"]').addEventListener('click',event=>{event.preventDefault();pauseFix()});
-  gallery.querySelector('[data-gallery-action="profiles"]').addEventListener('click',event=>{event.preventDefault();void repairGalleryProfiles()});
-  gallery.querySelector('[data-gallery-action="all"]').addEventListener('click',event=>{event.preventDefault();void startGallery126(false)});
-  gallery.querySelector('[data-gallery-action="cards"]').addEventListener('click',event=>{event.preventDefault();const run=readRun();if(!run?.gallery126){setStatus('先にハロウィン126人の画像を完成させてください',true);return;}void page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__?.()});
-  gallery.querySelector('[data-gallery-action="delete"]').addEventListener('click',event=>{event.preventDefault();void page.__MUMEI_PROFILE_CARD_DELETE_CARDS__?.()});
+  gallery.innerHTML='<summary>🎃 ハロウィンアート2026</summary><div class="hint">登録126人｜記事あり125人・やとさん1人は記事待ち｜126種類｜最初の記事｜プロフィール小文字</div><div class="special-actions"><button type="button" data-gallery-action="images">①記事あり125人の極薄</button><button type="button" data-gallery-action="pause">一時停止</button><button type="button" data-gallery-action="resume">再開</button><button type="button" data-gallery-action="cards">②通知カード</button><button type="button" data-gallery-action="delete">通知カードのみ削除</button><button type="button" data-gallery-action="profiles">プロフィールを整える</button><button type="button" data-gallery-action="all">126人全員を再確認</button></div>';
+
   panel.querySelector('.body')?.prepend(gallery);
  }
 
+ const gallery=panel.querySelector('[data-gallery126]');
+  bindPanelAction(gallery.querySelector('[data-gallery-action="images"]'), 'click:gallery',event=>{event.preventDefault();void startGallery126(true)});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="resume"]'), 'click:gallery',event=>{event.preventDefault();void resumeGallery126()});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="pause"]'), 'click:gallery',event=>{event.preventDefault();pauseFix()});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="profiles"]'), 'click:gallery',event=>{event.preventDefault();void repairGalleryProfiles()});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="all"]'), 'click:gallery',event=>{event.preventDefault();void startGallery126(false)});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="cards"]'), 'click:gallery',event=>{event.preventDefault();const run=readRun();if(!run?.gallery126){setStatus('先にハロウィン126人の画像を完成させてください',true);return;}void page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__?.()});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="delete"]'), 'click:gallery',event=>{event.preventDefault();void page.__MUMEI_PROFILE_CARD_DELETE_CARDS__?.()});
  const detail=panel.querySelector('details[data-like300]');
  if(!detail)return false;
  const summary=detail.querySelector('summary');
- if(summary)summary.textContent='＋ スキ履歴から紹介';
+ if(summary&&summary.textContent!=='＋ スキ履歴から紹介')summary.textContent='＋ スキ履歴から紹介';
  const hint=detail.querySelector('.hint');
- if(hint)hint.textContent='上の件数・全数を使用｜全数＝取得分全数（履歴候補は最大1500人）｜取得不可は飛ばす｜実績1件を追加｜50種ランダム｜10人ごと大見出し';
+ if(hint&&hint.textContent!=='上の件数・全数を使用｜全数＝取得分全数（履歴候補は最大1500人）｜取得不可は飛ばす｜実績1件を追加｜50種ランダム｜10人ごと大見出し')hint.textContent='上の件数・全数を使用｜全数＝取得分全数（履歴候補は最大1500人）｜取得不可は飛ばす｜実績1件を追加｜50種ランダム｜10人ごと大見出し';
 
  const oldButton=detail.querySelector('[data-a="like300-images"],[data-a="like300-fixed"]');
- if(oldButton){
+ if(oldButton&&!panelBindings.get(oldButton)?.has('click:history')){
   const button=oldButton.cloneNode(true);
   button.dataset.a='like300-fixed';
   button.textContent='① 最初から';
   button.style.background='#176b54';
   button.style.borderColor='#5bd7a7';
   oldButton.replaceWith(button);
-  button.addEventListener('click',event=>{event.preventDefault();void restartFixed300()})
+  bindPanelAction(button,'click:history',event=>{event.preventDefault();void restartFixed300()})
  }
 
  let resume=detail.querySelector('[data-a="like300-resume"]');
- if(resume)resume.remove();
- resume=document.createElement('button');resume.dataset.a='like300-resume';resume.textContent='続きから';resume.style.cssText='background:#244c66;border-color:#69bfe8';
- (detail.querySelector('.special-actions')||detail).appendChild(resume);resume.addEventListener('click',event=>{event.preventDefault();void resumeFixed300();});
+ if(!resume){resume=document.createElement('button');resume.dataset.a='like300-resume';resume.textContent='続きから';resume.style.cssText='background:#244c66;border-color:#69bfe8';
+ (detail.querySelector('.special-actions')||detail).appendChild(resume);}
+ bindPanelAction(resume,'click:resume',event=>{event.preventDefault();void resumeFixed300();});
  const prep=detail.querySelector('[data-a="like300-prep"]');
  prep?.remove();
  const actions=detail.querySelector('.special-actions');if(actions)actions.style.gridTemplateColumns='1fr';
  const cards=panel.querySelector('[data-a="cards"]');
  if(cards){
-  cards.textContent='② カード続き／開始';
+  if(cards.textContent!=='② カード続き／開始')cards.textContent='② カード続き／開始';
   cards.style.cssText='background:#34518a;border-color:#7897df';
-  (actions||detail).appendChild(cards);
-  if(!cards.dataset.currentCardHandler){
+  if(cards.parentNode!==(actions||detail))(actions||detail).appendChild(cards);
+  if(!panelBindings.get(cards)?.has('click:cards')){
    cards.dataset.currentCardHandler='1';
-   cards.addEventListener('click',event=>{
+   bindPanelAction(cards,'click:cards',event=>{
     const create=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;
     if(typeof create!=='function')return;
     event.preventDefault();event.stopImmediatePropagation();void create();
@@ -1673,11 +1681,11 @@ function patchPanel(){
    else setStatus('重複確認には最新版へ更新してください',true);
   });
  }
- (actions||detail).appendChild(audit);
+ if(audit.parentNode!==(actions||detail))(actions||detail).appendChild(audit);
  const deleteCards=panel.querySelector('[data-a="delete"]');
- if(deleteCards&&!deleteCards.dataset.currentDeleteHandler){
+ if(deleteCards&&!panelBindings.get(deleteCards)?.has('click:delete')){
   deleteCards.dataset.currentDeleteHandler='1';
-  deleteCards.addEventListener('click',event=>{
+  bindPanelAction(deleteCards,'click:delete',event=>{
    const remove=page.__MUMEI_PROFILE_CARD_DELETE_CARDS__;
    if(typeof remove!=='function')return;
    event.preventDefault();event.stopImmediatePropagation();void remove();
@@ -1685,18 +1693,44 @@ function patchPanel(){
  }
 
  const stop=panel.querySelector('[data-a="stop"]');
- stop?.addEventListener('pointerdown',()=>stopFix(),{capture:true});
- stop?.addEventListener('touchstart',()=>stopFix(),{capture:true,passive:true});
+ bindPanelAction(stop,'pointerdown:stop',()=>stopFix(),{capture:true});
+ bindPanelAction(stop,'touchstart:stop',()=>stopFix(),{capture:true,passive:true});
  return true
 }
 let attempts=0;
 window.addEventListener('mumei-profile-card-start',()=>void restartFixed300());
 window.addEventListener('mumei-profile-card-stop',()=>stopFix());
+let observedPanel=null,observedBody=null,observedGallery=null,repairQueued=false;
+function rememberPanel(){
+ observedPanel=document.getElementById(PANEL);observedBody=observedPanel?.querySelector('.body');observedGallery=observedPanel?.querySelector('[data-gallery126]');
+}
+function restorePanelControls(reveal=false){
+ page.__MUMEI_PROFILE_CARD_RESTORE_PANEL__?.();
+ if(!patchPanel())return false;
+ rememberPanel();
+ if(reveal&&observedGallery){observedGallery.open=true;observedBody.scrollTop=0;}
+ page.__MUMEI_PROFILE_CARD_REFRESH_UI__?.();
+ return true;
+}
+function panelControlsMissing(){
+ const panel=document.getElementById(PANEL),body=panel?.querySelector('.body'),gallery=panel?.querySelector('[data-gallery126]');
+ return !panel||!document.getElementById(PANEL+'-mini')||panel!==observedPanel||!body||body!==observedBody||!gallery||gallery!==observedGallery||!gallery.querySelector('[data-gallery-action="resume"]');
+}
+window.addEventListener('mumei-profile-card-panel-ready',()=>restorePanelControls(true));
+window.addEventListener('pageshow',()=>restorePanelControls());
 const timer=setInterval(()=>{
  attempts++;
- if(patchPanel()||attempts>240)clearInterval(timer)
+ if(restorePanelControls()||attempts>240)clearInterval(timer)
 },250);
-patchPanel();
+restorePanelControls();
+if(typeof window.MutationObserver==='function'){
+ const observer=new window.MutationObserver(()=>{
+  if(repairQueued||!panelControlsMissing())return;
+  repairQueued=true;
+  Promise.resolve().then(()=>{repairQueued=false;restorePanelControls()});
+ });
+ observer.observe(document.documentElement||document,{childList:true,subtree:true});
+}
 
 })();
 
