@@ -33,7 +33,7 @@ async function recoveryFixture(t,fetch){
   const source=readFileSync('src/main.tsx','utf8');
   const code=source.slice(source.indexOf('function showAccessNotice('),source.indexOf('async function pollOwnerPendingApplications('));
   const ctx=vm.createContext({window:h.w,document:h.w.document,localStorage:h.w.localStorage,sessionStorage:h.w.sessionStorage,
-    ...h.store,fetch,ACCESS:'fixture-access',REACTIVATE:'fixture-reactivate',JOIN_NOTE_KEY:'join',requestedNotificationAccount:'',memberResumeRunning:false,memberResumeGeneration:0});
+    ...h.store,...h.load('src/insight-session-request.ts'),fetch,ACCESS:'fixture-access',REACTIVATE:'fixture-reactivate',JOIN_NOTE_KEY:'join',requestedNotificationAccount:'',memberResumeRunning:false,memberResumeGeneration:0});
   vm.runInContext(ts.transpileModule(code+'\nthis.resume=tryReturningMemberResume;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,ctx);
   return {...h,ctx};
 }
