@@ -1,2 +1,2 @@
-INSIGHT 2026.10.19.3 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Restore saved ranking pages, recover archived display copies, and report database timeouts without duplicate queries.
+INSIGHT 2026.10.20.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
+Share overlapping session checks and hand verified identity to the initial shell; preserve fresh rechecks, account boundaries, saved history and completed marks.

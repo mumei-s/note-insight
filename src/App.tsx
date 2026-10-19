@@ -1,3 +1,4 @@
+import { readInsightSession, verifiedInsightSessionIdentity, type InsightSessionIdentity } from "./insight-session-request";
 import { lazy, Suspense, useEffect, useState } from "react";
 import "./fast-insight-v6-override.css";
 import { HubHome } from "./hub-home";
@@ -31,7 +32,6 @@ const PARTICIPANT_MAINTENANCE = false;
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
-const ACCESS_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const REACTIVATE_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const NOTIFICATION_TOOL_VERSION = "3.6.1";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
@@ -240,6 +240,7 @@ export function App() {
   const [route, setRoute] = useState(currentRoute);
   const [memberToken, setMemberToken] = useState(initialMemberToken);
   const [validatedMemberToken, setValidatedMemberToken] = useState("");
+  const [entrySession, setEntrySession] = useState<InsightSessionIdentity | null>(null);
   const [checkingMember, setCheckingMember] = useState(() => memberRoute(route) && Boolean(memberToken));
 
   useEffect(() => {
@@ -319,9 +320,10 @@ export function App() {
   }, [needsMember, memberToken]);
   useEffect(() => {
     let cancelled = false;
-    if (!needsMember || !memberToken) { setCheckingMember(false); if (!memberToken) setValidatedMemberToken(""); return; }
+    if (!needsMember || !memberToken) { setEntrySession(null); setCheckingMember(false); if (!memberToken) setValidatedMemberToken(""); return; }
     if (validatedMemberToken === memberToken) { setCheckingMember(false); return; }
     setCheckingMember(true);
+    setEntrySession(null);
     const c = new AbortController();
     const timer = window.setTimeout(() => c.abort(), 20_000);
 
@@ -348,16 +350,11 @@ export function App() {
 
     void (async () => {
       try {
-        const response = await fetch(ACCESS_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Insight-Token": memberToken },
-          body: JSON.stringify({ action: "session" }),
-          cache: "no-store",
-          signal: c.signal,
-        });
-        const payload = await response.json().catch(() => ({}));
+        const result = await readInsightSession(memberToken, c.signal);
+        const { response, payload } = result;
         if (cancelled) return;
         if (response.ok && payload?.ok !== false) {
+          setEntrySession(verifiedInsightSessionIdentity(result));
           setValidatedMemberToken(memberToken);
           return;
         }
@@ -405,13 +402,13 @@ export function App() {
   else if (route === "access/insight") page = <AccessPortalV6 />;
   else if (route === "owner") page = <OwnerGate />;
   else if (route === "manage") page = <ManagementPage />;
-  else if (route === "owner-insight") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "owner-insight") page = memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
   else if (route.startsWith("owner-features/")) page = ownerToken ? <FeaturePage slug={route.slice("owner-features/".length)} /> : <OwnerGate />;
-  else if (route === "dashboard") page = memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
-  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
-  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
-  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
-  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : memberValid ? <MemberInsightLiveV2 /> : <AccessPortalV6 />;
+  else if (route === "dashboard") page = memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
+  else if (route === "evidence") page = ownerView ? <EvidenceV2 /> : memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
+  else if (route === "article-likes") page = ownerView ? <ArticleLikesPageV2 /> : memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
+  else if (route === "dashboard-legacy") page = ownerView ? <CombinedAnalyticsApp /> : memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
+  else if (route.startsWith("features/")) page = ownerView ? <FeaturePage slug={route.slice("features/".length)} /> : memberValid ? <MemberInsightLiveV2 initialSession={entrySession} /> : <AccessPortalV6 />;
   else page = <HubHome />;
 
   const admin = isAdminRoute(route) || ownerView;

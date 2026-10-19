@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.19.3",
+  "appVersion": "2026.10.20.1",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-19T23:40:00+09:00",
+  "releasedAt": "2026-10-20T03:26:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "お店をはじめましたの通知分類を追加。スキ履歴・本人通知の対応済み表示を明確にし、保存済みの対応状況を維持します。",
+  "note": "起動時に重なる本人確認を共有し、同じ認証通信の繰り返しを削減。履歴・対応済み状態・本文とアカウント切替を維持します。",
   "dmVersion": "1.4.11",
   "dmLabel": "DM同期"
 }

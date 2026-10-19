@@ -21,12 +21,15 @@ function fixture({hash='#dashboard',accounts=[saved(member,'token-a'),saved(othe
   const document={visibilityState:'visible',getElementById:()=>null,createElement:()=>({style:{},remove(){}}),body:{appendChild(){}}};
   Object.assign(window,{location,history:{state:null,replaceState(_state,_title,url){page.href=new URL(url,page.href).href}},setTimeout(fn,ms){const id=++timer;timers.set(id,{fn,ms});return id},clearTimeout(id){timers.delete(id)},setInterval:()=>++timer});
   class Clock extends Date{static now(){return clock}}
-  const context=vm.createContext({window,document,location,localStorage,sessionStorage,Event,URL,Response,console,Date:Clock,exports:{},installApiBridge(){},registerServiceWorker(){},fetch:async(url,init)=>{const body=JSON.parse(init.body||'{}');calls.push({url,action:body.action});return body.action==='touch'?Response.json({ok:true}):respond(url,init,body)}});
+  const context=vm.createContext({window,document,location,localStorage,sessionStorage,Event,URL,Response,AbortController,setTimeout,clearTimeout,console,Date:Clock,exports:{},installApiBridge(){},registerServiceWorker(){},fetch:async(url,init)=>{const body=JSON.parse(init.body||'{}');calls.push({url,action:body.action});return body.action==='touch'?Response.json({ok:true}):respond(url,init,body)}});
   compile(readFileSync('src/insight-account-store.ts','utf8'),context);
   const store=context.exports;Object.assign(context,store);
   let lifecycle;
-  function loadLifecycle(){const target=vm.createContext({exports:{},Date:Clock});compile(readFileSync('src/insight-view-lifecycle.ts','utf8'),target);lifecycle=target.exports}
-  loadLifecycle();clock+=10;const verifiedAt=clock;viewCache.set('verified',{at:verifiedAt,rows:['saved-view']});
+  function loadLifecycle(){const target=vm.createContext({exports:{},Date:Clock,fetch:context.fetch,AbortController,setTimeout,clearTimeout,URL});compile(readFileSync('src/insight-view-lifecycle.ts','utf8'),target);lifecycle=target.exports}
+  loadLifecycle();
+  const sessionContext=vm.createContext({...context,exports:{},require:name=>name==='./insight-account-store'?store:lifecycle});
+  compile(readFileSync('src/insight-session-request.ts','utf8'),sessionContext);Object.assign(context,sessionContext.exports);
+  clock+=10;const verifiedAt=clock;viewCache.set('verified',{at:verifiedAt,rows:['saved-view']});
   const source=readFileSync('src/main.tsx','utf8'),startup=source.slice(0,source.indexOf('function startupFailureLabel('));
   compile(withoutImports(startup)+'\nthis.startup={validateCurrentMemberToken,tryReturningMemberResume};',context);
   const flush=()=>{for(let n=0;n<20;n++){const next=[...timers].find(([,entry])=>entry.ms<=30);if(!next)return;timers.delete(next[0]);next[1].fn()}throw new Error('Unexpected account event loop')};

@@ -1,3 +1,4 @@
+import { readInsightSession, verifiedInsightSessionIdentity } from "./insight-session-request";
 import { pendingBrowserWriteStatus, prepareBrowserStorage, retryBrowserStorage } from "./insight-browser-storage";
 import { Component, StrictMode, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -116,15 +117,10 @@ async function validateCurrentMemberToken() {
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
   if (!token) return "missing" as const;
   try {
-    const response = await fetch(ACCESS, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Insight-Token": token },
-      body: JSON.stringify({ action: "session" }),
-      cache: "no-store",
-    });
-    const payload = await readJson(response);
+    const result = await readInsightSession(token);
+    const { response, payload } = result;
     if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed()) return "temporary" as const;
-    if (response.ok && payload?.ok !== false && payload?.application) {
+    if (verifiedInsightSessionIdentity(result)) {
       const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
       rememberMemberSession(payload.application, token, stored?.passcode);
       if (window.location.hash.includes("access/insight")) window.location.hash = "dashboard";
