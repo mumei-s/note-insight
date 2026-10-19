@@ -32,7 +32,7 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  if(saved){w.localStorage.setItem(RUN_KEY,JSON.stringify(saved));gm.set(BACKUP_KEY,{value:structuredClone(saved),updatedAt:saved.updatedAt,deleted:false,articleKey:ARTICLE})}
  if(prefs)w.localStorage.setItem('mumei_profile_card_paster_v1',JSON.stringify(prefs));
  const code=readFileSync(path,'utf8');
- assert.match(code,/@version\s+2\.6\.6\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
+ assert.match(code,/@version\s+2\.6\.7\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
  w.eval(code);
  w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
  for(const callback of [...intervals.values()])callback();
@@ -136,7 +136,8 @@ test('reopening a paused batch changes no progress and performs no automatic res
 });
 
 test('a persisted minimized panel reopens after startup and its resume button resumes the saved card phase once',async t=>{
- const r=await runtime(t,files[0],{saved:{...pausedRun,pauseStage:'cards'},prefs:{tiny:true,collapsed:false}}),before=r.snapshots();
+ const completedRows=Array.from({length:126},(_,index)=>({gallery126:true,index:index+1}));
+ const r=await runtime(t,files[0],{saved:{...pausedRun,rows:completedRows,galleryAvailableOnly:false,pauseStage:'cards'},prefs:{tiny:true,collapsed:false}}),before=r.snapshots();
  assert.ok(r.panel().classList.contains('tiny'));
  r.click(r.w.document.getElementById(PANEL+'-mini'));await r.flush();
  assert.ok(!r.panel().classList.contains('tiny'));assert.equal(r.gallery().open,true);
@@ -163,4 +164,81 @@ test('lifecycle repair preserves the focused URL control and button taps preserv
  const inputEvent=new r.w.MouseEvent('mousedown',{bubbles:true,cancelable:true});field.dispatchEvent(inputEvent);
  assert.equal(inputEvent.defaultPrevented,false);assert.equal(r.w.document.activeElement,field);
  assert.equal(r.counts.network,0);
+});
+
+test('panel actions and disclosure taps never reach the host navigation click handler',async t=>{
+ const r=await runtime(t);let homeNavigations=0,pauseCalls=0;
+ r.w.document.addEventListener('click',()=>{homeNavigations++});
+ r.w.__MUMEI_PROFILE_CARD_PAUSE__=()=>{pauseCalls++;return true};
+ r.click(r.gallery().querySelector('[data-gallery-action="pause"]'));
+ assert.equal(pauseCalls,1);
+ assert.equal(homeNavigations,0,'pause must not bubble into note navigation');
+ const summary=r.gallery().querySelector('summary'),wasOpen=r.gallery().open;
+ summary.click();
+ assert.equal(r.gallery().open,!wasOpen,'the event shield preserves native disclosure toggling');
+ assert.equal(homeNavigations,0);
+ r.click(r.panel().querySelector('[data-ui="collapse"]'));
+ assert.equal(homeNavigations,0,'panel UI actions must not reach note navigation');
+ assert.equal(r.counts.network,0);
+});
+
+test('every mounted action is a non-submit button, including controls created after the base panel',async t=>{
+ const r=await runtime(t);
+ for(const button of r.panel().querySelectorAll('button'))assert.equal(button.type,'button',button.outerHTML);
+ assert.equal(r.w.document.getElementById(PANEL+'-mini').type,'button');
+});
+
+test('a mobile pause gesture is accepted before click and its compatibility events invoke pause once',async t=>{
+ const r=await runtime(t),button=r.gallery().querySelector('[data-gallery-action="pause"]');let pauseCalls=0,hostDowns=0;
+ r.w.__MUMEI_PROFILE_CARD_PAUSE__=()=>{pauseCalls++;return true};
+ for(const type of ['pointerdown','touchstart','click'])r.w.document.addEventListener(type,()=>{hostDowns++});
+ button.dispatchEvent(new r.w.Event('pointerdown',{bubbles:true,cancelable:true}));
+ assert.equal(pauseCalls,1,'mobile pause must acknowledge the initial pointer contact');
+ button.dispatchEvent(new r.w.Event('touchstart',{bubbles:true,cancelable:true}));
+ r.click(button);
+ assert.equal(pauseCalls,1,'compatibility touch/click events belong to the same pause gesture');
+ assert.equal(hostDowns,0);assert.equal(r.counts.network,0);
+});
+
+test('tapping pause while no phase is active still acknowledges the tap without changing progress',async t=>{
+ const r=await runtime(t),status=r.w.document.getElementById('mumei-profile-card-paster-status-v1'),beforeText=status.textContent,before=r.snapshots();
+ r.click(r.gallery().querySelector('[data-gallery-action="pause"]'));await r.flush();
+ assert.notEqual(status.textContent,beforeText,'an inactive card handler returning false must not leave pause silent');
+ assert.match(status.textContent,/一時停止|停止|実行中/);
+ assert.deepEqual(r.snapshots(),before);assert.equal(r.counts.network,0);
+});
+
+test('refreshing a busy panel keeps both pause controls enabled while blocking new batches',async t=>{
+ const r=await runtime(t);
+ r.w.__MUMEI_PROFILE_CARD_FIXED_BUSY__=()=>true;
+ r.w.__MUMEI_PROFILE_CARD_REFRESH_UI__();
+ assert.equal(r.gallery().querySelector('[data-gallery-action="pause"]').disabled,false);
+ assert.equal(r.panel().querySelector('[data-a="pause"]').disabled,false);
+ assert.equal(r.gallery().querySelector('[data-gallery-action="images"]').disabled,true);
+ assert.equal(r.panel().querySelector('[data-sources]').disabled,true);
+ assert.equal(r.counts.network,0);
+});
+
+test('the Halloween whole-batch delete control calls its current action once and never reaches host navigation',async t=>{
+ const r=await runtime(t),before=r.snapshots();let calls=0,homeNavigations=0;
+ assert.equal(typeof r.w.__MUMEI_PROFILE_CARD_DELETE_ALL__,'function','the visible delete control must have a current editor action');
+ r.w.__MUMEI_PROFILE_CARD_DELETE_ALL__=()=>{calls++};
+ r.w.document.addEventListener('click',()=>{homeNavigations++});
+ for(let i=0;i<5;i++)r.ready();await r.flush();
+ r.click(r.gallery().querySelector('[data-gallery-action="delete-all"]'));
+ assert.equal(calls,1);assert.equal(homeNavigations,0);
+ assert.deepEqual(r.snapshots(),before);assert.equal(r.counts.network,0);
+});
+
+for(const pauseStage of ['cards','core-images'])test('resume selects the saved generic core phase before gallery preparation: '+pauseStage,async t=>{
+ const saved={articleKey:ARTICLE,coreImageRun:true,gallery126:false,stage:pauseStage==='cards'?'cards_building':'images_building',paused:true,pauseStage,count:1,rows:[{index:1,creator:'Example',urlname:'example',url:'https://note.com/example/n/nabcdefabcdef'}],items:[],cardKeys:[],updatedAt:12345};
+ const r=await runtime(t,files[0],{saved}),before=r.snapshots();let cardResumes=0,imageResumes=0;
+ assert.equal(typeof r.w.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__,'function');
+ r.w.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__=()=>{cardResumes++};
+ r.w.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__=()=>{imageResumes++};
+ r.click(r.gallery().querySelector('[data-gallery-action="resume"]'));await r.flush();
+ assert.equal(cardResumes,pauseStage==='cards'?1:0);
+ assert.equal(imageResumes,pauseStage==='core-images'?1:0);
+ assert.deepEqual(r.snapshots(),before,'choosing a resume handler leaves stored progress unchanged');
+ assert.equal(r.counts.network,0,'generic resume never prepares or requests gallery participants');
 });

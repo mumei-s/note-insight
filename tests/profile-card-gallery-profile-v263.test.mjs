@@ -10,7 +10,7 @@ const code=source.slice(source.indexOf('function galleryProfileGraphemes('),sour
  source.slice(source.indexOf('function findActivity('),source.indexOf('function recordHeading('));
 function api(intl=Intl){
  const context=vm.createContext({Intl:intl});
- vm.runInContext(code+';globalThis.api={galleryProfileGraphemes,galleryProfileWidth,galleryProfileChunks,galleryProfileLines,galleryProfileLayout,escapeGalleryProfileTex,activityText,insertActivityAt,findActivity};',context);
+ vm.runInContext(code+';globalThis.api={galleryProfileGraphemes,galleryProfileWidth,galleryProfileBudgetChunks,galleryProfileChunks,galleryProfileLines,galleryProfileLayout,escapeGalleryProfileTex,activityText,insertActivityAt,findActivity};',context);
  return context.api;
 }
 const row={gallery126:true,creator:'猫好き🌱',profileText:'会社員とイラスト制作。親子で楽しむ物語を毎日発信しています。'};
@@ -64,6 +64,25 @@ test('Japanese closing punctuation stays with its text and opening brackets stay
  }
 });
 
+for(const [mode,intl] of [['Intl',Intl],['fallback',{}]]){
+ test(mode+' keeps complete Japanese and mixed-language words when wrapping',()=>{
+  const mathApi=api(intl),words=['会社員','クリエイター','発信しています','綴っています','ITエンジニア','Webデザイン'],text=words.join(' '),lines=Array.from(mathApi.galleryProfileLines(text));
+  assert.equal(lines.join(''),text);
+  for(const word of words)assert.equal(lines.filter(line=>line.includes(word)).length,1,word);
+  for(const line of lines)assert.ok(mathApi.galleryProfileWidth(line)<=16.00001,line);
+ });
+ test(mode+' wraps at complete sentences and clauses before using word boundaries',()=>{
+  const mathApi=api(intl),sentences=['前の文章。','小さな物語を描いています。','親子で楽しく学びます。'];
+  assert.deepEqual(Array.from(mathApi.galleryProfileLines(sentences.join(''))),sentences);
+  assert.deepEqual(Array.from(mathApi.galleryProfileLines('いつも前向きに楽しみ、親子で物語を描きます。')),['いつも前向きに楽しみ、','親子で物語を描きます。']);
+  const inflected='記事にしていますのでよければどうぞ。',layout=mathApi.galleryProfileLayout(inflected);
+  assert.equal(layout.font,'scriptsize');
+  assert.equal(layout.lines.join(''),inflected);
+  assert.ok(layout.lines.some(line=>line.includes('よければどうぞ。')));
+  assert.throws(()=>mathApi.galleryProfileLayout('W'.repeat(100)),/全文を保ったまま/);
+ });
+}
+
 test('URLs are indivisible and a long URL selects a smaller whole-profile font',()=>{
  const mathApi=api(),url='https://hasyamo-site.hasyamo.workers.dev/',profile={gallery126:true,creator:'はしゃも',profileText:'制作・相談受付中。事例・ポートフォリオ：'+url};
  const layout=mathApi.galleryProfileLayout('プロフィール｜'+profile.creator+'さん：'+profile.profileText);
@@ -97,6 +116,31 @@ test('every saved profile fits the phone budget and keeps every URL on one row',
   for(const match of original.matchAll(/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+/giu))assert.equal(layout.lines.filter(line=>line.includes(match[0])).length,1,prepared.urlname+':'+match[0]);
   assert.ok(!/[｜|《》]/u.test(mathApi.activityText(prepared)),prepared.urlname);
  }
+});
+
+test('fallback word wrapping keeps the current font size and full text for every saved profile',()=>{
+ const rows=JSON.parse(readFileSync('public/note-profile-card-halloween126.json','utf8')).preparedRows.filter(Boolean),normal=api(),fallback=api({});
+ for(const prepared of rows){
+  const original='プロフィール｜'+prepared.creator+'さん：'+(prepared.profileText||'プロフィール未設定'),layout=fallback.galleryProfileLayout(original);
+  assert.equal(layout.font,normal.galleryProfileLayout(original).font,prepared.urlname);
+  assert.equal(layout.lines.join(''),original.replace(/\r\n?|\n/g,''),prepared.urlname);
+  for(const line of layout.lines)assert.ok(fallback.galleryProfileWidth(line)<=layout.maxWidth+.00001,prepared.urlname+':'+line);
+ }
+});
+
+test('semantic word and sentence preferences never shrink the established profile font',()=>{
+ const rows=JSON.parse(readFileSync('public/note-profile-card-halloween126.json','utf8')).preparedRows.filter(Boolean),mathApi=api(),tiny=[];
+ for(const prepared of rows){
+  const original='プロフィール｜'+prepared.creator+'さん：'+(prepared.profileText||'プロフィール未設定'),layout=mathApi.galleryProfileLayout(original);
+  const widest=Math.max(0,...original.replace(/\r\n?/g,'\n').split('\n').flatMap(line=>mathApi.galleryProfileBudgetChunks(line).map(mathApi.galleryProfileWidth)));
+  assert.equal(layout.font,widest>16?'tiny':'scriptsize',prepared.urlname);
+  if(layout.font==='tiny')tiny.push(prepared.urlname);
+ }
+ assert.deepEqual(tiny.sort(),['hasyamo','kinu885','skagenavi','chatgpt_ysd','gentle_curlew322','henko_3in0'].sort());
+ const kanji='日本国内医療福祉経営企画活動管理運営支援情報技術創作制作';
+ const layout=mathApi.galleryProfileLayout(kanji);
+ assert.equal(layout.font,'scriptsize');
+ assert.equal(layout.lines.join(''),kanji);
 });
 
 test('actual KaTeX preserves the kaomoji, consecutive spaces and accented Latin character',{skip:!katex},()=>{

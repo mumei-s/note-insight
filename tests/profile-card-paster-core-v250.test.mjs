@@ -117,7 +117,7 @@ test('biography ownership excludes earlier text and limits matching paragraphs t
 
 test('reset removes only marked native dividers immediately after owned images',async()=>{
  const c=runtime();
- const image=(pos,url)=>({pos,node:{nodeSize:2,attrs:{link:url}}});
+ const image=(pos,url)=>({pos,node:{type:{name:'image'},nodeSize:2,attrs:{id:'image-'+pos,link:url}}});
  const alpha='https://note.com/alpha/n/n111111111111',beta='https://note.com/beta/n/n222222222222',gamma='https://note.com/gamma/n/n333333333333',delta='https://note.com/delta/n/n444444444444';
  c.trackedImages=[image(10,alpha),image(20,beta),image(30,gamma),image(40,delta)];
  const native={nodeSize:1,type:{name:'horizontal_rule'}};
@@ -125,9 +125,9 @@ test('reset removes only marked native dividers immediately after owned images',
  const textLine={nodeSize:3,type:{name:'paragraph'},textContent:'────────────'};
  const custom={nodeSize:1,type:{name:'noteSeparator',spec:{toDOM:()=>['hr']}}};
  const nodes=new Map([[12,native],[22,original],[32,textLine],[42,custom]]);
- c.view={state:{doc:{nodeAt:pos=>nodes.get(pos)}}};
- c.saved={dividerUrls:[alpha,gamma,delta]};
- c.api.patch('findView=()=>view;readRun=()=>saved;writeRun=value=>saved=value;resolveOwnedImageHits=()=>trackedImages;resolveOwnedCardHits=()=>[];resolveOwnedHeadingHits=()=>[];resolveOwnedActivityHits=()=>[];deleteHits=(view,hits)=>{globalThis.deleted=hits;return hits.length}');
+ c.view={state:{doc:{nodeAt:pos=>nodes.get(pos),content:{size:50},descendants(fn){for(const hit of c.trackedImages)fn(hit.node,hit.pos)}}}};
+ c.saved={articleKey:'n123456789abc',items:c.trackedImages.map(hit=>({id:hit.node.attrs.id,url:hit.node.attrs.link})),dividerUrls:[alpha,gamma,delta]};
+ c.api.patch('findView=()=>view;readRun=()=>saved;writeRun=value=>saved=value;resolveOwnedImageHits=()=>trackedImages;resolveOwnedCardHits=()=>[];deleteVerifiedGeneratedHits=(view,hits)=>{globalThis.deleted=hits;return hits.length}');
  const result=await c.api.deleteAllGenerated({save:false});
  assert.equal(result.removedImages,4);
  assert.equal(result.removedDividers,2);

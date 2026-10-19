@@ -58,3 +58,27 @@ test('the pause control stays usable while card actions are busy',async()=>{
  const creating=c.api.createCardsAtTap();await tick();assert.equal(pause.disabled,false);assert.equal(cards.disabled,true);
  c.api.pauseCards();c.finishCard();await creating;assert.equal(cards.disabled,false);
 });
+
+test('pause wakes the current card gap immediately without starting the next conversion',async()=>{
+ const c=runtime();c.api.patch('sleep=ms=>new Promise(resolve=>{globalThis.waitingMs=ms;globalThis.finishDelay=resolve})');
+ const creating=c.api.createCardsAtTap();await tick();c.finishCard();await tick();
+ assert.equal(c.waitingMs,700);assert.equal(c.calls.length,1);
+ c.api.pauseCards();await creating;
+ assert.equal(c.calls.length,1);assert.equal(c.saved.paused,true);assert.equal(c.saves.length,1);
+});
+
+test('pause wakes the longer ten-card throttle delay before an eleventh conversion',async()=>{
+ const c=runtime(11);c.api.patch('sleep=ms=>ms===2500?new Promise(resolve=>{globalThis.blockWaiting=true;globalThis.finishDelay=resolve}):Promise.resolve()');
+ const creating=c.api.createCardsAtTap();await tick();
+ for(let i=0;i<10;i++){assert.equal(c.calls.length,i+1);c.finishCard();await tick()}
+ assert.equal(c.blockWaiting,true);assert.equal(c.calls.length,10);c.api.pauseCards();await creating;
+ assert.equal(c.calls.length,10);assert.equal(c.saved.cardKeys.length,10);assert.equal(c.saved.paused,true);
+});
+
+test('profile-only gallery entries retain all images but never request a profile URL notification card',async()=>{
+ const c=runtime();c.saved.rows[1].profileOnly=true;
+ const expected=[c.saved.rows[0].url,c.saved.rows[2].url];
+ const creating=c.api.createCardsAtTap();await tick();assert.equal(c.calls.length,1);c.finishCard();await tick();
+ assert.equal(c.calls.length,2);c.finishCard();await creating;
+ assert.deepEqual(c.calls,expected);assert.equal(c.cards.length,2);assert.equal(c.saved.rows.length,3);assert.equal(c.saved.stage,'complete');
+});

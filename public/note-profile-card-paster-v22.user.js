@@ -35,7 +35,7 @@ const PREP_PREFIX='mumei_profile_like300_fix_v230:';
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
 const W=860,H=140;
-const IMAGE_GAP=180;
+const IMAGE_GAP=80;
 const HISTORY_CANDIDATE_CAP=1500;
 
 let busy=false;
@@ -48,6 +48,7 @@ let imageCommandCache=null;
 let selectionCache=null;
 const activeRequests=new Set();
 page.__MUMEI_PROFILE_CARD_FIXED_BUSY__=()=>busy||!!exportWaiter;
+page.__MUMEI_PROFILE_CARD_FIXED_PAUSE_REQUESTED__=()=>pauseRequested;
 const coreBusy=()=>Boolean(page.__MUMEI_PROFILE_CARD_CORE_BUSY__?.());
 const notifyFixedState=()=>window.dispatchEvent(new window.Event('mumei-profile-card-fixed-state'));
 
@@ -296,7 +297,7 @@ async function waitNewNoteImage(view,beforeIds,timeout=150000){
   if(fresh.length===1)return fresh[0];
   if(fresh.length>1)throw new Error('複数の新しい画像を検出しました。貼り付け中の手動画像追加を止め、本文の画像を確認してください');
   if(stopRequested)throw new Error('停止しました');
-  await sleep(120)
+  await sleep(70)
  }
  throw new Error('note画像アップロード待ちタイムアウト')
 }
@@ -664,12 +665,14 @@ async function ensureCardsRunReady(view,anchors=null){
  if(!run)return null;
  if(run.gallery126){
   if(run.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');
+  if(galleryNeedsParticipantUpgrade(run))throw new Error('記事なしの参加者1人を追加します。画像の「再開」で126人を完成させてください');
   const rows=validateGalleryRows(run.rows);
   if(!rows.at(-1)?.finalMarker)throw new Error('最後の実績の算数が未追加です。「続きから」で末尾の画像を完成させてください');
   assertGalleryTracking(view,run);repairGalleryProfileParagraphs(view,run,rows,anchors);await flushRunBackup();run=readRun();
   const images=ownedImagesForRun(view,run);
   const count=completedImagePrefix(rows,images);
   if(count!==rows.length)throw new Error('ハロウィン画像の照合 '+count+'/'+rows.length+'件。先に画像の続きを完成させてください');
+  if(reconcileGalleryHeadings(view,run,rows)){await flushRunBackup();run=readRun()}
   assertGalleryPaste(view,rows);
   if(!['images_ready','cards_building','complete'].includes(run.stage)){
    writeRun({...run,stage:'images_ready',updatedAt:Date.now()});await flushRunBackup();
@@ -887,9 +890,9 @@ function drawGalleryDecor(ctx,design){
  else ctx.fillRect(396,14,4,H-28);
  ctx.restore()
 }
-function fitGalleryCreatorName(ctx,creator,maxWidth){
+function fitGalleryCreatorName(ctx,creator,maxWidth,maxSize=14){
  const name=String(creator||''),full=name+'さん';
- for(let size=14;size>=10;size-=.5){
+ for(let size=maxSize;size>=10;size-=.5){
   ctx.font='700 '+size+'px system-ui,-apple-system,sans-serif';
   if(ctx.measureText(full).width<=maxWidth)return{text:full,size,truncated:false};
  }
@@ -902,10 +905,15 @@ function fitGalleryCreatorName(ctx,creator,maxWidth){
 function confirmedGalleryThumbnailMissing(row){
  return row.gallery126===true&&row.articleThumbnailMissing===true&&Boolean(row.key)&&Boolean(row.url)&&row.thumbnailMissingEvidence?.key===row.key&&row.thumbnailMissingEvidence?.articleUrl===row.url;
 }
+function confirmedGalleryProfileOnly(row){
+ const id=String(row.urlname||'').trim().toLowerCase(),profileUrl='https://note.com/'+id,proof=row.noPublicArticleEvidence;
+ return row.gallery126===true&&row.profileOnly===true&&/^[a-z0-9_\-]+$/.test(id)&&row.url===profileUrl&&row.actorUrl===profileUrl&&row.key===''&&row.thumbUrl===''&&row.title===''&&row.publishAt===null&&row.articleSelection==='profile-only-confirmed'&&row.oldestVerified===false&&row.oldestEvidence===null&&proof?.creator===id&&proof.profileUrl===profileUrl&&proof.noteCount===0&&proof.contentsTotal===0&&proof.isLastPage===true&&proof.source==='note-public-api'&&Number.isFinite(Date.parse(proof.checkedAt||''));
+}
 function drawGalleryCard(ctx,index,row,avatar,thumb){
  const design=galleryDesign(index),{layout,theme}=design;
  drawGalleryDecor(ctx,design);
- const [ix,iy,iw,ih]=layout.thumb,[ax,ay,ar]=layout.avatar;
+ const profileOnly=confirmedGalleryProfileOnly(row);
+ const [ix,iy,iw,ih]=layout.thumb,[ax,originalAy,originalAr]=layout.avatar,ay=profileOnly?70:originalAy,ar=profileOnly?Math.max(32,originalAr):originalAr;
  const frame=()=>layout.shape==='square'?rounded(ctx,ax-ar,ay-ar,ar*2,ar*2,10):circle(ctx,ax,ay,ar);
  ctx.fillStyle=theme.soft;frame();ctx.fill();ctx.strokeStyle=theme.accent;ctx.lineWidth=2;frame();ctx.stroke();
  if(avatar){
@@ -913,6 +921,15 @@ function drawGalleryCard(ctx,index,row,avatar,thumb){
   ctx.save();frame();ctx.clip();ctx.drawImage(avatar,ax-dw/2,ay-dh/2,dw,dh);ctx.restore()
  }else{
   ctx.save();ctx.fillStyle=theme.ink;ctx.font='800 '+Math.min(28,ar)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText([...String(row.creator||'n')][0]||'n',ax,ay);ctx.restore()
+ }
+ if(profileOnly){
+  // No article is invented for a participant whose public article count is zero.
+  // Keep just their real icon (or initial) and full creator label on this design.
+  const nx=ax>=W/2?24:ax+ar+24,nw=ax>=W/2?ax-ar-48:W-nx-24;
+  ctx.fillStyle=theme.bg;rounded(ctx,nx-4,46,nw+8,48,6);ctx.fill();
+  const name=fitGalleryCreatorName(ctx,row.creator,nw,24);
+  ctx.fillStyle=theme.ink;ctx.textAlign='start';ctx.textBaseline='middle';ctx.fillText(name.text,nx,70);
+  return;
  }
  // Keep text on a solid panel so every motif remains readable on mobile.
  const [tx,ty,tw]=layout.text,[nx,ny,nw]=layout.name;
@@ -943,7 +960,9 @@ function galleryAssetUrl(value,width){
  return value;
 }
 async function makeFile(row){
- const avatarRequired=Boolean(mediaUrl(row.actorImageUrl)),thumbnailMissing=confirmedGalleryThumbnailMissing(row);
+ const profileOnly=confirmedGalleryProfileOnly(row);
+ if(row.profileOnly===true&&!profileOnly){const error=new Error('公開記事なしの参加者確認記録が一致しません');error.code='PROFILE_ONLY_UNVERIFIED';throw error;}
+ const avatarRequired=Boolean(mediaUrl(row.actorImageUrl)),thumbnailMissing=profileOnly||confirmedGalleryThumbnailMissing(row);
  const avatarSource=row.gallery126?galleryAssetUrl(row.actorImageUrl,180):row.actorImageUrl,thumbSource=row.gallery126?galleryAssetUrl(row.thumbUrl,720):row.thumbUrl;
  const images=await Promise.allSettled([avatarRequired?bitmapFromUrl(avatarSource):Promise.resolve(null),thumbnailMissing?Promise.resolve(null):bitmapFromUrl(thumbSource)]);
  const [avatar,thumb]=images.map(result=>result.status==='fulfilled'?result.value:null);
@@ -1042,14 +1061,7 @@ const galleryProfileAsciiWidths=[.25,.28,.5,.84,.5,.84,.78,.53,.39,.39,.5,.78,.2
 function galleryProfileWidth(value){
  return galleryProfileGraphemes(value).reduce((sum,part)=>sum+(part==='\t'?1:part.length===1&&part.charCodeAt(0)>=32&&part.charCodeAt(0)<=126?galleryProfileAsciiWidths[part.charCodeAt(0)-32]:/^[\uff61-\uff9f]$/.test(part)?.55:1),0);
 }
-function galleryProfileChunks(value){
- const units=[],text=String(value??''),urls=/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+/giu;
- let offset=0;
- for(const match of text.matchAll(urls)){
-  units.push(...galleryProfileGraphemes(text.slice(offset,match.index)),match[0]);
-  offset=match.index+match[0].length;
- }
- units.push(...galleryProfileGraphemes(text.slice(offset)));
+function galleryProfileKinsoku(units){
  const noStart=/^[、。，．・：；？！ー…‥）〕］｝〉》」』】〙〗〟’”｠»ヽヾ々〻ゝゞぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ,.:;!?\)\]\}]/u;
  const noEnd=/[（〔［｛〈《「『【〘〖〝‘“｟«\(\[\{]$/u;
  const chunks=[];
@@ -1060,11 +1072,79 @@ function galleryProfileChunks(value){
  }
  return chunks;
 }
+function galleryProfileBudgetChunks(value){
+ // Preserve the established font selection: only a whole URL or a forbidden
+ // line-break pair can trigger tiny, never the semantic wrapping preferences.
+ const units=[],text=String(value??''),urls=/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+/giu;
+ let offset=0;
+ for(const match of text.matchAll(urls)){
+  units.push(...galleryProfileGraphemes(text.slice(offset,match.index)),match[0]);
+  offset=match.index+match[0].length;
+ }
+ units.push(...galleryProfileGraphemes(text.slice(offset)));
+ return galleryProfileKinsoku(units);
+}
+function galleryProfileChunks(value,maxWidth=Infinity){
+ const units=[],text=String(value??''),protectedWords=/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+|[\p{Script=Latin}\p{Mark}\p{Number}_]+(?:[+.'’/\-][\p{Script=Latin}\p{Mark}\p{Number}_]+)*(?:\+\+|#)?/giu;
+ const kind=part=>/^[\p{Script=Han}々〆ヵヶ]+$/u.test(part)?'han':/^[\p{Script=Han}々〆ヵヶ]+[\p{Script=Hiragana}\p{Mark}ー]+$/u.test(part)?'inflected':/^[\p{Script=Hiragana}\p{Mark}ー]+$/u.test(part)?'hiragana':/^[\p{Script=Katakana}\p{Mark}ー・\uff9e\uff9f]+$/u.test(part)?'katakana':/^\s+$/u.test(part)?'space':'other';
+ const append=(part,type=kind(part))=>{
+  const previous=units[units.length-1];
+  // Word Segmenter can split 会社員 and クリエイター. Rejoin contiguous
+  // script runs and Japanese inflections; keep ITエンジニア together too.
+  if(previous&&(type==='han'&&previous.kind==='han'||type==='hiragana'&&['han','inflected','hiragana','katakana','latin'].includes(previous.kind)&&!/(?:ので|けれど|けど|ですが|ながら|ならば|そして|または)$/u.test(previous.text)||type==='katakana'&&['katakana','latin'].includes(previous.kind)||type==='space'&&previous.kind==='space')){
+   previous.text+=part;previous.parts.push(part);
+   previous.kind=type==='hiragana'&&previous.kind!=='hiragana'?'inflected':type;
+  }else units.push({text:part,kind:type,parts:[part]});
+ };
+ const words=fragment=>{
+  const parts=typeof Intl?.Segmenter==='function'?Array.from(new Intl.Segmenter('ja',{granularity:'word'}).segment(fragment),part=>part.segment):galleryProfileGraphemes(fragment);
+  for(const part of parts)append(part);
+ };
+ let offset=0;
+ for(const match of text.matchAll(protectedWords)){
+  words(text.slice(offset,match.index));
+  append(match[0],/^https?:\/\//i.test(match[0])?'url':'latin');
+  offset=match.index+match[0].length;
+ }
+ words(text.slice(offset));
+ const bounded=[];
+ for(const unit of units){
+  // A long run of distinct Kanji words may wrap at the real word Segmenter
+  // boundaries. Do not reinterpret one Katakana word or URL as many letters.
+  if(unit.kind==='han'&&unit.parts.length>1&&typeof Intl?.Segmenter==='function'&&galleryProfileWidth(unit.text)>maxWidth){
+   let phrase='';
+   for(const word of unit.parts){if(phrase&&galleryProfileWidth(phrase+word)>maxWidth){bounded.push(phrase);phrase=''}phrase+=word}
+   if(phrase)bounded.push(phrase);
+  }else bounded.push(unit.text);
+ }
+ return galleryProfileKinsoku(bounded);
+}
+function galleryProfileSemanticParts(value,maxWidth){
+ const text=String(value??''),chunks=galleryProfileChunks(text,maxWidth),sentenceEnds=new Set();
+ if(typeof Intl?.Segmenter==='function')for(const part of new Intl.Segmenter('ja',{granularity:'sentence'}).segment(text))sentenceEnds.add(part.index+part.segment.length);
+ const terminal=/[。！？!?][\s）〕］｝〉》」』】’”\)\]\}]*$/u,clause=/[、，,；;：:][\s）〕］｝〉》」』】’”\)\]\}]*$/u;
+ const sentences=[];
+ let offset=0,sentence=[];
+ for(const chunk of chunks){
+  sentence.push(chunk);offset+=chunk.length;
+  if(sentenceEnds.has(offset)||terminal.test(chunk)){sentences.push(sentence);sentence=[]}
+ }
+ if(sentence.length)sentences.push(sentence);
+ const parts=[];
+ for(const words of sentences){
+  if(galleryProfileWidth(words.join(''))<=maxWidth+.00001){parts.push(words.join(''));continue}
+  let phrase=[];
+  const flush=()=>{if(!phrase.length)return;const whole=phrase.join('');parts.push(...(galleryProfileWidth(whole)<=maxWidth+.00001?[whole]:phrase));phrase=[]};
+  for(const word of words){phrase.push(word);if(clause.test(word))flush()}
+  flush();
+ }
+ return parts;
+}
 function galleryProfileLines(value,maxWidth=16){
  const lines=[];
  for(const original of String(value??'').replace(/\r\n?/g,'\n').split('\n')){
   let line='',used=0;
-  for(const part of galleryProfileChunks(original)){
+  for(const part of galleryProfileSemanticParts(original,maxWidth)){
    const size=galleryProfileWidth(part);
    if(size>maxWidth+.00001)throw new Error('プロフィールのURLまたは括弧内の文字列が長すぎます。全文を保ったまま表示幅を確認してください');
    if(line&&used+size>maxWidth+.00001){lines.push(line);line='';used=0}
@@ -1078,7 +1158,7 @@ function galleryProfileLayout(value){
  // At scriptsize, sixteen CJK em plus array margins leaves room on a phone.
  // A whole URL stays in one row. Only profiles whose indivisible URL/bracket
  // group needs extra room use tiny (0.5/0.7 of scriptsize), never truncation.
- const text=String(value??''),widest=Math.max(0,...text.replace(/\r\n?/g,'\n').split('\n').flatMap(line=>galleryProfileChunks(line).map(galleryProfileWidth)));
+ const text=String(value??''),widest=Math.max(0,...text.replace(/\r\n?/g,'\n').split('\n').flatMap(line=>galleryProfileBudgetChunks(line).map(galleryProfileWidth)));
  const tiny=widest>16,font=tiny?'tiny':'scriptsize',maxWidth=tiny?22.4:16;
  return{font,maxWidth,lines:galleryProfileLines(text,maxWidth)};
 }
@@ -1184,6 +1264,8 @@ async function resumeFixed300(){
  try{
   await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
   const run=readRun();
+  if(run?.pauseStage==='cards'&&!galleryNeedsParticipantUpgrade(run)&&typeof page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__==='function')return page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__();
+  if(!run?.gallery126&&run?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
   if(run?.items?.length||run?.rows?.length)return createFixed300();
   const bridge=await Promise.resolve(GM_getValue(BRIDGE_KEY,null));
   if(!Array.isArray(bridge?.people)||!bridge.people.length){setStatus('読み込みの続きがありません。「① 最初から」でスキ履歴を取得してください',true);return;}
@@ -1263,22 +1345,79 @@ function galleryManifest(){
  api.validateParticipants(manifest.people,126);
  return manifest;
 }
+function galleryNeedsParticipantUpgrade(run){
+ const creators=Array.isArray(run?.rows)?run.rows.filter(row=>!row?.finalMarker):[];
+ return Boolean(run?.gallery126&&creators.length===125&&(run.galleryAvailableOnly||creators.every(row=>row.galleryAvailableOnly===true)));
+}
+function galleryImagePlan(view,run,rows=run.rows){
+ const byUrl=new Map(rows.map((row,index)=>[norm(row.url),index])),entries=[],byIndex=new Map();let previous=-1;
+ if(byUrl.size!==rows.length)throw new Error('ハロウィン画像のリンクに重複があります');
+ const images=ownedImagesForRun(view,run),records=Array.isArray(run.items)?run.items:[];
+ if(images.length!==records.length)throw new Error('画像の保存記録と本文の件数が一致しません。欠けた画像を確認してください');
+ const upgrade=run.galleryParticipantUpgrade,allowed=new Set(upgrade?.fromCount===125&&Array.isArray(upgrade.addedParticipantUrls)?upgrade.addedParticipantUrls.map(norm).filter(url=>rows.some(row=>norm(row.url)===url&&galleryKnownNoArticle(canonicalUrlname(row)))):[]);
+ let expected=0;
+ for(const hit of images){
+  const index=byUrl.get(norm(hit.node.attrs?.link));
+  if(index===undefined||index<=previous||byIndex.has(index))throw new Error('ハロウィン画像の人物・順序が保存記録と一致しません');
+  while(expected<index&&allowed.has(norm(rows[expected].url)))expected++;
+  if(index!==expected)throw new Error('追加対象以外の画像に不足・順序の変更があります。本文は保持しました');
+  expected=index+1;
+  const row=rows[index];
+  if(String(hit.node.textContent||'').trim()!==row.creator+'さん')throw new Error((index+1)+'人目のキャプションが一致しません');
+  const entry={index,row,hit};entries.push(entry);byIndex.set(index,entry);previous=index;
+ }
+ return{entries,byIndex};
+}
+function galleryProfileMap(run){
+ if(run.galleryProfileTexts&&typeof run.galleryProfileTexts==='object'&&!Array.isArray(run.galleryProfileTexts))return{...run.galleryProfileTexts};
+ const rows=(run.rows||[]).filter(row=>!row.finalMarker),saved=run.activityTexts||[];
+ if(!Array.isArray(saved)||saved.length>rows.length)throw new Error('プロフィールの保存記録を確認できません');
+ return Object.fromEntries(saved.map((text,index)=>[norm(rows[index].url),String(text)]));
+}
+function recordGalleryActivity(row,text){
+ const run=readRun();if(!run?.gallery126)throw new Error('プロフィールの作成記録を確認できません');
+ const records=galleryProfileMap(run);records[norm(row.url)]=text;
+ writeRun({...run,galleryProfileTexts:records,activityTexts:run.rows.filter(person=>!person.finalMarker&&Object.prototype.hasOwnProperty.call(records,norm(person.url))).map(person=>records[norm(person.url)]),updatedAt:Date.now()});
+}
+async function upgradeGalleryParticipants(view,run){
+ if(!galleryNeedsParticipantUpgrade(run))return run;
+ validateGalleryRows(run.rows);assertGalleryTracking(view,run);
+ const oldRows=run.rows.filter(row=>!row.finalMarker),oldImages=ownedImagesForRun(view,run);
+ completedImagePrefix(run.rows,oldImages);
+ if(oldImages.length&&(oldRows.some(row=>!Number.isInteger(row.designIndex)||row.designIndex<0||row.designIndex>=126)||new Set(oldRows.map(row=>row.designIndex)).size!==oldRows.length))throw new Error('既存125人のデザイン記録が一致しません。画像は保持しました');
+ const manifest=galleryManifest(),existing=new Map(oldRows.map(row=>[canonicalUrlname(row),row])),beforeDoc=view.state.doc,rows=[];
+ for(let index=0;index<manifest.people.length;index++){
+  const person=manifest.people[index],old=existing.get(person.urlname.toLowerCase());
+  if(old){const{galleryAvailableOnly,gallerySourceIndex,...kept}=old;rows.push({...kept,index:index+1})}
+  else rows.push(await prepareGalleryPerson(person,index));
+ }
+ if(stopRequested)throw new Error('停止しました');
+ if(view.state.doc!==beforeDoc&&!view.state.doc.eq?.(beforeDoc))throw new Error('追加の確認中に本文が変更されました。完成分は保持しています。「再開」で照合してください');
+ const final=run.rows.at(-1)?.finalMarker?{...run.rows.at(-1),index:127}:null;
+ const complete=validateGalleryRows(final?[...rows,final]:rows),profiles=galleryProfileMap(run);
+ const addedParticipantUrls=rows.filter(row=>!existing.has(canonicalUrlname(row))).map(row=>row.url);
+ const upgraded={...run,rows:complete,count:126,galleryAvailableOnly:false,pendingPeople:[],galleryProfileTexts:profiles,stage:'images_building',galleryParticipantUpgrade:{fromCount:125,headingSourceCount:125,addedParticipantUrls,pendingHeadings:true,previousPauseStage:run.pauseStage||null,preparedAt:new Date().toISOString()},updatedAt:Date.now()};
+ writeRun(upgraded);await flushRunBackup();return readRun();
+}
 function repairGalleryProfileParagraphs(view,run,rows=run.rows,anchors=null){
  if(!run?.gallery126||run.articleKey!==editorArticleKey())throw new Error('この記事のハロウィン作成記録を確認できません');
- const images=ownedImagesForRun(view,run),done=completedImagePrefix(rows,images),saved=run.activityTexts||[];
- const profileCount=rows.filter(row=>!row.finalMarker).length,completedProfiles=rows.slice(0,done).filter(row=>!row.finalMarker).length;
- if(!Array.isArray(saved)||saved.length<completedProfiles||saved.length>Math.min(profileCount,completedProfiles+1))throw new Error('プロフィールの保存記録と画像件数が一致しません。本文は保持しました');
+ const plan=galleryImagePlan(view,run,rows),saved=galleryProfileMap(run),known=new Set(rows.filter(row=>!row.finalMarker).map(row=>norm(row.url)));
+ if(Object.keys(saved).some(url=>!known.has(url)))throw new Error('プロフィールの保存記録に別の人物が含まれています');
  const paragraphs=[];
  view.state.doc.descendants((node,pos)=>{if(node.type?.name==='paragraph')paragraphs.push({node,pos})});
- const replacements=[],texts=[];let mapping=null;
+ const replacements=[],texts={};let mapping=null;
  // Match both exact saved source and its replacement, so interruption between
  // the native transaction and checkpoint cannot duplicate or lose a profile.
- for(let i=0;i<saved.length;i++){
-  const from=i?images[i-1].pos+images[i-1].node.nodeSize:Math.max(0,Number(run.imageAnchorPos)||0);
-  const to=i<done?images[i].pos:view.state.doc.content.size;
-  const next=activityText(rows[i]),matches=paragraphs.filter(hit=>hit.pos>=from&&hit.pos<to&&(String(hit.node.textContent||'')===saved[i]||String(hit.node.textContent||'')===next));
+ for(let i=0;i<rows.length;i++){
+  const row=rows[i];if(row.finalMarker)continue;
+  const url=norm(row.url),own=plan.byIndex.get(i),record=Object.prototype.hasOwnProperty.call(saved,url);
+  if(!record){if(own)throw new Error((i+1)+'人目のプロフィール保存記録がありません。本文は保持しました');continue}
+  const earlier=plan.entries.filter(entry=>entry.index<i).at(-1),nextImage=plan.entries.find(entry=>entry.index>=i);
+  const from=earlier?earlier.hit.pos+earlier.hit.node.nodeSize:Math.max(0,Number(run.imageAnchorPos)||0);
+  const to=nextImage?nextImage.hit.pos:view.state.doc.content.size;
+  const next=activityText(row),matches=paragraphs.filter(hit=>hit.pos>=from&&hit.pos<to&&(String(hit.node.textContent||'')===saved[url]||String(hit.node.textContent||'')===next));
   if(matches.length!==1)throw new Error((i+1)+'人目のプロフィールを一意に照合できません。手編集と画像は保持しました');
-  const hit=matches[0];texts.push(next);
+  const hit=matches[0];texts[url]=next;
   if(String(hit.node.textContent||'')!==next)replacements.push({...hit,text:next});
  }
  if(replacements.length){
@@ -1288,7 +1427,7 @@ function repairGalleryProfileParagraphs(view,run,rows=run.rows,anchors=null){
  }
  if(mapping&&anchors&&Number.isFinite(Number(anchors.tappedAnchor)))anchors.tappedAnchor=mapping.map(Number(anchors.tappedAnchor),1);
  const hasCardAnchor=run.cardAnchorPos!=null&&run.cardAnchorPos!==''&&Number.isFinite(Number(run.cardAnchorPos));
- writeRun({...run,rows,activityTexts:texts,...(mapping&&hasCardAnchor?{cardAnchorPos:mapping.map(Number(run.cardAnchorPos),1)}:{}),profileLayoutVersion:VERSION,updatedAt:Date.now()});
+ writeRun({...run,rows,galleryProfileTexts:texts,activityTexts:rows.filter(row=>!row.finalMarker&&Object.prototype.hasOwnProperty.call(texts,norm(row.url))).map(row=>texts[norm(row.url)]),...(mapping&&hasCardAnchor?{cardAnchorPos:mapping.map(Number(run.cardAnchorPos),1)}:{}),profileLayoutVersion:VERSION,updatedAt:Date.now()});
  return replacements.length;
 }
 async function repairGalleryProfiles(){
@@ -1309,9 +1448,16 @@ async function repairGalleryProfiles(){
  }catch(error){setStatus('プロフィール整形停止：'+(error?.message||String(error)),true)}
  finally{busy=false;notifyFixedState()}
 }
+function galleryKnownNoArticle(id,manifest=galleryManifest()){
+ return (manifest.pendingPeople||[]).some(person=>String(person.urlname||'').toLowerCase()===id&&person.reason==='NO_PUBLIC_ARTICLE'&&person.noteCount===0);
+}
 function galleryRowVerified(row,index,manifest=galleryManifest(),outputIndex=index+1){
  if(!row)return false;
  const id=manifest.people[index]?.urlname.toLowerCase(),proof=row.oldestEvidence,key=noteKey(row.url);
+ if(row.profileOnly===true){
+  const evidence=row.noPublicArticleEvidence,profileUrl='https://note.com/'+id;
+  return Boolean(galleryKnownNoArticle(id,manifest)&&row.gallery126&&!row.finalMarker&&row.index===outputIndex&&canonicalUrlname(row)===id&&row.url===profileUrl&&row.actorUrl===profileUrl&&row.key===''&&row.title===''&&row.thumbUrl===''&&row.publishAt===null&&row.articleSelection==='profile-only-confirmed'&&row.oldestVerified===false&&row.oldestEvidence===null&&typeof row.profileText==='string'&&String(row.creator||'').trim()&&evidence&&evidence.creator===id&&evidence.profileUrl===profileUrl&&evidence.noteCount===0&&evidence.contentsTotal===0&&evidence.isLastPage===true&&evidence.source==='note-public-api'&&Number.isFinite(Date.parse(evidence.checkedAt)));
+ }
  let owner='';try{const u=new URL(row.url);if(u.origin==='https://note.com'&&!u.username&&!u.password)owner=u.pathname.match(/^\/([^/]+)\/n\/n[a-f0-9]{12}\/?$/i)?.[1]?.toLowerCase()||''}catch{}
  return Boolean(row.gallery126&&!row.finalMarker&&row.index===outputIndex&&canonicalUrlname(row)===id&&owner===id&&key&&row.key===key&&row.articleSelection==='oldest-confirmed'&&row.oldestVerified===true&&proof&&String(proof.creator).toLowerCase()===id&&proof.key===key&&proof.publishAt===row.publishAt&&Number.isFinite(Date.parse(row.publishAt))&&Number.isInteger(proof.terminalPage)&&proof.terminalPage>=1&&Array.isArray(proof.pagesChecked)&&proof.pagesChecked.includes(1)&&proof.pagesChecked.includes(proof.terminalPage+1)&&Number.isFinite(Date.parse(proof.verifiedAt)));
 }
@@ -1325,8 +1471,8 @@ function validateGalleryRows(rows){
  if(!Array.isArray(creators)||creators.length!==expected.length)throw new Error('ハロウィン参加者の一覧に不足があります');
  const keys=new Set();
  creators.forEach((row,index)=>{
-  if(!galleryRowVerified(row,expected[index].index,manifest,index+1)||available&&row.gallerySourceIndex!==expected[index].index+1||keys.has(noteKey(row.url)))throw new Error((index+1)+'人目の最初の記事・人物・順序を確認できません');
-  keys.add(noteKey(row.url));
+  if(!galleryRowVerified(row,expected[index].index,manifest,index+1)||available&&row.gallerySourceIndex!==expected[index].index+1||!row.profileOnly&&keys.has(noteKey(row.url)))throw new Error((index+1)+'人目の最初の記事・人物・順序を確認できません');
+  if(!row.profileOnly)keys.add(noteKey(row.url));
  });
  if(final&&(final.gallery126===true||Number(final.index)!==rows.length||canonicalUrlname(final)!=='fuku444'||norm(final.url)!==norm(FINAL_URL)||final.key!==FINAL_KEY||keys.has(FINAL_KEY)))throw new Error('最後の実績の算数の記事・人物・順序を確認できません');
  return rows;
@@ -1334,12 +1480,21 @@ function validateGalleryRows(rows){
 async function prepareGalleryPerson(person,index){
  const id=person.urlname.toLowerCase(),creator={...person,urlname:id,likerKey:id,actorUrl:'https://note.com/'+id};
  const [selected,payload]=await Promise.all([
-  page.__MUMEI_PROFILE_CARD_GALLERY__.chooseOldestArticle(creator,{requestJSON:xhrJSON,articleFromRaw,stopRequested:()=>stopRequested}),
+  page.__MUMEI_PROFILE_CARD_GALLERY__.chooseOldestArticle(creator,{requestJSON:xhrJSON,articleFromRaw,stopRequested:()=>stopRequested}).catch(error=>{if(error?.code==='NO_PUBLIC_ARTICLE'&&galleryKnownNoArticle(id))return null;throw error}),
   xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id))
  ]);
  if(stopRequested)throw new Error('停止しました');
  const profile=payload?.data?.creator||payload?.data?.user||payload?.data;
  if(!profile||typeof profile!=='object'||String(profile.urlname||'').toLowerCase()!==id||!String(profile.nickname||profile.name||'').trim()||!['profile','description','bio','introduction','self_introduction','note_intro'].some(key=>Object.prototype.hasOwnProperty.call(profile,key)))throw new Error(id+'さんのプロフィールを確認できません');
+ const biography=profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
+ if(typeof biography!=='string')throw new Error(id+'さんのプロフィール本文の形式を確認できません');
+ if(!selected){
+  if(profile.noteCount!==0)throw new Error(id+'さんの公開記事数を確認できません');
+  const checks=await Promise.all([true,false].map(disabled=>xhrJSON('https://note.com/api/v2/creators/'+encodeURIComponent(id)+'/contents?kind=note&page=1&disabled_pinned='+(disabled?'true':'false')+'&with_notes=false')));
+  if(!checks.every(check=>Array.isArray(check?.data?.contents)&&check.data.contents.length===0&&check.data.totalCount===0&&check.data.isLastPage===true))throw new Error(id+'さんの記事なしの確認結果が一致しません');
+  const avatar=avatarUrl(profile),profileUrl=creator.actorUrl;
+  return{...creator,index:index+1,creator:String(profile.nickname||profile.name).trim(),url:profileUrl,key:'',title:'',publishAt:null,thumbUrl:'',actorImageUrl:avatar,avatarMissing:!avatar,profileText:biography.replace(/\r\n?/g,'\n').trim(),gallery126:true,profileOnly:true,finalMarker:false,articleSelection:'profile-only-confirmed',oldestVerified:false,oldestEvidence:null,noPublicArticleEvidence:{creator:id,profileUrl,noteCount:0,contentsTotal:0,isLastPage:true,checkedAt:new Date().toISOString(),source:'note-public-api'}};
+ }
  let thumb=selected.thumbUrl,thumbnailMissingEvidence=null;
  if(!thumb){
   const p=await xhrJSON('https://note.com/api/v3/notes/'+encodeURIComponent(selected.key));
@@ -1352,8 +1507,6 @@ async function prepareGalleryPerson(person,index){
  }
  if(!thumb&&!thumbnailMissingEvidence)throw new Error(id+'さんの最初の記事サムネイルを確認できません');
  const avatar=avatarUrl(profile)||selected.actorImageUrl||'';
- const biography=profile.profile??profile.description??profile.bio??profile.introduction??profile.self_introduction??profile.note_intro??'';
- if(typeof biography!=='string')throw new Error(id+'さんのプロフィール本文の形式を確認できません');
  return{...selected,index:index+1,urlname:id,likerKey:id,actorUrl:creator.actorUrl,creator:String(profile.nickname||profile.name||person.creator||id).trim(),actorImageUrl:avatar,avatarMissing:!avatar,thumbUrl:thumb||'',articleThumbnailMissing:Boolean(thumbnailMissingEvidence),thumbnailMissingEvidence,profileText:biography.replace(/\r\n?/g,'\n').trim(),gallery126:true,finalMarker:false};
 }
 async function buildGalleryRows({availableOnly=false}={}){
@@ -1363,11 +1516,14 @@ async function buildGalleryRows({availableOnly=false}={}){
  const rows=saved?.signature===signature&&Array.isArray(saved.rows)?saved.rows.slice(0,126):Array(126).fill(null);
  while(rows.length<126)rows.push(null);
  for(let i=0;i<rows.length;i++){
+  // A not-yet-pasted zero-article snapshot can become outdated. Recheck that
+  // one account live; completed runs keep their already selected image/link.
+  if(rows[i]?.profileOnly)rows[i]=null;
   if(rows[i]&&!galleryRowVerified(rows[i],i,manifest))rows[i]=null;
-  if(!rows[i]&&galleryRowVerified(manifest.preparedRows?.[i],i,manifest))rows[i]=JSON.parse(JSON.stringify(manifest.preparedRows[i]));
+  if(!rows[i]&&!manifest.preparedRows?.[i]?.profileOnly&&galleryRowVerified(manifest.preparedRows?.[i],i,manifest))rows[i]=JSON.parse(JSON.stringify(manifest.preparedRows[i]));
  }
  const pending=new Set((manifest.pendingPeople||[]).filter(person=>person.reason==='NO_PUBLIC_ARTICLE'&&person.noteCount===0).map(person=>String(person.urlname).toLowerCase()));
- const missing=rows.map((row,index)=>row||availableOnly&&pending.has(manifest.people[index].urlname.toLowerCase())?null:index).filter(index=>index!==null);
+ const missing=rows.map((row,index)=>row?null:index).filter(index=>index!==null);
  for(let offset=0;offset<missing.length;offset+=6){
   if(stopRequested)throw new Error('停止しました');
   const results=await Promise.allSettled(missing.slice(offset,offset+6).map(async index=>{
@@ -1380,8 +1536,7 @@ async function buildGalleryRows({availableOnly=false}={}){
   const failed=results.find(result=>result.status==='rejected');
   if(failed)throw failed.reason;
  }
- const output=availableOnly?rows.flatMap((row,index)=>pending.has(manifest.people[index].urlname.toLowerCase())?[]:[{...row,gallerySourceIndex:index+1,galleryAvailableOnly:true}]).map((row,index)=>({...row,index:index+1})):rows;
- return validateGalleryRows(output);
+ return validateGalleryRows(rows);
 }
 function assertGalleryTracking(view,run=readRun()){
  if(!Array.isArray(run?.imageBaselineRecords))throw new Error('貼り付け前の画像記録を確認できません');
@@ -1392,6 +1547,31 @@ function assertGalleryTracking(view,run=readRun()){
   const original=run.imageBaselineRecords.some(record=>id?record.id===id:src&&record.src===src&&norm(record.link||'')===link);
   if(!original)throw new Error('保存記録のない画像を検出しました。二重貼り付けを防ぐため停止しました。本文の直前の画像を確認してください');
  }
+}
+function reconcileGalleryHeadings(view,run=readRun(),rows=run.rows){
+ if(!run?.galleryParticipantUpgrade?.pendingHeadings)return false;
+ const plan=galleryImagePlan(view,run,rows);
+ if(plan.entries.length!==rows.length)return false;
+ const creators=rows.filter(row=>!row.finalMarker),variants=new Map(),hits=[],targets=[];
+ for(let block=0;block<Math.ceil(creators.length/10);block++)for(const count of [125,126])variants.set(headingText(block,count),block);
+ const lower=Math.max(0,Number(run.imageAnchorPos)||0),upper=plan.entries.at(-1).hit.pos;
+ view.state.doc.descendants((node,pos)=>{if(pos>=lower&&pos<upper&&node.type?.name==='heading'&&variants.has(String(node.textContent||'')))hits.push({node,pos,block:variants.get(String(node.textContent))})});
+ const exact=new Set();for(const hit of hits){const text=String(hit.node.textContent);if(exact.has(text))throw new Error('移行する見出しが重複しています。本文は保持しました');exact.add(text)}
+ for(let block=0;block<Math.ceil(creators.length/10);block++){
+  if(!hits.some(hit=>hit.block===block))throw new Error('移行する見出しの保存位置を確認できません。本文は保持しました');
+  const index=block*10,entry=plan.byIndex.get(index),previous=plan.entries.filter(item=>item.index<index).at(-1),from=previous?previous.hit.pos+previous.hit.node.nodeSize:lower;
+  const profile=findActivity(view,activityText(rows[index]),from);
+  if(!profile||profile.pos>=entry.hit.pos)throw new Error('見出しを置くプロフィール位置を確認できません');
+  targets.push({pos:profile.pos,text:headingText(block,creators.length)});
+ }
+ const type=view.state.schema.nodes.heading;if(!type)throw new Error('note見出しノードを取得できません');
+ let tr=view.state.tr;
+ for(const hit of hits.sort((first,second)=>second.pos-first.pos))tr=tr.delete(hit.pos,hit.pos+hit.node.nodeSize);
+ for(const target of targets){let node;try{node=type.create({level:2},view.state.schema.text(target.text))}catch{node=type.create(null,view.state.schema.text(target.text))}tr=tr.insert(tr.mapping.map(target.pos,1),node)}
+ view.dispatch(tr);
+ const current=readRun()||run,shift=value=>value!=null&&value!==''&&Number.isFinite(Number(value))?tr.mapping.map(Number(value),1):value;
+ writeRun({...current,cardAnchorPos:shift(current.cardAnchorPos),pendingCard:current.pendingCard?{...current.pendingCard,pos:shift(current.pendingCard.pos)}:current.pendingCard,sectionHeadings:[...targets.map(target=>target.text),...(findHeading(view,'最後に｜実績の算数')?['最後に｜実績の算数']:[])],galleryParticipantUpgrade:{...current.galleryParticipantUpgrade,pendingHeadings:false,completedAt:new Date().toISOString()},updatedAt:Date.now()});
+ return true;
 }
 function assertGalleryPaste(view,rows){
  validateGalleryRows(rows);
@@ -1411,17 +1591,31 @@ function assertGalleryPaste(view,rows){
  }
  if(new Set(creators.map(row=>row.designIndex)).size!==creators.length)throw new Error('デザインに重複があります');
 }
-function checkPause(){if(pauseRequested)throw Object.assign(new Error('一時停止しました｜完成分を保存済み。「再開」で続けられます'),{code:'PAUSED'})}
+function checkPause(){if(pauseRequested)throw Object.assign(new Error('一時停止しました｜途中記録を保存済み。「再開」で続けられます'),{code:'PAUSED'})}
 function pauseFix(){
- if(busy){pauseRequested=true;setStatus('一時停止を受付｜処理中の1件を保存してから止まります')}
- else if(typeof page.__MUMEI_PROFILE_CARD_PAUSE__==='function')page.__MUMEI_PROFILE_CARD_PAUSE__();
- else setStatus('一時停止中｜「再開」で保存済みの続きから開始');
+ if(busy||exportWaiter){
+  pauseRequested=true;setStatus('一時停止を受付｜処理中の1件を保存してから止まります');
+ }else if(page.__MUMEI_PROFILE_CARD_PAUSE__?.()!==true){
+  setStatus(readRun()?.paused?'一時停止中です｜「再開」で続けられます':'現在は実行していません｜保存済みの続きは「再開」');
+ }
+ notifyFixedState();
+}
+let lastPauseGestureAt=-Infinity;
+function pausePanelGesture(event){
+ const target=event.target?.closest?.('[data-gallery-action="pause"],[data-a="pause"]');
+ const panel=document.getElementById(PANEL);
+ if(!target||!panel?.contains(target)||target.disabled)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ const now=Date.now();if(now-lastPauseGestureAt<650)return;
+ lastPauseGestureAt=now;pauseFix();
 }
 async function startGallery126(availableOnly=false){return createFixed300({gallery126:true,galleryAvailableOnly:availableOnly})}
 async function resumeGallery126(){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。一時停止が完了するまでお待ちください',true);return;}
  await hydrateRunBackup();
- if(readRun()?.pauseStage==='cards'){const resume=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;if(typeof resume==='function')return resume();}
+ const saved=readRun(),needsParticipant=galleryNeedsParticipantUpgrade(saved);
+ if(saved?.pauseStage==='cards'&&!needsParticipant){const resume=page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__;if(typeof resume==='function')return resume();}
+ if(!saved?.gallery126&&saved?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
  return startGallery126(true);
 }
 
@@ -1450,9 +1644,8 @@ async function createFixed300(options=null){
   checkPause();
   let existing=readRun();
   const gallery=Boolean(options?.gallery126||existing?.gallery126);
-  const availableOnly=Boolean(existing?.gallery126?existing.galleryAvailableOnly:options?.galleryAvailableOnly);
+  const availableOnly=false;
   if(gallery&&!editorArticleKey())throw new Error('記事の保存先を確認できません。下書きを保存して編集画面を開き直してください');
-  if(options?.gallery126&&options.galleryAvailableOnly===false&&existing?.galleryAvailableOnly)throw new Error('125人の作成分を保持しています。126人全員で作り直す場合は先に「最初に戻る」を押してください');
   if(gallery&&existing&&!existing.gallery126)throw new Error('別の作成分が保存されています。先に「最初に戻る」で整理してください');
   if(existing?.articleKey&&existing.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');
   const initialAnchor=gallery&&!existing?cardAnchorFromSelection(view):null,initialDoc=view.state.doc;
@@ -1461,6 +1654,7 @@ async function createFixed300(options=null){
    existing=await recoverCompatibleRun(view,existing);
    writeRun(existing);await flushRunBackup();
   }
+  if(gallery&&galleryNeedsParticipantUpgrade(existing))existing=await upgradeGalleryParticipants(view,existing);
 
   const requested=gallery?{mode:'number',count:126,target:126}:existing?.likesHistoryFix230?historyOptions(existing):(options||historyOptions());
   let rows;
@@ -1488,10 +1682,11 @@ async function createFixed300(options=null){
    if(gallery&&view.state.doc!==initialDoc&&!view.state.doc.eq?.(initialDoc))throw new Error('読み込み中に本文が変更されました。本文位置を選んで「126人の続き」を押してください');
    run={
     version:VERSION,articleKey:editorArticleKey(),items:[],cardKeys:[],sectionHeadings:[],activityTexts:[],rows,
+    contentBaselineNodes:gallery&&typeof view.state.doc.forEach==='function'?(()=>{const nodes=[];view.state.doc.forEach((node,pos)=>nodes.push({pos,json:node.toJSON()}));return nodes})():null,
     cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),
     cardBaselineNodes:gallery?embedNodes(view).map(hit=>({key:cardKey(hit),src:String(hit.node.attrs?.src||''),json:hit.node.toJSON?.()||null})):[],
     imageBaselineRecords:gallery?imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})):[],
-    createdAt:Date.now(),stage:'images_building',likesHistory:!gallery,likesHistoryFix230:!gallery,gallery126:gallery,galleryAvailableOnly:gallery&&availableOnly,pendingPeople:gallery&&availableOnly?galleryManifest().pendingPeople:[],
+    createdAt:Date.now(),stage:'images_building',likesHistory:!gallery,likesHistoryFix230:!gallery,gallery126:gallery,galleryAvailableOnly:false,pendingPeople:[],...(gallery?{galleryProfileTexts:{}}:{}),
     imageAnchorPos:gallery?initialAnchor:cardAnchorFromSelection(view),sources:gallery?galleryManifest().source:'スキ履歴（読み取りのみ）',mode:requested.mode,count:gallery?galleryCount:rows.length-1,historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,choice:gallery?'oldest':'latest'
    };
    writeRun(run)
@@ -1503,16 +1698,16 @@ async function createFixed300(options=null){
 
   if(gallery)assertGalleryTracking(view,run);
   let doneImages=ownedImages(view);
-  let done=completedImagePrefix(rows,doneImages);
+  let done=gallery?galleryImagePlan(view,run,rows).entries.length:completedImagePrefix(rows,doneImages);
   if(gallery&&done){
    // An interrupted transaction may have recorded its image immediately
    // before the following divider. Repair that boundary before moving on.
-   for(let i=0;i<done;i++){
-    const hit=ownedImages(view)[i];
-    if(!isDivider(view,view.state.doc.nodeAt(hit.pos+hit.node.nodeSize)))addDivider(view,hit,rows[i]);
+   for(const entry of galleryImagePlan(view,readRun()||run,rows).entries){
+    const hit=galleryImagePlan(view,readRun()||run,rows).byIndex.get(entry.index).hit;
+    if(!isDivider(view,view.state.doc.nodeAt(hit.pos+hit.node.nodeSize)))addDivider(view,hit,entry.row);
    }
    const current=readRun()||run;
-   writeRun({...current,dividerUrls:[...new Set([...(current.dividerUrls||[]),...rows.slice(0,done).map(row=>row.url)])],updatedAt:Date.now()});
+   writeRun({...current,dividerUrls:[...new Set([...(current.dividerUrls||[]),...galleryImagePlan(view,current,rows).entries.map(entry=>entry.row.url)])],updatedAt:Date.now()});
    await flushRunBackup();doneImages=ownedImages(view);
   }
   let insertPos=done?doneImages[done-1].pos+doneImages[done-1].node.nodeSize:Number(run.imageAnchorPos);
@@ -1524,10 +1719,18 @@ async function createFixed300(options=null){
   // image upload is ever in flight; rejected prefetches are consumed in order.
   let prepared=null;
   const prepareNext=index=>({index,promise:Promise.resolve().then(()=>makeFile(rows[index])).then(file=>({file}),error=>({error}))});
-  for(let i=done;i<rows.length;i++){
+  for(let i=gallery?0:done;i<rows.length;i++){
    checkPause();
    if(stopRequested)throw new Error('停止しました');
    const row=rows[i];
+   if(gallery){
+    const imagePlan=galleryImagePlan(view,readRun()||run,rows);
+    if(imagePlan.byIndex.has(i))continue;
+    const previous=imagePlan.entries.filter(entry=>entry.index<i).at(-1);
+    insertPos=previous?previous.hit.pos+previous.hit.node.nodeSize:Number((readRun()||run).imageAnchorPos);
+    if(!Number.isFinite(insertPos))throw new Error('追加する画像の本文位置を確認できません');
+    const divider=view.state.doc.nodeAt(insertPos);if(previous&&isDivider(view,divider))insertPos+=divider.nodeSize;
+   }
    setStatus('画像確認｜'+(i+1)+'/'+rows.length+'｜'+row.creator);
    let file;
    try{
@@ -1568,13 +1771,13 @@ async function createFixed300(options=null){
    if(!row.finalMarker){
     const text=activityText(row);
     const existingActivity=findActivity(view,text,insertPos);
-    if(existingActivity&&existingActivity.pos>=insertPos)insertPos=existingActivity.pos+existingActivity.node.nodeSize;
-    else if(!existingActivity){const a=insertActivityAt(view,row,insertPos);insertPos=a.nextPos;recordActivity(a.text)}
+    if(existingActivity&&existingActivity.pos>=insertPos){insertPos=existingActivity.pos+existingActivity.node.nodeSize;if(gallery)recordGalleryActivity(row,text)}
+    else if(!existingActivity){const a=insertActivityAt(view,row,insertPos);insertPos=a.nextPos;if(gallery)recordGalleryActivity(row,a.text);else recordActivity(a.text)}
    }
 
    setStatus('修正版｜'+(i+1)+'/'+rows.length+'｜'+row.creator+'｜アイコン＋サムネ');
    if(stopRequested)throw new Error('停止しました');
-   if(gallery&&i+1<rows.length)prepared=prepareNext(i+1);
+   if(gallery&&i+1<rows.length){const imagePlan=galleryImagePlan(view,readRun()||run,rows),next=rows.findIndex((person,index)=>index>i&&!imagePlan.byIndex.has(index));if(next>=0)prepared=prepareNext(next)}
    const made=await uploadOne(view,row,file,insertPos);
    insertPos=made.nextPos;
    recordImage(made.hit,row);
@@ -1582,10 +1785,10 @@ async function createFixed300(options=null){
    mapGalleryCardAnchorsAfterInsert(pendingAnchorMap);pendingAnchorMap=null;
    await flushRunBackup();
    checkPause();
-   await sleep(gallery?60:IMAGE_GAP)
+   await sleep(gallery?20:IMAGE_GAP)
   }
 
-  if(gallery)assertGalleryPaste(view,rows);
+  if(gallery){reconcileGalleryHeadings(view,readRun()||run,rows);assertGalleryPaste(view,rows)}
   run=readRun()||run;
   writeRun({...run,stage:'images_ready',paused:false,pauseStage:null,rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   await flushRunBackup();
@@ -1593,8 +1796,19 @@ async function createFixed300(options=null){
   setStatus('極薄'+rows.length+'件完了 ✅ '+(gallery&&availableOnly?'やとさん1人は記事公開待ち。':'')+'カードを置く本文位置をタップ→②カード続き/開始')
  }catch(error){
   if(pendingAnchorMap){mapGalleryCardAnchorsAfterInsert(pendingAnchorMap);await flushRunBackup();}
-  if(error?.code==='PAUSED'){const saved=readRun();if(saved){writeRun({...saved,paused:true,pauseStage:'images',pausedAt:Date.now()});await flushRunBackup();if(typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function')await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__('一時停止｜完成分の下書き保存中…');}}
-  setStatus(error?.code==='PAUSED'?error.message:'修正版停止：'+(error?.message||String(error)),error?.code!=='PAUSED')
+  let pauseNotice='';
+  if(error?.code==='PAUSED'){
+   const saved=readRun();
+   if(saved){
+    writeRun({...saved,paused:true,pauseStage:'images',pausedAt:Date.now()});
+    try{
+     await flushRunBackup();
+     const result=await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__?.('一時停止｜完成分の下書き保存中…');
+     if(result?.confirmed===false)pauseNotice='｜下書き保存の完了は画面で確認してください';
+    }catch(saveError){pauseNotice='｜下書き保存を確認してください：'+(saveError?.message||String(saveError))}
+   }
+  }
+  setStatus(error?.code==='PAUSED'?error.message+pauseNotice:'修正版停止：'+(error?.message||String(error)),error?.code!=='PAUSED')
  }finally{busy=false;notifyFixedState();await releaseAwake()}
 }
 function stopFix(){
@@ -1619,7 +1833,7 @@ function patchPanel(){
 
  if(!panel.querySelector('[data-gallery126]')){
   const gallery=document.createElement('details');gallery.dataset.gallery126='1';gallery.open=true;
-  gallery.innerHTML='<summary>🎃 ハロウィンアート2026</summary><div class="hint">登録126人｜記事あり125人・やとさん1人は記事待ち｜126種類｜最初の記事｜プロフィール小文字</div><div class="special-actions"><button type="button" data-gallery-action="images">①記事あり125人の極薄</button><button type="button" data-gallery-action="pause">一時停止</button><button type="button" data-gallery-action="resume">再開</button><button type="button" data-gallery-action="cards">②通知カード</button><button type="button" data-gallery-action="delete">通知カードのみ削除</button><button type="button" data-gallery-action="profiles">プロフィールを整える</button><button type="button" data-gallery-action="all">126人全員を再確認</button></div>';
+  gallery.innerHTML='<summary>🎃 ハロウィンアート2026</summary><div class="hint">126人・126種類｜記事なしもアイコン＋名前で掲載｜最初の記事｜プロフィール小文字</div><div class="special-actions"><button type="button" data-gallery-action="images">①126人の極薄</button><button type="button" data-gallery-action="pause">一時停止</button><button type="button" data-gallery-action="resume">再開</button><button type="button" data-gallery-action="cards">②通知カード</button><button type="button" data-gallery-action="delete">通知カードのみ削除</button><button type="button" data-gallery-action="delete-all">今回分を全削除</button><button type="button" data-gallery-action="profiles">プロフィールを整える</button><button type="button" data-gallery-action="all">126人全員を再確認</button></div>';
 
   panel.querySelector('.body')?.prepend(gallery);
  }
@@ -1631,6 +1845,7 @@ function patchPanel(){
   bindPanelAction(gallery.querySelector('[data-gallery-action="profiles"]'), 'click:gallery',event=>{event.preventDefault();void repairGalleryProfiles()});
   bindPanelAction(gallery.querySelector('[data-gallery-action="all"]'), 'click:gallery',event=>{event.preventDefault();void startGallery126(false)});
   bindPanelAction(gallery.querySelector('[data-gallery-action="cards"]'), 'click:gallery',event=>{event.preventDefault();const run=readRun();if(!run?.gallery126){setStatus('先にハロウィン126人の画像を完成させてください',true);return;}void page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__?.()});
+  bindPanelAction(gallery.querySelector('[data-gallery-action="delete-all"]'),'click:gallery',event=>{event.preventDefault();void page.__MUMEI_PROFILE_CARD_DELETE_ALL__?.()});
   bindPanelAction(gallery.querySelector('[data-gallery-action="delete"]'), 'click:gallery',event=>{event.preventDefault();void page.__MUMEI_PROFILE_CARD_DELETE_CARDS__?.()});
  const detail=panel.querySelector('details[data-like300]');
  if(!detail)return false;
@@ -1692,6 +1907,7 @@ function patchPanel(){
   },{capture:true});
  }
 
+ panel.querySelectorAll('button').forEach(button=>button.type='button');
  const stop=panel.querySelector('[data-a="stop"]');
  bindPanelAction(stop,'pointerdown:stop',()=>stopFix(),{capture:true});
  bindPanelAction(stop,'touchstart:stop',()=>stopFix(),{capture:true,passive:true});
@@ -1700,6 +1916,7 @@ function patchPanel(){
 let attempts=0;
 window.addEventListener('mumei-profile-card-start',()=>void restartFixed300());
 window.addEventListener('mumei-profile-card-stop',()=>stopFix());
+for(const type of ['pointerdown','touchstart','click'])window.addEventListener(type,pausePanelGesture,{capture:true,passive:false});
 let observedPanel=null,observedBody=null,observedGallery=null,repairQueued=false;
 function rememberPanel(){
  observedPanel=document.getElementById(PANEL);observedBody=observedPanel?.querySelector('.body');observedGallery=observedPanel?.querySelector('[data-gallery126]');

@@ -5,8 +5,8 @@ import {readFileSync} from 'node:fs';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 function runtime(){
- const paint=[],assets={avatar:{id:'avatar',width:96,height:96,close(){}},thumb:{id:'thumb',width:640,height:360,close(){}}};
- const context=vm.createContext({W:860,H:140,paint,assets,mediaUrl:value=>String(value||''),bitmapFromUrl:async url=>assets[url]||null,page:{File:class{constructor(parts,name,options){this.parts=parts;this.name=name;this.type=options.type}}}});
+ const paint=[],assetRequests=[],assets={avatar:{id:'avatar',width:96,height:96,close(){}},thumb:{id:'thumb',width:640,height:360,close(){}}};
+ const context=vm.createContext({W:860,H:140,paint,assets,mediaUrl:value=>String(value||''),bitmapFromUrl:async url=>{assetRequests.push(url);return assets[url]||null},page:{File:class{constructor(parts,name,options){this.parts=parts;this.name=name;this.type=options.type}}}});
  const ctx=new Proxy({measureText(text){const size=Number(String(this.font||'14px').match(/([\d.]+)px/)?.[1]||14);return{width:[...String(text)].length*8*size/14}}},{
   get(target,key){if(key in target)return target[key];return(...args)=>paint.push([key,...args.map(value=>value?.id?{asset:value.id}:value)])},
   set(target,key,value){target[key]=value;paint.push([key,value]);return true}
@@ -14,7 +14,7 @@ function runtime(){
  context.document={createElement:tag=>{assert.equal(tag,'canvas');return{getContext:()=>ctx,toBlob:callback=>callback({png:true})}}};
  const body=source.slice(source.indexOf('function rounded('),source.indexOf('function headingText('));
  vm.runInContext(body+';globalThis.api={assignDesigns,makeFile,galleryDesign,fitGalleryCreatorName};',context);
- return{...context,paint,assets,ctx,api:context.api};
+ return{...context,paint,assets,assetRequests,ctx,api:context.api};
 }
 const rows=()=>Array.from({length:126},(_,i)=>({gallery126:true,index:i+1,creator:'作者'+i,title:'最初の公開記事',actorImageUrl:'avatar',thumbUrl:'thumb'}));
 
@@ -94,7 +94,7 @@ test('long image names adapt down to 10px and always keep the honorific without 
 });
 
 test('a confirmed missing thumbnail leaves its area blank while retaining the creator and first article',async()=>{
- const {api,paint}=runtime(),row={...rows()[0],key:'n814d3f7335ce',url:'https://note.com/furikakemen/n/n814d3f7335ce',thumbUrl:'dead',articleThumbnailMissing:true,thumbnailMissingEvidence:{key:'n814d3f7335ce',articleUrl:'https://note.com/furikakemen/n/n814d3f7335ce'}};
+ const {api,paint}=runtime(),row={...rows()[0],designIndex:0,key:'n814d3f7335ce',url:'https://note.com/furikakemen/n/n814d3f7335ce',thumbUrl:'dead',articleThumbnailMissing:true,thumbnailMissingEvidence:{key:'n814d3f7335ce',articleUrl:'https://note.com/furikakemen/n/n814d3f7335ce'}};
  await api.makeFile(row);
  assert.deepEqual(paint.filter(command=>command[0]==='drawImage').map(command=>command[1].asset),['avatar']);
  assert.deepEqual(paint.filter(command=>command[0]==='fillText').map(command=>command[1]),[row.title,row.creator+'さん']);
@@ -102,4 +102,51 @@ test('a confirmed missing thumbnail leaves its area blank while retaining the cr
  assert.equal(row.url,'https://note.com/furikakemen/n/n814d3f7335ce');
  for(const changed of [{articleThumbnailMissing:false},{thumbnailMissingEvidence:null},{thumbnailMissingEvidence:{...row.thumbnailMissingEvidence,key:'n000000000000'}},{thumbnailMissingEvidence:{...row.thumbnailMissingEvidence,articleUrl:'https://note.com/other/n/n814d3f7335ce'}},{gallery126:false}])await assert.rejects(api.makeFile({...row,...changed}),error=>error.code==='ASSET_UNAVAILABLE'&&/記事サムネイル/.test(error.message));
  await assert.rejects(api.makeFile({...row,actorImageUrl:'dead'}),error=>error.code==='ASSET_UNAVAILABLE'&&/アイコン/.test(error.message));
+});
+
+
+function confirmedProfileOnlyRow(){
+ return{...rows()[87],urlname:'noted_yatoasuter',creator:'夜渡アステル',url:'https://note.com/noted_yatoasuter',actorUrl:'https://note.com/noted_yatoasuter',key:'',title:'',thumbUrl:'',publishAt:null,gallery126:true,profileOnly:true,articleSelection:'profile-only-confirmed',oldestVerified:false,oldestEvidence:null,noPublicArticleEvidence:{creator:'noted_yatoasuter',profileUrl:'https://note.com/noted_yatoasuter',noteCount:0,contentsTotal:0,isLastPage:true,checkedAt:'2026-10-19T00:00:00.000Z',source:'note-public-api'}};
+}
+
+test('a verified no-public-article participant renders only the real icon and full name without a thumbnail request',async()=>{
+ const {api,paint,assetRequests}=runtime(),row={...confirmedProfileOnlyRow(),designIndex:87};
+ const file=await api.makeFile(row);assert.equal(file.type,'image/png');
+ assert.deepEqual(assetRequests,['avatar']);
+ assert.deepEqual(paint.filter(command=>command[0]==='drawImage').map(command=>command[1].asset),['avatar']);
+ assert.deepEqual(paint.filter(command=>command[0]==='fillText').map(command=>command[1]),['夜渡アステルさん']);
+ assert.equal(row.url,'https://note.com/noted_yatoasuter');assert.equal(row.key,'');assert.equal(row.title,'');
+});
+
+test('a no-public-article participant without an icon uses their initial and name, with no asset downloads',async()=>{
+ const {api,paint,assetRequests}=runtime();
+ await api.makeFile({...confirmedProfileOnlyRow(),designIndex:36,actorImageUrl:''});
+ assert.deepEqual(assetRequests,[]);assert.equal(paint.filter(command=>command[0]==='drawImage').length,0);
+ assert.deepEqual(paint.filter(command=>command[0]==='fillText').map(command=>command[1]),['夜','夜渡アステルさん']);
+});
+
+test('mismatched or incomplete no-public-article evidence rejects before any asset download',async()=>{
+ const row=confirmedProfileOnlyRow();
+ const invalid=[{gallery126:false},{url:'https://note.com/other'},{actorUrl:'https://note.com/other'},{key:'n000000000000'},{title:'invented article'},{thumbUrl:'thumb'},{publishAt:'2025-01-01'},{articleSelection:'oldest-confirmed'},{oldestVerified:true},{oldestEvidence:{}},{noPublicArticleEvidence:null}];
+ for(const field of [{creator:'other'},{profileUrl:'https://note.com/other'},{noteCount:1},{noteCount:'0'},{contentsTotal:1},{isLastPage:false},{checkedAt:''},{source:'unverified'}])invalid.push({noPublicArticleEvidence:{...row.noPublicArticleEvidence,...field}});
+ for(const changed of invalid){const {api,assetRequests}=runtime();await assert.rejects(api.makeFile({...row,...changed}),error=>error.code==='PROFILE_ONLY_UNVERIFIED');assert.deepEqual(assetRequests,[])}
+});
+
+test('verified profile-only rendering still rejects a configured inaccessible icon',async()=>{
+ const {api,assetRequests}=runtime();
+ await assert.rejects(api.makeFile({...confirmedProfileOnlyRow(),actorImageUrl:'unavailable'}),error=>error.code==='ASSET_UNAVAILABLE'&&/アイコン/.test(error.message));
+ assert.deepEqual(assetRequests,['unavailable']);
+});
+
+test('a profile-only participant fits every assigned design variant with one icon and one creator label',async()=>{
+ for(let designIndex=0;designIndex<126;designIndex++){
+  const {api,paint,assetRequests,ctx}=runtime(),creator='夜渡アステル｜物語をつくるクリエイター';
+  await api.makeFile({...confirmedProfileOnlyRow(),creator,designIndex});
+  assert.deepEqual(assetRequests,['avatar']);
+  assert.equal(paint.filter(command=>command[0]==='drawImage').length,1);
+  const labels=paint.filter(command=>command[0]==='fillText');
+  assert.equal(labels.length,1);assert.equal(labels[0][1],creator+'さん');
+  assert.ok(labels[0][2]>=0&&labels[0][2]+ctx.measureText(labels[0][1]).width<=860,`design ${designIndex} name fits`);
+  assert.equal(labels[0][3],70);
+ }
 });

@@ -4,20 +4,22 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
 const code=source.slice(source.indexOf('function repairGalleryProfileParagraphs('),source.indexOf('async function repairGalleryProfiles('));
+const helpers=source.slice(source.indexOf('function galleryImagePlan('),source.indexOf('async function upgradeGalleryParticipants('));
 function runtime({mismatch=false,interrupted=false,final=false,pending=false}={}){
- const rows=[{creator:'一人目'},{creator:'二人目'}];if(final)rows.push({finalMarker:true});
+ const rows=[{creator:'一人目',url:'https://note.com/one/n/n000000000001'},{creator:'二人目',url:'https://note.com/two/n/n000000000002'}];if(final)rows.push({finalMarker:true,creator:'実績',url:'https://note.com/final/n/n000000000003'});
  const paragraph={name:'paragraph',create:(attrs,content,marks)=>({type:paragraph,attrs,textContent:content,marks,nodeSize:content.length+2})};
  const block=(name,text)=>({type:name==='paragraph'?paragraph:{name},attrs:{},textContent:text,nodeSize:name==='paragraph'?text.length+2:1});
  const first=block('paragraph',interrupted?'new-一人目':'old-one'),second=block('paragraph',mismatch?'手で編集した本文':'old-two');
  const image1=block('image','一人目さん'),image2=block('image','二人目さん'),native=block('embed','通知カード'),original=block('paragraph','もとの本文');
  const blocks=[original,block('heading','見出し'),first,image1,block('horizontal_rule',''),second,...(pending?[]:[image2,block('horizontal_rule','')]),...(final?[block('heading','実績の算数'),block('image','実績さん'),block('horizontal_rule','')]:[]),native];
+ blocks.filter(node=>node.type.name==='image').forEach((node,index)=>node.attrs.link=rows[index].url);
  const hits=()=>{let pos=0;return blocks.map(node=>{const hit={node,pos};pos+=node.nodeSize;return hit})};
  let dispatches=0,written;
  const doc={get content(){return{size:hits().reduce((sum,hit)=>sum+hit.node.nodeSize,0)}},descendants(fn){hits().forEach(hit=>fn(hit.node,hit.pos))}};
  const view={state:{doc,schema:{text:value=>value},get tr(){const replacements=[];return{replaceWith(from,to,node){replacements.push({from,to,node});return this},mapping:{map(pos){return pos+replacements.reduce((sum,r)=>sum+(r.to<=pos?r.node.nodeSize-(r.to-r.from):0),0)}},replacements}}},dispatch(tr){dispatches++;for(const replacement of tr.replacements){const index=hits().findIndex(hit=>hit.pos===replacement.from);assert.ok(index>=0);blocks[index]=replacement.node}}};
- const run={gallery126:true,articleKey:'draft',imageAnchorPos:original.nodeSize,rows,activityTexts:['old-one','old-two'],stage:'complete'};
- const context=vm.createContext({editorArticleKey:()=> 'draft',ownedImagesForRun:()=>hits().filter(hit=>hit.node.type.name==='image'),completedImagePrefix:(rows,images)=>images.length,activityText:row=>'new-'+row.creator,writeRun:run=>written=run,VERSION:'2.6.5'});
- vm.runInContext(code+';globalThis.repair=repairGalleryProfileParagraphs',context);
+ const run={gallery126:true,articleKey:'draft',imageAnchorPos:original.nodeSize,rows,items:blocks.filter(node=>node.type.name==='image').map(node=>({url:node.attrs.link})),activityTexts:['old-one','old-two'],stage:'complete'};
+ const context=vm.createContext({norm:value=>String(value||''),editorArticleKey:()=> 'draft',ownedImagesForRun:()=>hits().filter(hit=>hit.node.type.name==='image'),completedImagePrefix:(rows,images)=>images.length,activityText:row=>'new-'+row.creator,writeRun:run=>written=run,VERSION:'2.6.5'});
+ vm.runInContext(helpers+code+';globalThis.repair=repairGalleryProfileParagraphs',context);
  return{repair:anchors=>context.repair(view,run,rows,anchors),blocks,image1,image2,native,original,first,second,run,get dispatches(){return dispatches},get written(){return written}};
 }
 test('existing completed profiles change atomically while images, captions, cards and original text retain node identity',()=>{

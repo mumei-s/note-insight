@@ -84,7 +84,7 @@ test('a slow upload fully completes before the next image begins even with the s
  c.api.patch(`uploadOne=async(view,row,file,pos)=>{activeUploads++;maxUploads=Math.max(maxUploads,activeUploads);events.push('start-'+row.index);await new Promise(resolve=>setTimeout(resolve,6));const hit={pos,node:{nodeSize:1,attrs:{id:'img-'+row.index,src:'https://assets.st-note.com/'+row.index+'.png',link:row.url}}};images.push(hit);events.push('done-'+row.index);activeUploads--;return{hit,nextPos:pos+1}};`);
  await api.createFixed300();
  assert.equal(c.maxUploads,1);assert.deepEqual(Array.from(c.events),['start-1','done-1','start-2','done-2','start-3','done-3']);assert.equal(JSON.parse(local.get(RUN)).stage,'images_ready');
- assert.match(source,/const IMAGE_GAP=180/);assert.match(source,/await sleep\(120\)/);
+ assert.match(source,/const IMAGE_GAP=80/);assert.match(source,/await sleep\(70\)/);
 });
 
 test('whole-history reindexing maps the next insertion after a preceding group heading shrinks',async()=>{
