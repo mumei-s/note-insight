@@ -26,7 +26,7 @@ function actorFromText(v:string){const m=actionText(v).match(/^(.{1,160}?)\s*さ
 function jstDay(v:unknown){const ms=Date.parse(String(v||"")),d=Number.isFinite(ms)?new Date(ms):new Date();return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 
 const KIND_TYPES:Record<string,string>={
- user_badge:"badge",thank_you_message:"purchase_message",like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
+ user_badge:"badge",thank_you_message:"purchase_message",store_create:"store_started",like:"like",follow:"follow",super_follow:"follow",note_comment:"comment",note_comment_like:"comment_like",note_comment_reply:"reply",
  board_like_post:"membership_reaction",board_like_comment:"membership_reaction",board_reply_comment:"membership_board_reply",board_reply_post:"membership_board_reply",board_new_post:"membership_board",
  circle_note_add:"membership_article_added",circle_plan_note_add:"membership_article_added",circle_note_update:"membership_article_updated",circle_plan_note_update:"membership_article_updated",circle_plan_magazine_add:"membership_magazine_added",
  circle_plan_join:"membership_join",circle_publish:"membership_started",circle_plan_publish:"membership_plan",circle_plan_magazine_note_add:"magazine_article_added",
