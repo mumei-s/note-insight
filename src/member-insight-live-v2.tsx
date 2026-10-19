@@ -1,5 +1,6 @@
+import { readInsightSession, verifiedInsightSessionIdentity, type InsightSessionIdentity } from "./insight-session-request";
 import { CreatorAvatar } from "./creator-avatar";
-import { fetchInsightResource } from "./insight-view-lifecycle";
+import { fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount, setAccessIntent } from "./insight-account-store";
 import {
@@ -37,7 +38,6 @@ const MemberInsightCommentsFinal = lazy(() => loadInsightScreen(() => import("./
 const MemberInsightFavoritesFinal = lazy(() => loadInsightScreen(() => import("./member-insight-favorites-final")).then(module => ({ default: module.MemberInsightFavoritesFinal })));
 
 const MEMBER="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-member-api";
-const ACCESS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const RELATIONS="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-relations";
 const AUTO_MS=15*60_000;
 const RELATION_MS=30*60_000;
@@ -75,7 +75,7 @@ const fmt=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
 const timeNow=()=>new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit"}).format(new Date());
 const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms));
 
-export function MemberInsightLiveV2(){
+export function MemberInsightLiveV2({initialSession=null}:{initialSession?:InsightSessionIdentity|null}={}){
   const creatorMotion=useVisibleMotion<HTMLElement>();
   const[entryTab]=useState(()=>{
     const tab=String(window.history.state?.insightPendingTab||"");
@@ -84,7 +84,7 @@ export function MemberInsightLiveV2(){
   const explicitMode=entryTab?(["comments","favorites","social","notifications"].includes(entryTab)?entryTab:"normal") as Mode:requestedMode();
   const initialMode:Mode=explicitMode||"normal";
   const initialNavTab=entryTab||String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
-  const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[officialData,setOfficial]=useState<any>(null),[autoSyncEnabled]=useState(true);
+  const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[officialData,setOfficial]=useState<any>(()=>initialSession&&initialSession.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&initialSession.scope===String(currentStoredInsightAccount()?.noteId||"").toLowerCase()&&isFreshInsightView(initialSession.checkedAt)?initialSession:null),[autoSyncEnabled]=useState(true);
   const normalVisited=useRef(initialMode==="normal");
   // Keep an opened normal view mounted for its page/scroll state, but do not
   // download it when the initial destination is notifications or another scene.
@@ -134,10 +134,10 @@ export function MemberInsightLiveV2(){
     const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",scope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();
     const valid=()=>id===officialRequest.current.id&&!controller.signal.aborted&&token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&scope===String(currentStoredInsightAccount()?.noteId||"").toLowerCase();
     try{
-      const data=await post(ACCESS,"session",{},30_000,controller.signal);if(!valid())return false;
-      const app=data?.application,noteId=typeof app?.noteId==="string"?app.noteId.trim().toLowerCase():"";
-      if(data?.ok!==true||app?.status!=="active"||!/^[a-z0-9_-]{1,80}$/.test(noteId)||(scope&&noteId!==scope))throw new Error("INSIGHT_IDENTITY_MISMATCH");
-      setOfficial({token,scope,member:{noteId,displayName:typeof app.displayName==="string"&&app.displayName.trim()?app.displayName:noteId,imageUrl:typeof app.imageUrl==="string"?app.imageUrl:null}});return true;
+      const result=await readInsightSession(token,controller.signal);if(!valid())return false;
+      const identity=verifiedInsightSessionIdentity(result);
+      if(!identity)throw new Error("INSIGHT_IDENTITY_MISMATCH");
+      setOfficial(identity);return true;
     }
     catch{if(valid())setStatus("TOPの最新確認に失敗しました。各項目は個別に確認しています。");return false}
     finally{if(id===officialRequest.current.id)officialRequest.current.controller=null}
@@ -312,7 +312,7 @@ export function MemberInsightLiveV2(){
     return()=>{stopped=true;if(timer)window.clearTimeout(timer);document.documentElement.style.overflowY=previousOverflow}
   },[mode]);
   useEffect(()=>{
-    void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
+    if(!official)void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
     // Each panel verifies immediately on mount; no delayed duplicate startup reload.
     const timer=window.setInterval(()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void refreshSavedData(false)},15*60_000);

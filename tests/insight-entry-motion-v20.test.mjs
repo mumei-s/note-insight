@@ -73,6 +73,7 @@ function load(source, w, fetch, overrides = {}) {
   }
   dynamicImports(ast);
   Object.assign(modules, overrides);
+  function execute(source) {
   const compiled = ts.transpileModule(source.replaceAll('import.meta.env.BASE_URL', '"/note-insight/"'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
@@ -82,9 +83,15 @@ function load(source, w, fetch, overrides = {}) {
     window: w, document: w.document, localStorage: w.localStorage, sessionStorage: w.sessionStorage,
     location: w.location, history: w.history, navigator: w.navigator,
     URL, URLSearchParams, AbortController, Event: w.Event, CustomEvent: w.CustomEvent,
-    requestAnimationFrame: w.requestAnimationFrame.bind(w), fetch, console,
+    requestAnimationFrame: w.requestAnimationFrame.bind(w), fetch, console, setTimeout, clearTimeout,
   });
   return exports;
+  }
+  // Exercise the real session transport; visual component stubs must not turn
+  // the pending authentication read into an immediate fake React element.
+  modules['./insight-view-lifecycle'] = execute(readFileSync('src/insight-view-lifecycle.ts', 'utf8'));
+  modules['./insight-session-request'] = execute(readFileSync('src/insight-session-request.ts', 'utf8'));
+  return execute(source);
 }
 
 test('黒い切替待ち画面はナビ非表示中も装飾され、確認完了後に待ち時間を追加しない', async t => {
