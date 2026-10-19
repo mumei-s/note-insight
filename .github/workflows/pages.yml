@@ -83,7 +83,7 @@ jobs:
       - name: Check comment collection, independent public sync, and direct-room DM saving
         run: node --experimental-vm-modules --test tests/comment-refresh-recovery.test.mjs tests/public-sync-isolation.test.mjs tests/dm-direct-room-ingest.test.mjs
       - name: Check DM save recovery, fresh history, and reader startup
-        run: node --experimental-vm-modules --test tests/dm-summary-saved-time.test.mjs tests/dm-ui-freshness-recovery.test.mjs tests/dm-network-lifecycle.test.mjs tests/dm-network-recovery.test.mjs tests/dm-room-capacity.test.mjs tests/dm-reader-identity-lifecycle.test.mjs
+        run: node --experimental-vm-modules --test tests/dm-summary-saved-time.test.mjs tests/dm-feed-egress.test.mjs tests/dm-ui-freshness-recovery.test.mjs tests/dm-network-lifecycle.test.mjs tests/dm-network-recovery.test.mjs tests/dm-room-capacity.test.mjs tests/dm-reader-identity-lifecycle.test.mjs
       - name: Check read RPC results and permissions
         run: node --test tests/insight-rpc-read-performance.test.mjs tests/notification-feed-page-rpc.test.mjs tests/notification-store-started.test.mjs
       - name: Check retained social views and differences
