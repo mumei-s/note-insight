@@ -1061,13 +1061,13 @@ const galleryProfileAsciiWidths=[.25,.28,.5,.84,.5,.84,.78,.53,.39,.39,.5,.78,.2
 function galleryProfileWidth(value){
  return galleryProfileGraphemes(value).reduce((sum,part)=>sum+(part==='\t'?1:part.length===1&&part.charCodeAt(0)>=32&&part.charCodeAt(0)<=126?galleryProfileAsciiWidths[part.charCodeAt(0)-32]:/^[\uff61-\uff9f]$/.test(part)?.55:1),0);
 }
+const galleryProfileNoStart=/^[、。，．・：；？！ー…‥）〕］｝〉》」』】〙〗〟’”｠»ヽヾ々〻ゝゞぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ,.:;!?\)\]\}]/u;
+const galleryProfileNoEnd=/[（〔［｛〈《「『【〘〖〝‘“｟«\(\[\{]$/u;
 function galleryProfileKinsoku(units){
- const noStart=/^[、。，．・：；？！ー…‥）〕］｝〉》」』】〙〗〟’”｠»ヽヾ々〻ゝゞぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ,.:;!?\)\]\}]/u;
- const noEnd=/[（〔［｛〈《「『【〘〖〝‘“｟«\(\[\{]$/u;
  const chunks=[];
  for(const unit of units){
   const previous=chunks[chunks.length-1];
-  if(previous&&(noStart.test(unit)||noEnd.test(previous)))chunks[chunks.length-1]+=unit;
+  if(previous&&(galleryProfileNoStart.test(unit)||galleryProfileNoEnd.test(previous)))chunks[chunks.length-1]+=unit;
   else chunks.push(unit);
  }
  return chunks;
@@ -1089,16 +1089,16 @@ function galleryProfileChunks(value,maxWidth=Infinity){
  const kind=part=>/^[\p{Script=Han}々〆ヵヶ]+$/u.test(part)?'han':/^[\p{Script=Han}々〆ヵヶ]+[\p{Script=Hiragana}\p{Mark}ー]+$/u.test(part)?'inflected':/^[\p{Script=Hiragana}\p{Mark}ー]+$/u.test(part)?'hiragana':/^[\p{Script=Katakana}\p{Mark}ー・\uff9e\uff9f]+$/u.test(part)?'katakana':/^\s+$/u.test(part)?'space':'other';
  const append=(part,type=kind(part))=>{
   const previous=units[units.length-1];
-  // Word Segmenter can split 会社員 and クリエイター. Rejoin contiguous
-  // script runs and Japanese inflections; keep ITエンジニア together too.
+  // Build the same script runs and inflections on every device. Mobile ICU
+  // versions can return an entire Japanese clause as one word, so those
+  // spans must not become indivisible units. Keep ITエンジニア together too.
   if(previous&&(type==='han'&&previous.kind==='han'||type==='hiragana'&&['han','inflected','hiragana','katakana','latin'].includes(previous.kind)&&!/(?:ので|けれど|けど|ですが|ながら|ならば|そして|または)$/u.test(previous.text)||type==='katakana'&&['katakana','latin'].includes(previous.kind)||type==='space'&&previous.kind==='space')){
    previous.text+=part;previous.parts.push(part);
    previous.kind=type==='hiragana'&&previous.kind!=='hiragana'?'inflected':type;
   }else units.push({text:part,kind:type,parts:[part]});
  };
  const words=fragment=>{
-  const parts=typeof Intl?.Segmenter==='function'?Array.from(new Intl.Segmenter('ja',{granularity:'word'}).segment(fragment),part=>part.segment):galleryProfileGraphemes(fragment);
-  for(const part of parts)append(part);
+  for(const part of galleryProfileGraphemes(fragment))append(part);
  };
  let offset=0;
  for(const match of text.matchAll(protectedWords)){
@@ -1108,12 +1108,21 @@ function galleryProfileChunks(value,maxWidth=Infinity){
  }
  words(text.slice(offset));
  const bounded=[];
- for(const unit of units){
-  // A long run of distinct Kanji words may wrap at the real word Segmenter
-  // boundaries. Do not reinterpret one Katakana word or URL as many letters.
-  if(unit.kind==='han'&&unit.parts.length>1&&typeof Intl?.Segmenter==='function'&&galleryProfileWidth(unit.text)>maxWidth){
+ for(const [index,unit] of units.entries()){
+  // Use word boundaries only as optional hints for an unusually long Kanji
+  // run, after deterministic grouping. Ordinary Japanese wrapping never
+  // depends on a browser's word dictionary. URLs/Latin/Katakana stay whole.
+  // Reserve the surrounding forbidden-break punctuation before fitting a
+  // Kanji run. Adding a closing quote/full stop afterwards must not turn an
+  // exactly-full line into an oversized indivisible group.
+  let reserve=0;
+  for(let before=index-1;before>=0&&galleryProfileNoEnd.test(units[before].text);before--)reserve+=galleryProfileWidth(units[before].text);
+  for(let after=index+1;after<units.length&&galleryProfileNoStart.test(units[after].text);after++)reserve+=galleryProfileWidth(units[after].text);
+  const budget=Math.max(1,maxWidth-reserve);
+  if(unit.kind==='han'&&unit.parts.length>1&&typeof Intl?.Segmenter==='function'&&galleryProfileWidth(unit.text)>budget){
+   const parts=Array.from(new Intl.Segmenter('ja',{granularity:'word'}).segment(unit.text),part=>part.segment);
    let phrase='';
-   for(const word of unit.parts){if(phrase&&galleryProfileWidth(phrase+word)>maxWidth){bounded.push(phrase);phrase=''}phrase+=word}
+   for(const word of parts){if(phrase&&galleryProfileWidth(phrase+word)>budget){bounded.push(phrase);phrase=''}phrase+=word}
    if(phrase)bounded.push(phrase);
   }else bounded.push(unit.text);
  }
@@ -1146,7 +1155,7 @@ function galleryProfileLines(value,maxWidth=16){
   let line='',used=0;
   for(const part of galleryProfileSemanticParts(original,maxWidth)){
    const size=galleryProfileWidth(part);
-   if(size>maxWidth+.00001)throw new Error('プロフィールのURLまたは括弧内の文字列が長すぎます。全文を保ったまま表示幅を確認してください');
+   if(size>maxWidth+.00001)throw new Error('プロフィールに表示幅を超える単語またはURLがあります。全文を保ったまま表示幅を確認してください');
    if(line&&used+size>maxWidth+.00001){lines.push(line);line='';used=0}
    line+=part;used+=size;
   }

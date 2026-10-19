@@ -13,6 +13,18 @@ function api(intl=Intl){
  vm.runInContext(code+';globalThis.api={galleryProfileGraphemes,galleryProfileWidth,galleryProfileBudgetChunks,galleryProfileChunks,galleryProfileLines,galleryProfileLayout,escapeGalleryProfileTex,activityText,insertActivityAt,findActivity};',context);
  return context.api;
 }
+function coarseWordIntl(target=null){
+ return{Segmenter:class{
+  constructor(locale,options){this.granularity=options.granularity;this.native=new Intl.Segmenter(locale,options)}
+  segment(text){
+   if(this.granularity!=='word')return this.native.segment(text);
+   if(!target)return[{index:0,segment:text,isWordLike:true}];
+   const at=text.indexOf(target);
+   if(at<0)return this.native.segment(text);
+   return[...this.native.segment(text.slice(0,at)),{index:at,segment:target,isWordLike:true},...Array.from(this.native.segment(text.slice(at+target.length)),part=>({...part,index:part.index+at+target.length}))];
+  }
+ }};
+}
 const row={gallery126:true,creator:'猫好き🌱',profileText:'会社員とイラスト制作。親子で楽しむ物語を毎日発信しています。'};
 let katex;
 try{katex=createRequire(import.meta.url)(process.env.KATEX_TEST_MODULE||'katex')}catch{}
@@ -82,6 +94,54 @@ for(const [mode,intl] of [['Intl',Intl],['fallback',{}]]){
   assert.throws(()=>mathApi.galleryProfileLayout('W'.repeat(100)),/全文を保ったまま/);
  });
 }
+
+for(const [name,intl] of [['whole Japanese fragment',coarseWordIntl()],['long Minori phrase',coarseWordIntl('記事にしていますのでよければどうぞ')],['Minori conjunction and ending',coarseWordIntl('のでよければどうぞ')]]){
+ test('coarse word Segmenter '+name+' cannot stop Minori profile formatting',()=>{
+  const mathApi=api(intl),phrase='記事にしていますのでよければどうぞ。',layout=mathApi.galleryProfileLayout(phrase);
+  assert.equal(layout.font,'scriptsize');
+  assert.deepEqual(Array.from(layout.lines),['記事にしていますので','よければどうぞ。']);
+  const minori=JSON.parse(readFileSync('public/note-profile-card-halloween126.json','utf8')).preparedRows.find(prepared=>prepared?.urlname==='open_tulip9172');
+  assert.ok(minori);
+  const original='プロフィール｜'+minori.creator+'さん：'+minori.profileText,full=mathApi.galleryProfileLayout(original);
+  assert.equal(full.font,'scriptsize');
+  assert.equal(full.lines.join(''),original.replace(/[\r\n]/g,''));
+  assert.ok(full.lines.includes('記事にしていますので'));
+  assert.ok(full.lines.includes('よければどうぞ。'));
+  for(const line of full.lines)assert.ok(mathApi.galleryProfileWidth(line)<=full.maxWidth+.00001,line);
+ });
+}
+
+test('coarse word Segmenter preserves all saved profiles, their font sizes and complete URLs',()=>{
+ const rows=JSON.parse(readFileSync('public/note-profile-card-halloween126.json','utf8')).preparedRows.filter(Boolean),normal=api(),coarse=api(coarseWordIntl());
+ assert.ok(rows.length>=125);
+ for(const prepared of rows){
+  const original='プロフィール｜'+prepared.creator+'さん：'+(prepared.profileText||'プロフィール未設定'),layout=coarse.galleryProfileLayout(original);
+  assert.equal(layout.font,normal.galleryProfileLayout(original).font,prepared.urlname);
+  assert.equal(layout.lines.join(''),original.replace(/[\r\n]/g,''),prepared.urlname);
+  for(const line of layout.lines)assert.ok(coarse.galleryProfileWidth(line)<=layout.maxWidth+.00001,prepared.urlname+':'+line);
+  for(const match of original.matchAll(/https?:\/\/[^\s\u3000<>「」『』《》【】（）〔〕［］｛｝]+/giu))assert.equal(layout.lines.filter(line=>line.includes(match[0])).length,1,prepared.urlname+':'+match[0]);
+ }
+ const words=['ITエンジニア','Webデザイン','TypeScript',"Beyoncé's","S's-YR",'C++','HTML5'],url='https://example.com/profile?tag=cat&n=2',text=words.join(' ')+' '+url,layout=coarse.galleryProfileLayout(text);
+ assert.equal(layout.lines.join(''),text);
+ for(const word of [...words,url])assert.equal(layout.lines.filter(line=>line.includes(word)).length,1,word);
+ assert.throws(()=>coarse.galleryProfileLayout('https://example.com/'+('a'.repeat(200))),/全文を保ったまま/);
+ assert.throws(()=>coarse.galleryProfileLayout('W'.repeat(100)),/全文を保ったまま/);
+});
+
+test('closing punctuation and quotes cannot turn a fitting Kanji run into an oversized atomic unit',()=>{
+ const mathApi=api(),words=['創作','作品','制作','企画','支援','活動','実践','報告'];
+ for(const original of [words.join('')+'。','「'+words.join('')+'」。']){
+  const layout=mathApi.galleryProfileLayout(original);
+  assert.equal(layout.font,'scriptsize');
+  assert.equal(layout.lines.join(''),original);
+  for(const word of words)assert.equal(layout.lines.filter(line=>line.includes(word)).length,1,word);
+  for(const line of layout.lines){
+   assert.ok(mathApi.galleryProfileWidth(line)<=16.00001,line);
+   assert.ok(!/^[、。，．）」』】]/u.test(line),line);
+   assert.ok(!/[（「『【]$/u.test(line),line);
+  }
+ }
+});
 
 test('URLs are indivisible and a long URL selects a smaller whole-profile font',()=>{
  const mathApi=api(),url='https://hasyamo-site.hasyamo.workers.dev/',profile={gallery126:true,creator:'はしゃも',profileText:'制作・相談受付中。事例・ポートフォリオ：'+url};
