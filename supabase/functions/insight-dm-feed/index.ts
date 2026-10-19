@@ -6,6 +6,9 @@ const out=(x:unknown,s=200)=>new Response(JSON.stringify(x),{status:s,headers:H}
 async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function auth(req:Request){const raw=req.headers.get("X-Insight-Token")||"";if(!raw)throw new Error("INSIGHT_LOGIN_REQUIRED");const{data:s}=await db.from("insight_member_sessions").select("application_id,expires_at,revoked_at").eq("token_hash",await sha(raw)).maybeSingle();if(!s||s.revoked_at||Date.parse(s.expires_at)<=Date.now())throw new Error("INSIGHT_SESSION_INVALID");const{data:a}=await db.from("insight_access_applications").select("id,note_id,status").eq("id",s.application_id).maybeSingle();if(!a||a.status!=="active")throw new Error("INSIGHT_MEMBER_INACTIVE");const noteId=String(a.note_id||"").toLowerCase();return{id:String(a.id),scope:noteId==="ss_yr"?"owner":String(a.id),noteId}}
 const clean=(v:unknown)=>String(v||"").replace(/\s+/g," ").trim();
+// Person grouping never reads thread meta or room URLs. Keep message bodies and
+// the legacy threads response unchanged while avoiding those unused DB bytes.
+const PERSON_THREAD_FIELDS="thread_key,peer_note_id,peer_name,peer_url,peer_image_url,last_message_at,last_synced_at";
 function personKey(r:any){
  const id=clean(r?.peer_note_id).replace(/^@/,"").toLowerCase();
  if(/^[a-z0-9_-]+$/.test(id))return "note:"+id;
@@ -40,7 +43,7 @@ Deno.serve(async req=>{
     const{data,error,count}=await q;if(error)throw error;return out({ok:true,noteId:who.noteId,rows:data||[],total:count||0,page,pageSize:size})
   }
   if(action==="people"){
-    const{data,error}=await db.from("insight_dm_threads").select("*").eq("member_id",who.scope).order("last_message_at",{ascending:false,nullsFirst:false}).limit(5000);
+    const{data,error}=await db.from("insight_dm_threads").select(PERSON_THREAD_FIELDS).eq("member_id",who.scope).order("last_message_at",{ascending:false,nullsFirst:false}).limit(5000);
     if(error)throw error;
     const groups=new Map<string,any[]>();for(const r of data||[]){const k=personKey(r),a=groups.get(k)||[];a.push(r);groups.set(k,a)}
     const rows=[...groups.values()].map(personRow).sort((a,b)=>new Date(b.last_message_at||0).getTime()-new Date(a.last_message_at||0).getTime());
@@ -48,7 +51,7 @@ Deno.serve(async req=>{
   }
   if(action==="person_messages"){
     const key=String(b.personKey||"");if(!key)throw new Error("PERSON_REQUIRED");
-    const{data:threads,error:te}=await db.from("insight_dm_threads").select("*").eq("member_id",who.scope).limit(5000);if(te)throw te;
+    const{data:threads,error:te}=await db.from("insight_dm_threads").select(PERSON_THREAD_FIELDS).eq("member_id",who.scope).limit(5000);if(te)throw te;
     const mine=(threads||[]).filter(r=>personKey(r)===key),threadKeys=mine.map(r=>String(r.thread_key||"")).filter(Boolean);
     if(!threadKeys.length)return out({ok:true,noteId:who.noteId,person:null,rows:[],total:0});
     const page=Math.max(1,Number(b.page||1)),size=Math.min(500,Math.max(1,Number(b.pageSize||200))),from=(page-1)*size,to=from+size-1;
