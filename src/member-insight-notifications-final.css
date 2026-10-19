@@ -90,3 +90,9 @@
 .minf .minf-comment-context p{margin:4px 0;line-height:1.5}
 .minf .minf-completion button.is-saving::before{display:none}
 .minf .minf-completion button.is-saving{cursor:pointer}
+
+/* A saved completion uses the same clear green state as the history cards. */
+.minf .minf-completion button[aria-pressed=true],
+html[data-insight-layout] .minf .minf-completion button[aria-pressed=true]{background:#b9f4d0;border-color:#6eecaa;color:#062a19;font-weight:800!important;box-shadow:0 0 0 1px #6eecaa22}
+.minf .minf-list article:has(>.minf-row-actions .minf-completion button[aria-pressed=true]),
+html[data-insight-layout] .minf .minf-list article:has(>.minf-row-actions .minf-completion button[aria-pressed=true]){background:linear-gradient(90deg,#113027,#0a1b22 42%);box-shadow:inset 3px 0 0 #6eecaa55}

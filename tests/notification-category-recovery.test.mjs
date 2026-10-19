@@ -140,3 +140,23 @@ test('旧版の件数あり・本文0件の保存表示は復元せず、古い�
  assert.equal(h.w.document.querySelector('.minf-error'),null);
  assert.deepEqual(h.feeds().map(body=>[body.kind,body.page,body.pageSize,body.includeCategoryPreview]),[['all',1,100,false],['all',1,100,false]]);
 });
+
+test('お店をはじめましたの分類を選択・復元でき、保存済みの対応済み状態はそのまま表示する',async t=>{
+ const storeRow={...row('store-one','store_started'),raw_text:'人物さんがnoteでお店をはじめました',meta:{kind:'store_create'},confirmed:true};
+ const storeCounts={all:210,tip:189,rating:20,store_started:1};
+ const h=await fixture(t,{selected:()=>Response.json({ok:true,noteId:'tester',rows:[storeRow],total:1,categoryCounts:storeCounts,statusCounts:{all:1,pending:0,completed:1}})});
+ const option=h.w.document.querySelector('option[value="store_started"]');
+ assert.ok(option);assert.match(option.textContent,/お店をはじめました/);
+ await choose(h,'store_started');
+ assert.equal(h.w.document.querySelectorAll('.minf-list article.type-store_started').length,1);
+ assert.match(h.w.document.querySelector('.minf-main').textContent,/お店をはじめました/);
+ const completed=h.w.document.querySelector('.minf-completion button');
+ assert.equal(completed.getAttribute('aria-pressed'),'true');
+ assert.equal(completed.textContent,'✓ 対応済み');
+ assert.equal(h.saved().value.rows[0].confirmed,true);
+ assert.equal(h.saved().value.selection.kind,'store_started');
+ await choose(h,'all');await choose(h,'store_started');
+ assert.equal(h.w.document.querySelector('.minf-completion button').getAttribute('aria-pressed'),'true');
+ assert.equal(h.calls.filter(body=>body.kind==='store_started').length,1,'再訪時は取得済み分類を再利用する');
+ assert.equal(h.calls.some(body=>body.action&&body.action!=='recent'),false,'分類を開くだけで保存済み対応状況を書き換えない');
+});
