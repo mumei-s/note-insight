@@ -31,7 +31,7 @@ const rules = [
   ['auth-access', (p) => /^src\/(?:access-portal|insight-account-store)/.test(p) || /^supabase\/functions\/(?:insight-access|insight-access-reactivate|insight-code-login|insight-self-account|insight-recovery)/.test(p)],
   ['directory-catalog', (p) => p === 'public/directory-member.html' || /^src\/catalog-/.test(p) || /^supabase\/functions\/insight-participants/.test(p)],
   ['favorites', (p) => /favorite/i.test(p)],
-  ['dm', (p) => /^src\/member-insight-dm\.(?:tsx|css)$/.test(p)],
+  ['dm', (p) => /^src\/member-insight-dm\.(?:tsx|css)$/.test(p) || ['public/note-insight-dm-reader-v1.js', 'public/note-insight-dm.user.js'].includes(p)],
   ['games', (p) => /(?:^|\/)(?:game-|creator-world-game|match-game|creator-game-data)/i.test(p)],
   ['comments', (p) => /member-insight-comments|insight-comment-/i.test(p)],
   ['social', (p) => /member-insight-social|insight-social/i.test(p)],

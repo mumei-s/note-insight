@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.11';
+const VERSION='1.4.12';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -34,6 +34,29 @@ function notificationOpen(){
  return [...document.querySelectorAll('.m-navbarNotice,[class*="notificationList" i],[class*="noticeList" i]')].some(el=>shown(el)&&Boolean(el.querySelector('[class*="noticeItem" i],[class*="notificationItem" i],[data-testid="notification-item"]')));
 }
 function reconcileSurface(){if(dmRoute())return true;interrupted=true;document.getElementById('mumei-dm-reader-status')?.remove();return false}
+// Account/navigation menus can cover the DM page without changing its URL.
+// This is a presentation guard only: do not pause reading or change checkpoints.
+function statusMenuOpen(){
+ const visible=el=>{if(!shown(el))return false;const r=el.getBoundingClientRect();if(r.bottom<=0||r.right<=0||r.top>=(innerHeight||document.documentElement.clientHeight)||r.left>=(innerWidth||document.documentElement.clientWidth))return false;for(let p=el;p&&p!==document.body;p=p.parentElement)if(getComputedStyle(p).opacity==='0')return false;return true};
+ const overlay='[role="dialog"],[role="menu"],[aria-modal="true"],dialog[open]';
+ for(const el of document.querySelectorAll(overlay))if(visible(el)&&!el.closest('#mumei-dm-reader-status,[data-mumei-dm-reader-frame]'))return true;
+ // note's mobile account menu is not guaranteed to expose an ARIA role.
+ // Require several distinct account actions inside one positioned overlay
+ // surface, rather than hiding for a matching word in a message or page link.
+ const labels=new Map();
+ for(const el of document.querySelectorAll('a,button,[role="menuitem"]')){
+  const value=clean(el.textContent);
+  if(/^(?:自分の記事|下書き|購入した|スキした|最近見た)$/u.test(value)&&visible(el))labels.set(el,value);
+ }
+ if(new Set(labels.values()).size<3)return false;
+ for(const el of labels.keys())for(let p=el.parentElement;p&&p!==document.body&&p!==document.documentElement;p=p.parentElement){
+  if(!visible(p))continue;
+  const positioned=/^(?:fixed|absolute)$/u.test(getComputedStyle(p).position);
+  if(positioned&&new Set([...labels].filter(([node])=>p.contains(node)).map(([,label])=>label)).size>=3)return true;
+ }
+ return false;
+}
+
 const ROOM_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function roomKeyFromUrl(v){try{const u=new URL(String(v||''),location.href),m=u.pathname.match(/^\/messages\/rooms\/([^/?#]+)/i),id=m&&m[1]?m[1]:'';return ROOM_ID_RE.test(id)?id:''}catch{return''}}
 function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean),id=String(p[0]||'').toLowerCase();return u.hostname.endsWith('note.com')&&p.length===1&&/^[a-z0-9_-]+$/.test(id)&&!['messages','settings','notifications'].includes(id)?id:''}catch{return''}}
@@ -138,7 +161,7 @@ function statusLayout(){
  if(editor!==observedEditor){observedEditor=editor;composerResize?.disconnect();if(editor&&typeof ResizeObserver==='function'){composerResize= new ResizeObserver(scheduleStatusLayout);composerResize.observe(editor)}}
  const hide=()=>{if(!box.hidden)box.hidden=true;if(box.style.display!=='none')box.style.display='none'};
  // If the composer is not measurable, do not guess a fixed position over it.
- if(composing()||(roomKeyFromUrl(location.href)&&!editor)||(vv&&(layoutHeight-viewBottom>100||Number(vv.scale)>1.05))){hide();return}
+ if(statusMenuOpen()||composing()||(roomKeyFromUrl(location.href)&&!editor)||(vv&&(layoutHeight-viewBottom>100||Number(vv.scale)>1.05))){hide();return}
  let boundary=viewBottom,composerBottom=0;
  if(editor){
   const r=editor.getBoundingClientRect();boundary=Math.min(boundary,r.top);composerBottom=r.bottom;
@@ -274,5 +297,5 @@ async function run(){
 }
 function readerOutput(node){const el=node?.nodeType===1?node:node?.parentElement;return Boolean(el?.closest?.('#mumei-dm-reader-status,[data-mumei-dm-reader-frame]'))}
 function ownMutation(record){if(readerOutput(record.target))return true;if(record.type==='childList'){const changed=[...record.addedNodes,...record.removedNodes];return changed.length>0&&changed.every(readerOutput)}return false}
-{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);setInterval(()=>{if(document.visibilityState!=='hidden'&&!manualPaused)schedule(0)},5000);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{const native=records.filter(r=>!ownMutation(r));if(!native.length)return;const visible=reconcileSurface();scheduleStatusLayout();if(visible&&native.some(r=>r.type==='childList'||r.type==='characterData'))schedule(180)}).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
+{let timer=0,running=false;const done=()=>{running=false;if(interrupted&&!manualPaused&&dmRoute())schedule(100)};const schedule=(ms=180)=>{clearTimeout(timer);if(!reconcileSurface())return;timer=setTimeout(()=>{if(running)return;running=true;Promise.resolve(run()).catch(()=>{}).finally(done)},ms)};schedule(220);setInterval(()=>{if(document.visibilityState!=='hidden'&&!manualPaused)schedule(0)},5000);const observe=()=>{if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{const native=records.filter(r=>!ownMutation(r));if(!native.length)return;const visible=reconcileSurface();scheduleStatusLayout();if(visible&&native.some(r=>r.type==='childList'||r.type==='characterData'))schedule(180)}).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open','role','aria-modal']})};observe();addEventListener('pageshow',()=>{manualPaused=false;scheduleStatusLayout();schedule(180)});addEventListener('focus',()=>{scheduleStatusLayout();schedule(180)});window.__mumeiInsightDmReaderV1Api={version:VERSION,stop,scanRoom,syncRoomsInBackground,candidateNodes,messageData,roomAnchors,run:()=>{if(!reconcileSurface()||running)return false;running=true;Promise.resolve(run()).catch(()=>{}).finally(done);return true}}}
 })();

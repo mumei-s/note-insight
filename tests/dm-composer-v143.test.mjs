@@ -61,3 +61,49 @@ test('form外のplaintext-only入力とその子要素を送信済みDM本文と
  const h=fixture(t,{contenteditable:'plaintext-only'}),form=h.w.document.getElementById('composer'),replacement=h.w.document.createElement('div');replacement.id='composer';replacement.append(...form.childNodes);form.replaceWith(replacement);h.editor.removeAttribute('role');h.editor.innerHTML='<span class="messageText">まだ送信していない下書き</span>';h.editor.focus();
  const result=await h.w.__mumeiInsightDmReaderV1Api.scanRoom({id:'tester'},room,h.w.document,h.w.location.href);assert.equal(result.saved,1);assert.equal(h.sent.length,1);assert.equal(h.sent[0].body,'受信した本文');assert.equal(h.scrollWrites(),0);assert.equal(h.editor.textContent,'まだ送信していない下書き');
 });
+
+function accountMenu(h,{semantic=false}={}){
+ const menu=h.w.document.createElement('section');
+ if(semantic)menu.setAttribute('role','menu');else menu.style.position='fixed';
+ menu.innerHTML='<a href="/dashboard">ダッシュボード</a><a href="/settings">設定</a><a href="/notes">自分の記事</a><a href="/notes/drafts">下書き</a><a href="/purchases">購入した</a><a href="/likes">スキした</a><a href="/recent">最近見た</a>';
+ h.w.document.body.append(menu);return menu;
+}
+for(const semantic of [false,true])test(`DM一覧のアカウントメニュー中は完了帯だけを隠し、遅い進捗と開閉を安全に扱う (${semantic?'role':'mobile'})`,async t=>{
+ const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();
+ h.show({lastRunComplete:true,currentThread:41,threadCount:41,storedMessageCount:5257});
+ const panel=h.panel,menu=accountMenu(h,{semantic});await h.flushLayout();
+ assert.equal(h.w.location.pathname,'/messages/rooms/');assert.equal(h.panel,panel);assert.equal(panel.hidden,true);assert.equal(panel.style.display,'none');
+ h.show({lastRunComplete:true,currentThread:41,threadCount:41,storedMessageCount:5258});await h.flushLayout();
+ assert.equal(panel.hidden,true);assert.equal(h.ui.isManuallyPaused(),false);assert.equal(h.gm.get('mumei_insight_dm_sync_token_v1:tester'),'fixture');
+ for(let i=0;i<3;i++){menu.hidden=true;await h.flushLayout();assert.equal(panel.hidden,false);assert.match(panel.textContent,/41\/41人.*5258件/);menu.hidden=false;await h.flushLayout();assert.equal(panel.hidden,true)}
+ menu.remove();await h.flushLayout();assert.equal(panel.hidden,false);assert.equal(h.panel,panel);
+});
+test('メニューを開く前に届く完了応答も表示せず、同期の保存内容を変更しない',async t=>{
+ const h=fixture(t);const menu=accountMenu(h);h.editor.value='送信前の下書き';h.editor.focus();
+ h.show({lastRunComplete:true,storedMessageCount:5257});assert.equal(h.panel.hidden,true);
+ const result=await h.w.__mumeiInsightDmReaderV1Api.scanRoom({id:'tester'},room,h.w.document,h.w.location.href,()=>true);
+ assert.equal(result.saved,1);assert.equal(h.sent[0].body,'受信した本文');assert.equal(h.editor.value,'送信前の下書き');assert.equal(h.panel.hidden,true);assert.equal(h.ui.isManuallyPaused(),false);
+ menu.style.display='none';h.editor.blur();await h.flushLayout();assert.equal(h.panel.hidden,false);
+});
+test('非表示メニューと通常本文・静的リンクをメニューとして扱わない',async t=>{
+ const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();h.show();const menu=accountMenu(h);menu.hidden=true;await h.flushLayout();assert.equal(h.panel.hidden,false);
+ const article=h.w.document.createElement('aside');article.innerHTML='<a>自分の記事</a><a>下書き</a><a>購入した</a><p>スキした 最近見た</p>';h.w.document.querySelector('main').append(article);await h.flushLayout();assert.equal(h.panel.hidden,false);
+ menu.hidden=false;menu.setAttribute('aria-hidden','true');await h.flushLayout();assert.equal(h.panel.hidden,false);
+ menu.removeAttribute('aria-hidden');await h.flushLayout();assert.equal(h.panel.hidden,true);
+ h.w.history.pushState({},'', '/settings');await h.flushLayout();h.ui.statusLayout();assert.equal(h.panel,null);h.show();assert.equal(h.panel,null);
+});
+
+test('画面外・透明な閉じたメニューはDM帯を隠さず、表示変更に追従する',async t=>{
+ const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();h.show();const menu=accountMenu(h);
+ menu.style.opacity='0';await h.flushLayout();assert.equal(h.panel.hidden,false);
+ menu.style.opacity='1';const original=menu.getBoundingClientRect;menu.getBoundingClientRect=()=>({top:0,bottom:800,left:1200,right:1575,width:375,height:800});await h.flushLayout();assert.equal(h.panel.hidden,false);
+ menu.getBoundingClientRect=original;menu.style.transform='none';await h.flushLayout();assert.equal(h.panel.hidden,true);
+ menu.remove();await h.flushLayout();assert.equal(h.panel.hidden,false);
+ const modal=h.w.document.createElement('section');h.w.document.body.append(modal);await h.flushLayout();assert.equal(h.panel.hidden,false);
+ modal.setAttribute('aria-modal','true');await h.flushLayout();assert.equal(h.panel.hidden,true);
+ modal.removeAttribute('aria-modal');await h.flushLayout();assert.equal(h.panel.hidden,false);
+ modal.setAttribute('role','dialog');await h.flushLayout();assert.equal(h.panel.hidden,true);
+ modal.remove();await h.flushLayout();assert.equal(h.panel.hidden,false);
+ const dialog=h.w.document.createElement('dialog');h.w.document.body.append(dialog);dialog.setAttribute('open','');await h.flushLayout();assert.equal(h.panel.hidden,true);
+ dialog.removeAttribute('open');await h.flushLayout();assert.equal(h.panel.hidden,false);
+});
