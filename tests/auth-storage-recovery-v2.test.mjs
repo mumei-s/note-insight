@@ -16,7 +16,7 @@ function loadStore(seed={}, rejectRepair=false){
   };
   const window={dispatchEvent(){}};
   const Event=function Event(type){this.type=type};
-  const source=storeSource.replace(/\bexport\s+/g,'')+'\nglobalThis.testAPI={readStoredInsightAccounts,currentStoredInsightAccount,restoreStoredMemberSession,mergeStoredAccount};';
+  const source=storeSource.replace(/\bexport\s+/g,'')+'\nglobalThis.testAPI={readStoredInsightAccounts,currentStoredInsightAccount,restoreStoredMemberSession,mergeStoredAccount,forgetMemberSession,forgetInsightAccount};';
   const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
   const context={localStorage,window,Event,Map,Set,JSON,Math,Date,String,Number,Array,Object,globalThis:null};
   context.globalThis=context;
@@ -94,4 +94,13 @@ test('HTTP 402 keeps approved saved participants logged in',()=>{
   assert.match(unified,/ログイン状態を維持しています/);
   assert.match(unified,/最新確認に失敗したため前回保存分を表示しています/);
   assert.doesNotMatch(unified,/localStorage\.removeItem\(INSIGHT_TOKEN_KEY\);location\.hash="access\/insight";return}setError\(msg\)/);
+});
+
+for(const method of ['forgetMemberSession','forgetInsightAccount'])test(`${method} cannot resurrect an explicitly removed legacy identity or invalid token`,()=>{
+ const accounts=[{noteId:'a',status:'active',memberToken:'old-a',applicantToken:'app-a',passcode:'pass-a',updatedAt:100},{noteId:'b',status:'active',memberToken:'old-b',updatedAt:100}];
+ const {api,values}=loadStore({'mumei-insight-saved-accounts-v2':JSON.stringify(accounts),'mumei-insight-access-token':'old-a'});
+ api[method]('a');
+ const rows=api.readStoredInsightAccounts(),a=rows.find(row=>row.noteId==='a');
+ if(method==='forgetInsightAccount')assert.equal(a,undefined);else{assert.equal(a.memberToken,undefined);assert.equal(a.applicantToken,'app-a');assert.equal(a.passcode,'pass-a')}
+ assert.equal(rows.find(row=>row.noteId==='b').memberToken,'old-b');assert.equal(values.has('mumei-insight-access-token'),false);
 });
