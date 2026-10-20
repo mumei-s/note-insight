@@ -98,6 +98,8 @@ jobs:
         run: node --test --test-concurrency=1 tests/owner-dm-retention.test.mjs
       - name: Check DM request ordering and person switching
         run: node --experimental-vm-modules --test --test-name-pattern='DM本文の遅い取得' tests/analysis-repair-v147.test.mjs
+      - name: Check bounded reads and concurrent initialization
+        run: node --experimental-vm-modules --test tests/navigation-summary-egress.test.mjs tests/navigation-articles-lazy.test.mjs tests/notification-recent-egress.test.mjs tests/owner-pending-single-flight.test.mjs tests/resume-request-single-flight.test.mjs tests/home-access-session-budget.test.mjs
       # Emergency maintenance deploy: full regressions resume before maintenance is lifted.
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
