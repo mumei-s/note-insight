@@ -14,7 +14,7 @@ const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);re
 async function settle(work=()=>{}){await React.act(async()=>{work();for(let i=0;i<7;i++)await pause()})}
 function withoutImports(source){const file=ts.createSourceFile('fixture.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);for(const statement of [...file.statements].reverse())if(ts.isImportDeclaration(statement))source=source.slice(0,statement.getFullStart())+source.slice(statement.end);return source}
 
-async function fixture(t,{mode='normal',respond=()=>Response.json(payload()),slowMount=false}={}){
+async function fixture(t,{mode='normal',respond=()=>Response.json(payload()),slowMount=false,applicantToken}={}){
  const calls=[],mounted=[],dependencies={},globals={URLSearchParams};
  const marker=name=>()=>{React.useEffect(()=>{mounted.push(name)},[]);return React.createElement('div',{'data-scene':name},name)};
  for(const [file,name]of Object.entries({'article-likes-page-v2':'ArticleLikesPageV2','combined-analytics-app':'CombinedAnalyticsApp','evidence-v2':'EvidenceV2','feature-page':'FeaturePage','hub-home':'HubHome','management-page':'ManagementPage','owner-gate':'OwnerGate','access-portal-v6':'AccessPortalV6','member-insight-unified-v4':'MemberInsightUnifiedV4','member-insight-social-v2':'MemberInsightSocialV2','member-insight-notifications-final':'MemberInsightNotificationsFinal','member-insight-analysis-hub':'MemberInsightAnalysisHub','member-insight-comments-final':'MemberInsightCommentsFinal','member-insight-favorites-final':'MemberInsightFavoritesFinal'}))dependencies['./'+file]={[name]:marker(name)};
@@ -26,7 +26,7 @@ async function fixture(t,{mode='normal',respond=()=>Response.json(payload()),slo
  const h=await sceneFixture(t,{globals,dependencies,fetch:fetcher});
  Object.assign(globals,{Event:h.w.Event,CustomEvent:h.w.CustomEvent,navigator:h.w.navigator,requestAnimationFrame:callback=>h.w.requestAnimationFrame(callback)});
  Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});h.w.scrollTo=()=>{};h.w.HTMLElement.prototype.scrollIntoView=()=>{};
- h.w.localStorage.setItem(tokenKey,'token-a');h.w.localStorage.setItem('mumei-insight-saved-accounts-v3',JSON.stringify([{...account,memberToken:'token-a',updatedAt:1}]));h.w.localStorage.setItem('mumei-insight-active-account-v3',account.noteId);
+ h.w.localStorage.setItem(tokenKey,'token-a');h.w.localStorage.setItem('mumei-insight-saved-accounts-v3',JSON.stringify([{...account,memberToken:'token-a',applicantToken,updatedAt:1}]));h.w.localStorage.setItem('mumei-insight-active-account-v3',account.noteId);
  h.w.history.replaceState({},'',`?insightMode=${mode}#dashboard`);
  const store=h.load('src/insight-account-store.ts'),session=h.load('src/insight-session-request.ts');
  function require(name){if(name==='react')return React;if(name==='react/jsx-runtime')return jsx;if(name.endsWith('.css'))return{};if(dependencies[name])return dependencies[name];const file='src/'+name.replace(/^\.\//,'');return h.load(file+(existsSync(file+'.ts')?'.ts':'.tsx'))}
@@ -97,4 +97,28 @@ test('StrictMode effect replay keeps the shared entry request and still hands of
 test('completed overlapping entry has one auth request across all three real callers',async t=>{
  const pending=deferred(),h=await fixture(t,{respond:()=>pending.promise});await h.start();await settle(()=>pending.resolve(Response.json(payload())));
  assert.equal(h.sessions().length,1,'complete main, App, and Live entry auth budget');assert.match(h.creator(),/今回確認した本人/);
+});
+
+test('main and App share one invalid-session recovery instead of issuing two server tokens', async t => {
+ const session=deferred(),resume=deferred(),h=await fixture(t,{applicantToken:'applicant-a',respond:call=>call.body.action==='resume'?resume.promise:call.token==='token-a'?session.promise:Response.json(payload())});
+ await h.start();await settle(()=>session.resolve(Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401})));
+ assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1,'both real callers await the same resume mutation');
+ await settle(()=>resume.resolve(Response.json({...payload(),memberToken:'restored-token'})));
+ assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1);assert.equal(h.w.localStorage.getItem(tokenKey),'restored-token');assert.match(h.creator(),/今回確認した本人/);
+});
+
+for(const action of ['switch','logout'])test(`late shared resume cannot restore the previous account after ${action}`,async t=>{
+ const session=deferred(),resume=deferred(),other={...account,noteId:'creator_b',displayName:'切替先の本人'};
+ const h=await fixture(t,{applicantToken:'applicant-a',respond:call=>call.body.action==='resume'?resume.promise:call.token==='token-a'?session.promise:Response.json({ok:true,application:other})});
+ await h.start();await settle(()=>session.resolve(Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401})));assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1);
+ await settle(()=>{if(action==='switch')h.store.rememberMemberSession(other,'token-b');else{h.w.localStorage.setItem('mumei-insight-explicit-logout:'+account.noteId,'1');h.store.forgetMemberSession(account.noteId)}h.w.dispatchEvent(new h.w.Event('mumei-insight-accounts'))});
+ await settle(()=>resume.resolve(Response.json({...payload({displayName:'遅い旧本人'}),memberToken:'late-restored-token'})));
+ assert.equal(h.w.localStorage.getItem(tokenKey),action==='switch'?'token-b':null);assert.doesNotMatch(h.w.document.body.textContent,/遅い旧本人/);assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1);
+});
+
+test('shared recovery network failure does not automatically retry the resume mutation',async t=>{
+ const session=deferred();let fail;const resume=new Promise((_resolve,reject)=>{fail=reject});
+ const h=await fixture(t,{applicantToken:'applicant-a',respond:call=>call.body.action==='resume'?resume:session.promise});
+ await h.start();await settle(()=>session.resolve(Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401})));assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1);
+ await settle(()=>fail(new Error('network outcome unknown')));assert.equal(h.calls.filter(x=>x.body.action==='resume').length,1);assert.equal(h.w.localStorage.getItem(tokenKey),'token-a');assert.equal(h.creator(),undefined);
 });

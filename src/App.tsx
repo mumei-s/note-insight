@@ -1,4 +1,4 @@
-import { readInsightSession, verifiedInsightSessionIdentity, type InsightSessionIdentity } from "./insight-session-request";
+import { readInsightSession, resumeInsightSession, verifiedInsightSessionIdentity, type InsightSessionIdentity } from "./insight-session-request";
 import { lazy, Suspense, useEffect, useState } from "react";
 import "./fast-insight-v6-override.css";
 import { HubHome } from "./hub-home";
@@ -32,7 +32,6 @@ const PARTICIPANT_MAINTENANCE = false;
 const OWNER_KEY = "mumei-unified-owner-token";
 const MEMBER_KEY = INSIGHT_TOKEN_KEY;
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
-const REACTIVATE_ENDPOINT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const NOTIFICATION_TOOL_VERSION = "3.6.1";
 const NOTIFICATION_TOOL_VERSION_KEY = "mumei-notification-tool-version";
 const NOTIFICATION_AUTO_ONCE_KEY = "mumei-notification-auto-once-v2924";
@@ -332,13 +331,9 @@ export function App() {
       const account = readStoredInsightAccounts().find((item) => item.memberToken === memberToken);
       if (!account?.applicantToken) return "";
       try {
-        const response = await fetch(REACTIVATE_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
-          body: JSON.stringify({ action: "resume" }),
-          cache: "no-store",
-        });
-        const payload = await response.json().catch(() => ({}));
+        const { response, payload } = await resumeInsightSession(account, c.signal);
+        if (cancelled || localStorage.getItem(MEMBER_KEY) !== memberToken
+          || readStoredInsightAccounts().find((item) => item.memberToken === memberToken)?.noteId !== account.noteId) return "";
         if (!response.ok || payload?.ok === false || !payload?.memberToken) return "";
         if (payload?.applicantToken) rememberApplicant(payload.application, payload.applicantToken);
         rememberMemberSession(payload.application, payload.memberToken, account.passcode);
