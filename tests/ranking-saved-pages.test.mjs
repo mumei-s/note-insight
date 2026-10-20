@@ -74,3 +74,46 @@ test('既知57014は同じDB処理へ直ちに再送せず、保存順位を保�
 test('summaryの既知57014もDBへ重複再送せず、前回summaryと確認日時を保持する',async t=>{
  const h=await fixture(t,{respond:c=>c.action==='summary'?Response.json({ok:false,code:'57014',error:'保存先の集計が時間切れです'},{status:500}):undefined});h.cache.writeSavedInsightView('unified-summary',{account:'tester',token:'a'},{...summary('tester'),summary:{identifiedLikeCount:7122}},Date.now()-86400000);await h.show();assert.equal(h.calls.filter(c=>c.url.includes('/rest/')).length,0);assert.match(h.w.document.querySelector('.miu-stats').textContent,/保存スキ7,122/);assert.match(h.text(),/集計が時間切れ/);assert.ok(h.w.document.querySelector('[data-insight-saved-view="summary"]'));
 });
+
+const rankingTimeout=()=>Response.json({ok:false,error:{code:'57014',message:'statement timeout'}},{status:500});
+const rankingPanel=h=>h.w.document.querySelector('.miu-tab-stage > div:not([hidden]) .miu-panel');
+const rankingCount=h=>rankingPanel(h).querySelector('.miu-section-head').textContent;
+for(const kind of ['supporters','comment_ranking']){
+ test(kind+': never verified is unknown during loading and timeout, but a successful empty retry is zero',async t=>{
+  const pending=deferred();let fail=true;
+  const h=await fixture(t,{kind,respond:c=>c.action===kind?(fail?pending.promise:Response.json({rows:[],total:0})):undefined});
+  await h.show();assert.match(rankingCount(h),/—人/);assert.doesNotMatch(rankingCount(h),/0人/);
+  await settle(()=>pending.resolve(rankingTimeout()));
+  assert.match(rankingCount(h),/—人/);assert.match(rankingPanel(h).textContent,/集計が時間切れ/);assert.equal(h.read(),null);
+  assert.equal(rankingPanel(h).querySelector('.miu-pager'),null);assert.equal(rankingPanel(h).querySelector('[data-insight-saved-view]'),null);
+  fail=false;await h.click(rankingPanel(h).querySelector('.miu-error button'));
+  assert.match(rankingCount(h),/0人/);assert.equal(h.read().value.total,0);assert.equal(rankingPanel(h).querySelector('.miu-error'),null);
+ });
+ test(kind+': a failed refresh preserves verified zero and does not manufacture an unknown count',async t=>{
+  let fail=false;const h=await fixture(t,{kind,respond:c=>c.action===kind?(fail?rankingTimeout():Response.json({rows:[],total:0})):undefined});
+  await h.show();const before=h.read().savedAt;fail=true;await h.show({revision:1});
+  assert.match(rankingCount(h),/0人/);assert.match(rankingPanel(h).textContent,/前回表示分/);assert.equal(h.read().savedAt,before);
+ });
+ test(kind+': failed pagination retains the last successful page, count and rank numbers, and retry targets the failed page',async t=>{
+  const pending=deferred();let fail=true;
+  const h=await fixture(t,{kind,respond:c=>c.action===kind&&c.page===2?(fail?pending.promise:Response.json({rows:[row('次ページ確認済み')],total:250})):undefined});
+  await h.show();const before=h.read().savedAt;
+  await h.click(rankingPanel(h).querySelector('.miu-pager button:last-child'));
+  assert.match(rankingPanel(h).textContent,/tester最新順位/);assert.match(rankingPanel(h).querySelector('.miu-pager').textContent,/1 \/ 3/);assert.equal(rankingPanel(h).querySelector('em').textContent,'1');
+  await settle(()=>pending.resolve(rankingTimeout()));
+  assert.match(rankingCount(h),/250人/);assert.match(rankingPanel(h).textContent,/tester最新順位/);assert.match(rankingPanel(h).textContent,/前回表示分/);
+  assert.equal(h.read().value.page,1);assert.equal(h.read().savedAt,before);assert.equal(h.read().value.rows.length,1);
+  fail=false;await h.click(rankingPanel(h).querySelector('.miu-error button'));
+  assert.equal(h.calls.filter(c=>c.action===kind).at(-1).page,2);assert.match(rankingPanel(h).textContent,/次ページ確認済み/);assert.equal(rankingPanel(h).querySelector('em').textContent,'101');assert.equal(h.read().value.page,2);
+ });
+ test(kind+': authorization denial discards the formerly verified count instead of showing zero',async t=>{
+  let denied=false;const h=await fixture(t,{kind,respond:c=>c.action===kind&&denied?Response.json({error:'denied'},{status:403}):undefined});
+  await h.show();assert.match(rankingCount(h),/250人/);denied=true;await h.show({revision:1});
+  assert.match(rankingCount(h),/—人/);assert.doesNotMatch(rankingPanel(h).textContent,/tester最新順位|250人/);assert.equal(h.read(),null);
+ });
+ for(const token of ['b','c'])test(kind+': '+(token==='b'?'account change':'same-account token change')+' does not retain the old verified count when the new request fails',async t=>{
+  const h=await fixture(t,{kind,respond:c=>c.action===kind&&c.token!=='a'?rankingTimeout():undefined});
+  await h.show();assert.match(rankingCount(h),/250人/);h.w.localStorage.setItem('token',token);await h.show();
+  assert.match(rankingCount(h),/—人/);assert.doesNotMatch(rankingPanel(h).textContent,/tester最新順位|250人/);assert.equal(h.read(),null);
+ });
+}
