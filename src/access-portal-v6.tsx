@@ -1,9 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { readInsightSession, resumeInsightSession, verifiedInsightSessionIdentity } from "./insight-session-request";
 import {
+  EXPLICIT_LOGOUT_KEY_PREFIX,
   INSIGHT_TOKEN_KEY,
   activateStoredInsightAccount,
   clearAccessIntent,
   consumeAccessIntent,
+  currentStoredInsightAccount,
   forgetMemberSession,
   getStoredInsightAccount,
   readStoredInsightAccounts,
@@ -15,7 +18,6 @@ import type { StoredInsightAccount } from "./insight-account-store";
 import "./access-portal-v2.css";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
-const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const RECOVERY = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-recovery";
 const OWNER_VIEW_KEY = "mumei-owner-insight-view";
 const JOIN_NOTE_KEY = "mumei-insight-current-join-v5";
@@ -139,17 +141,27 @@ export function AccessPortalV6() {
     setError(""); setMessage("この端末の参加履歴から再ログインします。"); setNoteInput(account.noteId); setStage("recovery");
   }
 
-  async function hydrateCurrentMember() {
+  async function hydrateCurrentMember(live: () => boolean) {
     const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
     if (!token) return false;
+    const scope = currentStoredInsightAccount()?.noteId || "";
+    const current = () => live() && localStorage.getItem(INSIGHT_TOKEN_KEY) === token
+      && (currentStoredInsightAccount()?.noteId || "") === scope
+      && (!scope || localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + scope) !== "1");
     try {
-      const payload = await post(ACCESS, "session", {}, { "X-Insight-Token": token });
+      const result = await readInsightSession(token);
+      if (!current()) return null;
+      const { response, payload } = result;
+      if (response.status === 402) throw new Error("BACKEND_RESTRICTED_402");
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP_${response.status}`);
+      if (!verifiedInsightSessionIdentity(result)) throw new Error("INSIGHT_ACCOUNT_MISMATCH");
       const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
       rememberMemberSession(payload.application, token, stored?.passcode);
       clearRecoveryState();
       refresh();
       return true;
     } catch (reason) {
+      if (!current()) return null;
       const code = reason instanceof Error ? reason.message : "ACCESS_ERROR";
       const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
       if (backendUnavailable(code) && localActive(stored)) {
@@ -170,9 +182,14 @@ export function AccessPortalV6() {
     }
   }
 
-  async function reactivateReturning(account: StoredInsightAccount) {
+  async function reactivateReturning(account: StoredInsightAccount, live: () => boolean = () => true) {
     if (!account.applicantToken) return false;
-    const payload = await post(REACTIVATE, "resume", {}, { "X-Insight-Applicant": account.applicantToken });
+    const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "", scope = currentStoredInsightAccount()?.noteId || "";
+    const { response, payload } = await resumeInsightSession(account);
+    if (!live() || (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") !== token
+      || (currentStoredInsightAccount()?.noteId || "") !== scope
+      || localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") return false;
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP_${response.status}`);
     const current=currentJoinAccount();
     if(current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||payload.application?.noteId!==account.noteId)return false;
     rememberMemberSession(payload.application, payload.memberToken, account.passcode);
@@ -184,18 +201,19 @@ export function AccessPortalV6() {
     return true;
   }
 
-  async function resumeCurrentJoin() {
+  async function resumeCurrentJoin(live: () => boolean) {
     const account = currentJoinAccount();
     if (!account?.applicantToken) return false;
     try {
       const payload = await post(ACCESS, "application-status", {}, { "X-Insight-Applicant": account.applicantToken });
+      if (!live()) return false;
       const app = payload.application as Application, current = currentJoinAccount();
       if(current?.noteId!==account.noteId||current.applicantToken!==account.applicantToken||app.noteId!==account.noteId)return false;
       rememberApplication(app, app.verificationCode || account.passcode);
       if(app.status==="approved")announceApproval(app);
       setApplication(app);
       if (app.verificationCode) setVerificationCode(app.verificationCode);
-      if ((app.status === "approved" || app.status === "active") && app.verifiedAt) return reactivateReturning(account);
+      if ((app.status === "approved" || app.status === "active") && app.verifiedAt) return reactivateReturning(account, live);
       if (app.status === "approved") setStage("approved");
       else if (app.status === "pending") setStage("pending");
       else {
@@ -206,16 +224,18 @@ export function AccessPortalV6() {
     } catch { return false; }
   }
 
-  async function bootstrap() {
+  async function bootstrap(live: () => boolean) {
     sessionStorage.removeItem(OWNER_VIEW_KEY);
     const intent = consumeAccessIntent();
     const switchLocked = sessionStorage.getItem(SWITCH_LOCK_KEY) === "1";
     if (switchLocked || intent === "switch") { setStage("accounts"); return; }
     if (intent === "apply") { setStage("apply"); return; }
     if (intent === "login") { setStage("accounts"); return; }
-    const hasMember = await hydrateCurrentMember();
+    const hasMember = await hydrateCurrentMember(live);
+    if (!live() || hasMember === null) return;
     if (hasMember) { goDashboard(); return; }
-    if (await resumeCurrentJoin()) return;
+    if (await resumeCurrentJoin(live)) return;
+    if (!live()) return;
     const recovery = readRecoveryState();
     if (recovery) {
       setApplication(recovery.application);
@@ -226,7 +246,7 @@ export function AccessPortalV6() {
     setStage("accounts");
   }
 
-  useEffect(() => { void bootstrap(); }, []);
+  useEffect(() => { let live = true; void bootstrap(() => live); return () => { live = false; }; }, []);
   useEffect(() => {
     const handler = () => refresh();
     window.addEventListener("mumei-insight-accounts", handler);
