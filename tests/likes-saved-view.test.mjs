@@ -24,16 +24,16 @@ async function fixture(t,{respond}={}){
   count:action=>calls.filter(c=>c.action===action).length};
 }
 
-test('前回表示100件とページ・選択条件を先に表示し、裏ではそのページだけ最新確認する',async t=>{
+test('最新1ページ目と一致する保存表示だけを先に表示し、裏では最新確認する',async t=>{
  const latest=deferred(),sum=deferred();const h=await fixture(t,{respond:c=>c.action==='likes'?latest.promise:c.action==='summary'?sum.promise:undefined});
- const state=selection({status:'completed',scope:'month',month:'2026-09',sort:'oldest',query:'保存した検索',page:2});
+ const state=selection();
  const savedAt=Date.parse('2026-10-01T12:34:00+09:00');h.seed({selection:state,rows:[{...row(),confirmed:true}],total:250},savedAt);h.seedSummary(savedAt);await h.show();
- assert.match(h.text(),/前回表示のスキ/);assert.match(h.text(),/保存スキ123/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
- assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'対応済み');assert.equal(h.w.document.querySelector('input[type="month"]').value,'2026-09');
- assert.equal(h.w.document.querySelector('select').value,'oldest');assert.equal(h.w.document.querySelector('input[placeholder="名前・ID・記事"]').value,'保存した検索');
+ assert.match(h.text(),/前回表示のスキ/);assert.match(h.text(),/保存スキ123/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/1 \/ 3/);
+ assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'すべて');assert.equal(h.w.document.querySelector('input[type="month"]'),null);
+ assert.equal(h.w.document.querySelector('select').value,'newest');assert.equal(h.w.document.querySelector('input[placeholder="名前・ID・記事"]').value,'');
  assert.match(h.w.document.querySelector('[data-insight-saved-view="likes"]').textContent,/前回表示分.*最新を確認中/);assert.match(h.w.document.querySelector('[data-insight-saved-view="summary"]').textContent,/前回表示分.*最新を確認中/);
  for(const kind of ['likes','summary']){const label=h.w.document.querySelector(`[data-insight-saved-view="${kind}"]`).textContent;assert.match(label,/2026\/10\/1/);assert.match(label,/12:34/);assert.ok(!label.includes(String(savedAt)));}
- assert.deepEqual(h.calls.map(c=>c.action).sort(),['likes','summary']);const call=h.calls.find(c=>c.action==='likes');assert.equal(call.page,2);assert.equal(call.pageSize,100);assert.equal(call.query,'保存した検索');assert.equal(call.status,'completed');
+ assert.deepEqual(h.calls.map(c=>c.action).sort(),['likes','summary']);const call=h.calls.find(c=>c.action==='likes');assert.equal(call.page,1);assert.equal(call.pageSize,100);assert.equal(call.query,'');assert.equal(call.status,'all');
  await settle(()=>{latest.resolve(Response.json({rows:[{...row('同件数でも最新本文を採用'),confirmed:true}],total:250}));sum.resolve(Response.json(summary()))});
  assert.match(h.text(),/同件数でも最新本文を採用/);assert.doesNotMatch(h.text(),/前回表示のスキ/);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);assert.equal(h.w.document.querySelector('[data-insight-saved-view="summary"]'),null);
 });
@@ -64,9 +64,9 @@ test('遅い旧本人応答で現在本人の保存ページを上書きしな�
 });
 
 test('最新確認失敗時は前回表示を保持して失敗を明示し、成功時だけ保存を差し替える',async t=>{
- let failed=true;const h=await fixture(t,{respond:c=>c.action==='likes'&&failed?Response.json({ok:false,error:'offline'},{status:503}):undefined});h.seed({selection:selection({page:2}),rows:[row('保持するページ2')],total:250});await h.show();
- assert.match(h.text(),/保持するページ2/);assert.match(h.text(),/最新確認に失敗/);assert.match(h.text(),/前回表示分/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
- failed=false;await h.show({revision:1});assert.match(h.text(),/tester最新スキ/);assert.equal(h.read().value.selection.page,2);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);
+ let failed=true;const h=await fixture(t,{respond:c=>c.action==='likes'&&failed?Response.json({ok:false,error:'offline'},{status:503}):undefined});h.seed({selection:selection(),rows:[row('保持するページ1')],total:250});await h.show();
+ assert.match(h.text(),/保持するページ1/);assert.match(h.text(),/最新確認に失敗/);assert.match(h.text(),/前回表示分/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/1 \/ 3/);
+ failed=false;await h.show({revision:1});assert.match(h.text(),/tester最新スキ/);assert.equal(h.read().value.selection.page,1);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);
 });
 
 test('対応済みの保存成功を表示コピーへ反映し、未保存の押下は保存結果と混同しない',async t=>{
@@ -75,12 +75,29 @@ test('対応済みの保存成功を表示コピーへ反映し、未保存の�
  await settle(()=>saved.resolve(Response.json({ok:true})));assert.equal(h.read().value.rows[0].confirmed,true);assert.equal(h.count('likes'),1);
 });
 
-test('確認できた表示ページを保存し、コンポーネントを開き直しても同じページから表示する',async t=>{
+test('同じdocumentの画面往復・復帰・TOPからの再mountは選択を保持する',async t=>{
  let wait=false;const next=deferred();const h=await fixture(t,{respond:c=>c.action==='likes'?(wait?next.promise:Response.json({rows:[{...row(`確認済みページ${c.page}`),confirmed:c.status==='completed'}],total:250})):undefined});
  await h.show();await h.click([...h.w.document.querySelectorAll('.miu-tabs button')].find(b=>b.textContent==='対応済み'));await h.click(h.w.document.querySelector('.miu-pager button:last-child'));
- assert.equal(h.read().value.selection.page,2);assert.equal(h.read().value.selection.status,'completed');wait=true;await h.show({key:'reopened'});
- assert.match(h.text(),/確認済みページ2/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);assert.match(h.text(),/前回表示分.*最新を確認中/);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,2);
- await settle(()=>next.resolve(Response.json({rows:[{...row('最新のページ2'),confirmed:true}],total:250})));assert.match(h.text(),/最新のページ2/);
+ assert.equal(h.read().value.selection.page,2);assert.equal(h.read().value.selection.status,'completed');
+ const count=h.count('likes');await h.show({active:false});await h.show();
+ await settle(()=>{h.w.dispatchEvent(new h.w.Event('pagehide'));h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));h.w.dispatchEvent(new h.w.PageTransitionEvent('pageshow',{persisted:true}));});
+ assert.equal(h.count('likes'),count);assert.match(h.text(),/確認済みページ2/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'対応済み');
+ wait=true;await h.show({key:'reopened'});
+ assert.match(h.text(),/確認済みページ2/);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).status,'completed');
+ await settle(()=>next.resolve(Response.json({rows:[{...row('最新のページ2'),confirmed:true}],total:250})));assert.match(h.text(),/最新のページ2/);assert.equal(h.w.document.querySelector('.miu-handled').getAttribute('aria-pressed'),'true');
+ const fresh=await fixture(t);fresh.seed(JSON.parse(JSON.stringify(h.read().value)));await fresh.show();assert.equal(fresh.calls.find(c=>c.action==='likes').page,1);assert.equal(fresh.calls.find(c=>c.action==='likes').status,'all');
+});
+
+for(const oldSelection of [selection({page:19}),selection({page:19,status:'completed',scope:'month',month:'2026-09',sort:'oldest',query:'保存した検索'}),selection({status:'completed'}),selection({sort:'oldest'}),selection({query:'過去の記事'}),selection({scope:'day',day:'2026-10-09'}),selection({scope:'month',month:'2026-09'}),selection({scope:'year',year:'2025'})])test('新しいdocumentは古いページや絞り込みを表示せず最新の初期条件を取得する',async t=>{
+ const latest=deferred();const h=await fixture(t,{respond:c=>c.action==='likes'?latest.promise:undefined});
+ const saved={selection:oldSelection,rows:[{...row('昔の19ページ目'),confirmed:true}],total:2000};h.seed(saved);await h.show();
+ assert.doesNotMatch(h.text(),/昔の19ページ目/);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);assert.ok(h.w.document.querySelector('.miu-load-scene'));
+ assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'すべて');assert.equal(h.w.document.querySelector('.mini button.active').textContent,'全期間');assert.equal(h.w.document.querySelector('select').value,'newest');assert.equal(h.w.document.querySelector('input[placeholder="名前・ID・記事"]').value,'');
+ const call=h.calls.find(c=>c.action==='likes');assert.deepEqual([call.page,call.pageSize,call.status,call.sort,call.query,call.dateFrom,call.dateTo],[1,100,'all','newest','',null,null]);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.read().value)),saved,'古いコピーや対応済みデータを削除しない');
+ await settle(()=>h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated')));assert.doesNotMatch(h.text(),/昔の19ページ目/);assert.equal(h.count('likes'),1);
+ await settle(()=>latest.resolve(Response.json({rows:[{...row('今日の最新'),confirmed:true}],total:2000})));
+ assert.match(h.text(),/今日の最新/);assert.equal(h.read().value.selection.page,1);assert.equal(h.w.document.querySelector('.miu-handled').getAttribute('aria-pressed'),'true');assert.equal(h.count('like_completion'),0);assert.equal(h.count('sync'),0);
 });
 
 for(const invalid of [{selection:selection({scope:'day',day:'壊れた日付'}),rows:[row()],total:1},{selection:selection(),rows:Array(101).fill(row()),total:101},{selection:selection({status:'unknown'}),rows:[row()],total:1}])test('不正な保存ページを初期表示せず、現在100件を確認する',async t=>{
@@ -96,4 +113,31 @@ test('同じ本人のtoken切替後に通信が失敗しても前tokenの集計�
 test('本人確認を拒否された時は保存履歴を残して表示し続けない',async t=>{
  const h=await fixture(t,{respond:c=>c.action==='likes'?Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):undefined});h.seed({selection:selection(),rows:[row('拒否後は隠す保存履歴')],total:1});await h.show();
  assert.doesNotMatch(h.text(),/拒否後は隠す保存履歴/);assert.equal(h.w.document.querySelector('[data-insight-saved-view="likes"]'),null);assert.equal(h.read(),null);
+});
+
+test('同じ最新データを指す保存コピーでも過去の未使用条件を初期コントロールへ持ち越さない',async t=>{
+ const next=deferred();const h=await fixture(t,{respond:c=>c.action==='likes'?next.promise:undefined});h.seed({selection:selection({scope:'day',day:'',month:'2025-09',year:'2025'}),rows:[row()],total:1});await h.show();
+ assert.match(h.text(),/前回表示のスキ/);assert.equal(h.w.document.querySelector('.mini button.active').textContent,'全期間');assert.equal(h.w.document.querySelector('input[type="date"]'),null);
+ await settle(()=>next.resolve(Response.json({rows:[row()],total:1})));assert.equal(h.read().value.selection.year,String(new Date().getFullYear()));assert.equal(h.read().value.selection.month,'');
+});
+
+for(const deniedAction of ['likes','summary'])test(`追加したdocument内の閲覧位置は${deniedAction}の認証拒否後に復元しない`,async t=>{
+ let stage='ready';const held=deferred();const h=await fixture(t,{respond:c=>{
+  if(stage==='denied'&&c.action===deniedAction)return Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401});
+  if(stage==='held'&&c.action==='likes')return held.promise;
+  if(c.action==='likes')return Response.json({rows:[row(`本人確認前のページ${c.page}`)],total:250});
+ }});await h.show();await h.click(h.w.document.querySelector('.miu-pager button:last-child'));assert.equal(h.read().value.selection.page,2);
+ stage='denied';await h.show({revision:1});assert.equal(h.read(),null);
+ stage='held';h.w.localStorage.setItem('token','a');await h.show({key:'after-denial',revision:2});
+ // This verifies document-local selection invalidation, not all legacy raw-cache behavior.
+ assert.doesNotMatch(h.text(),/本人確認前のページ2/);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,1);
+ await settle(()=>held.resolve(Response.json({rows:[],total:0})));
+});
+
+test('対応済みとお気に入りの保存結果は同じdocumentの再mountでも保持する',async t=>{
+ let hold=false;const next=deferred();const h=await fixture(t,{respond:c=>hold&&c.action==='likes'?next.promise:undefined});await h.show();
+ await h.click(h.w.document.querySelector('.miu-handled'));await h.click(h.w.document.querySelector('.miu-star'));
+ assert.equal(h.read().value.rows[0].confirmed,true);assert.equal(h.read().value.rows[0].favorite,true);
+ hold=true;await h.show({key:'after-edits'});assert.equal(h.w.document.querySelector('.miu-handled').getAttribute('aria-pressed'),'true');assert.equal(h.w.document.querySelector('.miu-star').getAttribute('aria-label'),'お気に入り解除');
+ await settle(()=>next.resolve(Response.json({rows:[{...row(),confirmed:true,favorite:true}],total:250})));
 });

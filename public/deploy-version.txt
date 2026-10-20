@@ -1,2 +1,2 @@
-INSIGHT 2026.10.20.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.11
-Share overlapping session checks and hand verified identity to the initial shell; preserve fresh rechecks, account boundaries, saved history and completed marks.
+INSIGHT 2026.10.20.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.12
+Start likes at the latest page on fresh entry; retain same-document navigation state without changing saved history or completed marks.
