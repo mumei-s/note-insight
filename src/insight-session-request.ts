@@ -1,7 +1,9 @@
-import { INSIGHT_TOKEN_KEY, currentStoredInsightAccount } from "./insight-account-store";
+import { EXPLICIT_LOGOUT_KEY_PREFIX, INSIGHT_TOKEN_KEY, currentStoredInsightAccount, getStoredInsightAccount, type StoredInsightAccount } from "./insight-account-store";
 import { fetchInsightResource } from "./insight-view-lifecycle";
 
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
+const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
+const SELF_ACCOUNT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
 export type InsightSessionResult = { response: Response; payload: any; token: string; scope: string; checkedAt: number };
 export type InsightSessionIdentity = {
   token: string; scope: string; checkedAt: number;
@@ -12,6 +14,74 @@ let pending: Flight | null = null;
 const accountScope = () => String(currentStoredInsightAccount()?.noteId || "").toLowerCase();
 const identity = () => JSON.stringify([localStorage.getItem(INSIGHT_TOKEN_KEY) || "", accountScope()]);
 const abortError = () => Object.assign(new Error("通信を中断しました"), { name: "AbortError" });
+type ResumeResult = { response: Response; payload: any };
+const resumeFlights = new Map<string, Promise<ResumeResult>>();
+const touchFlights = new Map<string, Promise<void>>();
+
+// Startup and TOP may renew the same session concurrently. Renewal is not an
+// authentication result: never substitute it for readInsightSession.
+export function touchInsightSession(token: string): Promise<void> {
+  const key = JSON.stringify([token, accountScope()]);
+  if (!token || identity() !== key) return Promise.reject(new Error("INSIGHT_ACCOUNT_CHANGED"));
+  const existing = touchFlights.get(key);
+  if (existing) return existing;
+  const request = Promise.resolve().then(async () => {
+    if (identity() !== key) throw new Error("INSIGHT_ACCOUNT_CHANGED");
+    const response = await fetch(SELF_ACCOUNT, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Insight-Token": token },
+      body: JSON.stringify({ action: "touch" }), cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok !== true) throw new Error(payload?.error || "ACCESS_ERROR");
+    if (identity() !== key) throw new Error("INSIGHT_ACCOUNT_CHANGED");
+  }).finally(() => { if (touchFlights.get(key) === request) touchFlights.delete(key); });
+  touchFlights.set(key, request);
+  return request;
+}
+
+// Resume issues a new server token. Keep an already-sent operation in flight
+// even if every consumer leaves: aborting it would not undo the mutation, and
+// effect replay must not submit a second one while its outcome is unknown.
+// Nothing is cached after settlement and no failure is automatically retried.
+export function resumeInsightSession(account: Pick<StoredInsightAccount, "noteId" | "applicantToken">, signal?: AbortSignal): Promise<ResumeResult> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  const noteId = account.noteId.trim().toLowerCase(), applicantToken = account.applicantToken || "";
+  const sourceIdentity = identity(), joinId = localStorage.getItem("mumei-insight-current-join-v5") || "";
+  const current = () => identity() === sourceIdentity
+    && (localStorage.getItem("mumei-insight-current-join-v5") || "") === joinId
+    && localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + noteId) !== "1"
+    && getStoredInsightAccount(noteId)?.applicantToken === applicantToken;
+  if (!applicantToken || !current()) return Promise.reject(new Error("INSIGHT_ACCOUNT_CHANGED"));
+  const key = JSON.stringify([sourceIdentity, joinId, noteId, applicantToken]);
+  let request = resumeFlights.get(key);
+  if (!request) {
+    request = Promise.resolve().then(async () => {
+      if (!current()) throw new Error("INSIGHT_ACCOUNT_CHANGED");
+      const response = await fetch(REACTIVATE, {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Insight-Applicant": applicantToken },
+        body: JSON.stringify({ action: "resume" }), cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && (payload?.ok !== true || !payload?.memberToken || payload?.application?.noteId?.toLowerCase() !== noteId || payload?.application?.status !== "active")) throw new Error("INSIGHT_ACCOUNT_MISMATCH");
+      return { response, payload };
+    }).finally(() => { if (resumeFlights.get(key) === request) resumeFlights.delete(key); });
+    resumeFlights.set(key, request);
+  }
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const release = () => {
+      if (finished) return false;
+      finished = true; signal?.removeEventListener("abort", abort); return true;
+    };
+    const abort = () => { if (release()) reject(abortError()); };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    request.then(result => {
+      if (!release()) return;
+      if (!current()) reject(new Error("INSIGHT_ACCOUNT_CHANGED")); else resolve(result);
+    }, error => { if (release()) reject(error); });
+  });
+}
 
 // Only unfinished reads are shared. A later focus, refresh, or mount verifies
 // the server again; no successful or failed authentication response is cached.
