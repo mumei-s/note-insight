@@ -21,6 +21,7 @@ const customPlanMigration=readFileSync('supabase/migrations/'+customPlanName,'ut
 const storeName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_store_started.sql'));
 assert.ok(storeName,'the observed store-create notification migration is required');
 const storeMigration=readFileSync('supabase/migrations/'+storeName,'utf8');
+const slimMigration=readFileSync('supabase/migrations/20261020195704_insight_notification_slim_groups.sql','utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -41,6 +42,7 @@ before(async()=>{
  await db.exec(prunedMigration);
  await db.exec(customPlanMigration);
  await db.exec(storeMigration);
+ await db.exec(slimMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -86,6 +88,27 @@ test('empty page contract, explicit bounds and service-only invoker privileges',
  for(const params of [[[],member.scope,member.noteId,1,100],[['owner'],'wrong',member.noteId,1,100],[['owner'],'owner','',1,100],[['owner'],'owner','ss_yr',0,100],[['owner'],'owner','ss_yr',1000001,100],[['owner'],'owner','ss_yr',1,101],[['owner'],'owner','ss_yr',1,19]]){
   await assert.rejects(db.query("SELECT public.insight_notification_feed_page($1,$2,$3,'all','','all',$4,$5,false)",params),/INVALID_NOTIFICATION_FEED_PARAMETERS/);
  }
+});
+
+test('private fold helper is invoker-only computation with no public/schema execution access',async()=>{
+ const rights=(await db.query(`SELECT p.prosecdef,p.provolatile,p.proconfig,
+  has_schema_privilege('anon',n.oid,'USAGE') AS anon_schema,
+  has_schema_privilege('authenticated',n.oid,'USAGE') AS authenticated_schema,
+  has_schema_privilege('service_role',n.oid,'USAGE') AS service_schema,
+  has_function_privilege('anon',p.oid,'EXECUTE') AS anon,
+  has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated,
+  has_function_privilege('service_role',p.oid,'EXECUTE') AS service
+ FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+ WHERE n.nspname='insight_notification_internal' AND p.proname='fold_items'`)).rows[0];
+ assert.equal(rights.prosecdef,false);assert.equal(rights.provolatile,'s');assert.deepEqual(rights.proconfig,['search_path=""']);
+ assert.equal(rights.anon_schema,false);assert.equal(rights.authenticated_schema,false);assert.equal(rights.service_schema,true);
+ assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
+ for(const role of ['anon','authenticated']){
+  await db.exec('SET ROLE '+role);
+  try{await assert.rejects(db.query("SELECT insight_notification_internal.fold_items('[]')"),/permission denied/)}finally{await db.exec('RESET ROLE')}
+ }
+ await db.exec('SET ROLE service_role');
+ try{assert.equal((await db.query("SELECT insight_notification_internal.fold_items('[]') AS result")).rows[0].result,null)}finally{await db.exec('RESET ROLE')}
 });
 
 test('SQL matches the frozen JavaScript oracle for classification, scope, JST, status, favorites, comments and previews',async()=>{
@@ -266,12 +289,30 @@ test('early pruning skips excluded-only groups while retaining richer excluded r
  assert.equal((await equivalent({id:'prune-foreign',scope:'prune-foreign',noteId:'prune_foreign'},{})).total,1);
  // Inspect actual source cardinality rather than a timing threshold: history
  // consisting only of excluded kinds must not enter metadata decode/window work.
- let inner=prunedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
+ let inner=slimMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
  const parameters={p_member_ids:"ARRAY['prune-fixture']::text[]",p_scope:"'prune-fixture'::text",p_note_id:"'prune_fixture'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
  for(const [name,value] of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
  const plan=(await db.query('EXPLAIN (ANALYZE,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0].Plan;
  function findSource(node){return node['Subplan Name']==='CTE source_order'?node:(node.Plans||[]).map(findSource).find(Boolean)}
  assert.equal(findSource(plan)?.['Actual Rows'],4,'only both complete mixed semantic groups enter source metadata decode');
+});
+
+test('narrow grouping preserves greedy richness, same-time order and exact late filters across randomized duplicate groups',async()=>{
+ const rows=[];let seed=1729;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+ for(let group=0;group<80;group++)for(let j=0;j<2+group%7;j++){
+  const id=500000+group*10+j;
+  rows.push(row(id,{member_id:j%2?'owner':'owner-app',notification_type:['badge','other','like','membership_reaction'][Math.floor(random()*4)],
+   raw_text:'group '+group+' item '+j,actor_name:random()<.5?'Actor '+j:null,actor_url:random()<.5?'https://note.com/a'+j:null,
+   actor_image_url:random()<.5?'https://img.invalid/'+j:null,target_title:random()<.5?'Title '+j:null,
+   target_url:random()<.5?'https://note.com/ss_yr/n/nArticle':null,occurred_at:random()<.5?'2026-10-16T15:05:00.123Z':null,
+   captured_at:j%2?'2026-10-17T00:00:00Z':'2026-10-17T00:00:00.0004Z',
+   meta:{source:'note-notification-reader-v3',event_identity:'notice:'+(700000+group),
+    body:[null,false,0,'',[],{},'body '+j][Math.floor(random()*7)],comment_body:random()<.5?'comment '+j:null,
+    classifier:'action-v28-context',recovery_version:'evidence-v2-articles'}}));
+ }
+ await insert(rows);
+ for(const opts of [{},{page:2,pageSize:20},{kind:'badge',includeCategoryPreview:true},{handlingStatus:'pending',day:'2026-10-17'},{kind:'membership_reaction_self'}])await equivalent(member,opts);
+ await db.exec('DELETE FROM public.insight_notifications WHERE id>=500000');
 });
 
 test('20k-row history has exact late pages and a bounded row payload',async()=>{
