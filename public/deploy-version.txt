@@ -1,2 +1,2 @@
-INSIGHT 2026.10.20.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.12
-Start likes at the latest page on fresh entry; retain same-document navigation state without changing saved history or completed marks.
+INSIGHT 2026.10.21.1 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.12
+Reduce overlapping startup checks and unused article/notification auxiliary reads while preserving history, completion marks, favorites, fresh validation and latest-page fresh entry.

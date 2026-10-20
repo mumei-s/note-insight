@@ -55,9 +55,42 @@ const completionKey=(r:any)=>/^notice:\d+$/.test(String(r.meta?.event_identity||
 const scopedIds=(m:any)=>m.scope===m.id?[m.id]:[m.scope,m.id];
 async function notificationRow(m:any,id:unknown){if(!/^\d+$/.test(String(id)))throw new Error("INVALID_NOTIFICATION");const{data,error}=await db.from("insight_notifications").select("*").in("member_id",scopedIds(m)).eq("id",String(id)).maybeSingle();if(error)throw error;if(!data)throw new Error("NOTIFICATION_NOT_FOUND");return data}
 async function notificationCompletion(m:any,b:any){const row=await notificationRow(m,b.id);if(typeof b.completed!=="boolean")throw new Error("INVALID_COMPLETION");const key={member_id:m.scope,creator_urlname:m.noteId,item_type:"notification",item_key:completionKey(row)};const result=b.completed?await db.from("insight_manual_completions").upsert({...key,completed_at:new Date().toISOString()},{onConflict:"member_id,creator_urlname,item_type,item_key"}):await db.from("insight_manual_completions").delete().match(key);if(result.error)throw result.error;return{ok:true,completed:b.completed}}
-async function completionKeys(m:any){const keys=new Set<string>();for(let offset=0;;offset+=1000){const{data,error}=await db.from("insight_manual_completions").select("item_key").eq("member_id",m.scope).eq("creator_urlname",m.noteId).eq("item_type","notification").range(offset,offset+999);if(error)throw error;for(const r of data||[])keys.add(r.item_key);if((data||[]).length<1000)break}return keys}
+async function completionKeys(m:any,rows:any[]){
+ const requested=[...new Set(rows.map(completionKey))],keys=new Set<string>();
+ // Recent contains at most 300 rows. Never page through unrelated completion history.
+ for(let offset=0;offset<requested.length;offset+=100){
+  const{data,error}=await db.from("insight_manual_completions").select("item_key").eq("member_id",m.scope).eq("creator_urlname",m.noteId).eq("item_type","notification").in("item_key",requested.slice(offset,offset+100));
+  if(error)throw error;for(const r of data||[])keys.add(r.item_key);
+ }
+ return keys;
+}
 function favoriteCreator(r:any){try{const u=new URL(String(r.actor_url||"")),id=u.pathname.split("/").filter(Boolean)[0]||"";return u.hostname==="note.com"&&/^https?:$/.test(u.protocol)&&/^[A-Za-z0-9_-]+$/.test(id)&&!["m","n","messages","membership","settings"].includes(id)?{id:id.toLowerCase(),url:`https://note.com/${id.toLowerCase()}`}:null}catch{return null}}
 async function favoriteRows(m:any){const{data,error}=await db.from("insight_favorite_creators").select("creator_key,actor_url").eq("member_id",m.scope);if(error)throw error;return data||[]}
+function favoriteCandidateFilter(ids:string[]){
+ const alternatives=ids.map(id=>id.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
+ // JS lowercasing also maps the Kelvin sign to ASCII k; database collations may not.
+ const keyAlternatives=alternatives.replace(/k/g,"[kK]");
+ const quote=(value:string)=>`"${value.replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`;
+ // A superset, not a replacement for favoriteCreator: URL normalizes host case,
+ // credentials, ports, backslashes and dot segments. Match any whole path segment.
+ // It also removes embedded TAB/LF/CR, so retain those unusual URLs for JS validation.
+ return`creator_key.imatch.${quote(`^(${keyAlternatives})$`)},actor_url.imatch.${quote(`[/\\\\](${alternatives})([/\\\\?#]|[[:space:][:cntrl:]]*$)`)},actor_url.match.${quote("[\\t\\r\\n]")}`;
+}
+async function recentFavoriteRows(m:any,rows:any[]){
+ const ids=[...new Set(rows.map(r=>favoriteCreator(currentFormat(r))?.id).filter((id):id is string=>Boolean(id)))],favorites:any[]=[];
+ // Bound both creator count and encoded filter length; long legacy IDs must not
+ // turn a 300-row recent response into an oversized PostgREST GET request.
+ for(let offset=0;offset<ids.length;){
+  const batch=[ids[offset++]];
+  while(offset<ids.length&&batch.length<50&&encodeURIComponent(favoriteCandidateFilter([...batch,ids[offset]])).length<=6000)batch.push(ids[offset++]);
+  const requested=new Set(batch),{data,error}=await db.from("insight_favorite_creators").select("creator_key,actor_url").eq("member_id",m.scope).or(favoriteCandidateFilter(batch));
+  if(error)throw error;
+  // A candidate may match another path segment or a key overridden by its URL.
+  // Keep all aliases for this batch in their returned order, exactly as before.
+  for(const f of data||[])if(requested.has(favoriteCreator(f)?.id||String(f.creator_key).toLowerCase()))favorites.push(f);
+ }
+ return favorites;
+}
 function decorateHandling(rows:any[],m:any,completed:Set<string>,favorites:any[]){const byId=new Map<string,string>();for(const f of favorites){const c=favoriteCreator(f);byId.set(c?.id||String(f.creator_key).toLowerCase(),String(f.creator_key))}return rows.map(r=>{const row=decorate(r,m.noteId),creator=favoriteCreator(row);return{...row,confirmed:completed.has(completionKey(r)),favorite:!!creator&&byId.has(creator.id),favorite_creator_key:creator?(byId.get(creator.id)||creator.id):null}})}
 async function notificationFavorite(m:any,b:any){
  const row=decorate(await notificationRow(m,b.id),m.noteId),creator=favoriteCreator(row);if(!creator)throw new Error("CREATOR_NOT_FOUND");if(typeof b.favorite!=="boolean")throw new Error("INVALID_FAVORITE");
@@ -96,7 +129,7 @@ async function recentRows(m:any,b:any){
  let q=db.from("insight_notifications").select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta").in("member_id",ids).not("notification_type","in","(like,follow,comment,capture_noise)");
  if(since)q=q.or(`captured_at.gte.${since},meta->>last_reclassified_at.gte.${since}`);
  const{data,error}=await q.order("captured_at",{ascending:false}).order("id").limit(300);if(error)throw error;
- const[completed,favorites]=await Promise.all([completionKeys(m),favoriteRows(m)]),rows=decorateHandling(dedupe(data||[]),m,completed,favorites);
+ const selected=dedupe(data||[]),[completed,favorites]=await Promise.all([completionKeys(m,selected),recentFavoriteRows(m,selected)]),rows=decorateHandling(selected,m,completed,favorites);
  const watermark=(data||[]).reduce((at,r)=>[at,String(r.captured_at||""),String(r.meta?.last_reclassified_at||"")].sort().at(-1)!,since);
  return{ok:true,noteId:m.noteId,rows,watermark,partial:true,feedAt:new Date().toISOString()};
 }

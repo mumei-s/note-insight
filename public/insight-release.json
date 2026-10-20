@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.20.2",
+  "appVersion": "2026.10.21.1",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-20T17:54:00+09:00",
+  "releasedAt": "2026-10-21T02:32:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "新しくINSIGHTを開くとスキ履歴は最新の1ページ目から表示。同じ利用中の画面往復では閲覧位置を保ち、履歴・対応済み状態は変更しません。",
+  "note": "起動時の重複確認と不要な記事・通知補助データの取得を削減。履歴・対応済み・お気に入りと必要な最新確認、新しく開いた際の最新ページ表示を維持します。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }
