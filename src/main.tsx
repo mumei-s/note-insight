@@ -1,4 +1,4 @@
-import { readInsightSession, verifiedInsightSessionIdentity } from "./insight-session-request";
+import { readInsightSession, resumeInsightSession, touchInsightSession, verifiedInsightSessionIdentity } from "./insight-session-request";
 import { pendingBrowserWriteStatus, prepareBrowserStorage, retryBrowserStorage } from "./insight-browser-storage";
 import { Component, StrictMode, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,7 +20,6 @@ import {
 import "./styles.css";
 import "./insight-source-boundaries";
 
-const SELF_ACCOUNT = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-self-account";
 const ACCESS = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access";
 const REACTIVATE = "https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-access-reactivate";
 const OWNER_KEY = "mumei-unified-owner-token";
@@ -41,6 +40,7 @@ const pwaTopLaunch = initialUrl.searchParams.get("launch") === "top";
 const requestedNotificationAccount = String(initialUrl.searchParams.get("notificationAccount") || "").trim().replace(/^@/, "").toLowerCase();
 let memberResumeRunning = false;
 let memberResumeGeneration = 0;
+let ownerPendingFlight: { ownerToken: string; accountIdentity: string; controller: AbortController } | null = null;
 
 // The public INSIGHT URL must stay inside INSIGHT. Notification capture runs from note itself;
 // opening/reloading the app must never bounce the user to note or the installer.
@@ -178,13 +178,7 @@ async function tryReturningMemberResume() {
       if (!account.applicantToken) continue;
       if (localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") continue;
       try {
-        const response = await fetch(REACTIVATE, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Insight-Applicant": account.applicantToken },
-          body: JSON.stringify({ action: "resume" }),
-          cache: "no-store",
-        });
-        const payload = await readJson(response);
+        const { response, payload } = await resumeInsightSession(account);
         if (generation !== memberResumeGeneration || identity !== memberSessionIdentity() || !autoResumeAllowed() || localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + account.noteId) === "1") return;
         if (response.ok && payload?.memberToken && payload?.application) {
           rememberMemberSession(payload.application, payload.memberToken, account.passcode);
@@ -210,15 +204,31 @@ async function tryReturningMemberResume() {
 
 async function pollOwnerPendingApplications() {
   const ownerToken = localStorage.getItem(OWNER_KEY) || "";
+  const accountIdentity = memberSessionIdentity();
+  if (ownerPendingFlight && (ownerPendingFlight.ownerToken !== ownerToken || ownerPendingFlight.accountIdentity !== accountIdentity)) {
+    ownerPendingFlight.controller.abort();
+    ownerPendingFlight = null;
+  }
   if (!ownerToken) return;
+  // Startup, pageshow and focus can fire together. Share only this unfinished
+  // poll; every later event still checks the server and its owner permission.
+  if (ownerPendingFlight) return;
+  const flight = { ownerToken, accountIdentity, controller: new AbortController() };
+  ownerPendingFlight = flight;
+  const timer = window.setTimeout(() => {
+    flight.controller.abort();
+    if (ownerPendingFlight === flight) ownerPendingFlight = null;
+  }, 30_000);
   try {
     const response = await fetch(REACTIVATE, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Owner-Token": ownerToken },
       body: JSON.stringify({ action: "owner-pending" }),
       cache: "no-store",
+      signal: flight.controller.signal,
     });
     const payload = await readJson(response);
+    if (flight.controller.signal.aborted || ownerToken !== (localStorage.getItem(OWNER_KEY) || "") || accountIdentity !== memberSessionIdentity()) return;
     if (!response.ok || !payload?.ok) return;
     const items = Array.isArray(payload.items) ? payload.items : [];
     const signature = items.map((item: any) => `${item.id}:${item.updatedAt || ""}`).join("|");
@@ -234,17 +244,15 @@ async function pollOwnerPendingApplications() {
     localStorage.setItem(OWNER_PENDING_SEEN_KEY, signature);
   } catch {
     // Owner notification polling is best-effort and never blocks INSIGHT.
+  } finally {
+    window.clearTimeout(timer);
+    if (ownerPendingFlight === flight) ownerPendingFlight = null;
   }
 }
 
 const insightToken = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
 if (insightToken) {
-  void fetch(SELF_ACCOUNT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Insight-Token": insightToken },
-    body: JSON.stringify({ action: "touch" }),
-    cache: "no-store",
-  }).catch(() => { /* Long-session refresh must never block app startup. */ });
+  void touchInsightSession(insightToken).catch(() => { /* Long-session refresh must never block app startup. */ });
 }
 
 let knownMemberSession = memberSessionIdentity();
