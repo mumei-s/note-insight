@@ -107,3 +107,11 @@ test('画面外・透明な閉じたメニューはDM帯を隠さず、表示変
  const dialog=h.w.document.createElement('dialog');h.w.document.body.append(dialog);dialog.setAttribute('open','');await h.flushLayout();assert.equal(h.panel.hidden,true);
  dialog.removeAttribute('open');await h.flushLayout();assert.equal(h.panel.hidden,false);
 });
+
+test('スクロールしたメニューの項目が画面外でも帯を隠し、画面外のメニューから外側の固定枠へ判定を広げない',async t=>{
+ const h=fixture(t,{list:true});h.w.document.querySelector('form').remove();h.show();const menu=accountMenu(h);
+ for(const link of menu.querySelectorAll('a'))link.getBoundingClientRect=()=>({top:-300,bottom:-250,left:8,right:367,width:359,height:50});
+ await h.flushLayout();assert.equal(h.panel.hidden,true);
+ const outer=h.w.document.createElement('div');outer.style.position='fixed';h.w.document.body.append(outer);outer.append(menu);
+ menu.getBoundingClientRect=()=>({top:0,bottom:800,left:1200,right:1575,width:375,height:800});menu.style.transform='translateX(1200px)';await h.flushLayout();assert.equal(h.panel.hidden,false);
+});

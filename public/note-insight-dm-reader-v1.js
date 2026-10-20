@@ -46,13 +46,14 @@ function statusMenuOpen(){
  const labels=new Map();
  for(const el of document.querySelectorAll('a,button,[role="menuitem"]')){
   const value=clean(el.textContent);
-  if(/^(?:自分の記事|下書き|購入した|スキした|最近見た)$/u.test(value)&&visible(el))labels.set(el,value);
+  if(/^(?:自分の記事|下書き|購入した|スキした|最近見た)$/u.test(value)&&shown(el))labels.set(el,value);
  }
  if(new Set(labels.values()).size<3)return false;
  for(const el of labels.keys())for(let p=el.parentElement;p&&p!==document.body&&p!==document.documentElement;p=p.parentElement){
-  if(!visible(p))continue;
-  const positioned=/^(?:fixed|absolute)$/u.test(getComputedStyle(p).position);
-  if(positioned&&new Set([...labels].filter(([node])=>p.contains(node)).map(([,label])=>label)).size>=3)return true;
+  if(!/^(?:fixed|absolute)$/u.test(getComputedStyle(p).position))continue;
+  if(visible(p)&&new Set([...labels].filter(([node])=>p.contains(node)).map(([,label])=>label)).size>=3)return true;
+  // A closed/offscreen menu must not borrow a visible positioned app ancestor.
+  break;
  }
  return false;
 }
