@@ -5,12 +5,14 @@ const H={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"conte
 const out=(x:unknown,s=200)=>new Response(JSON.stringify(x),{status:s,headers:H});
 async function sha(v:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 const ownerIdentity=()=>({id:"owner",noteId:"ss_yr",name:"無名S note",role:"owner",authorized:true,verifiedAt:new Date().toISOString()});
-async function owner(req:Request){const raw=req.headers.get("X-Owner-Token")||"";if(!raw)return false;const{data}=await db.from("unified_owner_sessions").select("id").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",new Date().toISOString()).maybeSingle();return!!data?.id}
+async function owner(req:Request){const raw=req.headers.get("X-Owner-Token")||"";if(!raw)return false;const{data,error}=await db.from("unified_owner_sessions").select("id").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",new Date().toISOString()).maybeSingle();if(error)throw new Error("AUTH_CHECK_UNAVAILABLE");return!!data?.id}
 async function participant(req:Request){
  const raw=req.headers.get("X-Insight-Token")||"";if(!raw)return null;const now=new Date().toISOString();
- const{data:s}=await db.from("insight_member_sessions").select("application_id").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();
+ const{data:s,error:sessionError}=await db.from("insight_member_sessions").select("application_id").eq("token_hash",await sha(raw)).is("revoked_at",null).gt("expires_at",now).maybeSingle();
+ if(sessionError)throw new Error("AUTH_CHECK_UNAVAILABLE");
  if(!s?.application_id)return null;
- const{data:app}=await db.from("insight_access_applications").select("id,note_id,display_name,status,verified_at").eq("id",s.application_id).maybeSingle();
+ const{data:app,error:accountError}=await db.from("insight_access_applications").select("id,note_id,display_name,status,verified_at").eq("id",s.application_id).maybeSingle();
+ if(accountError)throw new Error("AUTH_CHECK_UNAVAILABLE");
  if(!app?.id||app.status!=="active")return null;
  return{id:String(app.id),noteId:String(app.note_id||"").toLowerCase(),name:app.display_name||app.note_id,role:"member",authorized:true,verifiedAt:app.verified_at||null}
 }
@@ -19,9 +21,11 @@ async function identity(req:Request){
 }
 async function identityByMemberId(memberId:string){
  if(memberId==="owner")return ownerIdentity();
- const{data:app}=await db.from("insight_access_applications").select("id,note_id,display_name,status,verified_at").eq("id",memberId).maybeSingle();
+ const{data:app,error:accountError}=await db.from("insight_access_applications").select("id,note_id,display_name,status,verified_at").eq("id",memberId).maybeSingle();
+ if(accountError)throw new Error("AUTH_CHECK_UNAVAILABLE");
  if(app?.id&&app.status==="active"){const noteId=String(app.note_id||"").toLowerCase();if(noteId==="ss_yr"&&app.verified_at)return ownerIdentity();return{id:String(app.id),noteId,name:app.display_name||app.note_id,role:"member",authorized:true,verifiedAt:app.verified_at||null}}
- const{data:p}=await db.from("insight_notification_profiles").select("note_urlname,note_nickname,verified_at,role").eq("member_id",memberId).maybeSingle();
+ const{data:p,error:profileError}=await db.from("insight_notification_profiles").select("note_urlname,note_nickname,verified_at,role").eq("member_id",memberId).maybeSingle();
+ if(profileError)throw new Error("AUTH_CHECK_UNAVAILABLE");
  if(p?.note_urlname){const noteId=String(p.note_urlname).toLowerCase();if(noteId==="ss_yr"&&p.verified_at)return ownerIdentity();return{id:memberId,noteId,name:p.note_nickname||p.note_urlname,role:p.role||"member",authorized:Boolean(p.verified_at),verifiedAt:p.verified_at||null}}
  throw new Error("DM_ACCOUNT_UNKNOWN")
 }
@@ -57,12 +61,13 @@ Deno.serve(async req=>{
    return out({ok:true,memberId:who.id,noteId:who.noteId,pairingCode:code,expiresAt:exp,noteUrl:`https://note.com/messages/rooms?mumei_dm_pair=${code}&mumei_account=${account}`,...state})
   }
   if(action==="stats"){
-   const[{count:messages},{count:threads},state]=await Promise.all([
+   const[messageResult,threadResult,state]=await Promise.all([
     db.from("insight_dm_messages").select("id",{count:"exact",head:true}).eq("member_id",who.id),
     db.from("insight_dm_threads").select("id",{count:"exact",head:true}).eq("member_id",who.id),
     paired(who.id)
    ]);
-   return out({ok:true,memberId:who.id,noteId:who.noteId,messages:messages||0,threads:threads||0,...state})
+   if(messageResult.error||threadResult.error)throw new Error("DM_STATS_UNAVAILABLE");
+   return out({ok:true,memberId:who.id,noteId:who.noteId,messages:messageResult.count||0,threads:threadResult.count||0,...state})
   }
   if(action==="issue")return out({ok:true,...await issue(who.id,who.noteId),paired:true});
   return out({ok:false,error:"UNKNOWN_ACTION"},400)
