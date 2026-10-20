@@ -118,3 +118,11 @@ test('表示中に同じtokenのnote本人が切り替わった時も旧本文�
  let changed=false;const h=await fixture(t,{count:1,handle:async(call,normal)=>changed?new Promise(()=>{}):normal(call.body)});await h.start();await h.open();assert.match(h.text(),/保存本文0/);
  changed=true;await settle(()=>{h.w.localStorage.setItem(accountKey,'account_b');h.w.dispatchEvent(new h.w.Event('mumei-insight-accounts'))});assert.doesNotMatch(h.text(),/保存本文|相手 peer|前回表示分/);
 });
+
+for(const action of ['summary','people','stats','person_messages'])test(`一時的な認証DB障害(${action})は保存済みDMを消さず、再確認で回復する`,async t=>{
+ const {storage}=await saved(t,{count:1});let fail=true;
+ const h=await fixture(t,{storage,handle:async(call,normal)=>call.body.action===action&&fail?new Response(JSON.stringify({ok:false,error:'AUTH_CHECK_UNAVAILABLE'}),{status:500}):normal(call.body)});
+ await h.start();await settle();assert.match(h.text(),/保存本文0/);assert.match(h.text(),/AUTH_CHECK_UNAVAILABLE/);
+ const key=Object.keys(storage).find(key=>key.startsWith(savedPrefix));assert.ok(h.copy()[key],'authorization database failure must not remove saved display');
+ fail=false;await h.click(h.button('保存先を再確認'));await settle();assert.match(h.text(),/保存本文0/);assert.doesNotMatch(h.text(),/AUTH_CHECK_UNAVAILABLE/);assert.equal(h.w.localStorage.getItem(tokenKey),'token-a');
+});

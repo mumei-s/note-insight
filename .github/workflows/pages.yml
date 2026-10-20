@@ -61,7 +61,7 @@ jobs:
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
       - name: Check startup under full storage and legacy browser APIs
-        run: node --experimental-vm-modules --test tests/boot-resilience.test.mjs tests/browser-storage-quota.test.mjs tests/storage-archive.test.mjs tests/service-worker-asset-reuse.test.mjs
+        run: node --experimental-vm-modules --test tests/boot-resilience.test.mjs tests/browser-storage-quota.test.mjs tests/storage-archive.test.mjs tests/persistent-cache-lifecycle.test.mjs tests/service-worker-asset-reuse.test.mjs
       - name: Check entry motion and retained notification behavior
         run: node --test tests/pc-display-mode.test.mjs tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/manual-login-navigation.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs tests/notification-filter-pagination-v423.test.mjs tests/notification-filter-pagination-v425.test.mjs
       - name: Check applicant approval and owner notification scope
@@ -83,9 +83,9 @@ jobs:
       - name: Check comment collection, independent public sync, and direct-room DM saving
         run: node --experimental-vm-modules --test tests/comment-refresh-recovery.test.mjs tests/public-sync-isolation.test.mjs tests/dm-direct-room-ingest.test.mjs
       - name: Check DM save recovery, fresh history, and reader startup
-        run: node --experimental-vm-modules --test tests/dm-summary-saved-time.test.mjs tests/dm-feed-egress.test.mjs tests/dm-ui-freshness-recovery.test.mjs tests/dm-network-lifecycle.test.mjs tests/dm-network-recovery.test.mjs tests/dm-room-capacity.test.mjs tests/dm-reader-identity-lifecycle.test.mjs
+        run: node --experimental-vm-modules --test tests/read-auth-transient-errors.test.mjs tests/dm-summary-saved-time.test.mjs tests/dm-feed-egress.test.mjs tests/dm-ui-freshness-recovery.test.mjs tests/dm-network-lifecycle.test.mjs tests/dm-network-recovery.test.mjs tests/dm-room-capacity.test.mjs tests/dm-reader-identity-lifecycle.test.mjs
       - name: Check read RPC results and permissions
-        run: node --test tests/insight-rpc-read-performance.test.mjs tests/notification-feed-page-rpc.test.mjs tests/notification-store-started.test.mjs
+        run: node --test tests/insight-rpc-read-performance.test.mjs tests/ranking-rpc-performance.test.mjs tests/ranking-count-branches.test.mjs tests/notification-feed-page-rpc.test.mjs tests/notification-store-started.test.mjs
       - name: Check retained social views and differences
         run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs
       - name: Check manual dashboard panel and durable save queue
