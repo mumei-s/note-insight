@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.20.1",
+  "appVersion": "2026.10.20.2",
   "notificationVersion": "3.6.38",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-20T03:26:00+09:00",
+  "releasedAt": "2026-10-20T17:54:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "起動時に重なる本人確認を共有し、同じ認証通信の繰り返しを削減。履歴・対応済み状態・本文とアカウント切替を維持します。",
+  "note": "新しくINSIGHTを開くとスキ履歴は最新の1ページ目から表示。同じ利用中の画面往復では閲覧位置を保ち、履歴・対応済み状態は変更しません。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }

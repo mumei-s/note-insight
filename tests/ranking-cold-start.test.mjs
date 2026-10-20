@@ -39,7 +39,7 @@ async function documentFixture(t,{tab='likes',stored=[],token='session-a',accoun
  };
 }
 
-for(const[tab,action]of cases)test(`${action}: successful server page survives a closed document and a fresh module realm`,async t=>{
+for(const[tab,action]of cases)test(`${action}: a fresh document ${action==='likes'?'starts at latest page 1':'restores the saved ranking page'}`,async t=>{
  const at=Date.now(),first=await documentFixture(t,{tab,now:at});await first.show();
  await first.click(first.panel().querySelector('.miu-pager button:last-child'));
  assert.match(first.panel().textContent,new RegExp(`初回の本人 ${action} 100`));
@@ -49,14 +49,21 @@ for(const[tab,action]of cases)test(`${action}: successful server page survives a
  const current=deferred(),currentSummary=deferred();
  const second=await documentFixture(t,{tab,stored:disk,now:at+60_001,respond:call=>call.action===action?current.promise:call.action==='summary'?currentSummary.promise:undefined});
  assert.notEqual(second.w,first.w);await second.show();
- assert.match(second.panel().textContent,new RegExp(`初回の本人 ${action} 100`));
- assert.match(second.panel().querySelector('.miu-pager').textContent,/2 \/ 3/);
- assert.match(second.panel().textContent,/前回表示分.*最新を確認中/);
- assert.equal(second.panel().querySelector('.miu-load-scene'),null);
+ const entryPage=action==='likes'?1:2;
+ if(action==='likes'){
+  assert.doesNotMatch(second.panel().textContent,/初回の本人/);
+  assert.equal(second.panel().querySelector('[data-insight-saved-view]'),null);
+  assert.ok(second.panel().querySelector('.miu-load-scene'));
+ }else{
+  assert.match(second.panel().textContent,new RegExp(`初回の本人 ${action} 100`));
+  assert.match(second.panel().querySelector('.miu-pager').textContent,/2 \/ 3/);
+  assert.match(second.panel().textContent,/前回表示分.*最新を確認中/);
+  assert.equal(second.panel().querySelector('.miu-load-scene'),null);
+ }
  assert.deepEqual(second.calls.map(call=>call.action).sort(),[action,'summary'].sort());
- assert.equal(second.calls.find(call=>call.action===action).page,2);assert.equal(second.calls.find(call=>call.action===action).pageSize,100);
- await settle(()=>{current.resolve(Response.json({ok:true,rows:pageRows(action,2,'再起動後の確認結果'),total:201}));currentSummary.resolve(Response.json(summary('tester')))});
- assert.match(second.panel().textContent,new RegExp(`再起動後の確認結果 ${action} 100`));assert.doesNotMatch(second.panel().textContent,/初回の本人/);
+ assert.equal(second.calls.find(call=>call.action===action).page,entryPage);assert.equal(second.calls.find(call=>call.action===action).pageSize,100);
+ await settle(()=>{current.resolve(Response.json({ok:true,rows:pageRows(action,entryPage,'再起動後の確認結果'),total:201}));currentSummary.resolve(Response.json(summary('tester')))});
+ assert.match(second.panel().textContent,new RegExp(`再起動後の確認結果 ${action} ${(entryPage-1)*100}`));assert.doesNotMatch(second.panel().textContent,/初回の本人/);
  assert.equal(second.panel().querySelector('[data-insight-saved-view]'),null);
 });
 
