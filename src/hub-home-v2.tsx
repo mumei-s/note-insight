@@ -1,4 +1,5 @@
 import { useVisibleMotion } from "./insight-visible-motion";
+import { readInsightSession, touchInsightSession, verifiedInsightSessionIdentity } from "./insight-session-request";
 import "./hub-home-intro.css";
 import { ParticipantShowcase } from "./hub-participant-showcase";
 import { CreatorAvatar } from "./creator-avatar";
@@ -100,17 +101,27 @@ export function HubHome() {
   useEffect(() => {
     const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "";
     if (!token) return;
+    let live = true;
+    const scope = currentStoredInsightAccount()?.noteId || "";
+    const current = () => live && localStorage.getItem(INSIGHT_TOKEN_KEY) === token
+      && (currentStoredInsightAccount()?.noteId || "") === scope
+      && (!scope || localStorage.getItem(EXPLICIT_LOGOUT_KEY_PREFIX + scope) !== "1");
     const stored = readStoredInsightAccounts().find((item) => item.memberToken === token);
-    void post(ACCESS, "session", { "X-Insight-Token": token }).then(async (payload) => {
+    void readInsightSession(token).then(async (result) => {
+      if (!current()) return;
+      if (!verifiedInsightSessionIdentity(result)) throw new Error("INSIGHT_SESSION_INVALID");
+      const { payload } = result;
       rememberMemberSession(payload.application, token, stored?.passcode); refreshAccounts();
       setAccountMessage("");
-      try { await post(SELF, "touch", { "X-Insight-Token": token }); } catch { /* keep persistent login */ }
+      try { await touchInsightSession(token); } catch { /* keep persistent login */ }
     }).catch(() => {
+      if (!current()) return;
       // TOP表示・URL直アクセス・一時通信失敗ではログイン情報を絶対に削除しない。
       // 保存ログインを消すのは、下の明示的なログアウト／退会操作だけ。
       refreshAccounts();
       setAccountMessage("ログイン情報は保持しています。通信確認できない場合は次回自動で再確認します。");
     });
+    return () => { live = false; };
   }, []);
 
   async function confirmAction() {
