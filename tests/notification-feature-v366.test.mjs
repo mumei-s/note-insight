@@ -96,3 +96,28 @@ for(const mode of ['modern','legacy'])test(`ON/OFFの保存失敗を成功扱い
  if(mode==='modern')w.GM={getValue:async(...a)=>get(...a),setValue:async(...a)=>set(...a)};else{w.GM_getValue=get;w.GM_setValue=set}
  w.eval(read('feature-bridge-v1.js'));const feature=w.__mumeiNotificationFeatureV1;await feature.ready;await assert.rejects(feature.setEnabled(false),/GM保存失敗/);assert.equal(feature.isEnabled(),true);fail=false;await feature.setEnabled(false);assert.equal(feature.isEnabled(),false);values.set('mumei_insight_notification_panel_enabled_v1',false);await feature.setEnabled(true);assert.equal(values.get('mumei_insight_notification_panel_enabled_v1'),true);assert.equal(feature.isEnabled(),true);
 });
+
+test('保存済み境界で自動通信を終了し、新しいキャプチャ・再表示・手動で差分を読む',async t=>{
+ const dom=new JSDOM('<main class="m-navbarNotice"><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};
+ let calls=0,now=Date.now(),result={saved:0,historyComplete:true};w.Date.now=()=>now;
+ w.__mumeiNotificationNetwork3300={syncCurrent:async()=>{calls++;return result},stop(){}};
+ w.eval(read('reader-v4.js'));await until(()=>calls===1);await pause(30);
+ const tick=async ms=>{now+=ms;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30)};
+ await tick(5000);await tick(60000);assert.equal(calls,1,'完了後は同じパネルで再通信しない');
+ w.document.dispatchEvent(new w.CustomEvent('mumei-notification-captured',{detail:{signature:'changed'}}));await until(()=>calls===2);
+ w.document.dispatchEvent(new w.CustomEvent('mumei-notification-captured',{detail:{signature:'changed'}}));await tick(10000);assert.equal(calls,2,'同じキャプチャでは繰り返さない');
+ await w.__mumeiNotificationReaderV4.scan();assert.equal(calls,3,'手動確認は即時');
+ result={saved:0,historyComplete:false,partial:true};await w.__mumeiNotificationReaderV4.scan();assert.equal(calls,4);
+ await tick(5000);assert.equal(calls,5,'未完了の次ウィンドウは自動継続');
+ result={saved:1,historyComplete:true};await w.__mumeiNotificationReaderV4.scan();await tick(5000);assert.equal(calls,6,'保存件数があっても完了したら止まる');
+ const panel=w.document.querySelector('main');panel.remove();await pause(200);await tick(5000);w.document.body.append(panel);await pause(200);await tick(5000);assert.equal(calls,7,'次回開いたら差分確認');
+});
+test('初回の複数ウィンドウ途中に来た新着は最後に先頭差分を読み、取り残さない',async t=>{
+ const dom=new JSDOM('<main class="m-navbarNotice"><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};let calls=0,finish;w.__mumeiNotificationNetwork3300={syncCurrent:()=>{calls++;return new Promise(r=>finish=r)},stop(){}};
+ w.eval(read('reader-v4.js'));await until(()=>calls===1);
+ w.document.dispatchEvent(new w.CustomEvent('mumei-notification-captured',{detail:{signature:'new-head-during-backfill'}}));finish({saved:300,partial:true,historyComplete:false});await until(()=>calls===2);
+ finish({saved:650,partial:false,historyComplete:true});await until(()=>calls===3);finish({saved:1,partial:false,historyComplete:true});await pause(50);
+ w.Date.now=()=>Date.now()+60000;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30);assert.equal(calls,3,'先頭の追加差分を確認したら通信を終える');
+});

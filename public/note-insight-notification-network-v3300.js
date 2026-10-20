@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.17';
+const VERSION='3.6.18';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -443,7 +443,7 @@ async function syncHistory(opts={}){
  // Do not discard a partially saved window when the user asks for a full read.
  if(journal?.phase==='save')journal.read=Number(journal.saved||0)+journal.rows.length;
  if(!journal||journal.schema!==1){
-  journal={schema:1,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull?'':clean(state.frontierSig||''),seen:opts.forceFull?[]:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,checked:0,startedAt:Date.now()};
+  journal={schema:1,completionSchema:2,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull||state.completionSchema!==2?'':clean(state.frontierSig||''),seen:opts.forceFull?[]:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,checked:0,startedAt:Date.now()};
   await writeJournal(a.id,journal);
  }
  const publish=async(complete=false)=>{
@@ -458,31 +458,37 @@ async function syncHistory(opts={}){
    const cap=journal.nextRequest?await replay(journal.nextRequest):await directNoticeCapture();
    if(!directNoticesCap(cap))throw new Error('NO_NOTIFICATION_API_CAPTURE');
    const pageRows=extractDirectNotices(cap.json,cap.url);
-   if(!journal.newestSig&&pageRows.length)journal.newestSig=clientSig(pageRows[0]);
+   // Backfill saves newest windows before older windows. Retain the head's
+   // signatures separately so a large history cannot evict the next delta boundary.
+   journal.headSignatures=[...new Set([...(journal.headSignatures||[]),...pageRows.map(clientSig)])].slice(0,MAX_NOTICES);
+   if(!journal.newestSig&&pageRows.length){journal.newestSig=clientSig(pageRows[0]);journal.newestRow=pageRows[0]}
    const known=new Set(journal.seen),unique=new Map(journal.rows.map(r=>[clientSig(r),r]));
    let knownCount=0;
    for(const row of pageRows){
     const signature=clientSig(row);
     if(signature===journal.frontier||known.has(signature)){knownCount++;continue}
-    if(!known.has(signature)&&unique.size<MAX_NOTICES)unique.set(signature,row);
+    if(!known.has(signature)){if(!journal.newestUnseenRow)journal.newestUnseenRow=row;unique.set(signature,row)}
    }
    // Bundled notices can move or change below a saved row. Inspect the entire
    // page; only a fully confirmed page is a safe incremental boundary.
-   const boundary=pageRows.length>0&&knownCount===pageRows.length;
+   const boundary=Boolean(journal.frontier)&&pageRows.length>0&&knownCount===pageRows.length;
    journal.checked=Number(journal.checked||0)+pageRows.length;
    journal.rows=[...unique.values()];journal.pages++;journal.read=journal.saved+journal.rows.length;
-   const limitReached=journal.rows.length>=MAX_NOTICES||journal.checked>=MAX_NOTICES;
-   const end=boundary||limitReached||terminalHint(cap.json)||!pageRows.length;
+   const limitReached=journal.rows.length>=MAX_NOTICES||journal.checked>=MAX_NOTICES||journal.pages>=MAX_PAGES;
+   const end=boundary||terminalHint(cap.json)||!pageRows.length;
    let next=end?null:mutateNextRequest(cap,nextHint(cap.json));
    if(!end&&!next&&directNoticesCap(cap)&&pageRows.length){
     const page=Number(new URL(cap.url).searchParams.get('page')||1);
     next=directPageRequest(cap,page+1);
    }
    if(next&&next.url===cap.url&&next.body===cap.body)throw new Error('通知の次ページが同じ位置です');
-   if(!end&&(!next||journal.pages>=MAX_PAGES))throw new Error('通知APIの終端を確認できません。途中情報を保持しています');
+   if(!end&&!next)throw new Error('通知APIの終端を確認できません。途中情報を保持しています');
+   const pageSignature=pageRows.map(clientSig).join('\n');
+   if(!end&&pageSignature===journal.lastPageSignature)throw new Error('通知APIが同じページを繰り返しています。途中情報を保持しています');
+   journal.lastPageSignature=pageSignature;
    journal.nextRequest=next?{url:next.url,method:next.method||'GET',body:next.body??null,requestInit:next.requestInit||cap.requestInit,transport:'direct'}:null;
    journal.total=journal.saved+journal.rows.length;
-   if(end){journal.rows=ascending(journal.rows);journal.phase='save'}
+   if(end||limitReached){journal.rows=ascending(journal.rows);journal.phase='save';journal.resumeCollect=!end}
    await writeJournal(a.id,journal);
    status(`取得 ${journal.rows.length}件｜古い通知から保存準備`,'saving',{readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up'});
   }}catch(error){if(error?.code!=='READ_STOPPED')throw error;}
@@ -502,11 +508,15 @@ async function syncHistory(opts={}){
    document.dispatchEvent(new Event('mumei-notification-checkpoint'));
    await publish();
   }
-  if(journal.resumeCollect&&!journal.rows.length){journal.phase='collect';journal.resumeCollect=false;await writeJournal(a.id,journal);}
-  const complete=journal.phase==='save'&&!journal.rows.length;
-  if(complete){
+  if(journal.resumeCollect&&!journal.rows.length){journal.phase='collect';journal.resumeCollect=false;journal.checked=0;journal.pages=0;journal.windowCount=Number(journal.windowCount||0)+1;await writeJournal(a.id,journal);}
+  const windowComplete=journal.phase==='save'&&!journal.rows.length;
+  const complete=windowComplete&&journal.completionSchema===2;
+  if(windowComplete){
    if(await pendingCount(a.id))throw new Error('未保存通知を保持しています');
-   await writeHistoryState(a.id,{...state,historyComplete:true,frontierSig:journal.newestSig||journal.frontier,confirmedSignatures:journal.seen,verifiedAt:Date.now(),version:VERSION,resume:null,direction:'bottom-up'});
+   await writeHistoryState(a.id,{...state,historyComplete:complete,completionSchema:complete?2:0,frontierSig:journal.newestSig||journal.frontier,confirmedSignatures:[...new Set([...(journal.headSignatures||[]),...journal.seen])].slice(0,1200),verifiedAt:Date.now(),version:VERSION,resume:null,direction:'bottom-up'});
+   // The newest captured row was confirmed in an earlier saved window. Keep
+   // the visible boundary at the newest row, not the final (oldest) backfill batch.
+   if(complete&&journal.newestRow&&journal.windowCount){const row=journal.frontier?(journal.newestUnseenRow||journal.newestRow):journal.newestRow;await writeUnifiedStatus(a.id,{boundarySignature:clientSig(row),boundaryEventIdentity:row.meta?.event_identity,boundaryDisplayText:clean(row.raw_text),boundaryTargetUrl:row.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});document.dispatchEvent(new Event('mumei-notification-checkpoint'));}
    await writeJournal(a.id,null);
   }
   await publish(complete);

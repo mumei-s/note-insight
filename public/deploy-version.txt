@@ -1,2 +1,2 @@
-INSIGHT 2026.10.21.2 / notification 3.6.38 / dashboard 1.7.3 / DM 1.4.12
-Reduce overlapping startup checks and unused article/notification auxiliary reads while preserving history, completion marks, favorites, fresh validation and latest-page fresh entry.
+INSIGHT 2026.10.21.3 / notification 3.6.39 / dashboard 1.7.3 / DM 1.4.12
+Complete accessible notification history in durable windows; stop automatic network scans at the confirmed boundary while preserving saved data and reader controls.

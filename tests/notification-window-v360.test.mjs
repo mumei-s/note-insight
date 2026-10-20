@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('public/note-insight-notification-network-v3300.js','utf8');
 function harness(shared={gm:new Map(),local:new Map(),saved:[]},options={}){
- let notices=[],apiCalls=0,onSave=null,rejectSave=false,badEnvelope=false,me='tester',localFailure='',removeBlocked=false,gmFailure=()=>false;
+ let notices=[],apiCalls=0,accountCalls=0,onSave=null,rejectSave=false,badEnvelope=false,me='tester',localFailure='',removeBlocked=false,gmFailure=()=>false;
  const events=new EventTarget(),doc=new EventTarget();
  class CE extends Event{constructor(name,init){super(name);this.detail=init?.detail}}
  const storage={getItem:k=>{if(localFailure==='security')throw new Error('SecurityError');return shared.local.get(k)??null},setItem:(k,v)=>{if(localFailure)throw new Error('QuotaExceededError');shared.local.set(k,v)},removeItem:k=>{if(removeBlocked||localFailure==='security')throw new Error('SecurityError');shared.local.delete(k)}};
@@ -18,12 +18,12 @@ function harness(shared={gm:new Map(),local:new Map(),saved:[]},options={}){
  }};
  shared.gm.set('mumei_insight_notification_sync_token_v2:tester','fixture-token');
  const context={URL,Event,CustomEvent:CE,Element:class{},Map,Set,Date,Promise,JSON,Number,String,Boolean,Math,structuredClone,GM:gm,localStorage:storage,document:doc,location:{hostname:'note.com',origin:'https://note.com',href:'https://note.com/',pathname:'/'},AbortController,setTimeout:options.setTimeout||setTimeout,clearTimeout:options.clearTimeout||clearTimeout,addEventListener:events.addEventListener.bind(events),dispatchEvent:events.dispatchEvent.bind(events),fetch:async(url)=>{
-  if(String(url).includes('current_user'))return{ok:true,json:async()=>({data:{urlname:me}})};
-  apiCalls++;const u=new URL(url),per=Number(u.searchParams.get('per')||12),page=Number(u.searchParams.get('page')||1),rows=notices.slice((page-1)*per,page*per),j=badEnvelope?{error:'bad page size'}:{data:rows,total_count:notices.length,next_page:page*per<notices.length?page+1:null};
+  if(String(url).includes('current_user')){accountCalls++;return{ok:true,json:async()=>({data:{urlname:me}})}};
+  apiCalls++;const u=new URL(url),per=Number(options.pageSize||u.searchParams.get('per')||12),page=Number(u.searchParams.get('page')||1),rows=notices.slice(((options.repeatPage?1:page)-1)*per,(options.repeatPage?1:page)*per),j=badEnvelope?{error:'bad page size'}:{data:rows,total_count:notices.length,next_page:page*per<notices.length?page+1:null};
   return{ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>j,text:async()=>JSON.stringify(j),clone(){return this}};
  }};
  context.window=context;vm.createContext(context);vm.runInContext(source,context);
- return{api:context.__mumeiNotificationNetwork3300,shared,gm,context,events,failLocal(kind='quota'){localFailure=kind},blockRemove(){removeBlocked=true},failGM(fn=()=>true){gmFailure=fn},setRows(rows){notices=rows},rows:()=>notices,bad(){badEnvelope=true},setNotices(n){notices=Array.from({length:n},(_,i)=>({id:n-i,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${n-i}`,noticed_at:new Date(1700000000000+(n-i)*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}]}))},setOnSave(fn){onSave=fn},rejectNext(){rejectSave=true},changeAccount(){me='other'},get calls(){return apiCalls}};
+ return{api:context.__mumeiNotificationNetwork3300,shared,gm,context,events,failLocal(kind='quota'){localFailure=kind},blockRemove(){removeBlocked=true},failGM(fn=()=>true){gmFailure=fn},setRows(rows){notices=rows},rows:()=>notices,bad(){badEnvelope=true},setNotices(n){notices=Array.from({length:n},(_,i)=>({id:n-i,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${n-i}`,noticed_at:new Date(1700000000000+(n-i)*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}]}))},setOnSave(fn){onSave=fn},rejectNext(){rejectSave=true},changeAccount(){me='other'},get calls(){return apiCalls},get accountCalls(){return accountCalls}};
 }
 async function pauseAfter20(h){h.setOnSave(()=>h.rejectNext());try{return await h.api.syncCurrent()}catch(e){assert.equal(e.progress.savedCount,20);return {saved:20,partial:true}}}
 test('300件は画面を動かさず古い順に保存し、2回目は新着5件のみ',async()=>{
@@ -109,4 +109,54 @@ test('次ページの待機中に別ページへ移動しても、取得済み�
  h.context.fetch=(url,init)=>{if(String(url).includes('page=2')){waiting=true;return new Promise(()=>{})}return original(url,init)};
  const run=h.api.syncCurrent();await tick();assert.equal(waiting,true);h.events.dispatchEvent(new Event('popstate'));const result=await settles(run);assert.equal(result.saved,12);assert.equal(result.partial,true);assert.equal(h.shared.gm.get('mumei_notification_window_v360:tester').phase,'collect');
  h.context.fetch=original;const next=await settles(h.api.syncCurrent());assert.equal(next.saved,24);assert.deepEqual(h.shared.saved,[...Array.from({length:12},(_,i)=>i+13),...Array.from({length:12},(_,i)=>i+1)]);
+});
+
+ test('新着なしの同期はnote本人確認と1ページのみで、保存済み通知を再送しない',async()=>{
+ const h=harness();h.setNotices(12);await h.api.syncCurrent();
+ const accounts=h.accountCalls,pages=h.calls,saved=h.shared.saved.length;
+ const result=await h.api.syncCurrent();
+ assert.equal(result.historyComplete,true);assert.equal(result.saved,0);
+ assert.equal(h.accountCalls-accounts,1);assert.equal(h.calls-pages,1);assert.equal(h.shared.saved.length,saved);
+ });
+
+async function finishWindows(h){let result;for(let i=0;i<10;i++){result=await h.api.syncCurrent();if(result.historyComplete)return result}assert.fail('history did not complete within fixture windows')}
+test('初回650件をスクロールせず複数ウィンドウで全件保存し、最終ラインは最新通知',async()=>{
+ const h=harness();h.setNotices(650);const first=await h.api.syncCurrent();assert.equal(first.saved,300);assert.equal(first.historyComplete,false);assert.equal(first.partial,true);
+ await finishWindows(h);assert.equal(h.shared.saved.length,650);assert.equal(new Set(h.shared.saved).size,650);
+ const cp=h.shared.gm.get('mumei_insight_notification_checkpoint_v2922:tester');assert.equal(cp.boundaryEventIdentity,'notice:650');
+ const before=h.calls;const next=await h.api.syncCurrent();assert.equal(next.saved,0);assert.equal(h.calls-before,1);
+});
+test('旧版が300件で完了扱いした履歴を一度だけ全走査し、保存済みは再送しない',async()=>{
+ const h=harness();h.setNotices(300);await finishWindows(h);
+ const historyKey=[...h.shared.gm.keys()].find(k=>k.includes('history')&&h.shared.gm.get(k)?.frontierSig);assert.ok(historyKey);
+ const state=h.shared.gm.get(historyKey);delete state.completionSchema;h.shared.gm.set(historyKey,state);
+ const old=h.rows();const older=Array.from({length:350},(_,i)=>({...old[0],id:-i,body:`古い通知 ${i}`,noticed_at:new Date(1600000000000-i*60000).toISOString()}));h.setRows([...old,...older]);
+ await finishWindows(h);assert.equal(h.shared.saved.length,650);assert.equal(h.shared.gm.get(historyKey).completionSchema,2);
+ const before=h.calls;await h.api.syncCurrent();assert.equal(h.calls-before,1);assert.equal(h.shared.saved.length,650);
+});
+test('初回途中の保存失敗は残りを保持し、再起動後に650件全件を確認する',async()=>{
+ const h=harness();h.setNotices(650);await pauseAfter20(h);const resumed=harness(h.shared);resumed.setNotices(650);
+ resumed.setOnSave(null);await finishWindows(resumed);assert.equal(h.shared.saved.length,650);assert.equal(new Set(h.shared.saved).size,650);
+});
+test('保存済み境界より新しい650件もウィンドウを継続し、同時刻のIDを失わない',async()=>{
+ const h=harness();h.setNotices(12);await finishWindows(h);h.setNotices(662);h.setRows(h.rows().map(r=>Number(r.id)>12?{...r,noticed_at:'2026-10-20T00:00:00Z'}:r));await finishWindows(h);
+ assert.equal(h.shared.saved.length,662);assert.equal(new Set(h.shared.saved).size,662);const before=h.calls;assert.equal((await h.api.syncCurrent()).saved,0);assert.equal(h.calls-before,1);
+});
+test('1500件の初回保存後も最新ページの確認済み署名を保持し、次回は再送しない',async()=>{
+ const h=harness();h.setNotices(1500);await finishWindows(h);assert.equal(h.shared.saved.length,1500);
+ const before=h.calls,result=await h.api.syncCurrent();assert.equal(result.historyComplete,true);assert.equal(result.saved,0);assert.equal(h.calls-before,1);assert.equal(h.shared.saved.length,1500);
+});
+for(const pageSize of [7,17])test(`APIページ${pageSize}件でも途中ページを切り捨てず全430件を保存`,async()=>{
+ const h=harness(undefined,{pageSize});h.setNotices(430);await finishWindows(h);assert.equal(h.shared.saved.length,430);assert.equal(new Set(h.shared.saved).size,430);
+});
+test('APIが同じページを返し続ける場合は無限走査せず未保存通知を保持する',async()=>{
+ const h=harness(undefined,{repeatPage:true});h.setNotices(650);await assert.rejects(h.api.syncCurrent(),/同じページ/);assert.equal(h.calls,2);assert.equal(h.shared.saved.length,0);const journal=h.shared.gm.get('mumei_notification_window_v360:tester');assert.equal(journal.rows.length,12);
+});
+test('旧版の未完了journalを捨てず保存後に完全走査し、完了証明を新しくする',async()=>{
+ const h=harness();h.setNotices(650);await pauseAfter20(h);const key='mumei_notification_window_v360:tester',journal=h.shared.gm.get(key);delete journal.completionSchema;h.shared.gm.set(key,journal);
+ const resumed=harness(h.shared);resumed.setNotices(650);await finishWindows(resumed);assert.equal(h.shared.saved.length,650);assert.equal(new Set(h.shared.saved).size,650);
+ const before=resumed.calls;assert.equal((await resumed.api.syncCurrent()).saved,0);assert.equal(resumed.calls-before,1);
+});
+test('途中でnote本人が変われば未送信分を別アカウントに保存しない',async()=>{
+ const h=harness();h.setNotices(650);h.setOnSave(()=>h.changeAccount());await assert.rejects(h.api.syncCurrent(),/NOTE_ACCOUNT_CHANGED/);assert.equal(h.shared.saved.length,20);const journal=h.shared.gm.get('mumei_notification_window_v360:tester');assert.equal(journal.saved,20);assert.equal(journal.rows.length,280);
 });
