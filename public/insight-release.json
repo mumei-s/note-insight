@@ -7,6 +7,6 @@
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
   "note": "起動時に重なる本人確認を共有し、同じ認証通信の繰り返しを削減。履歴・対応済み状態・本文とアカウント切替を維持します。",
-  "dmVersion": "1.4.11",
+  "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }

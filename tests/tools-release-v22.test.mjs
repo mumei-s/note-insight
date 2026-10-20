@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const read = path => readFileSync(path, 'utf8');
@@ -23,4 +26,23 @@ test('ダッシュボードのcoreと配布ラッパーの版・requireを一致
  assert.ok(wrapper.includes('dashboard-feature-bridge-v1.js?v=101'));
  const queueVersion=read('public/note-insight-dashboard-save-queue-v1.js').match(/version:'([^']+)'/)[1];
  assert.ok(wrapper.includes('dashboard-save-queue-v1.js?v='+queueVersion.replaceAll('.','')),'保存処理の更新が古いrequireキャッシュに隠れない');
+});
+
+
+test('DM readerと配布wrapperだけを同一機能として扱い、他機能の混在を許可しない', t => {
+ const dir=mkdtempSync(join(tmpdir(),'dm-feature-boundary-'));
+ t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const git=(...args)=>execFileSync('git',args,{cwd:dir,stdio:'pipe'});
+ git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');git('commit','--allow-empty','-qm','base');
+ const put=path=>{mkdirSync(dirname(join(dir,path)),{recursive:true});writeFileSync(join(dir,path),'fixture');};
+ for(const path of ['public/note-insight-dm-reader-v1.js','public/note-insight-dm.user.js','public/insight-release.json','src/insight-release.ts','tests/dm-composer-v143.test.mjs'])put(path);
+ git('add','.');git('commit','-qm','one DM release');
+ const script=resolve('scripts/check-feature-boundaries.mjs');
+ const check=()=>spawnSync(process.execPath,[script],{cwd:dir,encoding:'utf8'});
+ const valid=check();assert.equal(valid.status,0,valid.stdout+valid.stderr);assert.match(valid.stdout,/OK -> dm/);
+ for(const path of ['public/note-insight-notification-controls-v1.js','src/member-insight-social.tsx']){
+  put(path);git('add','.');git('commit','--amend','--no-edit','-q');
+  const invalid=check();assert.equal(invalid.status,1);assert.match(invalid.stderr,/FEATURE BOUNDARY VIOLATION/);
+  git('rm','-q',path);git('commit','--amend','--no-edit','-q');
+ }
 });
