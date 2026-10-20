@@ -245,6 +245,12 @@ export function forgetMemberSession(noteId: string) {
     normalizeList(readJsonList(key)).some((item) => item.noteId === id && item.memberToken === token));
   const before = readStoredInsightAccounts();
   const accounts = before.map((item) => item.noteId === id ? { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status, updatedAt: Date.now() } : item);
+  // Remove the invalid member token from the legacy source too; otherwise the
+  // next normalization merges it back into the current saved account.
+  const legacy = normalizeList(readJsonList(LEGACY_ACCOUNT_STORE_KEY));
+  if (legacy.some((item) => item.noteId === id && item.memberToken)) {
+    localStorage.setItem(LEGACY_ACCOUNT_STORE_KEY, JSON.stringify(legacy.map((item) => item.noteId === id ? { ...item, memberToken: undefined, status: item.status === "active" ? "logged-out" : item.status } : item)));
+  }
   write(accounts);
   if (ownsToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === token) localStorage.removeItem(INSIGHT_TOKEN_KEY);
 }
@@ -253,6 +259,9 @@ export function forgetInsightAccount(noteId: string) {
   const id = cleanId(noteId);
   const before = readStoredInsightAccounts();
   const removed = before.find((item) => item.noteId === id);
+  // Explicitly forgetting an identity also removes its migration source.
+  const legacy = normalizeList(readJsonList(LEGACY_ACCOUNT_STORE_KEY));
+  if (legacy.some((item) => item.noteId === id)) localStorage.setItem(LEGACY_ACCOUNT_STORE_KEY, JSON.stringify(legacy.filter((item) => item.noteId !== id)));
   write(before.filter((item) => item.noteId !== id));
   if (removed?.memberToken && localStorage.getItem(INSIGHT_TOKEN_KEY) === removed.memberToken) localStorage.removeItem(INSIGHT_TOKEN_KEY);
   if (removed?.applicantToken && localStorage.getItem(APPLICANT_KEY) === removed.applicantToken) localStorage.removeItem(APPLICANT_KEY);
