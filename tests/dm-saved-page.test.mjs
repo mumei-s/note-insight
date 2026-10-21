@@ -21,7 +21,7 @@ async function fixture(t,{storage={},token='token-a',account='account_a',count=1
  h.w.localStorage.setItem(tokenKey,token);h.w.localStorage.setItem(accountKey,account);
  h.w.setInterval=(fn,ms)=>{const timer={fn,ms,cancelled:false};timers.push(timer);return timer};h.w.clearInterval=timer=>{if(timer)timer.cancelled=true};
  const C=h.load('src/member-insight-dm.tsx').MemberInsightDm;
- return{...h,calls,normal,start:props=>h.render(C,{active:true,revision:0,...props}),open:()=>h.click(h.w.document.querySelector('.midm-threads button')),text:()=>h.w.document.body.textContent,
+ return{...h,calls,timers,normal,start:props=>h.render(C,{active:true,revision:0,...props}),open:()=>h.click(h.w.document.querySelector('.midm-threads button')),text:()=>h.w.document.body.textContent,
   button:label=>[...h.w.document.querySelectorAll('button')].find(button=>button.textContent===label),
   copy:()=>Object.fromEntries(Object.keys(h.w.localStorage).map(key=>[key,h.w.localStorage.getItem(key)])),
   setMessages:next=>{messages=next},poll:()=>settle(()=>{now+=61000;timers.findLast(timer=>timer.ms===60000&&!timer.cancelled).fn()})};
@@ -125,4 +125,47 @@ for(const action of ['summary','people','stats','person_messages'])test(`一時�
  await h.start();await settle();assert.match(h.text(),/保存本文0/);assert.match(h.text(),/AUTH_CHECK_UNAVAILABLE/);
  const key=Object.keys(storage).find(key=>key.startsWith(savedPrefix));assert.ok(h.copy()[key],'authorization database failure must not remove saved display');
  fail=false;await h.click(h.button('保存先を再確認'));await settle();assert.match(h.text(),/保存本文0/);assert.doesNotMatch(h.text(),/AUTH_CHECK_UNAVAILABLE/);assert.equal(h.w.localStorage.getItem(tokenKey),'token-a');
+});
+
+
+const hydrateDm=(h,storage)=>settle(()=>{for(const [key,value]of Object.entries(storage))if(key.startsWith(savedPrefix))h.w.localStorage.setItem(key,value);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+test('遅い保管庫の復元は待機中のDMを元の確認時刻で表示し追加通信を起こさない',async t=>{
+ const {storage}=await saved(t,{count:1}),waiting=[];
+ const h=await fixture(t,{messages:rows(1,'最新本文'),handle:call=>new Promise(resolve=>waiting.push({call,resolve}))});await h.start();assert.equal(h.calls.length,3);assert.doesNotMatch(h.text(),/保存本文/);const timer=h.timers.find(item=>item.ms===60000);
+ await hydrateDm(h,storage);assert.match(h.text(),/保存本文0/);assert.match(h.text(),/相手 peer/);assert.equal(h.timers.filter(item=>item.ms===60000).length,1);assert.equal(timer.cancelled,false);assert.match(h.text(),/前回表示分・最新確認中/);assert.equal(h.w.document.querySelector('.midm-history-panel').open,true);assert.equal(h.calls.length,3);
+ const key=Object.keys(storage).find(key=>key.startsWith(savedPrefix));assert.equal(JSON.parse(h.copy()[key]).savedAt,JSON.parse(storage[key]).savedAt);
+ await hydrateDm(h,storage);assert.equal(h.calls.length,3);
+ await settle(()=>waiting.filter(entry=>entry.call.body.action!=='person_messages').forEach(entry=>entry.resolve(h.normal(entry.call.body))));
+ assert.equal(h.calls.filter(call=>call.body.action==='person_messages').length,1);
+ await settle(()=>waiting.filter(entry=>entry.call.body.action==='person_messages').forEach(entry=>entry.resolve(h.normal(entry.call.body))));assert.match(h.text(),/最新本文0/);assert.doesNotMatch(h.text(),/保存本文0|前回表示分/);
+ await hydrateDm(h,storage);assert.match(h.text(),/最新本文0/);assert.doesNotMatch(h.text(),/保存本文0/);
+});
+
+for(const action of ['people','summary'])test(`遅いDMコピーは先に成功した${action}の空結果を上書きしない`,async t=>{
+ const {storage}=await saved(t,{count:1});
+ const h=await fixture(t,{handle:async(call)=>call.body.action===action?response(action==='people'?{rows:[]}:{messages:0,threads:0,readerStatus:[]}):new Promise(()=>{})});await h.start();await settle();await hydrateDm(h,storage);
+ assert.doesNotMatch(h.text(),/保存本文0/);assert.equal(h.calls.filter(call=>call.body.action==='person_messages').length,0);
+ if(action==='people')assert.equal(h.w.document.querySelectorAll('.midm-threads button').length,0);
+ else assert.equal(h.w.document.querySelectorAll('.midm-control-state > span b')[1].textContent,'0');
+});
+
+for(const status of [401,403])test(`HTTP ${status}後の遅い保管庫イベントでDMを復活させない`,async t=>{
+ const {storage}=await saved(t,{count:1}),h=await fixture(t,{handle:async()=>Response.json({ok:false,error:'DENIED'},{status})});await h.start();await settle();await hydrateDm(h,storage);assert.doesNotMatch(h.text(),/保存本文|相手 peer|前回表示分/);
+});
+
+for(const transition of ['account','token','revision','inactive','user'])test(`遅いDMコピーは${transition}変更後の画面を巻き戻さない`,async t=>{
+ const {storage}=await saved(t,{count:1}),h=await fixture(t,{handle:async()=>new Promise(()=>{})});await h.start();
+ if(transition==='account')h.w.localStorage.setItem(accountKey,'account_b');
+ if(transition==='token')h.w.localStorage.setItem(tokenKey,'token-b');
+ if(transition==='revision')await h.start({revision:1});
+ if(transition==='inactive')await h.start({active:false});
+ if(transition==='user')await h.click(h.w.document.querySelector('.midm-control details summary'));
+ const count=h.calls.length;await hydrateDm(h,storage);assert.doesNotMatch(h.text(),/保存本文|相手 peer|前回表示分/);assert.equal(h.calls.length,count);
+});
+
+
+test('一時的なDM取得失敗後の保管庫復旧もコピーだけ表示し次の通常照合を維持する',async t=>{
+ const {storage}=await saved(t,{count:1}),h=await fixture(t,{handle:async()=>Response.json({ok:false,error:'TEMPORARILY_OFFLINE'},{status:500})});await h.start();await settle();const before=h.calls.length;
+ await hydrateDm(h,storage);assert.match(h.text(),/保存本文0/);assert.match(h.text(),/前回表示分・最新確認できず/);assert.match(h.text(),/TEMPORARILY_OFFLINE/);assert.equal(h.calls.length,before);
+ const key=Object.keys(storage).find(key=>key.startsWith(savedPrefix));assert.equal(JSON.parse(h.copy()[key]).savedAt,JSON.parse(storage[key]).savedAt);
 });
