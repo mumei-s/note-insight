@@ -28,7 +28,7 @@ function restoreToken(){
   if(!found)return '';token=String(found.memberToken);localStorage.setItem(TOKEN,token);localStorage.setItem(ACTIVE,cleanId(found.noteId));return token;
  }catch{return token}
 }
-async function post(action,timeout=30000,token=restoreToken()){if(!token)throw new Error('INSIGHT_LOGIN_REQUIRED');const c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json','X-Insight-Token':token},body:JSON.stringify({action}),cache:'no-store',signal:c.signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||'DATA_ERROR');return p}finally{clearTimeout(t)}}
+async function post(action,timeout=30000,token=restoreToken()){if(!token)throw new Error('INSIGHT_LOGIN_REQUIRED');const c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json','X-Insight-Token':token},body:JSON.stringify({action}),cache:'no-store',signal:c.signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw Object.assign(new Error(p?.error||'DATA_ERROR'),{status:r.status});return p}finally{clearTimeout(t)}}
 // The member API returns creator.followers/following and stats.official*.
 // A zero is a measured count; missing/invalid values are not zero people.
 function publicCount(payload,field){
@@ -52,7 +52,41 @@ const aged=articles.filter(a=>now-dateMs(a)>=60*dayMs).sort((a,b)=>reaction(b)-r
 const buckets=[{k:'0反応',v:0},{k:'1–9反応',v:0},{k:'10–49反応',v:0},{k:'50–99反応',v:0},{k:'100反応以上',v:0}];for(const a of articles){const r=reaction(a);buckets[r===0?0:r<10?1:r<50?2:r<100?3:4].v++}document.getElementById('distribution').innerHTML=bars(buckets,'本','反応数の範囲ごとに該当する記事本数');const lv=articles.reduce((n,a)=>n+likeOf(a),0),cv=articles.reduce((n,a)=>n+commentOf(a),0),rt=lv+cv,lp=rt?lv/rt*100:0;document.getElementById('reactionDonut').innerHTML=donut(lv,cv);const sorted=[...articles].sort((a,b)=>reaction(b)-reaction(a)),top1=sorted[0]?reaction(sorted[0]):0,top5=sorted.slice(0,5).reduce((s,a)=>s+reaction(a),0),share5=totalR?top5/totalR*100:0,top20n=Math.max(1,Math.ceil(sorted.length*.2)),top20=sorted.slice(0,top20n).reduce((s,a)=>s+reaction(a),0),share20=totalR?top20/totalR*100:0;document.getElementById('concentration').innerHTML=row('1位記事',titleOf(sorted[0]||{}),`${fmt(top1)}反応`)+row('上位5記事',`全反応に占める割合`,`${share5.toFixed(1)}%`)+row('上位20%',`${top20n}記事`,`${share20.toFixed(1)}%`)+row('中央値/平均',`偏りの目安`,`${medianR.toFixed(1)} / ${avgR.toFixed(1)}`);document.getElementById('topBars').innerHTML=bars(sorted.slice(0,8).map((a,i)=>({k:`${i+1}. ${titleOf(a)}`,v:reaction(a)})));summary('sumConcentration',`上位5 ${share5.toFixed(0)}%`);
 const daily=new Map;for(const a of articles){const k=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(dateMs(a)));daily.set(k,(daily.get(k)||0)+reaction(a))}const vals=Array.from({length:30},(_,i)=>{const d=new Date(now-(29-i)*dayMs),k=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);return daily.get(k)||0});spark(vals);
 document.getElementById('articles').innerHTML=sorted.map(a=>`<div class="article-row"><a href="${esc(urlOf(a))}" target="_blank" rel="noreferrer">${esc(titleOf(a))}</a><span>${esc(date(publishOf(a)))}</span><span>${fmt(likeOf(a))}</span><span>${fmt(commentOf(a))}</span><span>${fmt(reaction(a))}</span></div>`).join('');summary('sumArticles',`${fmt(sorted.length)}記事`);content.classList.remove('hidden');statusEl.className='status ok';statusEl.textContent=`公開データ分析完了｜${fmt(sorted.length)}記事・反応${fmt(totalR)}｜${new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}).format(new Date())}`}
-const cacheKey=()=>activeId()?'mumei-public-analysis-cache-v1:'+activeId():'';
+const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+const rotate = (word, bits) => (word >>> bits) | (word << (32 - bits));
+
+// SHA-256 over UTF-16LE keeps synchronous display reads independent of optional
+// browser crypto/encoder APIs. The credential itself is never written to a copy.
+function digest(input) {
+  const length = input.length * 2, blocks = Math.ceil((length + 9) / 64), words = new Int32Array(blocks * 16);
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i), byte = i * 2;
+    words[byte >>> 2] |= (code & 255) << (24 - (byte % 4) * 8);
+    words[(byte + 1) >>> 2] |= (code >>> 8) << (24 - ((byte + 1) % 4) * 8);
+  }
+  words[length >>> 2] |= 128 << (24 - (length % 4) * 8);
+  words[words.length - 2] = Math.floor(length / 0x20000000);
+  words[words.length - 1] = length * 8;
+  const hash = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19], w = new Int32Array(64);
+  for (let offset = 0; offset < words.length; offset += 16) {
+    for (let i = 0; i < 64; i++) {
+      if (i < 16) w[i] = words[offset + i];
+      else { const x = w[i - 15], y = w[i - 2]; w[i] = w[i - 16] + (rotate(x,7) ^ rotate(x,18) ^ (x >>> 3)) + w[i - 7] + (rotate(y,17) ^ rotate(y,19) ^ (y >>> 10)); }
+    }
+    let [a,b,c,d,e,f,g,h] = hash;
+    for (let i = 0; i < 64; i++) {
+      const first = (h + (rotate(e,6) ^ rotate(e,11) ^ rotate(e,25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const second = ((rotate(a,2) ^ rotate(a,13) ^ rotate(a,22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      h=g;g=f;f=e;e=(d+first)|0;d=c;c=b;b=a;a=(first+second)|0;
+    }
+    [a,b,c,d,e,f,g,h].forEach((word,index) => { hash[index] = (hash[index] + word) | 0; });
+  }
+  return hash.map(word => (word >>> 0).toString(16).padStart(8,"0")).join("");
+}
+
+const cacheKey=(token=restoreToken())=>activeId()&&token?'mumei-public-analysis-cache-v2:'+activeId()+':'+digest(token):'';
+function denied(error){return error?.status===401||error?.status===403||/INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED|INSIGHT_MEMBER_INACTIVE|INSIGHT_MEMBER_NOT_ACTIVE|ACCOUNT_MISMATCH/.test(String(error?.message||''))}
+
 const refreshButton=document.getElementById('refresh');let loading=false,generation=0,requestContext='',displayContext='';
 function payloadAccount(payload,expected,required=false){
  const ids=[payload?.member?.noteId,payload?.creator?.noteId].filter(Boolean).map(cleanId);
@@ -61,14 +95,16 @@ function payloadAccount(payload,expected,required=false){
 }
 function message(error){const code=String(error?.message||error);return /ACCOUNT_MISMATCH/.test(code)?'選択中のアカウントと取得元が一致しません。':/LOGIN|SESSION|INACTIVE/.test(code)?'INSIGHTでログイン状態を確認してください。':error?.name==='AbortError'?'通信が時間内に完了しませんでした。':'通信に失敗しました。';}
 async function load(refresh=false){
- const token=restoreToken();let expected=activeId(),key=cacheKey(),context=key+'|'+token;
+ const token=restoreToken();let expected=activeId(),key=cacheKey(token),context=key+'|'+token;
+ // Account-only copies cannot establish the session that produced them.
+ if(expected)try{localStorage.removeItem('mumei-public-analysis-cache-v1:'+expected)}catch{}
  if(loading&&requestContext===context)return;
  const run=++generation;requestContext=context;loading=true;refreshButton.disabled=true;
  const current=()=>run===generation&&expected===activeId()&&token===restoreToken();
  if(displayContext!==context){content.classList.add('hidden');document.getElementById('kpis').replaceChildren();displayContext=context}
  let hasData=!content.classList.contains('hidden'),phase='profile';
  if(!token){statusEl.className='status warn';statusEl.textContent='INSIGHTでログインしてください。';content.classList.add('hidden');loading=false;refreshButton.disabled=false;return}
- if(!hasData&&key){try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved?.data&&Date.now()-saved.at<7*dayMs){payloadAccount(saved.data,expected);render(saved.data,{at:saved.at,cached:true});hasData=true}}catch{}}
+ if(!hasData&&key){try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved?.data&&Number.isFinite(saved.at)&&saved.at>0&&saved.at<=Date.now()&&Date.now()-saved.at<7*dayMs){payloadAccount(saved.data,expected);render(saved.data,{at:saved.at,cached:true});hasData=true}}catch{}}
  statusEl.className='status';statusEl.textContent=hasData?'保存済み分析を表示中・最新の人数を確認中…':'保存済み公開データと最新の人数を取得中…';
  const receive=async()=>{
   const p=await post('dashboard',30000,token);if(!current())return false;
@@ -84,7 +120,7 @@ async function load(refresh=false){
    phase='article';statusEl.className='status';statusEl.textContent='人数を更新しました・公開記事を更新中…';
    await post('sync',30000,token);if(!current())return;await receive();
   }
- }catch(e){if(current()){statusEl.className='status warn';statusEl.textContent=(phase==='article'?'人数と保存済み分析を表示中・記事更新失敗':hasData?'保存済み分析を表示中・更新失敗':'分析できません')+'：'+message(e)}}
+ }catch(e){if(current()){if(denied(e)){if(key)try{localStorage.removeItem(key)}catch{}content.classList.add('hidden');document.getElementById('kpis').replaceChildren();hasData=false;phase='profile'}statusEl.className='status warn';statusEl.textContent=(phase==='article'?'人数と保存済み分析を表示中・記事更新失敗':hasData?'保存済み分析を表示中・更新失敗':'分析できません')+'：'+message(e)}}
  finally{if(run===generation){loading=false;refreshButton.disabled=false}}
 }
 window.addEventListener('storage',e=>{if([TOKEN,ACTIVE,STORE].includes(e.key)||e.key?.startsWith('mumei-insight-explicit-logout:'))void load(false)});
