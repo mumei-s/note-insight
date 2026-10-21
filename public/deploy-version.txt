@@ -1,2 +1,2 @@
-INSIGHT 2026.10.21.3 / notification 3.6.39 / dashboard 1.7.3 / DM 1.4.12
-Complete accessible notification history in durable windows; stop automatic network scans at the confirmed boundary while preserving saved data and reader controls.
+INSIGHT 2026.10.21.4 / notification 3.6.40 / dashboard 1.7.3 / DM 1.4.12
+Preserve completed Reader sessions across identical DOM rerenders; detect new rendered notices without fetch interception or diagnostic traffic.

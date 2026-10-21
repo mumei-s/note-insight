@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.31',PROTOCOL='3.6.4';
+const VERSION='3.6.32',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -131,8 +131,8 @@ async function scan(opts={}){
  scanning=true;stop=false;pendingCapture=false;
  if(!opts.automatic){retryAt=0;retryFailures=0;autoComplete=false}
  try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false||!featureOn())return 0;health('新着を確認中…','saving',{readCount:0,savedCount:0});const result=await net.syncCurrent(opts);retryAt=0;retryFailures=0;
-  // Finish this open-panel session at the confirmed boundary. A new native
-  // capture, panel reopening, or explicit resume starts another delta.
+  // Finish this open-panel session at the confirmed boundary. A newly rendered
+  // notice, panel reopening, or explicit resume starts another delta.
   autoComplete=result?.historyComplete===true;
   traversalPending=result?.partial===true;
   if(autoComplete&&rescanAfterCompletion){rescanAfterCompletion=false;autoComplete=false;pendingCapture=true;lastAutoAt=0;}
@@ -146,7 +146,30 @@ async function scan(opts={}){
  }
  finally{scanning=false;if(userPaused&&lastProgress.state!=='error')health('一時停止しました','done',{...lastProgress,state:'done',scanning:false,stopping:true});else if(pendingCapture&&!stop)scheduleAuto(80)}
 }
-let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0;
+let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0,panelMissingAt=0;
+const observedNoticeKeys=new Map();
+function noticeKeys(panel){
+ const eligible=el=>panelEvidence(el)&&!el.closest('[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]');
+ let candidates=[...panel.querySelectorAll(ITEM)].filter(eligible);
+ if(!candidates.length)candidates=[...panel.querySelectorAll('li,[role="listitem"],a[href]')].filter(el=>eligible(el)&&TIME_RE.test(clean(el.textContent)));
+ return candidates.filter(el=>!candidates.some(other=>other!==el&&other.contains(el))).slice(0,MAX_NOTICES).map(el=>[
+  el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||el.querySelector('[data-notification-id],[data-notice-id]')?.getAttribute('data-notification-id')||el.querySelector('[data-notice-id]')?.getAttribute('data-notice-id')||'',
+  el.querySelector('time[datetime]')?.getAttribute('datetime')||'',stripTime(el.textContent),
+  links(el).map(x=>x.u).join(' ')
+ ].join('|'));
+}
+function watchNoticeKeys(panel,initial){
+ const counts=new Map();for(const key of noticeKeys(panel))counts.set(key,(counts.get(key)||0)+1);
+ const changed=!initial&&[...counts].some(([key,count])=>count>(observedNoticeKeys.get(key)||0));
+ for(const [key,count] of counts)observedNoticeKeys.set(key,Math.max(count,observedNoticeKeys.get(key)||0));
+ while(observedNoticeKeys.size>1200)observedNoticeKeys.delete(observedNoticeKeys.keys().next().value);
+ if(changed){if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;autoComplete=false;lastAutoAt=0;}
+}
+// An explicit action while the panel is absent distinguishes a fast user reopen
+// from a temporary empty render. No fetch hooks or diagnostic uploads are added.
+function explicitPanelReopen(){if(autoPanel&&!findPanel()){autoPanel=null;panelMissingAt=0;autoComplete=false;lastAutoAt=0;observedNoticeKeys.clear();if(scanning||traversalPending)rescanAfterCompletion=true;}}
+document.addEventListener('pointerdown',explicitPanelReopen,true);
+document.addEventListener('click',explicitPanelReopen,true);
 let capturedSignature='',pendingCapture=false;
 document.addEventListener('mumei-notification-captured',e=>{const next=String(e.detail?.signature||'');if(next&&next!==capturedSignature){capturedSignature=next;if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;lastAutoAt=0;autoComplete=false;scheduleAuto(80)}});
 function scheduleAuto(delay=150){
@@ -156,9 +179,15 @@ function scheduleAuto(delay=150){
   if(userPaused)return;
   const panel=isDmRoute()?null:findPanel();
   window.__mumeiV3Checkpoint325?.mark?.();
-  if(!panel){if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;if(!scanning)stop=false;return}
+  if(!panel){
+   if(autoPanel){if(!panelMissingAt)panelMissingAt=Date.now();const wait=500-(Date.now()-panelMissingAt);if(wait>0){scheduleAuto(wait);return}}
+   if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;panelMissingAt=0;observedNoticeKeys.clear();if(!scanning)stop=false;return
+  }
+  panelMissingAt=0;
+  const opening=!autoPanel;
+  if(opening){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false;lastAutoAt=0;observedNoticeKeys.clear()}
+  watchNoticeKeys(panel,opening);autoPanel=panel;
   if(scanning||document.visibilityState==='hidden')return;
-  if(panel!==autoPanel){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false}
   if(stop){pausedPanel=panel;return}
   if(pausedPanel===panel)return;
   if(Date.now()<retryAt)return;
@@ -168,13 +197,13 @@ function scheduleAuto(delay=150){
  },delay);
 }
 setTimeout(()=>scheduleAuto(),80);
-function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element)||!r.target.closest('[data-mumei-notification-controls]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true})}observe();
+function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element?r.target:r.target.parentElement)?.closest('[data-mumei-notification-controls]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true,characterData:true})}observe();
 const poll=setInterval(()=>scheduleAuto(),5000);
 window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);window.__mumeiNotificationNetwork3300?.stop?.()});
 window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
 window.addEventListener('focus',()=>scheduleAuto());
 window.addEventListener('mumei-notification-feature-changed',e=>{
- clearTimeout(autoTimer);autoPanel=null;pausedPanel=null;lastAutoAt=0;
+ clearTimeout(autoTimer);autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;observedNoticeKeys.clear();
  if(e.detail?.enabled){stop=false;scheduleAuto(0)}else pauseCapture();
 });
 window.__mumeiNotificationReaderV4={version:VERSION,pause:pauseReading,resume:resumeReading,isPaused:()=>userPaused,scan,scheduleAuto,rowData,visibleRows:()=>rows(findPanel()),findPanel,directPanel,isDmRoute};

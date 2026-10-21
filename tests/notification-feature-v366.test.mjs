@@ -121,3 +121,47 @@ test('初回の複数ウィンドウ途中に来た新着は最後に先頭差�
  finish({saved:650,partial:false,historyComplete:true});await until(()=>calls===3);finish({saved:1,partial:false,historyComplete:true});await pause(50);
  w.Date.now=()=>Date.now()+60000;w.__mumeiNotificationReaderV4.scheduleAuto(0);await pause(30);assert.equal(calls,3,'先頭の追加差分を確認したら通信を終える');
 });
+
+async function domReaderFixture(t){
+ const dom=new JSDOM('<button id="bell">通知</button><main class="m-navbarNotice"><div class="m-navbarNoticeItem" data-notice-id="a"><a href="/actor">人物</a>さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};let calls=0;
+ w.__mumeiNotificationNetwork3300={syncCurrent:async()=>{calls++;return{saved:0,historyComplete:true}},stop(){}};w.eval(read('reader-v4.js'));await until(()=>calls===1);await pause(200);
+ return{w,get calls(){return calls},settle:()=>pause(250)};
+}
+test('完了後に同内容のパネルDOMが何度差し替わっても再通信しない',async t=>{
+ const h=await domReaderFixture(t);for(let i=0;i<4;i++){const p=h.w.document.querySelector('main');p.replaceWith(p.cloneNode(true));await h.settle();assert.equal(h.calls,1)}
+});
+test('同じパネルの並べ替え・時刻ラベル・フィルター変更は再通信せず、本当の新着と本文変更を読む',async t=>{
+ const h=await domReaderFixture(t),w=h.w,p=w.document.querySelector('main'),a=p.firstElementChild;
+ a.classList.add('mumei-muted-v2939');a.style.display='none';a.lastChild.textContent='さんがスキしました 2分前';await h.settle();assert.equal(h.calls,1);
+ const b=a.cloneNode(true);b.dataset.noticeId='b';b.lastChild.textContent='さんがコメントしました 1分前';p.append(b);await h.settle();assert.equal(h.calls,2,'非表示フィルター対象でも新着を取得');
+ p.prepend(b);await h.settle();assert.equal(h.calls,2,'順序変更は新着ではない');
+ b.lastChild.textContent='さんがコメントしました 追記があります 1分前';await h.settle();assert.equal(h.calls,3,'まとめ通知本文の変化を取得');
+ b.remove();await h.settle();p.append(b);await h.settle();assert.equal(h.calls,3,'既知の行の除去と再配置では繰り返さない');
+});
+test('短い一時消失は再描画として扱い、実際の閉じ直しと素早いユーザー再表示は確認する',async t=>{
+ const h=await domReaderFixture(t),w=h.w;let p=w.document.querySelector('main');p.remove();await pause(200);w.document.body.append(p.cloneNode(true));await h.settle();assert.equal(h.calls,1,'短い描画の空白で完了を解除しない');
+ p=w.document.querySelector('main');p.remove();await pause(800);w.document.body.append(p);await h.settle();assert.equal(h.calls,2,'閉じて開いたら差分確認');
+ p.remove();w.document.getElementById('bell').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));w.document.body.append(p);await h.settle();assert.equal(h.calls,3,'明示的な素早い開き直しも取得');
+});
+test('識別子がない同一内容の通知でも件数が増えたら新着を読む',async t=>{
+ const h=await domReaderFixture(t),p=h.w.document.querySelector('main');p.firstElementChild.removeAttribute('data-notice-id');await h.settle();const before=h.calls;p.append(p.firstElementChild.cloneNode(true));await h.settle();assert.equal(h.calls,before+1);
+});
+test('実DOMの新着が履歴取得途中に追加されても、履歴完了後に先頭差分を取り込む',async t=>{
+ const dom=new JSDOM('<main class="m-navbarNotice"><div class="m-navbarNoticeItem" data-notice-id="a">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
+ w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};let calls=0,finish;
+ w.__mumeiNotificationNetwork3300={syncCurrent:()=>{calls++;return new Promise(r=>finish=r)},stop(){}};w.eval(read('reader-v4.js'));await until(()=>calls===1);
+ const row=w.document.querySelector('.m-navbarNoticeItem').cloneNode(true);row.dataset.noticeId='b';w.document.querySelector('main').prepend(row);await pause(250);
+ finish({saved:300,partial:true,historyComplete:false});await until(()=>calls===2);finish({saved:650,partial:false,historyComplete:true});await until(()=>calls===3);finish({saved:1,partial:false,historyComplete:true});await pause(250);
+ const p=w.document.querySelector('main');p.replaceWith(p.cloneNode(true));await pause(250);assert.equal(calls,3,'新着確認後の同内容再描画で再開しない');
+});
+test('DOM差し替えで保存エラーの再試行待機を解除しない',async t=>{
+ const dom=new JSDOM('<main class="m-navbarNotice"><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};let calls=0;
+ w.__mumeiNotificationNetwork3300={syncCurrent:async()=>{calls++;throw Object.assign(new Error('保存失敗'),{retryable:false})},stop(){}};w.eval(read('reader-v4.js'));await until(()=>calls===1);await pause(250);for(let i=0;i<3;i++){const p=w.document.querySelector('main');p.replaceWith(p.cloneNode(true));await pause(250)}assert.equal(calls,1);
+});
+test('公式の汎用li形式でも実DOMの新着を検出し、補助表示は通知と数えない',async t=>{
+ const dom=new JSDOM('<main><button>通知</button><button>お知らせ</button><ul><li><a href="/actor">人物</a>さんがスキしました 1分前</li></ul></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,left:0,top:0});w.GM={getValue:async(k,d)=>d};let calls=0;
+ w.__mumeiNotificationNetwork3300={syncCurrent:async()=>{calls++;return{saved:0,historyComplete:true}},stop(){}};w.eval(read('reader-v4.js'));await until(()=>calls===1);await pause(200);
+ const list=w.document.querySelector('ul'),row=w.document.createElement('li');row.innerHTML='<a href="/other">別の人物</a>さんがコメントしました 1分前';list.prepend(row);await pause(250);assert.equal(calls,2);
+ const helper=w.document.createElement('li');helper.id='mumei-notification-filter-continuation-v4';helper.textContent='続きへ 1分前';list.append(helper);await pause(250);assert.equal(calls,2);
+});
