@@ -152,8 +152,10 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const[visibleSelection,setVisibleSelection]=useState(initialView?selectionId(initial.selection):""),[visibleOwner,setVisibleOwner]=useState(selectionKey),[savedDisplayAt,setSavedDisplayAt]=useState(initial.cached?0:initial.saved?.savedAt||0);
   useEffect(()=>{NOTIFICATION_SELECTION_CACHE.set(selectionKey,{kind,handlingStatus,selectedDay,page})},[selectionKey,kind,handlingStatus,selectedDay,page]);
   const localEdits=useRef(new Map<string,Row>()),lastSnapshot=useRef("");
+  const passiveDisplay=useRef({key:"",blocked:false});
   function overlayEdits(list:Row[],includeMissing=true):Row[]{const map=new Map(list.map(r=>[String(r.id),r]));for(const row of includeMissing?readBoard(accountKey(memberNoteId)):[])if(localEdits.current.has(String(row.id))&&!map.has(String(row.id)))map.set(String(row.id),row);return [...map.values()].map(r=>{const creator=noteId(r.actor_url),favorite=[...localEdits.current.values()].find(p=>"favorite" in p&&noteId(p.actor_url)===creator);return{...r,...(favorite?{favorite:favorite.favorite,favorite_pending:true}:{}),...localEdits.current.get(String(r.id))}})}
   function saveRow(patch:Row,phase:SavePhase="saved"){
+    passiveDisplay.current.blocked=true;
     const handling="confirmed" in patch,favoriting="favorite" in patch;
     if(handling||favoriting){request.current.id++;request.current.controller?.abort();request.current.controller=null;recentRequest.current.controller?.abort();recentRequest.current.controller=null;setLoading(false)}
     const account=accountKey(memberNoteId),id=String(patch.id),saved=rows.find(r=>String(r.id)===id)||readBoard(account).find(r=>String(r.id)===id),prior={...saved,...localEdits.current.get(id)},row:Row={...prior,...patch,meta:{...prior?.meta,...patch.meta}};
@@ -189,6 +191,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const[readerStatus,setReaderStatus]=useState<any>(null);
   const[unresolved,setUnresolved]=useState<{remaining:number;insufficient:number}|null>(null);
   function discardSavedDisplay(token:string){
+    passiveDisplay.current.blocked=true;
     removeSavedInsightView("notifications",{account,token});NOTIFICATION_SELECTION_CACHE.delete(`${account}|${token}`);lastSnapshot.current="";
     for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&cached.token===token)NOTIFICATION_VIEW_CACHE.delete(key);
     setRows([]);setTotal(0);setStatusCounts({});setCategoryCounts({});setUpdatedAt("");setSyncAt("");setServerSync({received:0,confirmed:0,source:""});setVisibleSelection("");setSavedDisplayAt(0);
@@ -218,7 +221,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(Number(x.total)>0&&!baseList.some(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)))throw new Error("通知一覧の応答が不完全です。指定した条件の本文を取得できませんでした。");
       const list=overlayEdits(baseList,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).sort(notificationBoardOrder);if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextStatusCounts=x.statusCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}|${handlingStatus}`;
-      setRows(list);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setStatusCounts(nextStatusCounts);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
+      passiveDisplay.current.blocked=true;setRows(list);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setStatusCounts(nextStatusCounts);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
       NOTIFICATION_VIEW_CACHE.set(cacheKey,{rows:baseList,statusCounts:nextStatusCounts,total:Number(x.total||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now(),complete:true,revision,token});
       const boardIncoming=[...baseList];
       for(const [category,preview] of Object.entries(x.categoryPreview||{})){
@@ -303,6 +306,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   useEffect(()=>{
     const opening=!loadedSelection.current,account=accountKey(memberNoteId),selection=JSON.stringify([account,sessionToken,kind,selectedDay,handlingStatus]),changed=Boolean(loadedSelection.current&&loadedSelection.current!==selection),p=changed?1:page,force=loadedRevision.current!==revision;
     loadedSelection.current=selection;loadedRevision.current=revision;
+    passiveDisplay.current={key:JSON.stringify([selectionKey,selectionId({kind,selectedDay,handlingStatus,page:p}),revision]),blocked:false};
     const identityChanged=visibleOwner!==selectionKey;if(identityChanged)localEdits.current.clear();
     const stored=NOTIFICATION_VIEW_CACHE.get(`${account}|${kind}|${selectedDay||""}|${p}|${handlingStatus}`),cached=stored?.token===sessionToken&&canRetainInsightView(stored.cachedAt)?stored:undefined,fresh=hasFreshBoard(account);
     const persisted=savedNotificationView(account,sessionToken),target={kind,selectedDay,handlingStatus,page:p},saved=persisted&&selectionId(persisted.value.selection)===selectionId(target)?persisted:null,verified=fresh&&p===1?filterBoard(account,kind,selectedDay,handlingStatus):[],instant=overlayEdits(cached?.rows||saved?.value.rows||verified,p===1).filter(r=>(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)),display=cached||saved?.value;
@@ -311,6 +315,18 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     recentRequest.current.watermark=fresh?(localStorage.getItem(`mumei-notification-recent-watermark:${account}`)||""):"";void load(p,kind,true,selectedDay,force);if(opening&&p===1&&!(cached?.complete&&cached.revision===revision&&isFreshInsightView(cached.cachedAt)))void refreshRecent(true);
     return()=>{recentRequest.current.controller?.abort();recentRequest.current.controller=null;request.current.id++;request.current.controller?.abort();request.current.controller=null}
   },[kind,handlingStatus,selectedDay,revision,memberNoteId,sessionToken]);
+  useEffect(()=>{
+    const target={kind,selectedDay,handlingStatus,page},selected=selectionId(target),key=JSON.stringify([selectionKey,selected,revision]);
+    const restore=()=>{
+      const state=passiveDisplay.current;
+      if(state.key!==key||state.blocked||visibleState.current.selection||localEdits.current.size||localStorage.getItem(INSIGHT_TOKEN_KEY)!==sessionToken)return;
+      const saved=savedNotificationView(account,sessionToken);if(!saved||selectionId(saved.value.selection)!==selected)return;
+      state.blocked=true;const value=saved.value;
+      setRows(value.rows);setVisibleOwner(selectionKey);setVisibleSelection(selected);setSavedDisplayAt(saved.savedAt);setTotal(value.total);setStatusCounts(value.statusCounts);setCategoryCounts(value.categoryCounts);setUpdatedAt(value.updatedAt);setSyncAt(value.syncAt);setServerSync(value.serverSync);setLoading(false);
+    };
+    window.addEventListener("mumei-insight-storage-hydrated",restore);restore();
+    return()=>window.removeEventListener("mumei-insight-storage-hydrated",restore);
+  },[selectionKey,account,sessionToken,kind,selectedDay,handlingStatus,page,revision]);
   // Persist only the last displayed page. This copy never makes a view fresh and
   // therefore cannot suppress the selected-page/recent server checks on reopening.
   useEffect(()=>{
