@@ -35,6 +35,7 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
 }) {
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "", scope = JSON.stringify([accountKey, token]), verificationSignature = JSON.stringify([scope, revision]);
   const [initial] = useState(()=>readSavedMagazines(accountKey,token));
+  const passiveDisplay=useRef({scope,blocked:Boolean(initial)});
   const [savedDisplay,setSavedDisplay]=useState(initial),[checking,setChecking]=useState(false);
   const [rows, setRows] = useState<Row[]>(initial?.value.rows||[]), [refreshed, setRefreshed] = useState(initial?.value.refreshed||""), [loading, setLoading] = useState(!initial);
   const [mode, setMode] = useState(initial?.value.mode||"all"), [query, setQuery] = useState(initial?.value.query||""), [open, setOpen] = useState<string | null>(initial?.value.open||null), [states, setStates] = useState<Record<string, SearchState>>(()=>restoredStates(initial?.value.states||{})), [loadError, setLoadError] = useState("");
@@ -44,10 +45,15 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   const lastHistoryAt=useRef(0),lastHistoryScope=useRef(""),restoredSearchKeys=useRef(new Set(Object.keys(initial?.value.states||{}))),refreshHistory=useRef(()=>{});
   const rowsRef = useRef(rows), statesRef = useRef(states), openRef = useRef(open), cachedScope = useRef(scope), previousScope = useRef(scope), currentView = useRef({ signature: verificationSignature, active });
   rowsRef.current = rows; statesRef.current = states; openRef.current = open; currentView.current = { signature: verificationSignature, active };
+  useEffect(()=>{
+    const restore=()=>{if(passiveDisplay.current.scope!==scope||passiveDisplay.current.blocked||currentView.current.signature!==verificationSignature||(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")!==token)return;const saved=readSavedMagazines(accountKey,token);if(!saved)return;passiveDisplay.current.blocked=true;setSavedDisplay(saved);rowsRef.current=saved.value.rows;setRows(saved.value.rows);setRefreshed(saved.value.refreshed);setMode(saved.value.mode);setQuery(saved.value.query);setOpen(saved.value.open);setStates(restoredStates(saved.value.states));restoredSearchKeys.current=new Set(Object.keys(saved.value.states));setLoading(false)};
+    window.addEventListener("mumei-insight-storage-hydrated",restore);restore();
+    return()=>window.removeEventListener("mumei-insight-storage-hydrated",restore);
+  },[scope,verificationSignature,token,accountKey]);
   const patch = (key: string, change: Partial<SearchState>) => setStates(old => ({ ...old, [key]: { ...(old[key] || blank()), ...change } }));
   useEffect(() => {
     if (previousScope.current !== scope) {
-      previousScope.current = scope; verifiedHistory.current = null; resultCache.current.clear(); stop();
+      previousScope.current = scope; passiveDisplay.current={scope,blocked:false};verifiedHistory.current = null; resultCache.current.clear(); stop();
       const saved=readSavedMagazines(accountKey,token);setSavedDisplay(saved);rowsRef.current=saved?.value.rows||[];setRows(rowsRef.current);setRefreshed(saved?.value.refreshed||"");setLoadError("");setStates(restoredStates(saved?.value.states||{}));setOpen(saved?.value.open||null);setMode(saved?.value.mode||"all");setQuery(saved?.value.query||"");restoredSearchKeys.current=new Set(Object.keys(saved?.value.states||{}));lastHistoryAt.current=0;lastHistoryScope.current="";
     }
     if (!active) { stop(); setLoading(false); return; }
@@ -64,7 +70,7 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
         const x = await job.promise;
         if (!valid()) return;
         if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error(String(x?.error||"INVALID_MAGAZINE_HISTORY"));
-        setRows(x.rows); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : "");
+        passiveDisplay.current.blocked=true;setRows(x.rows); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : "");
         if (!x.__offlineCache) {
           const at=Date.now();verifiedHistory.current = { signature: verificationSignature, at };lastHistoryAt.current=at;lastHistoryScope.current=scope;setSavedDisplay(null);resultCache.current.clear();
           const key = openRef.current, state = key ? statesRef.current[key] : null, magazine = key ? x.rows.find((row: Row) => keyOf(row) === key) : null;
@@ -72,7 +78,7 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
         }
       } catch (error) {
         if (valid()) {
-          if(error instanceof Error&&/LOGIN|SESSION|INACTIVE/.test(error.message)){removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error.message);return;}
+          if(error instanceof Error&&/LOGIN|SESSION|INACTIVE/.test(error.message)){passiveDisplay.current.blocked=true;removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error.message);return;}
           if (!rowsRef.current.length && cachedScope.current === scope && Array.isArray(cached?.rows)) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
           setLoadError("マガジンの更新を確認できませんでした。保存済みの情報を表示しています。");
         }
@@ -133,8 +139,8 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
       if (currentRun === run.current) { patch(key, { busy: false }); activeRequest.current = null; activeKey.current = null; }
     }
   }
-  if(previousScope.current!==scope)return <section className="miu-panel mimag"><p>マガジンの保存状態を確認中…</p></section>;
-  return <section className="miu-panel mimag"><header className="miu-section-head"><div><small>MAGAZINES</small><h2>共同マガジン</h2></div><strong>{number(savedDisplay?.value.visibleTotal??visible.length)} / {number(savedDisplay?.value.total??rows.length)}誌</strong></header>
+  if(previousScope.current!==scope)return <section className="miu-panel mimag" onClickCapture={()=>{passiveDisplay.current.blocked=true}} onInputCapture={()=>{passiveDisplay.current.blocked=true}}><p>マガジンの保存状態を確認中…</p></section>;
+  return <section className="miu-panel mimag" onClickCapture={()=>{passiveDisplay.current.blocked=true}} onInputCapture={()=>{passiveDisplay.current.blocked=true}}><header className="miu-section-head"><div><small>MAGAZINES</small><h2>共同マガジン</h2></div><strong>{number(savedDisplay?.value.visibleTotal??visible.length)} / {number(savedDisplay?.value.total??rows.length)}誌</strong></header>
     <div className="miu-tools"><div className="miu-tabs">{[["all", "すべて"], ["owner", "自分がオーナー"], ["member", "参加中"]].map(([key, label]) => <button key={key} className={mode === key ? "active" : ""} aria-pressed={mode === key} onClick={() => { stop();if(key!==mode)changeSavedCriteria();setMode(key);setOpen(null); }}>{label}</button>)}</div><input value={query} onChange={e => { stop();changeSavedCriteria();setOpen(null);setQuery(e.target.value); }} placeholder="マガジン名・オーナー" aria-label="マガジン名・オーナー" /></div>
     {savedDisplay?<p className="miu-source" data-insight-saved-view="magazines">前回表示分（確認 {date(savedDisplay.savedAt)}）{checking?"・最新を確認中":""}{savedDisplay.value.visibleTotal>rows.length?`・先頭${number(rows.length)}誌を表示`:""}</p>:null}
     {refreshed ? <p className="miu-source">最終同期 {date(refreshed)}</p> : null}{loadError ? <p className="miu-error">{loadError}</p> : null}
