@@ -86,3 +86,17 @@ test('グループ変更の認証拒否後は楽観状態のrollbackで旧グル
  const select=h.w.document.querySelector('.miff-actions select');await React.act(async()=>{select.value='';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));await pause()});await settle();
  assert.doesNotMatch(h.body(),/確認済み作者|前回表示分|読む 1/);assert.equal(h.w.document.querySelectorAll('.miff-creator').length,0);assert.equal(h.helper.readSavedInsightView('favorites-last',scope),null);assert.equal(h.fallbackCalls.length,0);
 });
+
+test('遅いoverflow復元は前回作者を追加通信なしで表示し最新結果には勝たない',async t=>{
+ const h=await fixture(t,{saved:null});const count=h.calls.length;
+ await settle(()=>{h.helper.writeSavedInsightView('favorites-last',scope,snapshot,1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.body(),/前回の作者/);assert.equal(h.calls.length,count);
+ await settle(()=>{h.pending.find(x=>x.body.action==='favorites').resolve({rows:[]});h.pending.find(x=>x.body.action==='list').resolve({definitions:[],assignments:[]})});
+ await settle(()=>{h.helper.writeSavedInsightView('favorites-last',scope,snapshot,1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.body(),/前回の作者/);
+});
+
+for(const mode of ['other-token','denied','edited'])test(`お気に入りの遅い復元を拒否 ${mode}`,async t=>{
+ const h=await fixture(t,{saved:null,handler:mode==='denied'?async()=>Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):undefined});
+ if(mode==='edited')await h.change(h.w.document.querySelector('.miff-create input'),'作成途中');
+ await settle(()=>{h.helper.writeSavedInsightView('favorites-last',{...scope,token:mode==='other-token'?'other':scope.token},snapshot,1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.body(),/前回の作者/);
+});
