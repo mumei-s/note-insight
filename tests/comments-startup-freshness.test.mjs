@@ -457,3 +457,28 @@ test('全体検索の途中ページが失敗した時は部分結果を検索0�
  await h.start();await h.change(h.w.document.querySelector('.micf-tools input[placeholder]'),'未取得の検索語');await h.click([...h.w.document.querySelectorAll('.micf-tools button')].find(x=>x.textContent==='検索'));await settle();
  assert.match(h.body(),/全履歴の検索を完了できませんでした/);assert.match(h.body(),/検索中（暫定）/);assert.doesNotMatch(h.body(),/この条件のコメント履歴はありません/);
 });
+
+test('遅れて復元したtoken scoped保存表示を追加通信なしで表示し最新応答を優先する',async t=>{
+ let deliver,calls=0;const h=await fixture(t,{fetch:async()=>{calls++;return new Promise(resolve=>{deliver=()=>resolve(response([event('live','最新応答',{actor_image_url:'https://images.test/peer.png'})]))})}});
+ await h.start();assert.match(h.body(),/コメント履歴を読み込み中/);
+ const copies=h.load('src/insight-saved-view.ts');
+ await settle(()=>{copies.writeSavedInsightView('comments-default',{account:'account_a',token:'token-a'},{rows:[event('old','遅い保存表示')],total:1},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.body(),/遅い保存表示/);assert.match(h.body(),/前回保存分/);assert.equal(calls,1);
+ await settle(deliver);assert.match(h.body(),/最新応答/);
+ await settle(()=>{copies.writeSavedInsightView('comments-default',{account:'account_a',token:'token-a'},{rows:[event('old','上書き禁止')],total:1},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.body(),/最新応答/);assert.doesNotMatch(h.body(),/上書き禁止/);assert.equal(calls,1);
+});
+
+for(const variant of ['wrong-token','auth-denied','changed-filter'])test(`遅い保存表示を復元しない: ${variant}`,async t=>{
+ const h=await fixture(t,{fetch:async()=>variant==='auth-denied'?Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):new Promise(()=>{})});await h.start();
+ if(variant==='changed-filter')await h.click([...h.w.document.querySelectorAll('.micf-tabs button')].find(x=>x.textContent==='未返信'));
+ await settle(()=>{h.load('src/insight-saved-view.ts').writeSavedInsightView('comments-default',{account:'account_a',token:variant==='wrong-token'?'other':'token-a'},{rows:[event('old','復元禁止本文')],total:1},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.doesNotMatch(h.body(),/復元禁止本文/);
+});
+
+test('遅い保存済み0件も読込表示に戻らず、失敗しても保存日時を保持する',async t=>{
+ let fail;const h=await fixture(t,{fetch:async()=>new Promise(resolve=>{fail=()=>resolve(Response.json({ok:false},{status:503}))})});await h.start();
+ await settle(()=>{h.load('src/insight-saved-view.ts').writeSavedInsightView('comments-default',{account:'account_a',token:'token-a'},{rows:[],total:0},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.doesNotMatch(h.body(),/コメント履歴を読み込み中/);assert.match(h.body(),/前回保存分/);
+ await settle(fail);assert.match(h.body(),/前回保存分/);assert.equal(h.savedView().savedAt,1);
+});
