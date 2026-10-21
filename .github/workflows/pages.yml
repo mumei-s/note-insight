@@ -66,6 +66,8 @@ jobs:
         run: node --test tests/pc-display-mode.test.mjs tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/manual-login-navigation.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs tests/notification-filter-pagination-v423.test.mjs tests/notification-filter-pagination-v425.test.mjs
       - name: Check applicant approval and owner notification scope
         run: node --test tests/application-approval.test.mjs
+      - name: Check owner reads, authorization failures and detail request ordering
+        run: node --experimental-vm-modules --test tests/owner-route-loading.test.mjs
       - name: Check stable DM status and row-scoped filters
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
       - name: Check notification feed saved order
