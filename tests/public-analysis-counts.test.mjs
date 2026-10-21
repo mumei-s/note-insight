@@ -3,17 +3,18 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 import ts from 'typescript';
 
 const html=readFileSync('public/install-free-analysis-v3.html','utf8');
 const TOKEN='mumei-insight-access-token',ACTIVE='mumei-insight-active-account-v3',STORE='mumei-insight-saved-accounts-v3';
-const cache=id=>'mumei-public-analysis-cache-v1:'+id;
+const cache=(id,token='test-token')=>'mumei-public-analysis-cache-v2:'+id+':'+createHash('sha256').update(token,'utf16le').digest('hex');
 const pause=()=>new Promise(r=>setTimeout(r,10));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await pause();assert.ok(fn());}
 function payload(id='tester',followers=2132,following=883){return {ok:true,member:{noteId:id},creator:{noteId:id,followers,following},stats:{officialFollowers:followers,officialFollowing:following},articles:[{title:'保存済み記事',url:'https://note.com/'+id+'/n/n1',publish_at:'2026-09-25T00:00:00Z',like_count:30,comment_count:10}]};}
 function page(t,{id='tester',token='test-token',saved,values={},fetcher=async()=>Response.json(payload(id||'tester'))}={}){
  const dom=new JSDOM(html,{url:'https://mumei-s.github.io/note-insight/install-free-analysis-v3.html',runScripts:'outside-only'}),w=dom.window;t.after(()=>w.close());
- if(id)w.localStorage.setItem(ACTIVE,id);if(token)w.localStorage.setItem(TOKEN,token);if(saved)w.localStorage.setItem(cache(id),JSON.stringify({at:Date.now()-60000,data:saved}));
+ if(id)w.localStorage.setItem(ACTIVE,id);if(token)w.localStorage.setItem(TOKEN,token);if(saved)w.localStorage.setItem(cache(id,token),JSON.stringify({at:Date.now()-60000,data:saved}));
  for(const [k,v] of Object.entries(values))w.localStorage.setItem(k,typeof v==='string'?v:JSON.stringify(v));
  const calls=[];w.fetch=async(url,init)=>{calls.push({url,...JSON.parse(init.body),token:init.headers['X-Insight-Token']});return fetcher(url,init)};
  w.eval([...w.document.scripts].map(s=>s.textContent).join('\n'));
@@ -56,7 +57,7 @@ test('取得失敗時は保存値と更新失敗を表示し、初回失敗は�
 test('参加者切替中に前のアカウントの応答を表示・保存しない',async t=>{
  let finishA;const p=page(t,{fetcher:(_url,init)=>init.headers['X-Insight-Token']==='test-token'?new Promise(r=>finishA=r):Promise.resolve(Response.json(payload('another',4,5)))});
  p.w.localStorage.setItem(ACTIVE,'another');p.w.localStorage.setItem(TOKEN,'another-token');p.w.dispatchEvent(new p.w.StorageEvent('storage',{key:ACTIVE}));
- await until(()=>p.value('フォロー')==='5');finishA(Response.json(payload()));await pause();assert.equal(p.value('フォロー'),'5');assert.equal(p.w.localStorage.getItem(cache('tester')),null);assert.equal(JSON.parse(p.w.localStorage.getItem(cache('another'))).data.creator.noteId,'another');
+ await until(()=>p.value('フォロー')==='5');finishA(Response.json(payload()));await pause();assert.equal(p.value('フォロー'),'5');assert.equal(p.w.localStorage.getItem(cache('tester')),null);assert.equal(JSON.parse(p.w.localStorage.getItem(cache('another','another-token'))).data.creator.noteId,'another');
 });
 
 test('本人IDが違う応答・キャッシュを拒否し、明示ログアウトから自動復帰しない',async t=>{
@@ -83,3 +84,6 @@ test('現行backendは本人だけの数値を返し、欠損・0人・別人の
   assert.ok(reads.filter(r=>r.table==='insight_public_articles').every(r=>r.filters.some(([k,v])=>k==='member_id'&&v===(id==='ss_yr'?'owner':'member'))));
  }
 });
+
+for(const status of [401,403])test(`明示認証拒否${status}は保存分析を隠して削除する`,async t=>{const p=page(t,{saved:payload(),fetcher:async()=>Response.json({error:'INSIGHT_SESSION_INVALID'},{status})});await until(()=>!p.w.document.querySelector('#refresh').disabled);assert.ok(p.w.document.querySelector('#content').classList.contains('hidden'));assert.equal(p.w.localStorage.getItem(cache('tester')),null);});
+test('同一アカウントでも別tokenの保存値と旧accountのみのコピーを復帰しない',async t=>{const oldKey=cache('tester','old-token'),legacy='mumei-public-analysis-cache-v1:tester';const saved={at:Date.now(),data:payload()};const p=page(t,{values:{[oldKey]:saved,[legacy]:saved},fetcher:()=>new Promise(()=>{})});assert.ok(p.w.document.querySelector('#content').classList.contains('hidden'));assert.equal(p.w.localStorage.getItem(legacy),null);});
