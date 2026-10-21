@@ -141,3 +141,20 @@ test('対応済みとお気に入りの保存結果は同じdocumentの再mount�
  hold=true;await h.show({key:'after-edits'});assert.equal(h.w.document.querySelector('.miu-handled').getAttribute('aria-pressed'),'true');assert.equal(h.w.document.querySelector('.miu-star').getAttribute('aria-label'),'お気に入り解除');
  await settle(()=>next.resolve(Response.json({rows:[{...row(),confirmed:true,favorite:true}],total:250})));
 });
+
+test('最新ページの保存コピーは別ページ閲覧でも残り、新documentで即時表示する',async t=>{
+ const h=await fixture(t,{respond:c=>c.action==='likes'?Response.json({rows:[row(`確認済みページ${c.page}`)],total:250}):undefined});
+ await h.show();await h.click(h.w.document.querySelector('.miu-pager button:last-child'));
+ const latest=h.cache.readSavedInsightView('likes-latest',{account:'tester',token:'a'});
+ assert.equal(latest.value.selection.page,1);assert.equal(h.read().value.selection.page,2);
+ const waiting=deferred(),fresh=await fixture(t,{respond:c=>c.action==='likes'?waiting.promise:undefined});fresh.seed(JSON.parse(JSON.stringify(h.read().value)));
+ fresh.cache.writeSavedInsightView('likes-latest',{account:'tester',token:'a'},JSON.parse(JSON.stringify(latest.value)),latest.savedAt);
+ await fresh.show();assert.match(fresh.text(),/確認済みページ1/);assert.doesNotMatch(fresh.text(),/確認済みページ2/);assert.equal(fresh.w.document.querySelector('.miu-load-scene'),null);assert.equal(fresh.count('likes'),1);
+});
+
+test('別条件で確定した対応済み・お気に入りを最新ページコピーにも反映し日時は進めない',async t=>{
+ const h=await fixture(t);await h.show();const read=()=>h.cache.readSavedInsightView('likes-latest',{account:'tester',token:'a'}),at=read().savedAt;
+ await h.click([...h.w.document.querySelectorAll('.miu-tabs button')].find(b=>b.textContent==='未対応'));h.advance(1000);
+ await h.click(h.w.document.querySelector('.miu-star'));await h.click(h.w.document.querySelector('.miu-handled'));
+ assert.equal(read().value.rows[0].favorite,true);assert.equal(read().value.rows[0].confirmed,true);assert.equal(read().savedAt,at);
+});
