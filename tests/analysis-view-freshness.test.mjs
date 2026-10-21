@@ -192,9 +192,9 @@ test('notification period change cannot restore old-period hydration before effe
  await React.act(async()=>{const select=h.w.document.querySelector('.miah-period select');select.value='7';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'));await pause()});assert.doesNotMatch(h.w.document.querySelector('.miah-notification').textContent,/987,654/);
 });
 for(const sample of [0,987654])test(`notification saved ${sample} keeps original timestamp and pending/offline provenance`,async t=>{
- let reject;const h=await notificationScene(t,()=>new Promise((_,r)=>reject=r));const at=Date.parse('2026-10-20T01:23:00Z');h.load('src/insight-saved-view.ts').writeSavedInsightView('notification-analysis:0',{account:'tester',token:'fixture'},{sample,people:sample},at);await h.render(h.Component,{});
- const text=()=>h.w.document.querySelector('.miah-notification').textContent;assert.match(text(),/前回の保存済み分析.*2026\/10\/20.*10:23/);assert.match(text(),/最新の通知を確認中/);
- await React.act(async()=>{reject(new Error('offline'));await pause()});assert.match(text(),/前回の保存済み分析.*2026\/10\/20.*10:23/);assert.match(text(),/offline/);assert.doesNotMatch(text(),/最新の通知を確認中/);
+ let reject;const h=await notificationScene(t,()=>new Promise((_,r)=>reject=r));const at=Date.now()-86400000,stamp=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(at));h.load('src/insight-saved-view.ts').writeSavedInsightView('notification-analysis:0',{account:'tester',token:'fixture'},{sample,people:sample},at);await h.render(h.Component,{});
+ const text=()=>h.w.document.querySelector('.miah-notification').textContent;assert.ok(text().includes('前回の保存済み分析：'+stamp+' 時点'));assert.match(text(),/最新の通知を確認中/);
+ await React.act(async()=>{reject(new Error('offline'));await pause()});assert.ok(text().includes('前回の保存済み分析：'+stamp+' 時点'));assert.match(text(),/offline/);assert.doesNotMatch(text(),/最新の通知を確認中/);
 });
 test('notification live empty result removes saved provenance and wins over late hydration',async t=>{
  let finish;const h=await notificationScene(t,()=>new Promise(r=>finish=r));h.save(987654);await h.render(h.Component,{});
