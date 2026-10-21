@@ -7,7 +7,7 @@ const magazine=(title='前回のマガジン',key='mA')=>({key,title,url:`https:
 const copy=(overrides={})=>({mode:'owner',query:'マガジン',open:null,rows:[magazine()],total:12,visibleTotal:1,refreshed:'2026-10-17T00:00:00Z',states:{},...overrides});
 async function settle(fn=()=>{}){await React.act(async()=>{fn();for(let i=0;i<4;i++)await pause()})}
 async function fixture(t,{respond,answerSearch}={}){
- const h=await sceneFixture(t,{dependencies:{'./creator-avatar':{CreatorAvatar:()=>null,creatorNoteId:r=>r?.urlname||''},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token'}}});
+ const h=await sceneFixture(t,{globals:{Error},dependencies:{'./creator-avatar':{CreatorAvatar:()=>null,creatorNoteId:r=>r?.urlname||''},'./insight-account-store':{INSIGHT_TOKEN_KEY:'token'}}});
  h.w.localStorage.setItem('token','a');Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});
  const cache=h.load('src/insight-saved-view.ts'),C=h.load('src/member-insight-magazines.tsx').MemberInsightMagazines,calls=[],searches=[];
  const history=()=>{calls.push(h.w.localStorage.getItem('token'));return respond?.(calls)||Promise.resolve({rows:[magazine('最新のマガジン')]})},search=(params,signal)=>{searches.push({params,signal});return answerSearch?.(params)||Promise.resolve({rows:[]})};
@@ -56,4 +56,17 @@ test('確認拒否と遅い旧本人応答で保存表示を復元しない',asy
 test('確認したマガジンを100誌まで保存し、選択変更で確認時刻を新しくしない',async t=>{
  const h=await fixture(t,{respond:()=>Promise.resolve({rows:Array.from({length:150},(_,i)=>magazine(`マガジン${i}`,`m${i}`))})});await h.show();const first=h.read();assert.equal(first.value.rows.length,100);assert.equal(first.value.total,150);
  await h.click([...h.w.document.querySelectorAll('.miu-tabs button')].find(b=>b.textContent==='自分がオーナー'));assert.equal(h.read().savedAt,first.savedAt);assert.equal(h.read().value.mode,'owner');assert.equal(h.searches.length,0);
+});
+
+test('遅いoverflow復元はマガジンと保存条件を戻し検索巡回せず最新応答を優先する',async t=>{
+ const next=deferred(),h=await fixture(t,{respond:()=>next.promise});await h.show();
+ await settle(()=>{h.seed(copy());h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.match(h.text(),/前回のマガジン/);assert.equal(h.calls.length,1);assert.equal(h.searches.length,0);
+ await settle(()=>next.resolve({rows:[]}));await settle(()=>{h.seed(copy());h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.text(),/前回のマガジン/);
+});
+
+for(const mode of ['other-token','denied','edited'])test(`マガジンの遅い復元を拒否 ${mode}`,async t=>{
+ const next=deferred(),h=await fixture(t,{respond:()=>next.promise});await h.show();
+ if(mode==='denied')await settle(()=>next.reject(new Error('INSIGHT_SESSION_INVALID')));
+ if(mode==='edited')await h.change(h.w.document.querySelector('input'),'入力途中');
+ await settle(()=>{h.seed(copy(),{account:'tester',token:mode==='other-token'?'other':'a'});h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.text(),/前回のマガジン/);
 });
