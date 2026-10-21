@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ownerReadDenied, ownerReadRequest } from "./owner-read-request";
 
 const ENDPOINT="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/unified-owner-access";
 const KEY="mumei-unified-owner-token";
@@ -8,7 +9,7 @@ async function call(action:string,extra:Record<string,unknown>={}){const r=await
 
 export function OwnerGate(){
  const[checking,setChecking]=useState(true),[code,setCode]=useState(""),[challengeId,setChallengeId]=useState(""),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
- useEffect(()=>{void(async()=>{try{if(localStorage.getItem(KEY)){const p=await call("status");if(p.authenticated){location.hash=nextRoute();return}localStorage.removeItem(KEY)}}catch{localStorage.removeItem(KEY)}finally{setChecking(false)}})()},[]);
+ useEffect(()=>{let live=true;const controller=new AbortController(),token=localStorage.getItem(KEY)||"";void(async()=>{try{if(token){const p=await ownerReadRequest(ENDPOINT,token,{action:"status"},{},controller.signal);if(!live||localStorage.getItem(KEY)!==token)return;if(p.authenticated===true){location.hash=nextRoute();return}if(p.authenticated===false)localStorage.removeItem(KEY);else throw new Error("管理者セッションを確認できませんでした。もう一度お試しください。")}}catch(e){if(!live||localStorage.getItem(KEY)!==token)return;if(ownerReadDenied(e))localStorage.removeItem(KEY);else setMessage("通信に失敗しました。保存済みの管理者ログインは保持しています。再読み込みして確認してください。")}finally{if(live)setChecking(false)}})();return()=>{live=false;controller.abort()}},[]);
  async function start(){setBusy(true);setMessage("");try{const p=await call("start");setCode(p.code);setChallengeId(p.challengeId)}catch(e){setMessage(e instanceof Error?e.message:"コードを発行できませんでした")}finally{setBusy(false)}}
  async function verify(){setBusy(true);setMessage("");try{const p=await call("verify",{challengeId});localStorage.setItem(KEY,p.ownerToken);location.hash=nextRoute()}catch(e){const m=e instanceof Error?e.message:"確認できませんでした";setMessage(m==="PROFILE_CODE_NOT_FOUND"?"noteプロフィールにコードが見つかりません。掲載して保存後、もう一度確認してください。":m)}finally{setBusy(false)}}
  if(checking)return <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#070a0f",color:"#fff"}}>管理者セッション確認中…</div>;
