@@ -1,2 +1,2 @@
-INSIGHT 2026.10.21.5 / notification 3.6.41 / dashboard 1.7.3 / DM 1.4.12
-Save confirmed batches while collecting; freeze the pre-traversal boundary across shifted pages and durable resumes.
+INSIGHT 2026.10.21.6 / notification 3.6.41 / dashboard 1.7.3 / DM 1.4.12
+Restore account-scoped saved displays before background verification; guard delayed storage, stale responses, and explicit authorization denial across active views.
