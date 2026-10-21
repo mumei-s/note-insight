@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.30',PROTOCOL='3.6.4';
+const VERSION='3.6.31',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -79,7 +79,7 @@ function eventIdentity(el,raw,tm){
  return 'label:'+clean(raw).match(TIME_RE)?.[0];
 }
 const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
-let scanning=false,stop=false,active=null,retryAt=0,retryFailures=0;
+let scanning=false,stop=false,active=null,retryAt=0,retryFailures=0,autoComplete=false,traversalPending=false,rescanAfterCompletion=false;
 const PAUSE_KEY='mumei-notification-read-paused-v1';
 let lastProgress={},userPaused=false;window.addEventListener('mumei-notification-reader-status',e=>{lastProgress=e.detail||{}});try{userPaused=sessionStorage.getItem(PAUSE_KEY)==='1'}catch{}
 function rememberPause(value){userPaused=value;try{value?sessionStorage.setItem(PAUSE_KEY,'1'):sessionStorage.removeItem(PAUSE_KEY)}catch{}}
@@ -129,8 +129,14 @@ async function scan(opts={}){
  if(!net?.syncCurrent){health('通信Readerを起動できません','error');return 0}
  if(!opts.automatic)rememberPause(false);
  scanning=true;stop=false;pendingCapture=false;
- if(!opts.automatic){retryAt=0;retryFailures=0}
- try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false||!featureOn())return 0;health('新着を確認中…','saving',{readCount:0,savedCount:0});const result=await net.syncCurrent(opts);retryAt=0;retryFailures=0;return Number(result?.saved||0)}
+ if(!opts.automatic){retryAt=0;retryFailures=0;autoComplete=false}
+ try{if(await get('mumei_insight_notification_feature_enabled_v1',true)===false||!featureOn())return 0;health('新着を確認中…','saving',{readCount:0,savedCount:0});const result=await net.syncCurrent(opts);retryAt=0;retryFailures=0;
+  // Finish this open-panel session at the confirmed boundary. A new native
+  // capture, panel reopening, or explicit resume starts another delta.
+  autoComplete=result?.historyComplete===true;
+  traversalPending=result?.partial===true;
+  if(autoComplete&&rescanAfterCompletion){rescanAfterCompletion=false;autoComplete=false;pendingCapture=true;lastAutoAt=0;}
+  return Number(result?.saved||0)}
  catch(e){
   scanning=false;
   if(e?.code==='READ_STOPPED'){health('読込を停止しました','done',{scanning:false,stopping:true,partial:true,...e.progress});return 0}
@@ -142,7 +148,7 @@ async function scan(opts={}){
 }
 let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0;
 let capturedSignature='',pendingCapture=false;
-document.addEventListener('mumei-notification-captured',e=>{const next=String(e.detail?.signature||'');if(next&&next!==capturedSignature){capturedSignature=next;pendingCapture=true;lastAutoAt=0;scheduleAuto(80)}});
+document.addEventListener('mumei-notification-captured',e=>{const next=String(e.detail?.signature||'');if(next&&next!==capturedSignature){capturedSignature=next;if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;lastAutoAt=0;autoComplete=false;scheduleAuto(80)}});
 function scheduleAuto(delay=150){
  clearTimeout(autoTimer);
   autoTimer=setTimeout(()=>{
@@ -152,10 +158,11 @@ function scheduleAuto(delay=150){
   window.__mumeiV3Checkpoint325?.mark?.();
   if(!panel){if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;if(!scanning)stop=false;return}
   if(scanning||document.visibilityState==='hidden')return;
-  if(panel!==autoPanel){stop=false;pausedPanel=null;retryAt=0;retryFailures=0}
+  if(panel!==autoPanel){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false}
   if(stop){pausedPanel=panel;return}
   if(pausedPanel===panel)return;
   if(Date.now()<retryAt)return;
+  if(autoComplete&&!pendingCapture)return;
   if(autoPanel===panel&&Date.now()-lastAutoAt<5000)return;
   autoPanel=panel;lastAutoAt=Date.now();void scan({automatic:true});
  },delay);

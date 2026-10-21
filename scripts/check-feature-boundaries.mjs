@@ -22,7 +22,7 @@ const rules = [
   ['app-shell', (p) => p === 'src/App.tsx' || p === 'src/main.tsx' || p === 'src/insight-browser-storage.ts' || p === 'src/insight-screen-loader.ts' || /^src\/home-screen-install\.(tsx|css)$/.test(p) || ['public/sw.js', 'public/insight-editor-isolation.js', 'public/insight-owner-nav.js', 'public/recovery.html'].includes(p)],
   ['notification-installer', (p) => p === 'public/notification-browser-install.html' || p === 'public/tool-setup.html' || /^public\/notification-(?:install|update|entry).*\.html$/.test(p)],
   ['notification-filter-settings', (p) => p === 'public/notification-filter-settings.html' || p === 'public/notification-filter.html'],
-  ['notification-reader', (p) => /^public\/note-insight-notification-(?:reader|autoscan)/.test(p)],
+  ['notification-reader', (p) => /^public\/note-insight-notification-(?:reader|autoscan|network)/.test(p)],
   ['notification-checkpoint', (p) => /^public\/note-insight-notification-checkpoint/.test(p)],
   ['notification-shell', (p) => /^public\/note-insight-notification-(?:runtime|dock-watch|fixed-dock|launcher|surface-guard|settings-route|loader)/.test(p)],
   ['notification-insight-ui', (p) => /^src\/(?:insight-notification-ui|member-insight-notifications)/.test(p)],

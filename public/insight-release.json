@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.21.2",
-  "notificationVersion": "3.6.38",
+  "appVersion": "2026.10.21.3",
+  "notificationVersion": "3.6.39",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-21T02:32:00+09:00",
+  "releasedAt": "2026-10-21T08:57:00+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "起動時の重複確認と不要な記事・通知補助データの取得を削減。履歴・対応済み・お気に入りと必要な最新確認、新しく開いた際の最新ページ表示を維持します。",
+  "note": "通知Readerは初回に取得可能な履歴を途中保存しながら末尾まで取得し、以後は保存済み境界までの差分を取得して完了後の繰り返し通信を止めます。表示・フィルター・保存済みデータは維持します。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }
