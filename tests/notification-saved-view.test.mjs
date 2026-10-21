@@ -133,3 +133,18 @@ test('non-JSON authentication failure also discards the saved page',async t=>{
  await settle(()=>pending.resolve(new Response('login required',{status:401})));
  assert.doesNotMatch(h.w.document.body.textContent,/前回の通知|前回表示分・/);assert.equal(h.saved(),null);
 });
+
+test('late overflow hydration restores matching saved page without extra network and cannot replace a live response',async t=>{
+ const full=deferred(),h=await setup(t,{saved:null,fetch:b=>b.action==='recent'?Promise.resolve(Response.json({ok:true,noteId:'tester',rows:[]})):full.promise});await h.start();const count=h.calls.length;
+ await settle(()=>{h.storage.writeSavedInsightView('notifications',{account:'tester',token},copy([row('old','遅い通知保存表示')]),1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.w.document.body.textContent,/遅い通知保存表示/);assert.equal(h.calls.length,count);
+ await settle(()=>full.resolve(feed([row('new','確認済み最新通知')])));
+ await settle(()=>{h.storage.writeSavedInsightView('notifications',{account:'tester',token},copy([row('old','上書き禁止通知')]),1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.w.document.body.textContent,/確認済み最新通知/);assert.doesNotMatch(h.w.document.body.textContent,/上書き禁止通知/);
+});
+
+for(const mode of ['other-token','other-page','denied'])test(`late notification hydration rejects ${mode}`,async t=>{
+ const h=await setup(t,{saved:null,fetch:b=>mode==='denied'?Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):new Promise(()=>{})});await h.start();
+ await settle(()=>{h.storage.writeSavedInsightView('notifications',{account:'tester',token:mode==='other-token'?'other':token},copy([row('old','表示禁止通知')],selection({page:mode==='other-page'?2:1})),1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.doesNotMatch(h.w.document.body.textContent,/表示禁止通知/);
+});
