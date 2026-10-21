@@ -66,18 +66,44 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   const selectedRef=useRef(currentSelected);selectedRef.current=currentSelected;
   const requestedPageRef=useRef(1);
   const listVerified=useRef<VerifiedRead|null>(null),listRevision=useRef(revision),messageVerified=useRef<(VerifiedRead&{key:string;page:number})|null>(null),summaryVersion=useRef(""),readerSave=useRef<number|null>(null),pairVerified=useRef(0),summaryVerified=useRef(0);
+  const lateRestore=useRef<{allowed:boolean;revision:number;summary:Row|null;people:Row[]|null;messages:boolean}>({allowed:!initial,revision,summary:null,people:null,messages:false}),hydratedSelection=useRef("");
+  const[historyRestored,setHistoryRestored]=useState(Boolean(initial?.selected));
+  if(lateRestore.current.revision!==revision||!active)lateRestore.current.allowed=false;
   function pauseReads(){listRequest.current++;messageRequest.current++;listFlight.current?.abort();messageController.current?.abort();listFlight.current=null;messageController.current=null;messageFlight.current=""}
   function discardDeniedView(error:unknown){
     const status=Number((error as {status?:number})?.status);if(status!==401&&status!==403)return false;
+    lateRestore.current.allowed=false;
     removeSavedInsightView("dm",{account:accountNoteId,token});pauseReads();listVerified.current=null;messageVerified.current=null;summaryVerified.current=0;summaryVersion.current="";verifiedMessageView.current="";
     setPeople([]);setSelected(null);setMessages([]);setMessageOwner("");setMessageTotal(0);setMessagePage(1);setSummary(null);setPeopleVerified(false);setPreviousList(false);setPreviousMessages(false);setSavedAt(0);setLoading(false);setMessagesLoading(false);setSummaryReadState("error");setReader(null);setPairState(null);setMessageReadError("");setError(error instanceof Error?error.message:"INSIGHT_LOGIN_REQUIRED");return true;
   }
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;pauseReads()}},[]);
   useEffect(()=>{
+    lateRestore.current={allowed:!initial&&activeRef.current,revision,summary:null,people:null,messages:false};hydratedSelection.current="";setHistoryRestored(Boolean(initial?.selected));
     pauseReads();accountRequest.current=token;accountIdRequest.current=accountNoteId;messageView.current=initial?.selected?`${token}|${initial.selected.person_key}`:"";verifiedMessageView.current=messageView.current;
     listVerified.current=null;listRevision.current=revision;messageVerified.current=null;summaryVersion.current="";readerSave.current=null;pairVerified.current=0;summaryVerified.current=0;
     setViewToken(token);setViewAccount(accountNoteId);setSummary(initial?.summary||null);setSummaryReadState("checking");setPeople(initial?.people||[]);setPeopleVerified(Boolean(initial));setSelected(initial?.selected||null);setMessages(initial?.messages||[]);setMessageOwner(initial?.messageOwner||"");setMessageTotal(initial?.messageTotal||0);setMessagePage(initial?.messagePage||1);requestedPageRef.current=1;setPreviousList(Boolean(initial));setPreviousMessages(Boolean(initial?.selected));setSavedAt(saved?.savedAt||0);setLoading(!initial);setReader(null);setPairState(null);setNotice("");setError("");setMessageReadError("");setBusy(false);
   },[token,accountNoteId]);
+  // A bounded IndexedDB startup retry can reveal a copy after this scene mounts.
+  // Restore only missing display fields; live reads and user navigation own the view.
+  useEffect(()=>{
+    const restore=()=>{
+      const state=lateRestore.current;
+      if(!state.allowed||!mounted.current||!activeRef.current||document.visibilityState!=="visible"||state.revision!==revision||accountRequest.current!==token||accountIdRequest.current!==accountNoteId||token!==(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")||String(currentStoredInsightAccount()?.noteId||"").toLowerCase()!==accountNoteId)return;
+      const copy=readSavedDmView(accountNoteId,token);if(!copy)return;state.allowed=false;
+      const value=copy.value;let restored=false;
+      if(!state.summary&&value.summary){setSummary(value.summary);restored=true}
+      if(!state.people){setPeople(value.people);setPeopleVerified(true);setPreviousList(true);restored=true}
+      const person=value.selected,current=selectedRef.current;
+      if(person&&!state.messages&&(!current||current.person_key===person.person_key)&&(!state.people||state.people.some(row=>row.person_key===person.person_key))&&(!state.summary||state.summary.messages>0)){
+        const key=`${token}|${person.person_key}`;if(!current)hydratedSelection.current=key;
+        selectedRef.current=person;messageView.current=key;verifiedMessageView.current=key;
+        setSelected(person);setMessages(value.messages);setMessageOwner(value.messageOwner);setMessageTotal(value.messageTotal);setMessagePage(value.messagePage);setPreviousMessages(true);setHistoryRestored(true);restored=true;
+      }
+      if(restored)setSavedAt(copy.savedAt);
+    };
+    window.addEventListener("mumei-insight-storage-hydrated",restore);restore();
+    return()=>window.removeEventListener("mumei-insight-storage-hydrated",restore);
+  },[token,accountNoteId,revision]);
   useEffect(()=>{
     if(!accountChanged&&!previousList&&!previousMessages&&summaryReadState==="ready"&&listVerified.current&&(!selected||messageVerified.current?.key===`${token}|${selected.person_key}`)){
       const checkedAt=Math.min(listVerified.current.at,summaryVerified.current,selected?messageVerified.current!.at:Infinity);if(checkedAt>0&&Number.isFinite(checkedAt))setSavedAt(checkedAt);
@@ -116,13 +142,13 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     let stamp="",summaryReady=false,bodyTarget="",peopleRows:Row[]|null=null;
     const selectedPerson=()=>{const selected=selectedRef.current;return selected&&peopleRows?peopleRows.find(row=>row.person_key===selected.person_key)||null:selected};
     const readLists=()=>Promise.allSettled([
-      feed("people",{},controller.signal,token).then(p=>{if(valid()){const filtered=p.rows.filter(validPerson);peopleRows=filtered;setPeople(filtered);setPeopleVerified(true);setPreviousList(false);setSelected(previous=>previous?filtered.find((row:Row)=>row.person_key===previous.person_key)||null:null);setLoading(false)}return p}).catch(error=>{if(valid())discardDeniedView(error);throw error}),
+      feed("people",{},controller.signal,token).then(p=>{if(valid()){const filtered=p.rows.filter(validPerson);lateRestore.current.people=filtered;peopleRows=filtered;setPeople(filtered);setPeopleVerified(true);setPreviousList(false);setSelected(previous=>previous?filtered.find((row:Row)=>row.person_key===previous.person_key)||null:null);setLoading(false)}return p}).catch(error=>{if(valid())discardDeniedView(error);throw error}),
       ...(forced||!isFreshInsightView(pairVerified.current)?[pair("stats",{},controller.signal,token).then(st=>{if(valid()){setPairState(st);pairVerified.current=Date.now()}return st}).catch(error=>{if(valid())discardDeniedView(error);throw error})]:[])
     ]);
     let lists=forced?readLists():null;
     try{
       const errors:unknown[]=[];
-      try{const s=await feed("summary",{},controller.signal,token);if(!valid())return;setSummary(s);setSummaryReadState("ready");summaryVerified.current=Date.now();summaryReady=true;stamp=savedVersion(s,readerSave.current);summaryVersion.current=stamp;
+      try{const s=await feed("summary",{},controller.signal,token);if(!valid())return;lateRestore.current.summary=s;setSummary(s);setSummaryReadState("ready");summaryVerified.current=Date.now();summaryReady=true;stamp=savedVersion(s,readerSave.current);summaryVersion.current=stamp;
         const saved=listVerified.current;if(!lists&&(!saved||!stamp||saved.stamp!==stamp||!isFreshInsightView(saved.at)||!isFreshInsightView(pairVerified.current)))lists=readLists();
       }catch(e){if(!valid()||discardDeniedView(e))return;setSummaryReadState("error");summaryVerified.current=0;errors.push(e)}
       // A slow people refresh must not hold up the already selected conversation.
@@ -163,6 +189,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
       if(rows.length!==expected)throw new Error("DM_HISTORY_INCOMPLETE");
       if(page>1&&total>0&&expected===0){void loadMessages(person,silent,true,Math.max(1,Math.ceil(total/MESSAGE_PAGE_SIZE)));return}
       if(total===0){page=1;requestedPageRef.current=1}
+      lateRestore.current.messages=true;
       setMessages(rows.slice().reverse());setMessageOwner(person.person_key);setMessageTotal(total);setMessagePage(page);setPreviousMessages(false);
       verifiedMessageView.current=key;messageVerified.current={key,page,at:Date.now(),revision,stamp:capturedStamp};
     }catch(e){if(current()){if(discardDeniedView(e))return;messageVerified.current=null;const message=e instanceof Error?e.message:"DM本文の読込に失敗しました";setError(message);setMessageReadError(message)}}
@@ -178,14 +205,14 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
   useEffect(()=>{if(active)void load(false)},[revision,active,token,accountNoteId,accountRevision]);
-  useEffect(()=>{if(active&&!accountChanged)void loadMessages(currentSelected,true,false,messageVerified.current?.key===`${token}|${currentSelected?.person_key}`?requestedPageRef.current:1)},[currentSelected?.person_key,token,accountNoteId,accountChanged]);
+  useEffect(()=>{if(hydratedSelection.current){if(hydratedSelection.current===`${token}|${currentSelected?.person_key}`)hydratedSelection.current="";return}if(active&&!accountChanged)void loadMessages(currentSelected,true,false,messageVerified.current?.key===`${token}|${currentSelected?.person_key}`?requestedPageRef.current:1)},[currentSelected?.person_key,token,accountNoteId,accountChanged]);
   useEffect(()=>{
     if(!active)return;
     const refresh=()=>{if(document.visibilityState!=="visible"){pauseReads();setLoading(false);setMessagesLoading(false);return}void load(true)};
     const timer=window.setInterval(refresh,RECHECK_MS);
     window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);
     return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh)}
-  },[currentSelected?.person_key,active,token,accountNoteId,revision]);
+  },[active,token,accountNoteId,revision]);
   useEffect(()=>{
     if(!active)return;
     let dead=false;
@@ -201,7 +228,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
   const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
   if(accountChanged)return <section id="midm" className="midm"><h2>DM</h2><p className="midm-empty">DM履歴を読み込み中…</p></section>;
-  return <section id="midm" className="midm">
+  return <section id="midm" className="midm" onClickCapture={()=>{lateRestore.current.allowed=false}} onChangeCapture={()=>{lateRestore.current.allowed=false}}>
     <header className="midm-head"><div><small>PRIVATE DIRECT MESSAGES</small><h2>DM</h2><p>通常のnote DM画面はそのまま。裏で各ルームを同期し、相手ごとにまとめます。</p></div></header>
     <div className="midm-control">
       <div className="midm-control-state">
@@ -229,7 +256,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     {notice?<p className="midm-notice">{notice}</p>:null}
     {error?<p className="midm-error">⚠ {error}</p>:null}
     {(previousList||previousMessages)?<p className="midm-read-status midm-previous" role="status">前回表示分・{error||messageReadError?"最新確認できず":"最新確認中"}{savedAt?`（${fmt(savedAt)}）`:""}</p>:null}
-    {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:!peopleVerified?<p className="midm-empty">保存先のDM相手一覧を確認できませんでした。</p>:<details className="midm-history-panel" open={saved?.value.selected?true:undefined}>
+    {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:!peopleVerified?<p className="midm-empty">保存先のDM相手一覧を確認できませんでした。</p>:<details className="midm-history-panel" open={historyRestored?true:undefined}>
       <summary><span>DM履歴</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
       <div className={"midm-layout "+(selected?"is-person":"is-list")}>
         {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>{messageRequest.current++;requestedPageRef.current=1;setMessagePage(1);setMessages([]);setSelected(r)}}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
