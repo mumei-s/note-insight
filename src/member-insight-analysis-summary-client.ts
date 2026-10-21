@@ -2,7 +2,7 @@ import { INSIGHT_TOKEN_KEY } from './insight-account-store';
 import { fetchInsightResource } from './insight-view-lifecycle';
 const ENDPOINT='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-analysis-summary';
 const cache=new Map<number,{at:number;data:any}>();
-type Pending={request:Promise<any>;controller:AbortController;revision?:number;next?:Promise<any>;nextRevision?:number};
+type Pending={request:Promise<any>;controller:AbortController;revision?:number;next?:Promise<any>;nextRevision?:number;authError?:string};
 const pending=new Map<number,Pending>();
 let owner='',ownerGeneration=0;
 function waitForConsumer(request:Promise<any>,signal?:AbortSignal):Promise<any>{
@@ -39,10 +39,10 @@ export function loadNotificationSummary(period=0,force=false,signal?:AbortSignal
     try{
       const r=await fetchInsightResource(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Insight-Token':token},body:JSON.stringify({period}),cache:'no-store',signal:controller.signal});
       const p=await r.json().catch(()=>({}));
-      if(!r.ok||p?.ok===false)throw new Error(p?.error||'本人通知分析を取得できませんでした');
+      if(!r.ok||p?.ok===false)throw new Error(r.status===401||r.status===403?`HTTP_${r.status}`:p?.error||'本人通知分析を取得できませんでした');
       if(!current())throw new Error('アカウントが切り替わりました');
       cache.set(period,{at:Date.now(),data:p});return p;
-    }catch(e){if(!current())throw new Error('アカウントが切り替わりました');if(e instanceof Error&&e.name==='TimeoutError')throw new Error('読込が30秒以内に完了しませんでした。再読込してください。');throw e}
+    }catch(e){if(entry.authError)throw new Error(entry.authError);if(!current())throw new Error('アカウントが切り替わりました');if(/INSIGHT_SESSION_INVALID|INSIGHT_LOGIN_REQUIRED|INSIGHT_MEMBER_INACTIVE|HTTP_401|HTTP_403/i.test(String((e as Error)?.message||e))){cache.clear();ownerGeneration++;for(const active of pending.values())if(active!==entry){active.authError=String((e as Error)?.message||e);active.controller.abort()}pending.clear()}if(e instanceof Error&&e.name==='TimeoutError')throw new Error('読込が30秒以内に完了しませんでした。再読込してください。');throw e}
     finally{if(pending.get(period)===entry)pending.delete(period)}
   })();
   Object.assign(entry,{request,controller,revision:force?revision:undefined});pending.set(period,entry);

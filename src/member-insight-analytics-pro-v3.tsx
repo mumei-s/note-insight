@@ -12,7 +12,10 @@ import { GrowthAnalysis } from "./member-insight-analysis-growth";
 import { fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 
 const DASH="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-data";
-const CACHE_PREFIX="mumei-insight-pro-cache-v3:";
+import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView, savedInsightViewKey } from "./insight-saved-view";
+import { memberReadAuthFailure } from "./insight-member-db-fallback";
+function cacheScope(){return {account:String(currentStoredInsightAccount()?.noteId||"").toLowerCase(),token:localStorage.getItem(INSIGHT_TOKEN_KEY)||""}}
+const cacheKind=(period:string)=>"analysis-pro:"+period;
 type Period="week"|"month"|"all";
 const PERIODS:Record<Period,string>={week:"7日",month:"28日",all:"全期間"};
 function preferredPeriod():Period{try{const q=new URL(location.href).searchParams.get("insightPeriod")||localStorage.getItem("mumei-analysis-period:"+currentStoredInsightAccount()?.noteId);return q==="all"||q==="week"?q:"month"}catch{return"month"}}
@@ -35,16 +38,20 @@ function deltaPct(now:number,prev:number){if(!prev)return now?100:0;return (now-
 function jtime(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime()))return"—";return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(d)}
 function jstDay(v:any){const d=new Date(String(v||""));if(Number.isNaN(d.getTime()))return"";return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).format(d)}
 function pearson(xs:number[],ys:number[]){if(xs.length!==ys.length||xs.length<7)return null;const ax=avg(xs),ay=avg(ys),dx=xs.map(x=>x-ax),dy=ys.map(y=>y-ay),den=Math.sqrt(sum(dx.map(x=>x*x))*sum(dy.map(y=>y*y)));if(!den)return null;return sum(dx.map((x,i)=>x*dy[i]))/den}
-async function api(endpoint:string,body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const r=await fetchInsightResource(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||"分析データを取得できませんでした");return p}
+async function api(endpoint:string,body:Record<string,unknown>,signal?:AbortSignal){const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";if(!token)throw new Error("INSIGHT_LOGIN_REQUIRED");const r=await fetchInsightResource(endpoint,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify(body),cache:"no-store",signal}),p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(r.status===401||r.status===403?`HTTP_${r.status}`:p?.error||"分析データを取得できませんでした");return p}
 async function notificationSample(onPartial:(data:any)=>void,force=false,signal?:AbortSignal,revision?:number){
  const summary=await loadNotificationSummary(0,force,signal,revision);
  const result={rows:[],dailyCounts:summary.dailyCounts||[],total:summary.total,truncated:false};
  onPartial(result);return result;
 }
-function cacheKey(period:Period="month"){const id=String(currentStoredInsightAccount()?.noteId||"").toLowerCase();return id?CACHE_PREFIX+id+(period==="month"?"":":"+period):""}
-function readCache(period:Period="month"){const key=cacheKey(period);if(!key)return null;try{const raw=localStorage.getItem(key);if(!raw)return null;const x=JSON.parse(raw);if(!x?.data||!Number.isFinite(Number(x?.cachedAt)))return null;const latest=x.data.latestDashboard,span=latest?.periodStart&&latest?.periodEnd?Math.round((Date.parse(latest.periodEnd)-Date.parse(latest.periodStart))/86400000)+1:0,actual=x.data.selectedPeriod||(latest?.periodType==="all"?"all":span===7?"week":span===28?"month":null);if(actual&&actual!==period)return null;if(Date.now()-Number(x.cachedAt)>CACHE_MAX_AGE)return null;return x}catch{return null}}
+function cacheKey(period:Period="month"){return savedInsightViewKey(cacheKind(period),cacheScope())}
+function readCache(period:Period="month"){
+ const copy=readSavedInsightView<any>(cacheKind(period),cacheScope());if(!copy||!copy.value||Date.now()-copy.savedAt>CACHE_MAX_AGE)return null;
+ const data=copy.value;if(data.selectedPeriod!==period)return null;
+ return {data,cachedAt:copy.savedAt};
+}
 function cachePayload(data:any){const notices=data?.notifications||{};return{...data,notifications:{...notices,rows:(notices.rows||[]).slice(0,1000).map((r:Row)=>({occurred_at:r.occurred_at||null,captured_at:r.captured_at||null}))}}}
-function writeCache(data:any,period:Period="month",cachedAt=Date.now()){const key=cacheKey(period);if(!key)return;try{localStorage.setItem(key,JSON.stringify({cachedAt,data:cachePayload(data)}))}catch{}}
+function writeCache(data:any,period:Period="month",cachedAt=Date.now()){writeSavedInsightView(cacheKind(period),cacheScope(),cachePayload({...data,selectedPeriod:period}),cachedAt)}
 
 function dashboardHref(noteId:string,period:Period="month"){const role=String(noteId||"").toLowerCase()==="ss_yr"?"owner":"member",u=new URL(`${import.meta.env.BASE_URL}dashboard-setup.html`,window.location.origin);u.searchParams.set("role",role);u.searchParams.set("auto","1");if(noteId)u.searchParams.set("account",noteId.toLowerCase());u.searchParams.set("period",period);u.searchParams.set("v",CURRENT_DASHBOARD_VERSION);const back=new URL(window.location.href);back.searchParams.set("insightPeriod",period);u.searchParams.set("return",back.href);return u.href}
 function normalizeArticles(rows:Row[]):Article[]{const raw=(rows||[]).map(r=>{const pageViews=num(r.pageViews??r.views),impressions=num(r.impressions),likes=num(r.likes),comments=num(r.comments),salesYen=num(r.salesYen??r.sales_yen),comparable=impressions>0&&pageViews>=0&&pageViews<=impressions,conversion=comparable?pageViews/impressions*100:null,reactionsPer1k=pageViews>0?(likes+comments)/pageViews*1000:null,revenuePer1k=pageViews>0?salesYen/pageViews*1000:null;return{...r,pageViews,impressions,likes,comments,salesYen,conversion,reactionsPer1k,revenuePer1k,score:0} as Article});const pv=raw.map(r=>r.pageViews),react=raw.map(r=>r.reactionsPer1k??0),rev=raw.map(r=>r.revenuePer1k??0),sales=raw.map(r=>r.salesYen),conv=raw.filter(r=>r.conversion!=null).map(r=>r.conversion as number);for(const values of [pv,react,rev,sales,conv])values.sort((a,b)=>a-b);return raw.map(r=>{const c=r.conversion==null?50:percentile(conv,r.conversion);const score=Math.round(percentile(pv,r.pageViews)*.35+percentile(react,r.reactionsPer1k??0)*.25+percentile(rev,r.revenuePer1k??0)*.20+percentile(sales,r.salesYen)*.10+c*.10);return{...r,score}})}
@@ -85,14 +92,27 @@ function Bars({items,title,unit}:{items:{label:string;value:number|null;sub?:str
 function Fold({title,sub,children,defaultOpen=false}:{title:string;sub:string;children:ReactNode;defaultOpen?:boolean}){return <details className="mipro-fold" open={defaultOpen}><summary><span><b>{title}</b><small>{sub}</small></span><em>開く</em></summary><div className="mipro-fold-body">{children}</div></details>}
 function Kpis({items}:{items:{label:string;value:string;sub:string}[]}){return <div className="mipro-kpis">{items.map(x=><article key={x.label}><small>{x.label}</small><b>{x.value}</b><span>{x.sub}</span></article>)}</div>}
 
-export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}:{revision?:number;onBack?:()=>void;view?:"dashboard"|"verdict"}){
+type AnalysisProps={revision?:number;onBack?:()=>void;view?:"dashboard"|"verdict"};
+export function MemberInsightAnalyticsProV3(props:AnalysisProps){
+ const [,setScope]=useState(()=>cacheKey());
+ useEffect(()=>{const check=()=>setScope(cacheKey());const events=["storage","mumei-insight-accounts","focus","pageshow","online"];for(const event of events)window.addEventListener(event,check);return()=>{for(const event of events)window.removeEventListener(event,check)}},[]);
+ return <AnalysisView key={cacheKey()} {...props}/>;
+}
+function AnalysisView({revision=0,onBack,view="dashboard"}:AnalysisProps){
   const[period,setPeriod]=useState<Period>(preferredPeriod);
   const initial=useMemo(()=>readCache(period),[]);
-  const freshInitial=isFreshInsightView(initial?.cachedAt)?initial:null;
+  const freshInitial=initial;
   const[data,setData]=useState<any>(freshInitial?.data||null),[loading,setLoading]=useState(!freshInitial?.data),[refreshing,setRefreshing]=useState(false),[cachedAt,setCachedAt]=useState<number>(Number(freshInitial?.cachedAt||0)),[error,setError]=useState("");const root=useRef<HTMLElement>(null);
   const requestSeq=useRef(0),refreshController=useRef<AbortController|null>(null),refreshState=useRef({busy:false,at:Number(freshInitial?.cachedAt||0)}),dataRef=useRef(data),[noticesLoading,setNoticesLoading]=useState(false);
+  const mountedScope=useRef(cacheKey()),accessDenied=useRef(false),displayOwner=useRef(cacheKey(period));
   dataRef.current=data;
+  function denyAccess(message:string){
+    accessDenied.current=true;requestSeq.current++;refreshController.current?.abort();refreshController.current=null;refreshState.current={busy:false,at:0};
+    for(const p of Object.keys(PERIODS))removeSavedInsightView(cacheKind(p),cacheScope());
+    dataRef.current=null;setData(null);setCachedAt(0);setLoading(false);setRefreshing(false);setNoticesLoading(false);setError(message);
+  }
   async function refresh(background=Boolean(dataRef.current),passive=false,forceNotices=false){
+    if(mountedScope.current!==cacheKey())return;
     if(passive&&(refreshState.current.busy||isFreshInsightView(refreshState.current.at)))return;
     refreshController.current?.abort();
     const controller=new AbortController();refreshController.current=controller;
@@ -101,17 +121,23 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}
     const current=()=>!controller.signal.aborted&&seq===requestSeq.current&&owner===cacheKey(period)&&token===localStorage.getItem(INSIGHT_TOKEN_KEY);
     setRefreshing(true);if(!background)setLoading(true);setNoticesLoading(view==="verdict");setError("");
     let dashboard:any=null,checkedAt=0,followerCount:any=dataRef.current?.followerCount||null,notifications=dataRef.current?.notifications||{rows:[],total:0,truncated:false};
-    const publish=()=>{if(!dashboard||!current())return;const next={...dashboard,notifications,followerCount};dataRef.current=next;setData(next);setCachedAt(checkedAt);writeCache(next,period,checkedAt)};
-    const followerTask=api(DASH,{action:"follower-count"},controller.signal).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(()=>{if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
-    const noticeTask=view==="verdict"?notificationSample(next=>{if(current()){notifications=next;publish()}},forceNotices,controller.signal,revision).catch(()=>{if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)}):Promise.resolve();
+    const publish=()=>{if(!dashboard||!current())return;accessDenied.current=false;const next={...dashboard,notifications,followerCount};dataRef.current=next;setData(next);setCachedAt(checkedAt);writeCache(next,period,checkedAt)};
+    const followerTask=api(DASH,{action:"follower-count"},controller.signal).then(result=>{if(current()){followerCount=result.followerCount||null;publish()}}).catch(e=>{if(current()&&memberReadAuthFailure(String(e?.message||e))){denyAccess(String(e?.message||e));return}if(current()&&followerCount){followerCount={...followerCount,stale:true};publish()}});
+    const noticeTask=view==="verdict"?notificationSample(next=>{if(current()){notifications=next;publish()}},forceNotices,controller.signal,revision).catch(e=>{if(current()&&memberReadAuthFailure(String(e?.message||e))){denyAccess(String(e?.message||e));return}if(current())setError("通知との照合を更新できませんでした。ダッシュボードは表示できます。")}).finally(()=>{if(current())setNoticesLoading(false)}):Promise.resolve();
     try{
       try{dashboard=await api(DASH,{action:"analysis",days:365,dashboardOnly:true,period},controller.signal);checkedAt=Date.now();if(current())refreshState.current.at=checkedAt;publish()}
-      catch(e){if(current()){const saved=readCache(period);if(!dataRef.current&&saved?.data){dataRef.current=saved.data;setData(saved.data);setCachedAt(Number(saved.cachedAt))}setError(e instanceof Error?e.message:"分析データを取得できませんでした")}}
+      catch(e){if(current()){if(memberReadAuthFailure(String((e as Error)?.message||e))){denyAccess(String((e as Error)?.message||e));return}const saved=accessDenied.current?null:readCache(period);if(!dataRef.current&&saved?.data){dataRef.current=saved.data;setData(saved.data);setCachedAt(Number(saved.cachedAt))}setError(e instanceof Error?e.message:"分析データを取得できませんでした")}}
       finally{if(current())setLoading(false)}
       await Promise.all([noticeTask,followerTask]);
     }finally{if(current()){setRefreshing(false);refreshState.current.busy=false;refreshController.current=null}}
   }
   useEffect(()=>{void refresh(Boolean(dataRef.current),false,revision>0);return()=>{requestSeq.current++;refreshController.current?.abort();refreshController.current=null;refreshState.current.busy=false}},[revision,period,view]);
+  useEffect(()=>{
+    displayOwner.current=cacheKey(period);
+    const restore=()=>{if(accessDenied.current||dataRef.current||displayOwner.current!==cacheKey(period))return;const saved=readCache(period);if(!saved)return;dataRef.current=saved.data;setData(saved.data);setCachedAt(saved.cachedAt);setLoading(false)};
+    window.addEventListener("mumei-insight-storage-hydrated",restore);restore();
+    return()=>window.removeEventListener("mumei-insight-storage-hydrated",restore);
+  },[period]);
   useEffect(()=>{const resume=(event:Event)=>{if(document.visibilityState==='visible'&&!refreshState.current.busy)void refresh(Boolean(dataRef.current),event.type!=='online',event.type==='online')};for(const name of ['focus','pageshow','online'])window.addEventListener(name,resume);document.addEventListener('visibilitychange',resume);return()=>{for(const name of ['focus','pageshow','online'])window.removeEventListener(name,resume);document.removeEventListener('visibilitychange',resume)}},[period,view]);
   const articles=useMemo(()=>normalizeArticles((data?.topArticles||[]).filter((r:Row)=>!r.contentType||r.contentType==='article')),[data?.topArticles]);
 
@@ -132,7 +158,7 @@ export function MemberInsightAnalyticsProV3({revision=0,onBack,view="dashboard"}
   const qualityChecks=[hasOfficial('pageViews',latest.pageViews??latest.views),articles.length>0,metrics.filter(r=>r.pageViews!=null).length>=7,trafficRows.length>0,Boolean(latestFollower),num(data?.notifications?.total)>0],quality=qualityChecks.filter(Boolean).length;
   const ranked=[...articles].sort((a,b)=>b.score-a.score);
   const syncHref=dashboardHref(noteId,period);
-  function changePeriod(next:Period){if(next===period)return;requestSeq.current++;refreshController.current?.abort();const saved=readCache(next),fresh=isFreshInsightView(saved?.cachedAt)?saved:null;dataRef.current=fresh?.data||null;setData(dataRef.current);setCachedAt(fresh?.cachedAt||0);setLoading(!fresh?.data);refreshState.current.at=Number(fresh?.cachedAt||0);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
+  function changePeriod(next:Period){if(next===period)return;displayOwner.current=cacheKey(next);requestSeq.current++;refreshController.current?.abort();const saved=accessDenied.current?null:readCache(next),fresh=saved;dataRef.current=fresh?.data||null;setData(dataRef.current);setCachedAt(fresh?.cachedAt||0);setLoading(!fresh?.data);refreshState.current.at=Number(fresh?.cachedAt||0);setError("");setPeriod(next);try{localStorage.setItem("mumei-analysis-period:"+noteId,next);const u=new URL(location.href);u.searchParams.set("insightPeriod",next);history.replaceState(history.state,"",u)}catch{}}
   const official=(key:string,value:any,currency=false)=>!hasOfficial(key,value)?"未取得":currency?money(value):n(value);
   const savedPeriod=latest.periodType==="all"?"全期間（note公式の集計）":latest.periodStart&&latest.periodEnd?`${latest.periodStart}〜${latest.periodEnd}`:'対象期間は未取得';
   const missingSources=[!articles.length?'記事別データ':null,!trafficRows.length?'流入元':null,!latestFollower?'現在のフォロワー数':null].filter(Boolean);
