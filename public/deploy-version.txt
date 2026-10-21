@@ -1,2 +1,2 @@
-INSIGHT 2026.10.21.4 / notification 3.6.40 / dashboard 1.7.3 / DM 1.4.12
-Preserve completed Reader sessions across identical DOM rerenders; detect new rendered notices without fetch interception or diagnostic traffic.
+INSIGHT 2026.10.21.5 / notification 3.6.41 / dashboard 1.7.3 / DM 1.4.12
+Save confirmed batches while collecting; freeze the pre-traversal boundary across shifted pages and durable resumes.
