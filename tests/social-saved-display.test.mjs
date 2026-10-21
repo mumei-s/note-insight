@@ -7,7 +7,7 @@ const tokenKey='fixture-token',scope={account:'tester',token:'token-a'};
 const row=name=>({person_key:'person',actor_name:name,actor_url:'https://note.com/peer',relation:'mutual'});
 const comparison={action:'comparison',window:'latest',relationship:'mutual',query:'',page:2,pageSize:50};
 async function settle(work=()=>{}){await React.act(async()=>{work();await new Promise(r=>setTimeout(r,5));for(let i=0;i<3;i++)await pause()})}
-async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')}}={}){
+async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false}={}){
  const calls=[];let deliver;
  const fetch=async(_url,init)=>{calls.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});return new Promise(resolve=>{deliver=(value,status=200)=>resolve(Response.json(value,{status}))})};
  const h=await sceneFixture(t,{fetch,dependencies:{
@@ -18,8 +18,9 @@ async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('o
  }});
  Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});h.w.localStorage.setItem(tokenKey,'token-a');
  const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
+ const savedKey=saved.savedInsightViewKey('social-last',scope),copy=h.w.localStorage.getItem(savedKey);if(delayed)h.w.localStorage.removeItem(savedKey);
  const Component=h.load('src/member-insight-social-v2.tsx').MemberInsightSocialV2;await h.render(Component,{});await settle();
- return{...h,Component,calls,deliver:(value,status)=>deliver(value,status),pending:()=>deliver,body:()=>h.w.document.querySelector('.mis2-social-root,.mis2').textContent};
+ return{...h,Component,calls,copy,hydrate:()=>settle(()=>{h.w.localStorage.setItem(savedKey,copy);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))}),deliver:(value,status)=>deliver(value,status),pending:()=>deliver,body:()=>h.w.document.querySelector('.mis2-social-root,.mis2').textContent};
 }
 
 test('前回の条件とページを先に表示し、50件の最新確認を1回行う',async t=>{
@@ -69,4 +70,43 @@ test('一時的な500では保存表示を残し、接続回復時に最新確�
 test('代替の保存先読取で認証拒否された場合も前回表示へ戻さない',async t=>{
  const h=await fixture(t,comparison,{fallback:async()=>{throw new Error('HTTP_401')}});await settle(()=>h.deliver({ok:false,error:'一時的なAPI障害'},500));
  assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope),null);
+});
+
+
+const defaultComparison={action:'comparison',window:'oldest',relationship:'following_only',query:'',page:1,pageSize:50};
+test('遅い保管庫から照合中と同じ条件のコピーだけ復元し通信や確認時刻を増やさない',async t=>{
+ const h=await fixture(t,defaultComparison,{delayed:true});assert.doesNotMatch(h.body(),/前回の人物/);assert.equal(h.calls.length,1);
+ await h.hydrate();assert.match(h.body(),/前回の人物/);assert.match(h.body(),/前回表示分・最新確認中/);assert.equal(h.calls.length,1);
+ const original=JSON.parse(h.copy);assert.equal(h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope).savedAt,original.savedAt);
+ await h.hydrate();assert.equal(h.calls.length,1);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[row('最新の人物')],total:1}));assert.match(h.body(),/最新の人物/);assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);
+});
+
+for(const rows of [[],[row('先に届いた最新の人物')]])test(`照合の最新${rows.length?'成功':'空結果'}後に遅いコピーで上書きしない`,async t=>{
+ const h=await fixture(t,defaultComparison,{delayed:true});await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:rows.length}));await h.hydrate();assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.calls.length,1);
+ if(rows.length)assert.match(h.body(),/先に届いた最新の人物/);
+});
+
+for(const status of [401,403])test(`照合のHTTP ${status}後に遅いコピーで人物を復活させない`,async t=>{
+ const h=await fixture(t,defaultComparison,{delayed:true});await settle(()=>h.deliver({ok:false,error:'denied'},status));await h.hydrate();assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.match(h.body(),/アクセスを確認できませんでした/);
+});
+
+test('遅い保存条件は現在の照合のフィルターや履歴タブを変更しない',async t=>{
+ for(const query of [comparison,{action:'people',window:'oldest',query:'',page:3,pageSize:50,direction:'followings'}]){
+  const h=await fixture(t,query,{delayed:true});await h.hydrate();assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].body,defaultComparison);assert.equal(h.w.document.querySelector('.mis2-relationship-filter select').value,'following_only');
+ }
+});
+
+for(const transition of ['filter','route','token','revision'])test(`照合の${transition}変更後に遅いコピーを挿し込まない`,async t=>{
+ const h=await fixture(t,defaultComparison,{delayed:true});
+ if(transition==='filter')await React.act(async()=>{const select=h.w.document.querySelector('.mis2-relationship-filter select');select.value='mutual';select.dispatchEvent(new h.w.Event('change',{bubbles:true}));await pause()});
+ if(transition==='route')await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='個別の履歴'));
+ if(transition==='token')h.w.localStorage.setItem(tokenKey,'token-b');
+ if(transition==='revision')await h.render(h.Component,{revision:1});
+ await settle();const count=h.calls.length;await h.hydrate();assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.calls.length,count);
+});
+
+
+test('一時的な照合失敗後の遅いコピーは確認失敗のまま表示し新しい通信を起こさない',async t=>{
+ const h=await fixture(t,defaultComparison,{delayed:true});await settle(()=>h.deliver({ok:false,error:'TEMPORARILY_OFFLINE'},500));await h.hydrate();assert.match(h.body(),/前回の人物/);assert.match(h.body(),/前回表示分・最新確認できず/);assert.match(h.body(),/TEMPORARILY_OFFLINE/);assert.equal(h.calls.length,1);
 });

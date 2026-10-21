@@ -39,13 +39,15 @@ function syncText(r:any){if(!r)return"未照合";const got=Number(r.received_cou
 function syncNote(r:any){if(!r)return"同期履歴なし";const a=Number(r.added_count||0),d=Number(r.removed_count||0),when=date(r.created_at),liveAt=r.live_count_at?date(r.live_count_at):"";const live=liveAt?`・公式値確認 ${liveAt}`:"";if(r.complete)return`${when}・${a||d?`今回 増${a} / 減${d}`:"今回の増減なし"}${live}`;if(String(r.error||"").startsWith("NOTE_IDENTITY_LIST_CAPPED_AT_1000:"))return`${when}・公式総数差分 ${a||d?`増${a} / 減${d}`:"増減なし"}・人物は最新1,000人で照合${live}`;return`${when}・人物差分は取得できた範囲のみ${live}`}
 const RELATION_FILTERS=[['following_only','相手からフォローなし'],['lost','相互から減'],['mutual','相互フォロー'],['gained','相互に増'],['follower_only','相手だけフォロー'],['unknown','未確認'],['all','すべて']];
 function relationLabel(r:Row){return r.lost_at?'相互から減':r.relation==='mutual'?'相互フォロー':r.relation==='following_only'?'相手からフォローなし':r.relation==='follower_only'?'相手だけフォロー':'相手の状態を未確認'}
-function MutualComparison({revision}:{revision:number}){
+function MutualComparison({revision,hydrationAllowed}:{revision:number;hydrationAllowed:{current:boolean}}){
  const [initial]=useState(()=>{const q=savedSocialView()?.value.query;return q?.action==='comparison'?{action:'comparison',window:['oldest','latest'].includes(q.window)?q.window:'oldest',relationship:RELATION_FILTERS.some(([key])=>key===q.relationship)?q.relationship:'following_only',query:String(q.query||'').slice(0,300),page:Math.max(1,Math.floor(Number(q.page)||1)),pageSize:PAGE}:{action:'comparison',window:'oldest',relationship:'following_only',query:'',page:1,pageSize:PAGE}});
  const [data,setData]=useState<any>(()=>cachedSocial(initial,true)),[windowMode,setWindowMode]=useState(initial.window),[filter,setFilter]=useState(initial.relationship),[query,setQuery]=useState(initial.query),[page,setPage]=useState(initial.page),[busy,setBusy]=useState(true),[error,setError]=useState('');
  const request=useRef(0);
- useEffect(()=>{let disposed=false;const token=localStorage.getItem(INSIGHT_TOKEN_KEY),extra={action:'comparison',window:windowMode,relationship:filter,query,page,pageSize:PAGE};setData(cachedSocial(extra,true));const refresh=async()=>{
-  if(document.visibilityState!=='visible')return;const id=++request.current;setBusy(true);try{const x=await savedSocial(extra);if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){setData(x);setError('')}}catch(e){if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){const saved=cachedSocial(extra,true);if(saved)setData(saved);setError(e instanceof Error?e.message:'照合結果を読み込めませんでした')}}finally{if(!disposed&&request.current===id)setBusy(false)}
- };const first=window.setTimeout(()=>void refresh(),query?250:0),timer=window.setInterval(()=>void refresh(),60000),focus=()=>void refresh();window.addEventListener('focus',focus);window.addEventListener('pageshow',focus);document.addEventListener('visibilitychange',focus);return()=>{disposed=true;request.current++;window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener('focus',focus);window.removeEventListener('pageshow',focus);document.removeEventListener('visibilitychange',focus)}},[revision,windowMode,filter,query,page]);
+ useEffect(()=>{let disposed=false;const token=localStorage.getItem(INSIGHT_TOKEN_KEY),scope=socialScopeKey(socialScope()),extra={action:'comparison',window:windowMode,relationship:filter,query,page,pageSize:PAGE};let retained=cachedSocial(extra,true),authoritative=false;setData(retained);
+ const restore=()=>{if(disposed||!hydrationAllowed.current||retained||authoritative||document.visibilityState!=='visible'||scope!==socialScopeKey(socialScope())||socialDenied())return;const copy=cachedSocial(extra,true);if(copy){retained=copy;setData(copy)}};
+ window.addEventListener('mumei-insight-storage-hydrated',restore);restore();const refresh=async()=>{
+  if(document.visibilityState!=='visible')return;const id=++request.current;setBusy(true);try{const x=await savedSocial(extra);if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){authoritative=true;setData(x);setError('')}}catch(e){if(!disposed&&request.current===id&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token){const saved=cachedSocial(extra,true);if(saved)setData(saved);setError(e instanceof Error?e.message:'照合結果を読み込めませんでした')}}finally{if(!disposed&&request.current===id)setBusy(false)}
+ };const first=window.setTimeout(()=>void refresh(),query?250:0),timer=window.setInterval(()=>void refresh(),60000),focus=()=>void refresh();window.addEventListener('focus',focus);window.addEventListener('pageshow',focus);document.addEventListener('visibilitychange',focus);return()=>{disposed=true;request.current++;window.removeEventListener('mumei-insight-storage-hydrated',restore);window.clearTimeout(first);window.clearInterval(timer);window.removeEventListener('focus',focus);window.removeEventListener('pageshow',focus);document.removeEventListener('visibilitychange',focus)}},[revision,windowMode,filter,query,page]);
  const rows:Row[]=data?.rows||[],counts=data?.counts||{},status=data?.status,pages=Math.max(1,Math.ceil(Number(data?.total||0)/PAGE)),noteId=data?.noteId||'',scanUrl=noteId?`https://note.com/${encodeURIComponent(noteId)}?mumei_social_scan=1`:'';
  return <section id="mis2-social" className="mis2" aria-busy={busy}>
   <header className="mis2-head"><div><small>FOLLOW RELATIONSHIP</small><h2>フォローとフォロワーを照合</h2></div></header>
@@ -68,14 +70,16 @@ export function MemberInsightSocialV2({revision=0}:{revision?:number}){
  return <SocialViews key={JSON.stringify(socialScope())} revision={revision}/>;
 }
 function SocialViews({revision}:{revision:number}){
+ const hydrationAllowed=useRef(true),initialRevision=useRef(revision);if(initialRevision.current!==revision)hydrationAllowed.current=false;
  const [history,setHistory]=useState(()=>{const action=savedSocialView()?.value.query.action;return Boolean(action&&action!=='comparison')});
- return <div className="mis2-social-root"><div className="mis2-viewtabs"><button className={!history?'active':''} aria-pressed={!history} onClick={()=>setHistory(false)}>相互の照合・減を確認</button><button className={history?'active':''} aria-pressed={history} onClick={()=>setHistory(true)}>個別の履歴</button></div>{history?<SocialHistory revision={revision}/>:<MutualComparison revision={revision}/>}</div>
+ return <div className="mis2-social-root" onClickCapture={()=>{hydrationAllowed.current=false}} onChangeCapture={()=>{hydrationAllowed.current=false}}><div className="mis2-viewtabs"><button className={!history?'active':''} aria-pressed={!history} onClick={()=>setHistory(false)}>相互の照合・減を確認</button><button className={history?'active':''} aria-pressed={history} onClick={()=>setHistory(true)}>個別の履歴</button></div>{history?<SocialHistory revision={revision} hydrationAllowed={hydrationAllowed}/>:<MutualComparison revision={revision} hydrationAllowed={hydrationAllowed}/>}</div>
 }
-function SocialHistory({revision=0}:{revision?:number}){
+function SocialHistory({revision=0,hydrationAllowed}:{revision?:number;hydrationAllowed:{current:boolean}}){
  const[initialQuery]=useState(()=>{const q=savedSocialView()?.value.query;return q&&q.action!=='comparison'?q:{action:'people',window:'latest',query:'',page:1,pageSize:PAGE,direction:'followers'}});
  const initial=cachedSocial(initialQuery,true),initialView:View=initialQuery.action==='events'?'changes':initialQuery.action==='investigation'?'investigate':'people';
  const[rows,setRows]=useState<Row[]>(initial?.rows||[]),[total,setTotal]=useState(initial?.total||0),[page,setPage]=useState(Math.max(1,Math.floor(Number(initialQuery.page)||1))),[direction,setDirection]=useState(['followers','followings','all'].includes(initialQuery.direction)?initialQuery.direction:'followers'),[change,setChange]=useState(['all','added','removed'].includes(initialQuery.change)?initialQuery.change:'all'),[day,setDay]=useState(()=>{const raw=String(initialQuery.dateFrom||'');return /^\d{4}-\d{2}-\d{2}T00:00:00\+09:00$/.test(raw)?raw.slice(0,10):''}),[latest,setLatest]=useState<Record<string,any>>(initial?.latest||{[initialQuery.direction||'followers']:initial?.run}),[loading,setLoading]=useState(!initial),[error,setError]=useState(""),[view,setView]=useState<View>(initialView),[savedAt,setSavedAt]=useState(Number(initial?.__savedViewAt||0));
  const[windowMode,setWindowMode]=useState(['oldest','latest','all'].includes(initialQuery.window)?initialQuery.window:'latest'),[query,setQuery]=useState(String(initialQuery.query||'').slice(0,300)),[inspection,setInspection]=useState<any>(null),request=useRef(0),inspectionRequest=useRef(0),firstLoad=useRef(true);
+ const lateView=useRef({scope:socialScopeKey(socialScope()),query:initialQuery,resolved:Boolean(initial)});
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  async function load(p=1,silent=false){
   if(document.visibilityState!=="visible")return;
@@ -83,10 +87,13 @@ function SocialHistory({revision=0}:{revision?:number}){
   if(!silent)setLoading(true);setError("");
   const peopleDirection=direction==="followings"?"followings":"followers";
   const extra=view==="people"?{action:"people",window:windowMode,query,page:p,pageSize:PAGE,direction:peopleDirection}:{action:view==="investigate"?"investigation":"events",window:windowMode,query,page:p,pageSize:PAGE,direction,change:view==="investigate"?"removed":change,...range};
+  const cached=cachedSocial(extra,true),key=socialQueryKey(extra);
+  if(socialQueryKey(lateView.current.query)!==key)lateView.current={scope:socialScopeKey(socialScope()),query:extra,resolved:Boolean(cached)};
+  else if(cached)lateView.current.resolved=true;
   try{
-   if(!silent){const cached=cachedSocial(extra,true);setRows(cached?.rows||[]);setTotal(cached?.total||0);setSavedAt(Number(cached?.__savedViewAt||0));}
+   if(!silent){setRows(cached?.rows||[]);setTotal(cached?.total||0);setSavedAt(Number(cached?.__savedViewAt||0));}
    const x=await savedSocial(extra);
-   if(!valid())return;const list=(x.rows||[]).filter((r:Row)=>!String(r.person_key||"").startsWith("aggregate:"));setRows(list);setTotal(Number(x.total||0));setPage(p);setSavedAt(0);if(x.latest)setLatest(x.latest);else if(x.run)setLatest(v=>({...v,[peopleDirection]:x.run}));
+   if(!valid())return;lateView.current.resolved=true;const list=(x.rows||[]).filter((r:Row)=>!String(r.person_key||"").startsWith("aggregate:"));setRows(list);setTotal(Number(x.total||0));setPage(p);setSavedAt(0);if(x.latest)setLatest(x.latest);else if(x.run)setLatest(v=>({...v,[peopleDirection]:x.run}));
    void enrich(list).then(value=>{if(valid())setRows(value)});
   }catch(e){if(valid()){const saved=cachedSocial(extra,true);if(saved){setRows(saved.rows||[]);setTotal(Number(saved.total||0));setSavedAt(Number(saved.__savedViewAt||0));if(saved.latest)setLatest(saved.latest);else if(saved.run)setLatest(v=>({...v,[peopleDirection]:saved.run}))}setError(e instanceof Error?e.message:"読込失敗")}}finally{if(valid())setLoading(false)}
  }
@@ -95,6 +102,13 @@ function SocialHistory({revision=0}:{revision?:number}){
   try{const data=await post({action:"investigate",personKey:row.person_key,page:candidatePage});if(id===inspectionRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token)setInspection({row,...data,loading:false})}
   catch(e){if(id===inspectionRequest.current)setInspection({row,loading:false,error:e instanceof Error?e.message:"調査失敗"})}
  }
+ useEffect(()=>{
+  const restore=()=>{const state=lateView.current;if(!hydrationAllowed.current||state.resolved||document.visibilityState!=='visible'||state.scope!==socialScopeKey(socialScope())||socialDenied())return;
+   const copy=cachedSocial(state.query,true);if(!copy)return;state.resolved=true;
+   setRows((copy.rows||[]).filter((row:Row)=>!String(row.person_key||'').startsWith('aggregate:')));setTotal(Number(copy.total||0));setSavedAt(Number(copy.__savedViewAt||0));if(copy.latest)setLatest(copy.latest);else if(copy.run)setLatest(value=>({...value,[state.query.direction==='followings'?'followings':'followers']:copy.run}));
+  };
+  window.addEventListener('mumei-insight-storage-hydrated',restore);restore();return()=>window.removeEventListener('mumei-insight-storage-hydrated',restore);
+ },[]);
  useEffect(()=>{const p=firstLoad.current?page:1;firstLoad.current=false;setPage(p);setLoading(true);const timer=window.setTimeout(()=>void load(p),query?250:0);return()=>{window.clearTimeout(timer);request.current++}},[direction,change,day,revision,view,windowMode,query]);
  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void load(page,true)},timer=window.setInterval(refresh,60000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);document.addEventListener("visibilitychange",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);document.removeEventListener("visibilitychange",refresh)}},[page,direction,change,day,view,windowMode,query]);
  useEffect(()=>()=>{request.current++;inspectionRequest.current++},[]);
