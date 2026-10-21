@@ -51,9 +51,11 @@ for(const[tab,action]of cases)test(`${action}: a fresh document ${action==='like
  assert.notEqual(second.w,first.w);await second.show();
  const entryPage=action==='likes'?1:2;
  if(action==='likes'){
-  assert.doesNotMatch(second.panel().textContent,/初回の本人/);
-  assert.equal(second.panel().querySelector('[data-insight-saved-view]'),null);
-  assert.ok(second.panel().querySelector('.miu-load-scene'));
+  assert.match(second.panel().textContent,/初回の本人 likes 0/);
+  assert.doesNotMatch(second.panel().textContent,/初回の本人 likes 100/);
+  assert.match(second.panel().querySelector('.miu-pager').textContent,/1 \/ 3/);
+  assert.match(second.panel().textContent,/前回表示分.*最新を確認中/);
+  assert.equal(second.panel().querySelector('.miu-load-scene'),null);
  }else{
   assert.match(second.panel().textContent,new RegExp(`初回の本人 ${action} 100`));
   assert.match(second.panel().querySelector('.miu-pager').textContent,/2 \/ 3/);

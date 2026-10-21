@@ -72,3 +72,23 @@ test('notification cards with explicit titles do not fetch the article archive',
 test('manual update refreshes missing notification titles once after reloading visible rows',async t=>{
  let renamed=false;const h=await fixture(t,{tab:'notifications',respond:c=>c.action==='list'?Response.json({ok:true,rows:[notice()],total:1}):renamed&&c.action==='articles'?Response.json({ok:true,rows:[{...article(),title:'renamed saved article'}],total:1}):undefined});await h.show();assert.match(h.text(),/tester article first/);assert.equal(h.count('articles'),1);renamed=true;await h.update();assert.match(h.text(),/renamed saved article/);assert.equal(h.count('articles'),2,'manual refresh must not query titles both before and after rows reload');
 });
+
+test('late archive hydration shows matching account copy without restarting archive read; live empty wins',async t=>{
+ const pending=deferred(),h=await fixture(t,{tab:'articles',respond:c=>c.action==='articles'?pending.promise:undefined});await h.show();const scope={account:'tester',token:'first-token'};
+ await settle(()=>{h.cache.writeSavedInsightView('article-archive',scope,{rows:[article('tester','cached')],total:1},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.text(),/tester article cached/);assert.match(h.text(),/前回表示分/);assert.equal(h.count('articles'),1);
+ await settle(()=>pending.resolve(Response.json({ok:true,rows:[],total:0})));
+ await settle(()=>{h.cache.writeSavedInsightView('article-archive',scope,{rows:[article('tester','old')],total:1},1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.text(),/tester article old/);
+});
+
+test('article official dashboard explicit denial clears previously displayed values and its scoped cache',async t=>{
+ let denied=false;const h=await fixture(t,{tab:'articles',respond:c=>c.action==='analysis'?(denied?Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):Response.json({ok:true,latestDashboard:null,topArticles:[{url:article().url,likes:999,comments:42}]})):undefined});await h.show();assert.match(h.text(),/公式 ♡ 999/);
+ denied=true;h.advance(60001);await h.go('likes');await h.go('articles');assert.doesNotMatch(h.text(),/公式 ♡ 999/);assert.equal(h.cache.readSavedInsightView('article-dashboard',{account:'tester',token:'first-token'}),null);
+});
+
+for(const late of [false,true])test(`article official values restore before network with original saved stamp (late=${late})`,async t=>{
+ const pending=deferred(),h=await fixture(t,{tab:'articles',respond:c=>c.action==='analysis'?pending.promise:undefined});const scope={account:'tester',token:'first-token'},seed=()=>h.cache.writeSavedInsightView('article-dashboard',scope,{latestDashboard:null,topArticles:[{url:article().url,likes:777,comments:9}]},1);
+ if(!late)seed();await h.show();if(late)await settle(()=>{seed();h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
+ assert.match(h.text(),/公式 ♡ 777/);assert.match(h.text(),/公式値は前回表示分/);assert.equal(h.count('analysis'),1);assert.equal(h.cache.readSavedInsightView('article-dashboard',scope).savedAt,1);
+ await settle(()=>pending.resolve(Response.json({ok:true,latestDashboard:null,topArticles:[]})));await settle(()=>{seed();h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.text(),/公式 ♡ 777|公式値は前回表示分/);
+});
