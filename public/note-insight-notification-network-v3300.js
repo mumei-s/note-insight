@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.18';
+const VERSION='3.6.19';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -278,7 +278,7 @@ async function ingestRows(rows,cap,manual=false,emitStatus=true){
  const received=Array.isArray(rows)?rows.length:0;let saved=0,lastResponse=null;
  try{
   while(pending.size){
-   const current=await account(true);if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
+   const current=await account(true);if(current?.id!==a.id){throw new Error('NOTE_ACCOUNT_CHANGED')}
    const part=[...pending.values()].slice(0,50);
    const res=await request(INGEST,{noteId:a.id,notifications:part},token);lastResponse=res;
    const sent=new Set(part.map(clientSig)),confirmed=new Set((Array.isArray(res?.confirmedClientSignatures)?res.confirmedClientSignatures:[]).map(String).filter(s=>sent.has(s)));
@@ -427,7 +427,7 @@ function directPageRequest(cap,page){
 }
 // A durable window journal owns collection and confirmation separately. Page numbers
 // are only transport cursors; confirmed notification identities are the boundary.
-const JOURNAL='mumei_notification_window_v360:';
+const JOURNAL='mumei_notification_window_v360:',BOUNDARY='mumei_notification_boundary_v1:';
 async function readJournal(id){return readDurable(key(JOURNAL,id),null)}
 async function writeJournal(id,value){await writeDurable(key(JOURNAL,id),value)}
 function ascending(rows){return rows.map((r,i)=>({r,i})).sort((a,b)=>{
@@ -437,24 +437,62 @@ function ascending(rows){return rows.map((r,i)=>({r,i})).sort((a,b)=>{
 let activeSync=null;
 async function syncHistory(opts={}){
  stopRequested=false;
- const a=await account();if(!a)throw new Error('noteログインを確認してください');
+ const a=await account();if(!a){throw new Error('noteログインを確認してください')}
  if(!await tokenFor(a.id))throw new Error('本人連携が必要です');
- let state=await historyState(a.id),journal=await readJournal(a.id);
+ let state=await historyState(a.id),journal=await readJournal(a.id),newJournal=false;
  // Do not discard a partially saved window when the user asks for a full read.
  if(journal?.phase==='save')journal.read=Number(journal.saved||0)+journal.rows.length;
  if(!journal||journal.schema!==1){
+  newJournal=true;
   journal={schema:1,completionSchema:2,phase:'collect',rows:[],nextRequest:null,newestSig:'',frontier:opts.forceFull||state.completionSchema!==2?'':clean(state.frontierSig||''),seen:opts.forceFull?[]:Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[],read:0,saved:0,total:0,pages:0,checked:0,startedAt:Date.now()};
   await writeJournal(a.id,journal);
  }
+ // Boundary proof must never include rows saved during this traversal: offset
+ // pagination can repeat them after new arrivals move older unseen rows back.
+ // Store the immutable snapshot once, not in every buffer write. A single
+ // account-scoped slot is reused, and its generation must match the journal.
+ if(!journal.boundarySnapshot){
+  const generation=String(journal.startedAt)+':'+Math.random().toString(36).slice(2);
+  const unchanged=newJournal||(clean(state.frontierSig||'')===journal.frontier&&Number(state.verifiedAt||0)<Number(journal.startedAt||0));
+  await writeDurable(key(BOUNDARY,a.id),{generation,signatures:unchanged&&Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[]});
+  journal.boundarySnapshot=generation;await writeJournal(a.id,journal);
+ }
+ let snapshot=await readDurable(key(BOUNDARY,a.id),null);
+ if(snapshot?.generation!==journal.boundarySnapshot||!Array.isArray(snapshot?.signatures)){
+  // Never turn a missing optimization snapshot into a permanent retry loop.
+  // Reuse the unchanged pre-run history if provable; otherwise keep the cursor
+  // and unsaved buffer but disable whole-page early stopping for this run.
+  const unchanged=clean(state.frontierSig||'')===journal.frontier&&Number(state.verifiedAt||0)<Number(journal.startedAt||0);
+  snapshot={generation:String(journal.startedAt)+':'+Math.random().toString(36).slice(2),signatures:unchanged&&Array.isArray(state.confirmedSignatures)?state.confirmedSignatures:[]};
+  await writeDurable(key(BOUNDARY,a.id),snapshot);journal.boundarySnapshot=snapshot.generation;await writeJournal(a.id,journal);
+ }
+ const boundaryKnown=new Set(snapshot.signatures);
  const publish=async(complete=false)=>{
   const cp=await get(key(CHECK,a.id),{});
   const extra={phase:journal.phase==='save'?'saving':'collecting',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,checkedCount:Number(journal.checked||0),boundaryAt:cp.boundaryAt||0,direction:'bottom-up',windowLimit:MAX_NOTICES,partial:!complete,historyComplete:complete,stopping:stopRequested,scanning:!complete&&!stopRequested};
   await writeUnifiedStatus(a.id,{lastCheckAt:Date.now(),lastRunAt:Date.now(),lastRunComplete:complete,lastRunMode:complete?(journal.frontier?'delta':'window'):'partial',lastRunReadCount:journal.read,lastRunSavedCount:journal.saved,lastRunTotalCount:journal.total,lastError:'',direction:'bottom-up',historyComplete:complete});
   status(`${complete?(journal.saved?'✓ 保存確認':'新着なし'):stopRequested?'停止・途中保存':'読込'} ${journal.read} / ${journal.total||'?'}｜保存 ${journal.saved}`,complete||stopRequested?'done':'saving',extra);
  };
+ const savePart=async()=>{
+   status(`保存先の確認待ち｜保存確認 ${journal.saved} / ${journal.total}件`,'saving',{phase:'saving',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total});
+   const current=await account(true);if(current?.id!==a.id){throw new Error('NOTE_ACCOUNT_CHANGED')}
+   const part=journal.rows.slice(0,20);
+   // Journal already contains the entire unsaved window before transmission.
+   const result=await ingestRows(part,null,true,false);
+   journal.saved+=Number(result.saved||0);
+   journal.seen=[...new Set([...journal.seen,...part.map(clientSig)])].slice(-1200);
+   journal.rows.splice(0,part.length);
+   const last=part.at(-1);
+   await writeJournal(a.id,journal);
+   await writeUnifiedStatus(a.id,{boundarySignature:clientSig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryDisplayText:clean(last.raw_text),boundaryTargetUrl:last.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});
+   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
+   await publish();
+ };
  await publish();
  try{
   try{while(journal.phase==='collect'&&!stopRequested){
+   while(journal.rows.length>=20){journal.rows=ascending(journal.rows);await savePart()}
+   if(stopRequested)break;
    const cap=journal.nextRequest?await replay(journal.nextRequest):await directNoticeCapture();
    if(!directNoticesCap(cap))throw new Error('NO_NOTIFICATION_API_CAPTURE');
    const pageRows=extractDirectNotices(cap.json,cap.url);
@@ -466,7 +504,8 @@ async function syncHistory(opts={}){
    let knownCount=0;
    for(const row of pageRows){
     const signature=clientSig(row);
-    if(signature===journal.frontier||known.has(signature)){knownCount++;continue}
+    if(signature===journal.frontier||boundaryKnown.has(signature))knownCount++;
+    if(signature===journal.frontier||known.has(signature))continue
     if(!known.has(signature)){if(!journal.newestUnseenRow)journal.newestUnseenRow=row;unique.set(signature,row)}
    }
    // Bundled notices can move or change below a saved row. Inspect the entire
@@ -493,21 +532,7 @@ async function syncHistory(opts={}){
    status(`取得 ${journal.rows.length}件｜古い通知から保存準備`,'saving',{readCount:journal.read,savedCount:journal.saved,totalCount:journal.total,direction:'bottom-up'});
   }}catch(error){if(error?.code!=='READ_STOPPED')throw error;}
   if(stopRequested&&journal.phase==='collect'&&journal.rows.length){journal.resumeCollect=true;journal.phase='save';journal.rows=ascending(journal.rows);await writeJournal(a.id,journal);}
-  while(journal.phase==='save'&&journal.rows.length){
-   status(`保存先の確認待ち｜保存確認 ${journal.saved} / ${journal.total}件`,'saving',{phase:'saving',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total});
-   const current=await account(true);if(current?.id!==a.id)throw new Error('NOTE_ACCOUNT_CHANGED');
-   const part=journal.rows.slice(0,20);
-   // Journal already contains the entire unsaved window before transmission.
-   const result=await ingestRows(part,null,true,false);
-   journal.saved+=Number(result.saved||0);
-   journal.seen=[...new Set([...journal.seen,...part.map(clientSig)])].slice(-1200);
-   journal.rows.splice(0,part.length);
-   const last=part.at(-1);
-   await writeJournal(a.id,journal);
-   await writeUnifiedStatus(a.id,{boundarySignature:clientSig(last),boundaryEventIdentity:last.meta?.event_identity,boundaryDisplayText:clean(last.raw_text),boundaryTargetUrl:last.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});
-   document.dispatchEvent(new Event('mumei-notification-checkpoint'));
-   await publish();
-  }
+  while(journal.phase==='save'&&journal.rows.length)await savePart();
   if(journal.resumeCollect&&!journal.rows.length){journal.phase='collect';journal.resumeCollect=false;journal.checked=0;journal.pages=0;journal.windowCount=Number(journal.windowCount||0)+1;await writeJournal(a.id,journal);}
   const windowComplete=journal.phase==='save'&&!journal.rows.length;
   const complete=windowComplete&&journal.completionSchema===2;
@@ -516,7 +541,7 @@ async function syncHistory(opts={}){
    await writeHistoryState(a.id,{...state,historyComplete:complete,completionSchema:complete?2:0,frontierSig:journal.newestSig||journal.frontier,confirmedSignatures:[...new Set([...(journal.headSignatures||[]),...journal.seen])].slice(0,1200),verifiedAt:Date.now(),version:VERSION,resume:null,direction:'bottom-up'});
    // The newest captured row was confirmed in an earlier saved window. Keep
    // the visible boundary at the newest row, not the final (oldest) backfill batch.
-   if(complete&&journal.newestRow&&journal.windowCount){const row=journal.frontier?(journal.newestUnseenRow||journal.newestRow):journal.newestRow;await writeUnifiedStatus(a.id,{boundarySignature:clientSig(row),boundaryEventIdentity:row.meta?.event_identity,boundaryDisplayText:clean(row.raw_text),boundaryTargetUrl:row.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});document.dispatchEvent(new Event('mumei-notification-checkpoint'));}
+   if(complete&&journal.newestRow){const row=journal.frontier?(journal.newestUnseenRow||journal.newestRow):journal.newestRow;await writeUnifiedStatus(a.id,{boundarySignature:clientSig(row),boundaryEventIdentity:row.meta?.event_identity,boundaryDisplayText:clean(row.raw_text),boundaryTargetUrl:row.target_url||'',boundaryLegacySignature:'',boundaryAt:Date.now(),boundarySource:'network-confirmed-v362'});document.dispatchEvent(new Event('mumei-notification-checkpoint'));}
    await writeJournal(a.id,null);
   }
   await publish(complete);
