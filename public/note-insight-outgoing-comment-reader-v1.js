@@ -89,7 +89,7 @@ function mount() {
       await set(PERMISSION + account, { enabled: false, pendingDisable: false }); pendingDisable = false;
       lastError = '自動保存を停止しました。履歴は保持しています';
     }
-    catch (e) { lastError = 'この端末の保存は停止しました。サーバー権限の停止を確認できていません: ' + String(e.message || e); }
+    catch (e) { lastError = (stopServerConfirmed ? 'サーバーの保存権限は停止しました。端末への停止設定の記録に失敗しました: ' : 'この端末の保存は停止しました。サーバー権限の停止を確認できていません: ') + String(e.message || e); }
     finally { busy = false; render(); }
   });
   retryButton.addEventListener('click', () => void drain());

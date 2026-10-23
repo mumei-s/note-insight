@@ -49,7 +49,7 @@ test('account/session switch during consent cannot navigate',async t=>{
   const h=await app(t,{hold:true});await h.page.getByRole('button',{name:'同意してnoteへ進む'}).click();
   await h.page.getByRole('button',{name:'設定を中止'}).waitFor();
   await h.page.evaluate(()=>{localStorage.setItem('mumei-insight-access-token','other-session');window.dispatchEvent(new Event('storage'));});
-  await h.resolve(); await h.page.getByRole('button',{name:'同意してnoteへ進む'}).waitFor(); assert.ok(h.page.url().startsWith(base)); assert.equal(await h.page.locator('.mioc-handoff').count(),0);
+  await h.resolve(); await h.page.waitForFunction(()=>document.querySelector('.mioc')?.open===false); assert.ok(h.page.url().startsWith(base)); assert.equal(await h.page.locator('.mioc-handoff').count(),0);
 });
 for(const [name,change] of [ ['expired',{expiresAt:'2020-01-01T00:00:00Z'}], ['foreign origin',{noteUrl:noteUrl.replace('note.com','evil.example')}], ['wrong account',{noteId:'other'}], ['extra query',{noteUrl:noteUrl+'&token=secret'}], ['wrong path',{noteUrl:noteUrl.replace('/self?','/other?')}] ]) {
   test(`reject ${name} handoff without navigation`,async t=>{
