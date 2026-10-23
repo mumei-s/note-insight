@@ -98,3 +98,38 @@ test('feedのカテゴリpreviewをまとめ、同じfeedの再確認ではboard
  await h.render(Component,{noteId:'tester',revision:1});await React.act(async()=>{for(let i=0;i<6;i++)await pause()});
  assert.equal(boardWrites.length,1);assert.match(h.w.document.querySelector('.minf-list').textContent,/保存された本文a/);
 });
+
+test('通知の再取得で欠落・空本文が届いても同一コメントの保存本文を保持する',t=>{
+ const h=boardFixture(t),r=row('reply',{member_id:'a',notification_type:'reply',comment_identity:{articleKey:'n1',commentKey:'nc1'},meta:{comment_body:'取得済み原文',comment_key:'nc1',comment_author:'相手'},confirmed:true,favorite:true});h.retainBoard('tester',[r]);
+ h.views.set('tester|all||1|all',{rows:[r],total:1});h.retainBoard('tester',[{...r,meta:{comment_body:''},comment_body:null}]);
+ assert.equal(h.readBoard('tester')[0].meta.comment_body,'取得済み原文');assert.equal(h.views.get('tester|all||1|all').rows[0].meta.comment_body,'取得済み原文');assert.equal(JSON.parse(h.nativeGet(key))[0].favorite,true);
+ h.retainBoard('tester',[{...r,member_id:'b',meta:{},comment_body:''}]);assert.equal(h.readBoard('tester')[0].meta.comment_body,undefined,'別本人に本文を移さない');
+});
+test('同一通知でも別comment IDへ変われば旧本文を流用しない',t=>{
+ const h=boardFixture(t),r=row('reply',{notification_type:'reply',comment_identity:{articleKey:'n1',commentKey:'nc1'},meta:{comment_body:'別コメントの本文',comment_key:'nc1'}});h.retainBoard('tester',[r]);h.retainBoard('tester',[{...r,comment_identity:{articleKey:'n1',commentKey:'nc2'},meta:{comment_key:'nc2'}}]);assert.equal(h.readBoard('tester')[0].meta.comment_body,undefined);
+});
+
+test('部分的な会話再取得や削除表示で保存済み発言を失わず別threadは混ぜない',t=>{
+ const h=boardFixture(t),conversation={articleKey:'n1',threadKey:'root',complete:false,messages:[{commentKey:'root',parentKey:null,body:'自分の原文'},{commentKey:'nc1',parentKey:'root',body:'相手の原文'}]},r=row('reply',{notification_type:'reply',comment_identity:{articleKey:'n1',commentKey:'nc1'},meta:{comment_body:'相手の原文',comment_key:'nc1',comment_conversation:conversation}});h.retainBoard('tester',[r]);
+ h.retainBoard('tester',[{...r,meta:{comment_body:'[deleted]',comment_key:'nc1',comment_conversation:{...conversation,messages:[{commentKey:'nc1',parentKey:'root',body:''}]}}}]);const saved=h.readBoard('tester')[0];assert.equal(saved.meta.comment_body,'相手の原文');assert.deepEqual(Array.from(saved.meta.comment_conversation.messages,m=>m.body),['自分の原文','相手の原文']);
+ h.retainBoard('tester',[{...r,meta:{comment_body:'別の内容',comment_key:'nc1',comment_conversation:{...conversation,threadKey:'other',messages:[{commentKey:'nc1',parentKey:'other',body:'別の内容'}]}}}]);assert.equal(h.readBoard('tester')[0].meta.comment_conversation.messages.length,1);
+});
+
+test('identity欠落でもURL・meta記事IDの訂正先へ旧本文を流用せず、単なるlocator欠落なら保持する',t=>{
+ for(const change of [{target_url:'https://note.com/owner/n/n2?c=nc1'},{meta:{article_key:'n2'}},{target_url:'https://note.com/owner/n/n1?c=nc2'}]){
+ const h=boardFixture(t),r=row('reply',{notification_type:'reply',target_url:'https://note.com/owner/n/n1?c=nc1',comment_identity:null,meta:{article_key:'n1',comment_key:'nc1',comment_body:'旧対象の本文'}});h.retainBoard('tester',[r]);h.retainBoard('tester',[{...r,meta:{},...change}]);assert.equal(h.readBoard('tester')[0].meta.comment_body,undefined);
+ }
+ const h=boardFixture(t),r=row('reply',{notification_type:'reply',target_url:'https://note.com/owner/n/n1?c=nc1',meta:{comment_body:'保持する本文'}});h.retainBoard('tester',[r]);h.retainBoard('tester',[{...r,target_url:null,meta:{}}]);assert.equal(h.readBoard('tester')[0].meta.comment_body,'保持する本文');
+});
+
+test('記事から明示された非記事URLへの変更とcamelCaseのidentity訂正へ旧本文を運ばない',t=>{
+ for(const change of [{target_url:'https://note.com/owner/membership/posts/123',meta:{}},{target_url:null,meta:{articleKey:'nB',commentKey:'ncA'}},{target_url:null,meta:{articleKey:'nA',commentKey:'ncB'}}]){
+ const h=boardFixture(t),r=row('reply',{notification_type:'reply',target_url:'https://note.com/owner/n/nA?c=ncA',comment_identity:{articleKey:'nA',commentKey:'ncA'},meta:{comment_body:'記事の原文'}});h.retainBoard('tester',[r]);h.retainBoard('tester',[{...r,comment_identity:null,...change}]);const current=h.readBoard('tester')[0];assert.equal(current.meta.comment_body,undefined);assert.equal(current.comment_identity,null);
+ }
+});
+
+test('保存直後の遅い単発本文feedで証明済みroot会話を単発へ巻き戻さない',t=>{
+ const h=boardFixture(t),conversation={articleKey:'nA',threadKey:'root',complete:false,messages:[{commentKey:'root',parentKey:null,body:'自分の本文'},{commentKey:'ncA',parentKey:'root',body:'返信本文'}]},r=row('reply',{notification_type:'reply',comment_identity:{articleKey:'nA',commentKey:'ncA'},meta:{comment_body:'返信本文',comment_conversation:conversation}});h.retainBoard('tester',[r]);h.views.set('tester|all||1|all',{rows:[r],total:1});
+ h.retainBoard('tester',[{...r,meta:{comment_body:'返信本文',comment_conversation:{articleKey:'nA',threadKey:null,complete:false,messages:[{commentKey:'ncA',parentKey:null,body:'返信本文'}]}}}]);
+ for(const saved of [h.readBoard('tester')[0],h.views.get('tester|all||1|all').rows[0],JSON.parse(h.nativeGet(key))[0]]){assert.equal(saved.meta.comment_conversation.threadKey,'root');assert.equal(saved.meta.comment_conversation.messages.length,2)}
+});

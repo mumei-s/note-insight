@@ -1,2 +1,2 @@
-INSIGHT 2026.10.21.6 / notification 3.6.41 / dashboard 1.7.3 / DM 1.4.12
-Restore account-scoped saved displays before background verification; guard delayed storage, stale responses, and explicit authorization denial across active views.
+INSIGHT 2026.10.23.1 / notification 3.6.41 / dashboard 1.7.3 / DM 1.4.12
+Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
