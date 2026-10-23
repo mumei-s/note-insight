@@ -41,32 +41,17 @@ async function fixture(t, { respond, saved, savedToken = 'token-a' } = {}) {
   };
 }
 
-test('mount is read-only, closed, permission unchecked and disabled until explicit agreement', async t => {
+test('mount is read-only and page-generated consent clicks cannot issue a code', async t => {
   const h = await fixture(t);
-  assert.equal(h.calls.length, 0);
-  assert.equal(h.w.document.querySelector('.mioc').open, false);
-  assert.equal(h.checkbox().checked, false);
-  assert.equal(h.button('この端末の連携手順を作る').disabled, true);
-  await h.open(); assert.equal(h.calls.length, 1);
-  assert.equal(h.calls[0].body.action, 'list');
-  assert.deepEqual(h.calls[0].body, { action: 'list', page: 1, pageSize: 20 });
-  assert.equal(h.calls[0].headers['X-Insight-Token'], 'token-a');
-  await h.resolve(0, listing());
-  await h.click(h.checkbox()); assert.equal(h.calls.length, 1);
-  await h.click(h.button('この端末の連携手順を作る'));
-  assert.equal(h.calls.length, 2);
-  assert.deepEqual(h.calls[1].body, { action: 'own-comment-consent-start', consent: true });
-  assert.match(h.calls[1].url, /insight-notification-import-token$/);
-  assert.equal(h.calls[1].headers['X-Insight-Token'], 'token-a');
-  await h.click(h.button('連携手順を準備中…')); assert.equal(h.calls.length, 2);
-  await h.resolve(1, consentResult());
-  assert.match(h.text(), /まだ連携は完了していません/);
-  assert.equal(h.w.document.querySelector('.mioc-handoff a').href, consentResult().noteUrl);
-  assert.doesNotMatch(h.text(), /12345678|token-a/);
+  assert.equal(h.calls.length, 0); assert.equal(h.checkbox(), null);
+  await h.open(); await h.resolve(0, listing());
+  await h.click(h.button('同意してnoteへ進む'));
+  assert.equal(h.calls.length, 1); assert.equal(h.w.document.querySelector('.mioc-handoff'), null);
   assert.match(h.text(), /下書き・投稿失敗・旧形式のコメント欄・note公式アプリ/);
   assert.match(h.text(), /アカウント・記事・コメント・親コメントのID、投稿日時/);
   assert.match(h.text(), /非公開INSIGHT/);
 });
+
 
 test('same-account prior archive is immediate, not a fresh check, and another token cannot reuse it', async t => {
   const saved = { rows: [row({ bodyPreview: '前回の保存本文' })], details: {}, hasMore: false };
@@ -77,7 +62,7 @@ test('same-account prior archive is immediate, not a fresh check, and another to
   assert.match(h.text(), /前回の保存本文/); assert.match(h.text(), /保存済みの内容は保持/);
   assert.equal(h.savedView().savedAt, 1);
   h.w.localStorage.setItem(tokenKey, 'token-b'); await h.start();
-  assert.doesNotMatch(h.text(), /前回の保存本文/); assert.equal(h.checkbox().checked, false);
+  assert.doesNotMatch(h.text(), /前回の保存本文/); assert.equal(h.checkbox(), null);
 });
 
 test('list is previews only; detail obtains exact keys and shows a chronological self/other chat', async t => {
@@ -93,7 +78,7 @@ test('list is previews only; detail obtains exact keys and shows a chronological
   assert.match(h.text(), /返信の取得状況は未確認/); assert.doesNotMatch(h.text(), /返信なし/);
   assert.equal(h.w.document.querySelector('.mioc-entry a').href, 'https://note.com/peer/n/n123?c=nc1');
   assert.equal(h.savedView().value.details['n123:nc1'].row.body, '自分が投稿した本文の全体');
-  assert.equal(h.checkbox().checked, false);
+  assert.equal(h.checkbox(), null);
 });
 
 test('only proven same-thread IDs are grouped, never same author or article alone', async t => {
@@ -171,43 +156,23 @@ test('session switch aborts list and detail and rejects their late results', asy
 
 test('closing aborts unfinished list, clears consent, and reopening makes one fresh read', async t => {
   const h = await fixture(t);
-  await h.open(); await h.click(h.checkbox()); await h.close();
-  assert.equal(h.calls[0].signal.aborted, true); assert.equal(h.checkbox().checked, false);
+  await h.open(); await h.close();
+  assert.equal(h.calls[0].signal.aborted, true); assert.equal(h.checkbox(), null);
   await h.open(); assert.equal(h.calls.length, 2); await h.resolve(1, listing());
   await h.resolve(0, listing([row({ bodyPreview: '閉じる前の古い応答' })]));
   assert.doesNotMatch(h.text(), /閉じる前の古い応答/);
 });
 
-test('dismissing a pending consent never enables, leaks a late link, or automatically retries', async t => {
-  const h = await fixture(t);
-  await h.open(); await h.resolve(0, listing()); await h.click(h.checkbox()); await h.click(h.button('この端末の連携手順を作る'));
-  await h.close(); await h.open(); await h.resolve(1, consentResult());
-  assert.equal(h.w.document.querySelector('.mioc-handoff'), null); assert.equal(h.checkbox().checked, false); assert.equal(h.calls.length, 2);
-});
 
-test('consent accepts only current account exact official note URL, code and future expiry', async t => {
-  const h = await fixture(t);
-  await h.open(); await h.resolve(0, listing());
-  for (const change of [
-    { noteUrl: 'https://evil.example/self?mumei_own_comment_scope=1234567890abcdef1234567890abcdef&mumei_account=self' },
-    { noteUrl: 'https://note.com/other?mumei_own_comment_scope=1234567890abcdef1234567890abcdef&mumei_account=self' },
-    { noteUrl: 'https://note.com/self?mumei_own_comment_scope=abcdef1234567890abcdef1234567890&mumei_account=self' },
-    { noteUrl: 'https://note.com/self?mumei_own_comment_scope=1234567890abcdef1234567890abcdef&mumei_account=other' },
-    { noteUrl: 'https://note.com/self?mumei_own_comment_scope=1234567890abcdef1234567890abcdef&mumei_account=self&token=secret' },
-    { expiresAt: '2020-01-01T00:00:00Z' }, { noteId: 'other' },
-  ]) {
-    if (!h.checkbox().checked) await h.click(h.checkbox());
-    await h.click(h.button('この端末の連携手順を作る')); await h.resolve(h.calls.length - 1, consentResult(change));
-    assert.equal(h.w.document.querySelector('.mioc-handoff'), null); assert.match(h.text(), /連携は完了していません/);
-  }
-});
+
+
 
 test('saved-only history never infers absence of replies or current-browser permission', async t => {
   const h = await fixture(t);
   await h.open(); await h.resolve(0, listing([], { permission: { enabled: true, activeDeviceCount: 2 } }));
   assert.match(h.text(), /連携済み端末あり（2台）/); assert.match(h.text(), /このブラウザの連携状態は未確認/);
   assert.match(h.text(), /保存されていない投稿や返信がないことを示すものではありません/);
-  assert.equal(h.checkbox().checked, false); assert.doesNotMatch(h.text(), /返信なし/);
+  assert.equal(h.checkbox(), null); assert.doesNotMatch(h.text(), /返信なし/);
 });
 
 test('foreign article/comment URLs are suppressed rather than guessed from self account', async t => {
@@ -241,11 +206,11 @@ test('auth rejection discards cached display and prevents another in-flight resu
 
 test('opening/closing nested entries cannot reset main-panel consent or trigger another list', async t => {
   const h = await fixture(t);
-  await h.open(); await h.resolve(0, listing()); await h.click(h.checkbox());
+  await h.open(); await h.resolve(0, listing());
   await h.openEntry(); await h.resolve(1, detail());
   const entry = h.w.document.querySelector('.mioc-entry');
   await React.act(async () => { entry.open = false; await new Promise(resolve => h.w.setTimeout(resolve, 0)); await pause(); });
-  assert.equal(h.checkbox().checked, true); assert.equal(h.calls.length, 2);
+  assert.equal(h.checkbox(), null); assert.equal(h.calls.length, 2);
   assert.equal(h.w.document.querySelector('.mioc').open, true);
 });
 

@@ -125,17 +125,17 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
   const snapshotRef = useRef(snapshot); snapshotRef.current = snapshot;
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [checked, setChecked] = useState(false), [permission, setPermission] = useState<Permission | null>(null);
-  const [consent, setConsent] = useState(false), [consentBusy, setConsentBusy] = useState(false), [consentError, setConsentError] = useState("");
+  const [consentBusy, setConsentBusy] = useState(false), [consentError, setConsentError] = useState("");
   const [handoff, setHandoff] = useState<{ url: string; expiresAt: string } | null>(null);
   const rejected = useRef(false);
-  const page = useRef(1), alive = useRef(true), listFlight = useRef<AbortController | null>(null), consentFlight = useRef(false), consentVersion = useRef(0);
+  const page = useRef(1), alive = useRef(true), listFlight = useRef<AbortController | null>(null), consentFlight = useRef<AbortController | null>(null), consentVersion = useRef(0);
   const detailFlights = useRef(new Map<string, AbortController>()), attemptedDetails = useRef(new Set<string>());
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({}), [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const priorRevision = useRef(revision);
   const active = () => !rejected.current && alive.current && Boolean(token && id(account)) && localStorage.getItem(INSIGHT_TOKEN_KEY) === token;
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; listFlight.current?.abort(); for (const controller of detailFlights.current.values()) controller.abort(); };
+    return () => { alive.current = false; consentFlight.current?.abort(); listFlight.current?.abort(); for (const controller of detailFlights.current.values()) controller.abort(); };
   }, []);
   useEffect(() => {
     if (priorRevision.current === revision) return;
@@ -199,19 +199,24 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
     } catch (error) { if (active() && !controller.signal.aborted) setDetailErrors(previous => ({ ...previous, [key]: failed(error) })); }
     finally { if (detailFlights.current.get(key) === controller) { detailFlights.current.delete(key); if (active()) setDetailBusy(previous => ({ ...previous, [key]: false })); } }
   }
-  async function startConsent() {
-    if (!consent || !active() || consentFlight.current || handoff) return;
-    consentFlight.current = true; const version = ++consentVersion.current; setConsentBusy(true); setConsentError("");
+  async function startConsent(event: React.MouseEvent<HTMLButtonElement>) {
+    // A page-generated click must not create a permission-upgrade handoff.
+    if (!event.isTrusted || !active() || consentFlight.current || handoff) return;
+    const controller = new AbortController(); consentFlight.current = controller; const version = ++consentVersion.current; setConsentBusy(true); setConsentError("");
     try {
-      const payload = await request("insight-notification-import-token", { action: "own-comment-consent-start", consent: true });
+      const payload = await request("insight-notification-import-token", { action: "own-comment-consent-start", consent: true }, controller.signal);
       if (version !== consentVersion.current) return;
       const url = new URL(payload.noteUrl), expiry = Date.parse(payload.expiresAt);
       if (url.origin !== "https://note.com" || url.username || url.password || url.pathname !== `/${account}` || !/^[a-f0-9]{32}$/.test(payload.pairingCode) || url.searchParams.get("mumei_own_comment_scope") !== payload.pairingCode || url.searchParams.get("mumei_account") !== account || url.hash || [...url.searchParams.keys()].some(key => !["mumei_own_comment_scope", "mumei_account"].includes(key)) || !Number.isFinite(expiry) || expiry <= Date.now()) throw new Error("CONSENT_LINK_INVALID");
       setHandoff({ url: url.href, expiresAt: payload.expiresAt });
+      // Same-tab navigation needs no popup permission. Retain a safe link if the
+      // browser refuses navigation; opening the link still cannot enable Reader.
+      try { window.location.assign(url.href); }
+      catch { setConsentError("noteへの移動を開始できませんでした。下のボタンから続けてください。まだ連携は完了していません。"); }
     } catch { if (active() && version === consentVersion.current) setConsentError("連携用の案内を確認できませんでした。連携は完了していません。もう一度操作してください。"); }
-    finally { consentFlight.current = false; if (active()) setConsentBusy(false); }
+    finally { if (consentFlight.current === controller) { consentFlight.current = null; if (active()) setConsentBusy(false); } }
   }
-  function closeConsent() { consentVersion.current++; setConsent(false); setHandoff(null); setConsentError(""); }
+  function closeConsent() { consentVersion.current++; consentFlight.current?.abort(); consentFlight.current = null; setConsentBusy(false); setHandoff(null); setConsentError(""); }
   function toggle(next: boolean) {
     setOpen(next);
     if (next) { if (!checked) void loadList(1); }
@@ -231,9 +236,10 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
           <p>初期状態はオフです。同意したReader搭載ブラウザで、noteへの投稿に成功した自分のコメント本文、アカウント・記事・コメント・親コメントのID、投稿日時を、本人用の非公開INSIGHT保存先へ送ります。</p>
           <p>下書き・投稿失敗・旧形式のコメント欄・note公式アプリからの投稿は対象外です。対応する新形式のコメント欄だけを保存します。過去の未保存コメントは復元できません。連携していない端末の投稿も自動保存されません。</p>
           <p className="mioc-permission-status">{permission ? permission.enabled ? `連携済み端末あり（${permission.activeDeviceCount}台）。このブラウザの連携状態は未確認です。` : "保存連携済みの端末はありません。" : "保存連携の状態は未確認です。"}</p>
-          <label className="mioc-consent"><input type="checkbox" checked={consent} disabled={consentBusy || Boolean(handoff)} onChange={event => setConsent(event.target.checked)} />上記のデータを本人用INSIGHTへ送信・保存することに同意する</label>
-          <button type="button" disabled={!consent || consentBusy || Boolean(handoff)} onClick={() => void startConsent()}>{consentBusy ? "連携手順を準備中…" : "この端末の連携手順を作る"}</button>
-          {handoff ? <div className="mioc-handoff" role="status"><p>まだ連携は完了していません。Readerを入れたブラウザで下のnoteページを開き、同じアカウントで保存を許可してください。</p><a href={handoff.url} target="_blank" rel="noopener noreferrer">noteで保存の連携を確認する ↗</a><small>有効期限：{date(handoff.expiresAt)}</small><p>許可後、この画面の「履歴を更新」で保存先の状態を確認できます。</p><button type="button" onClick={closeConsent}>連携手順を閉じる</button></div> : null}
+          <p>初回だけ2操作です。下のボタンで上記データの送信・保存に同意してnoteへ進み、noteでこのブラウザの有効化を確認します。Readerを入れた同じブラウザで操作してください。</p>
+          <button type="button" disabled={consentBusy || Boolean(handoff)} onClick={event => void startConsent(event)}>{consentBusy ? "noteへの連携を準備中…" : "同意してnoteへ進む"}</button>
+          {consentBusy ? <button type="button" onClick={closeConsent}>設定を中止</button> : null}
+          {handoff ? <div className="mioc-handoff" role="status"><p>まだ連携は完了していません。noteで「このブラウザで自動保存を有効にする」を押してください。自動で移動しない場合は下のリンクから続けられます。</p><a href={handoff.url} rel="noreferrer">noteで有効化を続ける</a><small>有効期限：{date(handoff.expiresAt)}</small><p>許可後、この画面の「履歴を更新」で保存先の状態を確認できます。</p><button type="button" onClick={closeConsent}>連携手順を閉じる</button></div> : null}
           {consentError ? <p role="alert">{consentError}</p> : null}
         </details>
         <div className="mioc-toolbar"><button type="button" disabled={busy} onClick={() => void loadList(1)}>履歴を更新</button><small>{busy ? "保存先を確認中…" : checked ? "保存先を確認済み" : initial ? "前回保存分・最新未確認" : "保存先は未確認"}</small></div>
