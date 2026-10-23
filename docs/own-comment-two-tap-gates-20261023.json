@@ -1,0 +1,146 @@
+{
+  "base": "6752b89742f548830a5ad4ca51e3a4f4b1370d07",
+  "groups": [
+    {
+      "group": 1,
+      "command": "node --test tests/profile-card-paster-v230.test.mjs tests/profile-export-session.test.mjs tests/editor-isolation.test.mjs",
+      "exit": 0,
+      "tests": 117
+    },
+    {
+      "group": 2,
+      "command": "node --experimental-vm-modules --test tests/boot-resilience.test.mjs tests/browser-storage-quota.test.mjs tests/storage-archive.test.mjs tests/persistent-cache-lifecycle.test.mjs tests/service-worker-asset-reuse.test.mjs",
+      "exit": 0,
+      "tests": 45
+    },
+    {
+      "group": 3,
+      "command": "node --test tests/pc-display-mode.test.mjs tests/insight-entry-motion-v20.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs tests/auth-storage-recovery-v2.test.mjs tests/manual-login-navigation.test.mjs tests/recovery-other-device.test.mjs tests/notification-auth-v363.test.mjs tests/notification-feature-v366.test.mjs tests/notification-filter-pagination-v423.test.mjs tests/notification-filter-pagination-v425.test.mjs",
+      "exit": 0,
+      "tests": 100
+    },
+    {
+      "group": 4,
+      "command": "node --test tests/application-approval.test.mjs",
+      "exit": 0,
+      "tests": 5
+    },
+    {
+      "group": 5,
+      "command": "node --experimental-vm-modules --test tests/owner-route-loading.test.mjs",
+      "exit": 0,
+      "tests": 20
+    },
+    {
+      "group": 6,
+      "command": "node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs",
+      "exit": 0,
+      "tests": 70
+    },
+    {
+      "group": 7,
+      "command": "node --experimental-vm-modules --test tests/notification-save-order.test.mjs tests/notification-board-storage.test.mjs",
+      "exit": 0,
+      "tests": 16
+    },
+    {
+      "group": 8,
+      "command": "node --test tests/magazine-search-v23.test.mjs tests/creator-scene-v23.test.mjs",
+      "exit": 0,
+      "tests": 14
+    },
+    {
+      "group": 9,
+      "command": "node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs tests/like-completion-current.test.mjs tests/notification-context-v28.test.mjs tests/notification-handling-v29.test.mjs tests/handling-immediate-v30.test.mjs",
+      "exit": 0,
+      "tests": 102
+    },
+    {
+      "group": 10,
+      "command": "node --experimental-vm-modules --test tests/notification-v2968.test.mjs tests/notification-window-v360.test.mjs",
+      "exit": 0,
+      "tests": 60
+    },
+    {
+      "group": 11,
+      "command": "node --experimental-vm-modules --test tests/startup-freshness.test.mjs tests/comments-startup-freshness.test.mjs tests/secondary-view-freshness.test.mjs tests/analysis-view-freshness.test.mjs",
+      "exit": 0,
+      "tests": 89
+    },
+    {
+      "group": 12,
+      "command": "node --experimental-vm-modules --test tests/account-logout-ownership.test.mjs tests/app-session-refresh.test.mjs tests/session-request-single-flight.test.mjs tests/entry-session-request-budget.test.mjs tests/app-startup-session-gate.test.mjs tests/app-route-loading-budget.test.mjs tests/screen-loader-recovery.test.mjs tests/insight-scene-loading-budget.test.mjs tests/unified-startup-requests.test.mjs tests/notification-startup-request-budget.test.mjs tests/notification-selected-page-budget.test.mjs tests/notification-category-recovery.test.mjs tests/insight-shell-request-budget.test.mjs tests/insight-shell-refresh-signals.test.mjs",
+      "exit": 0,
+      "tests": 115
+    },
+    {
+      "group": 13,
+      "command": "node --experimental-vm-modules --test tests/comment-refresh-recovery.test.mjs tests/public-sync-isolation.test.mjs tests/dm-direct-room-ingest.test.mjs",
+      "exit": 0,
+      "tests": 27
+    },
+    {
+      "group": 14,
+      "command": "node --experimental-vm-modules --test tests/read-auth-transient-errors.test.mjs tests/dm-summary-saved-time.test.mjs tests/dm-feed-egress.test.mjs tests/dm-ui-freshness-recovery.test.mjs tests/dm-network-lifecycle.test.mjs tests/dm-network-recovery.test.mjs tests/dm-room-capacity.test.mjs tests/dm-reader-identity-lifecycle.test.mjs",
+      "exit": 0,
+      "tests": 68
+    },
+    {
+      "group": 15,
+      "command": "node --test tests/insight-rpc-read-performance.test.mjs tests/ranking-rpc-performance.test.mjs tests/ranking-count-branches.test.mjs tests/notification-feed-page-rpc.test.mjs tests/notification-store-started.test.mjs",
+      "exit": 0,
+      "tests": 23
+    },
+    {
+      "group": 16,
+      "command": "node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs",
+      "exit": 0,
+      "tests": 25
+    },
+    {
+      "group": 17,
+      "command": "node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-save-queue.test.mjs tests/dashboard-daily-v146.test.mjs tests/dashboard-read-egress.test.mjs",
+      "exit": 0,
+      "tests": 130
+    },
+    {
+      "group": 18,
+      "command": "node --experimental-vm-modules --test tests/view-retention-lifecycle.test.mjs tests/notification-pagination-lifecycle.test.mjs tests/notification-view-reuse.test.mjs tests/notification-legacy-body-v17.test.mjs tests/notification-comment-retention-ingest.test.mjs tests/notification-conversation-backend.test.mjs tests/notification-conversation-list-payload.test.mjs tests/notification-reclassify-archive-race.test.mjs tests/notification-comment-locator.test.mjs tests/unified-view-retention.test.mjs tests/dm-view-retention.test.mjs tests/magazine-view-retention.test.mjs",
+      "exit": 0,
+      "tests": 114
+    },
+    {
+      "group": 19,
+      "command": "node --experimental-vm-modules --test --test-concurrency=1 tests/outgoing-comment*.test.mjs",
+      "exit": 0,
+      "tests": 51
+    },
+    {
+      "group": 20,
+      "command": "node --experimental-vm-modules --test tests/saved-view-scope.test.mjs tests/likes-saved-view.test.mjs tests/notification-saved-view.test.mjs tests/dm-saved-page.test.mjs tests/social-saved-display.test.mjs tests/favorites-saved-display.test.mjs tests/magazine-saved-view.test.mjs tests/ranking-saved-pages.test.mjs tests/ranking-cold-start.test.mjs tests/unified-late-storage.test.mjs tests/member-history-errors.test.mjs",
+      "exit": 0,
+      "tests": 199
+    },
+    {
+      "group": 21,
+      "command": "node --test --test-concurrency=1 tests/owner-dm-retention.test.mjs",
+      "exit": 0,
+      "tests": 5
+    },
+    {
+      "group": 22,
+      "command": "node --experimental-vm-modules --test --test-name-pattern='DM\u672c\u6587\u306e\u9045\u3044\u53d6\u5f97' tests/analysis-repair-v147.test.mjs",
+      "exit": 0,
+      "tests": 1
+    },
+    {
+      "group": 23,
+      "command": "node --experimental-vm-modules --test tests/navigation-summary-egress.test.mjs tests/navigation-articles-lazy.test.mjs tests/notification-recent-egress.test.mjs tests/owner-pending-single-flight.test.mjs tests/resume-request-single-flight.test.mjs tests/home-access-session-budget.test.mjs",
+      "exit": 0,
+      "tests": 75
+    }
+  ],
+  "totalTests": 1471,
+  "browserTrustedClicks": "not run: executor launch restriction",
+  "legacyStaticFailuresUnchanged": 4
+}
