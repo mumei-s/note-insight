@@ -92,10 +92,10 @@ test('実handlerは同じclient signatureでも明示通知IDが違えば旧本�
   const [row]=await h.rows();assert.equal(row.meta.event_identity,'notice:222');assert.equal(row.meta.comment_body,undefined);assert.equal(row.meta.comment_body_source,undefined);
 });
 
-test('実handlerは同一通知の重複行を整理するとき別候補の取得済み本文を失わない',async t=>{
+test('実handlerは同一通知の重複候補から本文を保持し元の履歴行も削除しない',async t=>{
   const h=await fixture(t);await h.seed({meta:notice().meta});await h.seed({fingerprint:'legacy-fingerprint'});
-  const result=await h.send([notice()]);assert.equal(result.status,200);assert.equal(result.body.deduped,1);
-  const rows=await h.rows();assert.equal(rows.length,1);assert.equal(rows[0].meta.comment_body,resolved.comment_body);assert.equal(rows[0].meta.comment_body_source,'exact-comment-id');
+  const result=await h.send([notice()]);assert.equal(result.status,200);assert.equal(result.body.deduped,0);
+  const rows=await h.rows();assert.equal(rows.length,2);assert.equal(rows[0].meta.comment_body,resolved.comment_body);assert.equal(rows[0].meta.comment_body_source,'exact-comment-id');
 });
 
 test('実handlerは他tenantの同じ通知を本文の保持候補にせず、別note本人を拒否する',async t=>{
@@ -158,4 +158,8 @@ test('同じ記事URLからコメントIDだけ失われても本文を保持し
 test('旧reply_bodyだけに保存された本文を同一IDの再同期でも維持する',async t=>{
  const h=await fixture(t);await h.seed({meta:{...notice().meta,reply_body:'旧形式の本文',comment_key:'nc222'}});
  assert.equal((await h.send([notice()])).status,200);assert.equal((await h.rows())[0].meta.comment_body,'旧形式の本文');
+});
+
+test('取り込み処理は既存履歴の削除を実行しない',()=>{
+ const source=readFileSync('supabase/functions/insight-notification-ingest-v2/index.ts','utf8');assert.doesNotMatch(source,/\.delete\s*\(/);
 });

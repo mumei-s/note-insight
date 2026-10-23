@@ -235,18 +235,8 @@ Deno.serve(async(req)=>{
           if(readError)throw readError;if(!fresh)throw new Error("NOTIFICATION_CHANGED_RETRY");current=fresh;
         }
         if(!saved)throw new Error("NOTIFICATION_CHANGED_RETRY");updated++;
-        // Do not delete a duplicate that gained an archive after our read.
-        for(const duplicate of candidates.filter(x=>x.id!==preferred.id)){
-          const archive=duplicate.meta?.comment_conversation,archived=archive?.messages||[],savedBody=capturedCommentBody(duplicate.meta?.comment_body)||capturedCommentBody(duplicate.meta?.reply_body);
-          const oldIdentity=commentLocator(duplicate.target_url,duplicate.meta),newIdentity=commentLocator(row.target_url,row.meta);
-          if(typeof savedBody==="string"&&savedBody.trim()&&(!sameNotification(duplicate,row.meta,stableFingerprint)||!oldIdentity||!newIdentity||oldIdentity.article!==newIdentity.article||oldIdentity.comment!==newIdentity.comment||savedBody!==row.meta.comment_body))continue;
-          const retained=row.meta.comment_conversation;
-          if(archived.some((m:any)=>typeof m.body==="string"&&m.body.trim()&&(archive.articleKey!==retained?.articleKey||archive.threadKey!==retained?.threadKey||!retained?.messages?.some((kept:any)=>kept.commentKey===m.commentKey&&kept.parentKey===m.parentKey&&kept.body===m.body))))continue;
-          let remove=db.from("insight_notifications").delete().eq("id",duplicate.id).eq("member_id",who.memberId);
-          remove=duplicate.captured_at==null?remove.is("captured_at",null):remove.eq("captured_at",duplicate.captured_at);
-          const revision=duplicate.meta?.comment_archive_revision;remove=revision==null?remove.is("meta->>comment_archive_revision",null):remove.eq("meta->>comment_archive_revision",String(revision));
-          const{data:removed,error:deleteError}=await remove.select("id");if(deleteError)throw deleteError;deduped+=removed?.length||0;
-        }
+        // Duplicate rows remain intact. Read-time deduplication handles presentation;
+        // saving a recapture must never delete an existing history record.
       }else{
         const{error:insertError}=await db.from("insight_notifications").insert(row);if(insertError)throw insertError;inserted++;
       }
