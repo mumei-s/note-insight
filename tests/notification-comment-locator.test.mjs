@@ -83,3 +83,11 @@ test('対象コメントがthreadへ繋がらない時は無関係なrootだけ�
  assert.match(h.text(),/対象だけの本文/);assert.doesNotMatch(h.text(),/不正なroot本文/);await h.unmount();
  }
 });
+
+test('保存会話の取得と新着返信の明示確認を区別し、開き直しでは再取得しない',async t=>{
+ const h=await fixture(t,row({meta:{comment_key:'comment-a',comment_body:'保存した返信',comment_conversation_saved:true}}));await h.open();assert.equal(h.calls.length,0);assert.equal(h.w.document.querySelector('button').textContent,'会話を確認');
+ await settle(()=>h.w.document.querySelector('button').click());assert.equal(h.calls[0].body.includeConversation,true);assert.equal(h.calls[0].body.refreshConversation,undefined);
+ await h.resolve(0,{...result('保存した返信'),conversation:{articleKey:'article-a',threadKey:'root',complete:false,messages:[{commentKey:'root',parentKey:null,body:'自分の発言'},{commentKey:'comment-a',parentKey:'root',body:'保存した返信'}]}});assert.equal(h.w.document.querySelector('button').textContent,'新しい返信を確認');
+ await settle(()=>{h.w.document.querySelector('details').open=false});await h.open();assert.equal(h.calls.length,1);
+ await settle(()=>h.w.document.querySelector('button').click());assert.equal(h.calls[1].body.refreshConversation,true);assert.equal(h.calls[1].body.includeConversation,true);await h.reject(1);assert.match(h.text(),/自分の発言/);
+});

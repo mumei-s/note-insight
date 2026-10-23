@@ -133,3 +133,9 @@ test('保存直後の遅い単発本文feedで証明済みroot会話を単発へ
  h.retainBoard('tester',[{...r,meta:{comment_body:'返信本文',comment_conversation:{articleKey:'nA',threadKey:null,complete:false,messages:[{commentKey:'ncA',parentKey:null,body:'返信本文'}]}}}]);
  for(const saved of [h.readBoard('tester')[0],h.views.get('tester|all||1|all').rows[0],JSON.parse(h.nativeGet(key))[0]]){assert.equal(saved.meta.comment_conversation.threadKey,'root');assert.equal(saved.meta.comment_conversation.messages.length,2)}
 });
+
+test('軽量一覧が会話本文を省略しても端末に保存した会話と状態を保持する',t=>{
+ const h=boardFixture(t),conversation={articleKey:'nA',threadKey:'root',complete:false,messages:[{commentKey:'root',parentKey:null,body:'自分の本文'},{commentKey:'ncA',parentKey:'root',body:'返信本文'}]},r=row('reply',{notification_type:'reply',comment_identity:{articleKey:'nA',commentKey:'ncA'},meta:{comment_body:'返信本文',comment_conversation:conversation}});h.retainBoard('tester',[r]);h.views.set('tester|all||1|all',{rows:[r],total:1});
+ h.retainBoard('tester',[{...r,confirmed:true,favorite:true,meta:{comment_body:'返信本文',comment_conversation_saved:true}}]);
+ for(const saved of [h.readBoard('tester')[0],h.views.get('tester|all||1|all').rows[0],JSON.parse(h.nativeGet(key))[0]]){assert.equal(saved.meta.comment_conversation.threadKey,'root');assert.equal(saved.meta.comment_conversation.messages.length,2);assert.equal(saved.confirmed,true);assert.equal(saved.favorite,true)}
+});

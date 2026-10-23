@@ -168,7 +168,7 @@ function NotificationComment({row,onSaved}:{row:Row;onSaved:(row:Row)=>void}){
   const valid=()=>seq===request.current.seq&&!controller.signal.aborted&&currentLocator.current===locator&&token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"");
   setState(previous=>valid()?{locator,body,conversation,busy:true,message:"",missing:false,attempted:true}:previous);
   try{
-   const x=await post({action:"comment_detail",id:row.id,includeConversation:explicit},controller.signal);if(!valid())return;
+   const x=await post({action:"comment_detail",id:row.id,includeConversation:explicit,...(explicit&&conversation?{refreshConversation:true}:{})},controller.signal);if(!valid())return;
    const text=savedCommentText({comment_body:x.body})||body,thread=commentConversation(x.conversation,String(x.articleKey||identity?.articleKey||""),String(x.commentKey||key))||conversation;
    const message=x.status==="missing_id"?(board?"掲示板の本文はまだ取得・保存されていません。対象掲示板から確認できます。":"この旧通知には対象コメントIDが保存されていないため、会話を特定できません。保存済みの本文は保持しています。"):
     !x.body?"対象本文を取得できませんでした。保存済みの内容は保持しています。":x.persisted===false?"本文は表示中ですが、保存を確認できていません。":"";
@@ -182,7 +182,7 @@ function NotificationComment({row,onSaved}:{row:Row;onSaved:(row:Row)=>void}){
  {messages.length?<><ol className="minf-conversation" aria-label="保存したコメントの会話">{messages.map((m:any)=><li key={m.commentKey} className={m.isSelf?"minf-message self":"minf-message other"}><small>{m.isSelf?"自分":m.author||"投稿者未確認"}{m.occurredAt?` · ${new Date(m.occurredAt).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"})}`:""}</small><p>{m.body}</p></li>)}</ol><small>取得・保存できた範囲の履歴です。{messages.length===1?"会話全体はまだ確認できていません。":""}</small></>:null}
  {busy?<p role="status" aria-busy="true">本文を照合中…</p>:null}{message?<p role="status">{message}</p>:!messages.length&&!busy?<p>本文を読み込みます。</p>:null}
  {identity?.url||board&&href(row)?<a href={identity?.url||href(row)} target="_blank" rel="noreferrer">{board?"対象掲示板 ↗":"対象コメント ↗"}</a>:null}
- {!busy&&!missing?<button onClick={()=>void resolve(true)}>{body?"会話を確認":"本文を再読込"}</button>:null}</div></details>
+ {!busy&&!missing?<button onClick={()=>void resolve(true)}>{conversation?"新しい返信を確認":body?"会話を確認":"本文を再読込"}</button>:null}</div></details>
 }
 
 export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=""}:{revision?:number;noteId?:string}){
