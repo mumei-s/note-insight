@@ -60,3 +60,26 @@ test('掲示板の通知raw_textや汎用meta.bodyを返信本文にせず専用
  const initial=row({notification_type:'membership_board_reply',display_category:'membership_board_reply',raw_text:'通知案内だけの文章',meta:{comment_key:'comment-a',body:'通知案内だけの文章',source:'note-notification-dom'}}),h=await fixture(t,initial);assert.doesNotMatch(h.text(),/通知案内だけの文章/);await h.open();await h.resolve(0,{ok:true,body:'',status:'missing_id'});assert.doesNotMatch(h.text(),/通知案内だけの文章/);assert.match(h.text(),/掲示板の本文はまだ取得/);assert.equal(h.saved.length,0);
  await h.render({...initial,meta:{...initial.meta,comment_body:'取得確認済みの掲示板返信'}});assert.match(h.text(),/取得確認済みの掲示板返信/);assert.equal(h.calls.length,1);
 });
+
+test('保存済み本文は即時表示し、明示した会話確認が失敗しても残す',async t=>{
+ const h=await fixture(t,row({meta:{comment_key:'comment-a',comment_body:'保存済み本文'}}));await h.open();assert.equal(h.calls.length,0);assert.match(h.text(),/保存済み本文/);
+ await settle(()=>h.w.document.querySelector('button').click());assert.equal(h.calls.length,1);assert.match(h.text(),/保存済み本文/);await h.reject(0);assert.match(h.text(),/保存済み本文/);assert.match(h.text(),/保存済みの内容は保持/);
+});
+test('削除などで本文が取得できなくても保存済み本文を空にしない',async t=>{
+ const h=await fixture(t,row({meta:{comment_key:'comment-a',comment_body:'消してはいけない本文'}}));await h.open();await settle(()=>h.w.document.querySelector('button').click());await h.resolve(0,{ok:true,body:null,status:'unavailable'});assert.match(h.text(),/消してはいけない本文/);assert.equal(h.saved[0].comment_body,'消してはいけない本文');
+});
+test('旧通知のmissing_idは再試行ボタンと再開時の無意味な要求を出さない',async t=>{
+ const h=await fixture(t,row({comment_identity:null,meta:{}}));await h.open();await h.resolve(0,{ok:true,status:'missing_id',body:null});assert.match(h.text(),/会話を特定できません/);assert.equal(h.w.document.querySelector('button'),null);
+ await settle(()=>{h.w.document.querySelector('details').open=false});await h.open();assert.equal(h.calls.length,1);
+});
+test('確実な同一threadだけを時系列の自分・相手の吹き出しにする',async t=>{
+ const h=await fixture(t);await h.open();await h.resolve(0,{...result('返信本文'),conversation:{articleKey:'article-a',threadKey:'root',complete:false,messages:[{commentKey:'comment-a',parentKey:'root',body:'相手の返信',author:'相手',isSelf:false,occurredAt:'2026-10-23T00:02:00Z'},{commentKey:'root',parentKey:null,body:'自分のコメント',author:'自分',isSelf:true,occurredAt:'2026-10-23T00:01:00Z'},{commentKey:'unrelated',parentKey:'different',body:'混ぜない本文',author:'相手',occurredAt:'2026-10-23T00:03:00Z'}]}});
+ const bubbles=[...h.w.document.querySelectorAll('.minf-message')];assert.equal(bubbles.length,2);assert.match(bubbles[0].textContent,/自分のコメント/);assert.ok(bubbles[0].classList.contains('self'));assert.match(bubbles[1].textContent,/相手の返信/);assert.doesNotMatch(h.text(),/混ぜない本文/);
+});
+
+test('対象コメントがthreadへ繋がらない時は無関係なrootだけを会話にしない',async t=>{
+ for(const [parentKey,rootParent] of [['other',null],['root','other']]){
+ const h=await fixture(t);await h.open();await h.resolve(0,{...result('対象だけの本文'),conversation:{articleKey:'article-a',threadKey:'root',complete:false,messages:[{commentKey:'comment-a',parentKey,body:'対象だけの本文'},{commentKey:'root',parentKey:rootParent,body:'不正なroot本文'}]}});
+ assert.match(h.text(),/対象だけの本文/);assert.doesNotMatch(h.text(),/不正なroot本文/);await h.unmount();
+ }
+});
