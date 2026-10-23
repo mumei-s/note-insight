@@ -85,11 +85,20 @@ async function unresolvedSummary(ids:string[]){
   for(const r of data||[]){remaining++;if(insufficientEvidence(r))insufficient++;if(r.meta?.reclassify_pending||r.meta?.classifier!=="action-v28-context"||r.meta?.recovery_version!==RECOVERY_VERSION)unprocessed++}if((data||[]).length<1000)break;
  }return{remaining,insufficient,unsupported:remaining-insufficient,unprocessed};
 }
+// Reclassification must not overwrite a comment archive captured after this row was read.
+async function saveReclassifiedNotification(ids:string[],row:any,patch:any){
+ const meta={...patch.meta,comment_archive_revision:crypto.randomUUID()};
+ let q=db.from("insight_notifications").update({...patch,meta}).eq("id",row.id).in("member_id",ids);
+ q=row.captured_at==null?q.is("captured_at",null):q.eq("captured_at",row.captured_at);
+ q=row.meta?.comment_archive_revision==null?q.is("meta->>comment_archive_revision",null):q.eq("meta->>comment_archive_revision",row.meta.comment_archive_revision);
+ const{data,error}=await q.select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,meta").maybeSingle();if(error)throw error;
+ return data; // A conflict is intentionally skipped, not reported as repaired.
+}
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
  const m=await auth(req),ids=m.scope===m.id?[m.id]:[m.scope,m.id],b=await req.json().catch(()=>({})),cursor=String(b.cursor||""),now=new Date().toISOString();
  let q=db.from("insight_notifications").select("id,notification_type,raw_text,actor_name,actor_url,target_url,occurred_at,captured_at,meta").in("member_id",ids).order("id").limit(100);if(b.onlyPending!==false)q=q.or(`meta->>classifier.is.null,meta->>classifier.neq.action-v28-context,meta->>reclassify_pending.eq.true,meta->>recovery_version.is.null,meta->>recovery_version.neq.${RECOVERY_VERSION}`);q=q.eq("notification_type","other");if(cursor)q=q.gt("id",cursor);
- const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0;const repairedRows:any[]=[];
+ const{data,error}=await q;if(error)throw error;let checked=0,moved=0,dayStamped=0,pending=0,conflicted=0;const repairedRows:any[]=[];
  const evidence=new Map<string,any>();
  if((data||[]).some(r=>!r.meta?.kind)){
   for(let start=0;;start+=1000){const {data:probes,error:probeError}=await db.from("insight_notification_network_probes").select("response_sample").in("member_id",ids).order("captured_at",{ascending:false}).order("id").range(start,start+999);if(probeError)throw probeError;
@@ -104,8 +113,8 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  if(actor&&/^https:\/\/note\.com\/[^/?#]+\/?$/.test(String(actor.url||""))){repair.actor_url=actor.url;if(typeof actor.name==="string")repair.actor_name=actor.name;if(/^https:\/\//.test(String(actor.user_profile_image_path||"")))repair.actor_image_url=actor.user_profile_image_path}
  if(recovered){const target=String(meta.all_area_url||meta.featured_area_url||"");if(/^https:\/\/note\.com\//.test(target))repair.target_url=target;if(meta.noticed_at)repair.occurred_at=meta.noticed_at}
  if(meta.body)repair.raw_text=String(meta.body).replace(/<[^>]*>/g," ").slice(0,4000);
- const{data:saved,error:up}=await db.from("insight_notifications").update({...repair,notification_type:nextType,meta:finalMeta}).eq("id",r.id).in("member_id",ids).select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,meta").single();if(up)throw up;repairedRows.push(saved);checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++};
+ const saved=await saveReclassifiedNotification(ids,r,{...repair,notification_type:nextType,meta:finalMeta});if(!saved){conflicted++;return;}repairedRows.push(saved);checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++};
  for(let i=0;i<(data||[]).length;i+=8)await Promise.all((data||[]).slice(i,i+8).map(processRow));
  const unresolved=await unresolvedSummary(ids);
- return out({ok:true,unresolved,noteId:m.noteId,checked,moved,dayStamped,pending,rows:repairedRows,classifierVersion:"action-v28-context",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
+ return out({ok:true,unresolved,noteId:m.noteId,checked,moved,dayStamped,pending,conflicted,rows:repairedRows,classifierVersion:"action-v28-context",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});

@@ -115,7 +115,7 @@ function allowedExplicitSource(source:string){
 }
 function storedSource(source:string){if(source==="note-notification-reader-v2963")return "note-notification-manual-sync-v2963";return /^note-notification-resume-(?:upward|downward)-v\d+$/.test(source)?"note-notification-manual-sync-v2959":source}
 
-type ExistingRow={id:string;fingerprint:string;notification_type:string|null;target_url:string|null;meta:any};
+type ExistingRow={id:string;fingerprint:string;notification_type:string|null;target_url:string|null;captured_at?:string|null;meta:any};
 function commentLocator(target:unknown,meta:any){
   let found:{article:string;comment:string}|null=null,targetArticle="";
   for(const [index,raw] of [target,meta?.all_area_url,meta?.featured_area_url].entries()){
@@ -136,18 +136,57 @@ function sameNotification(existing:ExistingRow,meta:any,fingerprint:string){
   const client=String(existing.meta?.client_signature||"");
   return Boolean(client&&client===String(meta?.client_signature||""))||existing.fingerprint===fingerprint;
 }
+function capturedCommentBody(value:any){return typeof value==="string"&&value.trim()&&!/^(?:削除済み|このコメントは削除されました[。.]?|コメントは削除されました[。.]?|削除されたコメント|\[deleted\]|\[removed\])$/i.test(value.trim())?value:""}
 function preserveCommentMeta(meta:any,target:string|null,fingerprint:string,candidates:ExistingRow[]){
-  if(typeof meta.comment_body==="string"&&meta.comment_body.trim())return meta;
-  const next=commentLocator(target,meta);if(!next||meta.comment_key&&meta.comment_key!==next.comment)return meta;
+  const next=commentLocator(target,meta);
+  if(!next){
+    // Lost comment locators are not evidence that previously saved text was deleted.
+    // Recover only the same provider notice with no conflicting article/comment evidence.
+    if(String(meta.event_identity||"").startsWith("notice:"))for(const saved of candidates){
+      if(saved.meta?.event_identity!==meta.event_identity)continue;
+      const old=commentLocator(saved.target_url,saved.meta),article=old?.article||saved.meta?.article_key||saved.meta?.articleKey,comment=old?.comment||saved.meta?.comment_key||saved.meta?.commentKey;
+      if([meta.comment_key,meta.commentKey].some(key=>key&&key!==comment)||[meta.article_key,meta.articleKey].some(key=>key&&key!==article))continue;
+      let conflict=false;
+      for(const raw of [target,meta.all_area_url,meta.featured_area_url]){if(!raw)continue;try{const u=new URL(String(raw)),match=u.pathname.match(/^\/[A-Za-z0-9_-]+\/n\/(n[A-Za-z0-9]+)$/),key=u.searchParams.get("c");if(u.protocol!=="https:"||u.hostname!=="note.com"||!match||match[1]!==article||key&&key!==comment)conflict=true}catch{conflict=true}}
+      if(conflict)continue;
+      const retained={...meta};
+      if(!capturedCommentBody(retained.comment_body)&&capturedCommentBody(saved.meta?.reply_body))retained.comment_body=saved.meta.reply_body;
+      for(const key of ["comment_body","comment_key","article_key","comment_author","comment_author_url","comment_body_source","comment_resolved_at","comment_conversation"]){
+        if(saved.meta?.[key]!==undefined&&(key==="comment_body"?!capturedCommentBody(retained[key]):!(typeof retained[key]==="string"&&retained[key].trim())||key==="comment_conversation"))retained[key]=saved.meta[key];
+      }
+      return retained;
+    }
+    return meta;
+  }
+  if(meta.comment_key&&meta.comment_key!==next.comment)return meta;
+  let kept:Record<string,any>={...meta};
+  const hasBody=Boolean(capturedCommentBody(meta.comment_body));
+  let bodyKept=hasBody;
   for(const existing of candidates){
     const old=existing.meta||{},locator=commentLocator(existing.target_url,old);
-    if(typeof old.comment_body!=="string"||!old.comment_body.trim()||old.comment_key!==next.comment||!locator||locator.article!==next.article||locator.comment!==next.comment||!sameNotification(existing,meta,fingerprint))continue;
+    if(!locator||locator.article!==next.article||locator.comment!==next.comment||!sameNotification(existing,meta,fingerprint))continue;
     // Keep resolved text and its provenance together; notice metadata still comes from this capture.
-    const kept:Record<string,unknown>={...meta};
-    for(const key of ["comment_body","comment_key","comment_author","comment_body_source","comment_resolved_at"]){delete kept[key];if(Object.prototype.hasOwnProperty.call(old,key))kept[key]=old[key]}
-    return kept;
+    const previousBody=capturedCommentBody(old.comment_body)||capturedCommentBody(old.reply_body);
+    if(!bodyKept&&previousBody&&old.comment_key===next.comment){
+      for(const key of ["comment_body","comment_key","comment_author","comment_author_url","comment_body_source","comment_resolved_at"]){delete kept[key];if(Object.prototype.hasOwnProperty.call(old,key))kept[key]=old[key]}
+      kept.comment_body=previousBody;bodyKept=true;
+    }
+    // A reader recapture does not contain the separately resolved conversation.
+    // Preserve that server archive even when the reader supplies a new target body.
+    const archive=old.comment_conversation;
+    if(archive?.articleKey!==next.article||!Array.isArray(archive.messages)||!archive.messages.some((m:any)=>m.commentKey===next.comment&&typeof m.body==="string"&&m.body.trim()))continue;
+    if(!kept.comment_conversation){kept.comment_conversation=archive;continue}
+    const current=kept.comment_conversation;
+    if(current.articleKey!==archive.articleKey||current.threadKey!==archive.threadKey||!Array.isArray(current.messages))continue;
+    const messages=new Map(archive.messages.map((m:any)=>[m.commentKey,m]));
+    for(const message of current.messages){
+      const saved:any=messages.get(message.commentKey);
+      // A missing/empty fetch never erases a previously captured body.
+      messages.set(message.commentKey,saved&&typeof saved.body==="string"&&saved.body.trim()?saved:message);
+    }
+    kept.comment_conversation={...current,messages:[...messages.values()]};
   }
-  return meta;
+  return kept;
 }
 Deno.serve(async(req)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:H});
@@ -174,9 +213,9 @@ Deno.serve(async(req)=>{
       const precise=String(meta.event_identity||"").startsWith("notice:")||String(meta.event_identity||"").startsWith("time:");
       const fingerprints=precise?[stableFingerprint]:[...new Set([stableFingerprint,legacyFingerprint,legacyOtherFingerprint])];
       const eventIdentity=String(meta.event_identity||"");
-      const queries=[db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints)];
-      if(eventIdentity.startsWith("notice:"))queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).contains("meta",{event_identity:eventIdentity}).limit(8));
-      if(clientSignature)queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8));
+      const queries=[db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,captured_at,meta").eq("member_id",who.memberId).in("fingerprint",fingerprints)];
+      if(eventIdentity.startsWith("notice:"))queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,captured_at,meta").eq("member_id",who.memberId).contains("meta",{event_identity:eventIdentity}).limit(8));
+      if(clientSignature)queries.push(db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,captured_at,meta").eq("member_id",who.memberId).contains("meta",{client_signature:clientSignature}).limit(8));
       const found=await Promise.all(queries),byId=new Map<string,ExistingRow>();
       for(const result of found){if(result.error)throw result.error;for(const row of result.data||[])byId.set(row.id,row as ExistingRow)}
       const candidates=[...byId.values()];
@@ -184,9 +223,30 @@ Deno.serve(async(req)=>{
       const keptMeta=preserveCommentMeta(meta,targetUrl,stableFingerprint,preferred?[preferred,...candidates.filter(x=>x.id!==preferred.id)]:candidates);
       const row={member_id:who.memberId,fingerprint:stableFingerprint,notification_type:type,raw_text:raw,actor_name:actorName,actor_url:actorUrl,actor_image_url:actorImage,target_title:clean(item?.target_title,500),target_url:targetUrl,source_url:sourceUrl,occurred_at:at,captured_at:classifiedAt,meta:{...keptMeta,source:storedSource(source),capture_source:source,synced_note_id:who.noteId,classifier:"action-v28-context",classified_type:type,classification_status:type==="other"?"unmatched":"matched",event_day_jst:eventDay,reclassify_pending:type==="other",classified_at:classifiedAt,event_identity:meta.event_identity||"classification-independent-v2"}};
       if(preferred){
-        const duplicateIds=candidates.filter(x=>x.id!==preferred.id).map(x=>x.id);
-        if(duplicateIds.length){const{error:deleteError}=await db.from("insight_notifications").delete().in("id",duplicateIds);if(deleteError)throw deleteError;deduped+=duplicateIds.length}
-        const{error:updateError}=await db.from("insight_notifications").update(row).eq("id",preferred.id);if(updateError)throw updateError;updated++;
+        let current=preferred,saved=false;
+        for(let attempt=0;attempt<3;attempt++){
+          row.meta={...row.meta,...preserveCommentMeta(row.meta,targetUrl,stableFingerprint,[current,...candidates.filter(x=>x.id!==current.id)]),comment_archive_revision:crypto.randomUUID()};
+          let update=db.from("insight_notifications").update(row).eq("id",current.id).eq("member_id",who.memberId);
+          update=current.captured_at==null?update.is("captured_at",null):update.eq("captured_at",current.captured_at);
+          const revision=current.meta?.comment_archive_revision;update=revision==null?update.is("meta->>comment_archive_revision",null):update.eq("meta->>comment_archive_revision",String(revision));
+          const{data:wrote,error:updateError}=await update.select("id");if(updateError)throw updateError;
+          if(wrote?.length){saved=true;break}
+          const{data:fresh,error:readError}=await db.from("insight_notifications").select("id,fingerprint,notification_type,target_url,captured_at,meta").eq("id",current.id).eq("member_id",who.memberId).maybeSingle();
+          if(readError)throw readError;if(!fresh)throw new Error("NOTIFICATION_CHANGED_RETRY");current=fresh;
+        }
+        if(!saved)throw new Error("NOTIFICATION_CHANGED_RETRY");updated++;
+        // Do not delete a duplicate that gained an archive after our read.
+        for(const duplicate of candidates.filter(x=>x.id!==preferred.id)){
+          const archive=duplicate.meta?.comment_conversation,archived=archive?.messages||[],savedBody=capturedCommentBody(duplicate.meta?.comment_body)||capturedCommentBody(duplicate.meta?.reply_body);
+          const oldIdentity=commentLocator(duplicate.target_url,duplicate.meta),newIdentity=commentLocator(row.target_url,row.meta);
+          if(typeof savedBody==="string"&&savedBody.trim()&&(!sameNotification(duplicate,row.meta,stableFingerprint)||!oldIdentity||!newIdentity||oldIdentity.article!==newIdentity.article||oldIdentity.comment!==newIdentity.comment||savedBody!==row.meta.comment_body))continue;
+          const retained=row.meta.comment_conversation;
+          if(archived.some((m:any)=>typeof m.body==="string"&&m.body.trim()&&(archive.articleKey!==retained?.articleKey||archive.threadKey!==retained?.threadKey||!retained?.messages?.some((kept:any)=>kept.commentKey===m.commentKey&&kept.parentKey===m.parentKey&&kept.body===m.body))))continue;
+          let remove=db.from("insight_notifications").delete().eq("id",duplicate.id).eq("member_id",who.memberId);
+          remove=duplicate.captured_at==null?remove.is("captured_at",null):remove.eq("captured_at",duplicate.captured_at);
+          const revision=duplicate.meta?.comment_archive_revision;remove=revision==null?remove.is("meta->>comment_archive_revision",null):remove.eq("meta->>comment_archive_revision",String(revision));
+          const{data:removed,error:deleteError}=await remove.select("id");if(deleteError)throw deleteError;deduped+=removed?.length||0;
+        }
       }else{
         const{error:insertError}=await db.from("insight_notifications").insert(row);if(insertError)throw insertError;inserted++;
       }

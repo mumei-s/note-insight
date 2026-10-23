@@ -101,27 +101,76 @@ async function notificationFavorite(m:any,b:any){
 }
 function handlingMatch(r:any,status:string){return status==="completed"?Boolean(r.confirmed):status==="pending"?!r.confirmed:true}
 function selectHandling(rows:any[],kind:string,day:string,status:string){const dated=day?rows.filter(r=>jstDay(r.occurred_at||r.captured_at)===day):rows,category=kind==="all"?dated:dated.filter(r=>r.display_category===kind),statusCounts={all:category.length,pending:category.filter(r=>!r.confirmed).length,completed:category.filter(r=>r.confirmed).length},handled=dated.filter(r=>handlingMatch(r,status));return{dated:handled,statusCounts,selected:kind==="all"?handled:handled.filter(r=>r.display_category===kind)}}
-function commentIdentity(r:any){for(const raw of [r.target_url,r.meta?.all_area_url,r.meta?.featured_area_url]){try{const u=new URL(String(raw||"")),match=u.pathname.match(/^\/([A-Za-z0-9_-]+)\/n\/(n[A-Za-z0-9]+)$/),key=u.searchParams.get("c");if(u.hostname==="note.com"&&match&&key&&/^nc[A-Za-z0-9]+$/.test(key))return{articleKey:match[2],commentKey:key,url:`https://note.com/${match[1]}/n/${match[2]}?scrollpos=comment&c=${key}`}}catch{}}return null}
-function actualCommentBody(r:any){return String(r.meta?.comment_body||((r.meta?.source==="canonical-public-comments")?r.meta?.body:"")||"")}
+function commentIdentity(r:any){
+ const candidates:any[]=[];
+ for(const raw of [r.target_url,r.meta?.all_area_url,r.meta?.featured_area_url]){try{const u=new URL(String(raw||"")),match=u.pathname.match(/^\/([A-Za-z0-9_-]+)\/n\/(n[A-Za-z0-9]+)$/),key=u.searchParams.get("c");if(u.protocol==="https:"&&u.hostname==="note.com"&&!u.port&&!u.username&&!u.password&&match&&key&&/^nc[A-Za-z0-9]+$/.test(key))candidates.push({articleKey:match[2],commentKey:key,url:`https://note.com/${match[1]}/n/${match[2]}?scrollpos=comment&c=${key}`})}catch{}}
+ const meta=r.meta||{},articleKey=String(meta.article_key||meta.articleKey||""),commentKey=String(meta.comment_key||meta.commentKey||"");
+ if(/^(exact-comment-id|canonical-public-comments|comment-refresh)$/.test(String(meta.comment_body_source||meta.source||""))&&/^n[A-Za-z0-9]+$/.test(articleKey)&&/^nc[A-Za-z0-9]+$/.test(commentKey))candidates.push({articleKey,commentKey,url:null});
+ const first=candidates[0];if(!first||candidates.some(x=>x.articleKey!==first.articleKey||x.commentKey!==first.commentKey))return null;
+ return first;
+}
+function validConversation(value:any,identity:any){
+ if(!value||value.articleKey!==identity.articleKey||!Array.isArray(value.messages)||!value.messages.length)return false;
+ const root=value.threadKey;if(root!==null&&!/^nc[A-Za-z0-9]+$/.test(String(root||"")))return false;
+ return value.messages.some((r:any)=>r.commentKey===identity.commentKey&&r.body)&&value.messages.every((r:any)=>/^nc[A-Za-z0-9]+$/.test(String(r.commentKey))&&typeof r.body==="string"&&r.body.trim()&&(root===null?r.commentKey===identity.commentKey&&r.parentKey===null:r.commentKey===root?r.parentKey===null:r.parentKey===root));
+}
+
+function retainedCommentText(value:any){return typeof value==="string"&&value.trim()&&!/^(?:削除済み|削除されたコメント|このコメントは削除されました[。.]?|\[deleted\]|\[removed\])$/i.test(value.trim())?value:""}
+function actualCommentBody(r:any){for(const value of [r.meta?.comment_body,r.meta?.reply_body,r.meta?.source==="canonical-public-comments"?r.meta?.body:""]){const body=retainedCommentText(value);if(body)return body}return ""}
+
 function commentText(v:any):string{if(typeof v==="string")return v;if(Array.isArray(v))return v.map(commentText).join("");if(!v||typeof v!=="object")return"";if(typeof v.value==="string")return v.value;if(typeof v.text==="string")return v.text;return commentText(v.children||v.content||[])}
+function threadMessage(r:any,parentKey:string|null,noteId:string){
+ const user=r.user||r.author||{},actor=String(user.urlname||r.actor_url?.match(/^https:\/\/note\.com\/([^/?#]+)\/?$/)?.[1]||"");
+ return{commentKey:String(r.key||r.comment_key||""),parentKey,body:retainedCommentText(commentText(r.comment??r.body??r.text).trim()),author:user.nickname||user.name||r.actor_name||null,authorUrl:actor?`https://note.com/${actor}`:null,occurredAt:r.created_at||r.createdAt||r.occurred_at||null,isSelf:!!actor&&actor.toLowerCase()===noteId.toLowerCase()};
+}
+function mergeConversation(old:any,next:any){
+ // A late body-only lookup must never downgrade a concurrently saved proven thread.
+ if(old?.articleKey===next.articleKey&&old.threadKey&&next.threadKey===null)return old;
+ if(!old||old.articleKey!==next.articleKey||old.threadKey!==next.threadKey)old={messages:[],complete:false};
+ const map=new Map<string,any>();for(const r of [...(old.messages||[]),...(next.messages||[])]){const prior=map.get(r.commentKey);if(r.commentKey&&retainedCommentText(r.body))map.set(r.commentKey,{...prior,...r,body:prior?.body||r.body})}
+ return{...next,complete:Boolean(old.complete||next.complete),messages:[...map.values()].sort((a,b)=>String(a.occurredAt||"").localeCompare(String(b.occurredAt||""))||a.commentKey.localeCompare(b.commentKey))};
+}
 const commentPageCache=new Map<string,{at:number;result:{rows:any[];next:any}}>();
-// Resolve the exact comment ID; never match unrelated comments by actor/time.
-async function fetchExactComment(articleKey:string,commentKey:string){
- const deadline=Date.now()+24000,roots:any[]=[];
- const page=async(parent:string|null,p:number)=>{const cacheKey=`${articleKey}:${parent||"roots"}:${p}`,cached=commentPageCache.get(cacheKey);if(cached&&Date.now()-cached.at<120000)return cached.result;const remaining=deadline-Date.now();if(remaining<=0)throw new Error("COMMENT_LOOKUP_PAUSED");const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(remaining,8000));try{const url=`https://note.com/api/v3/notes/${encodeURIComponent(articleKey)}/note_comments?order=oldest&per_page=100&page=${p}${parent?`&parent_key=${encodeURIComponent(parent)}`:""}`,response=await fetch(url,{headers:{Accept:"application/json"},signal:controller.signal});if(!response.ok)throw new Error(`NOTE_PUBLIC_${response.status}`);const payload=await response.json(),data=payload.data,rows=Array.isArray(data)?data:data?.comments||data?.note_comments||[];const result={rows,next:payload.next_page??data?.next_page};commentPageCache.set(cacheKey,{at:Date.now(),result});if(commentPageCache.size>24)commentPageCache.delete(commentPageCache.keys().next().value!);return result}finally{clearTimeout(timer)}};
- const match=(rows:any[])=>{for(const r of rows){if(String(r.key||r.comment_key)===commentKey)return r;for(const nested of [r.latest_creator_reply,...(Array.isArray(r.replies)?r.replies:[])])if(nested&&String(nested.key||nested.comment_key)===commentKey)return nested}return null};
- for(let p=1;p<=20;p++){const result=await page(null,p),hit=match(result.rows);if(hit)return hit;roots.push(...result.rows);if(!result.next)break}
- for(const root of roots){if(!Number(root.reply_count||root.replyCount))continue;for(let p=1;p<=20;p++){const result=await page(String(root.key||root.comment_key),p),hit=match(result.rows);if(hit)return hit;if(!result.next)break}}
+// Exact-ID lookup is bounded across the entire request, not per root thread.
+async function fetchExactComment(articleKey:string,commentKey:string,noteId:string){
+ const deadline=Date.now()+20000,roots:any[]=[];let requests=0;
+ const page=async(parent:string|null,p:number)=>{if(++requests>24)throw new Error("COMMENT_LOOKUP_PAUSED");const cacheKey=`${articleKey}:${parent||"roots"}:${p}`,cached=commentPageCache.get(cacheKey);if(cached&&Date.now()-cached.at<120000)return cached.result;const remaining=deadline-Date.now();if(remaining<=0)throw new Error("COMMENT_LOOKUP_PAUSED");const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(remaining,5000));try{const url=`https://note.com/api/v3/notes/${encodeURIComponent(articleKey)}/note_comments?order=oldest&per_page=100&page=${p}${parent?`&parent_key=${encodeURIComponent(parent)}`:""}`,response=await fetch(url,{headers:{Accept:"application/json"},signal:controller.signal});if(!response.ok)throw new Error(`NOTE_PUBLIC_${response.status}`);const payload=await response.json(),data=payload.data,rows=Array.isArray(data)?data:data?.comments||data?.note_comments||[];const result={rows,next:payload.next_page??data?.next_page};commentPageCache.set(cacheKey,{at:Date.now(),result});if(commentPageCache.size>24)commentPageCache.delete(commentPageCache.keys().next().value!);return result}finally{clearTimeout(timer)}};
+ const key=(r:any)=>String(r?.key||r?.comment_key||""),nested=(r:any)=>[r.latest_creator_reply,...(Array.isArray(r.replies)?r.replies:[])].filter(Boolean);
+ const collect=async(root:any,initial:any[]=[])=>{
+  const threadKey=key(root),messages=[threadMessage(root,null,noteId),...nested(root).map(r=>threadMessage(r,threadKey,noteId)),...initial.map(r=>threadMessage(r,threadKey,noteId))];let complete=(root.reply_count??root.replyCount)===0;
+  try{if(!complete)for(let p=1;p<=20;p++){const result=await page(threadKey,p);messages.push(...result.rows.map((r:any)=>threadMessage(r,threadKey,noteId)));if(!result.next){complete=true;break}}}catch{/* Keep acquired exact bodies even if the rest of the thread is unavailable. */}
+  return mergeConversation(null,{articleKey,threadKey,complete,messages:messages.filter(r=>r.body&&/^nc[A-Za-z0-9]+$/.test(r.commentKey))});
+ };
+ for(let p=1;p<=20;p++){const result=await page(null,p);roots.push(...result.rows);for(const root of result.rows)if(key(root)===commentKey||nested(root).some(r=>key(r)===commentKey))return collect(root);if(!result.next)break}
+ for(const root of roots){if(!Number(root.reply_count||root.replyCount))continue;for(let p=1;p<=20;p++){const result=await page(key(root),p);if(result.rows.some((r:any)=>key(r)===commentKey))return collect(root,result.rows);if(!result.next)break}}
  return null;
 }
 async function notificationComment(m:any,b:any){
- const row=await notificationRow(m,b.id),identity=commentIdentity(row);if(!identity)return{ok:true,status:"missing_id",body:null};
- const saved=actualCommentBody(row);if(saved&&row.meta?.comment_key===identity.commentKey)return{ok:true,status:"saved",body:saved,...identity};
- const{data:local,error}=await db.from("insight_public_comments").select("body,actor_name,actor_url").eq("member_id",m.scope).eq("article_key",identity.articleKey).eq("comment_key",identity.commentKey).maybeSingle();if(error)throw error;
- let body=String(local?.body||""),author=local?.actor_name||null;
- if(!body){const hit=await fetchExactComment(identity.articleKey,identity.commentKey);if(hit){body=commentText(hit.comment??hit.body??hit.text).trim();author=hit.user?.nickname||hit.user?.name||null}}
- if(!body)return{ok:true,status:"unavailable",body:null,...identity};
- const meta={...row.meta,comment_body:body,comment_key:identity.commentKey,comment_author:author,comment_body_source:"exact-comment-id",comment_resolved_at:new Date().toISOString()};const{error:save}=await db.from("insight_notifications").update({meta}).eq("id",row.id).in("member_id",scopedIds(m));if(save)throw save;return{ok:true,status:"resolved",body,author,...identity};
+ const row=await notificationRow(m,b.id),identity=commentIdentity(row),saved=actualCommentBody(row);
+ if(!identity)return{ok:true,status:"missing_id",body:saved||null,persisted:!!saved,conversation:null};
+ if(saved&&row.meta?.comment_key&&row.meta.comment_key!==identity.commentKey)return{ok:true,status:"identity_conflict",body:null,...identity,conversation:null,persisted:false};
+ const previous=row.meta?.comment_conversation;
+ if(b.includeConversation!==true&&b.refreshConversation!==true&&validConversation(previous,identity))return{ok:true,status:"saved",body:saved||previous.messages.find((r:any)=>r.commentKey===identity.commentKey).body,author:row.meta?.comment_author||null,...identity,conversation:previous,persisted:true};
+ const{data:local,error}=await db.from("insight_public_comments").select("body,actor_name,actor_url,comment_key,parent_key,occurred_at,is_root").eq("member_id",m.scope).eq("article_key",identity.articleKey).eq("comment_key",identity.commentKey).maybeSingle();if(error)throw error;
+ let body=saved||retainedCommentText(local?.body),author=row.meta?.comment_author||local?.actor_name||null,conversation:any=null;
+ if(local?.body){const threadKey=local.parent_key||(local.is_root?local.comment_key:null);if(threadKey&&/^nc[A-Za-z0-9]+$/.test(threadKey)){const{data:related,error:re}=await db.from("insight_public_comments").select("body,actor_name,actor_url,comment_key,parent_key,occurred_at").eq("member_id",m.scope).eq("article_key",identity.articleKey).or(`comment_key.eq.${threadKey},parent_key.eq.${threadKey}`).limit(500);if(re)throw re;conversation={articleKey:identity.articleKey,threadKey,complete:false,messages:[...(related||[]),local].filter((r:any)=>r.body).map((r:any)=>threadMessage(r,r.parent_key||null,m.noteId))}}}
+ if(!conversation||b.includeConversation===true||b.refreshConversation===true){try{const live=await fetchExactComment(identity.articleKey,identity.commentKey,m.noteId);if(live&&(!conversation?.threadKey||conversation.threadKey===live.threadKey))conversation=mergeConversation(conversation,live)}catch{/* A source failure must not erase an already archived body. */}}
+ const hit=conversation?.messages?.find((r:any)=>r.commentKey===identity.commentKey);body=body||hit?.body||"";author=author||hit?.author||null;
+ if(!body)return{ok:true,status:"unavailable",body:null,...identity,conversation:null,persisted:false};
+ // A deleted root can have surviving replies. Keep its archived exact body in that proven thread.
+ if(conversation&&!conversation.messages.some((r:any)=>r.commentKey===identity.commentKey)&&conversation.threadKey===identity.commentKey){conversation=mergeConversation(conversation,{...conversation,messages:[{commentKey:identity.commentKey,parentKey:null,body,author,authorUrl:local?.actor_url||row.meta?.comment_author_url||null,occurredAt:local?.occurred_at||row.occurred_at||null,isSelf:String(local?.actor_url||row.meta?.comment_author_url||"").replace(/\/$/,"").toLowerCase()===`https://note.com/${m.noteId}`.toLowerCase()}]})}
+ if(conversation&&!conversation.messages.some((r:any)=>r.commentKey===identity.commentKey))conversation=null;
+ if(!conversation&&validConversation(previous,identity))conversation=previous;
+ if(!conversation)conversation={articleKey:identity.articleKey,threadKey:null,complete:false,messages:[{commentKey:identity.commentKey,parentKey:null,body,author,authorUrl:local?.actor_url||row.meta?.comment_author_url||null,occurredAt:local?.occurred_at||row.occurred_at||null,isSelf:String(local?.actor_url||row.meta?.comment_author_url||"").replace(/\/$/,"").toLowerCase()===`https://note.com/${m.noteId}`.toLowerCase()}]};
+ // Compare-and-swap protects concurrent metadata / archive updates. Never replace a captured body with emptiness.
+ for(let attempt=0;attempt<3;attempt++){
+  const current=attempt?await notificationRow(m,b.id):row,currentIdentity=commentIdentity(current);if(!currentIdentity||currentIdentity.articleKey!==identity.articleKey||currentIdentity.commentKey!==identity.commentKey)throw new Error("COMMENT_IDENTITY_CHANGED");
+  if(validConversation(current.meta?.comment_conversation,identity)&&current.meta.comment_conversation.threadKey&&conversation.threadKey&&current.meta.comment_conversation.threadKey!==conversation.threadKey)throw new Error("COMMENT_THREAD_CONFLICT");
+  const retained=actualCommentBody(current)||body,merged=mergeConversation(validConversation(current.meta?.comment_conversation,identity)?current.meta.comment_conversation:null,conversation),meta={...current.meta,comment_body:retained,article_key:identity.articleKey,comment_key:identity.commentKey,comment_author:current.meta?.comment_author||author,comment_author_url:current.meta?.comment_author_url||local?.actor_url||hit?.authorUrl||null,comment_body_source:"exact-comment-id",comment_conversation:merged,comment_resolved_at:new Date().toISOString(),comment_archive_revision:crypto.randomUUID()};
+  let query=db.from("insight_notifications").update({meta}).eq("id",row.id).in("member_id",scopedIds(m));query=current.captured_at==null?query.is("captured_at",null):query.eq("captured_at",current.captured_at);query=current.meta?.comment_archive_revision==null?query.is("meta->>comment_archive_revision",null):query.eq("meta->>comment_archive_revision",current.meta.comment_archive_revision);
+  const{data:updated,error:save}=await query.select("id");if(save)throw save;if(updated?.length)return{ok:true,status:saved?"saved":"resolved",body:retained,author:meta.comment_author,...identity,conversation:merged,persisted:true};
+ }
+ throw new Error("COMMENT_SAVE_CONFLICT");
 }
 
 async function recentRows(m:any,b:any){
