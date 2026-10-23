@@ -9,7 +9,7 @@ const token=(purpose,member_id='owner')=>({member_id,purpose,expires_at:'2099-01
 async function backend(tokens=[],codes=[]){
  let handle;
  const tables={unified_owner_sessions:[{id:'owner',token_hash:hash('fixture'),revoked_at:null,expires_at:'2099-01-01'}],insight_notification_ingest_tokens:tokens,insight_notification_pair_codes:codes,insight_notifications:[]};
- const db={from(name){let filters=[],action='select',payload,max=Infinity;const q={select(){return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>r[k]===v);return q},gt(k,v){filters.push(r=>r[k]>v);return q},order(){return q},limit(n){max=n;return q},update(v){action='update';payload=v;return q},delete(){action='delete';return q},insert(v){action='insert';payload=v;return q}};
+ const db={from(name){let filters=[],action='select',payload,max=Infinity;const q={select(){return q},eq(k,v){filters.push(r=>r[k]===v);return q},is(k,v){filters.push(r=>r[k]===v);return q},in(k,v){filters.push(r=>v.includes(r[k]));return q},gt(k,v){filters.push(r=>r[k]>v);return q},order(){return q},limit(n){max=n;return q},update(v){action='update';payload=v;return q},delete(){action='delete';return q},insert(v){action='insert';payload=v;return q}};
   const execute=()=>{const rows=tables[name]??[],matches=rows.filter(r=>filters.every(f=>f(r))).slice(0,max);if(action==='insert')rows.push({id:'new',used_at:null,revoked_at:null,...payload});if(action==='update')matches.forEach(r=>Object.assign(r,payload));if(action==='delete')tables[name]=rows.filter(r=>!matches.includes(r));return {data:matches,error:null}};
   q.maybeSingle=async()=>{const r=execute();return {...r,data:r.data[0]??null}};q.then=(a,b)=>Promise.resolve(execute()).then(a,b);return q;
  }};
@@ -30,3 +30,5 @@ test('本人通知のコード再発行でDashboardの待機中コードを削�
 test('Dashboard用コードを本人通知へ交換せず、認証なしの発行も拒否する',async()=>{
  const h=await backend([],[{id:'dash',member_id:'owner',purpose:'dashboard',code_hash:hash('12345678'),used_at:null,expires_at:'2099-01-01'}]);assert.equal((await h.call({action:'pair-exchange',code:'12345678'},false)).status,401);assert.equal((await h.call({action:'issue'},false)).status,401);assert.equal(h.tables.insight_notification_ingest_tokens.length,0);assert.equal(h.tables.insight_notification_pair_codes[0].used_at,null);
 });
+
+test('権限追加済み端末も本人通知の連携数に含め、新規発行は通知のみを維持する',async()=>{const h=await backend([token('note_notification_and_own_comment_sync')]);assert.equal((await h.call({action:'stats'})).body.paired,true);await h.call({action:'issue'});assert.equal(h.tables.insight_notification_ingest_tokens.at(-1).purpose,'note_notification_auto_sync')});
