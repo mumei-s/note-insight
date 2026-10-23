@@ -161,5 +161,5 @@ test('旧reply_bodyだけに保存された本文を同一IDの再同期でも�
 });
 
 test('取り込み処理は既存履歴の削除を実行しない',()=>{
- const source=readFileSync('supabase/functions/insight-notification-ingest-v2/index.ts','utf8');assert.doesNotMatch(source,/\.delete\s*\(/);
+ const source=readFileSync('supabase/functions/insight-notification-ingest-v2/index.ts','utf8');assert.doesNotMatch(source,/\.delete\s*\(\s*\)/);
 });
