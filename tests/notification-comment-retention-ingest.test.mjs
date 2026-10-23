@@ -6,13 +6,13 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import {PGlite} from '@electric-sql/pglite';
 
-const quote=s=>'"'+s.replaceAll('"','""')+'"';
+const quote=s=>s==='meta->>comment_archive_revision'?"(meta->>'comment_archive_revision')":'"'+s.replaceAll('"','""')+'"';
 const sha=async value=>Buffer.from(await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(value))).toString('hex');
 const url='https://note.com/other/n/nabc?scrollpos=comment&c=nc222';
 const notice=(extra={})=>({raw_text:'相手さんがあなたのコメントに返信しました',actor_name:'相手',actor_url:'https://note.com/other',target_url:url,occurred_at:'2026-10-14T00:00:00Z',meta:{source:'note-notification-reader-v4',kind:'note_comment_reply',event_identity:'notice:111',client_signature:'fixture-signature',body:'相手さんがあなたのコメントに返信しました'},...extra});
 const resolved={comment_body:'取得済みの実返信\n2行目',comment_key:'nc222',comment_author:'返信者',comment_body_source:'exact-comment-id',comment_resolved_at:'2026-10-14T00:01:00Z'};
 
-async function fixture(t){
+async function fixture(t,options={}){
   const sql=new PGlite();t.after(()=>sql.close());
   await sql.exec(`
     create table insight_notification_ingest_tokens(token_hash text,member_id text,expires_at timestamptz,revoked_at timestamptz);
@@ -34,11 +34,12 @@ async function fixture(t){
           return{data:null,error:null};
         }
         if(mode==='update'){
+          if(options.beforeUpdate)await options.beforeUpdate(sql);
           const keys=Object.keys(payload),values=keys.map(k=>payload[k]),shifted=where.replace(/\$(\d+)/g,(_,n)=>'$'+(Number(n)+values.length));
-          await sql.query('update '+quote(table)+' set '+keys.map((k,i)=>quote(k)+'=$'+(i+1)).join(',')+shifted,[...values,...params]);
-          return{data:null,error:null};
+          const result=await sql.query('update '+quote(table)+' set '+keys.map((k,i)=>quote(k)+'=$'+(i+1)).join(',')+shifted+' returning id',[...values,...params]);
+          return{data:result.rows,error:null};
         }
-        if(mode==='delete'){await sql.query('delete from '+quote(table)+where,params);return{data:null,error:null}}
+        if(mode==='delete'){const result=await sql.query('delete from '+quote(table)+where+' returning id',params);return{data:result.rows,error:null}}
         const selected=columns==='*'?'*':columns.split(',').map(quote).join(',');
         return{data:(await sql.query('select '+selected+' from '+quote(table)+where+(size===undefined?'':' limit '+size),params)).rows,error:null};
       }catch(error){return{data:null,error}}
@@ -102,4 +103,59 @@ test('実handlerは他tenantの同じ通知を本文の保持候補にせず、�
   const denied=await h.send([notice()],{noteId:'other-account',member_id:'member-b'});assert.equal(denied.status,409);assert.equal(denied.body.error,'NOTIFICATION_ACCOUNT_MISMATCH');assert.deepEqual(await h.rows(),[before]);
   assert.equal((await h.send([notice()],{member_id:'member-b'})).status,200);
   const rows=await h.rows();assert.equal(rows.length,2);assert.deepEqual(rows.find(r=>r.member_id==='member-b'),before);assert.equal(rows.find(r=>r.member_id==='member-a').meta.comment_body,undefined);
+});
+
+const archivedConversation={articleKey:'nabc',threadKey:'nc111',complete:true,messages:[{commentKey:'nc111',parentKey:null,body:'自分の元コメント',author:'自分',isSelf:true},{commentKey:'nc222',parentKey:'nc111',body:resolved.comment_body,author:'相手',isSelf:false}]};
+test('実handlerは再同期でも取得済み会話全体を保持する',async t=>{
+  const h=await fixture(t);await h.seed({meta:{...notice().meta,...resolved,comment_conversation:archivedConversation}});
+  assert.equal((await h.send([notice()])).status,200);
+  assert.deepEqual((await h.rows())[0].meta.comment_conversation,archivedConversation);
+});
+test('実handlerは新しい明示本文があっても取得済み親コメントを消さない',async t=>{
+  const h=await fixture(t);await h.seed({meta:{...notice().meta,...resolved,comment_conversation:archivedConversation}});
+  assert.equal((await h.send([notice({meta:{...notice().meta,comment_key:'nc222',comment_body:'新しい本文'}})])) .status,200);
+  const [row]=await h.rows();assert.equal(row.meta.comment_body,'新しい本文');assert.deepEqual(row.meta.comment_conversation,archivedConversation);
+});
+test('実handlerは記事または通知が異なる会話を引き継がない',async t=>{
+  const h=await fixture(t);await h.seed({meta:{...notice().meta,...resolved,comment_conversation:archivedConversation}});
+  assert.equal((await h.send([notice({meta:{...notice().meta,event_identity:'notice:different'}})])) .status,200);
+  assert.equal((await h.rows())[0].meta.comment_conversation,undefined);
+});
+
+
+test('実handlerは取得処理と競合しても後から保存された本文と会話を失わない',async t=>{
+  let fired=false;
+  const h=await fixture(t,{beforeUpdate:async sql=>{
+    if(fired)return;fired=true;
+    await sql.query('update insight_notifications set meta=meta || $1::jsonb where member_id=$2',[JSON.stringify({...resolved,comment_conversation:archivedConversation,comment_archive_revision:"concurrent-save"}),'member-a']);
+  }});
+  await h.seed({meta:notice().meta});
+  const response=await h.send([notice()]);assert.equal(response.status,200);assert.equal(response.body.updated,1);
+  const [row]=await h.rows();assert.equal(row.meta.comment_body,resolved.comment_body);assert.deepEqual(row.meta.comment_conversation,archivedConversation);
+});
+test('実handlerは連続競合時に確認済みを返さず保存済み本文を残す',async t=>{
+  let changes=0;
+  const h=await fixture(t,{beforeUpdate:async sql=>{
+    await sql.query('update insight_notifications set meta=meta || $1::jsonb where member_id=$2',[JSON.stringify({...resolved,comment_archive_revision:String(++changes)}),'member-a']);
+  }});
+  await h.seed();const response=await h.send([notice()]);
+  assert.equal(response.status,500);assert.equal(response.body.confirmedClientSignatures,undefined);assert.equal(changes,3);
+  assert.equal((await h.rows())[0].meta.comment_body,resolved.comment_body);
+});
+
+test('同じ通知IDのlocatorなし再取得は保存済み本文と会話を消さない',async t=>{
+ const h=await fixture(t);await h.seed({meta:{...notice().meta,...resolved,article_key:'nabc',comment_conversation:archivedConversation}});
+ assert.equal((await h.send([notice({target_url:null})])).status,200);
+ const [row]=await h.rows();assert.equal(row.meta.comment_body,resolved.comment_body);assert.deepEqual(row.meta.comment_conversation,archivedConversation);
+});
+
+test('同じ記事URLからコメントIDだけ失われても本文を保持し削除マーカーで上書きしない',async t=>{
+ const h=await fixture(t);await h.seed({meta:{...notice().meta,...resolved,article_key:'nabc',comment_conversation:archivedConversation}});
+ assert.equal((await h.send([notice({target_url:'https://note.com/other/n/nabc',meta:{...notice().meta,comment_body:'削除済み'}})])).status,200);
+ const [row]=await h.rows();assert.equal(row.meta.comment_body,resolved.comment_body);assert.equal(row.meta.comment_key,'nc222');assert.deepEqual(row.meta.comment_conversation,archivedConversation);
+});
+
+test('旧reply_bodyだけに保存された本文を同一IDの再同期でも維持する',async t=>{
+ const h=await fixture(t);await h.seed({meta:{...notice().meta,reply_body:'旧形式の本文',comment_key:'nc222'}});
+ assert.equal((await h.send([notice()])).status,200);assert.equal((await h.rows())[0].meta.comment_body,'旧形式の本文');
 });

@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+const source=fs.readFileSync('supabase/functions/insight-notification-reclassify/index.ts','utf8');
+const ast=ts.createSourceFile('reclassify.ts',source,ts.ScriptTarget.ES2022,true);
+const fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='saveReclassifiedNotification').getText(ast);
+function fixture(live){let writes=0;const filters=[];const db={from(){let payload;const q={update(p){payload=p;return q},eq(k,v){filters.push(r=>(k.startsWith('meta->>')?r.meta?.[k.slice(7)]:r[k])===v);return q},is(k){filters.push(r=>(k.startsWith('meta->>')?r.meta?.[k.slice(7)]:r[k])==null);return q},in(k,ids){filters.push(r=>ids.includes(r[k]));return q},select(){return q},async maybeSingle(){if(!filters.every(f=>f(live)))return{data:null,error:null};writes++;Object.assign(live,payload);return{data:live,error:null}}};return q}};const scope={db,crypto};vm.createContext(scope);vm.runInContext(ts.transpileModule(fn+'\nglobalThis.save=saveReclassifiedNotification;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,scope);return{save:scope.save,writes:()=>writes};}
+test('reclassification skips stale row when a comment archive was saved concurrently',async()=>{const old={id:'1',member_id:'m',captured_at:'date',meta:{}},live={...old,meta:{comment_body:'keep',comment_archive_revision:'new',comment_conversation:{messages:[{body:'keep'}]}}},f=fixture(live);assert.equal(await f.save(['m'],old,{notification_type:'reply',meta:{classifier:'new'}}),null);assert.equal(f.writes(),0);assert.equal(live.meta.comment_body,'keep');assert.equal(live.meta.comment_conversation.messages[0].body,'keep')});
+test('reclassification safely writes matching revision and preserves supplied archive',async()=>{const live={id:'1',member_id:'m',captured_at:'date',meta:{comment_body:'keep',comment_archive_revision:'same'}},f=fixture(live),r=await f.save(['m'],structuredClone(live),{notification_type:'reply',meta:{...live.meta,classifier:'new'}});assert.equal(f.writes(),1);assert.equal(r.meta.comment_body,'keep');assert.notEqual(r.meta.comment_archive_revision,'same')});
+test('old ingestion captured_at change also prevents stale reclassification',async()=>{const old={id:'1',member_id:'m',captured_at:'old',meta:{}},live={...old,captured_at:'new',meta:{comment_body:'new body'}},f=fixture(live);assert.equal(await f.save(['m'],old,{meta:{}}),null);assert.equal(live.meta.comment_body,'new body')});
