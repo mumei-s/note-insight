@@ -25,19 +25,18 @@ async function setup({ opted = false, consent = false, account = 'self', failure
 test('unopted Reader adds zero fetch, status calls, or hook installs', async () => {
   const f = await setup(); assert.equal(f.reads, 0); assert.equal(f.calls.length, 0); assert.equal(f.installs, 0); f.dom.window.close();
 });
-test('consent URL does not grant scope until checkbox and explicit click', async () => {
+test('consent URL and page-generated clicks never grant scope', async () => {
   const f = await setup({ consent: true });
   assert.equal(f.calls.length, 0); assert.equal(f.options[0].enabled(), false);
-  const box = f.w.document.querySelector('input'), button = f.w.document.querySelector('button');
-  assert.equal(box.checked, false); assert.equal(button.disabled, true);
-  box.checked = true; box.dispatchEvent(new f.w.Event('change')); button.click(); await f.settle();
-  assert.equal(f.calls.length, 1); assert.equal(f.calls[0].body.action, 'own-comment-scope-exchange'); assert.equal(f.calls[0].body.code, code);
-  assert.equal(f.calls[0].headers['X-Ingest-Token'], 'private-token'); assert.equal(f.options[0].enabled(), true);
-  assert.equal(f.w.location.search, ''); assert.equal(f.w.document.body.textContent.includes('private-token'), false); f.dom.window.close();
+  assert.equal(f.w.document.querySelector('input'), null);
+  f.w.document.querySelector('button').click(); await f.settle();
+  assert.equal(f.calls.length, 0); assert.equal(f.options[0].enabled(), false);
+  f.dom.window.close();
 });
-test('wrong note account cannot consume consent', async () => {
-  const f = await setup({ consent: true, account: 'other' }); const box = f.w.document.querySelector('input'); box.checked = true; box.dispatchEvent(new f.w.Event('change')); f.w.document.querySelector('button').click(); await f.settle(); assert.equal(f.calls.length, 0); assert.equal(f.options[0].enabled(), false); f.dom.window.close();
-});
+
+
+
+
 test('already opted account installs observer once without recurring polling', async () => {
   const f = await setup({ opted: true }); assert.equal(f.reads, 1); assert.equal(f.calls.length, 1); assert.equal(f.calls[0].body.action, 'own-comment-scope-status'); assert.equal(f.installs, 1); assert.equal(f.options[0].enabled(), true); assert.equal(f.drains, 1); await f.settle(); assert.equal(f.reads, 1); assert.equal(f.calls.length, 1); f.dom.window.close();
 });

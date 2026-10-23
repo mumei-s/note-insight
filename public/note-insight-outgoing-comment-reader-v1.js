@@ -14,7 +14,8 @@ const expectedAccount = String(params.get('mumei_account') || '').toLowerCase();
 const modern = () => Boolean(globalThis.GM);
 const get = async (k, d) => modern() && typeof GM.getValue === 'function' ? GM.getValue(k, d) : typeof GM_getValue === 'function' ? GM_getValue(k, d) : d;
 const set = async (k, value) => { if (modern() && typeof GM.setValue === 'function') return GM.setValue(k, value); if (typeof GM_setValue === 'function') return GM_setValue(k, value); throw new Error('連携設定を保存できません'); };
-let account = '', token = '', enabled = false, controller, panel, message, checkbox, startButton, stopButton, retryButton;
+let account = '', token = '', enabled = false, controller, panel, message, startButton, stopButton, retryButton;
+let consentUsed = false, serverScopeGranted = false;
 let lastError = '', queued = 0, busy = false, pendingDisable = false;
 const store = API.indexedStore(globalThis.indexedDB);
 function request(endpoint, body) {
@@ -36,8 +37,8 @@ function request(endpoint, body) {
 function render() {
   if (!panel) return;
   message.textContent = lastError || (enabled ? `@${account} 自分のコメントを自動保存中 · 未保存 ${queued}件` : `@${account} 自分のコメント自動保存は停止中`);
-  startButton.disabled = busy || !checkbox.checked || enabled;
-  stopButton.disabled = busy || (!enabled && !pendingDisable);
+  startButton.disabled = busy || enabled || consentUsed || !consentCode;
+  stopButton.disabled = busy || (!enabled && !pendingDisable && !serverScopeGranted);
   retryButton.disabled = busy || !enabled;
 }
 async function updateCount() { try { queued = (await store.pending(account)).length; } catch (e) { lastError = String(e.message || e); } render(); }
@@ -54,45 +55,58 @@ function mount() {
   const summary = document.createElement('summary'); summary.textContent = 'INSIGHT 自分のコメント保存'; details.append(summary);
   message = document.createElement('p'); details.append(message);
   const disclosure = document.createElement('p'); disclosure.textContent = 'このブラウザで投稿に成功した自分のコメント本文・アカウント・記事ID・コメントID・返信先ID・投稿日時を、INSIGHTの自分専用履歴に保存します。下書き・失敗した投稿・旧形式のコメント欄・noteアプリからの投稿は対象外です。'; details.append(disclosure);
-  const label = document.createElement('label'); checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = false; label.append(checkbox, document.createTextNode(' このブラウザの連携に保存権限を追加する')); details.append(label);
-  startButton = document.createElement('button'); startButton.type = 'button'; startButton.textContent = '同意して有効にする'; details.append(startButton);
+  startButton = document.createElement('button'); startButton.type = 'button'; startButton.textContent = 'このブラウザで自動保存を有効にする'; details.append(startButton);
   stopButton = document.createElement('button'); stopButton.type = 'button'; stopButton.textContent = '自動保存を停止'; details.append(stopButton);
   retryButton = document.createElement('button'); retryButton.type = 'button'; retryButton.textContent = '未保存分を再送'; details.append(retryButton);
-  const help = document.createElement('small'); help.textContent = '停止しても保存済み履歴は消えません。端末の未保存分は保持し、再開するまで送信しません。'; details.append(help);
-  checkbox.addEventListener('change', render);
-  startButton.addEventListener('click', async () => {
-    if (!checkbox.checked || busy || enabled) return;
+  const help = document.createElement('small'); help.textContent = '期限切れ・別アカウント・再開時はINSIGHTの保存設定からやり直してください。停止しても保存済み履歴は消えません。端末の未保存分は保持し、再開するまで送信しません。'; details.append(help);
+  startButton.addEventListener('click', async event => {
+    // Explicit trusted device consent, never a click dispatched by the page.
+    if (!event.isTrusted || busy || enabled || consentUsed) return;
     if (!/^[a-f0-9]{32}$/.test(consentCode) || account !== expectedAccount) { lastError = 'INSIGHTで保存の設定を開き、このアカウントの同意リンクからやり直してください'; render(); return; }
     busy = true; render();
     try {
+      // The note login may have changed since this tab was opened.
+      if (await currentAccount() !== account) throw new Error('noteのアカウントが変わりました。本人のアカウントでINSIGHTの保存設定からやり直してください');
       const result = await request('insight-notification-import-token', { action: 'own-comment-scope-exchange', code: consentCode, account });
       if (result.enabled !== true || result.account !== account) throw new Error('保存権限を確認できません');
+      consentUsed = true; serverScopeGranted = true;
       await set(DEVICE_USED, true);
       await set(PERMISSION + account, { enabled: true, pendingDisable: false }); enabled = true; lastError = '';
       const url = new URL(location.href); url.searchParams.delete('mumei_own_comment_scope'); url.searchParams.delete('mumei_account'); history.replaceState(history.state, '', url.pathname + url.search + url.hash);
       void drain();
-    } catch (e) { lastError = String(e.message || e); } finally { busy = false; render(); }
+    } catch (e) { lastError = '有効化を確認できません。INSIGHTの保存設定からやり直してください。' + String(e.message || e); } finally { busy = false; render(); }
   });
   stopButton.addEventListener('click', async () => {
-    if (busy || (!enabled && !pendingDisable)) return;
+    if (busy || (!enabled && !pendingDisable && !serverScopeGranted)) return;
     // Stop capture immediately even if the scope-reduction request is offline.
     enabled = false; pendingDisable = true; busy = true; render();
-    try { await set(PERMISSION + account, { enabled: false, pendingDisable: true }); await request('insight-notification-import-token', { action: 'own-comment-scope-disable', account }); pendingDisable = false; await set(PERMISSION + account, { enabled: false, pendingDisable: false }); lastError = '自動保存を停止しました。履歴は保持しています'; }
+    let stopServerConfirmed = false;
+    try {
+      // A local storage failure must not prevent revoking a confirmed server grant.
+      try { await set(PERMISSION + account, { enabled: false, pendingDisable: true }); } catch {}
+      await request('insight-notification-import-token', { action: 'own-comment-scope-disable', account });
+      serverScopeGranted = false; stopServerConfirmed = true;
+      await set(PERMISSION + account, { enabled: false, pendingDisable: false }); pendingDisable = false;
+      lastError = '自動保存を停止しました。履歴は保持しています';
+    }
     catch (e) { lastError = 'この端末の保存は停止しました。サーバー権限の停止を確認できていません: ' + String(e.message || e); }
     finally { busy = false; render(); }
   });
   retryButton.addEventListener('click', () => void drain());
   panel.append(details); document.body.append(panel); render();
 }
+async function currentAccount() {
+  const response = await fetch('/api/v2/current_user', { credentials: 'include', cache: 'no-store' });
+  if (!response.ok) throw new Error('noteのログイン状態を確認できません');
+  const json = await response.json(), data = json.data ?? json, user = data.user ?? data;
+  return String(user.urlname || '').toLowerCase();
+}
 async function init() {
   // Unopted-in Reader installs do not add any account/status traffic.
   if (!consentCode && await get(DEVICE_USED, false) !== true) return;
   // One account check on page startup, not a recurring poll. Successful response
   // identity must still match this account before any comment can be captured.
-  const response = await fetch('/api/v2/current_user', { credentials: 'include', cache: 'no-store' });
-  if (!response.ok) return;
-  const json = await response.json(), data = json.data ?? json, user = data.user ?? data;
-  account = String(user.urlname || '').toLowerCase();
+  account = await currentAccount();
   if (!/^[a-z0-9_-]+$/.test(account)) return;
   token = String(await get(TOKEN + account, ''));
   if (!token) { if (consentCode) { lastError = '先にこのブラウザで本人通知を連携してください'; mount(); } return; }
