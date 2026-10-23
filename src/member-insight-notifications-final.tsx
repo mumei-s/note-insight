@@ -1,3 +1,4 @@
+import { MemberInsightOutgoingComments } from "./member-insight-outgoing-comments";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -420,6 +421,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       <label><span>日付</span><input type="date" value={selectedDay} onChange={e=>{setPage(1);setSelectedDay(e.target.value)}}/></label>
       {selectedDay?<button type="button" onClick={()=>{setPage(1);setSelectedDay("")}}>全期間</button>:<span className="minf-filter-total">全期間</span>}
     </div>
+    <MemberInsightOutgoingComments noteId={selfId} revision={revision}/>
     <details className="minf-detail">
       <summary>詳細・精度・再分類 <span>開く / 閉じる ▾</span></summary>
       <div className="minf-detail-body">
