@@ -1,0 +1,33 @@
+/* A compact, opt-in archive alongside the existing notification controls. */
+.mioc{margin:7px 0;border:1px solid #355369;border-radius:9px;background:#0b1d29;color:#d8edf6;overflow:hidden;font-size:var(--insight-meta-text,12px)}
+.mioc>summary{padding:8px 10px;min-height:36px;cursor:pointer;font-weight:700;background:#102635}
+.mioc>summary>span{float:right;margin-left:8px;color:#9bc4d5;font-size:.9em;font-weight:400}
+.mioc .mioc-content{padding:9px;display:grid;gap:8px}
+.mioc p{margin:3px 0;line-height:1.6;overflow-wrap:anywhere}
+.mioc small{color:#a6bdca;line-height:1.5;overflow-wrap:anywhere}
+.mioc button,.mioc a{touch-action:manipulation}
+.mioc button{width:max-content;max-width:100%;min-height:36px;padding:6px 10px;border:1px solid #51798d;border-radius:8px;background:#123345;color:#d9f4ff;font:inherit;cursor:pointer}
+.mioc button:disabled{opacity:.55;cursor:default}
+.mioc a{color:#a0e7f6;overflow-wrap:anywhere;text-underline-offset:3px}
+.mioc :is(button,a,input,summary):focus-visible{outline:2px solid #a1ecff;outline-offset:3px}
+.mioc .mioc-permission{padding:7px 9px;border:1px solid #355368;border-radius:8px;background:#0c2331}
+.mioc .mioc-permission>summary{cursor:pointer;min-height:30px;font-weight:600}
+.mioc .mioc-permission p{margin:6px 0}
+.mioc .mioc-consent{display:flex;align-items:flex-start;gap:8px;margin:10px 0;line-height:1.6;cursor:pointer}
+.mioc .mioc-consent input{flex:none;appearance:auto;width:18px;height:18px;margin:2px 0 0;accent-color:#7bd9e8}
+.mioc .mioc-handoff{display:grid;gap:7px;margin-top:10px;padding:9px;border-left:3px solid #7bd9e8;background:#133441}
+.mioc .mioc-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.mioc .mioc-list{display:grid;gap:7px}
+.mioc .mioc-entry{padding:7px 9px;border:1px solid #315369;border-radius:9px;background:#0e2431;min-width:0}
+.mioc .mioc-entry>summary{cursor:pointer;min-height:36px;overflow-wrap:anywhere;line-height:1.55}
+.mioc .mioc-entry>summary>span{white-space:pre-wrap}
+.mioc .mioc-entry>summary>small{display:block;margin-top:3px}
+.mioc .mioc-conversation{list-style:none;padding:0;margin:9px 0;display:flex;flex-direction:column;gap:8px}
+.mioc .mioc-message{align-self:flex-start;max-width:92%;padding:8px 10px;border-radius:12px;background:#edf1f5;color:#18242f;overflow-wrap:anywhere}
+.mioc .mioc-message.self{align-self:flex-end;background:#ddf1ff}
+.mioc .mioc-message p{white-space:pre-wrap;margin:4px 0}
+.mioc .mioc-message small{color:#475569}
+.mioc .mioc-reply-state{color:#a6bdca;font-size:.94em}
+.mioc .mioc-entry-actions{margin-top:8px}
+.mioc [role=alert]{color:#ffd0c3}
+@media(max-width:420px){.mioc>summary>span{float:none;display:block;margin:3px 0 0}.mioc .mioc-message{max-width:96%}}
