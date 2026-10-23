@@ -85,6 +85,12 @@ async function unresolvedSummary(ids:string[]){
   for(const r of data||[]){remaining++;if(insufficientEvidence(r))insufficient++;if(r.meta?.reclassify_pending||r.meta?.classifier!=="action-v28-context"||r.meta?.recovery_version!==RECOVERY_VERSION)unprocessed++}if((data||[]).length<1000)break;
  }return{remaining,insufficient,unsupported:remaining-insufficient,unprocessed};
 }
+// List responses carry only a marker; full saved conversations are read on demand.
+function notificationListRow(row:any){
+ if(!row?.meta||typeof row.meta!=="object"||!Object.prototype.hasOwnProperty.call(row.meta,"comment_conversation"))return row;
+ const{comment_conversation,...meta}=row.meta;
+ return{...row,meta:{...meta,...(comment_conversation?{comment_conversation_saved:true}:{})}};
+}
 // Reclassification must not overwrite a comment archive captured after this row was read.
 async function saveReclassifiedNotification(ids:string[],row:any,patch:any){
  const meta={...patch.meta,comment_archive_revision:crypto.randomUUID()};
@@ -116,5 +122,5 @@ Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{heade
  const saved=await saveReclassifiedNotification(ids,r,{...repair,notification_type:nextType,meta:finalMeta});if(!saved){conflicted++;return;}repairedRows.push(saved);checked++;if(saved.notification_type!==type)moved++;if(saved.notification_type==="other")pending++;if(meta.event_day_jst!==day)dayStamped++};
  for(let i=0;i<(data||[]).length;i+=8)await Promise.all((data||[]).slice(i,i+8).map(processRow));
  const unresolved=await unresolvedSummary(ids);
- return out({ok:true,unresolved,noteId:m.noteId,checked,moved,dayStamped,pending,conflicted,rows:repairedRows,classifierVersion:"action-v28-context",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
+ return out({ok:true,unresolved,noteId:m.noteId,checked,moved,dayStamped,pending,conflicted,rows:repairedRows.map(notificationListRow),classifierVersion:"action-v28-context",classifiedAt:now,nextCursor:data?.length===100?data[data.length-1].id:null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}});

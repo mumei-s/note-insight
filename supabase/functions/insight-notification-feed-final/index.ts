@@ -35,6 +35,12 @@ async function commentRows(scope:string,kind:string|null,limit:number,offset=0){
 async function status(scope:string,ids:string[]){const[n,s]=await Promise.all([db.from("insight_notifications").select("captured_at").in("member_id",ids).order("captured_at",{ascending:false}).limit(1).maybeSingle(),db.from("insight_notification_sync_runs").select("created_at,inserted_count,received_count,source").in("member_id",ids).eq("source","browser-notification-stable-v3-confirmed").order("created_at",{ascending:false}).limit(1).maybeSingle()]);const last=Date.parse(String(n.data?.captured_at||""))||0,source=String(s.data?.source||""),count=Number(s.data?.inserted_count||0);return{lastUpdatedAt:last?new Date(last).toISOString():null,lastSyncAt:s.data?.created_at||null,lastSyncSource:source||null,lastSyncInserted:count,lastSyncConfirmed:source==="browser-notification-stable-v3-confirmed"?count:0,lastSyncReceived:Number(s.data?.received_count||0)}}
 // The service-only RPC performs exact classification/counting and returns a bounded page.
 // Do not fall back to a full notification scan when the migration is missing or unavailable.
+// List responses carry only a marker; full saved conversations are read on demand.
+function notificationListRow(row:any){
+ if(!row?.meta||typeof row.meta!=="object"||!Object.prototype.hasOwnProperty.call(row.meta,"comment_conversation"))return row;
+ const{comment_conversation,...meta}=row.meta;
+ return{...row,meta:{...meta,...(comment_conversation?{comment_conversation_saved:true}:{})}};
+}
 async function feedPage(m:any,b:any){
  const pageValue=Math.floor(Number(b.page)||1),sizeValue=Math.floor(Number(b.pageSize)||100);
  const page=Number.isFinite(pageValue)?Math.min(1_000_000,Math.max(1,pageValue)):1;
@@ -47,7 +53,7 @@ async function feedPage(m:any,b:any){
  });
  if(error)throw new Error("NOTIFICATION_FEED_READ_FAILED:"+String(error.code||error.message||"RPC"));
  if(!data||data.ok!==true||!Array.isArray(data.rows))throw new Error("NOTIFICATION_FEED_READ_INVALID");
- return data;
+ return{...data,rows:data.rows.map(notificationListRow),...(data.categoryPreview&&typeof data.categoryPreview==="object"?{categoryPreview:Object.fromEntries(Object.entries(data.categoryPreview).map(([key,rows])=>[key,Array.isArray(rows)?rows.map(notificationListRow):rows]))}:{})};
 }
 function baseKind(kind:string){if(kind==="reply_self"||kind==="reply_other"||kind==="reply_unknown")return"reply";if(kind==="membership_reaction_self"||kind==="membership_reaction_joined"||kind==="membership_reaction_unknown")return"membership_reaction";return kind==="all"?null:kind}
 function filterDisplay(rows:any[],kind:string,noteId:string){const decorated=rows.map(r=>decorate(r,noteId));if(kind==="all")return decorated;if(kind==="reply_self"||kind==="reply_other"||kind==="reply_unknown"||kind==="membership_reaction_self"||kind==="membership_reaction_joined"||kind==="membership_reaction_unknown")return decorated.filter(r=>String(r.display_category||"")===kind);return decorated}
@@ -150,7 +156,7 @@ async function notificationComment(m:any,b:any){
  if(!identity)return{ok:true,status:"missing_id",body:saved||null,persisted:!!saved,conversation:null};
  if(saved&&row.meta?.comment_key&&row.meta.comment_key!==identity.commentKey)return{ok:true,status:"identity_conflict",body:null,...identity,conversation:null,persisted:false};
  const previous=row.meta?.comment_conversation;
- if(b.includeConversation!==true&&b.refreshConversation!==true&&validConversation(previous,identity))return{ok:true,status:"saved",body:saved||previous.messages.find((r:any)=>r.commentKey===identity.commentKey).body,author:row.meta?.comment_author||null,...identity,conversation:previous,persisted:true};
+ if(b.refreshConversation!==true&&validConversation(previous,identity))return{ok:true,status:"saved",body:saved||previous.messages.find((r:any)=>r.commentKey===identity.commentKey).body,author:row.meta?.comment_author||null,...identity,conversation:previous,persisted:true};
  const{data:local,error}=await db.from("insight_public_comments").select("body,actor_name,actor_url,comment_key,parent_key,occurred_at,is_root").eq("member_id",m.scope).eq("article_key",identity.articleKey).eq("comment_key",identity.commentKey).maybeSingle();if(error)throw error;
  let body=saved||retainedCommentText(local?.body),author=row.meta?.comment_author||local?.actor_name||null,conversation:any=null;
  if(local?.body){const threadKey=local.parent_key||(local.is_root?local.comment_key:null);if(threadKey&&/^nc[A-Za-z0-9]+$/.test(threadKey)){const{data:related,error:re}=await db.from("insight_public_comments").select("body,actor_name,actor_url,comment_key,parent_key,occurred_at").eq("member_id",m.scope).eq("article_key",identity.articleKey).or(`comment_key.eq.${threadKey},parent_key.eq.${threadKey}`).limit(500);if(re)throw re;conversation={articleKey:identity.articleKey,threadKey,complete:false,messages:[...(related||[]),local].filter((r:any)=>r.body).map((r:any)=>threadMessage(r,r.parent_key||null,m.noteId))}}}
@@ -180,7 +186,7 @@ async function recentRows(m:any,b:any){
  const{data,error}=await q.order("captured_at",{ascending:false}).order("id").limit(300);if(error)throw error;
  const selected=dedupe(data||[]),[completed,favorites]=await Promise.all([completionKeys(m,selected),recentFavoriteRows(m,selected)]),rows=decorateHandling(selected,m,completed,favorites);
  const watermark=(data||[]).reduce((at,r)=>[at,String(r.captured_at||""),String(r.meta?.last_reclassified_at||"")].sort().at(-1)!,since);
- return{ok:true,noteId:m.noteId,rows,watermark,partial:true,feedAt:new Date().toISOString()};
+ return{ok:true,noteId:m.noteId,rows:rows.map(notificationListRow),watermark,partial:true,feedAt:new Date().toISOString()};
 }
 Deno.serve(async req=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});try{
  if(req.method!=="POST")return out({ok:false,error:"METHOD_NOT_ALLOWED"},405);
