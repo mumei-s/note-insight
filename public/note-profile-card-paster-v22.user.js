@@ -227,6 +227,46 @@ function webpackRequire(){
  try{chunks.push([[id],{},r=>{requireFn=r}])}catch{}
  return requireFn
 }
+function nativeEditorFunction(kind){
+ const req=webpackRequire(),image=kind==='image';
+ const label=image?'note正規画像処理':'note正規URLカード処理';
+ if(typeof req!=='function')throw new Error(label+'を取得できません');
+ const source=value=>{try{return typeof value==='function'?Function.prototype.toString.call(value):''}catch{return''}};
+ const fingerprint=text=>image?/Array\.from/.test(text)&&/imageUploading/.test(text)&&/entries/.test(text):text.includes('state.selection')&&text.includes('nodeBefore')&&text.includes('replaceRangeWith')&&text.includes('.then');
+ const matches=new Set();
+ const inspect=exports=>{
+  const values=[exports];
+  if(exports&&(typeof exports==='object'||typeof exports==='function')){
+   let keys=[];try{keys=Object.getOwnPropertyNames(exports)}catch{}
+   for(const key of keys){try{values.push(exports[key])}catch{}}
+  }
+  for(const value of values)if(typeof value==='function'&&value.length===(image?4:1)&&fingerprint(source(value)))matches.add(value);
+ };
+ // Current note builds expose registered factories (.m), but need not expose
+ // the module cache (.c). Inspect cached exports when available, without
+ // calling any candidate upload/card function to probe its behavior.
+ let cached=[];try{cached=Object.values(req.c||{})}catch{}
+ for(const entry of cached){try{inspect(entry?.exports)}catch{}}
+ if(!matches.size){
+  const factories=new Map();
+  const register=map=>{
+   let keys=[];try{keys=Object.keys(map||{})}catch{}
+   for(const key of keys)if(!factories.has(key)){try{if(typeof map[key]==='function')factories.set(key,map[key])}catch{}}
+  };
+  try{register(req.m)}catch{}
+  // Some runtime builds hide .m. Already registered chunk tables provide the
+  // same factories; prefer the runtime table when both expose the same ID.
+  const chunks=page.webpackChunk_N_E;
+  if(Array.isArray(chunks))for(const chunk of chunks){try{register(chunk?.[1])}catch{}}
+  const candidates=[...factories].filter(([,factory])=>fingerprint(source(factory)));
+  if(candidates.length>16)throw new Error(label+'の候補が多すぎるため停止しました。本文は保持しています');
+  // Load only modules whose registered source contains the complete native
+  // fingerprint. Never execute unrelated module factories or test uploads.
+  for(const [id] of candidates){try{inspect(req(id))}catch{}}
+ }
+ if(matches.size!==1)throw new Error(matches.size?label+'の候補を一意に確認できません。本文は保持しています':label+'を取得できません');
+ return matches.values().next().value;
+}
 function looksLikeView(value){
  try{return Boolean(value&&typeof value==='object'&&value.state?.doc&&value.state?.schema&&typeof value.dispatch==='function'&&value.dom&&typeof value.posAtDOM==='function')}
  catch{return false}
@@ -258,22 +298,18 @@ function findView(){
 }
 function nativeImageCommand(){
  if(imageCommandCache)return imageCommandCache;
- const requireFn=webpackRequire();
- let command;
- try{command=requireFn?.(94928)?.CwN}catch{}
- const src=typeof command==='function'?Function.prototype.toString.call(command):'';
- if(!(command?.length===4&&/Array\.from/.test(src)&&/imageUploading/.test(src)&&/entries/.test(src)))throw new Error('note正規画像処理を取得できません');
- return imageCommandCache=command
+ return imageCommandCache=nativeEditorFunction('image');
 }
 function selectionApi(){
  if(selectionCache)return selectionCache;
- const requireFn=webpackRequire();
- let mod;
- try{mod=requireFn?.(44044)}catch{}
+ const current=findView()?.state?.selection?.constructor;
+ if(typeof current?.atEnd==='function'&&typeof current?.near==='function')return selectionCache=current;
+ const req=webpackRequire();let mod;try{mod=req?.(44044)}catch{}
  const Selection=mod?.Y1;
  if(typeof Selection?.atEnd!=='function')throw new Error('note内部Selectionを取得できません');
- return selectionCache=Selection
+ return selectionCache=Selection;
 }
+
 function imageNodes(view){
  const out=[];
  view.state.doc.descendants((node,pos)=>{if(node.type?.name==='image')out.push({node,pos})});
