@@ -361,6 +361,7 @@ function setSelectionForInsert(view,pos){
  return view.state.selection.from
 }
 async function uploadOne(view,row,file,insertPos){
+ assertCreatorAllowed(row);
  const before=new Set(imageNodes(view).map(x=>String(x.node.attrs?.id||'')).filter(Boolean));
  const selected=setSelectionForInsert(view,insertPos);
  const dt=new page.DataTransfer();
@@ -438,6 +439,7 @@ function thumbnailUrl(note){
  return mediaUrl(note?.eyecatch||note?.eyecatch_url||note?.spEyecatch||note?.thumbnailExternalUrl||note?.image_url||note?.imageUrl||note?.thumbnail_url||note?.thumbnailUrl||note?.eyecatch_image||note?.eyecatchImage||note?.image||note?.thumbnail||'')
 }
 async function preparePerson(person){
+ assertCreatorAllowed(person);
  const id=canonicalUrlname(person);
  if(!id)throw new Error('クリエイターIDを確認できません');
  try{
@@ -496,6 +498,17 @@ function canonicalUrlname(person){
  return''
 }
 function creatorKey(person){return String(person?.likerKey??person?.liker_key??'').trim()}
+function excludedCreator(row){
+ const ids=[String(row?.urlname||'').trim().toLowerCase()];
+ for(const value of [row?.urlname,row?.actorUrl,row?.url])try{const url=new URL(String(value||''));if(url.protocol==='https:'&&(url.hostname==='note.com'||url.hostname==='www.note.com'))ids.push(decodeURIComponent(url.pathname.split('/')[1]||'').trim().toLowerCase())}catch{}
+ return ids.includes('cinephileangel');
+}
+function excludePendingCreatorRows(rows,run={}){
+ const retained=new Set([...(run.items||[]),...(run.cardKeys||[])].map(record=>norm(record.url)));
+ const selected=rows.filter(row=>!excludedCreator(row)||retained.has(norm(row.url)));
+ return selected.length===rows.length?rows:selected.map((row,index)=>({...row,index:index+1}));
+}
+function assertCreatorAllowed(row){if(excludedCreator(row))throw Object.assign(new Error('指定されたクリエイターは新規作成の対象外です'),{code:'CREATOR_EXCLUDED'})}
 function uniquePeople(people){
  const parents=new Map();
  const root=id=>{if(!parents.has(id))parents.set(id,id);let at=id;while(parents.get(at)!==at)at=parents.get(at);while(parents.get(id)!==id){const next=parents.get(id);parents.set(id,at);id=next}return at};
@@ -510,7 +523,7 @@ function sameCreator(first,second){
  return !!(firstKey&&secondKey&&firstKey===secondKey)||!!(canonicalUrlname(first)&&canonicalUrlname(first)===canonicalUrlname(second))
 }
 function validateFixedRows(rows,expectedCount=null){
- if(!Array.isArray(rows)||rows.length<2||rows.length>HISTORY_CANDIDATE_CAP+1||expectedCount!=null&&rows.length!==expectedCount+1)throw new Error('保存済みの指定件数＋実績1件の一覧を確認できません');
+ if(!Array.isArray(rows)||rows.length<1||rows.length>HISTORY_CANDIDATE_CAP+1||expectedCount!=null&&rows.length!==expectedCount+1)throw new Error('保存済みの指定件数＋実績1件の一覧を確認できません');
  const count=rows.length-1,creators=rows.slice(0,count),final=rows[count];
  if(uniquePeople(creators).length!==count||creators.some((row,index)=>row.finalMarker||Number(row.index)!==index+1))throw new Error('保存済み一覧にクリエイターの重複・不足・順序の不一致があります。「最初に戻る」で一覧を作り直してください');
  if(!final?.finalMarker)throw new Error('最後の実績の算数を含む'+(rows.length+1)+'件の一覧を確認できません。「最初に戻る」で一覧を作り直してください');
@@ -538,10 +551,12 @@ async function buildRows(target=300){
  let rows=Array.isArray(saved?.rows)&&compatible?saved.rows:[];
  let skipped=Array.isArray(saved?.skipped)&&saved.signature===signature?saved.skipped:[];
  let index=compatible?Number(saved.index||0):0;
+ const removed=rows.filter(excludedCreator);
+ if(removed.length){rows=rows.filter(row=>!excludedCreator(row));for(const row of removed)if(!skipped.some(person=>sameCreator(person,row)))skipped.push({urlname:canonicalUrlname(row),likerKey:creatorKey(row),reason:'指定クリエイターを除外'});}
  let accepted=0;
  const validCheckpoint=Number.isInteger(index)&&index===rows.length+skipped.length&&index<=people.length&&rows.length<=target&&uniquePeople([...rows,...skipped]).length===index&&skipped.every(person=>String(person.reason||'').trim())&&people.slice(0,index).every(person=>skipped.some(entry=>sameCreator(entry,person))||sameCreator(rows[accepted++],person))&&accepted===rows.length;
  if(!validCheckpoint)throw new Error('確認途中の保存データに重複・順序の不一致があります。スキ履歴を取得し直してください');
- if(saved?.signature===previousSignature){writePrep({...saved,signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();}
+ if(saved?.signature===previousSignature||removed.length){writePrep({...saved,signature,index,rows,skipped,updatedAt:Date.now()});await flushPrepBackup();}
 
  while(index<people.length&&rows.length<target){
   if(stopRequested)throw new Error('停止しました');
@@ -710,6 +725,10 @@ async function ensureCardsRunReady(view,anchors=null){
  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
  let run=readRun();
  if(!run)return null;
+ if(run.articleKey===editorArticleKey()&&!run.gallery126&&Array.isArray(run.rows)){
+  const selected=excludePendingCreatorRows(run.rows,run);
+  if(selected!==run.rows){run={...run,rows:selected,count:selected.length-1,updatedAt:Date.now()};writeRun(run);await flushRunBackup();}
+ }
  if(run.gallery126){
   if(run.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');
   if(galleryNeedsParticipantUpgrade(run))throw new Error('記事なしの参加者1人を追加します。画像の「再開」で126人を完成させてください');
@@ -1786,6 +1805,7 @@ async function createFixed300(options=null){
    const finalRow=await enrichFinal(creators.length+1);
    rows=validateFixedRows([...creators,finalRow])
   }
+  if(!gallery)rows=excludePendingCreatorRows(rows,existing||{});
   if(gallery&&!rows.at(-1)?.finalMarker){
    const finalRow=await enrichFinal(rows.length+1);
    if(stopRequested)throw new Error('停止しました');
@@ -1812,7 +1832,7 @@ async function createFixed300(options=null){
    };
    writeRun(run)
   }else{
-   run={...run,rows,count:gallery?galleryCount:run.count,stage:'images_building',paused:false,pauseStage:null,updatedAt:Date.now()};
+   run={...run,rows,count:gallery?galleryCount:rows.length-1,stage:'images_building',paused:false,pauseStage:null,updatedAt:Date.now()};
    writeRun(run)
   }
   await flushRunBackup();
@@ -1844,6 +1864,7 @@ async function createFixed300(options=null){
    checkPause();
    if(stopRequested)throw new Error('停止しました');
    const row=rows[i];
+   assertCreatorAllowed(row);
    if(gallery){
     const imagePlan=galleryImagePlan(view,readRun()||run,rows);
     if(imagePlan.byIndex.has(i))continue;
@@ -1913,8 +1934,8 @@ async function createFixed300(options=null){
   run=readRun()||run;
   writeRun({...run,stage:'images_ready',paused:false,pauseStage:null,rows,imagesCompletedAt:Date.now(),updatedAt:Date.now()});
   await flushRunBackup();
-  if(typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function')await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__((gallery?'ハロウィン極薄'+galleryCount+'人・'+galleryCount+'種類＋実績1件':'極薄'+(rows.length-1)+'人＋実績1件')+'｜画像貼付完了。下書き保存中…');
-  setStatus('極薄'+rows.length+'件完了 ✅ '+(gallery&&availableOnly?'やとさん1人は記事公開待ち。':'')+'カードを置く本文位置をタップ→②カード続き/開始')
+   const saved=typeof page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__==='function'?await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__((gallery?'ハロウィン極薄'+galleryCount+'人・'+galleryCount+'種類＋実績1件':'極薄'+(rows.length-1)+'人＋実績1件')+'｜画像貼付完了。下書き保存中…'):{confirmed:false};
+   setStatus(saved?.confirmed===false?'画像 '+rows.length+'件は貼付済み｜下書き保存は未確認。note画面で保存完了を確認してください':'極薄'+rows.length+'件完了 ✅ '+(gallery&&availableOnly?'やとさん1人は記事公開待ち。':'')+'カードを置く本文位置をタップ→②カード続き/開始')
  }catch(error){
   if(pendingAnchorMap){mapGalleryCardAnchorsAfterInsert(pendingAnchorMap);await flushRunBackup();}
   let pauseNotice='';

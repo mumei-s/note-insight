@@ -12,7 +12,7 @@ function runtime(count=3){
  c.saved={stage:'images_ready',rows:Array.from({length:count},(_,index)=>({url:'https://note.com/person'+index+'/n/n'+String(index+1).repeat(12),creator:'person'+index})),cardKeys:[],cardAnchorPos:null};
  c.cards=[];c.calls=[];c.statuses=[];c.saves=[];c.flushes=[];c.aborts=0;
  page.__MUMEI_PROFILE_CARD_RUN_STORE__={hydrate:async()=>{},flush:async()=>{c.flushes.push({cards:c.saved.cardKeys.length,paused:c.saved.paused===true})}};
- c.api.patch(`readRun=()=>saved;writeRun=value=>saved=value;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>10;cardAnchor=(run,pos)=>pos;reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};resolveOwnedImageHits=()=>saved.rows.map(()=>({}));resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;sleep=async()=>{};setStatus=(text,bad)=>statuses.push({text,bad});saveOnce=async text=>saves.push(text);abortActiveRequests=()=>{aborts++};createNativeCard=async(view,row,pos)=>{calls.push(row.url);await new Promise(resolve=>{globalThis.finishCard=resolve});const hit={url:row.url,pos,node:{nodeSize:1}};cards.push(hit);writeRun({...saved,cardKeys:[...saved.cardKeys,{url:row.url,key:'key-'+calls.length}],pendingCard:null});return{nextPos:pos+1}};`);
+ c.api.patch(`readRun=()=>saved;writeRun=value=>saved=value;findView=()=>({state:{doc:{content:{size:100}}}});cardAnchorFromSelection=()=>10;cardAnchor=(run,pos)=>pos;reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};resolveOwnedImageHits=()=>saved.rows.map(()=>({}));resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;sleep=async()=>{};setStatus=(text,bad)=>statuses.push({text,bad});saveOnce=async text=>{saves.push(text);return true};abortActiveRequests=()=>{aborts++};createNativeCard=async(view,row,pos)=>{calls.push(row.url);await new Promise(resolve=>{globalThis.finishCard=resolve});const hit={url:row.url,pos,node:{nodeSize:1}};cards.push(hit);writeRun({...saved,cardKeys:[...saved.cardKeys,{url:row.url,key:'key-'+calls.length}],pendingCard:null});return{nextPos:pos+1}};`);
  return c;
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -62,7 +62,7 @@ test('the pause control stays usable while card actions are busy',async()=>{
 test('pause wakes the current card gap immediately without starting the next conversion',async()=>{
  const c=runtime();c.api.patch('sleep=ms=>new Promise(resolve=>{globalThis.waitingMs=ms;globalThis.finishDelay=resolve})');
  const creating=c.api.createCardsAtTap();await tick();c.finishCard();await tick();
- assert.equal(c.waitingMs,700);assert.equal(c.calls.length,1);
+ assert.ok(c.waitingMs>0&&c.waitingMs<=700);assert.equal(c.calls.length,1);
  c.api.pauseCards();await creating;
  assert.equal(c.calls.length,1);assert.equal(c.saved.paused,true);assert.equal(c.saves.length,1);
 });

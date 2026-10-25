@@ -24,7 +24,7 @@ function runtime(buttons=[]){
 
 test('native draft save selects only the unique visible header control and prevents form submission',async()=>{
  const home=button({text:'ホーム'}),tool=button({excluded:true}),body=button({header:false}),draft=button();
- const r=runtime([home,tool,body,draft]);draft.onClick=()=>{draft.disabled=true};r.c.onSleep=()=>{draft.disabled=false};
+ const r=runtime([home,tool,body,draft]);draft.onClick=()=>{draft.disabled=true};r.c.onSleep=()=>{draft.disabled=false;r.notices.push({textContent:'下書きを保存しました',getClientRects:()=>[{}],closest:()=>null})};
  assert.equal(await r.api.saveOnce(),true);
  assert.equal(draft.clicks,1);assert.deepEqual(draft.clickTypes,['button']);assert.equal(draft.getAttribute('type'),null);
  assert.equal(home.clicks+tool.clicks+body.clicks,0);assert.deepEqual(r.c.waits,[100]);
@@ -38,14 +38,60 @@ test('ambiguous, linked or explicit form-action controls never get clicked',asyn
 });
 
 test('a unique native save control works when the editor header uses ordinary div elements',async()=>{
- const draft=button({header:false}),r=runtime([draft]);draft.onClick=()=>{draft.disabled=true};r.c.onSleep=()=>{draft.disabled=false};
+ const draft=button({header:false}),r=runtime([draft]);draft.onClick=()=>{draft.disabled=true};r.c.onSleep=()=>{draft.disabled=false;r.notices.push({textContent:'下書きを保存しました',getClientRects:()=>[{}],closest:()=>null})};
  assert.equal(await r.api.saveOnce(),true);assert.equal(draft.clicks,1);
 });
 
-test('an already exposed native draft method saves in place without clicking any control',async()=>{
+test('an explicit positive native result confirms saving without clicking any control',async()=>{
  const draft=button(),r=runtime([draft]);let calls=0;
- r.page.noteEditor={registerNoteDraft(mode){calls++;assert.equal(mode,'manual');return Promise.resolve()}};
+ r.page.noteEditor={registerNoteDraft(mode){calls++;assert.equal(mode,'manual');return Promise.resolve({result:true})}};
  assert.equal(await r.api.saveOnce(),true);assert.equal(calls,1);assert.equal(draft.clicks,0);assert.deepEqual(r.c.waits,[]);
+});
+
+test('a native void or object resolution alone remains unconfirmed and does not trigger a UI fallback',async()=>{
+ for(const resolved of [undefined,{}]){
+  const draft=button(),r=runtime([draft]);let calls=0;
+  r.page.noteEditor={registerNoteDraft(){calls++;return Promise.resolve(resolved)}};
+  const result=await r.api.saveOnce();
+  assert.equal(result.requested,true);assert.equal(result.confirmed,false);
+  assert.equal(calls,1);assert.equal(draft.clicks,0);
+  assert.deepEqual(r.c.waits,[100,100,100]);
+ }
+});
+
+test('a native void or object resolution can be confirmed by a fresh saved notice',async()=>{
+ for(const resolved of [undefined,{}]){
+  const draft=button(),r=runtime([draft]);let calls=0;
+  r.page.noteEditor={registerNoteDraft(){calls++;return Promise.resolve(resolved)}};
+  r.c.onSleep=()=>r.notices.push({textContent:'下書きを保存しました',getClientRects:()=>[{}],closest:()=>null});
+  assert.equal(await r.api.saveOnce(),true);
+  assert.equal(calls,1);assert.equal(draft.clicks,0);assert.deepEqual(r.c.waits,[100]);
+ }
+});
+
+test('busy-to-idle after a native method does not prove persistence without a success notice',async()=>{
+ for(const resolved of [undefined,{}]){
+  const draft=button(),r=runtime([draft]);let calls=0;
+  r.page.noteEditor={registerNoteDraft(){calls++;draft.disabled=true;return Promise.resolve(resolved)}};
+  r.c.onSleep=()=>{draft.disabled=false};
+  const result=await r.api.saveOnce();
+  assert.equal(result.confirmed,false);assert.equal(calls,1);assert.equal(draft.clicks,0);
+  assert.deepEqual(r.c.waits,[100,100,100]);
+ }
+});
+
+test('busy-to-idle after a native button click remains unconfirmed without a success notice',async()=>{
+ const draft=button(),r=runtime([draft]);draft.onClick=()=>{draft.disabled=true};r.c.onSleep=()=>{draft.disabled=false};
+ const result=await r.api.saveOnce();
+ assert.equal(result.confirmed,false);assert.equal(draft.clicks,1);assert.deepEqual(r.c.waits,[100,100,100]);
+});
+
+test('an unchanged stale success notice cannot confirm a native void result',async()=>{
+ const draft=button(),r=runtime([draft]);let calls=0;
+ r.notices.push({textContent:'下書きを保存しました',getClientRects:()=>[{}],closest:()=>null});
+ r.page.noteEditor={registerNoteDraft(){calls++;return Promise.resolve()}};
+ const result=await r.api.saveOnce();
+ assert.equal(result.confirmed,false);assert.equal(calls,1);assert.equal(draft.clicks,0);
 });
 
 test('a rejected native draft operation is not retried or replaced with a UI click',async()=>{

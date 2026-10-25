@@ -32,7 +32,7 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  if(saved){w.localStorage.setItem(RUN_KEY,JSON.stringify(saved));gm.set(BACKUP_KEY,{value:structuredClone(saved),updatedAt:saved.updatedAt,deleted:false,articleKey:ARTICLE})}
  if(prefs)w.localStorage.setItem('mumei_profile_card_paster_v1',JSON.stringify(prefs));
  const code=readFileSync(path,'utf8');
- assert.match(code,/@version\s+2\.7\.2\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
+ assert.match(code,/@version\s+2\.7\.3\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
  w.eval(code);
  w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
  for(const callback of [...intervals.values()])callback();
