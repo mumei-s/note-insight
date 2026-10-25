@@ -26,6 +26,7 @@ test('pause completes and saves the in-flight card, then resume sends each remai
  assert.equal(c.saved.stage,'cards_building');assert.equal(c.saved.paused,true);assert.equal(c.saved.pauseStage,'cards');
  assert.equal(c.saved.cardKeys.length,1);assert.equal(c.cards[0].pos,10);assert.equal(c.saves.length,1);
  assert.match(c.statuses.at(-1).text,/一時停止中.*1\/3/);assert.equal(c.window.__MUMEI_PROFILE_CARD_CORE_BUSY__(),false);
+ c.api.patch('cardAnchorFromSelection=()=>80');
  const resuming=c.api.createCardsAtTap();await tick();assert.equal(c.calls.length,2);assert.equal(c.saved.paused,false);
  c.finishCard();await tick();assert.equal(c.calls.length,3);c.finishCard();await resuming;
  assert.equal(c.saved.stage,'complete');assert.equal(c.saved.paused,false);assert.equal(c.saved.pauseStage,null);

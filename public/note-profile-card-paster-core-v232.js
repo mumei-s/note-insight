@@ -252,27 +252,55 @@ function exactUrlParagraphs(view,url){
  });
  return out
 }
-function cardAnchorFromSelection(view){
+function cardAnchorFromSelection(view,textCursor=false){
  const sel=view.state.selection,$from=sel.$from;
  if(!$from)return view.state.doc.content.size;
  try{
   if($from.depth>=1){
    const node=$from.node(1),before=$from.before(1);
    if(node?.type===view.state.schema.nodes.paragraph&&!String(node.textContent||''))return before;
+   if(textCursor&&$from.depth===1&&node?.type===view.state.schema.nodes.paragraph){
+    const from=Number(sel.from);
+    return from<=before+1?before:from>=before+node.nodeSize-1?before+node.nodeSize:from
+   }
    return before+node.nodeSize
   }
  }catch{}
- return Math.max(0,Math.min(view.state.doc.content.size,Number(sel.from)||view.state.doc.content.size))
+ const from=Number(sel.from);
+ return Math.max(0,Math.min(view.state.doc.content.size,Number.isFinite(from)?from:view.state.doc.content.size))
 }
+function notificationCardAnchorFromSelection(view){return cardAnchorFromSelection(view,true)}
 function insertWorkUrlAt(view,url,pos){
  const p=view.state.schema.nodes.paragraph;
- const at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)));
- view.dispatch(view.state.tr.insert(at,p.create(null,view.state.schema.text(url))));
- const node=view.state.doc.nodeAt(at);
- if(node?.type!==p||node.textContent!==url)throw new Error('通知カード用URLを指定位置へ配置できません');
- const Selection=selectionApi(),near=typeof Selection.near==='function'?Selection.near(view.state.doc.resolve(Math.max(0,Math.min(view.state.doc.content.size,at+node.nodeSize-1)))):Selection.atEnd(view.state.doc);
- view.dispatch(view.state.tr.setSelection(near).scrollIntoView());view.focus();
- return{node,pos:at}
+ const before=view.state.doc,value=Number(pos);
+ if(!p||!Number.isFinite(value))throw new Error('通知カードの挿入位置を確認できません');
+ let at=Math.max(0,Math.min(before.content.size,value));
+ const resolved=before.resolve(at);
+ if(resolved.depth>=1){
+  const block=resolved.node(1),start=resolved.before(1);
+  // A URL paragraph can split body text, but must never split an image caption
+  // or the enclosing structure of a list/quote. Block boundaries stay exact.
+  if(resolved.depth===1&&block.type===p){
+   if(at<=start+1)at=start;
+   else if(at>=start+block.nodeSize-1)at=start+block.nodeSize;
+  }else at=start+block.nodeSize;
+ }
+ const node=p.create(null,view.state.schema.text(url)),tr=view.state.tr.insert(at,node),matches=[];
+ // ProseMirror shifts a block inserted in text past the prefix's closing token.
+ // Locate our new node in the fitted transaction before changing the document.
+ tr.doc.forEach((candidate,pos)=>{if(candidate===node)matches.push({node:candidate,pos})});
+ if(matches.length!==1)throw new Error('通知カード用URLを指定位置へ配置できません');
+ const work=matches[0],Selection=selectionApi(),near=Selection.near(tr.doc.resolve(work.pos+node.nodeSize-1),-1);
+ if(near.from!==work.pos+node.nodeSize-1||near.to!==near.from)throw new Error('通知カード用URLのカーソル位置を確認できません');
+ tr.setSelection(near).scrollIntoView();
+ if(view.state.doc!==before)throw new Error('本文の位置が変わったため通知カードの挿入を停止しました');
+ view.dispatch(tr);
+ // note assigns paragraph IDs in an appended transaction, replacing the node
+ // object at the same position. Track that live node for conversion/cleanup.
+ const actual=view.state.doc.nodeAt(work.pos);
+ if(actual?.type!==p||actual.textContent!==url)throw new Error('通知カード用URLの配置結果を確認できません');
+ work.node=actual;
+ view.focus();return work
 }
 async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000){
  const end=Date.now()+timeout,errorGrace=2500;let errorAt=0;
@@ -285,8 +313,17 @@ async function waitNewCard(view,url,beforeKeys,attempt,timeout=45000){
  }
  throw attempt.error||new Error('正規通知カード生成タイムアウト')
 }
-function deleteExtraWorkUrl(view,url,beforeCount){
+function deleteExtraWorkUrl(view,url,beforeCount,work=null){
  const list=exactUrlParagraphs(view,url);
+ if(work){
+  const own=list.filter(hit=>hit.node===work.node);
+  if(!own.length)return 0;
+  if(own.length!==1)throw new Error('一時URLの位置を一意に確認できません。本文は保持しています');
+  const hit=own[0],tr=view.state.tr.delete(hit.pos,hit.pos+hit.node.nodeSize),expected=tr.doc;
+  view.dispatch(tr);
+  if(!view.state.doc.eq(expected))throw new Error('一時URLの削除結果を確認できません');
+  return 1
+ }
  if(list.length<=beforeCount)return 0;
  const extra=list.slice(beforeCount).sort((a,b)=>b.pos-a.pos);
  return deleteHits(view,extra)
@@ -322,7 +359,7 @@ function emptyCardGap(view,from,to){
 function recordNativeCard(hit,row){
  const run=readRun()||{},cards=Array.isArray(run.cardKeys)?run.cardKeys:[],rec={url:row.url,key:cardKey(hit),creator:row.creator};
  const records=new Map(cards.map(card=>[String(card.key||''),card]));records.set(rec.key,rec);
- writeRun({...run,cardKeys:[...records.values()],pendingCard:null,updatedAt:Date.now()});return rec
+ writeRun({...run,...(!cards.length?{cardAnchorPos:hit.pos}:{}),cardKeys:[...records.values()],pendingCard:null,updatedAt:Date.now()});return rec
 }
 async function reconcileCompletedCards(view,run,rows){
  assertUniqueGeneratedCards(view,run,rows);
@@ -354,10 +391,18 @@ async function createNativeCard(view,row,insertPos){
  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
  if(stopRequested)throw new Error('手動停止');
  const beforeKeys=new Set(embedNodes(view).map(cardKey).filter(Boolean)),rawBefore=exactUrlParagraphs(view,row.url).length;
- let requested=false,hit;
+ let requested=false,hit,work=null;
  try{
  if(stopRequested)throw new Error('手動停止');
- const work=insertWorkUrlAt(view,row.url,insertPos),workNode=work.node,attempt={error:null};
+ work=insertWorkUrlAt(view,row.url,insertPos);
+ const workNode=work.node,attempt={error:null},current=readRun()||run;
+ // Persist the fitted position before sending the native conversion request.
+ if(current.pendingCard?.pos!==work.pos||!cards.length&&current.cardAnchorPos!==work.pos){
+  writeRun({...current,...(!cards.length?{cardAnchorPos:work.pos}:{}),pendingCard:{...current.pendingCard,pos:work.pos},updatedAt:Date.now()});
+  await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
+ }
+ if(stopRequested)throw new Error('手動停止');
+ if(view.state.doc.nodeAt(work.pos)!==workNode||view.state.selection.from!==work.pos+workNode.nodeSize-1||view.state.selection.to!==view.state.selection.from)throw new Error('通知カードの挿入位置が変わったため停止しました。本文は保持しています');
  const command=noteUrlCommandFactory()(row.url,e=>{attempt.error=e});requested=true;
  const handled=command(view.state,(tr,consumedNode=workNode)=>{
   try{
@@ -371,14 +416,14 @@ async function createNativeCard(view,row,insertPos){
   const recovered=embedNodes(view).find(h=>{const k=cardKey(h);return k&&!beforeKeys.has(k)&&genuineCard(h,row.url)});
   if(recovered)hit=recovered;else throw e
  }
- deleteExtraWorkUrl(view,row.url,rawBefore);
+ deleteExtraWorkUrl(view,row.url,rawBefore,work);
  hit=embedNodes(view).find(h=>cardKey(h)===cardKey(hit))||hit;
  if(!genuineCard(hit,row.url))throw new Error('正規通知カードの照合に失敗しました');
  assertUniqueGeneratedCards(view,readRun()||run);
  const rec=recordNativeCard(hit,row);
  return{rec,nextPos:hit.pos+hit.node.nodeSize}
  }catch(error){
-  if(!requested||knownCardFailure(error)){deleteExtraWorkUrl(view,row.url,rawBefore);const current=readRun()||run;writeRun({...current,pendingCard:null,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
+  if(!requested||knownCardFailure(error)){if(work)deleteExtraWorkUrl(view,row.url,rawBefore,work);const current=readRun()||run;writeRun({...current,pendingCard:null,updatedAt:Date.now()});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.()}
   throw error
  }
 }
@@ -1847,7 +1892,7 @@ async function createCardsAtTap(){
  if(actionBlocked())return;busy=true;stopRequested=false;cardPauseRequested=false;cardRunActive=true;update();
  try{
   const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
-  const anchors={tappedAnchor:cardAnchorFromSelection(view)};
+  const anchors={tappedAnchor:notificationCardAnchorFromSelection(view)};
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.hydrate?.();
   if(stopRequested)throw new Error('手動停止');
   const savedPlan=readRun();
@@ -1872,6 +1917,10 @@ async function createCardsAtTap(){
   let existing=resolveOwnedCardHits(view).sort((a,b)=>a.pos-b.pos);
   if(existing.length>rows.length||existing.some((hit,index)=>!genuineCard(hit,rows[index]?.url)))throw new Error('保存済みカードの途中に欠落または順序の違いがあります。今あるカードは保持しました');
   let done=Math.min(existing.length,rows.length);
+
+  // With no completed/in-flight cards, a new tap starts at the current cursor.
+  // Completed or uncertain conversions keep their saved position for recovery.
+  if(!done&&!run.pendingCard)run={...run,cardAnchorPos:tappedAnchor};
 
   if(done>=rows.length){
    if(run.stage==='complete'&&run.draftSaveState==='confirmed'){

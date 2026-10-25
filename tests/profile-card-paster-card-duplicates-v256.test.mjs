@@ -13,8 +13,8 @@ function runtime(hits=[]){
  const entry="if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();";
  vm.runInContext(source.replace('const sleep=','let sleep=').replace(entry,'globalThis.api={patch:code=>eval(code),createNativeCard,createCardsAtTap,reconcileCompletedCards,auditGeneratedDuplicates};'),c);
  c.hits=hits;c.saved={rows:[row,next],items:[],cardKeys:[],cardBaselineKeys:[],cardAnchorPos:0,imageAnchorPos:0,stage:'images_ready'};c.calls=0;c.events=[];
- c.view={state:{doc:{content:{size:10},nodeAt:pos=>c.hits.find(hit=>hit.pos===pos)?.node||null}},dispatch(){throw Error('Unexpected document mutation')}};
- c.api.patch(`readRun=()=>saved;writeRun=run=>saved=run;embedNodes=()=>hits;imageNodes=()=>[];findView=()=>view;setStatus=(text,bad)=>events.push({text,bad});exactUrlParagraphs=()=>[];deleteExtraWorkUrl=()=>0;insertWorkUrlAt=()=>({node:{}});noteUrlCommandFactory=()=>()=>()=>{calls++;return true};sleep=async()=>{};waitNewCard=async()=>{throw Error('timeout')}`);
+ c.view={state:{doc:{content:{size:10},nodeAt:pos=>c.work?.pos===pos?c.work.node:c.hits.find(hit=>hit.pos===pos)?.node||null}},dispatch(){throw Error('Unexpected document mutation')}};
+ c.api.patch(`readRun=()=>saved;writeRun=run=>saved=run;embedNodes=()=>hits;imageNodes=()=>[];findView=()=>view;setStatus=(text,bad)=>events.push({text,bad});exactUrlParagraphs=()=>[];deleteExtraWorkUrl=()=>0;insertWorkUrlAt=(view,url,pos)=>{globalThis.work={node:{nodeSize:2},pos};view.state.selection={from:pos+1,to:pos+1};return work};noteUrlCommandFactory=()=>()=>()=>{calls++;return true};sleep=async()=>{};waitNewCard=async()=>{throw Error('timeout')}`);
  return c;
 }
 

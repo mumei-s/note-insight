@@ -32,11 +32,11 @@ test('card creation reconciles image readiness before checking the stored stage'
  await c.api.createCardsAtTap();assert.equal(healed,1);assert.equal(c.saved.stage,'complete');assert.equal(c.saves,1);assert.equal(c.saved.draftSaveState,'confirmed');assert.match(c.statuses.at(-1),/通知カード 2件/);
 });
 
-test('cards hydrate durable progress and preserve the tapped position before hydration changes selection',async()=>{
+test('cards hydrate durable progress and use the new tap instead of a stale zero-card anchor',async()=>{
  const c=runtime();c.saved=null;c.cards=[];c.statuses=[];c.checkpoints=[];c.tap=42;
  c.window.__MUMEI_PROFILE_CARD_RUN_STORE__={
   read:()=>c.saved,write:value=>{c.saved=value},
-  hydrate:async()=>{await Promise.resolve();c.tap=999;c.saved={stage:'images_ready',cardAnchorPos:null,rows:[{url:'https://note.com/a/n/n111111111111',creator:'a'},{url:'https://note.com/b/n/n222222222222',creator:'b'}],cardKeys:[]}},
+  hydrate:async()=>{await Promise.resolve();c.tap=999;c.saved={stage:'images_ready',cardAnchorPos:800,rows:[{url:'https://note.com/a/n/n111111111111',creator:'a'},{url:'https://note.com/b/n/n222222222222',creator:'b'}],cardKeys:[]}},
   flush:async()=>{c.checkpoints.push([c.saved.stage,c.saved.cardKeys.length])}
  };
  c.api.patch(`findView=()=>({state:{doc:{content:{size:1000}}}});reconcileCompletedCards=async(view,run)=>run;assertUniqueGeneratedCards=()=>{};embedNodes=()=>[];cardAnchorFromSelection=()=>tap;resolveOwnedImageHits=()=>[{},{}];resolveOwnedCardHits=()=>cards;genuineCard=(hit,url)=>hit.url===url;setStatus=text=>statuses.push(text);sleep=async()=>{};saveOnce=async()=>true;createNativeCard=async(view,row,pos)=>{cards.push({url:row.url,pos,node:{nodeSize:1}});const run=readRun();writeRun({...run,cardKeys:[...run.cardKeys,{url:row.url}]});return{nextPos:pos+1}}`);
