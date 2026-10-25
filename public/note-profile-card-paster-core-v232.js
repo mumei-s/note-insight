@@ -45,7 +45,7 @@ const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
 const SPEED_FACTOR=4.0;
 const IMAGE_PASTE_GAP=180;
-const CARD_GAP_FAST=700;
+const CARD_GAP_FAST=600;
 const CARD_GAP_SLOW=Math.round(10000/SPEED_FACTOR);
 const CARD_BLOCK_PAUSE=2500;
 function excludedCreator(row){

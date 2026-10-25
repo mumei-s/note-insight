@@ -32,14 +32,14 @@ function runtime({count=3,createMs=100,checkpointMs=50,pauseAfterCard=0,failAfte
  return{state,api:c.api};
 }
 
-test('fast verified cards retain the 700ms minimum including checkpoint time',async()=>{
+test('fast verified cards use the shorter 600ms minimum including checkpoint time',async()=>{
  const {state,api}=runtime();await api.createCardsAtTap();
- assert.deepEqual(state.starts,[50,750,1450]);
- assert.deepEqual(state.delays,[550,550]);
+ assert.deepEqual(state.starts,[50,650,1250]);
+ assert.deepEqual(state.delays,[450,450]);
  assert.equal(state.finalSaved,1);assert.equal(state.run.cardKeys.length,3);
 });
 
-test('slow verified cards do not add a redundant 700ms wait',async()=>{
+test('slow verified cards do not add a redundant 600ms wait',async()=>{
  const {state,api}=runtime({createMs:900});await api.createCardsAtTap();
  assert.deepEqual(state.starts,[50,1000,1950]);assert.deepEqual(state.delays,[]);
  assert.equal(state.finalSaved,1);
@@ -53,8 +53,8 @@ test('the last verified card has no trailing pacing idle',async()=>{
 
 test('the ten-card 2500ms throttle is preserved in addition to minimum pacing',async()=>{
  const {state,api}=runtime({count:11});await api.createCardsAtTap();
- assert.deepEqual(state.delays,[...Array(10).fill(550),2500]);
- assert.equal(state.starts[10]-state.starts[9],3200);
+ assert.deepEqual(state.delays,[...Array(10).fill(450),2500]);
+ assert.equal(state.starts[10]-state.starts[9],3100);
  assert.equal(state.finalSaved,1);assert.equal(state.run.cardKeys.length,11);
 });
 

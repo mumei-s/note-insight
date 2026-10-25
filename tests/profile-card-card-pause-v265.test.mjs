@@ -62,7 +62,7 @@ test('the pause control stays usable while card actions are busy',async()=>{
 test('pause wakes the current card gap immediately without starting the next conversion',async()=>{
  const c=runtime();c.api.patch('sleep=ms=>new Promise(resolve=>{globalThis.waitingMs=ms;globalThis.finishDelay=resolve})');
  const creating=c.api.createCardsAtTap();await tick();c.finishCard();await tick();
- assert.ok(c.waitingMs>0&&c.waitingMs<=700);assert.equal(c.calls.length,1);
+ assert.ok(c.waitingMs>0&&c.waitingMs<=600);assert.equal(c.calls.length,1);
  c.api.pauseCards();await creating;
  assert.equal(c.calls.length,1);assert.equal(c.saved.paused,true);assert.equal(c.saves.length,1);
 });

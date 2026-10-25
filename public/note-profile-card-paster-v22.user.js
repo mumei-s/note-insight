@@ -35,7 +35,7 @@ const PREP_PREFIX='mumei_profile_like300_fix_v230:';
 const FINAL_URL='https://note.com/fuku444/n/nb4f6934381e9';
 const FINAL_KEY='nb4f6934381e9';
 const W=860,H=140;
-const IMAGE_GAP=80;
+const IMAGE_GAP=50;
 const HISTORY_CANDIDATE_CAP=1500;
 
 let busy=false;
