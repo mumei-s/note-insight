@@ -483,6 +483,7 @@ async function preparePerson(person){
    thumbUrl:thumb,
    title:String(note.name||note.title||latest.title||'無題の記事').trim(),
    profileText:biography,
+   profileLayout:'compact-v272',
    likesHistory:true,
    likedAt:String(person.likedAt||'')
   }
@@ -681,6 +682,7 @@ async function recoverCompatibleRun(view,existing){
  const headings=new Set(existing.sectionHeadings||[]),activities=new Set(existing.activityTexts||[]),dividers=new Set(existing.dividerUrls||[]);
  let anchor=owned[0]?.pos??(Number(existing.imageAnchorPos)||0);
  const recoverProfile=(block,row)=>{
+  if(block?.node?.type?.name==='paragraph'&&row.profileLayout==='compact-v272'&&String(block.node.textContent||'')===activityText(row)){activities.add(String(block.node.textContent));return true}
   const prefix='プロフィール｜'+row.creator+'さん：';
   if(block?.node?.type?.name!=='paragraph'||!String(block.node.textContent||'').startsWith(prefix))return false;
   const text=String(block.node.textContent),profile=text.slice(prefix.length);
@@ -1190,7 +1192,10 @@ function galleryProfileChunks(value,maxWidth=Infinity){
   }else units.push({text:part,kind:type,parts:[part]});
  };
  const words=fragment=>{
-  for(const part of galleryProfileGraphemes(fragment))append(part);
+  for(const part of galleryProfileGraphemes(fragment)){
+   const previous=units[units.length-1];
+   append(part,part==='ー'&&previous&&['katakana','latin'].includes(previous.kind)?'katakana':kind(part));
+  }
  };
  let offset=0;
  for(const match of text.matchAll(protectedWords)){
@@ -1241,17 +1246,24 @@ function galleryProfileSemanticParts(value,maxWidth){
  }
  return parts;
 }
-function galleryProfileLines(value,maxWidth=16){
+function galleryProfileLines(value,maxWidth=16,allowWide=false){
  const lines=[];
  for(const original of String(value??'').replace(/\r\n?/g,'\n').split('\n')){
+  const start=lines.length;
   let line='',used=0;
   for(const part of galleryProfileSemanticParts(original,maxWidth)){
    const size=galleryProfileWidth(part);
-   if(size>maxWidth+.00001)throw new Error('プロフィールに表示幅を超える単語またはURLがあります。全文を保ったまま表示幅を確認してください');
+   if(size>maxWidth+.00001){
+    if(!allowWide)throw new Error('プロフィールに表示幅を超える単語またはURLがあります。全文を保ったまま表示幅を確認してください');
+    // Keep an exceptionally long URL/word intact on its own smallest-font
+    // row. A layout preference must not discard a creator or truncate text.
+    if(line){lines.push(line);line='';used=0}
+    lines.push(part);continue;
+   }
    if(line&&used+size>maxWidth+.00001){lines.push(line);line='';used=0}
    line+=part;used+=size;
   }
-  lines.push(line);
+  if(line||!original||lines.length===start)lines.push(line);
  }
  return lines;
 }
@@ -1277,12 +1289,18 @@ function escapeGalleryProfileTex(value){
   return char;
  }).join('');
 }
+function historyProfileLayout(value){
+ const text=String(value??''),widest=Math.max(0,...text.replace(/\r\n?/g,'\n').split('\n').flatMap(line=>galleryProfileChunks(line,16).map(galleryProfileWidth)));
+ const tiny=widest>16,font=tiny?'tiny':'scriptsize',maxWidth=tiny?22.4:16;
+ return{font,maxWidth,lines:galleryProfileLines(text,maxWidth,true)};
+}
+function compactHistoryRows(rows){return rows.map(row=>row.finalMarker?row:{...row,profileLayout:'compact-v272'})}
 function activityText(row){
  const text='プロフィール｜'+row.creator+'さん：'+(row.profileText||'プロフィール未設定');
- if(!row.gallery126)return text;
+ if(!row.gallery126&&row.profileLayout!=='compact-v272')return text;
  // note accepts $${...}$$ in an ordinary paragraph. Keep a single source string
  // so saved activityTexts can identify this exact profile when resuming/resetting.
- const layout=galleryProfileLayout(text),lines=layout.lines.map(line=>'\\text{'+escapeGalleryProfileTex(line)+'}');
+ const layout=row.gallery126?galleryProfileLayout(text):historyProfileLayout(text),lines=layout.lines.map(line=>'\\text{'+escapeGalleryProfileTex(line)+'}');
  return'$${\\'+layout.font+'\\begin{array}{l}'+lines.join('\\\\')+'\\end{array}}$$';
 }
 function insertHeadingAt(view,text,pos){
@@ -1302,7 +1320,7 @@ function insertActivityAt(view,row,pos){
  if(!type)throw new Error('note段落を取得できません');
  const at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)||0));
  const text=activityText(row);
- const small=!row.gallery126&&view.state.schema.marks?.small;
+ const small=!row.gallery126&&row.profileLayout!=='compact-v272'&&view.state.schema.marks?.small;
  const marks=small?[small.create()]:[];
  const node=type.create(null,view.state.schema.text(text,marks));
  view.dispatch(view.state.tr.insert(at,node));
@@ -1353,6 +1371,7 @@ async function restartFixed300(){
     const creators=await buildRows(options.target);
     rows=validateFixedRows([...creators,await enrichFinal(creators.length+1)]);
    }
+   rows=compactHistoryRows(rows);
    clearCurrentPaste(view,run);
    writeRun({...run,version:VERSION,mode:options.mode,count:rows.length-1,historyRequestedCount:options.mode==='number'?options.count:null,rows,items:[],cardKeys:[],sectionHeadings:[],activityTexts:[],dividerUrls:[],stage:'images_building',imageAnchorPos:Math.min(view.state.doc.content.size,Math.max(0,Number(run.imageAnchorPos)||0)),cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),createdAt:Date.now()});
    return createFixed300();
@@ -1775,6 +1794,7 @@ async function createFixed300(options=null){
   }
   checkPause();
   rows=assignDesigns(rows);
+  if(!gallery&&!existing?.likesHistoryFix230)rows=compactHistoryRows(rows);
   if(gallery&&existing?.gallery126){assertGalleryTracking(view,existing);repairGalleryProfileParagraphs(view,existing,rows);await flushRunBackup();existing=readRun();}
   const galleryCount=gallery?rows.length-1:0;
 
@@ -1953,7 +1973,7 @@ function patchPanel(){
  const summary=detail.querySelector('summary');
  if(summary&&summary.textContent!=='＋ スキ履歴から紹介')summary.textContent='＋ スキ履歴から紹介';
  const hint=detail.querySelector('.hint');
- if(hint&&hint.textContent!=='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し')hint.textContent='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し';
+ if(hint&&hint.textContent!=='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜プロフィール小文字｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し')hint.textContent='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜プロフィール小文字｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し';
 
  let preset=detail.querySelector('[data-a="like200-preset"]');
  if(!preset){preset=document.createElement('button');preset.type='button';preset.dataset.a='like200-preset';preset.textContent='直近200人に設定';(detail.querySelector('.special-actions')||detail).prepend(preset);}

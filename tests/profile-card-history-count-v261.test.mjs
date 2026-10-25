@@ -57,6 +57,9 @@ test('the latest 200 distinct creators are selected before the cutoff, with alia
  assert.equal(new Set(run.rows.slice(0,-1).map(row=>row.urlname)).size,200);
  assert.equal(run.rows.at(-1).urlname,'fuku444');assert.equal(run.rows.at(-1).index,201);
  assert.equal(c.images.length,201);assert.equal(c.profileLines.length,200);
+ assert.ok(run.rows.slice(0,-1).every(row=>row.profileLayout==='compact-v272'));
+ assert.equal(run.activityTexts.length,200);
+ assert.ok(run.activityTexts.every(text=>text.startsWith('$${\\scriptsize\\begin{array}{l}')||text.startsWith('$${\\tiny\\begin{array}{l}')));
  assert.equal(c.headings.length,21);
  assert.equal(c.headings[0],'01｜1人目〜10人目のクリエイター様');
  assert.equal(c.headings[19],'20｜191人目〜200人目のクリエイター様');
@@ -126,6 +129,21 @@ test('first from twelve to two acquires a new valid plan before clearing only it
  c.api.patch(`prepareInsightExport=async options=>{events.push('export-'+options.count)};clearCurrentPaste=(view,run)=>{events.push('clear-'+run.count);images.length=0;return 0};createFixed300=async()=>{events.push('create')};`);
  await api.restartFixed300();
  const run=JSON.parse(local.get(RUN));assert.equal(run.count,2);assert.equal(run.rows.length,3);assert.equal(run.rows.at(-1).index,3);assert.deepEqual(Array.from(c.events),['export-2','clear-12','create']);
+ assert.ok(run.rows.slice(0,-1).every(row=>row.profileLayout==='compact-v272'));
+});
+
+test('starting the same prepared 200-person plan again selects compact profiles without refetching people',async()=>{
+ const {context:c,api,local}=runtime(200),rows=plan(200);
+ local.set(RUN,JSON.stringify({articleKey:ARTICLE,version:'2.7.1',likesHistoryFix230:true,likesHistory:true,count:200,mode:'number',rows,items:[],activityTexts:[],imageAnchorPos:0,stage:'images_building'}));
+ c.events=[];
+ c.api.patch(`prepareInsightExport=async()=>{throw Error('the same prepared plan must not refetch history')};clearCurrentPaste=()=>{events.push('clear');return 0};createFixed300=async()=>{events.push('create')};`);
+ await api.restartFixed300();
+ const run=JSON.parse(local.get(RUN));
+ assert.deepEqual(Array.from(c.events),['clear','create']);
+ assert.equal(run.rows.length,201);
+ assert.ok(run.rows.slice(0,-1).every(row=>row.profileLayout==='compact-v272'));
+ assert.deepEqual(run.rows.map(row=>row.url),rows.map(row=>row.url));
+ assert.equal(run.rows.at(-1).finalMarker,true);assert.deepEqual(run.activityTexts,[]);
 });
 
 test('candidate requests include bounded headroom, and excessive requested counts are refused',()=>{

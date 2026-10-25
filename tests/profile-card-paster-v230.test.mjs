@@ -48,7 +48,11 @@ test('profile text preserves the actual biography without guessing from articles
  const row=await c.api.preparePerson({urlname:'creator'});
  assert.equal(row.profileText,'料理ではなく、小説を書いています。\n旅も好き。');
  assert.equal(row.thumbUrl,'https://assets.st-note.com/thumb.png');
- assert.equal(c.api.activityText(row),'プロフィール｜花さん：料理ではなく、小説を書いています。\n旅も好き。');
+ assert.equal(row.profileLayout,'compact-v272');
+ const formula=c.api.activityText(row);
+ assert.ok(formula.startsWith('$${\\scriptsize\\begin{array}{l}'));
+ assert.ok(formula.includes('小説を書いています。'));
+ assert.ok(!formula.includes('AIと投資の記事'));
  assert.equal(c.api.activityText({creator:'空',profileText:''}),'プロフィール｜空さん：プロフィール未設定');
 });
 test('duplicates use creator identity, and fuku444 is reserved for the final extra entry',async()=>{
@@ -110,7 +114,7 @@ uploadOne=async()=>({hit:{},nextPos:302});recordImage=()=>{};sleep=async()=>{};
 });
 test('direct installer preserves the fix identity and all entries load the same guarded implementation',()=>{
  const installer=readFileSync('public/note-profile-card-paster-install.html','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.7.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-likes300-fix-v220.user.js\?v=2.7.2/);
  assert.match(source,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
  assert.doesNotMatch(readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),/@require/);
 });
@@ -118,10 +122,10 @@ test('direct installer preserves the fix identity and all entries load the same 
 test('the original bridge update replaces the original installed identity rather than the separate fix',()=>{
  const installer=readFileSync('public/note-profile-card-paster-original-update.html','utf8');
  const original=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
- assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.7.1/);
+ assert.match(installer,/location\.replace\('https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-profile-card-paster-v1.user.js\?v=2.7.2/);
  assert.doesNotMatch(installer,/likes300-fix/);
  assert.match(original,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/profile-card-paster\n/);
- assert.match(original,/@version\s+2.7.1/);
+ assert.match(original,/@version\s+2.7.2/);
  assert.doesNotMatch(original,/@require/);
  assert.doesNotMatch(original,/@match.*mumei-s\.github\.io/);
 });
