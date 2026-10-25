@@ -32,7 +32,7 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  if(saved){w.localStorage.setItem(RUN_KEY,JSON.stringify(saved));gm.set(BACKUP_KEY,{value:structuredClone(saved),updatedAt:saved.updatedAt,deleted:false,articleKey:ARTICLE})}
  if(prefs)w.localStorage.setItem('mumei_profile_card_paster_v1',JSON.stringify(prefs));
  const code=readFileSync(path,'utf8');
- assert.match(code,/@version\s+2\.6\.8\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
+ assert.match(code,/@version\s+2\.7\.0\b/,'exercise the rebuilt publication, including its real startup and lifecycle code');
  w.eval(code);
  w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
  for(const callback of [...intervals.values()])callback();
@@ -46,6 +46,25 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null}={}){
  assert.ok(gallery(),'Halloween controls must be available after initial startup');
  return{w,panel,gallery,click,ready,flush,counts,snapshots};
 }
+
+test('a fresh panel defaults to 200 and the recent-200 preset preserves a saved run',async t=>{
+ const fresh=await runtime(t,files[0],{saved:null});
+ assert.equal(fresh.panel().querySelector('[data-count]').value,'200');
+ const r=await runtime(t,files[1],{prefs:{mode:'all',count:12}}),before=r.snapshots();
+ assert.equal(r.panel().querySelector('[data-mode]').value,'all');
+ for(let i=0;i<3;i++)r.ready();
+ assert.equal(r.panel().querySelectorAll('[data-a="like200-preset"]').length,1);
+ const preset=r.panel().querySelector('[data-a="like200-preset"]');
+ assert.equal(preset.type,'button');
+ r.click(preset);await r.flush();
+ assert.equal(r.panel().querySelector('[data-mode]').value,'number');
+ assert.equal(r.panel().querySelector('[data-count]').value,'200');
+ assert.equal(r.panel().querySelector('[data-count]').disabled,false);
+ const prefs=JSON.parse(r.w.localStorage.getItem('mumei_profile_card_paster_v1'));
+ assert.equal(prefs.mode,'number');assert.equal(prefs.count,200);
+ assert.deepEqual(r.snapshots(),before);
+ assert.equal(r.counts.network,0,'setting the count cannot start a new batch');
+});
 
 for(const path of files)test('published tool restores Halloween controls after repeated close and expansion: '+path,async t=>{
  const r=await runtime(t,path),initialPanel=r.panel(),initialGallery=r.gallery();

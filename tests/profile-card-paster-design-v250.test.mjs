@@ -5,16 +5,16 @@ import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 
 const source=readFileSync('public/note-profile-card-paster-v22.user.js','utf8');
-test('50 random designs cover each pool without adjacent repeats, including pool boundaries and resume',()=>{
- const body=source.slice(source.indexOf('function assignDesigns('),source.indexOf('const palettes='));
+test('200 random designs cover each pool without adjacent repeats, including pool boundaries and resume',()=>{
+ const body=source.slice(source.indexOf('const HISTORY_DESIGN_COUNT='),source.indexOf('const palettes='));
  const context=vm.createContext({});vm.runInContext(body,context);
- const rows=Array.from({length:301},(_,i)=>({index:i+1}));
+ const rows=Array.from({length:401},(_,i)=>({index:i+1}));
  const plans=[];
  for(let trial=0;trial<12;trial++){
   const plan=context.assignDesigns(rows);plans.push(plan.map(r=>r.designIndex).join(','));
-  assert.equal(plan.length,301);
+  assert.equal(plan.length,401);
   for(let i=1;i<plan.length;i++)assert.notEqual(plan[i].designIndex,plan[i-1].designIndex);
-  for(let i=0;i<300;i+=50)assert.equal(new Set(plan.slice(i,i+50).map(r=>r.designIndex)).size,50);
+  for(let i=0;i<400;i+=200)assert.deepEqual(Array.from(new Set(plan.slice(i,i+200).map(r=>r.designIndex))).sort((a,b)=>a-b),Array.from({length:200},(_,i)=>i));
   assert.equal(context.assignDesigns(plan),plan);
  }
  assert.ok(new Set(plans).size>1);

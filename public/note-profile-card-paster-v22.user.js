@@ -2,7 +2,7 @@
 // @name         無名S note アイコン＋キャプション 貼り付け装置
 // @namespace    https://github.com/mumei-s/note-insight/profile-card-paster
 // @version      2.5.8
-// @description  スキ履歴の件数を指定して紹介を作成。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄50種。
+// @description  スキ履歴の直近200人を人物重複なしで紹介。実アイコン・最新記事サムネイル・画像外のプロフィール全文・極薄200種。
 // @match        https://editor.note.com/*
 // @noframes
 // @run-at       document-idle
@@ -117,11 +117,13 @@ function setStatus(text,bad=false){
 let exportWaiter=null;
 function historyOptions(run=null){
  if(run?.likesHistoryFix230||run?.likesHistory){
+  // Old quota-fragment backups did not store a count; their original plan
+  // was 300 people. The new UI default must not reinterpret those backups.
   const count=Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.historyRequestedCount||run.count)||300;
   return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count};
  }
  const panel=document.getElementById(PANEL),mode=panel?.querySelector('[data-mode]')?.value==='all'?'all':'number';
- const count=Number(panel?.querySelector('[data-count]')?.value||10);
+ const count=Number(panel?.querySelector('[data-count]')?.value||200);
  if(mode==='number'&&(!Number.isInteger(count)||count<1||count>HISTORY_CANDIDATE_CAP))throw new Error('スキ履歴の件数は1〜'+HISTORY_CANDIDATE_CAP+'人で指定してください');
  return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count};
 }
@@ -526,6 +528,13 @@ async function buildRows(target=300){
  if(!rows.length)throw new Error('貼り付け可能なクリエイターがありません。公開記事なし・取得不可の候補を除外しました');
  return rows.slice(0,target).map((row,index)=>({...row,index:index+1}))
 }
+function replacementDesignChoices(rows,position){
+ const start=Math.floor(position/HISTORY_DESIGN_COUNT)*HISTORY_DESIGN_COUNT;
+ const used=new Set(rows.slice(start,start+HISTORY_DESIGN_COUNT).filter((row,offset)=>start+offset!==position&&Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT).map(row=>row.designIndex));
+ const available=Array.from({length:HISTORY_DESIGN_COUNT},(_,style)=>style).filter(style=>!used.has(style));
+ const separated=available.filter(style=>style!==rows[position-1]?.designIndex&&style!==rows[position+1]?.designIndex);
+ return separated.length?separated:available;
+}
 async function replaceUnavailableCreator(rows,index,error,mode='number'){
  validateFixedRows(rows);
  const count=rows.length-1,target=mode==='all'?Infinity:count;
@@ -567,9 +576,9 @@ async function replaceUnavailableCreator(rows,index,error,mode='number'){
  const refreshed=filled.map((person,position)=>{if(position<index)return rows[position];const previous=rows.slice(0,count).find(row=>sameCreator(row,person));return previous?{...person,...previous,index:position+1}:{...person,index:position+1}});
  refreshed.push({...rows[count],index:filled.length+1});
  for(let position=index;position<refreshed.length;position++){
-  const row=refreshed[position],before=refreshed[position-1]?.designIndex,next=refreshed[position+1]?.designIndex;
-  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50&&row.designIndex!==before)continue;
-  const choices=Array.from({length:50},(_,style)=>style).filter(style=>style!==before&&style!==next);
+  const row=refreshed[position],before=refreshed[position-1]?.designIndex;
+  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT&&row.designIndex!==before)continue;
+  const choices=replacementDesignChoices(refreshed,position);
   refreshed[position]={...row,designIndex:choices[Math.floor(Math.random()*choices.length)]};
  }
  validateFixedRows(refreshed);
@@ -581,7 +590,7 @@ async function recoverCompatibleRun(view,existing){
  let originalPlan=null;
  try{if(Array.isArray(existing.rows))originalPlan=validateFixedRows(existing.rows)}catch{}
  const options=historyOptions({...existing,likesHistory:true}),target=options.target;
- const currentFragment=/^2\.[56]\.\d+(?:$|\b)/.test(String(existing.version||''));
+ const currentFragment=/^2\.[567]\.\d+(?:$|\b)/.test(String(existing.version||''));
  const knownHistory=existing.likesHistory===true&&originalPlan;
  if(!currentFragment&&!knownHistory)throw new Error('この保存データをスキ'+options.count+'人の履歴貼り付けとして確認できません。本文は保持しています');
  const records=Array.isArray(existing.items)?existing.items:[],all=imageNodes(view),matched=new Map();
@@ -624,10 +633,10 @@ async function recoverCompatibleRun(view,existing){
  }
  if(!rows){const creators=await buildRows(target);rows=verify(validateFixedRows([...creators,await enrichFinal(creators.length+1)]))}
  for(let position=0;position<rows.length;position++){
-  const row=rows[position],before=rows[position-1]?.designIndex,next=rows[position+1]?.designIndex;
-  if(position<owned.length&&(Array.isArray(existing.rows)?existing.rows:[]).some(person=>sameCreator(person,row)&&norm(person.url)===norm(row.url)&&person.designIndex===row.designIndex)&&Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50)continue;
-  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50&&row.designIndex!==before)continue;
-  const choices=Array.from({length:50},(_,style)=>style).filter(style=>style!==before&&style!==next);
+  const row=rows[position],before=rows[position-1]?.designIndex;
+  if(position<owned.length&&(Array.isArray(existing.rows)?existing.rows:[]).some(person=>sameCreator(person,row)&&norm(person.url)===norm(row.url)&&person.designIndex===row.designIndex)&&Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT)continue;
+  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT&&row.designIndex!==before)continue;
+  const choices=replacementDesignChoices(rows,position);
   rows[position]={...row,designIndex:choices[Math.floor(Math.random()*choices.length)]}
  }
  const blocks=[];
@@ -761,6 +770,7 @@ function hash(value){
  for(const ch of String(value||'')){h^=ch.codePointAt(0)||0;h=Math.imul(h,16777619)}
  return h>>>0
 }
+const HISTORY_DESIGN_COUNT=200;
 function assignDesigns(rows){
  // Keep every saved gallery choice: retries and asset recovery must not restyle
  // images that have already been pasted. The gallery uses one finite set.
@@ -776,15 +786,19 @@ function assignDesigns(rows){
   for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}
   return rows.map(row=>row.gallery126===true&&!keep.has(row)?{...row,designIndex:pool.pop()}:row)
  }
- const valid=rows.every((row,i)=>Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<50&&(i===0||row.designIndex!==rows[i-1].designIndex));
+ const valid=rows.every((row,i)=>Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT&&(i===0||row.designIndex!==rows[i-1].designIndex));
  if(valid)return rows;
+ // Saved choices, including older 50-style batches, remain frozen. A new
+ // batch draws every one of the 200 styles once before opening another pool.
  let pool=[],last=-1;
- return rows.map(row=>{
-  if(!pool.length){
-   pool=Array.from({length:50},(_,i)=>i);
+ return rows.map((row,position)=>{
+  if(position%HISTORY_DESIGN_COUNT===0){
+   const saved=new Set(rows.slice(position,position+HISTORY_DESIGN_COUNT).filter(entry=>Number.isInteger(entry.designIndex)&&entry.designIndex>=0&&entry.designIndex<HISTORY_DESIGN_COUNT).map(entry=>entry.designIndex));
+   pool=Array.from({length:HISTORY_DESIGN_COUNT},(_,i)=>i).filter(index=>!saved.has(index));
    for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-   if(pool[pool.length-1]===last)[pool[0],pool[pool.length-1]]=[pool[pool.length-1],pool[0]];
   }
+  if(Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<HISTORY_DESIGN_COUNT){last=row.designIndex;return row;}
+  if(pool.length>1&&pool[pool.length-1]===last)[pool[0],pool[pool.length-1]]=[pool[pool.length-1],pool[0]];
   last=pool.pop();return{...row,designIndex:last};
  });
 }
@@ -795,6 +809,19 @@ const palettes=[
  {bg:'#fffaf2',panel:'#fffefa',ink:'#39291b',muted:'#846e5a',line:'#ead7bf',accent:'#d99240',soft:'#fff0da'},
  {bg:'#f8f5ff',panel:'#ffffff',ink:'#2e2141',muted:'#78688e',line:'#ddd2ec',accent:'#8062c9',soft:'#eee8fb'}
 ];
+// Four visibly different content compositions × ten decorative motifs ×
+// five palettes. Indices 0–49 retain the original renderer without restyling
+// any saved image; 50–199 add thumbnail/portrait placements and square frames.
+const historyLayouts=[
+ {avatar:[50,70,34],text:[100,18,455],name:[100,86,455],brand:[100,110],thumb:[590,8,262,124],shape:'circle'},
+ {avatar:[810,70,32],text:[304,18,448],name:[304,88,448],brand:[304,111],thumb:[8,8,270,124],shape:'square'},
+ {avatar:[49,70,32],text:[374,18,462],name:[374,88,462],brand:[374,111],thumb:[104,12,246,116],shape:'circle'},
+ {avatar:[499,70,29],text:[20,18,432],name:[20,88,432],brand:[20,111],thumb:[548,8,304,124],shape:'square'}
+];
+function historyDesign(index){
+ if(!Number.isInteger(index)||index<0||index>=HISTORY_DESIGN_COUNT)throw new Error('極薄デザイン番号が不正です');
+ return{layoutIndex:Math.floor(index/50),motif:index%10,paletteIndex:Math.floor(index/10)%5,layout:historyLayouts[Math.floor(index/50)],theme:palettes[Math.floor(index/10)%5]};
+}
 function drawDecor(ctx,index,theme){
  ctx.fillStyle=theme.bg;ctx.fillRect(0,0,W,H);
  ctx.strokeStyle=theme.line;ctx.lineWidth=1.5;rounded(ctx,1,1,W-2,H-2,12);ctx.stroke();
@@ -948,6 +975,35 @@ function drawGalleryCard(ctx,index,row,avatar,thumb){
  }
  ctx.strokeStyle=theme.line;ctx.lineWidth=2;rounded(ctx,ix,iy,iw,ih,9);ctx.stroke()
 }
+function drawHistoryCard(ctx,index,row,avatar,thumb){
+ const design=historyDesign(index),{layout,theme}=design;
+ drawDecor(ctx,index,theme);
+ const [ax,ay,ar]=layout.avatar,[tx,ty,tw]=layout.text,[nx,ny,nw]=layout.name,[bx,by]=layout.brand,[ix,iy,iw,ih]=layout.thumb;
+ const frame=radius=>layout.shape==='square'?rounded(ctx,ax-radius,ay-radius,radius*2,radius*2,10):circle(ctx,ax,ay,radius);
+ // Solid text panels keep every composition legible over its large motif.
+ ctx.fillStyle=theme.bg;rounded(ctx,tx-3,ty-3,tw+6,57,5);ctx.fill();rounded(ctx,nx-3,ny-3,nw+6,22,5);ctx.fill();
+ ctx.save();ctx.fillStyle=theme.accent;ctx.globalAlpha=.7;
+ if(design.layoutIndex===1)ctx.fillRect(288,13,4,H-26);
+ else if(design.layoutIndex===2)ctx.fillRect(360,13,4,H-26);
+ else{ctx.fillRect(17,78,435,3);ctx.fillRect(532,13,4,H-26)}
+ ctx.restore();
+ ctx.fillStyle=theme.soft;frame(ar+3);ctx.fill();ctx.strokeStyle=theme.accent;ctx.lineWidth=2;frame(ar+3);ctx.stroke();
+ if(avatar){
+  const sw=avatar.width||avatar.naturalWidth||1,sh=avatar.height||avatar.naturalHeight||1,scale=Math.max(ar*2/sw,ar*2/sh),dw=sw*scale,dh=sh*scale;
+  ctx.save();frame(ar);ctx.clip();ctx.drawImage(avatar,ax-dw/2,ay-dh/2,dw,dh);ctx.restore();
+ }else{
+  ctx.save();ctx.fillStyle=theme.muted;ctx.font='800 24px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText([...String(row.creator||'n')][0]||'n',ax,ay);ctx.restore();
+ }
+ ctx.textAlign='start';ctx.textBaseline='top';ctx.fillStyle=theme.ink;ctx.font='700 18px system-ui,-apple-system,sans-serif';
+ textLines(ctx,row.title,tw,2).forEach((line,i)=>ctx.fillText(line,tx,ty+i*25));
+ const name=fitGalleryCreatorName(ctx,row.creator,nw);ctx.fillStyle=theme.muted;ctx.fillText(name.text,nx,ny);
+ ctx.fillStyle=theme.accent;ctx.font='700 12px system-ui,-apple-system,sans-serif';ctx.fillText('note',bx,by);
+ ctx.fillStyle=theme.panel;rounded(ctx,ix,iy,iw,ih,8);ctx.fill();ctx.strokeStyle=theme.line;ctx.lineWidth=1;rounded(ctx,ix,iy,iw,ih,8);ctx.stroke();
+ if(thumb){
+  const sw=thumb.width||thumb.naturalWidth||1,sh=thumb.height||thumb.naturalHeight||1,scale=Math.max(iw/sw,ih/sh),dw=sw*scale,dh=sh*scale;
+  ctx.save();rounded(ctx,ix,iy,iw,ih,8);ctx.clip();ctx.drawImage(thumb,ix+(iw-dw)/2,iy+(ih-dh)/2,dw,dh);ctx.restore();
+ }
+}
 function galleryAssetUrl(value,width){
  try{
   const url=new URL(String(value||''));
@@ -973,13 +1029,13 @@ async function makeFile(row){
   const error=new Error(row.creator+'さん：'+(avatarUnavailable?'アイコン':'記事サムネイル')+'を表示できません'+(reason?'（'+reason+'）':''));
   error.code='ASSET_UNAVAILABLE';throw error;
  }
- const limit=row.gallery126===true?126:50;
+ const limit=row.gallery126===true?126:HISTORY_DESIGN_COUNT;
  const index=Number.isInteger(row.designIndex)&&row.designIndex>=0&&row.designIndex<limit?row.designIndex:assignDesigns([row])[0].designIndex;
  const theme=palettes[Math.floor(index/10)%palettes.length];
  const canvas=document.createElement('canvas');
  canvas.width=W;canvas.height=H;
  const ctx=canvas.getContext('2d');
- if(row.gallery126===true){drawGalleryCard(ctx,index,row,avatar,thumb)}else{
+ if(row.gallery126===true){drawGalleryCard(ctx,index,row,avatar,thumb)}else if(index>=50){drawHistoryCard(ctx,index,row,avatar,thumb)}else{
  drawDecor(ctx,index,theme);
 
  const ax=50,ay=70,ar=34;
@@ -1861,7 +1917,18 @@ function patchPanel(){
  const summary=detail.querySelector('summary');
  if(summary&&summary.textContent!=='＋ スキ履歴から紹介')summary.textContent='＋ スキ履歴から紹介';
  const hint=detail.querySelector('.hint');
- if(hint&&hint.textContent!=='上の件数・全数を使用｜全数＝取得分全数（履歴候補は最大1500人）｜取得不可は飛ばす｜実績1件を追加｜50種ランダム｜10人ごと大見出し')hint.textContent='上の件数・全数を使用｜全数＝取得分全数（履歴候補は最大1500人）｜取得不可は飛ばす｜実績1件を追加｜50種ランダム｜10人ごと大見出し';
+ if(hint&&hint.textContent!=='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し')hint.textContent='直近順・同じ人は1回｜200種ランダム（200人までは全て別）｜上の件数・全数を使用｜実績1件を追加｜10人ごと大見出し';
+
+ let preset=detail.querySelector('[data-a="like200-preset"]');
+ if(!preset){preset=document.createElement('button');preset.type='button';preset.dataset.a='like200-preset';preset.textContent='直近200人に設定';(detail.querySelector('.special-actions')||detail).prepend(preset);}
+ bindPanelAction(preset,'click:recent200',event=>{
+  event.preventDefault();
+  const mode=panel.querySelector('[data-mode]'),count=panel.querySelector('[data-count]');
+  if(!mode||!count)return;
+  mode.value='number';count.value='200';count.disabled=false;
+  mode.dispatchEvent(new Event('change',{bubbles:true}));count.dispatchEvent(new Event('change',{bubbles:true}));
+  setStatus('直近200人・人物重複なし・200種に設定しました｜① 最初からで取得開始');
+ });
 
  const oldButton=detail.querySelector('[data-a="like300-images"],[data-a="like300-fixed"]');
  if(oldButton&&!panelBindings.get(oldButton)?.has('click:history')){

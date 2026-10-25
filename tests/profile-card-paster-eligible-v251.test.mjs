@@ -73,7 +73,7 @@ test('exhausting unavailable candidates reports actual eligible and skipped coun
  const c=runtime({GM_getValue:()=>({at:6,people:people(7)})});c.events=[];
  c.api.patch(`findView=()=>({state:{doc:{nodeAt:()=>null}}});nativeImageCommand=()=>{};selectionApi=()=>{};readRun=()=>null;preparePerson=async()=>{throw Error('HTTP 403')};makeFile=async()=>{events.push('image');return{}};setStatus=(text,bad)=>{events.push({text,bad})};sleep=async()=>{}`);
  await c.api.createFixed300();
- assert.equal(c.events.filter(event=>event==='image').length,0);assert.match(c.events.at(-1).text,/0\/10人.*7人/);assert.equal(c.events.at(-1).bad,true);
+ assert.equal(c.events.filter(event=>event==='image').length,0);assert.match(c.events.at(-1).text,/0\/200人.*7人/);assert.equal(c.events.at(-1).bad,true);
  const saved=JSON.parse(c.localStorage.getItem(PREP_KEY));assert.equal(saved.index,7);assert.equal(saved.rows.length,0);assert.equal(saved.skipped.length,7);
 });
 

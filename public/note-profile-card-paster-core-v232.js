@@ -1859,7 +1859,7 @@ function resetFields(){
  const p=document.getElementById(PANEL);if(!p)return;
  p.querySelector('[data-sources]').value='';
  p.querySelector('[data-mode]').value='number';
- p.querySelector('[data-count]').value='10';
+ p.querySelector('[data-count]').value='200';
  const sm=p.querySelector('[data-special-mode]'),sc=p.querySelector('[data-special-count]');
  if(sm)sm.value='number';if(sc)sc.value='200';
  p.querySelectorAll('button[data-special-tag]').forEach(x=>x.classList.add('on'));
@@ -2045,7 +2045,7 @@ function mount(){
  <div class="body">
   <label>URL / マガジン / #（上から優先）</label>
   <textarea data-sources placeholder="記事URL&#10;マガジンURL&#10;#タグ">${escAttr(g.sources||'')}</textarea>
-  <div class="amount"><select data-mode><option value="number">件数</option><option value="all">全数</option></select><input data-count type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${Number(g.count??10)}"></div>
+  <div class="amount"><select data-mode><option value="number">件数</option><option value="all">全数</option></select><input data-count type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${Number(g.count??200)}"></div>
   <div class="choices"><button data-choice="oldest">最初</button><button data-choice="fixed">固定→最新</button><button data-choice="latest">最新</button></div>
   <div class="hint">指定件数＋最後に「実績の算数」1件（件数外）</div>
 

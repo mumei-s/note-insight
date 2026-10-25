@@ -24,7 +24,7 @@
   const close = document.getElementById('close');
   const q = new URLSearchParams(location.search);
   const requestId = String(q.get('request') || '');
-  const count = Math.max(1, Math.min(1500, Number(q.get('count') || 100)));
+  const count = Math.max(1, Math.min(1500, Number(q.get('count') || 200)));
   const unique = q.get('unique') !== '0';
   const recentArticles = false;
   const expectedMember = String(localStorage.getItem('mumei-insight-active-account-v3') || '').trim().toLowerCase();

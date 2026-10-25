@@ -40,10 +40,10 @@ test('partial recovery preserves valid saved designs and only fills unassigned o
  const subset=[{gallery126:true,designIndex:125},{gallery126:true,designIndex:17}];assert.equal(api.assignDesigns(subset),subset);
 });
 
-test('the existing likes workflow retains its 50-design pools and stable resume',()=>{
- const {api}=runtime(),assigned=api.assignDesigns(Array.from({length:301},(_,i)=>({index:i+1})));
+test('the likes workflow uses 200-design pools with stable resume while the gallery remains separate',()=>{
+ const {api}=runtime(),assigned=api.assignDesigns(Array.from({length:401},(_,i)=>({index:i+1})));
  for(let i=1;i<assigned.length;i++)assert.notEqual(assigned[i].designIndex,assigned[i-1].designIndex);
- for(let i=0;i<300;i+=50)assert.equal(new Set(Array.from(assigned.slice(i,i+50),row=>row.designIndex)).size,50);
+ for(let i=0;i<400;i+=200)assert.equal(new Set(Array.from(assigned.slice(i,i+200),row=>row.designIndex)).size,200);
  assert.equal(api.assignDesigns(assigned),assigned);
 });
 
