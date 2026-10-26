@@ -6,37 +6,24 @@
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>通知フィルター設定</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07111a;color:#eef8ff}
-*{box-sizing:border-box}body{margin:0;background:#07111a;color:#eef8ff}
-.wrap{max-width:720px;margin:0 auto;padding:10px 10px calc(22px + env(safe-area-inset-bottom))}
-.top{position:sticky;top:0;z-index:20;background:#07111af2;padding:5px 0 8px}
-.back{width:100%;height:42px;border:1px solid #466b82;border-radius:11px;background:#102838;color:#e5f9ff;font-weight:900;font-size:14px}
-h1{font-size:22px;margin:12px 2px 3px}.sub{margin:0 2px 8px;color:#91a9b8;font-size:11px;line-height:1.45}
-.status{min-height:30px;border:1px solid #315266;border-radius:8px;background:#0c1b27;padding:6px 9px;margin-bottom:8px;font-size:11px;display:flex;align-items:center}
-.status.ok{border-color:#3f7c5b;color:#d9ffe7}.status.err{border-color:#8d4853;color:#ffd8dd}.status.hide{display:none}
-.groups{display:grid;gap:7px}.group{border:1px solid #315166;border-radius:11px;background:#0b1924;overflow:hidden}
-.summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:7px;align-items:center;padding:8px 9px;min-height:46px}
-.switch{display:flex;align-items:center;font-weight:900}.gtitle{min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.count{font-size:10px;color:#9cb2c0;white-space:nowrap}.chev{width:30px;height:30px;border:1px solid #3a6076;border-radius:8px;background:#102737;color:#e7f8ff;font-weight:900}
-.body{display:none;border-top:1px solid #244455;padding:8px}.group.open .body{display:block}
-.manage{display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:6px}.manage input,.add input{width:100%;height:34px;border:1px solid #3e6076;border-radius:8px;background:#07141e;color:#fff;padding:0 8px;font-size:12px}
-button{border:1px solid #466b82;border-radius:8px;background:#112b3b;color:#e7f8ff;font-weight:900}
-.del{height:34px;border-color:#7e4350;background:#301820;color:#ffd9df}
-.members{display:grid;gap:5px;margin-top:7px}.member{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:6px;align-items:center;border:1px solid #264558;border-radius:9px;padding:5px;background:#081721}
-.who{display:grid;grid-template-columns:32px minmax(0,1fr);gap:7px;align-items:center;min-width:0}.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#142734;border:1px solid #35586f}
-.name{font-size:12px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.id{font-size:9.5px;color:#9eb3c1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.add{display:grid;grid-template-columns:minmax(0,1fr) 56px;gap:6px;margin-top:7px}.add button{height:34px}
-.footer{margin-top:8px}.footer button{width:100%;height:38px}.empty{padding:10px;text-align:center;color:#93aab9;font-size:11px}
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07111a;color:#eef8ff}*{box-sizing:border-box}body{margin:0;background:#07111a;color:#eef8ff}.wrap{max-width:720px;margin:0 auto;padding:10px 10px calc(22px + env(safe-area-inset-bottom,0px))}.top{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;background:#07111af5;padding:5px 0 8px;padding-top:max(5px,env(safe-area-inset-top,0px))}button,input,select{font:inherit}button{appearance:none;-webkit-appearance:none;min-height:44px;border:1px solid #466b82;border-radius:9px;background:#112b3b;color:#e7f8ff;font-weight:750;padding:8px 12px;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.5;cursor:default}.back{width:100%;font-size:13px}.jump{white-space:nowrap;font-size:13px}input,select{appearance:none;-webkit-appearance:none;width:100%;min-width:0;min-height:44px;border:1px solid #3e6076;border-radius:8px;background:#07141e;color:#fff;padding:8px 10px;font-size:16px}select{padding-right:30px;background-image:linear-gradient(45deg,transparent 50%,#a8dce9 50%),linear-gradient(135deg,#a8dce9 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat}input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;accent-color:#72cfe9;width:20px;min-height:20px;height:20px;margin:0}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8de7fc;outline-offset:3px}h1{font-size:22px;margin:12px 2px 3px}.sub{margin:0 2px 10px;color:#a0b9c8;font-size:12px;line-height:1.6}.status{min-height:34px;border:1px solid #315266;border-radius:8px;background:#0c1b27;padding:7px 9px;margin-bottom:10px;font-size:12px;line-height:1.5}.status.ok{border-color:#3f7c5b;color:#d9ffe7}.status.err{border-color:#8d4853;color:#ffd8dd}.status.hide{visibility:hidden}.composer{display:grid;gap:10px;border:1px solid #426b80;border-radius:12px;background:#0d202d;padding:12px;margin-bottom:14px;scroll-margin-top:70px}.composer h2{font-size:16px;margin:0;color:#b3ebf8}.field{display:grid;gap:5px;min-width:0}.field>span,.new-folder>label{font-size:12px;font-weight:700;color:#bad3e0}.compose-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}.compose-row>.field{min-width:0}.compose-row>button{white-space:nowrap;background:#20516a}.new-folder{border-top:1px solid #294b60;padding-top:10px;display:grid;gap:6px}.new-folder>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}.new-folder button{white-space:nowrap}.hint{margin:0;color:#9db8c9;font-size:11px;line-height:1.5}.search{margin:0 0 10px}.totals{font-size:12px;color:#a7c2d1;margin:0 0 8px}.groups{display:grid;gap:8px}.group{border:1px solid #315166;border-radius:11px;background:#0b1924;overflow:hidden}.summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 8px;min-height:52px}.switch{display:grid;place-items:center;min-width:44px;min-height:44px}.group-toggle{display:flex;align-items:center;gap:8px;min-width:0;text-align:left;border:0;background:transparent;padding:5px 0}.gtitle{min-width:0;flex:1;font-size:14px;overflow-wrap:break-word;line-height:1.4}.chev{flex:0 0 auto;color:#91cce1}.count{font-size:11px;color:#9cb2c0;white-space:nowrap}.body{display:none;border-top:1px solid #244455;padding:10px}.group.open .body{display:grid;gap:9px}.manage{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}.del{border-color:#7e4350;background:#301820;color:#ffd9df;font-size:12px;white-space:nowrap}.members{display:grid;gap:6px}.member{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;border:1px solid #264558;border-radius:9px;padding:7px;background:#081721}.who{display:grid;grid-template-columns:32px minmax(0,1fr);gap:7px;align-items:center;min-width:0}.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#142734;border:1px solid #35586f}.name{font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:break-word}.id{font-size:11px;color:#9eb3c1;overflow-wrap:anywhere}.empty{padding:12px;text-align:center;color:#a8bfcd;font-size:12px;line-height:1.6}.more{width:100%;font-size:12px}.folder-add{width:100%;font-size:12px}.folder-state{font-size:11px;color:#b9cad4;margin:0;line-height:1.5}@media(max-width:380px){.wrap{padding-left:8px;padding-right:8px}.composer,.body{padding:10px}.back{font-size:12px;padding-left:7px;padding-right:7px}.jump{padding-left:9px;padding-right:9px}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><button class="back" id="back">← noteの🔔通知へ戻る</button></div>
-  <h1>通知フィルター設定</h1>
-  <p class="sub">登録した人が先頭のマガジン追加・参加通知を隠します。スキや返信は残します。設定は自動保存です。</p>
-  <div class="status" id="status">設定を読み込んでいます…</div>
-  <div class="groups" id="groups"></div>
-  <div class="footer"><button id="addGroup">＋ グループ追加</button></div>
+ <div class="top"><button class="back" id="back" type="button">← noteの🔔通知へ戻る</button><button class="jump" id="jumpAdd" type="button">＋追加</button></div>
+ <h1>通知フィルター設定</h1>
+ <p class="sub">登録した人が先頭のマガジン追加・参加通知を隠します。スキや返信は残します。設定は自動保存です。</p>
+ <div class="status" id="status" role="status" aria-live="polite">設定を読み込んでいます…</div><button id="retrySave" type="button" hidden>保存を再試行</button>
+ <section class="composer" id="quickAdd" aria-labelledby="addHeading">
+  <h2 id="addHeading">記事・クリエイターから追加</h2>
+  <label class="field"><span>記事URL・クリエイターURL・@ID</span><input id="quickInput" type="text" placeholder="https://note.com/…/n/…" autocomplete="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" disabled></label>
+  <div class="compose-row"><label class="field"><span>追加先フォルダ</span><select id="folderTarget" disabled></select></label><button id="addCreator" type="button" disabled>＋追加</button></div>
+  <p class="hint">記事URLを貼るだけで投稿者を追加できます。同じフォルダの重複登録はしません。</p>
+  <div class="new-folder"><label for="newFolderName">新しいフォルダ</label><div><input id="newFolderName" type="text" placeholder="フォルダ名" autocomplete="off" disabled><button id="addGroup" type="button" disabled>作成</button></div></div>
+ </section>
+ <label class="field search"><span>フォルダ・登録人物を探す</span><input id="search" type="search" placeholder="フォルダ名・名前・ID" autocomplete="off" disabled></label>
+ <p class="totals" id="totals"></p><div class="groups" id="groups"></div>
 </div>
 <script>
 (function(){
@@ -44,109 +31,111 @@ button{border:1px solid #466b82;border-radius:8px;background:#112b3b;color:#e7f8
 const NOTE='https://note.com/?mumei_filter_return=bell';
 const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const q=new URLSearchParams(location.search),account=(q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
-const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status');
-let groups=[],profiles={},loaded=false,saveTimer=0,statusTimer=0,returning=false,returnTimer=0;
-const opened=new Set();
-
-function returnToBell(){
-  if(returning)return;
-  returning=true;
-  setStatus('🔔通知へ戻っています…');
-  clearTimeout(returnTimer);
-  post('return-bell');
-  returnTimer=setTimeout(()=>location.replace(NOTE),900)
-}
-history.replaceState({mumeiFilter:true},'',location.href);
-history.pushState({mumeiFilterGuard:true},'',location.href);
-addEventListener('popstate',returnToBell);
-document.getElementById('back').onclick=returnToBell;
-
+const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status'),quickInput=document.getElementById('quickInput'),folderTarget=document.getElementById('folderTarget'),addCreatorButton=document.getElementById('addCreator'),newFolderName=document.getElementById('newFolderName'),addGroupButton=document.getElementById('addGroup'),searchInput=document.getElementById('search'),retrySaveButton=document.getElementById('retrySave');
+let groups=[],profiles=Object.create(null),loaded=false,saveTimer=0,saveDirty=false,saveInFlight=null,saveSequence=0,legacyAckUncertain=false,statusTimer=0,returning=false,returnRequested=false,returnTimer=0,selectedGroup=null,pendingLookup=null,requestSequence=0,canResolveArticles=false;
+const opened=new Set(),limits=new WeakMap(),requestedProfiles=new Set(),PAGE_SIZE=50;
+const reserved=new Set(['n','m','notifications','settings','sitesettings','messages','search','login','signup','home','explore','membership','magazine','api','intent']);
 function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
+function creatorId(v){const id=clean(v).replace(/^@/,'').toLowerCase();return /^[a-z0-9_-]+$/.test(id)&&!reserved.has(id)?id:''}
 function norm(raw){return(Array.isArray(raw)?raw:[]).map((g,i)=>({name:clean(g&&g.name)||('グループ '+(i+1)),enabled:g?.enabled!==false,ids:[...new Set((Array.isArray(g?.ids)?g.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}))}
 function setStatus(s,kind='',linger=1400){clearTimeout(statusTimer);statusEl.textContent=s;statusEl.className='status'+(kind?' '+kind:'');if(kind==='ok'&&linger)statusTimer=setTimeout(()=>statusEl.className='status hide',linger)}
 function post(type,payload={}){window.postMessage({source:PAGE,type,account,...payload},location.origin)}
-function parseId(v){const raw=clean(v);if(!raw)return'';try{const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://note.com/'+raw.replace(/^@/,''));const id=(u.pathname.split('/').filter(Boolean)[0]||'').toLowerCase();return u.hostname==='note.com'&&/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}}
-function queueSave(){clearTimeout(saveTimer);setStatus('保存中…');saveTimer=setTimeout(()=>post('save',{groups:norm(groups)}),120)}
-function requestProfiles(ids){const list=[...new Set((ids||groups.flatMap(g=>g.ids)).filter(Boolean))];if(list.length)post('profiles',{ids:list})}
-
-function memberNode(id,gi,mi){
-  const info=profiles[id]||{nickname:'',profileImageUrl:''};
-  const row=document.createElement('div');row.className='member';
-  const who=document.createElement('div');who.className='who';
-  const img=document.createElement('img');img.className='avatar';img.alt='';
-  if(info.profileImageUrl)img.src=info.profileImageUrl;else img.style.visibility='hidden';
-  const txt=document.createElement('div');
-  const name=document.createElement('div');name.className='name';name.textContent=info.nickname||('@'+id);
-  const uid=document.createElement('div');uid.className='id';uid.textContent='@'+id;
-  txt.append(name,uid);who.append(img,txt);
-  const del=document.createElement('button');del.className='del';del.textContent='削除';
-  del.onclick=e=>{e.stopPropagation();groups[gi].ids.splice(mi,1);render();queueSave()};
-  row.append(who,del);return row
+function stopReturn(){clearTimeout(returnTimer);returnTimer=0;returning=false;returnRequested=false}
+function saveFailed(message){legacyAckUncertain=true;if(saveInFlight)clearTimeout(saveInFlight.timer);saveInFlight=null;saveDirty=true;stopReturn();retrySaveButton.hidden=false;setStatus(message||'設定の保存を確認できません。今の登録内容を保持しています。保存を再試行してください','err',0)}
+function requestReturn(){if(!returning||returnRequested||saveDirty||saveInFlight)return;returnRequested=true;setStatus('🔔通知へ戻っています…');post('return-bell');returnTimer=setTimeout(()=>{if(returning&&!saveDirty&&!saveInFlight)location.replace(NOTE)},900)}
+function flushSave(){
+ clearTimeout(saveTimer);if(!saveDirty||saveInFlight)return;saveDirty=false;retrySaveButton.hidden=true;
+ const requestId='save-'+Date.now()+'-'+(++saveSequence);saveInFlight={requestId,timer:setTimeout(()=>{if(saveInFlight?.requestId===requestId)saveFailed()},20000)};post('save',{groups:norm(groups),requestId})
 }
+function queueSave(){if(returnRequested){clearTimeout(returnTimer);returnRequested=false}saveDirty=true;clearTimeout(saveTimer);retrySaveButton.hidden=true;setStatus('保存中…');saveTimer=setTimeout(flushSave,120)}
+function acknowledgeSave(d){
+ if(!saveInFlight||d.requestId!==undefined&&d.requestId!==saveInFlight.requestId)return;
+ if(d.requestId===undefined&&legacyAckUncertain){stopReturn();setStatus('保存確認には本人通知ツールの更新が必要です。今の登録内容は保持しています','err',0);return}
+ clearTimeout(saveInFlight.timer);saveInFlight=null;retrySaveButton.hidden=true;
+ if(saveDirty){flushSave();return}if(returning){requestReturn();return}if(!pendingLookup)setStatus('保存しました','ok')
+}
+retrySaveButton.onclick=()=>{saveDirty=true;setStatus('保存を再試行中…');flushSave()};
+function returnToBell(){if(returning)return;if(pendingLookup){clearTimeout(pendingLookup.timer);pendingLookup=null;setComposeBusy(false)}returning=true;returnRequested=false;clearTimeout(returnTimer);flushSave();if(saveInFlight||saveDirty){setStatus('変更を保存してから🔔通知へ戻ります…');return}requestReturn()}
+history.replaceState({mumeiFilter:true},'',location.href);history.pushState({mumeiFilterGuard:true},'',location.href);addEventListener('popstate',returnToBell);document.getElementById('back').onclick=returnToBell;
+function parseInput(value){
+ const raw=clean(value);if(!raw||raw.length>2048)throw new Error('記事URL・クリエイターURL・@IDを入力してください');
+ if(!/[\/:?#.]/.test(raw)){const id=creatorId(raw);if(id)return{id};throw new Error('クリエイターIDを確認できません')}
+ let u;try{u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw)}catch{throw new Error('noteの記事URL・クリエイターURLを入力してください')}
+ if(u.protocol!=='https:'||u.hostname!=='note.com'||u.username||u.password||u.port)throw new Error('https://note.com/ のURLを入力してください');
+ const p=u.pathname.split('/').filter(Boolean).map(x=>{try{return decodeURIComponent(x)}catch{return''}});
+ if(p.length===1&&creatorId(p[0]))return{id:creatorId(p[0])};
+ if(p.length===3&&p[1]==='n'&&creatorId(p[0])&&/^n[a-f0-9]{12}$/i.test(p[2]))return{id:creatorId(p[0])};
+ if(p.length===2&&p[0]==='n'&&/^n[a-f0-9]{12}$/i.test(p[1]))return{key:p[1].toLowerCase()};
+ throw new Error('noteの記事URL・クリエイターURL・@IDを入力してください')
+}
+function setComposeBusy(busy){quickInput.disabled=busy||!loaded;folderTarget.disabled=busy||!loaded||!groups.length;addCreatorButton.disabled=busy||!loaded||!groups.length;newFolderName.disabled=busy||!loaded;addGroupButton.disabled=busy||!loaded;searchInput.disabled=!loaded}
+function syncTargets(){
+ if(!groups.includes(selectedGroup))selectedGroup=groups[0]||null;
+ folderTarget.replaceChildren();groups.forEach((g,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent=g.name+'（'+g.ids.length+'人'+(g.enabled?'':'・オフ')+'）';option.selected=g===selectedGroup;folderTarget.append(option)});setComposeBusy(Boolean(pendingLookup))
+}
+function requestProfiles(ids){const list=[...new Set((ids||[]).filter(id=>id&&!requestedProfiles.has(id)))];if(!list.length)return;list.forEach(id=>requestedProfiles.add(id));post('profiles',{ids:list})}
+function mergeProfiles(items){for(const p of items||[]){const id=creatorId(p?.id);if(!id)continue;profiles[id]={nickname:clean(p.nickname||p.name||id),profileImageUrl:clean(p.profileImageUrl||p.image||'')}}}
+function patchProfiles(){for(const row of groupsEl.querySelectorAll('[data-profile-id]')){const id=row.dataset.profileId,info=profiles[id];if(!info)continue;const name=row.querySelector('.name'),label=info.nickname||('@'+id);if(name.textContent!==label)name.textContent=label;const img=row.querySelector('img');if(info.profileImageUrl){if(img.getAttribute('src')!==info.profileImageUrl)img.src=info.profileImageUrl;if(img.style.visibility)img.style.visibility=''}else if(img.style.visibility!=='hidden')img.style.visibility='hidden'}}
+function memberNode(id,g){
+ const info=profiles[id]||{},row=document.createElement('div');row.className='member';row.dataset.profileId=id;
+ const who=document.createElement('div');who.className='who';const img=document.createElement('img');img.className='avatar';img.alt='';if(info.profileImageUrl)img.src=info.profileImageUrl;else img.style.visibility='hidden';
+ const txt=document.createElement('div'),name=document.createElement('div'),uid=document.createElement('div');name.className='name';name.textContent=info.nickname||('@'+id);uid.className='id';uid.textContent='@'+id;txt.append(name,uid);who.append(img,txt);
+ const del=document.createElement('button');del.type='button';del.className='del';del.textContent='外す';del.setAttribute('aria-label','@'+id+' を '+g.name+' から外す');del.onclick=()=>{const i=g.ids.indexOf(id);if(i<0)return;g.ids.splice(i,1);render();syncTargets();queueSave()};row.append(who,del);return row
+}
+function chooseFolder(g){selectedGroup=g;syncTargets();document.getElementById('quickAdd').scrollIntoView?.({block:'start'});quickInput.focus({preventScroll:true})}
 function render(){
-  groupsEl.innerHTML='';
-  if(!groups.length){const e=document.createElement('div');e.className='empty';e.textContent='登録グループはありません';groupsEl.appendChild(e)}
-  groups.forEach((g,gi)=>{
-    const card=document.createElement('section');card.className='group'+(opened.has(gi)?' open':'');
-    const summary=document.createElement('div');summary.className='summary';
-    const on=document.createElement('label');on.className='switch';on.innerHTML='<input type="checkbox" '+(g.enabled?'checked':'')+'>';
-    on.onclick=e=>e.stopPropagation();
-    on.querySelector('input').onchange=e=>{g.enabled=e.target.checked;queueSave()};
-    const title=document.createElement('div');title.className='gtitle';title.textContent=g.name;
-    const count=document.createElement('div');count.className='count';count.textContent=g.ids.length+'人';
-    const chev=document.createElement('button');chev.className='chev';chev.textContent=opened.has(gi)?'▲':'▼';
-    const toggle=()=>{opened.has(gi)?opened.delete(gi):opened.add(gi);render();if(opened.has(gi))requestProfiles(g.ids)};
-    title.onclick=toggle;count.onclick=toggle;chev.onclick=e=>{e.stopPropagation();toggle()};
-    summary.append(on,title,count,chev);
-
-    const body=document.createElement('div');body.className='body';
-    const manage=document.createElement('div');manage.className='manage';
-    const name=document.createElement('input');name.type='text';name.value=g.name;name.onchange=e=>{g.name=clean(e.target.value)||('グループ '+(gi+1));queueSave();render()};
-    const delGroup=document.createElement('button');delGroup.className='del';delGroup.textContent='削除';delGroup.onclick=()=>{groups.splice(gi,1);const next=new Set();for(const x of opened)if(x<gi)next.add(x);else if(x>gi)next.add(x-1);opened.clear();for(const x of next)opened.add(x);render();queueSave()};
-    manage.append(name,delGroup);
-
-    const members=document.createElement('div');members.className='members';
-    g.ids.forEach((id,mi)=>members.appendChild(memberNode(id,gi,mi)));
-    const add=document.createElement('div');add.className='add';add.setAttribute('data-mumei-filter-add','1');
-    const inp=document.createElement('input');inp.type='text';inp.placeholder='note URL / @ID / ID';
-    inp.autocomplete='off';inp.autocapitalize='none';inp.spellcheck=false;inp.name='mumei-note-profile-'+gi;
-    inp.setAttribute('data-form-type','other');inp.setAttribute('data-lpignore','true');
-    const clearWrongAutofill=()=>{const v=clean(inp.value);if(/^https?:\/\/mumei-s\.github\.io\/note-insight\/?/i.test(v))inp.value=''};
-    inp.addEventListener('focus',clearWrongAutofill);inp.addEventListener('input',clearWrongAutofill);
-    setTimeout(clearWrongAutofill,0);
-    const btn=document.createElement('button');btn.type='button';btn.textContent='＋追加';
-    const run=()=>{
-      clearWrongAutofill();
-      const id=parseId(inp.value);
-      if(!id){setStatus('noteのクリエイターURL / @ID / IDを入力してください','err',0);inp.focus();return}
-      if(g.ids.includes(id)){setStatus('@'+id+' はこのグループに登録済みです','ok');inp.value='';return}
-      g.ids.push(id);inp.value='';opened.add(gi);render();queueSave();requestProfiles([id]);
-      setStatus('@'+id+' を追加しました・保存中…','ok',0)
-    };
-    btn.onclick=run;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();run()}};
-    add.append(inp,btn);body.append(manage,members,add);
-    card.append(summary,body);groupsEl.appendChild(card)
-  })
-}
-document.getElementById('addGroup').onclick=()=>{const i=groups.length;groups.push({name:'グループ '+(i+1),enabled:true,ids:[]});opened.add(i);render();queueSave()};
-
-addEventListener('message',e=>{
-  if(e.origin!==location.origin||e.data?.source!==BRIDGE)return;
-  const d=e.data;
-  if(d.type==='state'){
-    loaded=true;groups=norm(d.groups);if(!groups.length)groups=[{name:'通知フィルター',enabled:true,ids:[]}];
-    render();setStatus('@'+account+' の設定を読み込みました','ok')
-  }else if(d.type==='saved'){
-    setStatus('保存しました','ok')
-  }else if(d.type==='return-ready'){
-    clearTimeout(returnTimer);
-    location.replace(NOTE)
-  }else if(d.type==='profiles'){
-    for(const p of d.profiles||[])if(p&&p.id)profiles[p.id]=p;
-    if(loaded)render()
-  }else if(d.type==='error'){
-    setStatus(d.message||'処理に失敗しました','err',0)
+ const term=clean(searchInput.value).toLowerCase();groupsEl.replaceChildren();document.getElementById('totals').textContent=groups.length+'フォルダ・'+new Set(groups.flatMap(g=>g.ids)).size+'人';let shown=0;
+ groups.forEach((g,gi)=>{
+  const folderMatch=!term||g.name.toLowerCase().includes(term),matches=folderMatch?g.ids:g.ids.filter(id=>id.includes(term)||String(profiles[id]?.nickname||'').toLowerCase().includes(term));if(term&&!folderMatch&&!matches.length)return;shown++;
+  const card=document.createElement('section');card.className='group'+(opened.has(g)?' open':'');
+  const summary=document.createElement('div');summary.className='summary';const on=document.createElement('label');on.className='switch';const check=document.createElement('input');check.type='checkbox';check.checked=g.enabled;check.setAttribute('aria-label',g.name+' のフィルター');check.onchange=()=>{g.enabled=check.checked;syncTargets();queueSave()};on.append(check);
+  const toggle=document.createElement('button');toggle.type='button';toggle.className='group-toggle';toggle.setAttribute('aria-expanded',String(opened.has(g)));toggle.setAttribute('aria-controls','folder-body-'+gi);const title=document.createElement('span');title.className='gtitle';title.textContent=g.name;const chev=document.createElement('span');chev.className='chev';chev.textContent=opened.has(g)?'▲':'▼';toggle.append(title,chev);toggle.onclick=()=>{opened.has(g)?opened.delete(g):opened.add(g);render()};
+  const count=document.createElement('span');count.className='count';count.textContent=matches.length===g.ids.length?g.ids.length+'人':matches.length+' / '+g.ids.length+'人';summary.append(on,toggle,count);card.append(summary);
+  const body=document.createElement('div');body.className='body';body.id='folder-body-'+gi;
+  if(opened.has(g)){
+   const manage=document.createElement('div');manage.className='manage';const name=document.createElement('input');name.type='text';name.value=g.name;name.setAttribute('aria-label',g.name+' のフォルダ名');name.onchange=()=>{g.name=clean(name.value)||('グループ '+(gi+1));render();syncTargets();queueSave()};
+   const remove=document.createElement('button');remove.type='button';remove.className='del';remove.textContent='フォルダ削除';remove.onclick=()=>{const index=groups.indexOf(g);if(index<0)return;groups.splice(index,1);opened.delete(g);render();syncTargets();queueSave()};manage.append(name,remove);
+   const add=document.createElement('button');add.type='button';add.className='folder-add';add.textContent='このフォルダに追加';add.onclick=()=>chooseFolder(g);body.append(manage,add);if(!g.enabled){const state=document.createElement('p');state.className='folder-state';state.textContent='このフォルダはオフです。登録人物の通知を隠すときはフォルダのスイッチをオンにします。';body.append(state)}
+   const list=document.createElement('div');list.className='members';const limit=limits.get(g)||PAGE_SIZE,visible=matches.slice(0,limit);visible.forEach(id=>list.append(memberNode(id,g)));body.append(list);requestProfiles(visible);
+   if(!matches.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=term?'一致する登録人物はいません':'まだ登録されていません';body.append(empty)}
+   if(matches.length>visible.length){const more=document.createElement('button');more.type='button';more.className='more';more.textContent='さらに'+Math.min(PAGE_SIZE,matches.length-visible.length)+'人を表示（'+visible.length+' / '+matches.length+'人）';more.onclick=()=>{limits.set(g,limit+PAGE_SIZE);render()};body.append(more)}
   }
+  card.append(body);groupsEl.append(card)
+ });
+ if(!shown){const empty=document.createElement('div');empty.className='empty';empty.textContent=groups.length?'一致するフォルダ・登録人物はいません':'フォルダを作成して、記事URLから人物を追加できます';groupsEl.append(empty)}
+}
+function addToFolder(id,g,raw){
+ if(!groups.includes(g)){setStatus('追加先フォルダが削除されました。フォルダを選び直してください','err',0);return}
+ if(g.ids.includes(id)){setStatus('@'+id+' は '+g.name+' に登録済みです','ok');quickInput.value='';return}
+ g.ids.push(id);opened.add(g);limits.set(g,PAGE_SIZE);selectedGroup=g;quickInput.value='';render();syncTargets();queueSave();requestProfiles([id]);setStatus('@'+id+' を '+g.name+' に追加しました・保存中…'+(g.enabled?'':'（このフォルダはオフです）'),'ok',0)
+}
+function finishLookup(d){
+ const pending=pendingLookup;if(!pending||d.requestId!==pending.requestId||d.account!==account)return;
+ clearTimeout(pending.timer);pendingLookup=null;setComposeBusy(false);
+ if(d.type==='creator-error'){setStatus(d.message||'記事の投稿者を確認できません','err',0);return}
+ const id=creatorId(d.id);if(!id){setStatus('記事の投稿者を確認できません','err',0);return}
+ if(clean(quickInput.value)!==pending.raw||!groups.includes(pending.group)){setStatus('入力や追加先が変わったため追加しませんでした。内容を確認して再試行してください','err',0);return}
+ addToFolder(id,pending.group,pending.raw)
+}
+function runAdd(){
+ if(!loaded||pendingLookup)return;const raw=clean(quickInput.value),g=selectedGroup;if(!g){setStatus('先に追加先フォルダを作成してください','err',0);newFolderName.focus();return}
+ let input;try{input=parseInput(raw)}catch(error){setStatus(error.message,'err',0);quickInput.focus();return}
+ if(input.id){addToFolder(input.id,g,raw);return}
+ if(!canResolveArticles){setStatus('この形式の記事URLを読み取るには本人通知ツールを更新してください。投稿者入りの記事URLか@IDでも追加できます','err',0);return}
+ const requestId='article-'+Date.now()+'-'+(++requestSequence);pendingLookup={requestId,raw,group:g,timer:setTimeout(()=>{if(pendingLookup?.requestId!==requestId)return;pendingLookup=null;setComposeBusy(false);setStatus('記事の読み取りを確認できません。本人通知ツールを確認して再試行してください','err',0)},22000)};setComposeBusy(true);setStatus('記事の投稿者を確認中…');post('resolve-creator',{requestId,value:raw})
+}
+folderTarget.onchange=()=>{selectedGroup=groups[Number(folderTarget.value)]||null};addCreatorButton.onclick=runAdd;quickInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdd()}};
+function createFolder(){if(!loaded||pendingLookup)return;const name=clean(newFolderName.value);if(!name){setStatus('新しいフォルダ名を入力してください','err',0);newFolderName.focus();return}const g={name,enabled:true,ids:[]};groups.push(g);selectedGroup=g;opened.add(g);newFolderName.value='';render();syncTargets();queueSave();quickInput.focus({preventScroll:true})}
+addGroupButton.onclick=createFolder;newFolderName.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();createFolder()}};searchInput.oninput=render;document.getElementById('jumpAdd').onclick=()=>{document.getElementById('quickAdd').scrollIntoView?.({block:'start'});if(loaded)quickInput.focus({preventScroll:true})};
+addEventListener('message',e=>{
+ if(!/^[a-z0-9_-]+$/.test(account)||e.origin!==location.origin||e.data?.source!==BRIDGE)return;const d=e.data;if(d.account!==undefined&&d.account!==account)return;
+ if(d.type==='state'){
+  if(loaded)return;loaded=true;groups=norm(d.groups);if(!groups.length)groups=[{name:'通知フィルター',enabled:true,ids:[]}];mergeProfiles(d.profiles);canResolveArticles=d.canResolveArticles===true;selectedGroup=groups[0];render();syncTargets();setStatus('@'+account+' の設定を読み込みました','ok')
+ }else if(d.type==='saved')acknowledgeSave(d);
+ else if(d.type==='return-ready'){if(returning&&!saveDirty&&!saveInFlight){clearTimeout(returnTimer);location.replace(NOTE)}}
+ else if(d.type==='profiles'){mergeProfiles(d.profiles);patchProfiles()}
+ else if(d.type==='creator-resolved'||d.type==='creator-error')finishLookup(d);
+ else if(d.type==='error'){if((d.action==='save'||!d.action&&saveInFlight)&&(!d.requestId||d.requestId===saveInFlight?.requestId))saveFailed(d.message||'設定を保存できません。今の登録内容を保持しています');else{if(d.action==='return-bell')stopReturn();setStatus(d.message||'処理に失敗しました','err',0)}}
 });
 if(!/^[a-z0-9_-]+$/.test(account))setStatus('noteアカウントを確認できません。🔔通知から設定を開き直してください','err',0);
 else{post('load');setTimeout(()=>{if(!loaded)setStatus('本人通知ツールとの接続を確認してください','err',0)},3500)}

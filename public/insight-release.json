@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.23.4",
-  "notificationVersion": "3.6.43",
+  "notificationVersion": "3.6.44",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-23T20:23:00+09:00",
+  "releasedAt": "2026-10-26T12:46:19+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "自分のコメント保存の初回設定を2操作に簡略化。同意後は同じタブでnoteへ進み、このブラウザで有効化します。既存の本人確認・端末単位の許可・保存履歴は維持。初期状態はオフ。",
+  "note": "本人通知のフィルター中、過去ページの追加で確認済みの先頭取得を繰り返さないよう改善。記事URLからの人物追加、フォルダ選択・作成・検索をまとめ、登録済みの設定と保存履歴を保持。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }
