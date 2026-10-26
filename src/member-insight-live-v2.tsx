@@ -29,6 +29,7 @@ import "./insight-ux-v12";
 import "./member-insight-analysis-scene.css";
 import { useVisibleMotion } from "./insight-visible-motion";
 import { loadInsightScreen } from "./insight-screen-loader";
+import { captureInsightReturn } from "./insight-update-return";
 
 const MemberInsightUnifiedV4 = lazy(() => loadInsightScreen(() => import("./member-insight-unified-v4")).then(module => ({ default: module.MemberInsightUnifiedV4 })));
 const MemberInsightSocialV2 = lazy(() => loadInsightScreen(() => import("./member-insight-social-v2")).then(module => ({ default: module.MemberInsightSocialV2 })));
@@ -52,7 +53,9 @@ const RELATION_SYNC_KEY="mumei-insight-last-auto-relation-sync";
 type Mode="normal"|"comments"|"favorites"|"social"|"notifications"|"analysis";
 const INSIGHT_NAV_ITEMS=[["likes","スキ履歴"],["supporters","スキ順位"],["comments","コメント"],["commentRanking","コメント順位"],["magazines","マガジン"],["favorites","お気に入り"],["social","フォロー"],["notifications","本人通知"],["dm","DM"],["articles","記事"]] as const;
 const MODES=new Set<Mode>(["normal","comments","favorites","social","notifications","analysis"]);
-function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);return stored&&MODES.has(stored as Mode)?stored as Mode:null}
+const validNavTab=(tab:unknown):tab is string=>typeof tab==="string"&&INSIGHT_NAV_ITEMS.some(([key])=>key===tab);
+const modeForTab=(tab:string):Mode=>["comments","favorites","social","notifications"].includes(tab)?tab as Mode:"normal";
+function requestedMode(){const q=new URLSearchParams(window.location.search).get("insightMode");if(q==="dm")return"normal";if(q&&MODES.has(q as Mode))return q as Mode;const stored=sessionStorage.getItem(ENTRY_MODE_KEY);if(stored&&MODES.has(stored as Mode))return stored as Mode;const historyMode=window.history.state?.insightMode;return MODES.has(historyMode)?historyMode as Mode:null}
 
 async function post(endpoint:string,action:string,extra:Record<string,unknown>={},timeout=45_000,externalSignal?:AbortSignal){
   const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
@@ -78,13 +81,24 @@ const sleep=(ms:number)=>new Promise<void>(resolve=>window.setTimeout(resolve,ms
 export function MemberInsightLiveV2({initialSession=null}:{initialSession?:InsightSessionIdentity|null}={}){
   const creatorMotion=useVisibleMotion<HTMLElement>();
   const[entryTab]=useState(()=>{
-    const tab=String(window.history.state?.insightPendingTab||"");
-    return INSIGHT_NAV_ITEMS.some(([key])=>key===tab)?tab:"";
+    const pending=window.history.state?.insightPendingTab;
+    if(validNavTab(pending))return pending;
+    const query=new URLSearchParams(window.location.search),tab=query.get("insightTab");
+    if(validNavTab(tab))return tab;
+    if(query.get("insightMode")==="dm")return"dm";
+    if(query.has("insightMode"))return"";
+    const previous=window.history.state?.insightTab;
+    return validNavTab(previous)?previous:"";
   });
-  const explicitMode=entryTab?(["comments","favorites","social","notifications"].includes(entryTab)?entryTab:"normal") as Mode:requestedMode();
+  const[explicitMode]=useState(()=>{
+    if(validNavTab(window.history.state?.insightPendingTab))return modeForTab(entryTab);
+    const requested=requestedMode();
+    return requested==="analysis"?"analysis":entryTab?modeForTab(entryTab):requested;
+  });
   const initialMode:Mode=explicitMode||"normal";
   const initialNavTab=entryTab||String(explicitMode&&["comments","favorites","social","notifications"].includes(explicitMode)?explicitMode:"likes");
   const[revision,setRevision]=useState(0),[status,setStatus]=useState("最新データを確認中…"),[appBusy,setAppBusy]=useState(false),[dataBusy,setDataBusy]=useState(false),[mode,setMode]=useState<Mode>(initialMode),[navTab,setNavTab]=useState(initialNavTab),[officialData,setOfficial]=useState<any>(()=>initialSession&&initialSession.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&initialSession.scope===String(currentStoredInsightAccount()?.noteId||"").toLowerCase()&&isFreshInsightView(initialSession.checkedAt)?initialSession:null),[autoSyncEnabled]=useState(true);
+  const navigation=useRef({mode,tab:navTab});navigation.current={mode,tab:navTab};
   const normalVisited=useRef(initialMode==="normal");
   // Keep an opened normal view mounted for its page/scroll state, but do not
   // download it when the initial destination is notifications or another scene.
@@ -108,7 +122,7 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   function openMode(next:Mode){
     window.dispatchEvent(new Event("mumei-insight-close-items"));
     if(mode===next){
-      if(next==="analysis")window.dispatchEvent(new Event("mumei-insight-analysis-menu"));
+      if(next==="analysis"){const state={...window.history.state};delete state.analysisPanel;window.history.replaceState(state,"",window.location.href);window.dispatchEvent(new Event("mumei-insight-analysis-menu"))}
       if(next!=="notifications")requestAnimationFrame(()=>document.querySelector<HTMLElement>(next==="analysis"?".miah,.mia2,.miaf":".miu")?.scrollIntoView({block:"start",behavior:"auto"}));
       return;
     }
@@ -116,14 +130,15 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     if(next==="notifications")notificationEntryY.current=y;
     window.history.replaceState({...window.history.state,insightScrollY:y},"",window.location.href);
     const modeUrl=new URL(window.location.href);modeUrl.searchParams.delete("analysisPanel");modeUrl.searchParams.delete("insightMode");
-    window.history.pushState({...window.history.state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:window.history.state?.insightTab||"likes",insightScrollY:y},"",modeUrl.href);
+    const state={...window.history.state};delete state.analysisPanel;
+    window.history.pushState({...state,route:"dashboard",insightMode:next,insightTab:["comments","favorites","social","notifications"].includes(next)?next:state.insightTab||"likes",insightScrollY:y},"",modeUrl.href);
     if(["comments","favorites","social","notifications"].includes(next))setNavTab(next);setMode(next);window.dispatchEvent(new Event("mumei-insight-navigation"));
     if(next!=="notifications")requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"}));
   }
   function backMode(){if(mode!=="normal"){window.history.back();return}window.history.back()}
   function handleUnifiedTab(tab:string){
     const next:Mode=tab==="comments"?"comments":tab==="favorites"?"favorites":tab==="social"?"social":tab==="notifications"?"notifications":"normal";
-    const current={...window.history.state};delete current.insightPendingTab;
+    const current={...window.history.state};delete current.insightPendingTab;delete current.analysisPanel;
     if(mode===next&&current.insightTab===tab){window.history.replaceState(current,"",window.location.href);setNavTab(tab);return}
     window.history.replaceState({...current,insightScrollY:window.scrollY},"",window.location.href);
     window.history.pushState({...current,route:"dashboard",insightMode:next,insightTab:tab,insightScrollY:window.scrollY},"",window.location.href);
@@ -252,7 +267,7 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
       const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),12000);
       try{const fresh=await fetch(`${import.meta.env.BASE_URL}index.html?insight-app-update=${Date.now()}`,{cache:"no-store",signal:controller.signal});if(!fresh.ok)throw new Error("新しい画面を取得できませんでした。再試行してください。")}finally{window.clearTimeout(timer)}
       sessionStorage.setItem(APP_UPDATE_RESULT_KEY,latestVersion);
-      const target=new URL(window.location.href);
+      const target=new URL(captureInsightReturn({...navigation.current,account:String(currentStoredInsightAccount()?.noteId||"").toLowerCase()}));
       target.searchParams.set("insightAppVersion",latestVersion);
       window.location.replace(target.href);
     }catch(e){
@@ -261,10 +276,10 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     }finally{setAppBusy(false)}
   }
   useEffect(()=>{
-    const requested=entryTab?initialMode:requestedMode();
-    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");const tab=entryTab||(["comments","favorites","social","notifications"].includes(requested)?requested:"likes");const state={...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0};delete state.insightPendingTab;window.history.replaceState(state,"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
+    const requested=explicitMode;
+    if(requested){sessionStorage.removeItem(ENTRY_MODE_KEY);const u=new URL(window.location.href);u.searchParams.delete("insightMode");u.searchParams.delete("insightTab");const tab=entryTab||(["comments","favorites","social","notifications"].includes(requested)?requested:"likes");const state={...window.history.state,route:"dashboard",insightMode:requested,insightTab:tab,insightScrollY:0};delete state.insightPendingTab;window.history.replaceState(state,"",u.href);setNavTab(tab);setMode(requested);window.dispatchEvent(new Event("mumei-insight-navigation"))}
     else{window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightTab:"likes",insightScrollY:0},"",window.location.href);setNavTab("likes");setMode("normal");window.dispatchEvent(new Event("mumei-insight-navigation"))}
-    const pop=()=>{const next=history.state?.insightMode;const tab=String(history.state?.insightTab||(["comments","favorites","social","notifications"].includes(next)?next:"likes"));const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
+    const pop=()=>{const next=history.state?.insightMode;const tab=validNavTab(history.state?.insightTab)?history.state.insightTab:(["comments","favorites","social","notifications"].includes(next)?next:"likes");const y=Number(history.state?.insightScrollY);setNavTab(tab);setMode(MODES.has(next)?next:"normal");if(Number.isFinite(y))requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:y,behavior:"auto"})))};
     window.addEventListener("popstate",pop);return()=>window.removeEventListener("popstate",pop)
   },[]);
   useEffect(()=>{
@@ -341,8 +356,10 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   const dashboardMissing=Boolean(releaseChecked&&dashboardLatest&&!dashboardInstalled);
   const dashboardUpdateAvailable=Boolean(dashboardLatest&&dashboardInstalled&&versionDiffers(dashboardInstalled,dashboardLatest));
   const noteId=String(official?.member?.noteId||currentStoredInsightAccount()?.noteId||"").toLowerCase();
-  const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
-  const notificationConnectionHref=`./notification-connection.html?from=insight${noteId?`&notificationAccount=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(window.location.href)}`;
+  const updateReturn=captureInsightReturn({mode,tab:navTab,account:noteId});
+  const dashboardSetupHref=`./dashboard-setup.html?from=analysis${noteId?`&account=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(updateReturn)}`;
+  const notificationConnectionHref=`./notification-connection.html?from=insight${noteId?`&notificationAccount=${encodeURIComponent(noteId)}`:""}&return=${encodeURIComponent(updateReturn)}`;
+  function withCurrentReturn(href:string){const target=new URL(href,window.location.href);target.searchParams.set("return",captureInsightReturn({...navigation.current,account:String(currentStoredInsightAccount()?.noteId||noteId).toLowerCase()}));return target.href}
   const dashboardCardContent=<><strong>📊 分析</strong><small>{dashboardInstalled?`ダッシュボード v${dashboardInstalled}`:"ダッシュボード同期は未導入"}{dashboardUpdateAvailable&&dashboardLatest?` → v${dashboardLatest}`:""}</small><span>{releaseError?"更新確認に失敗｜再確認できます":"公式ダッシュボード＋INSIGHT"}</span></>;
   const account=currentStoredInsightAccount();
   const creatorId=String(official?.member?.noteId||account?.noteId||noteId||"").replace(/^@/,"");
@@ -374,10 +391,10 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
         <a className="miv5-launcher-item caution" href="./insight-data-notice.html"><span className="icon">⚠</span><b>注意</b></a>
         <div className={`miv5-launcher-item analysis ${mode==="analysis"?"active ":""}${dashboardUpdateAvailable||notificationUpdateAvailable?"needs-update":dashboardMissing?"needs-install":""}`}>
           <button type="button" onClick={()=>openMode("analysis")} aria-label="分析を開く"><span className="icon">📊</span><b>分析</b></button>
-          <a className="gear" href={dashboardSetupHref} aria-label="分析設定">⚙</a>
+          <a className="gear" href={dashboardSetupHref} onClick={event=>{event.currentTarget.href=withCurrentReturn(event.currentTarget.href)}} aria-label="分析設定">⚙</a>
         </div>
         <div className={`miv5-launcher-item notification ${mode==="notifications"?"active":""}`}>
-          <button type="button" onClick={()=>{window.location.href=notificationConnectionHref}} aria-label="本人通知の連携と履歴を開く"><span className="icon">🔔</span><b>本人通知</b></button>
+          <button type="button" onClick={()=>{window.location.href=withCurrentReturn(notificationConnectionHref)}} aria-label="本人通知の連携と履歴を開く"><span className="icon">🔔</span><b>本人通知</b></button>
         </div>
       </nav>
     </section>
