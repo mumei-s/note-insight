@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
-import ts from 'typescript';
+import { browserSourceModule } from './browser-source-module.mjs';
 import {webcrypto} from 'node:crypto';
 
 const read=p=>readFileSync(p,'utf8'),KEY='mumei_insight_dashboard_feature_enabled_v1';
@@ -26,7 +26,7 @@ function harness(t,{enabled=true,automatic=true,legacy=false,listener=true,failW
  }
  const markup='<main><h1>アクセス状況</h1><p>ページビュー 3</p><script type="application/json">{"page_views":{"2026-09-27":3}}</script></main>';
  function note(html=markup,url='https://note.com/sitesettings/stats'){const w=create(url,html);w.eval(read('public/note-insight-dashboard-save-queue-v1.js'));w.eval(core);w.eval(wrapper);if(readOnStart&&enabled&&/^\/(?:dashboard|sitesettings\/stats)(?:\/|$)/.test(w.location.pathname))w.setTimeout(()=>w.document.dispatchEvent(new w.CustomEvent('mumei-dashboard-read',{detail:{automatic:false}})),50);return w}
- function app(){const w=create('https://mumei-s.github.io/note-insight/','<div class="miv5-update"><div class="miv5-source-grid"><div class="miv5-source-card dashboard"><button class="miv5-source-main">分析</button><a class="miv5-install-link miv5-dashboard-settings" href="./dashboard-setup.html">設定・更新</a></div><div class="miv5-source-card notice"><button class="miv5-source-main">本人通知</button></div></div></div>');w.eval('(()=>{'+ts.transpileModule(read('src/insight-top-install-v16.ts').replace('export {};',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText+'})()');return w}
+ function app(){const w=create('https://mumei-s.github.io/note-insight/','<div class="miv5-update"><div class="miv5-source-grid"><div class="miv5-source-card dashboard"><button class="miv5-source-main">分析</button><a class="miv5-install-link miv5-dashboard-settings" href="./dashboard-setup.html">設定・更新</a></div><div class="miv5-source-card notice"><button class="miv5-source-main">本人通知</button></div></div></div>');browserSourceModule(w,'src/insight-top-install-v16.ts');return w}
  return {values,calls,create,note,app};
 }
 

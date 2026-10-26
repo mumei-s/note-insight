@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import * as React from 'react';
 import * as jsx from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
+import { browserSourceModule } from './browser-source-module.mjs';
 
 const pause = () => new Promise(resolve => setImmediate(resolve));
 async function fixture(t, initialRows) {
@@ -24,6 +25,7 @@ async function fixture(t, initialRows) {
     './insight-release': { CURRENT_DM_VERSION: '1.4.10', fetchInsightRelease: async () => ({ dmVersion: '1.4.10' }), versionDiffers: () => false },
     './insight-view-lifecycle': { fetchInsightResource: (...args) => fetch(...args), isFreshInsightView: () => false },
     './insight-saved-view': { readSavedInsightView: () => null, writeSavedInsightView: () => {}, removeSavedInsightView: () => {} },
+    './insight-update-return': browserSourceModule(w, 'src/insight-update-return.ts'),
   };
   const fetch = async (_url, init) => {
     const body = JSON.parse(init.body);

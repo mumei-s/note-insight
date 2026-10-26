@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import * as React from 'react';
 import * as jsx from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
+import { browserSourceModule } from './browser-source-module.mjs';
 
 const pause = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -36,6 +37,7 @@ async function fixture(t, file, component, props, handler, saved = {}) {
     './insight-release': { CURRENT_DM_VERSION: '1.4.10', fetchInsightRelease: async () => ({ dmVersion: '1.4.10' }), versionDiffers: () => false },
     './insight-view-lifecycle': lifecycleExports,
     './insight-saved-view': savedViewExports,
+    './insight-update-return': browserSourceModule(w, 'src/insight-update-return.ts'),
     './insight-member-db-fallback': { memberDbReadFallback: async () => { throw new Error('fallback unavailable'); }, memberReadAuthFailure: msg => /LOGIN|SESSION|401|403/.test(msg) },
   };
   const exports = {};

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
-import ts from 'typescript';
+import { browserSourceModule } from './browser-source-module.mjs';
 import './notification-native-page-budget.test.mjs';
 import './notification-filter-incremental-v426.test.mjs';
 import './notification-filter-settings-v114.test.mjs';
@@ -20,7 +20,7 @@ for(const mode of ['modern','legacy','focus'])test(`別タブでOFFにすると�
   w.eval(read('feature-bridge-v1.js'));return w;
  };
  const app=create('https://mumei-s.github.io/note-insight/','<div class="miv5-update"><div class="miv5-source-grid"><div class="miv5-source-card notice"><button class="miv5-source-main">本人通知</button></div></div></div>');
- app.eval('(()=>{'+ts.transpileModule(readFileSync('src/insight-top-install-v16.ts','utf8').replace('export {};',''),{compilerOptions:{module:ts.ModuleKind.None,target:ts.ScriptTarget.ES2022}}).outputText+'})()');
+ browserSourceModule(app,'src/insight-top-install-v16.ts');
  const markup='<button aria-label="通知" id="bell">🔔</button><main id="native"><button>通知</button><button>お知らせ</button><div class="m-navbarNoticeItem"><a href="/actor">人物</a>さんがマガジンに新しい記事を1本追加しました 1分前</div><div class="m-navbarNoticeItem">別の人物さんがスキしました 2分前</div></main>';
  const note=create('https://note.com/',markup);let starts=0,stops=0,finish;
  note.__mumeiNotificationNetwork3300={syncCurrent:()=>{starts++;return new Promise(r=>finish=r)},stop:()=>{stops++;finish?.({saved:0});finish=null}};
