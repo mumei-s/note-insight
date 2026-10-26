@@ -7,10 +7,11 @@ import {JSDOM} from 'jsdom';
 const base='https://mumei-s.github.io/note-insight/';
 const html=readFileSync('public/dashboard-setup.html','utf8');
 const script=readFileSync('public/dashboard-setup.js','utf8');
+const updateReturn=readFileSync('public/insight-update-return.js','utf8');
 const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
 const featureBridge=readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8');
 const wrapper=readFileSync('public/note-insight-dashboard-sync.user.js','utf8');
-const DASH='mumei-dashboard-tool-version',NOTICE='mumei-notification-tool-version',MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',ACTIVE='mumei-insight-active-account-v3',PENDING='mumei-dashboard-update-pending-v2';
+const DASH='mumei-dashboard-tool-version',NOTICE='mumei-notification-tool-version',MEMBER='mumei-insight-access-token',OWNER='mumei-unified-owner-token',ACTIVE='mumei-insight-active-account-v3',PENDING='mumei-insight-update-pending-v1:dashboard';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function settle(){await tick();await tick()}
 function page(t,options={}){
@@ -18,7 +19,7 @@ function page(t,options={}){
   const observers=[];
   t.after(()=>{observers.forEach(o=>o.disconnect());dom.window.close()});
   const calls=[],nav=[],url=new URL(w.location.href);
-  w.__location={href:url.href,origin:url.origin,search:url.search,assign:href=>nav.push({kind:'assign',href}),replace:href=>nav.push({kind:'replace',href})};
+  w.__location={href:url.href,origin:url.origin,pathname:url.pathname,search:url.search,hash:url.hash,assign:href=>nav.push({kind:'assign',href}),replace:href=>nav.push({kind:'replace',href})};
   if(options.ua)Object.defineProperty(w.navigator,'userAgent',{value:options.ua});
   if(options.platform)Object.defineProperty(w.navigator,'platform',{value:options.platform});
   if(options.touch)Object.defineProperty(w.navigator,'maxTouchPoints',{value:options.touch});
@@ -34,6 +35,8 @@ function page(t,options={}){
   w.postMessage=data=>queueMicrotask(()=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,data})));
   if(options.wrapper){w.eval(featureBridge);w.eval(wrapper)}
   // Intercept browser navigation without replacing the production pairing, version or event logic.
+  w.eval(updateReturn.replace("'use strict';","'use strict'; const location=window.__location;"));
+  if(options.pending)w.MumeiInsightUpdateReturn.create({tool:'dashboard',account:url.searchParams.get('account')||w.localStorage.getItem(ACTIVE)||'',returnTo:url.searchParams.get('return'),fallbackMode:'analysis'}).begin(release.dashboardVersion);
   w.eval(script.replace("'use strict';","'use strict'; const location=window.__location;"));
   return{w,calls,nav,gmStore,get:id=>w.document.getElementById(id),observerCalls:()=>observerCalls};
 }
@@ -65,7 +68,7 @@ test('最新版照会に失敗した時は確認済みを捏造しない',async 
   const h=page(t,{active:release.dashboardVersion,manifestError:true});await settle();assert.equal(h.get('startRead').disabled,true);assert.match(h.get('dashStatus').textContent,/確認に失敗/);assert.equal(h.nav.length,0);
 });
 test('更新から戻ったらこの画面で一度だけ再起動し、アカウントと分析の戻り先を保持する',async t=>{
-  const query='?account=tester&return='+encodeURIComponent(base+'?insightMode=analysis#dashboard')+'&auto=0',h=page(t,{active:'1.4.4',query,session:{[PENDING]:JSON.stringify({at:Date.now(),reloaded:false})}});await settle();h.w.dispatchEvent(new h.w.Event('focus'));await settle();
+  const query='?account=tester&return='+encodeURIComponent(base+'?insightMode=analysis#dashboard')+'&auto=0',h=page(t,{active:'1.4.4',query,pending:true});await settle();h.w.dispatchEvent(new h.w.Event('focus'));await settle();
   assert.equal(h.nav.length,1);const u=new URL(h.nav[0].href);assert.equal(u.pathname,'/note-insight/dashboard-setup.html');assert.equal(u.searchParams.get('account'),'tester');assert.equal(u.searchParams.get('return'),base+'?insightMode=analysis#dashboard');assert.ok(u.searchParams.has('verifyTs'));
   h.w.dispatchEvent(new h.w.Event('focus'));await settle();assert.equal(h.nav.length,1);assert.match(h.get('dashStatus').textContent,/更新をまだ確認できません/);
 });
@@ -135,8 +138,8 @@ test('ログインなしなら読込を実行せず、エラーが版検出のDO
 for(const problem of ['changed-before','changed-during','wrong-response'])test('アカウント不一致を停止する: '+problem,async t=>{
   const h=page(t,{wrapper:true,storage:{[MEMBER]:'fixture',[ACTIVE]:problem==='changed-before'?'another':'tester'},pair:async(url,init,w)=>{if(problem==='changed-during')w.localStorage.setItem(MEMBER,'changed-fixture');return{ok:true,json:async()=>({ok:true,noteId:problem==='wrong-response'?'another':'tester',pairingCode:'12345678'})}}});await settle();h.get('startRead').click();await settle();assert.equal(h.nav.length,0);assert.match(h.get('readStatus').textContent,/アカウント/);if(problem==='changed-before')assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);
 });
-test('本人通知の更新は独立パネルを使い、完了後この更新画面へ戻れる',async t=>{
-  const h=page(t,{active:release.dashboardVersion,storage:{[NOTICE]:'3.5.0'}});await settle();const u=new URL(h.get('installNotice').href);assert.equal(u.pathname,'/note-insight/notification-browser-install.html');assert.equal(new URL(u.searchParams.get('return')).pathname,'/note-insight/dashboard-setup.html');assert.equal(h.get('installNotice').hidden,false);
+test('本人通知の更新は独立パネルを使い、完了後は元のINSIGHT分析へ戻る',async t=>{
+  const h=page(t,{active:release.dashboardVersion,storage:{[NOTICE]:'3.5.0'}});await settle();const u=new URL(h.get('installNotice').href);assert.equal(u.pathname,'/note-insight/notification-browser-install.html');const back=new URL(u.searchParams.get('return'));assert.equal(back.pathname,'/note-insight/');assert.equal(back.searchParams.get('insightMode'),'analysis');assert.equal(back.hash,'#dashboard');assert.equal(back.searchParams.get('account'),'tester');assert.equal(h.get('installNotice').hidden,false);
   h.w.localStorage.setItem(NOTICE,release.notificationVersion);h.w.dispatchEvent(new h.w.Event('mumei-notification-version-changed'));await settle();assert.equal(h.get('installNotice').hidden,true);
 });
 

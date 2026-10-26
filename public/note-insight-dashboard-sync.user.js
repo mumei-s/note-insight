@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.3
+// @version      1.7.4
 // @description  小型の手動読み込みパネル。読み込み・一時停止・履歴・OFF対応。取得済みデータは画面を離れても保存します。ON/OFFはメイン🔔から変更できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -28,12 +28,12 @@
 (function startDashboardWrapper() {
   'use strict';
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardWrapper()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.3';
+  const VERSION='1.7.4',CORE_VERSION='1.7.3';
   let featureEpoch=0,resumeBoot=false;
   const featureOn=()=>window.__mumeiDashboardFeatureV1?.isEnabled?.()!==false;
   const autoOn=()=>window.__mumeiDashboardFeatureV1?.isAutomatic?.()??(localStorage.getItem('mumei_insight_dashboard_auto_enabled_v1')!=='false');
   if(document.documentElement?.getAttribute('data-mumei-dashboard-wrapper'))return;
-  document.documentElement?.setAttribute('data-mumei-dashboard-wrapper',VERSION);
+  document.documentElement?.setAttribute('data-mumei-dashboard-wrapper',CORE_VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
   const TOKEN_KEY='mumei-dashboard-ingest-token-v1';
   const NOTE_KEY='mumei-dashboard-note-id-v1';
@@ -57,7 +57,7 @@
   if(location.origin==='https://mumei-s.github.io'){
     if(!/\/(?:tool-setup|dashboard-setup)\.html$/.test(location.pathname))return;
     installHideStyle(true);markVersion();
-    const markBridge=()=>{if(document.documentElement)document.documentElement.setAttribute('data-mumei-dashboard-bridge',VERSION)};
+    const markBridge=()=>{const root=document.documentElement;if(!root)return;let changed=false;if(root.getAttribute('data-mumei-dashboard-bridge')!==VERSION){root.setAttribute('data-mumei-dashboard-bridge',VERSION);changed=true}if(root.getAttribute('data-mumei-dashboard-live-version')!==VERSION){root.setAttribute('data-mumei-dashboard-live-version',VERSION);changed=true}if(changed)window.dispatchEvent(new Event('mumei-insight-tool-ready'))};
     const cleanup=()=>{document.getElementById('mumei-dashboard-sync')?.remove();markVersion();markBridge()};
     const saveHandoff=async()=>{
       const el=document.getElementById(HANDOFF_ID),raw=el?.getAttribute('data-payload')||'';if(!raw)return;
@@ -119,7 +119,7 @@
   async function startRead({automatic=false}={}){
     const epoch=featureEpoch;
     if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');showPanel();
-    if(panel()?.dataset.coreVersion!==VERSION){
+    if(panel()?.dataset.coreVersion!==CORE_VERSION){
       setCoreStatus('ダッシュボードの更新が揃っていません。更新を確認してください。','warn');
       const btn=document.getElementById('mumei-dash-run');if(btn)btn.disabled=true;
       if(!document.getElementById('mumei-dash-update')){const a=document.createElement('a');a.id='mumei-dash-update';a.textContent='更新を確認';a.href='https://mumei-s.github.io/note-insight/dashboard-setup.html?v='+VERSION;a.style.cssText='color:#a5eaff;white-space:nowrap;padding:8px';panel()?.querySelector('.row')?.append(a)}
@@ -140,7 +140,7 @@
       }
       if(document.documentElement.getAttribute('data-mumei-dashboard-surface')==='other')return;
       if(!await waitPanel())throw new Error('DASHBOARD_TOOL_CORE_NOT_READY');showPanel();
-      if(panel()?.dataset.coreVersion!==VERSION){setCoreStatus('ダッシュボードの更新が揃っていません。更新を確認してください。','warn');const btn=document.getElementById('mumei-dash-run');if(btn)btn.disabled=true;if(!document.getElementById('mumei-dash-update')){const a=document.createElement('a');a.id='mumei-dash-update';a.textContent='更新を確認';a.href='https://mumei-s.github.io/note-insight/dashboard-setup.html';panel()?.append(a)}return;}
+      if(panel()?.dataset.coreVersion!==CORE_VERSION){setCoreStatus('ダッシュボードの更新が揃っていません。更新を確認してください。','warn');const btn=document.getElementById('mumei-dash-run');if(btn)btn.disabled=true;if(!document.getElementById('mumei-dash-update')){const a=document.createElement('a');a.id='mumei-dash-update';a.textContent='更新を確認';a.href='https://mumei-s.github.io/note-insight/dashboard-setup.html';panel()?.append(a)}return;}
       const direct=directPayload()||arrivalDirect,pending=direct?null:await loadPending();
       if(epoch!==featureEpoch||!featureOn())return;
       const requested=await pairRequest(direct||pending);if(requested)lastAutoKey='';

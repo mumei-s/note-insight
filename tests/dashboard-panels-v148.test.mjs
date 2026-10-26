@@ -153,7 +153,7 @@ test('公式の未連携ボタンから設定・本人照合・日別保存・�
  w.__location={get href(){return w.location.href},get search(){return w.location.search},get origin(){return w.location.origin},assign:href=>{assert.ok(handoffStore.get('mumei-dashboard-handoff-v143'),'移動より先に共有保存を確認');setupNav.push(href)}};
  const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
  w.fetch=async(url,init={})=>{if(String(url).includes('insight-release.json'))return Response.json(release);pairCalls.push(init);assert.equal(JSON.parse(init.body).action,'pair-start');assert.equal(init.headers['X-Insight-Token'],'member-fixture');return Response.json({ok:true,noteId:'tester',pairingCode:'12345678'})};
- w.eval(readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8'));w.eval(wrapper);w.eval(readFileSync('public/dashboard-setup.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));await pause(50);
+ w.eval(readFileSync('public/note-insight-dashboard-feature-bridge-v1.js','utf8'));w.eval(wrapper);w.eval(readFileSync('public/insight-update-return.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));w.eval(readFileSync('public/dashboard-setup.js','utf8').replace("'use strict';","'use strict'; const location=window.__location;"));await pause(50);
  assert.equal(pairCalls.length,1);assert.equal(setupNav.length,1);assert.ok(!setupNav[0].includes('member-fixture'));
  const requests=[];let stored;
  const official=page(t,'<p>ページビュー 8</p><details><summary>日別アクセスグラフ</summary><script type="application/json">{"page_views":{"2026-09-21":8}}</script></details>',{paired:false,url:'https://note.com/sitesettings/stats',before:w=>{
