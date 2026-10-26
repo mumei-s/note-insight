@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import './notification-filter-latency.test.mjs';
+import './notification-filter-state.test.mjs';
 
 const source=readFileSync('public/note-insight-notification-filter-v4.js','utf8');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
