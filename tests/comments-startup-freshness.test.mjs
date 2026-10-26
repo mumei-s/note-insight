@@ -591,3 +591,77 @@ test('遅い保存済み0件も読込表示に戻らず、失敗しても保存�
  assert.doesNotMatch(h.body(),/コメント履歴を読み込み中/);assert.match(h.body(),/前回保存分/);
  await settle(fail);assert.match(h.body(),/前回保存分/);assert.equal(h.savedView().savedAt,1);
 });
+
+const countRows=count=>Array.from({length:count},(_,i)=>event('count-'+i,'件数確認の本文'+i,{actor_image_url:'https://images.test/peer.png'}));
+async function countFixture(t,options){
+ const h=await fixture(t,options),timeout=h.w.setTimeout.bind(h.w);
+ h.w.setTimeout=(fn,ms,...args)=>timeout(fn,ms===1200?0:ms,...args);
+ return h;
+}
+function historyCounts(h){
+ const summary=h.w.document.querySelector('.micf-history-counts');assert.ok(summary,'保存先・読み込み・画面表示を区別する件数を表示する');
+ return{summary,label:summary.querySelector('.micf-storage-count b')?.textContent,stored:summary.querySelector('.micf-storage-count strong')?.textContent,
+  loaded:summary.querySelector('.micf-loaded-count')?.textContent||'',visible:summary.querySelector('.micf-visible-count')?.textContent||''};
+}
+async function settledHistoryCounts(h){
+ await React.act(async()=>{for(let i=0;i<20&&!h.w.document.querySelector('.micf-history-counts');i++)await new Promise(resolve=>setTimeout(resolve,0))});
+ return historyCounts(h);
+}
+
+test('保存先4,604件を読み込み500件・画面表示120件と区別し、表示を増やしても再取得しない',async t=>{
+ const calls=[],rows=countRows(500),h=await countFixture(t,{fetch:async(_url,init)=>{calls.push(JSON.parse(init.body));return response(rows,4604)}});
+ await h.start();await settle();let counts=await settledHistoryCounts(h);
+ assert.equal(counts.label,'保存先');assert.equal(counts.stored,'4,604件');assert.match(counts.loaded,/読み込み済み\s*500件/);assert.match(counts.visible,/表示中\s*120件/);assert.ok(counts.summary.classList.contains('done'));
+ assert.equal(h.w.document.querySelectorAll('.micf-event-list article').length,120);assert.deepEqual(calls.map(p=>[p.page,p.pageSize]),[[1,500]]);
+ assert.doesNotMatch(h.w.document.querySelector('.micf-head p').textContent,/全部表示/);assert.match(h.w.document.querySelector('.micf-head p').textContent,/必要な分だけ/);
+ await h.click(h.w.document.querySelector('.micf-more button'));counts=historyCounts(h);
+ assert.equal(counts.stored,'4,604件');assert.match(counts.loaded,/読み込み済み\s*500件/);assert.match(counts.visible,/表示中\s*240件/);assert.equal(calls.length,1);
+ assert.equal(h.savedView().value.rows.length,500);assert.equal(h.savedView().value.total,4604);
+});
+
+test('必要な続き500件だけを読み込み、戻った後も保存先総数・表示位置・取得済み本文を維持する',async t=>{
+ const calls=[],rows=countRows(1000),h=await countFixture(t,{fetch:async(_url,init)=>{const p=JSON.parse(init.body);calls.push(p);return response(rows.slice((p.page-1)*p.pageSize,p.page*p.pageSize),4604)}});
+ await h.start();await settle();
+ for(let i=0;i<4;i++)await h.click(h.w.document.querySelector('.micf-more button'));
+ assert.equal(calls.length,1);assert.match(historyCounts(h).visible,/表示中\s*500件/);
+ await h.click(h.w.document.querySelector('.micf-more button'));await settle();let counts=await settledHistoryCounts(h);
+ assert.deepEqual(calls.map(p=>[p.page,p.pageSize]),[[1,500],[2,500]]);assert.equal(counts.stored,'4,604件');assert.match(counts.loaded,/読み込み済み\s*1,000件/);assert.match(counts.visible,/表示中\s*500件/);
+ const before={calls:calls.length,writes:h.writes.length,savedAt:h.savedView().savedAt};
+ await h.render(()=>null,{});await h.start();await settle();counts=historyCounts(h);
+ assert.equal(calls.length,before.calls);assert.equal(h.writes.length,before.writes);assert.equal(h.savedView().savedAt,before.savedAt);
+ assert.equal(counts.label,'保存先');assert.equal(counts.stored,'4,604件');assert.match(counts.loaded,/読み込み済み\s*1,000件/);assert.match(counts.visible,/表示中\s*500件/);
+ await h.click(h.w.document.querySelector('.micf-more button'));counts=historyCounts(h);assert.match(counts.visible,/表示中\s*620件/);assert.equal(calls.length,before.calls);
+ assert.equal(h.savedView().value.rows.length,500);assert.equal(h.savedView().value.total,4604,'表示コピーの500件上限で保存先総数を切り下げない');
+});
+
+test('前回の500件コピーと総数4,604件は最新確認前も通信失敗後も前回確認と明示する',async t=>{
+ const rows=countRows(500),calls=[];let fail;
+ const h=await countFixture(t,{stored:{rows,total:4604,savedAt:1},fetch:async(_url,init)=>{calls.push(JSON.parse(init.body));return new Promise(resolve=>{fail=()=>resolve(Response.json({ok:false,error:'OFFLINE'},{status:503}))})}});
+ await h.start();assert.match(h.body(),/前回保存分を表示・最新確認中/);assert.equal(h.w.document.querySelector('.micf-head strong').textContent,'4,604件');assert.equal(h.w.document.querySelector('.micf-load-state.done'),null);
+ await settle(fail);const counts=await settledHistoryCounts(h);
+ assert.equal(counts.label,'前回確認');assert.equal(counts.stored,'4,604件');assert.equal(counts.summary.classList.contains('done'),false);assert.match(h.body(),/最新未確認/);
+ assert.match(counts.loaded,/読み込み済み\s*500件/);assert.match(counts.visible,/表示中\s*120件/);
+ assert.deepEqual(calls.map(p=>[p.page,p.pageSize]),[[1,500]]);assert.equal(h.savedView().savedAt,1);assert.equal(h.writes.length,0);
+});
+
+test('次ページの失敗は保存総数や取得済み500件を減らさず、完了した保存確認に見せない',async t=>{
+ const rows=countRows(500),calls=[],h=await countFixture(t,{fetch:async(_url,init)=>{const p=JSON.parse(init.body);calls.push(p);return p.page===2?Response.json({ok:false,error:'PAGE_OFFLINE'},{status:503}):response(rows,4604)}});
+ await h.start();await settle();const before=h.savedView();
+ for(let i=0;i<5;i++)await h.click(h.w.document.querySelector('.micf-more button'));
+ await settle();const counts=await settledHistoryCounts(h);
+ assert.equal(counts.label,'前回確認');assert.equal(counts.stored,'4,604件');assert.match(counts.loaded,/読み込み済み\s*500件/);assert.match(counts.visible,/表示中\s*500件/);assert.equal(counts.summary.classList.contains('done'),false);
+ assert.match(h.w.document.querySelector('.micf-error').textContent,/PAGE_OFFLINE/);assert.deepEqual(calls.map(p=>p.page),[1,2]);
+ assert.equal(h.savedView().savedAt,before.savedAt);assert.equal(h.savedView().value.total,4604);assert.equal(h.savedView().value.rows.length,500);assert.equal(h.writes.length,0);
+});
+
+test('保存件数を確認できない初回の通信失敗を、保存先0件の成功に置き換えない',async t=>{
+ let calls=0;const h=await countFixture(t,{fetch:async()=>{calls++;return Response.json({ok:false,error:'UNAVAILABLE'},{status:503})}});
+ await h.start();await settle();const counts=await settledHistoryCounts(h);
+ assert.equal(counts.label,'保存件数を確認できません');assert.equal(counts.stored,'—');assert.equal(counts.summary.classList.contains('done'),false);assert.equal(calls,1);assert.equal(h.savedView(),null);assert.equal(h.writes.length,0);
+});
+
+test('保存先が確認できた0件は未確認表示と区別し、読み込み・画面表示も0件に揃える',async t=>{
+ let calls=0;const h=await countFixture(t,{fetch:async()=>{calls++;return response([],0)}});
+ await h.start();await settle();const counts=await settledHistoryCounts(h);
+ assert.equal(counts.label,'保存先');assert.equal(counts.stored,'0件');assert.match(counts.loaded,/読み込み済み\s*0件/);assert.match(counts.visible,/表示中\s*0件/);assert.ok(counts.summary.classList.contains('done'));assert.equal(calls,1);
+});
