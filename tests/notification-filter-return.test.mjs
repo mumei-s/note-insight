@@ -6,7 +6,7 @@ import {JSDOM} from 'jsdom';
 const source=readFileSync('public/note-insight-notification-filter-v4.js','utf8');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const hidden=el=>el.classList.contains('mumei-muted-v2939');
-const row=(id='muted',text='登録人物さん他35名が共同マガジンに新しい記事を44本追加しました')=>`<div class="m-navbarNoticeItem" id="${id}"><a href="/actor"><img></a>${text}</div>`;
+const row=(id='muted',text='登録人物さん他35名が共同マガジンに新しい記事を44本追加しました',actor='actor')=>`<div class="m-navbarNoticeItem" id="${id}"><a href="/${actor}"><img></a>${text}</div>`;
 async function until(fn,message){for(let i=0;i<60;i++){if(fn())return;await wait(20)}assert.ok(fn(),message)}
 function setup(t,mode='modern',realReader=false){
  const dom=new JSDOM('<button id="bell">🔔</button><main id="page"></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});
@@ -38,7 +38,7 @@ for(const mode of ['modern','legacy'])test(`🔔を離れて遅れて再生成�
 });
 
 test('BEMの子要素ではなく通知一行全体を判定し、別の先頭人物・スキを残す',async t=>{
- const e=setup(t);e.panel.innerHTML='<button>通知</button><button>お知らせ</button><div class="m-navbarNoticeItem" id="nested"><div class="m-navbarNoticeItem__body"><span class="m-navbarNoticeItem__name">登録人物さん他35名が</span><span class="m-navbarNoticeItem__title">共同マガジンに新しい記事を44本追加しました</span></div></div>'+row('like','登録人物さんがあなたの記事にスキしました')+row('other','別の人物さん他35名が共同マガジンに新しい記事を44本追加しました');
+ const e=setup(t);e.panel.innerHTML='<button>通知</button><button>お知らせ</button><div class="m-navbarNoticeItem" id="nested"><div class="m-navbarNoticeItem__body"><span class="m-navbarNoticeItem__name">登録人物さん他35名が</span><span class="m-navbarNoticeItem__title">共同マガジンに新しい記事を44本追加しました</span></div></div>'+row('like','登録人物さんがあなたの記事にスキしました')+row('other','別の人物さん他35名が共同マガジンに新しい記事を44本追加しました','other');
  await until(()=>hidden(e.w.document.querySelector('#nested')),'通知の外枠全体を非表示');
  assert.ok(!hidden(e.w.document.querySelector('#like')));assert.ok(!hidden(e.w.document.querySelector('#other')));
 });
@@ -152,7 +152,7 @@ test('単独通知の対応後も、スキ・返信・自分の記事追加・�
   row('own','登録人物さんがあなたの記事をマガジン「作品集」に追加しました 31分前'),
   row('like','登録人物さんがあなたの記事にスキしました 31分前'),
   row('reply','登録人物さんがあなたのコメントに返信しました 31分前'),
-  row('unlisted','別の人物さんが作品集に記事を追加しました 31分前'),
+  row('unlisted','別の人物さんが作品集に記事を追加しました 31分前','other'),
   row('quoted','登録人物さんが「作品集に記事を追加しました」という記事にスキしました 31分前'),
   row('target','登録人物さんが作品集に新しい記事を追加しました 31分前'),
  ].join('');
@@ -162,7 +162,7 @@ test('単独通知の対応後も、スキ・返信・自分の記事追加・�
 
 test('通知を複数含むnoticeItems外枠を隠さず、対象の一行だけを隠す',async t=>{
  const e=setup(t);
- e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="noticeItems" id="collection">'+row('target')+row('like','登録人物さんがあなたの記事にスキしました')+row('unlisted','別の人物さんが共同マガジンに新しい記事を3本追加しました')+'</div>';
+ e.panel.innerHTML='<header><button>通知</button><button>お知らせ</button></header><div class="noticeItems" id="collection">'+row('target')+row('like','登録人物さんがあなたの記事にスキしました')+row('unlisted','別の人物さんが共同マガジンに新しい記事を3本追加しました','other')+'</div>';
  await until(()=>hidden(e.panel.querySelector('#target')),'一覧の親ではなく対象の一行を非表示');
  assert.ok(!hidden(e.panel.querySelector('#collection')));
  for(const id of ['like','unlisted'])assert.notEqual(e.w.getComputedStyle(e.panel.querySelector('#'+id)).display,'none',id);

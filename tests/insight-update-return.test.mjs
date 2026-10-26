@@ -6,7 +6,8 @@ import {JSDOM} from 'jsdom';
 const BASE='https://mumei-s.github.io/note-insight/';
 const ACTIVE='mumei-insight-active-account-v3';
 const PREFIX='mumei-insight-update-pending-v1:';
-const versions={notification:'3.6.47',dashboard:'1.7.4',dm:'1.4.13'};
+const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
+const versions={notification:release.notificationVersion,dashboard:release.dashboardVersion,dm:release.dmVersion};
 const clone=value=>JSON.parse(JSON.stringify(value));
 
 function page(t,{path='notification-browser-install.html',query='',active='tester'}={}){

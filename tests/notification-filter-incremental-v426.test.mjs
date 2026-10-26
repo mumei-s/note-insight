@@ -2,21 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
+import './notification-filter-leading-v429.test.mjs';
 
 const source=readFileSync(process.env.FILTER_INCREMENTAL_SOURCE||'public/note-insight-notification-filter-v4.js','utf8');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check){for(let i=0;i<80&&!check();i++)await pause(10);assert.ok(check(),'filter settles');}
 const row=(id,{muted=true,name=muted?'登録人物':'別の人物',actor=muted?'actor':'other'}={})=>`<li class="native-notice" id="${id}"><a href="/${actor}">${name}</a>さんが${muted?'共同マガジンに新しい記事を1本追加しました':'あなたの記事にスキしました'} 1分前</li>`;
 
-function fixture(t,{mode='modern',initial=Array.from({length:12},(_,i)=>row('old-'+i)).join(''),prefix=0}={}){
+function fixture(t,{mode='modern',initial=Array.from({length:12},(_,i)=>row('old-'+i)).join(''),prefix=0,stored={},fetcher,clock}={}){
  const dom=new JSDOM(`<body style="overflow:hidden"><style>.native-notice{height:60px}</style><ul id="notices" class="notificationList" style="height:400px;overflow-y:auto">${prefix?`<div id="native-prefix" style="height:${prefix}px"></div>`:''}${initial}<li id="native-loading"></li><div id="native-sentinel" class="h-px"></div></ul></body>`,{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window;t.after(()=>w.close());
  const list=w.document.getElementById('notices'),loading=w.document.getElementById('native-loading'),sentinel=w.document.getElementById('native-sentinel');
  const values=new Map([['mumei_insight_magazine_filter_enabled_v3:tester',true],['mumei_insight_notification_groups_v1:tester',[{enabled:true,ids:['actor']}]],['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor',name:'登録人物'}]]]);
+ for(const [key,value]of Object.entries(stored))values.set(key,value);if(clock)w.Date.now=()=>clock.now;
  if(mode==='modern')w.GM={getValue:async(key,fallback)=>values.get(key)??fallback,setValue:async(key,value)=>values.set(key,value)};
  else{w.GM_getValue=(key,fallback)=>values.get(key)??fallback;w.GM_setValue=(key,value)=>values.set(key,value)}
- const measure={refreshes:0,classifications:0,requests:0};w.__filterMeasure=measure;
- w.fetch=async()=>{measure.requests++;return Response.json({data:{urlname:'tester'}})};
+ const measure={refreshes:0,classifications:0,requests:0,profileRequests:0,currentUserRequests:0,urls:[]};w.__filterMeasure=measure;
+ w.fetch=async(url,init)=>{measure.requests++;measure.urls.push(String(url));if(String(url).startsWith('/api/v2/creators/'))measure.profileRequests++;if(String(url)==='/api/v2/current_user')measure.currentUserRequests++;return fetcher?fetcher(String(url),init):Response.json({data:{urlname:'tester'}})};
  function height(el){
   if(el.hidden||w.getComputedStyle(el).display==='none')return 0;
   if(el.id==='native-prefix')return prefix;
@@ -68,7 +70,7 @@ test('行全体の文とhrefが同じでも、人物リンクの表示名が変�
 });
 
 test('listenerがない設定変更・プロフィール名の後着も同じDOMを再判定する',async t=>{
- const f=fixture(t,{initial:row('target',{name:'新しい名前',actor:'unrelated'})+row('last')});await f.ready();assert.equal(f.hidden('target'),false);
+ const f=fixture(t,{initial:row('target',{name:'新しい名前',actor:'magazine/mfictional'})+row('last')});await f.ready();assert.equal(f.hidden('target'),false);
  f.set('mumei_insight_magazine_mute_profiles_v5:tester',[{id:'actor',name:'新しい名前'}]);
  await f.w.__mumeiNotificationFilterV4.refresh(true);assert.equal(f.hidden('target'),true);
  f.set('mumei_insight_notification_groups_v1:tester',[{enabled:false,ids:['actor']}]);
@@ -195,4 +197,73 @@ test('ブロック境界で対象文言のタイトルが終わっても、そ�
  ];
  const f=fixture(t,{initial:row('real-add')+cases.map(([id,body])=>`<li class="native-notice" id="${id}">${body}<time>1分前</time></li>`).join('')});await f.ready();
  assert.equal(f.hidden('real-add'),true);for(const [id] of cases)assert.equal(f.hidden(id),false,id);
+});
+
+const FILTER='mumei_insight_magazine_filter_enabled_v3:',GROUPS='mumei_insight_notification_groups_v1:',PROFILES='mumei_insight_magazine_mute_profiles_v5:';
+const fictionalName='架空の登録人物',collapsedTarget='<a class="native-notice" id="collapsed-actor" href="/magazine/mfictional"><span>架空の登録人…さん他2名が</span><span>共同マガジンに新しい記事を3本追加しました</span><time>1分前</time></a>';
+const hydrationRows=row('known-control',{name:'既知の架空人物',actor:'control'})+collapsedTarget;
+function hydrationStorage(name,{globalOn=true,actorOn=true}={}){return{
+ [FILTER+'tester']:globalOn,
+ [GROUPS+'tester']:[{name:'登録先',enabled:actorOn,ids:['actor']},{name:'既知の対象',enabled:true,ids:['control']}],
+ [PROFILES+'tester']:[{id:'actor',name},{id:'control',name:'既知の架空人物'}],
+ [PROFILES+'other']:[{id:'untouched',name:'別の架空人物'}],
+}}
+function onlyProfileLookups(f,currentUserRequests=1){assert.ok(f.measure.urls.every(url=>url==='/api/v2/current_user'||url.startsWith('/api/v2/creators/')),'プロフィール確認で通知一覧APIを読み直さない');assert.equal(f.measure.currentUserRequests,currentUserRequests)}
+
+for(const mode of ['modern','legacy'])for(const placeholder of ['actor','@ACTOR'])test(`IDの仮表示名を取得した表示名で補完し、人物リンクのない省略通知を同じDOMで隠す (${mode}, ${placeholder})`,async t=>{
+ let resolveProfile;
+ const f=fixture(t,{mode,initial:hydrationRows,stored:hydrationStorage(placeholder),fetcher:url=>url==='/api/v2/current_user'?Response.json({data:{urlname:'tester'}}):new Promise(resolve=>{resolveProfile=resolve})});
+ await until(()=>f.measure.profileRequests===1);await until(()=>f.w.__mumeiNotificationFilterV4.getState()?.total===2);
+ const original=f.w.document.getElementById('collapsed-actor');assert.equal(f.hidden('collapsed-actor'),false,'投稿者をまだ照合できない間は隠さない');assert.equal(original.querySelector('a[href]'),null,'人物IDのリンクに頼らない実際の省略型');
+ resolveProfile(Response.json({data:{nickname:fictionalName,urlname:'actor',profileImageUrl:'https://example.test/fictional.png'}}));
+ await until(()=>f.hidden('collapsed-actor'));await pause(100);assert.equal(f.w.document.getElementById('collapsed-actor'),original);assert.equal(f.values.get(PROFILES+'tester').find(profile=>profile.id==='actor').name,fictionalName);assert.equal(f.measure.profileRequests,1);
+ assert.deepEqual(f.values.get(PROFILES+'other'),[{id:'untouched',name:'別の架空人物'}]);onlyProfileLookups(f);
+});
+
+for(const mode of ['modern','legacy'])for(const disabled of ['global','folder'])test(`全体または登録先がOFFなら、ID仮表示名の補完通信を始めない (${mode}, ${disabled})`,async t=>{
+ const f=fixture(t,{mode,initial:hydrationRows,stored:hydrationStorage('actor',{globalOn:disabled!=='global',actorOn:disabled!=='folder'}),fetcher:url=>{assert.equal(url,'/api/v2/current_user');return Response.json({data:{urlname:'tester'}})}});
+ await until(()=>f.w.__mumeiNotificationFilterV4.getState()?.total===2);await pause(100);assert.equal(f.measure.profileRequests,0);assert.equal(f.hidden('collapsed-actor'),false);onlyProfileLookups(f);
+});
+
+for(const mode of ['modern','legacy'])test(`既知の人物名があれば追加通信なしで省略通知を隠す (${mode})`,async t=>{
+ const f=fixture(t,{mode,initial:hydrationRows,stored:hydrationStorage(fictionalName),fetcher:url=>{assert.equal(url,'/api/v2/current_user');return Response.json({data:{urlname:'tester'}})}});
+ await f.ready();assert.equal(f.hidden('collapsed-actor'),true);assert.equal(f.measure.profileRequests,0);onlyProfileLookups(f);
+});
+
+for(const mode of ['modern','legacy'])test(`人物名の補完失敗を自動で繰り返さず、明示的な切替後だけ追加の一回を許す (${mode})`,async t=>{
+ const clock={now:Date.now()},f=fixture(t,{mode,clock,initial:hydrationRows,stored:hydrationStorage('actor'),fetcher:url=>url==='/api/v2/current_user'?Response.json({data:{urlname:'tester'}}):new Response('',{status:503})});
+ await until(()=>f.measure.profileRequests===1);await f.ready();assert.equal(f.hidden('collapsed-actor'),false);
+ for(let i=0;i<3;i++){clock.now+=16_000;await f.w.__mumeiNotificationFilterV4.refresh(true);await pause(70)}assert.equal(f.measure.profileRequests,1,'15秒以上経過しても通常更新で自動再試行しない');
+ f.set(FILTER+'tester',false);f.w.dispatchEvent(new f.w.Event('mumei-insight-filter-refresh-v2939'));await until(()=>f.w.__mumeiNotificationFilterV4.getState()?.enabled===false);assert.equal(f.measure.profileRequests,1);
+ clock.now+=16_000;f.set(FILTER+'tester',true);f.w.dispatchEvent(new f.w.Event('mumei-insight-filter-refresh-v2939'));await until(()=>f.measure.profileRequests===2);await pause(100);
+ for(let i=0;i<3;i++){clock.now+=16_000;f.w.dispatchEvent(new f.w.Event('mumei-insight-filter-refresh-v2939'));await pause(100)}assert.equal(f.measure.profileRequests,2,'明示更新を重ねても一ページで一人につき自動一回＋手動一回まで');assert.equal(f.hidden('collapsed-actor'),false);onlyProfileLookups(f);
+});
+
+function replaceAccountPanel(f,markup){
+ const previous=f.w.__mumeiNotificationReaderV4.findPanel(),next=f.w.document.createElement('ul');next.className='notificationList';next.style.cssText='height:400px;overflow-y:auto';next.innerHTML=markup+'<li class="native-loading"></li><div class="h-px"></div>';
+ next.getBoundingClientRect=()=>({top:100,bottom:500,left:0,right:360,width:360,height:400});Object.defineProperties(next,{clientHeight:{get:()=>400},scrollHeight:{get:()=>400}});
+ previous.replaceWith(next);f.w.__mumeiNotificationReaderV4.findPanel=()=>next;return next;
+}
+const copy=value=>JSON.parse(JSON.stringify(value));
+
+test('別noteアカウントでは、同じ人物の補完失敗回数を引き継がず自分の設定だけに表示名を保存する',async t=>{
+ let current='tester';const clock={now:Date.now()},calls={tester:0,other:0},stored=hydrationStorage('actor');
+ stored[FILTER+'other']=true;stored[GROUPS+'other']=[{name:'別アカウントの登録先',enabled:true,ids:['actor','control']}];stored[PROFILES+'other']=[{id:'actor',name:'actor'},{id:'control',name:'既知の架空人物'}];
+ const f=fixture(t,{clock,initial:hydrationRows,stored,fetcher:url=>{if(url==='/api/v2/current_user')return Response.json({data:{urlname:current}});calls[current]++;return current==='tester'?new Response('',{status:503}):Response.json({data:{nickname:fictionalName,urlname:'actor'}})}});
+ await until(()=>calls.tester===1);await f.ready();clock.now+=16_000;f.w.dispatchEvent(new f.w.Event('mumei-insight-filter-refresh-v2939'));await until(()=>calls.tester===2);await pause(100);
+ const firstGroups=copy(f.values.get(GROUPS+'tester')),firstProfiles=copy(f.values.get(PROFILES+'tester')),otherGroups=copy(f.values.get(GROUPS+'other'));
+ current='other';replaceAccountPanel(f,hydrationRows);await f.w.__mumeiNotificationFilterV4.refresh(true);await until(()=>f.measure.currentUserRequests===2&&f.hidden('collapsed-actor'));
+ assert.deepEqual(calls,{tester:2,other:1});assert.deepEqual(copy(f.values.get(GROUPS+'tester')),firstGroups);assert.deepEqual(copy(f.values.get(PROFILES+'tester')),firstProfiles);assert.deepEqual(copy(f.values.get(GROUPS+'other')),otherGroups);assert.equal(f.values.get(PROFILES+'other').find(profile=>profile.id==='actor').name,fictionalName);onlyProfileLookups(f,2);
+});
+
+test('旧アカウントの補完応答待ちに別アカウントが追加した人物を、旧側の設定へ混ぜて保存しない',async t=>{
+ let current='tester',completeFirst;const calls=[],stored=hydrationStorage('actor'),secondName='架空の別の登録人物';
+ stored[FILTER+'other']=true;stored[GROUPS+'other']=[{name:'別アカウントの登録先',enabled:true,ids:['actor_b','control']}];stored[PROFILES+'other']=[{id:'actor_b',name:'actor_b'},{id:'control',name:'既知の架空人物'}];
+ const f=fixture(t,{initial:hydrationRows,stored,fetcher:url=>{if(url==='/api/v2/current_user')return Response.json({data:{urlname:current}});const id=decodeURIComponent(url.split('/').at(-1));calls.push(id);return id==='actor'?new Promise(resolve=>{completeFirst=resolve}):Response.json({data:{nickname:secondName,urlname:'actor_b'}})}});
+ await until(()=>calls.length===1);await f.ready();const firstGroups=copy(f.values.get(GROUPS+'tester')),otherGroups=copy(f.values.get(GROUPS+'other'));
+ current='other';const otherRow='<a class="native-notice" id="other-collapsed" href="/magazine/mother"><span>架空の別の登録人…さん他2名が</span><span>共同マガジンに新しい記事を3本追加しました</span><time>1分前</time></a>';
+ const next=replaceAccountPanel(f,row('other-control',{name:'既知の架空人物',actor:'control'})+otherRow+row('other-like',{muted:false}));await f.w.__mumeiNotificationFilterV4.refresh(true);await until(()=>f.measure.currentUserRequests===2&&f.w.__mumeiNotificationFilterV4.getState()?.total===3);
+ assert.deepEqual(calls,['actor'],'別アカウントの人物は旧応答待ちの間にキューへ入る');assert.equal(f.hidden('other-collapsed'),false);
+ completeFirst(Response.json({data:{nickname:fictionalName,urlname:'actor'}}));await until(()=>f.hidden('other-collapsed'));
+ assert.deepEqual(calls,['actor','actor_b']);assert.equal(f.w.__mumeiNotificationReaderV4.findPanel(),next);assert.equal(f.values.get(PROFILES+'tester').find(profile=>profile.id==='actor').name,fictionalName);assert.equal(f.values.get(PROFILES+'tester').some(profile=>profile.id==='actor_b'),false);assert.equal(f.values.get(PROFILES+'other').find(profile=>profile.id==='actor_b').name,secondName);assert.equal(f.values.get(PROFILES+'other').some(profile=>profile.id==='actor'),false);assert.deepEqual(f.values.get(GROUPS+'tester'),firstGroups);assert.deepEqual(f.values.get(GROUPS+'other'),otherGroups);onlyProfileLookups(f,2);
 });

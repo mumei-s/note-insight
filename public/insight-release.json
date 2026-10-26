@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.26.1",
-  "notificationVersion": "3.6.47",
+  "appVersion": "2026.10.26.2",
+  "notificationVersion": "3.6.48",
   "dashboardVersion": "1.7.4",
-  "releasedAt": "2026-10-26T15:51:28+09:00",
+  "releasedAt": "2026-10-26T16:27:56+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "コメント取得の失敗理由と対象記事を確認し、失敗分だけ再取得できるよう改善。本体・本人通知・DM・ダッシュボードは更新したツールの起動を確認して元のINSIGHT画面へ戻ります。",
+  "note": "本人通知の先頭人物をIDで確認し、複数名表記・表示名変更・未補完の名前によるフィルターの取りこぼしを改善。コメントの取得理由と失敗分だけの再取得に対応。本体・本人通知・DM・ダッシュボードは更新確認後に元のINSIGHT画面へ戻ります。",
   "dmVersion": "1.4.13",
   "dmLabel": "DM同期"
 }
