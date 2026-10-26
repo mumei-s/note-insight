@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.23.4",
-  "notificationVersion": "3.6.46",
-  "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-26T14:25:35+09:00",
+  "appVersion": "2026.10.26.1",
+  "notificationVersion": "3.6.47",
+  "dashboardVersion": "1.7.4",
+  "releasedAt": "2026-10-26T15:51:28+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "マガジン追加通知の動作文と後続の記事プレビューをDOMの区切りで判定し、複数人物・省略名・まとめ通知を非表示にする処理を修正。購入・紹介・引用・スキ・返信などと既存のフォルダ設定は保持。",
-  "dmVersion": "1.4.12",
+  "note": "コメント取得の失敗理由と対象記事を確認し、失敗分だけ再取得できるよう改善。本体・本人通知・DM・ダッシュボードは更新したツールの起動を確認して元のINSIGHT画面へ戻ります。",
+  "dmVersion": "1.4.13",
   "dmLabel": "DM同期"
 }

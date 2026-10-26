@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>INSIGHT インストール / 更新</title>
+<script src="./insight-update-return.js?v=20261026-1"></script>
 <meta name="mumei-installer-boundary" content="LOCKED-INDEPENDENT-V1">
 <style>
 *{box-sizing:border-box}
@@ -114,7 +115,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <a class="action primary" href="https://apps.apple.com/jp/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscriptsを開く</a>
 <a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkey（有料・INSIGHTとは別料金）</a>
 </div>
-<div class="small">Userscripts：Safari → 拡張機能 → UserscriptsをON → note.comを許可。Tampermonkeyを選ぶ場合はApp Store側の表示内容を確認して進めます。</div>
+<div class="small">Userscripts：Safari → 拡張機能 → UserscriptsをON → note.com と mumei-s.github.io を許可。Tampermonkeyを選ぶ場合はApp Store側の表示内容を確認して進めます。</div>
 </div>
 </details>
 
@@ -166,17 +167,17 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 </div>
 </section>
 
-<div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。</div>
+<div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。起動確認のため、note.com と mumei-s.github.io で拡張機能の実行を許可してください。保存画面からこのタブへ戻ると自動で確認します。</div>
 </section>
 </main>
 <script>
-const RUNTIME_KEY='mumei-notification-v3-loader',TOOL_KEY='mumei-notification-tool-version',RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js',PENDING='mumei-notification-install-pending-v1',RELOADED='mumei-notification-install-reloaded-v1';
+const RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
 const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
-let latest='',browserId='other';
+let latest='',browserId='other',loadingLatest=null;
 function rawScriptUrl(){return RAW_SCRIPT}
-function safeBack(v){if(!String(v||'').trim())return'';try{const u=new URL(String(v||''),location.href);return u.origin===location.origin&&u.pathname.startsWith('/note-insight/')&&!/\/(?:notification-browser-install|dm-browser-install|tool-setup)\.html$/.test(u.pathname)?u.href:''}catch{return''}}
-const q=new URLSearchParams(location.search),back=safeBack(q.get('return'))||new URL('./?insightMode=notifications#dashboard',location.href).href;document.getElementById('back').href=back;
-const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1',notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase();
+const q=new URLSearchParams(location.search),updater=window.MumeiInsightUpdateReturn,notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'notifications',fallbackTab:'notifications',account:notificationAccount});document.getElementById('back').href=back;
+const update=updater.create({tool:'notification',returnTo:back,account:notificationAccount,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ 更新確認済み。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
+const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1';
 let panelOn=true;
 const panelToggle=document.getElementById('panelToggle');
 function renderPanelToggle(){panelToggle.textContent=panelOn?'ON':'OFF';panelToggle.className='panel-toggle '+(panelOn?'on':'off');panelToggle.setAttribute('aria-pressed',panelOn?'true':'false')}
@@ -184,13 +185,6 @@ function panelPost(type,payload={}){window.postMessage({source:PANEL_PAGE,type,a
 panelToggle.addEventListener('click',()=>{panelOn=!panelOn;renderPanelToggle();panelPost('panel-set',{enabled:panelOn})});
 addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==PANEL_BRIDGE)return;const d=e.data;if(d.type==='state'){panelOn=d.panelOn!==false;renderPanelToggle()}else if(d.type==='panel-saved'){panelOn=d.panelOn!==false;renderPanelToggle()}else if(d.type==='error'){panelToggle.textContent='確認';panelToggle.className='panel-toggle'}});
 if(notificationAccount)panelPost('load');else{panelToggle.textContent='要連携';panelToggle.disabled=true}
-const requestedVersion=String(q.get('notificationInstalled')||'').trim(),verifiedInstalled=/^\d+(?:\.\d+){1,3}$/.test(requestedVersion)?requestedVersion:'';
-if(verifiedInstalled){
-  localStorage.setItem(TOOL_KEY,verifiedInstalled);
-  localStorage.setItem(RUNTIME_KEY,verifiedInstalled);
-  sessionStorage.removeItem(PENDING);
-  sessionStorage.removeItem(RELOADED);
-}
 function env(){
   const ua=navigator.userAgent||'',platform=navigator.platform||'',ios=/(iPhone|iPad|iPod)/i.test(ua)||(platform==='MacIntel'&&navigator.maxTouchPoints>1),android=/Android/i.test(ua),safari=/Safari/i.test(ua)&&!/(Chrome|CriOS|Edg|EdgiOS|FxiOS|OPR|Android)/i.test(ua),edge=/EdgA|EdgiOS|Edg\//i.test(ua),firefox=/FxiOS|Firefox/i.test(ua),opera=/OPR\//i.test(ua),yahoo=/YJApp|Yahoo/i.test(ua),mac=!ios&&/Macintosh/i.test(ua);
   if(ios)return safari?'ios-safari':'ios-other';
@@ -218,7 +212,7 @@ function setDetected(){
   detected.textContent='現在: '+(names[browserId]||'その他')+'　→ 該当パネルを開いてください。';
   document.querySelectorAll('.browser').forEach(x=>{x.classList.toggle('active',x.dataset.browser===browserId);x.open=x.dataset.browser===browserId});
 }
-function installed(){return String(localStorage.getItem(TOOL_KEY)||localStorage.getItem(RUNTIME_KEY)||'')}
+function installed(){return updater.live('notification')}
 function compareVersion(a,b){const pa=String(a||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const av=pa[i]||0,bv=pb[i]||0;if(av!==bv)return av>bv?1:-1}return 0}
 function check(){
   const current=installed();
@@ -227,36 +221,14 @@ function check(){
   if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。この画面に戻ると自動確認し、完了後はINSIGHTへ戻ります。';return}
   result.className='result';result.textContent=current?'本人通知ツールを検出しました。更新状態を確認中…':'更新状態を確認中…'
 }
-async function loadLatest(){try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('release');const p=await r.json();latest=String(p.notificationVersion||'');check()}catch{latest='';check()}}
+async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;check()}})();return loadingLatest}
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
-install.addEventListener('click',()=>{sessionStorage.setItem(PENDING,'1');sessionStorage.removeItem(RELOADED);paintInstall();result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。使用中のuserscript拡張でインストール / 更新してください。':'userscriptを開きます。Tampermonkeyでインストール / 更新してください。'});
-let returning=false;
-function returnToInsight(){
-  if(returning||!back)return;
-  returning=true;
-  sessionStorage.removeItem(PENDING);
-  sessionStorage.removeItem(RELOADED);
-  result.className='result ok';
-  result.textContent='✓ 更新確認済み。INSIGHTへ戻ります…';
-  setTimeout(()=>location.replace(back),120)
-}
-function refresh(){check();void loadLatest().then(()=>{if(sessionStorage.getItem(PENDING)==='1'){const current=installed();if(latest&&current&&compareVersion(current,latest)>=0)returnToInsight()}})}
-function verifyAfterInstall(){
-  if(verifiedInstalled){refresh();returnToInsight();return}
-  if(sessionStorage.getItem(PENDING)!=='1'){refresh();return}
-  const current=installed();
-  if(latest&&current&&compareVersion(current,latest)>=0){returnToInsight();return}
-  if(sessionStorage.getItem(RELOADED)!=='1'){
-    sessionStorage.setItem(RELOADED,'1');
-    result.className='result';result.textContent='インストール済みバージョンをこの画面で確認しています…';
-    const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));
-    setTimeout(()=>location.replace(u.href),180);return
-  }
-  refresh()
-}
+install.addEventListener('click',()=>{paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。':'userscriptを開きます。Tampermonkeyで保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。'});
+async function refresh(){check();await loadLatest();return update.finish(latest)}
+async function verifyAfterInstall(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
 addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));
-addEventListener('mumei-notification-version-changed',()=>{refresh();setTimeout(verifyAfterInstall,40)});
+addEventListener('mumei-notification-version-changed',()=>void refresh());addEventListener('mumei-insight-tool-ready',()=>void refresh());
 paintInstall();setDetected();refresh();
 </script>
 </body>

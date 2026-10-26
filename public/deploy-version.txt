@@ -1,4 +1,5 @@
-INSIGHT 2026.10.23.3 / notification 3.6.42 / dashboard 1.7.3 / DM 1.4.12
+INSIGHT 2026.10.26.1 / notification 3.6.47 / dashboard 1.7.4 / DM 1.4.13
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
+Confirm the running tool version after update and return to the original INSIGHT view. Keep unavailable source comments distinct from transient failures and retain saved bodies.

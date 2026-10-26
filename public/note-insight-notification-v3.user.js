@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.46
-// @description  本人通知V3.6.46。初回は取得可能な全履歴を20件ずつ途中保存しながら取得。次回は保存済み境界までの差分を保存し、完了後の反復通信を停止します。
+// @version      3.6.47
+// @description  本人通知V3.6.47。起動版を確認して更新後はINSIGHTへ戻ります。初回は全履歴、次回は保存済み境界までの差分を保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -40,10 +40,11 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.46',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.47',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
-function publish(){try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}}
+function publishLive(){if(location.origin!=='https://mumei-s.github.io'||!location.pathname.startsWith('/note-insight/'))return;if(!document.documentElement){document.addEventListener('DOMContentLoaded',publishLive,{once:true});return}const root=document.documentElement;if(root.getAttribute('data-mumei-notification-live-version')!==VERSION)root.setAttribute('data-mumei-notification-live-version',VERSION);window.dispatchEvent(new Event('mumei-insight-tool-ready'))}
+function publish(){try{localStorage.setItem(TOOL_KEY,VERSION);localStorage.setItem(RUNTIME_KEY,VERSION);window.dispatchEvent(new Event('mumei-notification-version-changed'))}catch{}publishLive()}
 void Promise.resolve(setActive(VERSION)).then(publish);publish();
 
 if(location.hostname==='note.com'){
