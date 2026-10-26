@@ -230,6 +230,22 @@ for(const tool of Object.keys(installers))test(`${tool}: 実インストーラ�
  const h=installer(t,tool,{installed:true});await wait(160);await h.focus();assert.equal(h.nav.length,0);h.noPairing();
 });
 
+test('本人通知の更新ファイルは公開版ごとのURLで開き、アカウントや戻り先を送らない',async t=>{
+ const h=installer(t,'notification');await wait(160);
+ const link=h.w.document.getElementById('install'),url=new URL(link.href);
+ assert.equal(url.origin,'https://raw.githubusercontent.com');assert.equal(url.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');
+ assert.deepEqual([...url.searchParams.keys()],['v']);assert.equal(url.searchParams.get('v'),versions.notification);
+ h.click();assert.equal(new URL(link.href).searchParams.get('v'),versions.notification);assert.equal(h.nav.length,0);h.noPairing();
+ assert.match(h.w.document.querySelector('.foot').textContent,/noteの🔔画面も再読み込み/);
+});
+
+test('公開版を確認できない時も更新ファイルの古いキャッシュを使わず、導入完了にはしない',async t=>{
+ const h=installer(t,'notification',{releaseError:true});await wait(160);const link=h.w.document.getElementById('install');
+ h.w.Date.now=()=>123456789;h.click();const first=new URL(link.href);h.w.Date.now=()=>123456790;h.click();const second=new URL(link.href);
+ assert.equal(first.searchParams.get('v'),'check-123456789');assert.equal(second.searchParams.get('v'),'check-123456790');assert.equal(first.pathname,second.pathname);
+ assert.deepEqual([...second.searchParams.keys()],['v']);assert.equal(h.nav.length,0);h.noPairing();
+});
+
 for(const tool of Object.keys(installers))test(`${tool}: 実インストーラーで古い保存版・クエリ・クリックだけでは戻らず、実起動後に元の画面へ戻る`,async t=>{
  const h=installer(t,tool,{stale:true});await wait(160);assert.equal(h.nav.length,0);h.click();await h.focus();
  const appNavigations=()=>h.nav.filter(({href})=>new URL(href).pathname==='/note-insight/'||new URL(href).pathname==='/note-insight/index.html');

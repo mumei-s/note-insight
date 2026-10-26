@@ -167,14 +167,14 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 </div>
 </section>
 
-<div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。起動確認のため、note.com と mumei-s.github.io で拡張機能の実行を許可してください。保存画面からこのタブへ戻ると自動で確認します。</div>
+<div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。起動確認のため、note.com と mumei-s.github.io で拡張機能の実行を許可してください。保存画面からこのタブへ戻ると自動で確認します。その後、開いているnoteの🔔画面も再読み込みしてください。</div>
 </section>
 </main>
 <script>
 const RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
 const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
 let latest='',browserId='other',loadingLatest=null;
-function rawScriptUrl(){return RAW_SCRIPT}
+function rawScriptUrl(){const url=new URL(RAW_SCRIPT);url.searchParams.set('v',latest||'check-'+Date.now());return url.href}
 const q=new URLSearchParams(location.search),updater=window.MumeiInsightUpdateReturn,notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'notifications',fallbackTab:'notifications',account:notificationAccount});document.getElementById('back').href=back;
 const update=updater.create({tool:'notification',returnTo:back,account:notificationAccount,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ 更新確認済み。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1';
@@ -221,7 +221,7 @@ function check(){
   if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。この画面に戻ると自動確認し、完了後はINSIGHTへ戻ります。';return}
   result.className='result';result.textContent=current?'本人通知ツールを検出しました。更新状態を確認中…':'更新状態を確認中…'
 }
-async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;check()}})();return loadingLatest}
+async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;paintInstall();check()}})();return loadingLatest}
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
 install.addEventListener('click',()=>{paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。':'userscriptを開きます。Tampermonkeyで保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。'});
