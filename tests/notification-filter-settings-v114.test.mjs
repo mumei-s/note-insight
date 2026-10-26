@@ -16,18 +16,20 @@ function ui(t,{groups=[{name:'既存フォルダ',enabled:true,ids:[]}],profiles
  w.eval(pageCode);
  const message=(type,payload={},origin=w.location.origin)=>w.dispatchEvent(new w.MessageEvent('message',{origin,data:{source:BRIDGE,account,type,...payload}}));
  if(load)message('state',{groups:plain(groups),profiles,canResolveArticles:capable});
- const input=w.document.getElementById('quickInput'),target=w.document.getElementById('folderTarget');
+ const input=w.document.getElementById('quickInput'),target=w.document.getElementById('folderTarget'),view=w.document.getElementById('folderView');
  const add=value=>{input.value=value;w.document.getElementById('addCreator').click()};
  const choose=index=>{target.value=String(index);target.dispatchEvent(new w.Event('change',{bubbles:true}))};
- const toggle=index=>w.document.querySelectorAll('.group-toggle')[index].click();
- return{w,posts,message,input,target,add,choose,toggle,timeouts,returnTimers,saveTimeouts,requests:()=>posts.filter(p=>p.data.type==='resolve-creator').map(p=>p.data),status:()=>w.document.getElementById('status').textContent};
+ const chooseView=index=>{view.value=String(index);view.dispatchEvent(new w.Event('change',{bubbles:true}))};
+ const filter=value=>{const input=w.document.getElementById('search');input.value=value;input.dispatchEvent(new w.Event('input',{bubbles:true}))};
+ const toggle=(index=0)=>w.document.querySelectorAll('.group-toggle')[index].click();
+ return{w,posts,message,input,target,view,add,choose,chooseView,filter,toggle,timeouts,returnTimers,saveTimeouts,requests:()=>posts.filter(p=>p.data.type==='resolve-creator').map(p=>p.data),status:()=>w.document.getElementById('status').textContent};
 }
 
 test('記事URLの投稿者を選択フォルダへ追加し、既存登録・オフ状態を保存する',async t=>{
  const h=ui(t,{groups:[{name:'保留',enabled:false,ids:['kept']},{name:'追加先',enabled:true,ids:['prior']}]});
  h.choose(1);h.add('https://note.com/Article_Author/n/n123456789abc?from=share#part');
  assert.equal(h.requests().length,0,'投稿者入りURLに追加APIは不要');
- assert.match(h.w.document.querySelectorAll('.group')[1].textContent,/@article_author/);
+ assert.equal(h.w.document.querySelectorAll('.group').length,1);assert.match(h.w.document.querySelector('.group').textContent,/@article_author/);assert.equal(h.view.value,'1');
  assert.equal(h.input.value,'');
  await new Promise(r=>setTimeout(r,160));
  const saved=h.posts.filter(p=>p.data.type==='save').at(-1).data.groups;
@@ -39,7 +41,28 @@ test('記事URLの投稿者を選択フォルダへ追加し、既存登録・�
 test('新しいフォルダは上部で作成して直ちに追加先へ選択できる',t=>{
  const h=ui(t);const name=h.w.document.getElementById('newFolderName');name.value='  新しい   対象  ';h.w.document.getElementById('addGroup').click();
  assert.match(h.target.selectedOptions[0].textContent,/新しい 対象/);assert.equal(name.value,'');
- h.add('@new_person');assert.equal(h.w.document.querySelectorAll('.group').length,2);assert.match(h.w.document.querySelectorAll('.group')[1].textContent,/@new_person/);
+ h.add('@new_person');assert.equal(h.w.document.querySelectorAll('.group').length,1);assert.match(h.w.document.querySelector('.group').textContent,/@new_person/);assert.equal(h.view.value,h.target.value);assert.equal(h.target.options.length,2);
+});
+
+test('100フォルダでも1件だけ表示し、選択・検索・作成・削除後も追加先と保存内容を保つ',t=>{
+ const groups=Array.from({length:100},(_,i)=>({name:'分類'+String(i).padStart(3,'0'),enabled:i!==77,ids:['person_'+i,'other_'+i]}));
+ const h=ui(t,{groups,profiles:[{id:'person_77',nickname:'架空の作者77'}]}),doc=h.w.document,prev=doc.getElementById('prevFolder'),next=doc.getElementById('nextFolder'),position=()=>doc.getElementById('folderPosition').textContent;
+ const bounded=()=>{assert.equal(doc.querySelectorAll('.group').length,1);assert.equal(h.target.value,h.view.value,'表示中と追加先は同じフォルダ');assert.ok(doc.querySelectorAll('.member').length<=50)};
+ bounded();assert.equal(h.target.options.length,100);assert.equal(h.view.options.length,100);assert.equal(doc.querySelectorAll('.member').length,0);assert.equal(h.posts.filter(p=>p.data.type==='profiles').length,0);assert.equal(position(),'1 / 100');assert.equal(prev.disabled,true);assert.equal(next.disabled,false);
+ next.click();bounded();assert.equal(h.target.value,'1');assert.equal(position(),'2 / 100');prev.click();bounded();assert.equal(h.target.value,'0');
+ h.chooseView(99);bounded();assert.equal(h.target.value,'99');assert.equal(position(),'100 / 100');assert.equal(next.disabled,true);
+ h.filter('作者77');bounded();assert.equal(h.view.options.length,1);assert.equal(h.target.options.length,100);assert.equal(h.target.value,'77');assert.equal(position(),'1 / 1');assert.equal(prev.disabled,true);assert.equal(next.disabled,true);h.toggle();assert.equal(doc.querySelectorAll('.member').length,1);assert.match(doc.querySelector('.member').textContent,/架空の作者77/);
+ h.filter('person_42');bounded();assert.equal(h.target.value,'42');assert.match(doc.querySelector('.gtitle').textContent,/分類042/);
+ h.filter('person_');bounded();assert.equal(h.view.options.length,100);next.click();bounded();assert.equal(h.target.value,'43');
+ h.choose(77);bounded();assert.equal(doc.getElementById('search').value,'');assert.equal(position(),'78 / 100');assert.equal(doc.querySelector('.switch input').checked,false);
+ const check=doc.querySelector('.switch input');check.click();assert.equal(check.checked,true);check.click();assert.equal(check.checked,false);
+ h.filter('一致しない検索');assert.equal(doc.querySelectorAll('.group').length,0);assert.equal(h.view.options.length,0);assert.equal(h.view.disabled,true);assert.equal(h.target.options.length,100);assert.equal(h.target.value,'77');assert.equal(position(),'0 / 0');assert.equal(prev.disabled,true);assert.equal(next.disabled,true);
+ h.add('@added_while_search_empty');bounded();assert.equal(doc.getElementById('search').value,'');assert.equal(h.target.value,'77');assert.equal(doc.querySelector('.switch input').checked,false);assert.match(doc.querySelector('.group').textContent,/@added_while_search_empty/);
+ h.filter('分類000');doc.getElementById('newFolderName').value='新しい対象';doc.getElementById('addGroup').click();bounded();assert.equal(doc.getElementById('search').value,'');assert.equal(h.target.value,'100');assert.equal(position(),'101 / 101');assert.match(doc.querySelector('.gtitle').textContent,/新しい対象/);h.add('@new_person');bounded();
+ h.choose(42);h.toggle();doc.querySelector('.manage .del').click();bounded();assert.equal(h.target.options.length,100);assert.equal(h.target.value,'42');assert.match(doc.querySelector('.gtitle').textContent,/分類043/);h.add('@after_delete');bounded();
+ doc.getElementById('back').click();const save=h.posts.filter(p=>p.data.type==='save').at(-1).data;
+ const expected=plain(groups);expected[77].ids.push('added_while_search_empty');expected[43].ids.push('after_delete');expected.splice(42,1);expected.push({name:'新しい対象',enabled:true,ids:['new_person']});assert.deepEqual(save.groups,expected);assert.equal(save.groups.find(g=>g.name==='分類077').enabled,false);
+ assert.equal(h.posts.some(p=>p.data.type==='return-bell'),false);h.message('saved',{requestId:save.requestId});assert.equal(h.posts.filter(p=>p.data.type==='return-bell').length,1);
 });
 
 test('不正URL・予約ルートを人物IDとして追加しない',t=>{

@@ -7,13 +7,14 @@
 <title>通知フィルター設定</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07111a;color:#eef8ff}*{box-sizing:border-box}body{margin:0;background:#07111a;color:#eef8ff}.wrap{max-width:720px;margin:0 auto;padding:10px 10px calc(22px + env(safe-area-inset-bottom,0px))}.top{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;background:#07111af5;padding:5px 0 8px;padding-top:max(5px,env(safe-area-inset-top,0px))}button,input,select{font:inherit}button{appearance:none;-webkit-appearance:none;min-height:44px;border:1px solid #466b82;border-radius:9px;background:#112b3b;color:#e7f8ff;font-weight:750;padding:8px 12px;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.5;cursor:default}.back{width:100%;font-size:13px}.jump{white-space:nowrap;font-size:13px}input,select{appearance:none;-webkit-appearance:none;width:100%;min-width:0;min-height:44px;border:1px solid #3e6076;border-radius:8px;background:#07141e;color:#fff;padding:8px 10px;font-size:16px}select{padding-right:30px;background-image:linear-gradient(45deg,transparent 50%,#a8dce9 50%),linear-gradient(135deg,#a8dce9 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat}input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;accent-color:#72cfe9;width:20px;min-height:20px;height:20px;margin:0}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8de7fc;outline-offset:3px}h1{font-size:22px;margin:12px 2px 3px}.sub{margin:0 2px 10px;color:#a0b9c8;font-size:12px;line-height:1.6}.status{min-height:34px;border:1px solid #315266;border-radius:8px;background:#0c1b27;padding:7px 9px;margin-bottom:10px;font-size:12px;line-height:1.5}.status.ok{border-color:#3f7c5b;color:#d9ffe7}.status.err{border-color:#8d4853;color:#ffd8dd}.status.hide{visibility:hidden}.composer{display:grid;gap:10px;border:1px solid #426b80;border-radius:12px;background:#0d202d;padding:12px;margin-bottom:14px;scroll-margin-top:70px}.composer h2{font-size:16px;margin:0;color:#b3ebf8}.field{display:grid;gap:5px;min-width:0}.field>span,.new-folder>label{font-size:12px;font-weight:700;color:#bad3e0}.compose-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}.compose-row>.field{min-width:0}.compose-row>button{white-space:nowrap;background:#20516a}.new-folder{border-top:1px solid #294b60;padding-top:10px;display:grid;gap:6px}.new-folder>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}.new-folder button{white-space:nowrap}.hint{margin:0;color:#9db8c9;font-size:11px;line-height:1.5}.search{margin:0 0 10px}.totals{font-size:12px;color:#a7c2d1;margin:0 0 8px}.groups{display:grid;gap:8px}.group{border:1px solid #315166;border-radius:11px;background:#0b1924;overflow:hidden}.summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 8px;min-height:52px}.switch{display:grid;place-items:center;min-width:44px;min-height:44px}.group-toggle{display:flex;align-items:center;gap:8px;min-width:0;text-align:left;border:0;background:transparent;padding:5px 0}.gtitle{min-width:0;flex:1;font-size:14px;overflow-wrap:break-word;line-height:1.4}.chev{flex:0 0 auto;color:#91cce1}.count{font-size:11px;color:#9cb2c0;white-space:nowrap}.body{display:none;border-top:1px solid #244455;padding:10px}.group.open .body{display:grid;gap:9px}.manage{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}.del{border-color:#7e4350;background:#301820;color:#ffd9df;font-size:12px;white-space:nowrap}.members{display:grid;gap:6px}.member{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;border:1px solid #264558;border-radius:9px;padding:7px;background:#081721}.who{display:grid;grid-template-columns:32px minmax(0,1fr);gap:7px;align-items:center;min-width:0}.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#142734;border:1px solid #35586f}.name{font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:break-word}.id{font-size:11px;color:#9eb3c1;overflow-wrap:anywhere}.empty{padding:12px;text-align:center;color:#a8bfcd;font-size:12px;line-height:1.6}.more{width:100%;font-size:12px}.folder-add{width:100%;font-size:12px}.folder-state{font-size:11px;color:#b9cad4;margin:0;line-height:1.5}@media(max-width:380px){.wrap{padding-left:8px;padding-right:8px}.composer,.body{padding:10px}.back{font-size:12px;padding-left:7px;padding-right:7px}.jump{padding-left:9px;padding-right:9px}}
+.folder-browser{display:grid;gap:7px;margin-bottom:9px}.folder-nav{display:grid;grid-template-columns:minmax(44px,1fr) auto minmax(44px,1fr);gap:8px;align-items:center}.folder-nav button{min-width:44px;min-height:44px;padding:7px 10px;font-size:12px}.folder-nav span{min-width:68px;text-align:center;font-variant-numeric:tabular-nums;font-size:12px;color:#bad3e0;white-space:nowrap}
 </style>
 </head>
 <body>
 <div class="wrap">
  <div class="top"><button class="back" id="back" type="button">← noteの🔔通知へ戻る</button><button class="jump" id="jumpAdd" type="button">＋追加</button></div>
  <h1>通知フィルター設定</h1>
- <p class="sub">登録した人が先頭のマガジン追加・参加通知を隠します。スキや返信は残します。設定は自動保存です。</p>
+ <p class="sub">登録した人の「マガジンへ新しい記事を追加した」お知らせだけを隠します。話題・記事内紹介・購入・スキ・返信などは残します。設定は自動保存です。</p>
  <div class="status" id="status" role="status" aria-live="polite">設定を読み込んでいます…</div><button id="retrySave" type="button" hidden>保存を再試行</button>
  <section class="composer" id="quickAdd" aria-labelledby="addHeading">
   <h2 id="addHeading">記事・クリエイターから追加</h2>
@@ -23,7 +24,12 @@
   <div class="new-folder"><label for="newFolderName">新しいフォルダ</label><div><input id="newFolderName" type="text" placeholder="フォルダ名" autocomplete="off" disabled><button id="addGroup" type="button" disabled>作成</button></div></div>
  </section>
  <label class="field search"><span>フォルダ・登録人物を探す</span><input id="search" type="search" placeholder="フォルダ名・名前・ID" autocomplete="off" disabled></label>
- <p class="totals" id="totals"></p><div class="groups" id="groups"></div>
+ <p class="totals" id="totals"></p>
+ <section class="folder-browser" aria-label="フォルダ管理">
+  <label class="field"><span>管理するフォルダ</span><select id="folderView" disabled></select></label>
+  <div class="folder-nav"><button id="prevFolder" type="button" aria-label="前のフォルダ" disabled>← 前へ</button><span id="folderPosition" aria-live="polite">0 / 0</span><button id="nextFolder" type="button" aria-label="次のフォルダ" disabled>次へ →</button></div>
+ </section>
+ <div class="groups" id="groups"></div>
 </div>
 <script>
 (function(){
@@ -31,9 +37,10 @@
 const NOTE='https://note.com/?mumei_filter_return=bell';
 const PAGE='mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const q=new URLSearchParams(location.search),account=(q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
-const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status'),quickInput=document.getElementById('quickInput'),folderTarget=document.getElementById('folderTarget'),addCreatorButton=document.getElementById('addCreator'),newFolderName=document.getElementById('newFolderName'),addGroupButton=document.getElementById('addGroup'),searchInput=document.getElementById('search'),retrySaveButton=document.getElementById('retrySave');
+const groupsEl=document.getElementById('groups'),statusEl=document.getElementById('status'),quickInput=document.getElementById('quickInput'),folderTarget=document.getElementById('folderTarget'),folderView=document.getElementById('folderView'),prevFolder=document.getElementById('prevFolder'),nextFolder=document.getElementById('nextFolder'),folderPosition=document.getElementById('folderPosition'),addCreatorButton=document.getElementById('addCreator'),newFolderName=document.getElementById('newFolderName'),addGroupButton=document.getElementById('addGroup'),searchInput=document.getElementById('search'),retrySaveButton=document.getElementById('retrySave');
 let groups=[],profiles=Object.create(null),loaded=false,saveTimer=0,saveDirty=false,saveInFlight=null,saveSequence=0,legacyAckUncertain=false,statusTimer=0,returning=false,returnRequested=false,returnTimer=0,selectedGroup=null,pendingLookup=null,requestSequence=0,canResolveArticles=false;
 const opened=new Set(),limits=new WeakMap(),requestedProfiles=new Set(),PAGE_SIZE=50;
+let matchingGroups=[];
 const reserved=new Set(['n','m','notifications','settings','sitesettings','messages','search','login','signup','home','explore','membership','magazine','api','intent']);
 function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
 function creatorId(v){const id=clean(v).replace(/^@/,'').toLowerCase();return /^[a-z0-9_-]+$/.test(id)&&!reserved.has(id)?id:''}
@@ -68,10 +75,11 @@ function parseInput(value){
  if(p.length===2&&p[0]==='n'&&/^n[a-f0-9]{12}$/i.test(p[1]))return{key:p[1].toLowerCase()};
  throw new Error('noteの記事URL・クリエイターURL・@IDを入力してください')
 }
-function setComposeBusy(busy){quickInput.disabled=busy||!loaded;folderTarget.disabled=busy||!loaded||!groups.length;addCreatorButton.disabled=busy||!loaded||!groups.length;newFolderName.disabled=busy||!loaded;addGroupButton.disabled=busy||!loaded;searchInput.disabled=!loaded}
+function setComposeBusy(busy){quickInput.disabled=busy||!loaded;folderTarget.disabled=busy||!loaded||!groups.length;addCreatorButton.disabled=busy||!loaded||!groups.length;newFolderName.disabled=busy||!loaded;addGroupButton.disabled=busy||!loaded;searchInput.disabled=busy||!loaded;folderView.disabled=busy||!loaded||!matchingGroups.length;const index=matchingGroups.indexOf(selectedGroup);prevFolder.disabled=busy||index<=0;nextFolder.disabled=busy||index<0||index>=matchingGroups.length-1}
 function syncTargets(){
  if(!groups.includes(selectedGroup))selectedGroup=groups[0]||null;
- folderTarget.replaceChildren();groups.forEach((g,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent=g.name+'（'+g.ids.length+'人'+(g.enabled?'':'・オフ')+'）';option.selected=g===selectedGroup;folderTarget.append(option)});setComposeBusy(Boolean(pendingLookup))
+ folderTarget.replaceChildren();folderView.replaceChildren();groups.forEach((g,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent=g.name+'（'+g.ids.length+'人'+(g.enabled?'':'・オフ')+'）';option.selected=g===selectedGroup;folderTarget.append(option);if(matchingGroups.includes(g))folderView.append(option.cloneNode(true))});
+ const index=matchingGroups.indexOf(selectedGroup);folderView.value=index<0?'':String(groups.indexOf(selectedGroup));folderPosition.textContent=(index<0?0:index+1)+' / '+matchingGroups.length;setComposeBusy(Boolean(pendingLookup))
 }
 function requestProfiles(ids){const list=[...new Set((ids||[]).filter(id=>id&&!requestedProfiles.has(id)))];if(!list.length)return;list.forEach(id=>requestedProfiles.add(id));post('profiles',{ids:list})}
 function mergeProfiles(items){for(const p of items||[]){const id=creatorId(p?.id);if(!id)continue;profiles[id]={nickname:clean(p.nickname||p.name||id),profileImageUrl:clean(p.profileImageUrl||p.image||'')}}}
@@ -80,34 +88,37 @@ function memberNode(id,g){
  const info=profiles[id]||{},row=document.createElement('div');row.className='member';row.dataset.profileId=id;
  const who=document.createElement('div');who.className='who';const img=document.createElement('img');img.className='avatar';img.alt='';if(info.profileImageUrl)img.src=info.profileImageUrl;else img.style.visibility='hidden';
  const txt=document.createElement('div'),name=document.createElement('div'),uid=document.createElement('div');name.className='name';name.textContent=info.nickname||('@'+id);uid.className='id';uid.textContent='@'+id;txt.append(name,uid);who.append(img,txt);
- const del=document.createElement('button');del.type='button';del.className='del';del.textContent='外す';del.setAttribute('aria-label','@'+id+' を '+g.name+' から外す');del.onclick=()=>{const i=g.ids.indexOf(id);if(i<0)return;g.ids.splice(i,1);render();syncTargets();queueSave()};row.append(who,del);return row
+ const del=document.createElement('button');del.type='button';del.className='del';del.textContent='外す';del.setAttribute('aria-label','@'+id+' を '+g.name+' から外す');del.onclick=()=>{const i=g.ids.indexOf(id);if(i<0)return;g.ids.splice(i,1);render();queueSave()};row.append(who,del);return row
 }
-function chooseFolder(g){selectedGroup=g;syncTargets();document.getElementById('quickAdd').scrollIntoView?.({block:'start'});quickInput.focus({preventScroll:true})}
+function chooseFolder(g){selectedGroup=g;searchInput.value='';render();document.getElementById('quickAdd').scrollIntoView?.({block:'start'});quickInput.focus({preventScroll:true})}
 function render(){
- const term=clean(searchInput.value).toLowerCase();groupsEl.replaceChildren();document.getElementById('totals').textContent=groups.length+'フォルダ・'+new Set(groups.flatMap(g=>g.ids)).size+'人';let shown=0;
- groups.forEach((g,gi)=>{
-  const folderMatch=!term||g.name.toLowerCase().includes(term),matches=folderMatch?g.ids:g.ids.filter(id=>id.includes(term)||String(profiles[id]?.nickname||'').toLowerCase().includes(term));if(term&&!folderMatch&&!matches.length)return;shown++;
+ const term=clean(searchInput.value).toLowerCase(),matched=new Map();groupsEl.replaceChildren();document.getElementById('totals').textContent=groups.length+'フォルダ・'+new Set(groups.flatMap(g=>g.ids)).size+'人';
+ groups.forEach(g=>{const folderMatch=!term||g.name.toLowerCase().includes(term),ids=folderMatch?g.ids:g.ids.filter(id=>id.includes(term)||String(profiles[id]?.nickname||'').toLowerCase().includes(term));if(folderMatch||ids.length)matched.set(g,ids)});matchingGroups=[...matched.keys()];
+ if(!groups.includes(selectedGroup))selectedGroup=groups[0]||null;if(matchingGroups.length&&!matched.has(selectedGroup))selectedGroup=matchingGroups[0];
+ const g=matchingGroups.includes(selectedGroup)?selectedGroup:null;syncTargets();
+ if(g){
+  const gi=groups.indexOf(g),matches=matched.get(g);
   const card=document.createElement('section');card.className='group'+(opened.has(g)?' open':'');
   const summary=document.createElement('div');summary.className='summary';const on=document.createElement('label');on.className='switch';const check=document.createElement('input');check.type='checkbox';check.checked=g.enabled;check.setAttribute('aria-label',g.name+' のフィルター');check.onchange=()=>{g.enabled=check.checked;syncTargets();queueSave()};on.append(check);
   const toggle=document.createElement('button');toggle.type='button';toggle.className='group-toggle';toggle.setAttribute('aria-expanded',String(opened.has(g)));toggle.setAttribute('aria-controls','folder-body-'+gi);const title=document.createElement('span');title.className='gtitle';title.textContent=g.name;const chev=document.createElement('span');chev.className='chev';chev.textContent=opened.has(g)?'▲':'▼';toggle.append(title,chev);toggle.onclick=()=>{opened.has(g)?opened.delete(g):opened.add(g);render()};
   const count=document.createElement('span');count.className='count';count.textContent=matches.length===g.ids.length?g.ids.length+'人':matches.length+' / '+g.ids.length+'人';summary.append(on,toggle,count);card.append(summary);
   const body=document.createElement('div');body.className='body';body.id='folder-body-'+gi;
   if(opened.has(g)){
-   const manage=document.createElement('div');manage.className='manage';const name=document.createElement('input');name.type='text';name.value=g.name;name.setAttribute('aria-label',g.name+' のフォルダ名');name.onchange=()=>{g.name=clean(name.value)||('グループ '+(gi+1));render();syncTargets();queueSave()};
-   const remove=document.createElement('button');remove.type='button';remove.className='del';remove.textContent='フォルダ削除';remove.onclick=()=>{const index=groups.indexOf(g);if(index<0)return;groups.splice(index,1);opened.delete(g);render();syncTargets();queueSave()};manage.append(name,remove);
+   const manage=document.createElement('div');manage.className='manage';const name=document.createElement('input');name.type='text';name.value=g.name;name.setAttribute('aria-label',g.name+' のフォルダ名');name.onchange=()=>{g.name=clean(name.value)||('グループ '+(gi+1));render();queueSave()};
+   const remove=document.createElement('button');remove.type='button';remove.className='del';remove.textContent='フォルダ削除';remove.onclick=()=>{const index=groups.indexOf(g);if(index<0)return;groups.splice(index,1);opened.delete(g);selectedGroup=groups[Math.min(index,groups.length-1)]||null;render();queueSave()};manage.append(name,remove);
    const add=document.createElement('button');add.type='button';add.className='folder-add';add.textContent='このフォルダに追加';add.onclick=()=>chooseFolder(g);body.append(manage,add);if(!g.enabled){const state=document.createElement('p');state.className='folder-state';state.textContent='このフォルダはオフです。登録人物の通知を隠すときはフォルダのスイッチをオンにします。';body.append(state)}
    const list=document.createElement('div');list.className='members';const limit=limits.get(g)||PAGE_SIZE,visible=matches.slice(0,limit);visible.forEach(id=>list.append(memberNode(id,g)));body.append(list);requestProfiles(visible);
    if(!matches.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=term?'一致する登録人物はいません':'まだ登録されていません';body.append(empty)}
    if(matches.length>visible.length){const more=document.createElement('button');more.type='button';more.className='more';more.textContent='さらに'+Math.min(PAGE_SIZE,matches.length-visible.length)+'人を表示（'+visible.length+' / '+matches.length+'人）';more.onclick=()=>{limits.set(g,limit+PAGE_SIZE);render()};body.append(more)}
   }
   card.append(body);groupsEl.append(card)
- });
- if(!shown){const empty=document.createElement('div');empty.className='empty';empty.textContent=groups.length?'一致するフォルダ・登録人物はいません':'フォルダを作成して、記事URLから人物を追加できます';groupsEl.append(empty)}
+ }else{const empty=document.createElement('div');empty.className='empty';empty.textContent=groups.length?'一致するフォルダ・登録人物はいません':'フォルダを作成して、記事URLから人物を追加できます';groupsEl.append(empty)}
 }
 function addToFolder(id,g,raw){
  if(!groups.includes(g)){setStatus('追加先フォルダが削除されました。フォルダを選び直してください','err',0);return}
- if(g.ids.includes(id)){setStatus('@'+id+' は '+g.name+' に登録済みです','ok');quickInput.value='';return}
- g.ids.push(id);opened.add(g);limits.set(g,PAGE_SIZE);selectedGroup=g;quickInput.value='';render();syncTargets();queueSave();requestProfiles([id]);setStatus('@'+id+' を '+g.name+' に追加しました・保存中…'+(g.enabled?'':'（このフォルダはオフです）'),'ok',0)
+ opened.add(g);limits.set(g,PAGE_SIZE);selectedGroup=g;searchInput.value='';quickInput.value='';
+ if(g.ids.includes(id)){render();setStatus('@'+id+' は '+g.name+' に登録済みです','ok');return}
+ g.ids.push(id);render();queueSave();requestProfiles([id]);setStatus('@'+id+' を '+g.name+' に追加しました・保存中…'+(g.enabled?'':'（このフォルダはオフです）'),'ok',0)
 }
 function finishLookup(d){
  const pending=pendingLookup;if(!pending||d.requestId!==pending.requestId||d.account!==account)return;
@@ -124,13 +135,15 @@ function runAdd(){
  if(!canResolveArticles){setStatus('この形式の記事URLを読み取るには本人通知ツールを更新してください。投稿者入りの記事URLか@IDでも追加できます','err',0);return}
  const requestId='article-'+Date.now()+'-'+(++requestSequence);pendingLookup={requestId,raw,group:g,timer:setTimeout(()=>{if(pendingLookup?.requestId!==requestId)return;pendingLookup=null;setComposeBusy(false);setStatus('記事の読み取りを確認できません。本人通知ツールを確認して再試行してください','err',0)},22000)};setComposeBusy(true);setStatus('記事の投稿者を確認中…');post('resolve-creator',{requestId,value:raw})
 }
-folderTarget.onchange=()=>{selectedGroup=groups[Number(folderTarget.value)]||null};addCreatorButton.onclick=runAdd;quickInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdd()}};
-function createFolder(){if(!loaded||pendingLookup)return;const name=clean(newFolderName.value);if(!name){setStatus('新しいフォルダ名を入力してください','err',0);newFolderName.focus();return}const g={name,enabled:true,ids:[]};groups.push(g);selectedGroup=g;opened.add(g);newFolderName.value='';render();syncTargets();queueSave();quickInput.focus({preventScroll:true})}
+folderTarget.onchange=()=>{selectedGroup=groups[Number(folderTarget.value)]||null;searchInput.value='';render()};folderView.onchange=()=>{selectedGroup=groups[Number(folderView.value)]||null;render()};
+function moveFolder(step){const g=matchingGroups[matchingGroups.indexOf(selectedGroup)+step];if(g){selectedGroup=g;render()}}
+prevFolder.onclick=()=>moveFolder(-1);nextFolder.onclick=()=>moveFolder(1);addCreatorButton.onclick=runAdd;quickInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdd()}};
+function createFolder(){if(!loaded||pendingLookup)return;const name=clean(newFolderName.value);if(!name){setStatus('新しいフォルダ名を入力してください','err',0);newFolderName.focus();return}const g={name,enabled:true,ids:[]};groups.push(g);selectedGroup=g;opened.add(g);newFolderName.value='';searchInput.value='';render();queueSave();quickInput.focus({preventScroll:true})}
 addGroupButton.onclick=createFolder;newFolderName.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();createFolder()}};searchInput.oninput=render;document.getElementById('jumpAdd').onclick=()=>{document.getElementById('quickAdd').scrollIntoView?.({block:'start'});if(loaded)quickInput.focus({preventScroll:true})};
 addEventListener('message',e=>{
  if(!/^[a-z0-9_-]+$/.test(account)||e.origin!==location.origin||e.data?.source!==BRIDGE)return;const d=e.data;if(d.account!==undefined&&d.account!==account)return;
  if(d.type==='state'){
-  if(loaded)return;loaded=true;groups=norm(d.groups);if(!groups.length)groups=[{name:'通知フィルター',enabled:true,ids:[]}];mergeProfiles(d.profiles);canResolveArticles=d.canResolveArticles===true;selectedGroup=groups[0];render();syncTargets();setStatus('@'+account+' の設定を読み込みました','ok')
+  if(loaded)return;loaded=true;groups=norm(d.groups);if(!groups.length)groups=[{name:'通知フィルター',enabled:true,ids:[]}];mergeProfiles(d.profiles);canResolveArticles=d.canResolveArticles===true;selectedGroup=groups[0];render();setStatus('@'+account+' の設定を読み込みました','ok')
  }else if(d.type==='saved')acknowledgeSave(d);
  else if(d.type==='return-ready'){if(returning&&!saveDirty&&!saveInFlight){clearTimeout(returnTimer);location.replace(NOTE)}}
  else if(d.type==='profiles'){mergeProfiles(d.profiles);patchProfiles()}

@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.23.4",
-  "notificationVersion": "3.6.44",
+  "notificationVersion": "3.6.45",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-26T12:46:19+09:00",
+  "releasedAt": "2026-10-26T13:54:25+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知のフィルター中、過去ページの追加で確認済みの先頭取得を繰り返さないよう改善。記事URLからの人物追加、フォルダ選択・作成・検索をまとめ、登録済みの設定と保存履歴を保持。",
+  "note": "通知フィルターをマガジンへの新しい記事追加のお知らせだけに限定し、話題・記事内紹介・購入・参加などを保持。フォルダは選択した1つだけ表示し、切替・検索・記事URLからの追加と既存設定を維持。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }
