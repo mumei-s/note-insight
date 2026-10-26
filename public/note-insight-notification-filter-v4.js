@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.9';
+const VERSION='4.2.10';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -22,22 +22,36 @@ const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
 const modern=()=>Boolean(globalThis.GM);
 async function put(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
-let profileJob=null;const profileAttempt=new Map(),profileQueue=new Map(),profileKey=(id,who)=>key(PROFILE,id)+'|'+who;
+let profileJob=null;const profileAttempt=new Map(),profileQueue=new Map(),profilePlans=new Map(),profileKey=(id,who)=>key(PROFILE,id)+'|'+who;
 function canHydrate(id,who){const attempt=profileAttempt.get(profileKey(id,who));return!attempt||attempt.count<2&&attempt.manualReady&&!attempt.pending}
 function hydrateProfiles(id,ids,profiles){
+ profilePlans.set(id,(profilePlans.get(id)||0)+1);
+ const wanted=new Set(ids);for(const[k,item]of profileQueue)if(item.id===id&&!wanted.has(item.who))profileQueue.delete(k);
  for(const who of ids){const resolved=profiles.some(p=>p.id===who&&p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==who);if(!resolved&&canHydrate(id,who))profileQueue.set(profileKey(id,who),{id,who})}
  flushProfiles();
+}
+async function fetchProfile(who){
+ const controller=new AbortController();let timer;
+ try{return await Promise.race([(async()=>{const r=await fetch('/api/v2/creators/'+encodeURIComponent(who),{credentials:'include',cache:'no-store',signal:controller.signal});if(!r.ok)return null;const j=await r.json(),d=j.data||j,name=clean(d.nickname||d.name);return name?{id:who,name,image:d.profileImageUrl||d.profile_image_url||''}:null})(),new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(null)},20000)})])}finally{clearTimeout(timer)}
 }
 function flushProfiles(){
  if(profileJob||!profileQueue.size)return;
  profileJob=(async()=>{
   while(profileQueue.size){
+   if(!featureOn()||document.visibilityState==='hidden'||!root||!shown(root)){profileQueue.clear();break}
    const id=profileQueue.values().next().value.id,batch=[...profileQueue.values()].filter(item=>item.id===id&&canHydrate(id,item.who)).slice(0,4).map(item=>item.who);if(!batch.length){for(const[k,item]of profileQueue)if(item.id===id)profileQueue.delete(k);continue}for(const who of batch){const requestKey=profileKey(id,who);profileQueue.delete(requestKey);const previous=profileAttempt.get(requestKey);profileAttempt.set(requestKey,{count:(previous?.count||0)+1,manualReady:false,pending:true})}
-   try{const saved=await get(key(PROFILE,id),[]),next=new Map((Array.isArray(saved)?saved:[]).map(p=>[String(p.id||'').toLowerCase(),p]));
-    await Promise.all(batch.map(async who=>{try{const r=await fetch('/api/v2/creators/'+encodeURIComponent(who),{credentials:'include',cache:'no-store'});if(!r.ok)return;const j=await r.json(),d=j.data||j,name=clean(d.nickname||d.name);if(name)next.set(who,{id:who,name,image:d.profileImageUrl||d.profile_image_url||''})}catch{}}));
-    await put(key(PROFILE,id),[...next.values()]);
+   try{let writes=Promise.resolve();
+    await Promise.all(batch.map(async who=>{try{const profile=await fetchProfile(who);if(!profile)return;
+     // Apply a ready name without waiting for an unrelated slow response. Merge
+     // into fresh account-owned storage serially, so concurrent replies do not
+     // overwrite each other or profiles saved by the settings page meanwhile.
+     writes=writes.catch(()=>{}).then(async()=>{const saved=await get(key(PROFILE,id),[]),next=new Map((Array.isArray(saved)?saved:[]).map(p=>[String(p.id||'').toLowerCase(),p]));next.set(who,profile);await put(key(PROFILE,id),[...next.values()]);if(accountId===id){invalidate();schedule(0,true)}});await writes;
+    }catch{}}));
    }finally{for(const who of batch)profileAttempt.get(profileKey(id,who)).pending=false}
-   cache=null;cacheAt=0;if(accountId===id)schedule(0,true)
+   // GM reads can be genuinely asynchronous. Wait for classification/pruning,
+   // not just one timer tick, before starting another batch. If that pass was
+   // superseded, only a later verified pass may enqueue work again.
+   if(accountId===id&&profileQueue.size){const plan=profilePlans.get(id);if(!await refresh(true)&&profilePlans.get(id)===plan)for(const[k,item]of profileQueue)if(item.id===id)profileQueue.delete(k)}
   }
  })().catch(()=>{}).finally(()=>{profileJob=null;if(profileQueue.size)flushProfiles()})
 }
@@ -108,13 +122,22 @@ function magazineAction(t){
  }
  return ended&&!quotes.length&&/^.+に(?:新しい)?記事を(?:\d+本)?追加しました$/u.test(action);
 }
-async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;if(enabled)hydrateProfiles(a.id,ids,profiles);cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
+async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
+function startsText(el,node){const before=document.createRange();before.selectNodeContents(el);before.setEndBefore(node);return!clean(before.toString())}
 function leadId(el,lead,st){const links=creatorLinks(el);
  // Multiple named actors are one native notice. Only a creator link at the
  // start of its text proves the leading identity; preview links do not.
- const startsText=node=>{const before=document.createRange();before.selectNodeContents(el);before.setEndBefore(node);return!clean(before.toString())},summary=clean(el.textContent);for(const link of links){if(!link.txt||!startsText(link.node))continue;if(nameMatch(lead,link.txt)||summary.startsWith(link.txt)&&/^さん\s*(?:、|，|,|と)/u.test(clean(summary.slice(link.txt.length))))return link.id}
- const avatars=[...el.querySelectorAll('a[href]')].filter(a=>!clean(a.textContent)&&a.querySelector('img')&&startsText(a)),avatarIds=avatars.map(a=>creatorIdFromUrl(a.getAttribute('href')));if(avatarIds.length&&avatarIds.every(Boolean)&&new Set(avatarIds).size===1)return avatarIds[0];
+ const summary=clean(el.textContent);for(const link of links){if(!link.txt||!startsText(el,link.node))continue;if(nameMatch(lead,link.txt)||summary.startsWith(link.txt)&&/^さん\s*(?:、|，|,|と)/u.test(clean(summary.slice(link.txt.length))))return link.id}
+ const avatars=[...el.querySelectorAll('a[href]')].filter(a=>!clean(a.textContent)&&a.querySelector('img')&&startsText(el,a)),avatarIds=avatars.map(a=>creatorIdFromUrl(a.getAttribute('href')));if(avatarIds.length&&avatarIds.every(Boolean)&&new Set(avatarIds).size===1)return avatarIds[0];
  const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));return prof?.id||''}
+function profileIdsForRows(st,list){
+ const unresolved=list.filter(el=>classificationCache.get(el)?.needsProfile);if(!st.enabled||!unresolved.length)return[];
+ const resolved=new Set(st.profiles.filter(p=>p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==p.id).map(p=>p.id)),missing=[...st.ids].filter(id=>!resolved.has(id)),missingSet=new Set(missing),wanted=new Set();
+ // Grouped avatars are hints for lookup priority, never proof that their
+ // owner is the leading actor. Keep name-only fallback for incomplete markup.
+ for(const el of unresolved)for(const link of creatorLinks(el))if(!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&missingSet.has(link.id))wanted.add(link.id);
+ return[...wanted,...missing.filter(id=>!wanted.has(id))];
+}
 function rememberOwnAttributes(el){ownAttributeValues.set(el,{style:el.getAttribute('style'),'aria-hidden':el.getAttribute('aria-hidden')})}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE);rememberOwnAttributes(el)}
 function pageEdge(el,on){if(!el)return;if(on){if(!edgeState.has(el)){edgeState.set(el,{aria:el.getAttribute('aria-hidden'),inert:el.hasAttribute('inert'),display:el.style.getPropertyValue('display'),priority:el.style.getPropertyPriority('display')});el.style.setProperty('display',nativeDisplay.get(el)||(el.tagName==='LI'?'list-item':'block'),'important')}if(el.getAttribute(EDGE)!=='1')el.setAttribute(EDGE,'1');if(el.getAttribute('aria-hidden')!=='true')el.setAttribute('aria-hidden','true');if(!el.hasAttribute('inert'))el.setAttribute('inert','')}else{const old=edgeState.get(el);if(el.hasAttribute(EDGE))el.removeAttribute(EDGE);if(old){old.aria===null?el.removeAttribute('aria-hidden'):el.setAttribute('aria-hidden',old.aria);if(!old.inert)el.removeAttribute('inert');old.display?el.style.setProperty('display',old.display,old.priority):el.style.removeProperty('display');edgeState.delete(el)}}rememberOwnAttributes(el)}
@@ -195,9 +218,9 @@ function classificationState(st){return JSON.stringify([revision,st.enabled,[...
 function classifyRow(el,st,fingerprint){
  const text=clean(el.textContent),markup=el.innerHTML,href=el.getAttribute('href'),cached=classificationCache.get(el);
  if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.fingerprint===fingerprint)return cached.hide;
- const lead=leadName(text);let hide=false;
- if(st.enabled&&st.ids.size&&lead&&magazineNoise(magazineActionText(el))){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}
- classificationCache.set(el,{text,markup,href,fingerprint,hide});return hide;
+ const lead=leadName(text);let hide=false,needsProfile=false;
+ if(st.enabled&&st.ids.size&&lead&&magazineNoise(magazineActionText(el))){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id));needsProfile=!id}
+ classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile});return hide;
 }
 function viewportAnchor(surface,list){
  if(!surface?.isConnected||continuationAttempt)return null;
@@ -211,14 +234,14 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list)}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);hydrateProfiles(accountId,profileIdsForRows(st,list),st.profiles);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='childList'){const nodes=[...m.addedNodes,...m.removedNodes];if(nodes.length&&nodes.every(node=>owned(node.nodeType===1?node:node.parentElement)))return false}if(m.type==='attributes'){const own=ownAttributeValues.get(m.target);if(own&&Object.hasOwn(own,m.attributeName)&&own[m.attributeName]===m.target.getAttribute(m.attributeName))return false;if(m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN)}return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 // Native touch and wheel gestures must reach note's actual scroll ancestor.
 // A panel can be nested inside that ancestor or use the document viewport.
 function discover(){retries=0;schedule(40,true)}
