@@ -208,7 +208,7 @@ test('filter and backend restriction fixes stay isolated',()=>{
   assert.match(controls,/knownAccount\|\|await account\(\)/);
   assert.match(controls,/searchParams\.set\('notificationAccount',a\.id\)/);
   assert.match(filter,/VERSION='4\.2\.\d+'/);
-  assert.match(filter,/profileQueue=new Set\(\)/);
+  assert.match(filter,/profileQueue=new Map\(\)/);
   assert.match(filter,/while\(profileQueue\.size\)/);
   assert.match(filter,/flatMap\(g=>Array\.isArray\(g\?\.ids\)\?g\.ids:\[\]\)/);
   assert.match(filter,/data-mumei-filter-scroll-guard/);
