@@ -29,7 +29,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=426
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=120
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-status-bridge-v1.js?v=110
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-settings-bridge-v1.js?v=113
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-settings-bridge-v1.js?v=114
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-account-pair-v1.js?v=101
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-outgoing-comment-capture-v1.js?v=100
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-outgoing-comment-reader-v1.js?v=101
