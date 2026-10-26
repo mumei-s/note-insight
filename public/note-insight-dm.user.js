@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT DM同期
 // @namespace    https://github.com/mumei-s/note-insight/dm
-// @version      1.4.12
+// @version      1.4.13
 // @description  INSIGHT DM同期。表示更新による再読込・点滅を抑え、通常のDM画面と入力欄を保ちながら本文を同期します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -28,10 +28,11 @@
 
 (function(){
 'use strict';
-const VERSION='1.4.12',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
+const VERSION='1.4.13',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(GMKEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(GMKEY,String(v||''))}catch{}}
-function publish(){try{localStorage.setItem(KEY,VERSION);window.dispatchEvent(new Event('mumei-dm-version-changed'))}catch{}}
+function publishLive(){if(location.origin!=='https://mumei-s.github.io'||!location.pathname.startsWith('/note-insight/'))return;if(!document.documentElement){document.addEventListener('DOMContentLoaded',publishLive,{once:true});return}const root=document.documentElement;if(root.getAttribute('data-mumei-dm-live-version')!==VERSION)root.setAttribute('data-mumei-dm-live-version',VERSION);window.dispatchEvent(new Event('mumei-insight-tool-ready'))}
+function publish(){try{localStorage.setItem(KEY,VERSION);window.dispatchEvent(new Event('mumei-dm-version-changed'))}catch{}publishLive()}
 void Promise.resolve(setActive(VERSION)).then(publish);publish();
 if(location.origin==='https://mumei-s.github.io')window.addEventListener('message',event=>{
  if(event.source!==window||event.origin!==location.origin||event.data?.source!=='mumei-dm-status-ui'||event.data?.type!=='read')return;

@@ -5,6 +5,7 @@ import { CURRENT_DM_VERSION, fetchInsightRelease, versionDiffers } from "./insig
 import { fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import "./member-insight-dm.css";
+import { captureInsightReturn } from "./insight-update-return";
 
 const API="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-feed";
 const PAIR="https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-import-token";
@@ -225,7 +226,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   const messageElements=useMemo(()=>visibleMessages.map(message=><article key={message.message_key} className={"midm-message "+(message.direction||"unknown")}><small>{message.direction==="outbound"?"あなた":message.sender_name||selected?.peer_name||"相手"} · {fmt(message.sent_at||message.captured_at)}</small>{message.body?<p>{message.body}</p>:null}{message.attachment_url?<a href={message.attachment_url} target="_blank" rel="noreferrer">{message.attachment_name||"添付ファイル"} ↗</a>:null}</article>),[visibleMessages,selected?.peer_name]);
   const serverErrors=(summary?.readerStatus||[]).filter((x:Row)=>x.error),lastBodySave=(summary?.readerStatus||[]).find((x:Row)=>Number(x.saved)>0);
   const lastMessageSavedAt=Number(summary?.messages)>0&&typeof summary?.lastMessageSavedAt==="string"&&!Number.isNaN(Date.parse(summary.lastMessageSavedAt))?summary.lastMessageSavedAt:null;
-  const installHref="./dm-browser-install.html?return="+encodeURIComponent(location.href);
+  const installHref="./dm-browser-install.html?return="+encodeURIComponent(captureInsightReturn({mode:"normal",tab:"dm",account:accountNoteId}))+(accountNoteId?"&account="+encodeURIComponent(accountNoteId):"");
   const dmMissing=Boolean(releaseChecked&&latestDmVersion&&!toolVersion),dmUpdateAvailable=Boolean(latestDmVersion&&toolVersion&&versionDiffers(toolVersion,latestDmVersion));
   if(accountChanged)return <section id="midm" className="midm"><h2>DM</h2><p className="midm-empty">DM履歴を読み込み中…</p></section>;
   return <section id="midm" className="midm" onClickCapture={()=>{lateRestore.current.allowed=false}} onChangeCapture={()=>{lateRestore.current.allowed=false}}>
