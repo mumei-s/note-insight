@@ -11,7 +11,8 @@ let lastRun=0;
 let initialEntryHandled=false;
 let navigationBound=false;
 let reclassifyBusy=false;
-const explicitNotificationEntry=(()=>{try{const q=new URLSearchParams(window.location.search).get("insightMode");const at=Number(sessionStorage.getItem(ENTRY_AT_KEY)||0),fresh=at>0&&Date.now()-at<20_000;return q==="notifications"||fresh}catch{return false}})();
+function hasExplicitInsightEntry(){try{const q=new URLSearchParams(window.location.search),modes=new Set(["normal","comments","favorites","social","notifications","analysis","dm"]),tabs=new Set(["likes","supporters","comments","commentRanking","magazines","favorites","social","notifications","dm","articles"]),state=window.history.state||{};const at=Number(sessionStorage.getItem(ENTRY_AT_KEY)||0),fresh=at>0&&Date.now()-at<20_000;return modes.has(q.get("insightMode")||"")||tabs.has(q.get("insightTab")||"")||tabs.has(state.insightPendingTab)||modes.has(state.insightMode)&&tabs.has(state.insightTab)||fresh}catch{return false}}
+const explicitInsightEntry=hasExplicitInsightEntry();
 const KAOMOJI:Record<string,string>={like:"(♡˙︶˙♡)",comment_like:"(๑♡ᴗ♡๑)",comment:"(｡･ω･)ﾉﾞ",reply_self:"( •̀ᴗ•́ )و",reply_other:"( •̀ᴗ•́ )و",reply:"( •̀ᴗ•́ )و",follow:"(ง •̀_•́)ง",creator_article_posted:"(๑•̀ㅂ•́)و✧",magazine_follow:"( ´ ▽ ` )ﾉ",my_article_magazine_added:"(ﾉ◕ヮ◕)ﾉ",magazine_article_added:"(ﾉ◕ヮ◕)ﾉ",magazine_join:"(*´▽`*)",membership_board:"( ˶'ᵕ'˶ )",membership_board_reply:"( ˶'ᵕ'˶ )",membership_reaction_self:"(♡´▽`♡)",membership_reaction_joined:"(♡´▽`♡)",membership_reaction:"(♡´▽`♡)",membership_started:"٩(ˊᗜˋ*)و",membership_plan:"٩(ˊᗜˋ*)و",membership_join:"(*´꒳`*)",purchase:"(*ﾟ▽ﾟ*)",tip:"(人´∀`*)",buzz:"(๑•̀ㅁ•́๑)✧",rating:"٩(ˊᗜˋ*)و",points:"( •̀ᴗ•́ )و",quote:"(｡•̀ᴗ-)✧",other:"(・・?)"};
 
 function installStyle(){
@@ -45,7 +46,7 @@ function openNormalTop(){window.dispatchEvent(new CustomEvent("mumei-insight-ope
 function normalizeInitialEntry(){
   if(initialEntryHandled||!document.querySelector(".miv5"))return;
   initialEntryHandled=true;
-  if(explicitNotificationEntry)return;
+  if(explicitInsightEntry||hasExplicitInsightEntry())return;
   try{sessionStorage.removeItem(ENTRY_MODE_KEY);sessionStorage.removeItem(ENTRY_AT_KEY)}catch{}
   window.history.replaceState({...window.history.state,route:"dashboard",insightMode:"normal",insightScrollY:0},"",window.location.href);
   window.setTimeout(openNormalTop,0)
