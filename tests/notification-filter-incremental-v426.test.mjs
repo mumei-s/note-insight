@@ -102,3 +102,56 @@ test('フィルター自身のstyle抑止後でも、本物のnative表示変更
  f.list.style.display='none';await pause(100);f.list.style.display='block';
  await until(()=>f.measure.refreshes>before+1);assert.equal(f.hidden('old-0'),true);
 });
+
+for(const mode of ['modern','legacy'])test(`記事追加だけを隠し、マガジン参加・自分の記事追加・話題・紹介・埋込・購入・交流通知を保持する (${mode})`,async t=>{
+ const cases=[
+  ['grouped','さん他35名が共同マガジンに新しい記事を1,234本追加しました 1分前',true],
+  ['single','さんが「書きたい」気持ちをそ...に記事を追加し\nました 31分前',true],
+  ['no-count','さんが作品集に新しい記事を追加しました 7秒前',true],
+  ['join','さんが共同運営マガジンに仲間入りしました 1分前',false],
+  ['member-join','さんがメンバーシップに参加しました 1分前',false],
+  ['own-added','さんがあなたの記事をマガジン「作品集」に追加しました 1分前',false],
+  ['own-passive','さんのマガジンにあなたの記事が追加されました 1分前',false],
+  ['buzz','さんの記事であなたの記事が紹介されて話題になりました 1分前',false],
+  ['introduced','さんが記事内であなたの記事を紹介しました 1分前',false],
+  ['embedded','さんが自分の記事にあなたの記事を埋め込みました 1分前',false],
+  ['article-inside','さんが記事内にあなたの記事を追加しました 1分前',false],
+  ['purchase','さんがあなたの記事を購入しました 1分前',false],
+  ['like','さんがあなたの記事にスキしました 1分前',false],
+  ['reply','さんがあなたのコメントに返信しました 1分前',false],
+  ['comment','さんがあなたの記事にコメントしました 1分前',false],
+  ['follow','さんがあなたをフォローしました 1分前',false],
+  ['uncertain','さんが「作品集に新しい記事を1本追加しました 1分前',false],
+ ];
+ const initial=cases.map(([id,text])=>`<li class="native-notice" id="${id}"><a href="/actor">登録人物</a>${text}</li>`).join('');
+ const f=fixture(t,{mode,initial});await f.ready();
+ for(const [id,,hide] of cases)assert.equal(f.hidden(id),hide,id);
+ assert.equal(f.measure.requests,1);const nodes=cases.map(([id])=>f.w.document.getElementById(id));
+ f.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await f.w.__mumeiNotificationFilterV4.refresh(true);
+ for(let i=0;i<cases.length;i++){assert.equal(f.hidden(cases[i][0]),false);assert.equal(f.w.document.getElementById(cases[i][0]),nodes[i])}
+});
+
+test('記事タイトルに非表示対象の文言があっても、購入・スキ・返信・紹介・埋込を隠さない',async t=>{
+ const title='共同マガジンに新しい記事を1本追加しました',linked=`<a href="/someone/n/n123456789abc">${title}</a>`;
+ const cases=[
+  ['quoted-like',`さんが「${title}」という記事にスキしました 1分前`],
+  ['quoted-purchase',`さんが「${title}」という記事を購入しました 1分前`],
+  ['quoted-introduced',`さんが「${title}」という記事であなたの記事を紹介しました 1分前`],
+  ['quoted-embedded',`さんが「${title}」という記事にあなたの記事を埋め込みました 1分前`],
+  ['linked-like',`さんが「${linked}」という記事にスキしました 1分前`],
+  ['linked-reply',`さんが「${linked}」であなたのコメントに返信しました 1分前`],
+  ['unquoted-ambiguous',`さんが${title}という記事にスキしました 1分前`],
+  ['preview-purchase',`さんがあなたの記事を購入しました<p>登録人物さんが${title}</p><time>1分前</time>`],
+  ['preview-buzz',`さんの記事であなたの記事が紹介されて話題になりました<p>登録人物さんが${title}</p><time>1分前</time>`],
+ ];
+ const initial=row('real-add')+cases.map(([id,text])=>`<li class="native-notice" id="${id}"><a href="/actor">登録人物</a>${text}</li>`).join('');
+ const f=fixture(t,{initial});await f.ready();assert.equal(f.hidden('real-add'),true);
+ for(const [id] of cases)assert.equal(f.hidden(id),false,id);
+});
+
+test('平坦な本文・リンクが同じでも、動作文をpreviewへ移したDOM変更を再判定する',async t=>{
+ const f=fixture(t,{initial:row('target')+row('last')});await f.ready();assert.equal(f.hidden('target'),true);
+ const target=f.w.document.getElementById('target'),text=target.textContent,link=target.querySelector('a').outerHTML,body=target.lastChild.textContent;
+ target.innerHTML=link+'<p>'+body+'</p>';assert.equal(target.textContent,text);
+ await until(()=>!f.hidden('target'));assert.equal(f.w.document.getElementById('target'),target);
+});

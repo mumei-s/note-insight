@@ -10,10 +10,10 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check,label){for(let i=0;i<150&&!check();i++)await sleep(20);assert.ok(check(),label)}
 const notice=(id,extra={})=>({id,kind:'note_comment_like',body:`人物さんがあなたのコメントにスキしました ${id}`,noticed_at:new Date(1700000000000+id*60000).toISOString(),action_users:[{name:'人物',url:'https://note.com/person'}],...extra});
 
-async function fixture(t,{count=24,partial=false,filtered=false}={}){
- const initial=Array.from({length:count},(_,i)=>notice(count-i,filtered?{kind:'magazine_note_add_follow',body:`人物さんが共同マガジンに新しい記事を1本追加しました ${count-i}`,all_area_url:'https://note.com/person/m/mFixture'}:{}));
+async function fixture(t,{count=24,partial=false,filtered=false,storedValues=null}={}){
+ const initial=Array.from({length:count},(_,i)=>notice(count-i,filtered?{kind:'magazine_note_add_follow',body:'人物さんが共同マガジンに新しい記事を1本追加しました',all_area_url:'https://note.com/person/m/mFixture'}:{}));
  let notices=initial.map(row=>({...row}));
- const calls=[],saved=[],values=new Map([['mumei_insight_notification_sync_token_v2:tester','fixture-token']]);
+ const calls=[],saved=[],ingests=[],values=storedValues||new Map([['mumei_insight_notification_sync_token_v2:tester','fixture-token']]);
  if(filtered){values.set('mumei_insight_magazine_filter_enabled_v3:tester',true);values.set('mumei_insight_notification_groups_v1:tester',[{enabled:true,ids:['person']}]);values.set('mumei_insight_magazine_mute_profiles_v5:tester',[{id:'person',name:'人物'}])}
  const dom=new JSDOM('<body><main class="m-navbarNotice"><button>通知</button><button>お知らせ</button><div id="notice-list"></div></main></body>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window;t.after(()=>w.close());
@@ -22,7 +22,7 @@ async function fixture(t,{count=24,partial=false,filtered=false}={}){
  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:100,top:0,bottom:100,left:0,right:360});
  w.GM={getValue:async(key,fallback)=>values.has(key)?values.get(key):fallback,setValue:async(key,value)=>values.set(key,structuredClone(value)),xmlHttpRequest(options){
   const body=JSON.parse(options.data),rows=body.notifications||[];
-  if(options.url.includes('ingest'))saved.push(...structuredClone(rows));
+  if(options.url.includes('ingest')){ingests.push(structuredClone(rows));saved.push(...structuredClone(rows))}
   options.onload({status:200,responseText:JSON.stringify({ok:true,confirmedClientSignatures:rows.map(row=>row.meta.client_signature)})});
  }};
  w.fetch=async input=>{
@@ -48,14 +48,16 @@ async function fixture(t,{count=24,partial=false,filtered=false}={}){
  }
  // Exercise the existing capture parser directly without installing any new
  // production fetch hooks or exporting a test-only method from the product.
+ let initialComplete=false;
+ w.document.addEventListener('mumei-v3-reader-status',event=>{if(event.detail?.historyComplete===true)initialComplete=true});
  w.eval(networkSource.replace(/\}\)\(\);?\s*$/,'window.__nativePageBudgetCapture=processCapture;})();'));w.eval(readerSource);
  await until(()=>{
   const checkpoint=values.get('mumei_insight_notification_checkpoint_v2922:tester');
-  return partial?checkpoint?.lastRunComplete===false&&checkpoint?.lastRunSavedCount===300:checkpoint?.lastRunComplete===true;
+  return partial?checkpoint?.lastRunComplete===false&&checkpoint?.lastRunSavedCount===300:initialComplete;
  },partial?'the first bounded 300-row history window must be saved':'the initial native history traversal must finish');
  await sleep(250);
  if(filtered){w.eval(filterSource);await until(()=>list.querySelectorAll('.m-navbarNoticeItem.mumei-muted-v2939').length===12,'the real filter must hide the initial registered-person magazine notifications');await sleep(200)}
- return{w,list,calls,saved,values,initial,element,nativeLoading,nativeSentinel,appendNative(rows){const fragment=w.document.createDocumentFragment();fragment.append(...rows.map(element));list.insertBefore(fragment,nativeLoading)},setNotices(rows){notices=rows},advance(ms){clockOffset+=ms},headReads:()=>calls.filter(call=>call.page===1).length,
+ return{w,list,calls,saved,ingests,values,initial,element,nativeLoading,nativeSentinel,appendNative(rows){const fragment=w.document.createDocumentFragment();fragment.append(...rows.map(element));list.insertBefore(fragment,nativeLoading)},setNotices(rows){notices=rows},advance(ms){clockOffset+=ms},headReads:()=>calls.filter(call=>call.page===1).length,
   capturePage:async(page,rows)=>w.__nativePageBudgetCapture({url:`https://note.com/api/v3/notices?page=${page}&per=12&body_ast=1`,method:'GET',json:{data:rows}}, {probe:false}),
   settle:async()=>{w.__mumeiNotificationReaderV4.scheduleAuto(0);await sleep(400)}};
 }
@@ -130,6 +132,28 @@ test('a genuinely new head prepend still reads and saves the new notification af
  await h.settle();
  await until(()=>h.saved.some(row=>row.meta.event_identity==='notice:25'),'new head notification must be saved');
  assert.ok(h.headReads()>before,'new head evidence still starts a delta read');
+});
+
+test('persisted completion survives a real Reader restart: no new notice checks twelve rows and one new head checks twenty-four, not three hundred',async t=>{
+ const original=await fixture(t,{count:300});
+ assert.equal(original.saved.length,300,'the previous runtime must confirm the complete three-hundred-notice history');
+ const storedValues=structuredClone(original.values);original.w.close();
+ const h=await fixture(t,{count:300,storedValues});
+ assert.deepEqual(h.calls.map(({page,per})=>({page,per})),[{page:1,per:12}],'the restarted Reader validates an unchanged completed history with only its twelve-row head');
+ assert.equal(h.saved.length,0);assert.equal(h.ingests.length,0,'an unchanged restart sends no saved history to Supabase');
+ const before=h.calls.length,progress=[],added=notice(301);
+ h.w.document.addEventListener('mumei-v3-reader-status',event=>progress.push(event.detail));
+ h.setNotices([added,...h.initial]);h.list.prepend(h.element(added));
+ await h.settle();
+ await until(()=>progress.some(status=>status.historyComplete===true),'the new head delta must complete through the real Reader and network');
+ assert.deepEqual(h.calls.slice(before).map(({page,per})=>({page,per})),[{page:1,per:12},{page:2,per:12}],'one new notice needs a mixed head page and one fully confirmed boundary page');
+ assert.equal(h.ingests.length,1,'there is only one ingest request for the new notice');
+ assert.deepEqual(h.ingests[0].map(row=>row.meta.event_identity),['notice:301'],'only the new notification is sent, with no old-history replay');
+ assert.equal(h.saved.length,1);
+ const complete=progress.findLast(status=>status.historyComplete===true);
+ assert.equal(complete.checkedCount,24,'the proof actually checks twenty-four native notices');
+ assert.equal(complete.readCount,1,'progress counts only the one unseen notification as newly read');
+ assert.equal(h.values.get('mumei_insight_notification_checkpoint_v2922:tester').boundaryEventIdentity,'notice:301');
 });
 
 test('a page-1 capture of a new head still starts the delta before the official DOM has rerendered',async t=>{

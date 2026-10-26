@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.6';
+const VERSION='4.2.7';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -63,7 +63,35 @@ function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:
 function leadName(t){const m=clean(t).match(/^(.{1,180}?)\s*さん\s*(?:他\s*\d[\d,]*\s*名\s*)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||''}
 function norm(v){return clean(v).toLowerCase().replace(/\s+/g,'').replace(/[.…⋯]+$/u,'')}
 function nameMatch(lead,full){const a=norm(lead),b=norm(full);if(!a||!b)return false;if(a===b)return true;return /[.…⋯]$/u.test(clean(lead))&&a.length>=2&&b.startsWith(a)}
-function magazineNoise(t){const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\d)/g,'$1');return /さん(?:他\d+名)?が.*(?:マガジン|共同運営|共同マガ|運営メンバー).*?(?:新しい記事を\d+本追加しました|記事を\d+本追加しました|仲間入りしました)/u.test(s)||/さん(?:他\d+名)?が.*新しい記事を\d+本追加しました/u.test(s)||/さん(?:他\d+名)?が.+?に(?:新しい)?記事を(?:\d+本)?追加しました(?![」』】"”])/u.test(s)}
+function magazineActionText(el){
+ const summary=clean(el.textContent);
+ const leading=node=>{const text=clean(node.textContent);return text&&summary.startsWith(text)&&Boolean(leadName(text))};
+ function text(node){
+  if(node.nodeType===3)return node.textContent;
+  if(node.nodeType!==1)return'';
+  if(node!==el){
+   if(node.matches('time,[datetime]'))return'';
+   if(node.matches('a[href]')){let article=false;try{const url=new URL(node.getAttribute('href'),location.href);article=url.hostname==='note.com'&&/\/n\/n[a-f0-9]{12}(?:\/|$)/i.test(url.pathname)}catch{}if(article&&!leading(node))return'';}
+   if(node.matches('p,h1,h2,h3,h4,h5,h6')&&!leading(node))return'';
+  }
+  return [...node.childNodes].map(text).join('');
+ }
+ return clean(text(el));
+}
+function magazineNoise(t){
+ const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\d)/g,'$1').replace(/(?:たった今|昨日|\d+(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u,''),lead=s.match(/^.{1,180}?さん(?:他\d+名)?が/u);
+ if(!lead)return false;
+ const action=s.slice(lead[0].length),pairs={'「':'」','『':'』','【':'】','（':'）','(' :')','“':'”','"':'"'},closing=new Set(Object.values(pairs)),quotes=[];
+ let ended=false;
+ for(let i=0;i<action.length;i++){
+  const char=action[i];
+  if(quotes.at(-1)===char){quotes.pop();continue}
+  if(pairs[char]){quotes.push(pairs[char]);continue}
+  if(closing.has(char))return false;
+  if(!quotes.length&&action.startsWith('ました',i)){if(i+3!==action.length)return false;ended=true;break}
+ }
+ return ended&&!quotes.length&&/^.+に(?:新しい)?記事を(?:\d+本)?追加しました$/u.test(action);
+}
 async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;if(enabled)hydrateProfiles(a.id,ids,profiles);cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
 function leadId(el,lead,st){const links=creatorLinks(el);const text=links.find(x=>x.txt&&nameMatch(lead,x.txt));if(text)return text.id;const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));if(prof)return prof.id;const first=links[0];if(!first)return'';const p=st.profiles.find(x=>x.id===first.id);if(first.txt&&nameMatch(lead,first.txt))return first.id;if(p?.name&&nameMatch(lead,p.name))return first.id;return''}
 function rememberOwnAttributes(el){ownAttributeValues.set(el,{style:el.getAttribute('style'),'aria-hidden':el.getAttribute('aria-hidden')})}
@@ -144,11 +172,11 @@ let lastResult=null;
 function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
 function classificationState(st){return JSON.stringify([revision,st.enabled,[...st.ids].sort(),st.profiles.map(p=>[p.id,p.name]).sort((a,b)=>a[0].localeCompare(b[0]))])}
 function classifyRow(el,st,fingerprint){
- const text=clean(el.textContent),hrefs=[...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')].map(a=>JSON.stringify([a.getAttribute('href'),clean(a.textContent)])).join('\n'),cached=classificationCache.get(el);
- if(cached&&cached.text===text&&cached.hrefs===hrefs&&cached.fingerprint===fingerprint)return cached.hide;
+ const text=clean(el.textContent),markup=el.innerHTML,href=el.getAttribute('href'),cached=classificationCache.get(el);
+ if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.fingerprint===fingerprint)return cached.hide;
  const lead=leadName(text);let hide=false;
- if(st.enabled&&st.ids.size&&lead&&magazineNoise(text)){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}
- classificationCache.set(el,{text,hrefs,fingerprint,hide});return hide;
+ if(st.enabled&&st.ids.size&&lead&&magazineNoise(magazineActionText(el))){hide=st.profiles.some(p=>p.name&&nameMatch(lead,p.name));if(!hide){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id))}}
+ classificationCache.set(el,{text,markup,href,fingerprint,hide});return hide;
 }
 function viewportAnchor(surface,list){
  if(!surface?.isConnected||continuationAttempt)return null;
