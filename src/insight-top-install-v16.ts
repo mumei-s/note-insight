@@ -1,4 +1,4 @@
-export {};
+import { captureInsightReturn } from "./insight-update-return";
 
 const STYLE_ID="mumei-top-final-v17-style";
 const TOOL_CLASS="mumei-top-tool-install";
@@ -29,7 +29,7 @@ function activeNoteId(){
   return"";
 }
 function hrefFor(kind:"dashboard"|"notice"){
-  const id=activeNoteId(),back=encodeURIComponent(window.location.href),account=id?`&account=${encodeURIComponent(id)}`:"";
+  const id=activeNoteId(),back=encodeURIComponent(captureInsightReturn({account:id})),account=id?`&account=${encodeURIComponent(id)}`:"";
   return`./tool-setup.html?from=top&focus=${kind}${account}&return=${back}`;
 }
 
