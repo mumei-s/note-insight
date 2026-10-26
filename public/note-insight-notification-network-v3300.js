@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.19';
+const VERSION='3.6.20';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -309,7 +309,9 @@ async function processCapture(cap,{manual=false,probe=true}={}){
  if(probe)void saveProbe(cap,rows);
  if(!rows.length)return{handled:false,saved:0,candidate:true};
  lastCapture={...cap,rows,at:Date.now()};
- document.dispatchEvent(new CustomEvent('mumei-notification-captured',{detail:{signature:rows.map(clientSig).join("\n")}}));
+ const url=new URL(cap.url,location.href),requestedPage=Number(url.searchParams.get('page')||1),requestedSize=Number(url.searchParams.get('per')||rows.length);
+ const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1,pageSize=Number.isSafeInteger(requestedSize)&&requestedSize>0?requestedSize:rows.length;
+ document.dispatchEvent(new CustomEvent('mumei-notification-captured',{detail:{signature:rows.map(clientSig).join("\n"),page,pageSize,pagination:page>1}}));
  if(manual)return ingestRows(rows,cap,true);
  return{handled:true,saved:0,received:rows.length,deferred:true}
 }

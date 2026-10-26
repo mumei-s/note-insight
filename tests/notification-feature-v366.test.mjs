@@ -131,11 +131,11 @@ async function domReaderFixture(t){
 test('完了後に同内容のパネルDOMが何度差し替わっても再通信しない',async t=>{
  const h=await domReaderFixture(t);for(let i=0;i<4;i++){const p=h.w.document.querySelector('main');p.replaceWith(p.cloneNode(true));await h.settle();assert.equal(h.calls,1)}
 });
-test('同じパネルの並べ替え・時刻ラベル・フィルター変更は再通信せず、本当の新着と本文変更を読む',async t=>{
+test('同じパネルの並べ替え・時刻ラベル・フィルター変更は再通信せず、先頭の新着と本文変更を読む',async t=>{
  const h=await domReaderFixture(t),w=h.w,p=w.document.querySelector('main'),a=p.firstElementChild;
  a.classList.add('mumei-muted-v2939');a.style.display='none';a.lastChild.textContent='さんがスキしました 2分前';await h.settle();assert.equal(h.calls,1);
- const b=a.cloneNode(true);b.dataset.noticeId='b';b.lastChild.textContent='さんがコメントしました 1分前';p.append(b);await h.settle();assert.equal(h.calls,2,'非表示フィルター対象でも新着を取得');
- p.prepend(b);await h.settle();assert.equal(h.calls,2,'順序変更は新着ではない');
+ const b=a.cloneNode(true);b.dataset.noticeId='b';b.lastChild.textContent='さんがコメントしました 1分前';p.prepend(b);await h.settle();assert.equal(h.calls,2,'非表示フィルター対象でも先頭の新着を取得');
+ p.append(b);await h.settle();assert.equal(h.calls,2,'順序変更は新着ではない');
  b.lastChild.textContent='さんがコメントしました 追記があります 1分前';await h.settle();assert.equal(h.calls,3,'まとめ通知本文の変化を取得');
  b.remove();await h.settle();p.append(b);await h.settle();assert.equal(h.calls,3,'既知の行の除去と再配置では繰り返さない');
 });

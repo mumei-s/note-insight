@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.32',PROTOCOL='3.6.4';
+const VERSION='3.6.33',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -148,6 +148,8 @@ async function scan(opts={}){
 }
 let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0,panelMissingAt=0;
 const observedNoticeKeys=new Map();
+let observedNoticeOrder=[];
+function resetNoticeKeys(){observedNoticeKeys.clear();observedNoticeOrder=[]}
 function noticeKeys(panel){
  const eligible=el=>panelEvidence(el)&&!el.closest('[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]');
  let candidates=[...panel.querySelectorAll(ITEM)].filter(eligible);
@@ -159,19 +161,35 @@ function noticeKeys(panel){
  ].join('|'));
 }
 function watchNoticeKeys(panel,initial){
- const counts=new Map();for(const key of noticeKeys(panel))counts.set(key,(counts.get(key)||0)+1);
+ const keys=noticeKeys(panel),counts=new Map();for(const key of keys)counts.set(key,(counts.get(key)||0)+1);
  const changed=!initial&&[...counts].some(([key,count])=>count>(observedNoticeKeys.get(key)||0));
+ // The official list is newest first. After a confirmed full/delta read, an
+ // unchanged prefix followed only by older tail rows is native pagination,
+ // not a new head. Keep observing those identities without rereading page 1.
+ // Prepends, changes to existing bodies and incomplete reads still recheck.
+ const olderTail=autoComplete&&!pendingCapture&&!scanning&&!traversalPending&&observedNoticeOrder.length>0&&keys.length>observedNoticeOrder.length&&observedNoticeOrder.every((key,index)=>keys[index]===key);
  for(const [key,count] of counts)observedNoticeKeys.set(key,Math.max(count,observedNoticeKeys.get(key)||0));
+ observedNoticeOrder=keys;
  while(observedNoticeKeys.size>1200)observedNoticeKeys.delete(observedNoticeKeys.keys().next().value);
- if(changed){if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;autoComplete=false;lastAutoAt=0;}
+ if(changed&&!olderTail){if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;autoComplete=false;lastAutoAt=0;}
 }
 // An explicit action while the panel is absent distinguishes a fast user reopen
 // from a temporary empty render. No fetch hooks or diagnostic uploads are added.
-function explicitPanelReopen(){if(autoPanel&&!findPanel()){autoPanel=null;panelMissingAt=0;autoComplete=false;lastAutoAt=0;observedNoticeKeys.clear();if(scanning||traversalPending)rescanAfterCompletion=true;}}
+function explicitPanelReopen(){if(autoPanel&&!findPanel()){autoPanel=null;panelMissingAt=0;autoComplete=false;lastAutoAt=0;resetNoticeKeys();if(scanning||traversalPending)rescanAfterCompletion=true;}}
 document.addEventListener('pointerdown',explicitPanelReopen,true);
 document.addEventListener('click',explicitPanelReopen,true);
 let capturedSignature='',pendingCapture=false;
-document.addEventListener('mumei-notification-captured',e=>{const next=String(e.detail?.signature||'');if(next&&next!==capturedSignature){capturedSignature=next;if(scanning||traversalPending)rescanAfterCompletion=true;pendingCapture=true;lastAutoAt=0;autoComplete=false;scheduleAuto(80)}});
+document.addEventListener('mumei-notification-captured',e=>{
+ const next=String(e.detail?.signature||'');if(!next)return;
+ // A native page 2+ response is older pagination. The network journal still
+ // owns its normal page traversal/save; this event must not start over at 1.
+ const page=Number(e.detail?.page);
+ if(e.detail?.pagination===true||Number.isSafeInteger(page)&&page>1){scheduleAuto(80);return}
+ if(next===capturedSignature)return;
+ capturedSignature=next;
+ if(scanning||traversalPending)rescanAfterCompletion=true;
+ pendingCapture=true;lastAutoAt=0;autoComplete=false;scheduleAuto(80);
+});
 function scheduleAuto(delay=150){
  clearTimeout(autoTimer);
   autoTimer=setTimeout(()=>{
@@ -181,11 +199,11 @@ function scheduleAuto(delay=150){
   window.__mumeiV3Checkpoint325?.mark?.();
   if(!panel){
    if(autoPanel){if(!panelMissingAt)panelMissingAt=Date.now();const wait=500-(Date.now()-panelMissingAt);if(wait>0){scheduleAuto(wait);return}}
-   if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;panelMissingAt=0;observedNoticeKeys.clear();if(!scanning)stop=false;return
+   if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;panelMissingAt=0;resetNoticeKeys();if(!scanning)stop=false;return
   }
   panelMissingAt=0;
   const opening=!autoPanel;
-  if(opening){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false;lastAutoAt=0;observedNoticeKeys.clear()}
+  if(opening){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false;lastAutoAt=0;resetNoticeKeys()}
   watchNoticeKeys(panel,opening);autoPanel=panel;
   if(scanning||document.visibilityState==='hidden')return;
   if(stop){pausedPanel=panel;return}
@@ -197,13 +215,13 @@ function scheduleAuto(delay=150){
  },delay);
 }
 setTimeout(()=>scheduleAuto(),80);
-function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element?r.target:r.target.parentElement)?.closest('[data-mumei-notification-controls]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true,characterData:true})}observe();
+function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element?r.target:r.target.parentElement)?.closest('[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true,characterData:true})}observe();
 const poll=setInterval(()=>scheduleAuto(),5000);
 window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);window.__mumeiNotificationNetwork3300?.stop?.()});
 window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
 window.addEventListener('focus',()=>scheduleAuto());
 window.addEventListener('mumei-notification-feature-changed',e=>{
- clearTimeout(autoTimer);autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;observedNoticeKeys.clear();
+ clearTimeout(autoTimer);autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;resetNoticeKeys();
  if(e.detail?.enabled){stop=false;scheduleAuto(0)}else pauseCapture();
 });
 window.__mumeiNotificationReaderV4={version:VERSION,pause:pauseReading,resume:resumeReading,isPaused:()=>userPaused,scan,scheduleAuto,rowData,visibleRows:()=>rows(findPanel()),findPanel,directPanel,isDmRoute};
