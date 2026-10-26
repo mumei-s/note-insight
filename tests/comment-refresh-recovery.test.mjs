@@ -8,8 +8,8 @@ import {PGlite} from '@electric-sql/pglite';
 
 const source=fs.readFileSync('supabase/functions/insight-comment-refresh/index.ts','utf8');
 const shared=fs.readFileSync('supabase/functions/_shared/egress-20260930.ts','utf8');
-function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,session=true,missingPool=[]}={}){
- const calls=[],saved=[],notes=[];let handler;
+function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveError=false,updateError=false,session=true,missingPool=[],articles=[],noteFetch=null,clock=null,onSave=null}={}){
+ const calls=[],saved=[],notes=[],queries=[];let handler;
  const db={rpc:async(name,args)=>{
   calls.push({name,args});
   if(name==='insight_comment_refresh_claim')return{data:claim};
@@ -19,34 +19,36 @@ function edge({member='owner',noteId='ss_yr',claim=true,maintenance=false,saveEr
   if(name==='insight_missing_comment_articles')return{data:missingPool};
   if(name==='insight_comment_refresh_batch'){
    assert.equal(args.p_member,member);
-   assert.equal(args.p_notifications[0].member_id,member,'通知は実在する正本profileを参照');
+   for(const event of args.p_notifications)assert.equal(event.member_id,member,'通知は実在する正本profileを参照');
    if(saveError)return{error:{message:'WRITE_FAILED'}};
-   saved.push(...args.p_rows);return{data:{changed:args.p_rows.length,newNotifications:args.p_notifications.length}};
+   saved.push(...args.p_rows);onSave?.();return{data:{changed:args.p_rows.length,newNotifications:args.p_notifications.length}};
   }
   throw Error('Unexpected RPC '+name);
  },from:table=>{
-  let values={};const q={select:()=>q,eq:(key,value)=>{values[key]=value;return q},in:()=>q,not:()=>q,limit:()=>q,
+  let values={},included={},operation='select';const q={select:()=>q,eq:(key,value)=>{values[key]=value;return q},in:(key,value)=>{included[key]=value;return q},not:()=>q,limit:()=>q,
    upsert:()=>{throw Error('Existing canonical profile must not be replaced')},
-   update:()=>q,is:()=>q,maybeSingle:()=>resolve()};
+   update:()=>{operation='update';return q},is:()=>q,maybeSingle:()=>resolve()};
   function resolve(){
+   queries.push({table,operation,values:{...values},included:{...included}});
    if(table==='insight_notification_profiles')return Promise.resolve({data:values.public_watch_enabled?[{member_id:member,note_urlname:noteId}]:{member_id:member,note_urlname:noteId}});
    if(table==='insight_member_sessions')return Promise.resolve({data:session?{application_id:'app-uuid',expires_at:'2099-01-01',revoked_at:null}:null});
    if(table==='insight_access_applications')return Promise.resolve({data:{id:member==='owner'?'app-uuid':member,note_id:noteId,status:'active',verified_at:'2026-01-01'}});
-   if(table==='insight_public_articles')return Promise.resolve({data:[]});
+   if(table==='insight_public_articles'){if(operation==='update')return Promise.resolve(updateError?{error:{message:'ARTICLE_UPDATE_FAILED'}}:{data:[]});return Promise.resolve({data:articles.filter(row=>row.member_id===values.member_id&&(!included.article_key||included.article_key.includes(row.article_key)))})}
    throw Error('Unexpected table '+table);
   }
   q.then=(a,b)=>resolve().then(a,b);return q;
  }};
- const context=vm.createContext({Request,Response,URL,TextEncoder,AbortController,Date,crypto:webcrypto,
+ const context=vm.createContext({Request,Response,URL,TextEncoder,AbortController,Date:clock||Date,crypto:webcrypto,
   console:{error:()=>{}},setTimeout:(cb,ms)=>ms<100?(queueMicrotask(cb),0):setTimeout(cb,ms),clearTimeout,
-  fetch:async url=>{notes.push(String(url));
+  fetch:async(url,init)=>{notes.push(String(url));
+   if(noteFetch){const response=await noteFetch(String(url),init);if(response!==undefined)return response}
    if(String(url).includes('/contents?'))return Response.json({data:{contents:[{key:'n123',name:'article',commentCount:1}]}});
    if(String(url).includes('/note_comments?'))return Response.json({data:[{key:'comment1',user:{urlname:'peer',nickname:'相手'},comment:'取得本文',created_at:'2026-10-10T00:00:00Z'}],next_page:null});
    throw Error('Unexpected fetch '+url);
   },createClient:()=>db,Deno:{env:{get:()=>''},serve:h=>handler=h}});
- const js=stripTypeScriptTypes(shared.replace(/^export /gm,'')+'\n'+source.replace(/^import .*;\s*$/gm,'')+'\nglobalThis.helpers={notificationMember,memberProfile,pageRows,comments,missingArticles};',{mode:'strip'});
+ const js=stripTypeScriptTypes(shared.replace(/^export /gm,'')+'\n'+source.replace(/^import .*;\s*$/gm,'')+'\nglobalThis.helpers={notificationMember,memberProfile,pageRows,commentPages,comments,missingArticles,noteJson,refreshProfile};',{mode:'strip'});
  vm.runInContext(js,context);
- return{handler,calls,saved,notes,helpers:context.helpers};
+ return{handler,calls,saved,notes,queries,context,helpers:context.helpers};
 }
 function memberRequest(extra={}){return new Request('https://example.invalid',{method:'POST',headers:{'Content-Type':'application/json','X-Insight-Token':'fixture-only-token'},body:JSON.stringify({action:'refresh',memberId:'another-tenant',noteId:'another_note',...extra})})}
 
@@ -87,6 +89,174 @@ test('取得拒否の記事が先頭に残っても修復候補を巡回して�
  assert.deepEqual(Array.from(first,x=>x.key),['n0','n1','n2','n3','n4','n5']);
  assert.deepEqual(Array.from(next,x=>x.key),['n6','n7','n8','n0','n1','n2']);
  assert.equal(h.calls[0].args.p_limit,100);
+});
+
+const commentRow=(key='c1',extra={})=>({key,user:{urlname:'peer',nickname:'相手'},comment:'架空の取得本文',created_at:'2026-10-10T00:00:00Z',...extra});
+const storedArticle=(key,member='owner')=>({member_id:member,article_key:key,title:'架空の記事 '+key,url:`https://note.com/fixture/n/${key}`,comment_count:1});
+const commentReads=h=>h.notes.filter(url=>url.includes('/note_comments?'));
+
+for(const status of [403,404,410])test(`HTTP ${status}は自動再試行せず、記事と理由・60秒制限を返す`,async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json({error:'unavailable'},{status}):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.partial,true);assert.equal(p.failedArticles,1);assert.equal(p.articles,0);
+ assert.deepEqual(p.articleFailures,[{articleKey:'n123',title:'article',url:'https://note.com/ss_yr/n/n123',stage:'note',code:`NOTE_PUBLIC_${status}`,retryable:false}]);
+ assert.deepEqual(p.errors,[`NOTE_PUBLIC_${status}`]);assert.equal(commentReads(h).length,1);assert.equal(h.saved.length,0);
+ assert.ok(p.retryAfterSeconds>0&&p.retryAfterSeconds<=60);
+});
+
+test('本番403の正確なJSON理由だけをコメント欄無効として返し、設定変更や再試行をしない',async()=>{
+ const disabled='この記事へのコメントは無効になっています';
+ for(const [response,code] of [
+  [()=>Response.json({error:{message:disabled,type:'forbidden'}},{status:403}),'NOTE_COMMENTS_DISABLED'],
+  [()=>Response.json({error:{message:'この記事は閲覧できません',type:'forbidden'}},{status:403}),'NOTE_PUBLIC_403'],
+  [()=>Response.json({error:{message:disabled,type:'another_error'}},{status:403}),'NOTE_PUBLIC_403'],
+  [()=>new Response(`<html>${disabled}</html>`,{status:403,headers:{'content-type':'text/html'}}),'NOTE_PUBLIC_403']
+ ]){
+  const h=edge({noteFetch:async url=>url.includes('/note_comments?')?response():undefined}),p=await(await h.handler(memberRequest())).json();
+  assert.equal(p.ok,false);assert.equal(p.failedArticles,1);assert.equal(p.articleFailures[0].code,code);assert.equal(p.articleFailures[0].retryable,false);assert.equal(p.articleFailures[0].stage,'note');
+  assert.equal(commentReads(h).length,1);assert.equal(h.saved.length,0);assert.ok(!h.queries.some(query=>query.operation==='update'));
+ }
+});
+
+test('403理由の本文読込が止まっても403を時間切れの一時障害へ変換して再試行しない',async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?{ok:false,status:403,headers:new Headers(),json:async()=>new Promise(()=>{})}:undefined});
+ const timer=h.context.setTimeout;h.context.setTimeout=(fn,ms)=>ms===12000?setTimeout(fn,5):timer(fn,ms);
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.articleFailures[0].code,'NOTE_PUBLIC_403');assert.equal(p.articleFailures[0].retryable,false);assert.equal(commentReads(h).length,1);
+});
+
+for(const status of [429,503])test(`一時HTTP ${status}はGETを1回だけ再試行し、成功したコメントだけを保存する`,async()=>{
+ let attempts=0;
+ const h=edge({noteFetch:async url=>{if(url.includes('/note_comments?')&&attempts++===0)return Response.json({error:'temporary'},{status})}});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,true);assert.equal(p.failedArticles,0);assert.equal(p.changedComments,1);
+ assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,1);assert.equal(h.calls.filter(call=>call.name==='insight_comment_refresh_batch').length,1);
+});
+
+test('一時障害が続いても2 GETで止め、取得失敗を成功へ変更しない',async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json({error:'temporary'},{status:503}):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(commentReads(h).length,2);assert.equal(p.ok,false);assert.equal(p.articleFailures[0].code,'NOTE_PUBLIC_503');assert.equal(p.articleFailures[0].retryable,true);assert.equal(h.saved.length,0);
+});
+
+for(const body of [false,true])test(`${body?'HTTP200本文':'GET接続'}の一時通信切断は1回だけ再試行する`,async()=>{
+ let attempts=0;
+ const h=edge({noteFetch:async url=>{if(url.includes('/note_comments?')&&attempts++===0){if(body)return{ok:true,json:async()=>{throw new TypeError('terminated')}};throw new TypeError('offline')}}});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,true);assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,1);
+});
+
+test('AbortSignalを無視するGETも時間切れで1回だけ再試行し、遅い通信で保存を重複しない',async()=>{
+ let attempts=0,firstSignal,releaseFirst;
+ const h=edge({noteFetch:async(url,init)=>{if(url.includes('/note_comments?')&&attempts++===0){firstSignal=init.signal;return new Promise(resolve=>{releaseFirst=()=>resolve(Response.json({data:[commentRow('late')],next_page:null}))})}}});
+ const timer=h.context.setTimeout;h.context.setTimeout=(fn,ms)=>ms===12000?setTimeout(fn,5):timer(fn,ms);
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,true);assert.equal(firstSignal.aborted,true);assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,1);
+ releaseFirst();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.saved.length,1);assert.equal(h.calls.filter(call=>call.name==='insight_comment_refresh_batch').length,1);
+});
+
+test('Retry-Afterが残り時間を超える場合は待機も再GETもせず、再取得可能時刻を返す',async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json({error:'limited'},{status:429,headers:{'Retry-After':'90'}}):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(commentReads(h).length,1);assert.equal(p.retryAfterSeconds,90);assert.equal(p.articleFailures[0].retryable,true);
+});
+
+test('時間切れの残りが少ないGETでは2回目を始めない',async()=>{
+ const h=edge({noteFetch:async()=>new Promise(()=>{})});
+ await assert.rejects(h.helpers.noteJson('/fixture',Date.now()+25),error=>error.code==='NOTE_PUBLIC_TIMEOUT');
+ assert.equal(h.notes.length,1);
+});
+
+test('指定記事だけを取得し、最近の記事・未対応・旧記事修復へ拡大しない',async()=>{
+ const h=edge({articles:[storedArticle('nabc')],missingPool:[{article_key:'n666',title:'別の修復候補',comment_count:1}]});
+ const p=await(await h.handler(memberRequest({articleKey:'nabc'}))).json();
+ assert.equal(p.ok,true);assert.equal(p.articles,1);assert.equal(h.saved[0].article_key,'nabc');
+ assert.ok(h.notes.every(url=>url.includes('/notes/nabc/note_comments?')));
+ assert.ok(!h.calls.some(call=>['insight_fast_comment_threads','insight_missing_comment_articles'].includes(call.name)));
+ assert.equal(p.newNotifications,0,'明示した古い記事修復から過去の本人通知を再発火しない');
+});
+
+test('失敗記事キーは最大6件の本人保存記事だけへ解決し、別scopeや存在しない記事を取得しない',async()=>{
+ const member='participant-uuid',h=edge({member,noteId:'participant',articles:[storedArticle('nabc',member),storedArticle('nabd',member),storedArticle('nfff','another-tenant')]});
+ const p=await(await h.handler(memberRequest({articleKeys:['nabc','nabd','nfff','nabc'],memberId:'another-tenant',noteId:'another_note'}))).json();
+ assert.equal(p.ok,false);assert.equal(p.articles,2);assert.equal(p.failedArticles,1);
+ assert.equal(p.articleFailures[0].articleKey,'nfff');assert.equal(p.articleFailures[0].code,'COMMENT_ARTICLE_NOT_FOUND');assert.equal(p.articleFailures[0].retryable,false);
+ assert.equal(commentReads(h).length,2);assert.ok(h.notes.every(url=>!url.includes('/nfff/')));
+ assert.deepEqual(h.saved.map(row=>row.article_key),['nabc','nabd']);assert.ok(h.saved.every(row=>row.member_id===member));
+ const selected=h.queries.find(query=>query.table==='insight_public_articles'&&query.operation==='select');
+ assert.equal(selected.values.member_id,member);assert.deepEqual(Array.from(selected.included.article_key),['nabc','nabd','nfff']);
+});
+
+test('不正・空・過剰・曖昧な選択は400で拒否し、自動全体取得やclaimへfallbackしない',async()=>{
+ const invalid=[{articleKey:''},{articleKey:'other/nabc'},{articleKey:42},{articleKeys:[]},{articleKeys:null},{articleKeys:'nabc'},{articleKeys:['nabc','invalid']},{articleKeys:Array(7).fill('nabc')},{articleKey:'nabc',articleKeys:['nabc']}];
+ for(const selected of invalid){const h=edge(),r=await h.handler(memberRequest(selected));assert.equal(r.status,400,JSON.stringify(selected));assert.equal((await r.json()).error,'COMMENT_ARTICLE_SELECTION_INVALID');assert.equal(h.notes.length,0);assert.ok(!h.calls.some(call=>call.name==='insight_comment_refresh_claim'))}
+});
+
+test('cooldownは失敗記事だけの明示取得でも共有し、残りが不明な時は安全側60秒を返す',async()=>{
+ const h=edge({claim:false,articles:[storedArticle('nabc')]}),p=await(await h.handler(memberRequest({articleKeys:['nabc']}))).json();
+ assert.equal(p.skipped,true);assert.equal(p.retryAfterSeconds,60);assert.equal(h.notes.length,0);assert.equal(h.saved.length,0);
+});
+
+for(const payload of [{data:{unexpected:[]}},{error:'upstream error'},{data:[null]},{data:[{}]}])test(`HTTP200の未知コメント形式を空の成功にしない (${JSON.stringify(payload)})`,async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json(payload):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.failedArticles,1);assert.equal(p.articles,0);assert.match(p.articleFailures[0].code,/^NOTE_COMMENT_(RESPONSE|ROW)_INVALID$/);
+ assert.equal(commentReads(h).length,1,'形式異常を一時通信エラーとみなして自動再試行しない');assert.equal(h.saved.length,0);
+});
+
+test('不正JSONを空の正常終了にせず、自動再試行もしない',async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?new Response('{broken',{status:200}):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.articleFailures[0].code,'NOTE_COMMENT_RESPONSE_INVALID');assert.equal(commentReads(h).length,1);assert.equal(h.saved.length,0);
+});
+
+test('next_pageがなくてもisLastPage:falseを尊重し、次ページまで確認する',async()=>{
+ const h=edge({noteFetch:async url=>{if(!url.includes('/note_comments?'))return;const page=Number(new URL(url).searchParams.get('page'));return Response.json({data:{comments:page===1?[commentRow()]:[],isLastPage:page===2}})}});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,true);assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,1);
+});
+
+for(const payload of [{data:[],next_page:2},{data:[commentRow()],next_page:2,isLastPage:true},{data:[commentRow()],next_page:1}])test('矛盾・空の非終端・戻るページを未完了として報告する '+JSON.stringify(payload),async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json(payload):undefined});
+ const p=await(await h.handler(memberRequest())).json();assert.equal(p.ok,false);assert.match(p.articleFailures[0].code,/^NOTE_COMMENT_PAGINATION_/);assert.equal(h.saved.length,0);
+});
+
+test('同じコメントページの反復は2ページで止め、20回読んで成功扱いしない',async()=>{
+ const h=edge({noteFetch:async url=>url.includes('/note_comments?')?Response.json({data:[commentRow()],next_page:Number(new URL(url).searchParams.get('page'))+1}):undefined});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.articleFailures[0].code,'NOTE_COMMENT_PAGE_REPEAT');assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,0);
+});
+
+test('20ページ上限でも次がある記事は完了や部分コメント保存と誤認しない',async()=>{
+ const h=edge({noteFetch:async url=>{if(!url.includes('/note_comments?'))return;const page=Number(new URL(url).searchParams.get('page'));return Response.json({data:[commentRow('c'+page)],next_page:page+1})}});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.articleFailures[0].code,'NOTE_COMMENT_PAGE_LIMIT');assert.equal(commentReads(h).length,20);assert.equal(h.saved.length,0);
+});
+
+test('返信ページが取得できない記事は親だけを全件取得成功として保存しない',async()=>{
+ const h=edge({noteFetch:async url=>{if(!url.includes('/note_comments?'))return;if(new URL(url).searchParams.has('parent_key'))return Response.json({error:'private'},{status:403});return Response.json({data:[commentRow('root',{reply_count:1})],next_page:null})}});
+ const p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.articleFailures[0].stage,'note');assert.equal(p.articleFailures[0].code,'NOTE_PUBLIC_403');assert.equal(commentReads(h).length,2);assert.equal(h.saved.length,0);
+});
+
+for(const update of [false,true])test(`${update?'記事情報更新':'保存RPC'}失敗はsave段階で返し、保存を自動で繰り返さない`,async()=>{
+ const h=edge({saveError:!update,updateError:update}),p=await(await h.handler(memberRequest())).json();
+ assert.equal(p.ok,false);assert.equal(p.failedArticles,1);assert.equal(p.articleFailures[0].stage,'save');assert.equal(p.articleFailures[0].code,'COMMENT_SAVE_FAILED');assert.equal(p.articleFailures[0].retryable,true);
+ assert.equal(h.calls.filter(call=>call.name==='insight_comment_refresh_batch').length,1);assert.equal(h.saved.length,update?1:0);
+});
+
+test('deadline前に取得した記事は保存し、未着手の選択記事はpendingキーとして残す',async()=>{
+ let now=Date.now();class Clock extends Date{static now(){return now}}
+ const h=edge({clock:Clock,articles:['nabc','nabd','nabe'].map(key=>storedArticle(key)),onSave:()=>{now+=23000}});
+ const p=await(await h.handler(memberRequest({articleKeys:['nabc','nabd','nabe']}))).json();
+ assert.equal(p.truncated,true);assert.equal(p.partial,true);assert.equal(p.articles,1);assert.equal(p.failedArticles,0);assert.deepEqual(p.pendingArticleKeys,['nabd','nabe']);assert.equal(h.saved.length,1);assert.equal(p.retryAfterSeconds,37);
+});
+
+test('処理中にdeadlineへ達しても現記事の失敗と未着手キーを両方返す',async()=>{
+ let now=Date.now();class Clock extends Date{static now(){return now}}
+ const h=edge({clock:Clock,articles:['nabc','nabd'].map(key=>storedArticle(key)),noteFetch:async url=>{if(url.includes('/note_comments?')){now+=25001;return Response.json({error:'temporary'},{status:503})}}});
+ const p=await(await h.handler(memberRequest({articleKeys:['nabc','nabd']}))).json();
+ assert.equal(p.ok,false);assert.equal(p.truncated,true);assert.equal(p.articleFailures[0].articleKey,'nabc');assert.equal(p.articleFailures[0].code,'NOTE_PUBLIC_503');assert.deepEqual(p.pendingArticleKeys,['nabd']);assert.equal(commentReads(h).length,1);
 });
 
 test('本番batch SQLで通知FK違反の全巻戻しを再現し、正本scopeなら両方保存される',async()=>{

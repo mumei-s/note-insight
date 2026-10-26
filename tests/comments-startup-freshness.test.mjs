@@ -409,6 +409,115 @@ test('同じnoteでも別tokenの保存コピーは表示しない',async t=>{
  await h.start();assert.doesNotMatch(h.body(),/別tokenの私有本文|前回保存分を表示/);assert.equal(h.savedView(),null);
 });
 
+const failedArticle=(articleKey,extra={})=>({articleKey,title:'確認対象 '+articleKey,url:'https://note.com/account_a/n/'+articleKey,stage:'note',code:'NOTE_PUBLIC_403',retryable:false,...extra});
+const retryButton=h=>h.w.document.querySelector('.micf-recovery>button');
+const retainedComment=()=>event('retained','取得失敗中も保持する本文',{actor_image_url:'https://images.test/peer.png'});
+
+test('取得失敗の対象記事・note拒否と保存失敗の理由を示し、安全な記事リンクだけを出す',async t=>{
+ const calls=[],failures=[failedArticle('n1'),failedArticle('n2',{code:'NOTE_PUBLIC_404',url:'https://evil.test/article'}),failedArticle('n3',{stage:'save',code:'COMMENT_SAVE_FAILED',retryable:true,url:'javascript:alert(1)'}),failedArticle('n4',{code:'NOTE_PUBLIC_429',retryable:true,url:''}),failedArticle('n5',{code:'NOTE_COMMENTS_DISABLED',url:''}),failedArticle('n6',{code:'COMMENT_ARTICLE_NOT_FOUND',url:''})];
+ const h=await fixture(t,{fetch:async()=>response([retainedComment()]),refreshFetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);calls.push(body);
+  return Response.json(calls.length===1?{ok:false,articles:1,changedComments:0,failedArticles:6,articleFailures:failures,retryAfterSeconds:0}:{ok:true,articles:6,changedComments:0,failedArticles:0});
+ }});
+ await h.start();await settle();
+ const recovery=h.w.document.querySelector('.micf-recovery');
+ assert.match(recovery.textContent,/確認できなかった記事（6件）/);assert.equal(recovery.querySelectorAll('li').length,6);
+ assert.match(recovery.textContent,/note側で公開取得が許可されていません/);assert.match(recovery.textContent,/非公開・削除/);assert.match(recovery.textContent,/取得後の保存を確認できませんでした/);assert.match(recovery.textContent,/note側の回数制限/);
+ assert.match(recovery.querySelectorAll('li')[4].textContent,/コメント欄.*(?:無効|停止|オフ|閉)/);assert.match(recovery.querySelectorAll('li')[5].textContent,/記事を確認できません/);assert.doesNotMatch(recovery.textContent,/NOTE_COMMENTS_DISABLED|COMMENT_ARTICLE_NOT_FOUND/);
+ assert.equal(h.w.document.querySelector('.micf-load-state.unavailable'),null,'保存失敗と回数制限を含む結果を、公開できない記事だけの案内へ置き換えない');
+ assert.deepEqual([...recovery.querySelectorAll('a')].map(a=>a.href),['https://note.com/account_a/n/n1']);
+ assert.match(h.body(),/取得失敗中も保持する本文/);assert.equal(retryButton(h).disabled,false);
+ await h.click(retryButton(h));await settle();
+ assert.deepEqual(calls,[{action:'refresh',articleKey:null},{action:'refresh',articleKeys:['n1','n2','n3','n4','n5','n6']}]);
+ assert.equal(h.w.document.querySelector('.micf-recovery'),null);assert.match(h.body(),/取得失敗中も保持する本文/);assert.equal(h.savedView().value.rows[0].body,'取得失敗中も保持する本文');
+});
+
+test('再取得待機中は通信せず、待機後の共有制限でも失敗対象と保存済み本文を保持する',async t=>{
+ let now=Date.now();class Clock extends Date{static now(){return now}}
+ const calls=[],ticks=[];
+ const h=await fixture(t,{globals:{Date:Clock},fetch:async()=>response([retainedComment()]),refreshFetch:async(_url,init)=>{
+  calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{ok:false,articles:0,failedArticles:1,articleFailures:[failedArticle('n1')],changedComments:0,retryAfterSeconds:60}:{ok:true,skipped:true,reason:'recent',retryAfterSeconds:30});
+ }});
+ const originalTimeout=h.w.setTimeout.bind(h.w);h.w.setTimeout=(fn,ms,...args)=>ms===1000?(ticks.push(()=>fn(...args)),90000+ticks.length):originalTimeout(fn,ms,...args);
+ await h.start();await settle();assert.equal(retryButton(h).disabled,true);assert.match(retryButton(h).textContent,/再取得まで 60秒/);
+ await h.click(retryButton(h));assert.equal(calls.length,1,'disabled retry cannot repeat the shared refresh');
+ now+=61000;await settle(()=>ticks.shift()());assert.equal(retryButton(h).disabled,false);
+ await h.click(retryButton(h));await settle();
+ assert.deepEqual(calls[1],{action:'refresh',articleKeys:['n1']});assert.match(h.body(),/直前の取得があるため/);assert.match(h.body(),/確認対象 n1/);assert.match(h.body(),/取得失敗中も保持する本文/);assert.equal(retryButton(h).disabled,true);assert.match(retryButton(h).textContent,/再取得まで 30秒/);
+});
+
+test('6記事を超える失敗は先頭6記事だけ再取得し、未送信の失敗を消さず次へ進める',async t=>{
+ const calls=[],failures=Array.from({length:8},(_,i)=>failedArticle('n'+(i+1)));
+ const h=await fixture(t,{fetch:async()=>response([retainedComment()]),refreshFetch:async(_url,init)=>{
+  calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{ok:false,articles:0,changedComments:0,failedArticles:8,articleFailures:failures,retryAfterSeconds:0}:{ok:true,articles:calls.length===2?6:2,changedComments:0,failedArticles:0,retryAfterSeconds:0});
+ }});
+ await h.start();await settle();assert.match(retryButton(h).textContent,/先頭6記事/);
+ await h.click(retryButton(h));await settle();
+ assert.deepEqual(calls[1],{action:'refresh',articleKeys:['n1','n2','n3','n4','n5','n6']});
+ assert.deepEqual([...h.w.document.querySelectorAll('.micf-recovery li>b')].map(el=>el.textContent),['確認対象 n7','確認対象 n8']);const unavailable=h.w.document.querySelector('.micf-load-state.unavailable');assert.match(unavailable.textContent,/2記事.*note側/);assert.match(unavailable.textContent,/保存済み履歴/);assert.doesNotMatch(unavailable.textContent,/取得できませんでした/);
+ await h.click(retryButton(h));await settle();assert.deepEqual(calls[2],{action:'refresh',articleKeys:['n7','n8']});assert.equal(h.w.document.querySelector('.micf-recovery'),null);assert.match(h.body(),/取得失敗中も保持する本文/);
+});
+
+test('時間内に未処理の記事も取得完了とせず、本人記事だけの再取得対象に残す',async t=>{
+ const calls=[];
+ const h=await fixture(t,{fetch:async()=>response([retainedComment()]),refreshFetch:async(_url,init)=>{
+  calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{ok:true,articles:1,failedArticles:0,truncated:true,pendingArticleKeys:['nabc','nabc','wrong-key'],changedComments:0,retryAfterSeconds:0}:{ok:true,articles:1,failedArticles:0,changedComments:0});
+ }});
+ await h.start();await settle();assert.match(h.body(),/残りはもう一度取得できます/);assert.match(h.body(),/今回は時間内に確認できませんでした/);
+ const links=[...h.w.document.querySelectorAll('.micf-recovery a')];assert.deepEqual(links.map(a=>a.href),['https://note.com/account_a/n/nabc']);
+ await h.click(retryButton(h));await settle();assert.deepEqual(calls[1],{action:'refresh',articleKeys:['nabc']});assert.equal(h.w.document.querySelector('.micf-recovery'),null);
+});
+
+test('選択記事名を省略されない読み出しに表示し、日付と記事選択を保持する',async t=>{
+ const title='スマートフォンでも最後まで確認したい、とても長い確認対象の記事タイトルです';
+ const h=await fixture(t,{fetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);return body.action==='comment_articles'?response([{article_key:'nabc',title,comment_count_day:1}]):response([retainedComment()]);
+ }});
+ await h.start();await h.change(h.w.document.querySelector('input[type="date"]'),'2026-10-26');await settle();
+ const select=h.w.document.querySelector('.micf-tools select');await settle(()=>{Object.getOwnPropertyDescriptor(h.w.HTMLSelectElement.prototype,'value').set.call(select,'nabc');select.dispatchEvent(new h.w.Event('change',{bubbles:true}))});
+ assert.equal(select.getAttribute('aria-label'),'コメント日の記事');assert.equal(h.w.document.querySelector('.micf-selected-article').textContent,'選択中：'+title);assert.equal(h.w.document.querySelector('input[type="date"]').value,'2026-10-26');assert.equal(h.w.document.querySelector('.micf-tools select').value,'nabc');
+});
+
+test('失敗分の再取得中に本人を切り替えても遅い応答で別本人の失敗や本文を変更しない',async t=>{
+ const calls=[];let deliverRetry,signal;
+ const h=await fixture(t,{fetch:async(_url,init)=>response([event('current',init.headers['X-Insight-Token']==='token-a'?'Aの保存済み本文':'Bの保存済み本文',{actor_image_url:'https://images.test/peer.png'})]),refreshFetch:async(_url,init)=>{
+  const body=JSON.parse(init.body),token=init.headers['X-Insight-Token'];calls.push({body,token});
+  if(token==='token-b')return Response.json({ok:false,articles:0,failedArticles:1,articleFailures:[failedArticle('nbb',{title:'Bだけの失敗記事'})],changedComments:0,retryAfterSeconds:0});
+  if(body.articleKeys){signal=init.signal;return new Promise(resolve=>{deliverRetry=()=>resolve(Response.json({ok:true,articles:1,failedArticles:0,changedComments:1}))})}
+  return Response.json({ok:false,articles:0,failedArticles:1,articleFailures:[failedArticle('naa',{title:'Aだけの失敗記事'})],changedComments:0,retryAfterSeconds:0});
+ }});
+ await h.start();await settle();await h.click(retryButton(h));assert.equal(signal.aborted,false);
+ h.w.localStorage.setItem(tokenKey,'token-b');await h.start({noteId:'account_b'});await settle();assert.equal(signal.aborted,true);assert.match(h.body(),/Bだけの失敗記事/);assert.doesNotMatch(h.body(),/Aだけの失敗記事|Aの保存済み本文/);
+ const writes=h.writes.length;await settle(deliverRetry);assert.match(h.body(),/Bだけの失敗記事/);assert.match(h.body(),/Bの保存済み本文/);assert.equal(h.writes.length,writes);assert.equal(calls.at(-1).token,'token-b');
+});
+
+test('保存した失敗一覧へ戻った後の手動再取得も、画面離脱で中断する',async t=>{
+ const calls=[];let signal,deliverRetry,reads=0;
+ const h=await fixture(t,{fetch:async()=>{reads++;return response([retainedComment()])},refreshFetch:async(_url,init)=>{
+  const body=JSON.parse(init.body);calls.push(body);
+  if(body.articleKeys){signal=init.signal;return new Promise(resolve=>{deliverRetry=()=>resolve(Response.json({ok:true,articles:1,failedArticles:0,changedComments:1}))})}
+  return Response.json({ok:false,articles:0,failedArticles:1,articleFailures:[failedArticle('n1')],changedComments:0,retryAfterSeconds:0});
+ }});
+ await h.start();await settle();await h.render(()=>null,{});await h.start();await settle();assert.equal(calls.length,1,'fresh return restores failure details without repeating note reads');
+ await h.click(retryButton(h));assert.equal(signal.aborted,false);const before={reads,writes:h.writes.length};
+ await h.render(()=>React.createElement('p',null,'後の画面'),{});assert.equal(signal.aborted,true,'a manual collection after a cached return still belongs to the current component');
+ await settle(deliverRetry);assert.equal(reads,before.reads);assert.equal(h.writes.length,before.writes);assert.equal(h.w.document.body.textContent,'後の画面');
+});
+
+test('失敗分の通信が再び失敗しても対象記事と保存済みコメントを保持する',async t=>{
+ let calls=0;
+ const h=await fixture(t,{fetch:async()=>response([retainedComment()]),refreshFetch:async()=>{
+  if(calls++)throw new Error('OFFLINE');return Response.json({ok:false,articles:0,failedArticles:1,articleFailures:[failedArticle('n1')],changedComments:0,retryAfterSeconds:0});
+ }});
+ await h.start();await settle();await h.click(retryButton(h));await settle();assert.match(h.body(),/noteのコメント取得を確認できませんでした/);assert.match(h.body(),/確認対象 n1/);assert.match(h.body(),/取得失敗中も保持する本文/);assert.equal(retryButton(h).disabled,false);assert.equal(calls,2);
+});
+
+test('HTTP200でも取得結果の形が不明なら成功にせず保存済みコメントを保持する',async t=>{
+ let reads=0;
+ const h=await fixture(t,{fetch:async()=>{reads++;return response([retainedComment()])},refreshFetch:async()=>Response.json({ok:true,unknown:'missing confirmed article result'})});
+ await h.start();await settle();assert.match(h.body(),/noteのコメント取得を確認できませんでした/);assert.match(h.body(),/COMMENT_REFRESH_RESPONSE_INVALID/);assert.match(h.body(),/取得失敗中も保持する本文/);assert.doesNotMatch(h.body(),/noteから0記事のコメントを取得しました/);assert.equal(reads,1,'an invalid collection response must not trigger a second saved-history read');assert.equal(h.w.document.querySelector('.micf-recovery'),null);
+});
+
 test('保存分を表示した後の401は本文と表示コピーを除き再利用しない',async t=>{
  let deliver;const h=await fixture(t,{stored:saved([event('old','失効後に見せない本文')]),fetch:async()=>new Promise(resolve=>{deliver=()=>resolve(new Response('invalid',{status:401}))})});
  await h.start();assert.match(h.body(),/失効後に見せない本文/);

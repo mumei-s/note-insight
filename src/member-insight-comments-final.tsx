@@ -26,7 +26,8 @@ const COMMENT_CACHE=new Map<string,CommentCache>();
 type CommentView={status:string;day:string;articleKey:string;draft:string;query:string;renderLimit:number};
 const COMMENT_VIEWS=new Map<string,CommentView>();
 const COMMENT_ARTICLES=new Map<string,{rows:Row[];at:number;revision:number}>();
-const COMMENT_COLLECTION=new Map<string,{at:number;revision:number;message:string}>();
+type ArticleFailure={articleKey:string;title:string;url:string;stage:"note"|"save";code:string;retryable:boolean};
+const COMMENT_COLLECTION=new Map<string,{at:number;revision:number;message:string;failures?:ArticleFailure[];retryAt?:number}>();
 const COMMENT_AUX=new Map<string,{detail:Record<string,Row[]>;hearts:Record<string,Heart>}>();
 let lastVerifiedScope="";
 function savedComments(scope:{account:string;token:string}){
@@ -73,6 +74,30 @@ async function post(endpoint:string,body:Record<string,unknown>,request:Captured
  }
 }
 const n=(v:any)=>new Intl.NumberFormat("ja-JP").format(Number(v||0));
+function articleFailures(result:Row,account:string):ArticleFailure[]{
+ const found=new Map<string,ArticleFailure>();
+ for(const item of Array.isArray(result.articleFailures)?result.articleFailures:[]){
+  const key=String(item?.articleKey||"");if(!/^n[0-9a-f]{1,63}$/i.test(key)||found.has(key))continue;
+  let url="";try{const u=new URL(String(item.url||""));if(u.origin==="https://note.com"&&!u.username&&!u.password)url=u.href}catch{}
+  found.set(key,{articleKey:key,title:String(item.title||"確認できなかった記事").slice(0,180),url,stage:item.stage==="save"?"save":"note",code:String(item.code||"COMMENT_REFRESH_FAILED"),retryable:item.retryable===true});
+ }
+ for(const raw of Array.isArray(result.pendingArticleKeys)?result.pendingArticleKeys:[]){
+  const key=String(raw||"");if(!/^n[0-9a-f]{1,63}$/i.test(key)||found.has(key))continue;
+  found.set(key,{articleKey:key,title:"今回の取得時間内に確認できなかった記事",url:/^[a-z0-9_-]+$/i.test(account)?`https://note.com/${account}/n/${key}`:"",stage:"note",code:"COMMENT_REFRESH_DEADLINE",retryable:true});
+ }
+ return [...found.values()];
+}
+function articleFailureReason(f:ArticleFailure){
+ if(f.stage==="save")return"取得後の保存を確認できませんでした";
+ if(f.code==="NOTE_COMMENTS_DISABLED")return"記事のコメント欄が無効になっているため、noteから取得できません";
+ if(f.code==="NOTE_PUBLIC_403")return"note側で公開取得が許可されていません";
+ if(/NOTE_PUBLIC_(404|410)/.test(f.code)||f.code==="ARTICLE_NOT_FOUND"||f.code==="COMMENT_ARTICLE_NOT_FOUND")return"記事を確認できません。非公開・削除などの可能性があります";
+ if(f.code==="NOTE_PUBLIC_429")return"note側の回数制限です。時間をおいて再取得してください";
+ if(f.code==="COMMENT_REFRESH_DEADLINE")return"今回は時間内に確認できませんでした";
+ if(/RESPONSE|PAGINATION|PAGE_LIMIT/.test(f.code))return"コメントの応答を最後まで確認できませんでした";
+ return"noteとの通信を確認できませんでした";
+}
+const unavailableArticle=(f:ArticleFailure)=>f.code==="NOTE_COMMENTS_DISABLED"||/^NOTE_PUBLIC_(403|404|410)$/.test(f.code)||f.code==="COMMENT_ARTICLE_NOT_FOUND";
 const date=(v:any,withTime=true)=>{if(!v)return"—";const d=new Date(String(v));if(Number.isNaN(d.getTime()))return"—";return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",...(withTime?{year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}:{year:"numeric",month:"numeric",day:"numeric"})}).format(d)};
 const isoDay=(v:string)=>v?`${v}T00:00:00+09:00`:null;function nextDay(v:string){return v?new Date(new Date(`${v}T00:00:00+09:00`).getTime()+86400000).toISOString():null}function noteId(url:any){try{return new URL(String(url||"")).pathname.split("/").filter(Boolean)[0]||""}catch{return""}}
 async function enrich(rows:Row[],signal:AbortSignal):Promise<Row[]>{
@@ -107,6 +132,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",viewScope=`${memberNoteId.trim().toLowerCase()}|${token}`,savedView=COMMENT_VIEWS.get(viewScope)||defaultView(),initialKey=viewCacheKey(viewScope,savedView),initialCached=COMMENT_CACHE.get(initialKey),initialRetained=initialCached&&canRetainInsightView(initialCached.at)?initialCached:null,initialAux=initialRetained?COMMENT_AUX.get(initialKey):null,storageScope={account:memberNoteId,token},initialSaved=!initialRetained&&savedView.status==="all"&&!savedView.day&&!savedView.articleKey?savedComments(storageScope):null,initialSavedRows=Array.isArray(initialSaved?.value.rows)?initialSaved.value.rows.slice(0,EVENT_PAGE):[];
  const[rows,setRows]=useState<Row[]>(initialRetained?.rows||initialSavedRows),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(savedView.articleKey),[day,setDay]=useState(savedView.day),[draft,setDraft]=useState(savedView.draft),[query,setQuery]=useState(savedView.query),[total,setTotal]=useState(initialRetained?.total||Number(initialSaved?.value.total)||0),[status,setStatus]=useState(savedView.status),[detail,setDetail]=useState<Record<string,Row[]>>(initialAux?.detail||{}),[hearts,setHearts]=useState<Record<string,Heart>>(initialAux?.hearts||{}),[loading,setLoading]=useState(!initialRetained),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">(initialRetained?"idle":"initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(savedView.renderLimit),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
  const [savedDisplay,setSavedDisplay]=useState(initialSaved?.savedAt||0),[loadedPage,setLoadedPage]=useState(initialRetained?.page||1),[moreLoading,setMoreLoading]=useState(false);
+ const [collectionFailures,setCollectionFailures]=useState<ArticleFailure[]>([]),[collectionRetryAt,setCollectionRetryAt]=useState(0),[collectionNow,setCollectionNow]=useState(Date.now());
  const loadSeq=useRef(0),pageBusy=useRef(false),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  const stateScope=useRef(viewScope),controlsReady=stateScope.current===viewScope;
@@ -215,24 +241,28 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   try{const x=await post(HISTORY,{action:"comment_thread",rootKey:k},request);if(current(request))setDetail(v=>{if(!current(request))return v;const next={...v,[k]:x.rows||[]};remember(COMMENT_AUX,cacheKey,{detail:next,hearts:COMMENT_AUX.get(cacheKey)?.hearts||{}});return next})}catch(e){if(current(request))setError(e instanceof Error?e.message:"会話の読込に失敗しました")}
  }
  reloadSaved.current=()=>{COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});void loadAll(true,{rows,total,at:Date.now(),revision})};
- async function collectComments(selectedArticle:string|null=null,force=false){
+ async function collectComments(selectedArticle:string|null=null,force=false,retryKeys?:string[]){
   if(collectionController.current||!token||!persistKey)return;
   const controller=new AbortController(),seq=++collectionSeq.current,capturedToken=token;
   collectionController.current=controller;
   const active=()=>seq===collectionSeq.current&&!controller.signal.aborted&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"");
-  const announce=(message:string)=>{setCollectionMessage(message);remember(COMMENT_COLLECTION,viewScope,{at:Date.now(),revision,message})};
+  const announce=(message:string,failures:ArticleFailure[]=[],retryAt=0)=>{setCollectionMessage(message);setCollectionFailures(failures);setCollectionRetryAt(retryAt);remember(COMMENT_COLLECTION,viewScope,{at:Date.now(),revision,message,failures,retryAt})};
   setCollecting(true);setCollectionMessage("noteのコメントを取得中… 保存済み履歴はそのまま表示しています。");
   try{
-   const response=await fetchInsightResource(COMMENT_REFRESH,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":capturedToken},body:JSON.stringify({action:"refresh",articleKey:selectedArticle}),cache:"no-store",signal:controller.signal},40000);
+   const response=await fetchInsightResource(COMMENT_REFRESH,{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":capturedToken},body:JSON.stringify(retryKeys?{action:"refresh",articleKeys:retryKeys.slice(0,6)}:{action:"refresh",articleKey:selectedArticle}),cache:"no-store",signal:controller.signal},40000);
    const result=await bounded(response.json(),controller.signal,40000);
    if(!active())return;
    if(!response.ok)throw new Error(result?.error||`HTTP_${response.status}`);
    const partial=Number.isSafeInteger(result?.failedArticles)&&result.failedArticles>0;
    if(result?.ok!==true&&!partial)throw new Error(result?.error||"COMMENT_REFRESH_FAILED");
-   if(result.paused){announce("noteのコメント取得は一時停止中です。保存済み履歴を表示しています。");return}
-   if(result.skipped){announce("直前の取得があるため、保存先の履歴を表示しています。")}
-   else if(partial){announce(`${n(result.failedArticles)}記事のコメントを取得できませんでした。取得できた分を保存先から確認しています。`)}
-   else if(result.truncated){announce("今回取得できたコメントを反映しています。残りはもう一度取得できます。")}
+   if(result.paused){announce("noteのコメント取得は一時停止中です。保存済み履歴を表示しています。",collectionFailures,collectionRetryAt);return}
+   const untouched=retryKeys?collectionFailures.filter(f=>!retryKeys.includes(f.articleKey)):[],failures=[...untouched,...articleFailures(result,memberNoteId)],retryAt=Date.now()+Math.max(0,Math.min(60,Number.isFinite(result.retryAfterSeconds)?result.retryAfterSeconds:60))*1000;
+   if(result.skipped){announce("直前の取得があるため、保存先の履歴を表示しています。",collectionFailures,retryAt)}
+   else if(partial||untouched.length){
+    const count=Number(result.failedArticles||0)+untouched.length,unavailable=failures.length===count&&failures.every(unavailableArticle);
+    announce(unavailable&&failures.every(f=>f.code==="NOTE_COMMENTS_DISABLED")?`${n(count)}記事はコメント欄が無効のため、noteから再取得できません。保存済みの本文は保持しています。`:unavailable?`${n(count)}記事はnote側でコメントを確認できないため、保存済み履歴を表示しています。対象記事から理由を確認できます。`:`${n(count)}記事のコメントを取得できませんでした。保存済み履歴は保持しています。対象記事と理由を確認し、失敗分だけ再取得できます。`,failures,retryAt);
+   }
+   else if(result.truncated){announce("今回取得できたコメントを反映しています。残りはもう一度取得できます。",failures,retryAt)}
    else if(Number.isSafeInteger(result.articles)&&result.articles>=0){announce(`noteから${n(result.articles)}記事のコメントを取得しました。保存先の履歴を表示しています。`)}
    else throw new Error("COMMENT_REFRESH_RESPONSE_INVALID");
    // A skipped/unchanged automatic collection adds nothing to the initial DB
@@ -246,12 +276,14 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  }
  useEffect(()=>{
   if(!controlsReady)return;
-  setCollectionMessage("");setCollecting(false);
+  const cleanup=()=>{collectionSeq.current++;collectionController.current?.abort();collectionController.current=null};
+  setCollectionMessage("");setCollectionFailures([]);setCollectionRetryAt(0);setCollecting(false);
   const saved=COMMENT_COLLECTION.get(viewScope);
-  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)){setCollectionMessage(saved.message);return}
+  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)){setCollectionMessage(saved.message);setCollectionFailures(saved.failures||[]);setCollectionRetryAt(saved.retryAt||0);return cleanup}
   if(persistKey&&token)void collectComments();
-  return()=>{collectionSeq.current++;collectionController.current?.abort();collectionController.current=null};
+  return cleanup;
  },[persistKey,token,viewScope,revision,controlsReady]);
+ useEffect(()=>{if(!collectionRetryAt)return;let timer=0;const tick=()=>{setCollectionNow(Date.now());if(Date.now()<collectionRetryAt)timer=window.setTimeout(tick,1000)};tick();return()=>window.clearTimeout(timer)},[collectionRetryAt]);
  useEffect(()=>{
   if(!controlsReady)return;
   const controller=new AbortController(),seq=++articleSeq.current,capturedToken=token;
@@ -313,14 +345,17 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const visibleEventRows=useMemo(()=>eventRows.slice(0,renderLimit),[eventRows,renderLimit]);
  const visibleThreadRows=useMemo(()=>rows.slice(0,renderLimit),[rows,renderLimit]);
  const complete=!loading&&!error&&!savedDisplay&&rows.length>=total,shownTotal=status==="all"&&query.trim()?eventRows.length:total;
+ const retrySeconds=Math.max(0,Math.ceil((collectionRetryAt-collectionNow)/1000)),selectedArticle=articles.find(a=>String(a.article_key)===articleKey);
  if(!controlsReady)return <section className="micf"><h2>コメント・返信履歴</h2><p className="micf-empty">コメント履歴を確認中…</p></section>;
  return <section className="micf" aria-busy={syncPhase==="initial"&&loading}>
   <header className="micf-head"><div><small>COMMENT HISTORY</small><h2>コメント・返信履歴</h2><p>{status==="all"?"保存済みの全コメント・全返信を、会話数ではなく1件ずつ全部表示します。":"対応状況ごとの会話一覧です。「自分の返信で終了」は最後の返信への相手本人の♡も照合します。"}</p></div><strong>{status==="all"&&query.trim()&&!complete?<small>検索中（暫定）</small>:null}{n(shownTotal)}件</strong></header>
   {savedDisplay?<div className="micf-load-state" role="status"><b>{error?"前回保存分を表示・最新未確認":"前回保存分を表示・最新確認中"}</b><span>保存 {date(new Date(savedDisplay).toISOString())}</span></div>:null}
   {syncPhase!=="idle"?<div className={`micf-sync-scene ${syncPhase}`}><div className="micf-sync-track"><i/><i/><i/><i/></div><b>{syncMessage}</b><span>{syncPhase==="initial"?`${n(rows.length)} / ${total?n(total):"…"}件`:"保存済み表示はそのまま"}</span></div>:<div className="micf-load-state done"><b>{complete?"全履歴 保存済み":"保存済み履歴"}</b><span>{n(rows.length)} / {n(total)}件</span></div>}
   <div className="micf-tabs">{[["all","すべて（全コメント）"],["pending","要対応"],["unreplied","未返信"],["followup_pending","相手返信"],["heart_closed","あなたの♡で終了"],["replied","自分返信"]].map(x=><button key={x[0]} className={status===x[0]?"active":""} onClick={()=>setStatus(x[0])}>{x[1]}</button>)}</div>
-  <div className="micf-tools"><label><span>コメント日</span><input type="date" value={day} onChange={e=>{setDay(e.target.value);setArticleKey("")}}/></label><select value={articleKey} onChange={e=>setArticleKey(e.target.value)} disabled={!day}><option value="">{day?`この日の記事すべて (${articles.length})`:"日付を選択すると記事一覧"}</option>{articles.map(a=><option key={a.article_key} value={a.article_key}>{a.title}（{n(a.comment_count_day)}件）</option>)}</select><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="名前・記事・コメント本文" onKeyDown={e=>{if(e.key==="Enter")setQuery(draft)}}/><button onClick={()=>setQuery(draft)}>検索</button>{day?<button onClick={()=>{setDay("");setArticleKey("")}}>日付解除</button>:null}<button type="button" onClick={()=>void collectComments(articleKey||null,true)} disabled={collecting||!persistKey}>{collecting?"noteから取得中…":"noteからコメントを取得"}</button></div>
-  {collectionMessage?<div className="micf-load-state" role="status" aria-live="polite"><b>{collectionMessage}</b></div>:null}
+  <div className="micf-tools"><label><span>コメント日</span><input type="date" value={day} onChange={e=>{setDay(e.target.value);setArticleKey("")}}/></label><select aria-label="コメント日の記事" value={articleKey} onChange={e=>setArticleKey(e.target.value)} disabled={!day}><option value="">{day?`この日の記事すべて (${articles.length})`:"日付を選択すると記事一覧"}</option>{articles.map(a=><option key={a.article_key} value={a.article_key}>{a.title}（{n(a.comment_count_day)}件）</option>)}</select><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="名前・記事・コメント本文" onKeyDown={e=>{if(e.key==="Enter")setQuery(draft)}}/><button onClick={()=>setQuery(draft)}>検索</button>{day?<button onClick={()=>{setDay("");setArticleKey("")}}>日付解除</button>:null}<button type="button" onClick={()=>void collectComments(articleKey||null,true)} disabled={collecting||!persistKey}>{collecting?"noteから取得中…":"noteからコメントを取得"}</button></div>
+  {selectedArticle?<p className="micf-selected-article">選択中：{selectedArticle.title}</p>:null}
+  {collectionMessage?<div className={`micf-load-state${collectionFailures.length&&collectionFailures.every(unavailableArticle)?" unavailable":""}`} role="status" aria-live="polite"><b>{collectionMessage}</b></div>:null}
+  {collectionFailures.length?<div className="micf-recovery"><details><summary>確認できなかった記事（{n(collectionFailures.length)}件）</summary><ul>{collectionFailures.map(f=><li key={f.articleKey}><b>{f.title}</b><p>{articleFailureReason(f)}</p>{f.url?<a href={f.url} target="_blank" rel="noreferrer">noteで記事を確認 ↗</a>:null}</li>)}</ul></details><button type="button" disabled={collecting||retrySeconds>0} onClick={()=>void collectComments(null,true,collectionFailures.slice(0,6).map(f=>f.articleKey))}>{collecting?"noteから取得中…":retrySeconds?`再取得まで ${retrySeconds}秒`:collectionFailures.length>6?"失敗分だけ再取得（先頭6記事）":"失敗分だけ再取得"}</button></div>:null}
   {error?<p className="micf-error">{error}</p>:null}{loading&&!rows.length&&!savedDisplay?<p className="micf-empty">コメント履歴を読み込み中…</p>:status==="all"?eventRows.length?<><div className="micf-event-list">{visibleEventRows.map(r=>{const label=r.is_creator?(r.is_root?"あなたのコメント":"あなたの返信"):(r.is_root?"コメント":"返信");return <article key={r.comment_key} className={r.is_creator?"mine":""}><EventPerson row={r}/><span className="micf-event-kind">{label}</span><p>{r.body||"（本文なし）"}</p>{r.article_url?<a href={r.article_url} target="_blank" rel="noreferrer">{r.article_title||"対象記事"} ↗</a>:<span className="micf-event-article">{r.article_title||"記事"}</span>}<time>{date(r.occurred_at)}</time>{r.is_creator_liked?<small className="micf-event-heart">♥ あなたの♡</small>:null}</article>})}</div>{visibleEventRows.length<eventRows.length||(!query.trim()&&rows.length<total)?<div ref={moreRef} className="micf-more"><b>{n(visibleEventRows.length)} / {n(query.trim()?eventRows.length:total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">{query.trim()&&!complete?(loading?"全履歴を検索中…":"全履歴の検索を完了できませんでした"):"この条件のコメント履歴はありません。"}</p>:rows.length?<><div className="micf-thread-list">{visibleThreadRows.map(r=>{const st=stateOf(r,status),heart=hearts[String(r.root_key||"")];return <details key={r.root_key} onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open)void open(String(r.root_key))}}><summary><Person row={r}/><span className={`micf-state ${st.key}`}>{st.label}</span><p>{String(r.root_body||"").slice(0,140)}</p><a href={r.article_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{r.article_title}</a><time>{date(r.last_at||r.root_at)}</time><HeartState row={r} heart={heart}/></summary><div className="micf-thread">{detail[String(r.root_key)]?.map(m=><article key={m.comment_key} className={m.is_creator?"mine":""}><div><b>{m.is_creator?"あなた":m.actor_name}</b><small>{date(m.occurred_at)}</small></div><p>{m.body}</p></article>)||<p>会話を読み込み中…</p>}</div></details>})}</div>{visibleThreadRows.length<rows.length||rows.length<total?<div ref={moreRef} className="micf-more"><b>{n(visibleThreadRows.length)} / {n(total)}件を表示</b><span>下へ進むと続きを表示します</span><button type="button" disabled={loading||moreLoading||Boolean(savedDisplay)} onClick={revealMore}>{moreLoading?"続きを読み込み中…":"続きを表示"}</button></div>:null}</>:<p className="micf-empty">この条件のコメント履歴はありません。</p>}
  </section>
 }

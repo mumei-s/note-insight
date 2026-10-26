@@ -7,11 +7,11 @@
  .micf-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;overflow:visible}
  .micf-tabs button{width:100%;min-width:0;min-height:34px;padding:4px 5px;font-size:8.5px;white-space:normal;line-height:1.2}
  .micf-tools{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:6px;align-items:end}
- .micf-tools label{width:100%}
- .micf-tools label input,.micf-tools select{height:36px}
- .micf-tools>select{grid-column:auto}
+ .micf-tools>label,.micf-tools>select{grid-column:1/-1;width:100%}
+ .micf-tools label input,.micf-tools select{height:44px}
  .micf-tools>input{grid-column:1/-1!important}
- .micf-tools>button{min-height:36px}
+ :root .micf .micf-tools :is(input,select,button){min-height:44px!important}
+ :root .micf .micf-tools :is(input,select){font-size:16px!important}
  .micf-head{gap:7px}.micf-head>strong{flex:0 0 auto}
 }
 
@@ -35,3 +35,11 @@
 .micf-more button{min-height:44px;margin:4px 0 8px;padding:7px 18px;border:1px solid #38516a;border-radius:9px;background:#0d1a27;color:#9feaff;font:inherit;font-size:11px;font-weight:900;cursor:pointer}
 .micf-more button:disabled{opacity:.55;cursor:default}
 .micf-head>strong>small{display:block;max-width:9em;white-space:normal;font-size:9px;letter-spacing:0;line-height:1.4}
+.micf-selected-article{margin:0 0 10px;color:#bfefff;font-size:12px;line-height:1.6;overflow-wrap:break-word}
+.micf-load-state.unavailable{border-color:#315b74;background:#102633;color:#c4e9fb}
+.micf-recovery{display:grid;gap:8px;margin:8px 0 14px;font-size:12px;line-height:1.6}
+.micf-recovery details{border:1px solid #516078;border-radius:9px;background:#101e2b;overflow:hidden}
+.micf-recovery summary{display:flex;align-items:center;gap:8px;list-style:none;min-height:44px;padding:9px 12px;cursor:pointer;color:#d0e9f9;font-weight:700}
+.micf-recovery summary::-webkit-details-marker{display:none}.micf-recovery summary::before{content:"▸"}.micf-recovery details[open]>summary::before{content:"▾"}
+.micf-recovery ul{margin:0;padding:0 12px;list-style:none}.micf-recovery li{padding:10px 0;border-top:1px solid #33465b;overflow-wrap:break-word}.micf-recovery li p{margin:4px 0;color:#c0cddd}.micf-recovery a{display:inline-flex;align-items:center;min-height:44px;color:#9feaff;text-decoration:none}
+.micf-recovery>button{appearance:none;-webkit-appearance:none;min-height:44px;padding:9px 12px;border:1px solid #466580;border-radius:9px;background:#123449;color:#c9f5ff;font:inherit;font-weight:750;cursor:pointer}.micf-recovery>button:disabled{opacity:.6;cursor:default}
