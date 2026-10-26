@@ -1,4 +1,4 @@
-export {};
+import { captureInsightReturn } from "./insight-update-return";
 
 function activeNoteId(){
   const links=[...document.querySelectorAll<HTMLAnchorElement>('.miu a[href*="note.com/"]')];
@@ -14,7 +14,7 @@ function updateUrl(){
   const u=new URL('./notification-update.html',location.href),id=activeNoteId();
   u.searchParams.set('from','top');
   if(id)u.searchParams.set('account',id);
-  u.searchParams.set('return',location.href);
+  u.searchParams.set('return',captureInsightReturn({account:id}));
   return u.href;
 }
 
