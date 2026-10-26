@@ -453,10 +453,10 @@ test('履歴の開閉だけで読み込みを止めず、重複する詳細・�
  assert.ok(h.w.document.getElementById('mumei-dash-run'));assert.equal(h.w.document.getElementById('mumei-dash-details'),null);assert.equal(h.w.document.getElementById('mumei-dash-toggle'),null);
 });
 
-test('URLが変わらない🔔表示ではパネル操作を止め、取得済みの保存は継続する',async t=>{
+for(const surface of ['notification','account-menu'])test('URLが変わらない前面表示ではパネル操作を止め、取得済みの保存は継続する：'+surface,async t=>{
  let finish;const h=page(t,'<p>ページビュー 8</p><details><summary>日別グラフ</summary></details>',{stats:()=>new Promise(r=>finish=r),before:w=>{w.document.querySelector('summary').onclick=()=>void w.fetch('/api/v1/stats/daily')}});
  for(let i=0;i<60&&!finish;i++)await pause(10);
- const notice=h.w.document.createElement('section');notice.setAttribute('role','dialog');notice.setAttribute('aria-label','通知');notice.innerHTML='<button>通知</button><button>お知らせ</button>';h.w.document.body.append(notice);
+ const notice=h.w.document.createElement('section');if(surface==='notification'){notice.setAttribute('role','dialog');notice.setAttribute('aria-label','通知');notice.innerHTML='<button>通知</button><button>お知らせ</button>'}else notice.innerHTML='<a href="/dashboard">ダッシュボード</a><a href="/settings">設定</a><a href="/notes">自分の記事</a><a href="/notes?status=draft">下書き</a>';h.w.document.body.append(notice);
  await pause(80);assert.equal(h.w.document.getElementById('mumei-dashboard-sync'),null);assert.equal(h.w.document.getElementById('mumei-dashboard-clearance'),null);
  finish({page_views:{'2026-09-20':8}});await saved(h);assert.equal(h.saves[0].contentSections.article.scope,'partial-read');
  notice.remove();await saved(h);assert.ok(h.w.document.getElementById('mumei-dashboard-sync'));assert.equal(h.saves[0].metricSeries[0].pageViews,8);assert.equal(h.diagnostics.length,0);

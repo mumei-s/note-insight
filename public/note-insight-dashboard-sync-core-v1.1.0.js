@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.3
+// @version      1.7.4
 // @description  note公式Dashboardを本人アカウント完全一致でINSIGHTへ手動読み込み。インプレッション・PV・スキ・コメント・売上・流入元・日別系列・記事/メンシプ/マガジン対応。本人通知とは独立しています。
 // @match        https://note.com/sitesettings/stats*
 // @match        https://note.com/dashboard*
@@ -26,7 +26,7 @@
     });return;
   }
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardCore()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.3';
+  const VERSION='1.7.4';
   if(document.documentElement?.getAttribute('data-mumei-dashboard-core'))return;
   document.documentElement?.setAttribute('data-mumei-dashboard-core',VERSION);
   const TOKEN_API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dashboard-import-token';
@@ -50,12 +50,15 @@
   function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
   async function currentNoteId(){const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)return'';const j=await r.json(),u=(j.data??j).user||(j.data??j),id=text(u?.urlname||u?.url_name||u?.username).replace(/^@/,'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)?id:''}catch{return''}finally{clearTimeout(timer)}}
   let surfaceSuspended=false,surfaceActive=true;
-  function notificationSurface(){
+  function foregroundSurface(){
     const visible=el=>{for(let p=el;p&&p!==document.documentElement;p=p.parentElement){const s=getComputedStyle(p);if(p.hidden||p.hasAttribute('inert')||p.getAttribute('aria-hidden')==='true'||s.display==='none'||s.visibility==='hidden'||s.opacity==='0')return false}return el.isConnected};
-    for(const el of document.querySelectorAll('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"],.m-navbarNotice,[class*="navbarNoticeList"],[role="dialog"],[role="menu"],[popover]')){
+    for(const el of document.querySelectorAll('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"],.m-navbarNotice,[class*="navbarNoticeList"],dialog[open],[role="dialog"],[role="menu"],[aria-modal="true"],[popover]')){
       if(el.closest('#mumei-dashboard-sync'))continue;
       if(!visible(el))continue;
-      if(el.matches('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"]')||el.matches('[role="dialog"],[role="menu"],[popover]')&&/通知|お知らせ|notification/i.test(el.getAttribute('aria-label')||''))return true;
+      // Official metric/period popups belong to the reader, even when portalled
+      // outside main or wrapped in a dialog/menu by the dashboard framework.
+      if([metricTrigger(),periodTrigger()].some(trigger=>{const id=trigger?.getAttribute('aria-controls'),controlled=id&&document.getElementById(id);return controlled&&(el===controlled||el.contains(controlled)||controlled.contains(el))}))continue;
+      if(el.matches('[data-mumei-notice-shell-v2958="1"],[data-mumei-notice-shell-v3="1"],dialog[open],[role="dialog"],[role="menu"],[aria-modal="true"]')||el.matches('[popover]')&&/通知|お知らせ|notification/i.test(el.getAttribute('aria-label')||''))return true;
       const labels=[...el.querySelectorAll('a,button,[role="tab"]')].filter(visible).map(x=>text(x.textContent));if(labels.some(x=>/^通知(?:\s*\d+)?$/.test(x))&&labels.some(x=>x==='お知らせ'))return true;
       if(el.matches('.m-navbarNotice,[class*="navbarNoticeList"]')&&[...el.querySelectorAll('.m-navbarNoticeItem,[class*="navbarNoticeItem"],[data-testid="notification-item"]')].some(visible))return true;
     }
@@ -63,10 +66,21 @@
     const tabs=[...document.querySelectorAll('a,button,[role="tab"],[role="button"]')].filter(el=>/^(?:通知|お知らせ)(?:\s*\d+)?$/.test(text(el.textContent))&&!el.closest('#mumei-dashboard-sync')&&visible(el));
     const notices=tabs.filter(el=>/^通知(?:\s*\d+)?$/.test(text(el.textContent))),news=tabs.filter(el=>/^お知らせ(?:\s*\d+)?$/.test(text(el.textContent)));
     for(const n of notices)for(const o of news){let p=n.parentElement;for(let i=0;i<6&&p&&p!==document.body;i++,p=p.parentElement)if(p.contains(o))return true}
+    // Mobile account sheets may have no dialog/menu role. Match a local group
+    // of visible account actions, not the word "dashboard" anywhere on the page.
+    const actions=[...document.querySelectorAll('a,button,[role="button"],[role="menuitem"]')].filter(el=>/^(?:ダッシュボード|設定|自分の記事|下書き)$/.test(text(el.textContent))&&!el.closest('#mumei-dashboard-sync')&&visible(el));
+    const root=dashboardRoot();
+    for(const link of actions.filter(el=>text(el.textContent)==='ダッシュボード')){
+      for(let group=link.parentElement,depth=0;group&&group!==document.body&&depth<6;group=group.parentElement,depth++){
+        if(group===root||group.contains(root))break;
+        const labels=actions.filter(el=>group.contains(el)).map(el=>text(el.textContent));
+        if(labels.includes('設定')&&labels.includes('自分の記事')&&labels.includes('下書き'))return true;
+      }
+    }
     return false;
   }
   const isDashboardRoute=()=>location.origin==='https://note.com'&&/^\/(?:sitesettings\/stats|dashboard)(?:\/|$)/.test(location.pathname);
-  const isDashboard=()=>featureOn()&&isDashboardRoute()&&document.visibilityState!=='hidden'&&!notificationSurface();
+  const isDashboard=()=>featureOn()&&isDashboardRoute()&&document.visibilityState!=='hidden'&&!foregroundSurface();
   const statsUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://note.com'&&/^\/api\/v\d+\/(?:stats|dashboards?|analytics)(?:\/|$)/.test(u.pathname)}catch{return false}};
   const graphqlUrl=url=>{try{const u=new URL(url,location.href);return u.origin==='https://graphql.note.com'&&u.pathname==='/graphql'}catch{return false}};
   const contentLabel=el=>text(el?.getAttribute('aria-label')||el?.textContent);
@@ -720,7 +734,7 @@
   window.addEventListener('DOMContentLoaded',mount,{once:true});
   document.addEventListener('mumei-dashboard-mount',mount);
   let surfaceTimer=0;
-  new MutationObserver(records=>{if(!featureOn()||!document?.documentElement||document.visibilityState==='hidden'||records.every(r=>r.target?.closest?.('#mumei-dashboard-sync,#mumei-dashboard-clearance')))return;clearTimeout(surfaceTimer);surfaceTimer=setTimeout(updateDashboardSurface,50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3']});
+  new MutationObserver(records=>{if(!featureOn()||!document?.documentElement||document.visibilityState==='hidden'||records.every(r=>r.target?.closest?.('#mumei-dashboard-sync,#mumei-dashboard-clearance')))return;clearTimeout(surfaceTimer);surfaceTimer=setTimeout(updateDashboardSurface,50)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','inert','open','role','aria-hidden','aria-modal','aria-expanded','data-mumei-notice-shell-v2958','data-mumei-notice-shell-v3']});
   // note's page and a userscript can use different History objects. A route
   // change may therefore bypass the wrapper hook and have no DOM mutation.
   let surfaceHref=location.href;
