@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.7';
+const VERSION='4.2.8';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -67,20 +67,32 @@ function magazineActionText(el){
  const summary=clean(el.textContent);
  const leading=node=>{const text=clean(node.textContent);return text&&summary.startsWith(text)&&Boolean(leadName(text))};
  function text(node){
-  if(node.nodeType===3)return node.textContent;
+  if(node.nodeType===3)return clean(node.textContent);
   if(node.nodeType!==1)return'';
   if(node!==el){
    if(node.matches('time,[datetime]'))return'';
    if(node.matches('a[href]')){let article=false;try{const url=new URL(node.getAttribute('href'),location.href);article=url.hostname==='note.com'&&/\/n\/n[a-f0-9]{12}(?:\/|$)/i.test(url.pathname)}catch{}if(article&&!leading(node))return'';}
-   if(node.matches('p,h1,h2,h3,h4,h5,h6')&&!leading(node))return'';
+   if(node.matches('[class*="preview" i],[class*="excerpt" i],h1,h2,h3,h4,h5,h6')&&!leading(node))return'';
   }
-  return [...node.childNodes].map(text).join('');
+  const content=[...node.childNodes].map(text).join('');
+  return node.matches('div,p,li,article,section,br,h1,h2,h3,h4,h5,h6')?'\u001e'+content+'\u001e':content;
  }
- return clean(text(el));
+ return text(el);
 }
 function magazineNoise(t){
- const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\d)/g,'$1').replace(/(?:たった今|昨日|\d+(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u,''),lead=s.match(/^.{1,180}?さん(?:他\d+名)?が/u);
- if(!lead)return false;
+ const blocks=String(t||'').split('\u001e');let prefix='';
+ for(let i=0;i<blocks.length;i++){
+  prefix+=blocks[i];if(!magazineAction(prefix))continue;
+  const rest=clean(blocks.slice(i+1).join(''));
+  // A title can itself end in the addition phrase. Its following purchase,
+  // like or introduction clause is still part of the notification action.
+  return !/^(?:[」』】”"]|という|といった|と題した|の記事|記事[にを]|[にをで](?:スキ|購入|返信|コメント|紹介|引用|埋め込))/u.test(rest);
+ }
+ return false;
+}
+function magazineAction(t){
+ const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\d)/g,'$1').replace(/(?:たった今|昨日|\d+(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u,''),lead=s.match(/^(.{1,180}?)さん(?:他\d+名)?(が|の|から|より|に)/u);
+ if(!lead||lead[2]!=='が')return false;
  const action=s.slice(lead[0].length),pairs={'「':'」','『':'』','【':'】','（':'）','(' :')','“':'”','"':'"'},closing=new Set(Object.values(pairs)),quotes=[];
  let ended=false;
  for(let i=0;i<action.length;i++){

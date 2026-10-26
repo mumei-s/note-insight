@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.23.4",
-  "notificationVersion": "3.6.45",
+  "notificationVersion": "3.6.46",
   "dashboardVersion": "1.7.3",
-  "releasedAt": "2026-10-26T13:54:25+09:00",
+  "releasedAt": "2026-10-26T14:25:35+09:00",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知フィルターをマガジンへの新しい記事追加のお知らせだけに限定し、話題・記事内紹介・購入・参加などを保持。フォルダは選択した1つだけ表示し、切替・検索・記事URLからの追加と既存設定を維持。",
+  "note": "マガジン追加通知の動作文と後続の記事プレビューをDOMの区切りで判定し、複数人物・省略名・まとめ通知を非表示にする処理を修正。購入・紹介・引用・スキ・返信などと既存のフォルダ設定は保持。",
   "dmVersion": "1.4.12",
   "dmLabel": "DM同期"
 }

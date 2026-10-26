@@ -152,6 +152,47 @@ test('記事タイトルに非表示対象の文言があっても、購入・�
 test('平坦な本文・リンクが同じでも、動作文をpreviewへ移したDOM変更を再判定する',async t=>{
  const f=fixture(t,{initial:row('target')+row('last')});await f.ready();assert.equal(f.hidden('target'),true);
  const target=f.w.document.getElementById('target'),text=target.textContent,link=target.querySelector('a').outerHTML,body=target.lastChild.textContent;
- target.innerHTML=link+'<p>'+body+'</p>';assert.equal(target.textContent,text);
+ target.innerHTML=link+'<p class="article-preview">'+body+'</p>';assert.equal(target.textContent,text);
  await until(()=>!f.hidden('target'));assert.equal(f.w.document.getElementById('target'),target);
+});
+
+for(const mode of ['modern','legacy'])test(`省略人物名・複数登録人物のマガジン追加を、DIVプレビューや分割段落でも隠す (${mode})`,async t=>{
+ const people=[{id:'actor',name:'架空のEC運用ノート',short:'架空のEC運用ノー…'},{id:'writer_b',name:'架空の週末エッセイ帳',short:'架空の週末エッセ…'},{id:'writer_c',name:'架空の学びと記録',short:'架空の学びと記録'}];
+ const [a,b,c]=people,actor=(person,count)=>`${person.short}さん他${count}名が`,added=(magazine,count)=>`${magazine}に新しい記事を${count}本追加しました`,preview='【架空のEC運用】競合商品の見出しを比べる…',time='<time>1分前</time>';
+ const cases=[
+  ['div-preview',`<li class="native-notice" id="div-preview"><span>${actor(a,35)}</span><span>${added('【共同運営マガジン】頑…',36)}</span><div>${preview}</div>${time}</li>`],
+  ['whole-row-link',`<a class="native-notice" id="whole-row-link" href="/magazine/mfictional"><span>${actor(b,24)}</span><span>${added('【創作仲間の棚】続…',25)}</span><div>架空の週末に見つけたこと…</div>${time}</a>`],
+  ['split-paragraphs',`<li class="native-notice" id="split-paragraphs"><p>${actor(c,2)}</p><p>${added('学びの記録を集める棚…',3)}</p><div>架空の記事プレビュー</div>${time}</li>`],
+  ['nested-blocks',`<li class="native-notice" id="nested-blocks"><div><div><span>${actor(a,35)}</span><div><span>【共同運営マガジン】頑…</span>に新しい記事を36本追加しました</div></div><div>${preview}</div></div>${time}</li>`],
+  ['inline-div',`<a class="native-notice" id="inline-div" href="/writer_b/m/mfictional">${actor(b,24)}${added('【創作仲間の棚】続…',25)}<div>架空の週末の記事プレビュー</div><span>1分前</span></a>`],
+  ['three-paragraphs',`<li class="native-notice" id="three-paragraphs"><p>${actor(c,2)}</p><p>学びの記録を集める棚…</p><p>に新しい記事を3本追加しました</p><div>架空の記事プレビュー</div>${time}</li>`],
+ ];
+ const control=`<li class="native-notice" id="control-added"><a href="/actor">${a.name}</a>さんが共同マガジンに新しい記事を1本追加しました 1分前</li>`;
+ const f=fixture(t,{mode,initial:control+cases.map(([,markup])=>markup).join('')});
+ f.set('mumei_insight_notification_groups_v1:tester',[{enabled:true,ids:people.map(person=>person.id)}]);
+ f.set('mumei_insight_magazine_mute_profiles_v5:tester',people.map(person=>({id:person.id,name:person.name})));
+ const originals=cases.map(([id])=>f.w.document.getElementById(id));await f.ready();
+ assert.deepEqual(cases.map(([id])=>f.hidden(id)),cases.map(()=>true),'every native layout keeps the registered actor and article-add action');
+ assert.equal(f.measure.requests,1);assert.equal(f.w.document.querySelectorAll('#mumei-notification-filter-continuation-v4').length,1);
+ f.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await f.w.__mumeiNotificationFilterV4.refresh(true);
+ for(let i=0;i<cases.length;i++){assert.equal(f.hidden(cases[i][0]),false);assert.equal(f.w.document.getElementById(cases[i][0]),originals[i])}
+});
+
+test('ブロック境界で対象文言のタイトルが終わっても、その後の購入・スキ・紹介を隠さない',async t=>{
+ const phrase='共同マガジンに新しい記事を36本追加しました',lead='<span>登録人物さんが</span>';
+ const cases=[
+  ['title-purchase',`${lead}<div>${phrase}</div><div>という記事を購入しました</div>`],
+  ['title-like',`${lead}<div>${phrase}</div><div>にスキしました</div>`],
+  ['title-introduced',`${lead}<div>${phrase}</div><div>という記事であなたの記事を紹介しました</div>`],
+  ['title-reply',`${lead}<p>${phrase}</p><p>の記事に返信しました</p>`],
+  ['quoted-title',`${lead}<div>「${phrase}</div><div>」という記事にスキしました</div>`],
+  ['linked-title',`${lead}<a href="/fictional/n/n123456789abc">${phrase}</a><div>という記事を購入しました</div>`],
+  ['article-inside',`${lead}<div>記事内にあなたの記事を追加しました</div><div>紹介された架空の記事</div>`],
+  ['buzz-div-title',`<div>登録人物さんの記事であなたの記事が紹介されて話題になりました</div><div>登録人物さんが${phrase}</div>`],
+  ['from-div-title',`<div>登録人物さんからコメントが届きました</div><div>登録人物さんが${phrase}</div>`],
+  ['by-div-title',`<div>登録人物さんよりあなたの記事が紹介されました</div><div>登録人物さんが${phrase}</div>`],
+  ['to-div-title',`<div>登録人物さんにあなたの記事が紹介されました</div><div>登録人物さんが${phrase}</div>`],
+ ];
+ const f=fixture(t,{initial:row('real-add')+cases.map(([id,body])=>`<li class="native-notice" id="${id}">${body}<time>1分前</time></li>`).join('')});await f.ready();
+ assert.equal(f.hidden('real-add'),true);for(const [id] of cases)assert.equal(f.hidden(id),false,id);
 });
