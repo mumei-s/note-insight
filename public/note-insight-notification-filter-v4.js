@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.10';
+const VERSION='4.2.11';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -81,15 +81,17 @@ function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:
 function leadName(t){const m=clean(t).match(/^(.{1,180}?)\s*さん\s*(?:他\s*\d[\d,]*\s*名\s*)?(?:が|の|から|より|に)/u);return m?.[1]?.trim()||''}
 function norm(v){return clean(v).toLowerCase().replace(/\s+/g,'').replace(/[.…⋯]+$/u,'')}
 function nameMatch(lead,full){const a=norm(lead),b=norm(full);if(!a||!b)return false;if(a===b)return true;return /[.…⋯]$/u.test(clean(lead))&&a.length>=2&&b.startsWith(a)}
+function magazineLink(v){try{const u=new URL(String(v||''),location.href);return u.protocol==='https:'&&u.hostname==='note.com'&&!u.username&&!u.password&&!u.port&&/^\/(?:[a-z0-9_-]+\/m\/|magazine\/|m\/)m[a-z0-9_-]+\/?$/i.test(u.pathname)}catch{return false}}
 function magazineActionText(el){
  const summary=clean(el.textContent);
  const leading=node=>{const text=clean(node.textContent);return text&&summary.startsWith(text)&&Boolean(leadName(text))};
+ const titleOnly=node=>{if(!magazineLink(node.getAttribute('href'))||leading(node)||/(?:ました|ません)/u.test(clean(node.textContent)))return false;const after=document.createRange();after.selectNodeContents(el);after.setStartAfter(node);return/^に(?:新しい)?記事を(?:\d+本)?追加しました/u.test(clean(after.toString()).replace(/\s+/g,''))};
  function text(node){
   if(node.nodeType===3)return clean(node.textContent);
   if(node.nodeType!==1)return'';
   if(node!==el){
    if(node.matches('time,[datetime]'))return'';
-   if(node.matches('a[href]')){let article=false;try{const url=new URL(node.getAttribute('href'),location.href);article=url.hostname==='note.com'&&/\/n\/n[a-f0-9]{12}(?:\/|$)/i.test(url.pathname)}catch{}if(article&&!leading(node))return'';}
+   if(node.matches('a[href]')){if(titleOnly(node))return'マガジン';let article=false;try{const url=new URL(node.getAttribute('href'),location.href);article=url.hostname==='note.com'&&/\/n\/n[a-f0-9]{12}(?:\/|$)/i.test(url.pathname)}catch{}if(article&&!leading(node))return'';}
    if(node.matches('[class*="preview" i],[class*="excerpt" i],h1,h2,h3,h4,h5,h6')&&!leading(node))return'';
   }
   const content=[...node.childNodes].map(text).join('');
@@ -112,15 +114,20 @@ function magazineAction(t){
  const s=clean(t).replace(/\s+/g,'').replace(/(\d),(?=\d)/g,'$1').replace(/(?:たった今|昨日|\d+(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u,''),lead=s.match(/^(.{1,180}?)さん(?:他\d+名)?(が|の|から|より|に)/u);
  if(!lead||lead[2]!=='が')return false;
  const action=s.slice(lead[0].length),pairs={'「':'」','『':'』','【':'】','（':'）','(' :')','“':'”','"':'"'},closing=new Set(Object.values(pairs)),quotes=[];
+ // Native notices abbreviate a magazine title before the addition clause.
+ // That can cut off its closing bracket. Accept only a title ending in an
+ // actual ellipsis followed by the complete fixed action, never an earlier
+ // completed action or a quoted article continuation.
+ const truncated=()=>{const m=action.match(/^(.{1,180}(?:\.{3}|…+|⋯+))に(?:新しい)?記事を(?:\d+本)?追加しました$/u);return Boolean(m&&!/(?:ました|ません|という|といった|と題した|あなたの記事|あなたのコメント)/u.test(m[1]))};
  let ended=false;
  for(let i=0;i<action.length;i++){
   const char=action[i];
   if(quotes.at(-1)===char){quotes.pop();continue}
   if(pairs[char]){quotes.push(pairs[char]);continue}
-  if(closing.has(char))return false;
+  if(closing.has(char))return truncated();
   if(!quotes.length&&action.startsWith('ました',i)){if(i+3!==action.length)return false;ended=true;break}
  }
- return ended&&!quotes.length&&/^.+に(?:新しい)?記事を(?:\d+本)?追加しました$/u.test(action);
+ return ended&&!quotes.length&&/^.+に(?:新しい)?記事を(?:\d+本)?追加しました$/u.test(action)||truncated();
 }
 async function state(force=false){if(!force&&cache&&Date.now()-cacheAt<3000)return cache;const rev=revision,a=await account();if(!a)return null;const enabled=Boolean(await get(key(FIL,a.id),false)),gs=await get(key(GRP,a.id),[]);let ids=[];if(Array.isArray(gs)&&gs.length)ids=[...new Set(gs.filter(g=>g?.enabled!==false).flatMap(g=>Array.isArray(g?.ids)?g.ids:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))];else{const raw=await get(key(MUT,a.id),[]);ids=[...new Set((Array.isArray(raw)?raw:[]).map(x=>String(x).toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}const ps=await get(key(PROFILE,a.id),[]),profiles=(Array.isArray(ps)?ps:[]).filter(p=>p?.id&&ids.includes(String(p.id).toLowerCase())).map(p=>({id:String(p.id).toLowerCase(),name:clean(p.name)}));if(rev!==revision||a.id!==accountId)return null;cache={enabled,ids:new Set(ids),profiles};cacheAt=Date.now();return cache}
 function startsText(el,node){const before=document.createRange();before.selectNodeContents(el);before.setEndBefore(node);return!clean(before.toString())}
@@ -213,14 +220,15 @@ function continueFilteredPage(st,list,surface){
  const label=continuation.querySelector('span');if(!continuationAttempt&&label.textContent!==message)label.textContent=message;
 }
 let lastResult=null;
-function reportResult(st,list){const result={enabled:st.enabled,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
+function clearResult(){if(lastResult===null)return;lastResult=null;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:null}))}
+function reportResult(st,list){const result={version:VERSION,enabled:st.enabled,registered:st.ids.size,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length,magazineAdd:list.filter(el=>classificationCache.get(el)?.isMagazine).length,unresolved:list.filter(el=>classificationCache.get(el)?.needsProfile).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
 function classificationState(st){return JSON.stringify([revision,st.enabled,[...st.ids].sort(),st.profiles.map(p=>[p.id,p.name]).sort((a,b)=>a[0].localeCompare(b[0]))])}
 function classifyRow(el,st,fingerprint){
  const text=clean(el.textContent),markup=el.innerHTML,href=el.getAttribute('href'),cached=classificationCache.get(el);
  if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.fingerprint===fingerprint)return cached.hide;
- const lead=leadName(text);let hide=false,needsProfile=false;
- if(st.enabled&&st.ids.size&&lead&&magazineNoise(magazineActionText(el))){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id));needsProfile=!id}
- classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile});return hide;
+ const lead=leadName(text);let hide=false,needsProfile=false,isMagazine=false;
+ if(st.enabled&&st.ids.size&&lead){isMagazine=magazineNoise(magazineActionText(el));if(isMagazine){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id));needsProfile=!id}}
+ classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile,isMagazine});return hide;
 }
 function viewportAnchor(surface,list){
  if(!surface?.isConnected||continuationAttempt)return null;
@@ -234,14 +242,14 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();return;}if(!st){if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);hydrateProfiles(accountId,profileIdsForRows(st,list),st.profiles);return true}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);hydrateProfiles(accountId,profileIdsForRows(st,list),st.profiles);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='childList'){const nodes=[...m.addedNodes,...m.removedNodes];if(nodes.length&&nodes.every(node=>owned(node.nodeType===1?node:node.parentElement)))return false}if(m.type==='attributes'){const own=ownAttributeValues.get(m.target);if(own&&Object.hasOwn(own,m.attributeName)&&own[m.attributeName]===m.target.getAttribute(m.attributeName))return false;if(m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN)}return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){clearResult();if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 // Native touch and wheel gestures must reach note's actual scroll ancestor.
 // A panel can be nested inside that ancestor or use the document viewport.
 function discover(){retries=0;schedule(40,true)}
