@@ -9,7 +9,12 @@ async function liveCounts(noteId:string){const c=new AbortController(),timer=set
 async function latestRuns(scope:string,noteId:string){const{data,error}=await db.from("insight_relation_sync_runs").select("direction,expected_count,received_count,complete,baseline,error,created_at,added_count,removed_count").eq("member_id",scope).order("created_at",{ascending:false}).limit(20);if(error)throw error;const latest:any={followers:null,followings:null};for(const r of data||[]){const d=String(r.direction||"");if((d==="followers"||d==="followings")&&!latest[d])latest[d]=r}const live=await liveCounts(noteId);if(live){for(const d of ["followers","followings"] as const){const count=live[d];latest[d]={...(latest[d]||{direction:d,received_count:0,complete:false,baseline:true,error:"RELATION_SCAN_PENDING",created_at:null,added_count:0,removed_count:0}),live_expected_count:count,live_count_at:live.at}}}return latest}
 const PERSON_FIELDS="person_key,actor_name,actor_url,actor_image_url,active,last_seen_at,first_seen_at,last_changed_at,source_rank,direction";
 function searchText(v:any){return String(v||"").normalize("NFKC").replace(/[^\p{L}\p{N}_@ -]/gu,"").replace(/^@/,"").slice(0,100)}
-function evidence(row:any,run:any){const unknown=String(row.person_key||"").startsWith("unknown:");return{...row,evidence:unknown?"count_only":run?.complete===true?"complete_snapshot":"window_candidate",identity_exact:!unknown&&run?.complete===true,comparison_at:run?.created_at||null,comparison_complete:run?.complete===true}}
+function evidence(row:any,run:any){
+ const unknown=String(row.person_key||"").startsWith("unknown:"),provided=["authenticated_relationship","complete_snapshot","window_candidate"].includes(row.evidence)?row.evidence:null;
+ const kind=unknown?"count_only":provided||(run?.complete===true?"complete_snapshot":"window_candidate");
+ const exact=!unknown&&kind!=="window_candidate"&&(provided?row.identity_exact===true:run?.complete===true);
+ return{...row,evidence:kind,identity_exact:exact,comparison_at:run?.created_at||null,comparison_complete:kind==="complete_snapshot"&&exact};
+}
 async function annotate(scope:string,rows:any[]){const ids=[...new Set(rows.map(r=>r.run_id).filter(Boolean))];if(!ids.length)return rows.map(r=>evidence(r,null));const{data,error}=await db.from("insight_relation_sync_runs").select("id,complete,created_at").eq("member_id",scope).in("id",ids);if(error)throw error;const runs=new Map((data||[]).map(r=>[String(r.id),r]));return rows.map(r=>evidence(r,runs.get(String(r.run_id))))}
 async function savedPeople(scope:string,direction:string){
  const rows:any[]=[];for(let start=0;;start+=1000){const{data,error}=await db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction).order("person_key").range(start,start+999);if(error)throw error;rows.push(...(data||[]));if((data||[]).length<1000)break}return rows;
@@ -34,25 +39,29 @@ async function investigate(scope:string,key:string,page=1){
  if(!key||key.length>400||key.startsWith("unknown:"))throw new Error("PERSON_REQUIRED");
  const [relations,events,history]=await Promise.all([
   db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("person_key",key),
-  db.from("insight_relation_events").select("id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
+  db.from("insight_relation_history_rows").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
   db.from("insight_social_comparison_history").select("id,previous_following,previous_follower,is_following,is_follower,observed_at,observation_kind",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("observed_at",{ascending:false}).range((page-1)*50,page*50-1)
  ]);if(relations.error)throw relations.error;if(events.error)throw events.error;if(history.error)throw history.error;
  return{ok:true,personKey:key,relations:relations.data||[],relationshipHistory:history.data||[],inspectionPage:page,inspectionPages:Math.max(1,Math.ceil(Math.max(history.count||0,events.count||0)/50)),events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
 }
 async function windowPeople(scope:string,direction:string,window:string){
  let q=db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction);
- q=q.eq("active",true);
- q=q.order("source_rank",{ascending:window!=="oldest"}).order("person_key");
+ // The historic window must retain people who left the current note list.
+ // Reversing the ranks of the active latest window returned the same 1,000
+ // people twice and excluded precisely the archived identities being sought.
+ if(window==="oldest")q=q.order("first_seen_at",{ascending:true}).order("person_key");
+ else q=q.eq("active",true).order("source_rank",{ascending:true}).order("person_key");
  const{data,error}=await q.limit(1000);if(error)throw error;return data||[];
 }
 const EVENT_FIELDS="id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count";
+const HISTORY_FIELDS=EVENT_FIELDS+",evidence,identity_exact,source,evidence_window_start";
 async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,size:number){
  const direction=String(b.direction||"all"),change=b.action==="investigation"?"removed":String(b.change||"all"),from=valid(b.dateFrom),to=valid(b.dateTo),term=searchText(b.query);
  const chunks:(string[]|null)[]=keys===null?[null]:Array.from({length:Math.ceil(keys.length/80)},(_,i)=>keys.slice(i*80,(i+1)*80));
  let total=0;const rows:any[]=[];
  for(let i=0;i<chunks.length;i+=3){
   const results=await Promise.all(chunks.slice(i,i+3).map(async chunk=>{
-   let q=db.from("insight_relation_events").select(EVENT_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
+   let q=db.from("insight_relation_history_rows").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
    if(chunk)q=q.in("person_key",chunk);
    
    if(direction==="followers"||direction==="followings")q=q.eq("direction",direction);
@@ -68,7 +77,7 @@ async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,
   }));
   for(const r of results){if(r.error)throw r.error;total+=r.count||0;rows.push(...(r.data||[]))}
  }
- rows.sort((a,b)=>String(b.detected_at).localeCompare(String(a.detected_at))||Number(b.id)-Number(a.id));
+ rows.sort((a,b)=>String(b.detected_at).localeCompare(String(a.detected_at))||String(b.id).localeCompare(String(a.id)));
  return{total,rows:await annotate(scope,keys===null?rows:rows.slice(offset,offset+size))};
 }
 function comparisonRows(relations:any[],verified:any[],latest:any){
@@ -124,7 +133,7 @@ Deno.serve(async req=>{
   const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId),window==="all"?(action==="people"?savedPeople(m.scope,direction):Promise.resolve(null)):windowPeople(m.scope,direction,window)]);
   if(action==="people"){
    const term=searchText(b.query).toLowerCase(),list=(people||[]).filter((r:any)=>!term||String(r.actor_name||"").normalize("NFKC").toLowerCase().includes(term)||String(r.actor_url||"").toLowerCase().includes(term));
-   return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="all"?"all_saved_people":window==="oldest"?"source_order_bottom":"latest_snapshot"});
+   return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="all"?"all_saved_people":window==="oldest"?"first_saved_people":"latest_snapshot"});
   }
   const result=await windowEvents(m.scope,{...b,action,direction:window==="all"?String(b.direction||"all"):direction},people?.map((r:any)=>r.person_key)||null,offset,pageSize);
   return out({ok:true,...result,page,pageSize,latest,noteId:m.noteId,window,windowTotal:people?.length??null});

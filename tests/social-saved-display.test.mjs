@@ -129,3 +129,69 @@ for(const action of ['comparison','people'])test(`確認済み${action}は時間
  await h.render(h.Component,{revision:1});await settle();assert.equal(h.calls.length,4,'明示更新は同条件でも再確認する');
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows:pageRows('明示更新後のページ1'),total:150}));assert.match(h.body(),/明示更新後のページ1/);
 });
+
+test('増減履歴へ入ると最新人物の枠を引き継がず全履歴を表示し、ページ戻りは再取得しない',async t=>{
+ const query={action:'people',window:'latest',query:'',page:1,pageSize:50,direction:'followers'};
+ const h=await fixture(t,query);await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[row('現在の人物')],total:1}));
+ await h.click(h.w.document.querySelector('button[aria-label="【増】【減】履歴"]'));await settle();
+ assert.equal(h.calls.length,2);assert.deepEqual(h.calls[1].body,{action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'all',dateFrom:null,dateTo:null});
+ const events=Array.from({length:50},(_,i)=>({id:i+1,person_key:'former-'+i,actor_name:'保存済みの減少人物'+i,actor_url:'https://note.com/former_'+i,direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship'}));
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:events,total:51}));assert.match(h.body(),/保存済みの減少人物0/);
+ const pager=label=>[...h.w.document.querySelectorAll('.mis2-pager button')].find(button=>button.textContent===label);
+ await h.click(pager('→'));await settle();assert.equal(h.calls.length,3);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{...events[0],id:51,person_key:'former-50',actor_name:'保存済みの減少人物50'}],total:51}));
+ h.advance(86400000);await h.click(pager('←'));await settle();assert.equal(h.calls.length,3);assert.match(h.body(),/保存済みの減少人物0/);
+});
+
+test('過去から1000人は現在一覧の下端ではなく保存開始時の人物として案内する',async t=>{
+ const query={action:'people',window:'oldest',query:'',page:1,pageSize:50,direction:'followers'};
+ const h=await fixture(t,query);await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{...row('過去の保存人物'),active:false}],total:1}));
+ assert.match(h.body(),/保存開始時からの1,000人/);assert.match(h.body(),/現在の一覧から外れた人も含みます/);assert.match(h.body(),/過去の保存人物/);assert.equal(h.calls.length,1);
+});
+
+test('関係確認で復元した人物と全件照合と人数だけの不明を区別して表示する',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+ const h=await fixture(t,query),removed={event_type:'removed',direction:'followers',change_count:1};
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[
+  {...removed,id:1,person_key:'verified',actor_name:'履歴から復元した人物',actor_url:'https://note.com/verified',identity_exact:true,evidence:'authenticated_relationship'},
+  {...removed,id:2,person_key:'complete',actor_name:'全件確認した人物',actor_url:'https://note.com/complete',identity_exact:true,evidence:'complete_snapshot'},
+  {...removed,id:3,person_key:'unknown:drop',identity_exact:false,evidence:'count_only'}
+ ],total:3}));
+ const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,3);
+ assert.match(articles[0].textContent,/履歴から復元した人物/);assert.match(articles[0].textContent,/関係確認履歴で確認/);assert.doesNotMatch(articles[0].textContent,/全件照合/);
+ assert.match(articles[1].textContent,/全件照合で確認/);assert.match(articles[2].textContent,/不明 −1/);assert.doesNotMatch(articles[2].textContent,/全件照合で確認|関係確認履歴で確認/);
+});
+
+test('古い27人と直近の保存人物を候補として表示し、確認済みの減少と人数だけの不明へ混ぜない',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+ const h=await fixture(t,query),removed={event_type:'removed',direction:'followers',detected_at:'2026-10-28T01:00:00Z'};
+ const old=Array.from({length:27},(_,i)=>({...removed,id:'event-'+i,person_key:'old-'+i,actor_name:'過去の保存人物'+i,actor_url:'https://note.com/old_'+i,evidence:'window_candidate',identity_exact:false,change_count:1,source:'relation_event'}));
+ const recent={...removed,id:'archive-recent',person_key:'recent',actor_name:'直近の保存人物',actor_url:'https://note.com/recent',evidence:'window_candidate',identity_exact:false,change_count:0,source:'saved_archive'};
+ const confirmed={...removed,id:'verified',person_key:'verified',actor_name:'関係終了を確認した人物',actor_url:'https://note.com/verified',evidence:'authenticated_relationship',identity_exact:true,change_count:1};
+ const unknown={...removed,id:'count',person_key:'unknown:drop',evidence:'count_only',identity_exact:false,change_count:48};
+ const rows=[...old,recent,confirmed,unknown];await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:rows.length}));
+ const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,30);assert.match(h.body(),/記録 30件/);
+ assert.equal(articles.filter(article=>article.classList.contains('candidate')).length,28);
+ for(const article of articles.slice(0,28)){assert.match(article.textContent,/範囲外・要確認/);assert.doesNotMatch(article.textContent,/【減】|変化を検知|関係確認履歴で確認/)}
+ assert.match(articles[0].textContent,/範囲外を検知/);assert.doesNotMatch(articles[0].textContent,/最終確認/);
+ assert.match(articles[27].textContent,/直近の保存人物/);assert.match(articles[27].textContent,/最終確認/);assert.match(articles[27].textContent,/減少人数には含めません/);assert.doesNotMatch(articles[27].textContent,/不明 −1/);
+ assert.match(articles[28].textContent,/【減】/);assert.match(articles[28].textContent,/関係確認履歴で確認/);
+ assert.match(articles[29].textContent,/不明 −48/);assert.doesNotMatch(articles[29].textContent,/直近の保存人物|範囲外・要確認/);
+});
+
+test('今後の範囲外観測は人数0のまま候補と表示し、検知日時を過去の最終確認日時と混同しない',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+ const h=await fixture(t,query);await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'window:new',event_type:'removed',direction:'followers',person_key:'new-window',actor_name:'新しく範囲外になった人物',actor_url:'https://note.com/new_window',source:'window_observation',evidence:'window_candidate',identity_exact:false,change_count:0,detected_at:'2026-10-28T01:00:00Z'}],total:1}));
+ const article=h.w.document.querySelector('.mis2-list article');assert.match(article.textContent,/範囲外・要確認/);assert.match(article.textContent,/範囲外を検知/);assert.doesNotMatch(article.textContent,/【減】|最終確認|不明 −1/);assert.ok(article.classList.contains('candidate'));
+});
+
+test('スマホ用の短いラベルでも方向と履歴の意味をアクセシブル名に残す',async t=>{
+ const query={action:'people',window:'latest',query:'',page:1,pageSize:50,direction:'followers'},h=await fixture(t,query);
+ const following=h.w.document.querySelector('button[aria-label="あなたが相手をフォロー"]'),followers=h.w.document.querySelector('button[aria-label="相手があなたをフォロー"]');
+ assert.equal(following.textContent,'フォロー中');assert.equal(followers.textContent,'フォロワー');
+ assert.equal(h.w.document.querySelector('button[aria-label="【増】【減】履歴"]').textContent,'増減履歴');
+ assert.equal(h.w.document.querySelector('button[aria-label="拾えなかった減少・不明人物を再調査"]').textContent,'不明分の調査');
+ assert.equal(following.title,'あなたが相手をフォロー');assert.equal(followers.title,'相手があなたをフォロー');
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[row('確認済みの人物')],total:1}));
+ await h.click(following);await settle();assert.equal(h.calls.at(-1).body.direction,'followings');
+});

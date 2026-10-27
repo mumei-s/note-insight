@@ -8,12 +8,12 @@ test('最新1000人からの消失と総数減少が重なっても、解除し�
  const src=readFileSync('supabase/functions/insight-relations/index.ts','utf8'),start=src.indexOf('async function syncCappedFollowers'),end=src.indexOf('async function syncDirection',start),named=[],unknown=[];
  const old=[{person_key:'left-window',actor_name:'A'},{person_key:'retained',actor_name:'B'}];
  const ctx=evaluate(src.slice(start,end)+'\nthis.syncCappedFollowers=syncCappedFollowers;',{
-  active:async()=>old,markRemoved:async()=>{},upsertPeople:async()=>{},
+  active:async()=>old,markRemoved:async()=>{},upsertPeople:async()=>{},toPerson:x=>({key:x.person_key,name:x.actor_name}),
   db:{from:()=>({insert:()=>({select:()=>({single:async()=>({data:{id:7},error:null})})})})},
-  eventRows:async(scope,run,direction,type,people)=>named.push(...people.map(p=>({type,...p}))),unknownEvent:async(scope,run,direction,type,count)=>{if(count)unknown.push({type,count})}
+  eventRows:async(scope,run,direction,type,people,now,changeCount=1)=>named.push(...people.map(p=>({type,changeCount,...p}))),unknownEvent:async(scope,run,direction,type,count)=>{if(count)unknown.push({type,count})}
  });
  const result=await ctx.syncCappedFollowers('member','followers',{official:1999,people:[{key:'retained',rank:1},{key:'new-person',rank:2}],pages:1,error:'NOTE_IDENTITY_LIST_CAPPED_AT_1000:1999',sources:{}},{expected_count:2000,received_count:2,complete:false,error:'NOTE_IDENTITY_LIST_CAPPED_AT_1000:2000'},'2026-09-22T00:00:00Z');
- assert.equal(result.removed,1);assert.equal(result.unknownRemoved,1);assert.equal(named.length,0);assert.deepEqual(unknown,[{type:'removed',count:1}]);
+ assert.equal(result.removed,1);assert.equal(result.unknownRemoved,1);assert.equal(named.length,1);assert.equal(named[0].changeCount,0);assert.equal(named[0].key,'left-window');assert.deepEqual(unknown,[{type:'removed',count:1}]);
 });
 test('全件照合・1000人範囲の候補・人数のみの減少を証拠別に分ける',()=>{
  const src=readFileSync('supabase/functions/insight-social-events/index.ts','utf8'),start=src.indexOf('function evidence('),end=src.indexOf('async function annotate',start),ctx=evaluate(src.slice(start,end)+'\nthis.evidence=evidence;');

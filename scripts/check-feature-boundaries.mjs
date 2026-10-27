@@ -34,7 +34,7 @@ const rules = [
   ['dm', (p) => /^src\/member-insight-dm\.(?:tsx|css)$/.test(p) || ['public/note-insight-dm-reader-v1.js', 'public/note-insight-dm.user.js'].includes(p)],
   ['games', (p) => /(?:^|\/)(?:game-|creator-world-game|match-game|creator-game-data)/i.test(p)],
   ['comments', (p) => /member-insight-comments|insight-comment-/i.test(p)],
-  ['social', (p) => /member-insight-social|insight-social/i.test(p)],
+  ['social', (p) => /member-insight-social|insight-social/i.test(p) || /^supabase\/functions\/insight-relations\//.test(p)],
   ['analysis', (p) => /member-insight-(?:analysis|analytics|completeness|opportunity)/i.test(p)],
   ['membership', (p) => /insight-member-(?:extras|history)|member-portal/i.test(p)],
 ];
