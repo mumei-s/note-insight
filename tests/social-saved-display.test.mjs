@@ -7,7 +7,7 @@ const tokenKey='fixture-token',scope={account:'tester',token:'token-a'};
 const row=name=>({person_key:'person',actor_name:name,actor_url:'https://note.com/peer',relation:'mutual'});
 const comparison={action:'comparison',window:'latest',relationship:'mutual',query:'',page:2,pageSize:50};
 async function settle(work=()=>{}){await React.act(async()=>{work();await new Promise(r=>setTimeout(r,5));for(let i=0;i<3;i++)await pause()})}
-async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false}={}){
+async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false,historyWindowVersion}={}){
  let now=Date.now();class Clock extends Date{static now(){return now}}
  const calls=[],timers=[];let deliver,iconCalls=0;
  const fetch=async(_url,init)=>{if(String(_url).endsWith('creator-icons')){iconCalls++;return Response.json({items:[]})}calls.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});return new Promise(resolve=>{deliver=(value,status=200)=>resolve(Response.json(value,{status}))})};
@@ -18,7 +18,7 @@ async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('o
   './insight-member-db-fallback':{memberReadAuthFailure:message=>/INSIGHT_(SESSION_INVALID|LOGIN_REQUIRED|MEMBER_INACTIVE)|HTTP_40[13]/.test(message),memberDbReadFallback:fallback},
  }});
  Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});h.w.localStorage.setItem(tokenKey,'token-a');
- const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
+ const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{historyWindowVersion,query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
  const savedKey=saved.savedInsightViewKey('social-last',scope),copy=h.w.localStorage.getItem(savedKey);if(delayed)h.w.localStorage.removeItem(savedKey);
  h.w.setInterval=(fn,ms)=>{const timer={fn,ms,cancelled:false};timers.push(timer);return timer};h.w.clearInterval=timer=>{if(timer)timer.cancelled=true};
  const Component=h.load('src/member-insight-social-v2.tsx').MemberInsightSocialV2;await h.render(Component,{});await settle();
@@ -194,4 +194,22 @@ test('スマホ用の短いラベルでも方向と履歴の意味をアクセ�
  assert.equal(following.title,'あなたが相手をフォロー');assert.equal(followers.title,'相手があなたをフォロー');
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[row('確認済みの人物')],total:1}));
  await h.click(following);await settle();assert.equal(h.calls.at(-1).body.direction,'followings');
+});
+
+for(const action of ['events','investigation'])test(`旧保存の${action}・最新枠だけを初回更新で全履歴へ移し、古い枠の本文は流用しない`,async t=>{
+ const query={action,window:'latest',query:'対象',page:3,pageSize:50,direction:'followings',change:'removed',dateFrom:'2026-10-01T00:00:00+09:00',dateTo:'2026-10-01T15:00:00.000Z'},h=await fixture(t,query);
+ assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,270));await pause()});assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].body,{...query,window:'all',page:1});
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{...row('対象・全履歴で復元'),event_type:'removed',direction:'followings',identity_exact:true,evidence:'authenticated_relationship'}],total:1}));
+ assert.match(h.body(),/対象・全履歴で復元/);
+ const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyWindowVersion,2);assert.equal(saved.value.query.window,'all');assert.equal(saved.value.query.page,1);
+ h.advance(86400000);await h.render(()=>null);await h.render(h.Component,{});await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,270));await pause()});assert.equal(h.calls.length,1);assert.match(h.body(),/対象・全履歴で復元/);
+});
+
+test('更新後に明示選択した最新枠と2ページ目は再表示でも変更せず、確認済み本文を再取得しない',async t=>{
+ const query={action:'events',window:'latest',query:'',page:2,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query,{historyWindowVersion:2});
+ assert.match(h.body(),/前回の人物/);assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].body,query);
+ const rows=Array.from({length:50},(_,i)=>({...row('選択した最新枠2ページ-'+i),id:i,person_key:'selected-'+i,event_type:'removed',direction:'followers',identity_exact:true,evidence:'complete_snapshot'}));
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:150}));h.advance(86400000);await h.render(()=>null);await h.render(h.Component,{});await settle();
+ assert.equal(h.calls.length,1);assert.match(h.body(),/選択した最新枠2ページ-0/);assert.equal(h.w.document.querySelector('.mis2-pager select').value,'2');assert.equal(h.w.document.querySelector('button[aria-pressed="true"]').textContent,'個別の履歴');
+ const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyWindowVersion,2);assert.equal(saved.value.query.window,'latest');assert.equal(saved.value.query.page,2);
 });

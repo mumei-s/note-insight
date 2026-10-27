@@ -69,3 +69,11 @@ test('最新確認で内容が変わった時だけ他ページも失効させ�
  late({noteId:'a',total:1,rows:[{person_key:'old-pending'}]});await old;assert.equal(a.api.cachedSocial({...query,query:'pending'}),null);
  await a.api.savedSocial(query);assert.equal(a.api.cachedSocial(query).rows[0].person_key,'b-1-0');
 });
+
+test('取得成功と確認済みページへ戻る保存の両方に履歴範囲の新schemaを記録する',async()=>{
+ let calls=0;const a=fixture(new Map(),async extra=>{calls++;return{noteId:'a',total:51,rows:Array.from({length:extra.page===2?1:50},(_,i)=>({person_key:'person-'+extra.page+'-'+i}))}});
+ await a.api.savedSocial(query);await a.api.savedSocial({...query,page:2});
+ const key=[...a.storage.keys()].find(key=>key.startsWith('mumei-insight-data-cache-v1:saved:')),copy=JSON.parse(a.storage.get(key));assert.equal(copy.value.historyWindowVersion,2);
+ delete copy.value.historyWindowVersion;a.storage.set(key,JSON.stringify(copy));
+ await a.api.savedSocial(query);assert.equal(calls,2);const saved=JSON.parse(a.storage.get(key));assert.equal(saved.value.historyWindowVersion,2);assert.equal(saved.value.query.page,1);
+});
