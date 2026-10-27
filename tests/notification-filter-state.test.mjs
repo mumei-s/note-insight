@@ -43,7 +43,7 @@ async function fixture(t,{mode='modern',filter=true,pending=false,clipboard='suc
 
 for(const mode of ['modern','legacy'])test(`実際のフィルター件数を匿名で確認・コピーし、設定や通信を増やさない (${mode})`,async t=>{
  const f=await fixture(t,{mode}),beforeRequests=f.requests.length,beforeWrites=f.writes.length;
- assert.equal(f.w.document.querySelectorAll('#'+TOOLBAR+'>button').length,6,'状態も既存の操作行に収める');assert.equal(f.opener().parentElement.id,TOOLBAR);assert.equal(f.w.document.querySelector('#'+TOOLBAR+' .panel-meta button'),null,'下段の高さを増やすボタンを置かない');assert.equal(f.w.getComputedStyle(f.opener()).height,'32px');
+ assert.equal(f.w.document.querySelectorAll('#'+TOOLBAR+'>button').length,6,'状態も既存の操作行に収める');assert.equal(f.opener().parentElement.id,TOOLBAR);assert.equal(f.w.document.querySelector('#'+TOOLBAR+' .panel-meta button'),null,'下段の高さを増やすボタンを置かない');assert.equal(f.w.getComputedStyle(f.opener()).height,'32px');assert.equal(f.w.getComputedStyle(f.opener()).boxSizing,'border-box');
  await f.open();const rows=f.rows(),version=f.w.__mumeiNotificationFilterV4.version;
  assert.deepEqual(rows,{'実行版':version,'フィルター':'ON','有効な登録人物':'1人','判定した通知':'4件','マガジン追加通知':'3件','非表示':'1件','人物未確認':'1件'});
  assert.equal(f.card().getAttribute('aria-modal'),'true');assert.equal(f.w.document.getElementById(f.card().getAttribute('aria-labelledby')).textContent,'フィルターの状態');
