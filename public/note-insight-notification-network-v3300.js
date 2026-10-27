@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.20';
+const VERSION='3.6.21';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -269,8 +269,11 @@ async function writeUnifiedStatus(id,patch){
  const cp=await get(key(CHECK,id),{});
  if(!await set(key(CHECK,id),{...cp,...patch,version:VERSION}))throw new Error(STORAGE_ERROR);
 }
-async function ingestRows(rows,cap,manual=false,emitStatus=true){
+async function ingestRows(rows,cap,manual=false,emitStatus=true,expectedAccount=''){
  const a=await account(true);if(!a)throw new Error('noteログインを確認してください');
+ // The history journal belongs to its original note account. Check that
+ // owner before reading a token or merging rows into an account's outbox.
+ if(expectedAccount&&a.id!==expectedAccount)throw new Error('NOTE_ACCOUNT_CHANGED');
  const token=await tokenFor(a.id);if(!token)throw new Error('本人連携が必要です');
  const pending=mergePending(await readOutbox(a.id),rows,cap,manual);
  if(!pending.size)return{handled:true,saved:0,received:Array.isArray(rows)?rows.length:0,pending:0};
@@ -477,10 +480,9 @@ async function syncHistory(opts={}){
  };
  const savePart=async()=>{
    status(`保存先の確認待ち｜保存確認 ${journal.saved} / ${journal.total}件`,'saving',{phase:'saving',readCount:journal.read,savedCount:journal.saved,totalCount:journal.total});
-   const current=await account(true);if(current?.id!==a.id){throw new Error('NOTE_ACCOUNT_CHANGED')}
    const part=journal.rows.slice(0,20);
    // Journal already contains the entire unsaved window before transmission.
-   const result=await ingestRows(part,null,true,false);
+   const result=await ingestRows(part,null,true,false,a.id);
    journal.saved+=Number(result.saved||0);
    journal.seen=[...new Set([...journal.seen,...part.map(clientSig)])].slice(-1200);
    journal.rows.splice(0,part.length);
