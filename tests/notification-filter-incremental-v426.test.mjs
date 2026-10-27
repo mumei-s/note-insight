@@ -5,6 +5,7 @@ import {JSDOM} from 'jsdom';
 import './notification-filter-leading-v429.test.mjs';
 import './notification-filter-truncated-v4211.test.mjs';
 import './notification-filter-stale-avatar-v4212.test.mjs';
+import './notification-filter-row-budget-v4213.test.mjs';
 
 const source=readFileSync(process.env.FILTER_INCREMENTAL_SOURCE||'public/note-insight-notification-filter-v4.js','utf8');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));

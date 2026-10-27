@@ -188,6 +188,8 @@ test('全件がフィルター対象でもOFFボタンが残り、高さ0の一�
  e.w.eval(readFileSync('public/note-insight-notification-controls-v1.js','utf8'));
  const button=()=>e.w.document.querySelector('[data-action="filter"]');
  await until(()=>hidden(only)&&button()?.isConnected,'全件を隠してもOFF操作を残す');
+ assert.equal(e.w.__mumeiNotificationFilterV4.getState().total,1);assert.equal(e.w.__mumeiNotificationFilterV4.getState().hidden,1,'判定結果は描画フレームを待たず確定する');
+ await until(()=>/すべてフィルター対象/.test(e.w.document.querySelector('.read-status').textContent),'状態の描画は一フレームにまとめて反映する');
  assert.match(e.w.document.querySelector('.read-status').textContent,/すべてフィルター対象/);
  button().click();await until(()=>!hidden(only)&&button()?.dataset.on==='0','高さ0でもOFFで一覧全件を表示');
  assert.notEqual(e.w.getComputedStyle(only).display,'none');

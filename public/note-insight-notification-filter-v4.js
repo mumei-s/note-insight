@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.12';
+const VERSION='4.2.13';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -56,7 +56,7 @@ function flushProfiles(){
  })().catch(()=>{}).finally(()=>{profileJob=null;if(profileQueue.size)flushProfiles()})
 }
 async function get(k,d){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
-let accountId='',accountJob=null,cache=null,cacheAt=0,root=null,watchedPanel=null,obs=null,timer=0,pendingForce=false,revision=0,run=0,retries=0;
+let accountId='',accountJob=null,cache=null,cacheAt=0,root=null,watchedPanel=null,obs=null,timer=0,pendingForce=false,revision=0,domRevision=0,run=0,retries=0;
 const listened=new Set();
 function invalidate(){cache=null;cacheAt=0;revision++}
 function listenAccount(id){if(listened.has(id))return;const listen=modern()&&GM.addValueChangeListener||typeof GM_addValueChangeListener==='function'&&GM_addValueChangeListener;if(!listen)return;listened.add(id);for(const prefix of [FIL,GRP,MUT,PROFILE])try{listen(key(prefix,id),()=>{if(accountId!==id)return;invalidate();schedule(0,true)})}catch{}}
@@ -70,11 +70,20 @@ function fallbackRow(el){const t=clean(el.textContent),dated=!el.matches('a[href
 function candidates(r){
  if(!r)return[];
  const known=[...new Set([...r.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]'),...[...r.querySelectorAll(ITEM)].filter(el=>!String(el.className||'').includes('__'))])];
- const fallback=[...r.querySelectorAll(FALLBACK_ITEM)].filter(el=>fallbackRow(el)&&!known.some(k=>k!==el&&el.contains(k)));
+ const knownAncestors=new Set();for(const el of known)for(let parent=el.parentElement;parent&&parent!==r;parent=parent.parentElement)knownAncestors.add(parent);
+ const fallback=[...r.querySelectorAll(FALLBACK_ITEM)].filter(el=>fallbackRow(el)&&!knownAncestors.has(el));
  return [...new Set([...known,...fallback])]
 }
-function collection(el,xs){const nested=xs.filter(child=>child!==el&&el.contains(child)&&leadName(clean(child.textContent)));return nested.some((a,i)=>nested.slice(i+1).some(b=>!a.contains(b)&&!b.contains(a)))}
-function rows(r){const xs=candidates(r),single=xs.filter(el=>!collection(el,xs));return single.filter(el=>!single.some(parent=>parent!==el&&parent.contains(el))).sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1)}
+function collectionTree(r,xs){
+ const ordered=xs.slice().sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1),members=new Set(ordered),widths=new Map(),collections=new Set();
+ // Two independent leading descendants identify a list wrapper. A chain of
+ // nested copies is still one notice. Propagate widths through nearest candidate
+ // ancestors, rather than comparing every loaded row with every other row.
+ for(let i=ordered.length-1;i>=0;i--){const el=ordered[i],descendants=widths.get(el)||0;if(descendants>1)collections.add(el);const width=Math.max(descendants,leadName(clean(el.textContent))?1:0);let parent=el.parentElement;while(parent&&parent!==r&&!members.has(parent))parent=parent.parentElement;if(parent)widths.set(parent,Math.min(2,(widths.get(parent)||0)+width))}
+ if((widths.get(r)||0)>1)collections.add(r);return{ordered,collections};
+}
+function collection(el,xs){return collectionTree(el,xs.filter(child=>child!==el&&el.contains(child))).collections.has(el)}
+function rows(r){const{ordered,collections}=collectionTree(r,candidates(r)),single=ordered.filter(el=>!collections.has(el)),members=new Set(single);return single.filter(el=>{for(let parent=el.parentElement;parent&&parent!==r;parent=parent.parentElement)if(members.has(parent))return false;return true})}
 function restoreCollections(){for(const el of document.querySelectorAll('.'+OWN))if(collection(el,candidates(el)))setHidden(el,false)}
 function creatorIdFromUrl(v){try{const u=new URL(String(v||''),location.href),p=u.pathname.split('/').filter(Boolean);if(u.protocol!=='https:'||u.hostname!=='note.com'||u.username||u.password||u.port||p.length!==1)return'';const id=(p[0]||'').toLowerCase();return/^[a-z0-9_-]+$/.test(id)&&!['settings','sitesettings','membership'].includes(id)?id:''}catch{return''}}
 function creatorLinks(el){return[...el.querySelectorAll('a[href]')].map(a=>({id:creatorIdFromUrl(a.getAttribute('href')),txt:clean(a.textContent),node:a})).filter(x=>x.id)}
@@ -139,11 +148,11 @@ function leadId(el,lead,st){const links=creatorLinks(el);
  const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));return prof?.id||''}
 function profileIdsForRows(st,list){
  const unresolved=list.filter(el=>classificationCache.get(el)?.needsProfile);if(!st.enabled||!unresolved.length)return{ids:[],recheck:[]};
- const resolved=new Set(st.profiles.filter(p=>p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==p.id).map(p=>p.id)),missing=[...st.ids].filter(id=>!resolved.has(id)),wanted=new Set(),recheck=new Set();
+ const resolved=new Set(st.profiles.filter(p=>p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==p.id).map(p=>p.id)),missing=[...st.ids].filter(id=>!resolved.has(id)&&canHydrate(accountId,id)),wanted=new Set(),recheck=new Set();
  // Grouped avatars are hints for lookup priority, never proof that their
  // owner is the leading actor. A visible registered candidate may have changed
  // its name, so recheck just that ID under the existing per-account budget.
- for(const el of unresolved)for(const link of creatorLinks(el))if(!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&st.ids.has(link.id)){wanted.add(link.id);if(resolved.has(link.id))recheck.add(link.id)}
+ for(const el of unresolved)for(const id of classificationCache.get(el)?.profileCandidates||[])if(st.ids.has(id)&&canHydrate(accountId,id)){wanted.add(id);if(resolved.has(id))recheck.add(id)}
  return{ids:[...wanted,...missing.filter(id=>!wanted.has(id))],recheck:[...recheck]};
 }
 function rememberOwnAttributes(el){ownAttributeValues.set(el,{style:el.getAttribute('style'),'aria-hidden':el.getAttribute('aria-hidden')})}
@@ -229,7 +238,8 @@ function classifyRow(el,st,fingerprint){
  if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.fingerprint===fingerprint)return cached.hide;
  const lead=leadName(text);let hide=false,needsProfile=false,isMagazine=false;
  if(st.enabled&&st.ids.size&&lead){isMagazine=magazineNoise(magazineActionText(el));if(isMagazine){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id));needsProfile=!id}}
- classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile,isMagazine});return hide;
+ const profileCandidates=needsProfile?[...new Set(creatorLinks(el).filter(link=>!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&st.ids.has(link.id)).map(link=>link.id))]:[];
+ classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile,isMagazine,profileCandidates});return hide;
 }
 function viewportAnchor(surface,list){
  if(!surface?.isConnected||continuationAttempt)return null;
@@ -243,14 +253,14 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateRows=candidate?rows(candidate):[],candidateHasRows=Boolean(candidateRows.length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision,generation=domRevision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=r===candidate&&generation===domRevision?candidateRows:rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='childList'){const nodes=[...m.addedNodes,...m.removedNodes];if(nodes.length&&nodes.every(node=>owned(node.nodeType===1?node:node.parentElement)))return false}if(m.type==='attributes'){const own=ownAttributeValues.get(m.target);if(own&&Object.hasOwn(own,m.attributeName)&&own[m.attributeName]===m.target.getAttribute(m.attributeName))return false;if(m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN)}return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){clearResult();if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed))schedule(50)});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){clearResult();if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed)){domRevision++;schedule(50)}});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
 // Native touch and wheel gestures must reach note's actual scroll ancestor.
 // A panel can be nested inside that ancestor or use the document viewport.
 function discover(){retries=0;schedule(40,true)}
