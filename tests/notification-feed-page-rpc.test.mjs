@@ -25,6 +25,9 @@ const slimMigration=readFileSync('supabase/migrations/20261020195704_insight_not
 const boundedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_bounded_cover.sql'));
 assert.ok(boundedName,'the bounded-cover migration is required');
 const boundedMigration=readFileSync('supabase/migrations/'+boundedName,'utf8');
+const parameterPlanName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_parameter_plans.sql'));
+assert.ok(parameterPlanName,'the parameter-plan migration is required');
+const parameterPlanMigration=readFileSync('supabase/migrations/'+parameterPlanName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -47,6 +50,7 @@ before(async()=>{
  await db.exec(storeMigration);
  await db.exec(slimMigration);
  await db.exec(boundedMigration);
+ await db.exec(parameterPlanMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -393,4 +397,27 @@ test('bounded migration reuses the exact prebuild and rejects same-name index or
   await assert.rejects(db.exec(boundedMigration),/differs from the approved slim-groups prerequisite/);
  }finally{await db.exec('ROLLBACK')}
  assert.deepEqual(await indexes(),original);
+});
+
+test('USING-bound dynamic execution matches the current static RPC for repeated scopes and filters',async()=>{
+ const reference='insight_notification_internal.static_feed_reference',signature=reference+'(text[],text,text,text,text,text,integer,integer,boolean)';
+ const start=boundedMigration.indexOf('CREATE OR REPLACE FUNCTION public.insight_notification_feed_page(');
+ const staticFunction=boundedMigration.slice(start,boundedMigration.indexOf('$function$;',start)+'$function$;'.length).replace('CREATE OR REPLACE FUNCTION public.insight_notification_feed_page(','CREATE FUNCTION '+reference+'(');
+ await db.exec(staticFunction);await db.exec('REVOKE ALL ON FUNCTION '+signature+' FROM PUBLIC,anon,authenticated;GRANT EXECUTE ON FUNCTION '+signature+' TO service_role;');
+ const quotedScope="quote'\\scope",quoted=row(8000001,{member_id:quotedScope,notification_type:'badge',meta:{source:'note-notification-reader-v3',client_signature:'bound-value-only'}});await insert([quoted]);
+ const cases=[
+  [['owner','owner-app'],'owner','ss_yr','all','','all',3,100,false],
+  [['owner','owner-app'],'owner','ss_yr','reply_other','2026-10-17','pending',2,20,true],
+  [['large'],'large','large','all','','all',71,100,true],
+  [['scope','participant_境界'],'scope','byte_boundary','badge','','completed',1,20,true],
+  [[quotedScope],quotedScope,'quoted_scope',"badge' OR true --","bad'day",'unknown',1,100,false],
+  [[quotedScope],quotedScope,'quoted_scope','all','','all',1,100,false],
+ ];
+ try{
+  for(const values of [...cases,cases[0],cases[5]]){
+   const result=(await db.query(`WITH old_result AS MATERIALIZED (SELECT ${reference}($1,$2,$3,$4,$5,$6,$7,$8,$9) AS value), new_result AS MATERIALIZED (SELECT public.insight_notification_feed_page($1,$2,$3,$4,$5,$6,$7,$8,$9) AS value) SELECT (old_result.value-'feedAt')=(new_result.value-'feedAt') AS equal,(new_result.value->>'total')::integer AS total,md5((new_result.value-'feedAt')::text) AS digest FROM old_result CROSS JOIN new_result`,values)).rows[0];
+   assert.equal(result.equal,true,'complete JSON parity for '+JSON.stringify(values));
+  }
+ }finally{await db.exec('DROP FUNCTION '+signature)}
+ assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.insight_notifications WHERE member_id=$1",[quotedScope])).rows[0].count,1,'quote/backslash/filter values remain data, never SQL text');
 });
