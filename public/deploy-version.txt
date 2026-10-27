@@ -1,4 +1,4 @@
-INSIGHT 2026.10.27.3 / notification 3.6.52 / dashboard 1.7.5 / DM 1.4.13
+INSIGHT 2026.10.27.4 / notification 3.6.53 / dashboard 1.7.5 / DM 1.4.13
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
@@ -11,3 +11,5 @@ Handle truncated magazine labels without weakening other notification action gua
 Recheck stale names only for registered creators pictured on unresolved magazine-add notices; preserve per-account request bounds.
 Reduce repeated notification DOM comparisons and coalesce filter status rendering without expanding network reads or changing durable-save boundaries.
 Remove one redundant identity read per save batch while retaining fresh account checks before storage and POST.
+Reuse verified document-scoped loaded pages on navigation without age-only rereads; keep explicit and real-data invalidations, complete comment continuations and honest failed-check status.
+Restore native notification toolbar height by keeping state in the existing32px action row.
