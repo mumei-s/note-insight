@@ -72,8 +72,8 @@ test('記事を一度開いた後も非表示中のcatalog更新でサムネイ�
   await h.go('articles');assert.equal(h.count('resolve'),2);assert.match(h.w.document.querySelector('.miu-self-article-grid').textContent,/新しく保存された記事/);
 });
 
-test('記事の期限超確認中も同sessionの公式値を保持し、最新応答で更新する',async t=>{
-  const next=deferred();let wait=false;const h=await fixture(t,{tab:'articles',respond:c=>wait&&c.action==='analysis'?next.promise:undefined});await h.show();await h.go('likes');h.advance(60001);wait=true;await h.go('articles');
+test('記事のrevision確認中も同sessionの公式値を保持し、最新応答で更新する',async t=>{
+  const next=deferred();let wait=false;const h=await fixture(t,{tab:'articles',respond:c=>wait&&c.action==='analysis'?next.promise:undefined});await h.show();await h.go('likes');h.advance(60001);wait=true;await h.show({revision:1});await h.go('articles');
   assert.equal(h.count('analysis'),2);assert.match(h.w.document.querySelector('.miu-self-article-grid').textContent,/公式 ♡ 901/);
   await settle(()=>next.resolve(Response.json(snapshot(902))));assert.match(h.w.document.querySelector('.miu-self-article-grid').textContent,/公式 ♡ 902/);
 });

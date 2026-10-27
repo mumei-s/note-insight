@@ -32,7 +32,7 @@ test('light summary requests only visible likes, then lazily loads articles once
  const h=await fixture(t);await h.show();assert.deepEqual(h.calls.map(c=>c.action).sort(),['likes','summary']);assert.equal(h.calls.find(c=>c.action==='summary').view,'navigation');
  await h.go('articles');assert.equal(h.count('articles'),1);assert.equal(h.count('analysis'),1);assert.match(h.text(),/tester article first/);
  await h.go('likes');await h.go('articles');assert.equal(h.count('articles'),1);
- h.advance(60001);await h.go('likes');await h.go('articles');assert.equal(h.count('articles'),2);
+ h.advance(60001);await h.go('likes');await h.go('articles');assert.equal(h.count('articles'),1,'elapsed time alone does not invalidate a verified archive');
 });
 test('initial article entry does not present an unverified empty archive as a successful zero',async t=>{
  const pending=deferred();const h=await fixture(t,{tab:'articles',respond:c=>c.action==='articles'?pending.promise:undefined});await h.show();assert.equal(h.count('articles'),1);assert.match(h.text(),/未確認/);assert.match(h.text(),/記事の最新データを確認中/);
@@ -48,7 +48,7 @@ test('an account switch aborts and rejects the previous archive response and sav
  await settle(()=>pending.resolve(Response.json({ok:true,rows:[article('tester','old')],total:1})));assert.doesNotMatch(h.text(),/tester article old/);
 });
 test('failed archive rechecks retain labelled saved rows and retry rather than mark a failed response fresh',async t=>{
- let broken=false;const h=await fixture(t,{tab:'articles',respond:c=>broken&&c.action==='articles'?Response.json({ok:false,error:'fixture failure'},{status:503}):undefined});await h.show();await h.go('likes');h.advance(60001);broken=true;await h.go('articles');assert.match(h.text(),/tester article first/);assert.match(h.text(),/前回保存分|前回表示分/);assert.equal(h.count('articles'),2);
+ let broken=false;const h=await fixture(t,{tab:'articles',respond:c=>broken&&c.action==='articles'?Response.json({ok:false,error:'fixture failure'},{status:503}):undefined});await h.show();await h.go('likes');h.advance(60001);broken=true;await h.show({revision:1});await h.go('articles');assert.match(h.text(),/tester article first/);assert.match(h.text(),/前回保存分|前回表示分/);assert.equal(h.count('articles'),2);
  await h.go('likes');broken=false;await h.go('articles');assert.equal(h.count('articles'),3);
 });
 test('malformed or denied archive results cannot silently become a verified empty archive',async t=>{
@@ -83,7 +83,7 @@ test('late archive hydration shows matching account copy without restarting arch
 
 test('article official dashboard explicit denial clears previously displayed values and its scoped cache',async t=>{
  let denied=false;const h=await fixture(t,{tab:'articles',respond:c=>c.action==='analysis'?(denied?Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):Response.json({ok:true,latestDashboard:null,topArticles:[{url:article().url,likes:999,comments:42}]})):undefined});await h.show();assert.match(h.text(),/公式 ♡ 999/);
- denied=true;h.advance(60001);await h.go('likes');await h.go('articles');assert.doesNotMatch(h.text(),/公式 ♡ 999/);assert.equal(h.cache.readSavedInsightView('article-dashboard',{account:'tester',token:'first-token'}),null);
+ denied=true;h.advance(60001);await h.go('likes');await h.show({revision:1});await h.go('articles');assert.doesNotMatch(h.text(),/公式 ♡ 999/);assert.equal(h.cache.readSavedInsightView('article-dashboard',{account:'tester',token:'first-token'}),null);
 });
 
 for(const late of [false,true])test(`article official values restore before network with original saved stamp (late=${late})`,async t=>{

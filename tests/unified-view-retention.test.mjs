@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as React from 'react';
 import {sceneFixture,pause} from './react-scene-fixture.mjs';
+import './unified-pageback-cache.test.mjs';
 
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve}};
 const summary=(id='tester')=>({member:{noteId:id,displayName:id,imageUrl:null},summary:{},analysis:{},counts:{comments:0,followers:0,followings:0,notifications:0},articles:[]});
@@ -52,10 +53,11 @@ test('verified empty like history is retained; an empty API object is not a veri
  assert.equal(h.count('likes'),afterFailure+1);assert.match(h.w.document.body.textContent,/最新確認に失敗/);
 });
 
-test('TTL expiry checks latest in the background while keeping the loaded like page',async t=>{
+test('elapsed time retains the loaded like page; an actual revision checks it in the background',async t=>{
  let stale=false;const next=deferred();const h=await fixture(t,{respond:call=>stale&&call.action==='likes'?next.promise:undefined});await h.show();
  await h.click(h.w.document.querySelector('.miu-pager button:last-child'));await h.show({active:false});h.advance(60_001);stale=true;await h.show();
- assert.equal(h.count('summary'),2);assert.equal(h.count('analysis'),0);assert.equal(h.count('likes'),3);
+ assert.equal(h.count('summary'),1);assert.equal(h.count('analysis'),0);assert.equal(h.count('likes'),2);
+ await h.show({revision:1});assert.equal(h.count('summary'),2);assert.equal(h.count('likes'),3);
  assert.match(h.w.document.querySelector('.miu-card-grid').textContent,/testerページ2/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);
  await React.act(async()=>{next.resolve(Response.json({rows:[row('新しいページ2',2)],total:250}));await pause()});assert.match(h.w.document.body.textContent,/新しいページ2/);
 });
@@ -99,10 +101,10 @@ for(const [tab,action]of[['supporters','supporters'],['commentRanking','comment_
  await h.show({revision:1});assert.equal(h.count(action),3);
 });
 
-test('magazine history requests are retained across fresh returns and renewed for revisions and TTL',async t=>{
+test('magazine history requests are retained across returns and elapsed time; revisions renew them',async t=>{
  const h=await fixture(t,{tab:'magazines',realMagazines:true,respond:call=>call.action==='magazines'?Response.json({rows:[],total:0}):undefined});await h.show();assert.equal(h.count('magazines'),1);
  await h.show({active:false});await h.show();assert.equal(h.count('magazines'),1);
- await h.show({revision:1});assert.equal(h.count('magazines'),2);await h.show({active:false,revision:1});h.advance(60_001);await h.show({revision:1});assert.equal(h.count('magazines'),3);
+ await h.show({revision:1});assert.equal(h.count('magazines'),2);await h.show({active:false,revision:1});h.advance(60_001);await h.show({revision:1});assert.equal(h.count('magazines'),2);await h.show({revision:2});assert.equal(h.count('magazines'),3);
 });
 
 test('leaving an unfinished like request does not mark it verified or accept its late response',async t=>{

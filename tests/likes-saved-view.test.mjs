@@ -83,6 +83,8 @@ test('同じdocumentの画面往復・復帰・TOPからの再mountは選択を�
  await settle(()=>{h.w.dispatchEvent(new h.w.Event('pagehide'));h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));h.w.dispatchEvent(new h.w.PageTransitionEvent('pageshow',{persisted:true}));});
  assert.equal(h.count('likes'),count);assert.match(h.text(),/確認済みページ2/);assert.match(h.w.document.querySelector('.miu-pager').textContent,/2 \/ 3/);assert.equal(h.w.document.querySelector('.miu-tabs button.active').textContent,'対応済み');
  wait=true;await h.show({key:'reopened'});
+ assert.equal(h.count('likes'),count,'same-document remount reuses the verified page without HTTP');
+ await h.show({key:'reopened',revision:1});
  assert.match(h.text(),/確認済みページ2/);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).page,2);assert.equal(h.calls.filter(c=>c.action==='likes').at(-1).status,'completed');
  await settle(()=>next.resolve(Response.json({rows:[{...row('最新のページ2'),confirmed:true}],total:250})));assert.match(h.text(),/最新のページ2/);assert.equal(h.w.document.querySelector('.miu-handled').getAttribute('aria-pressed'),'true');
  const fresh=await fixture(t);fresh.seed(JSON.parse(JSON.stringify(h.read().value)));await fresh.show();assert.equal(fresh.calls.find(c=>c.action==='likes').page,1);assert.equal(fresh.calls.find(c=>c.action==='likes').status,'all');
