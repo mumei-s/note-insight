@@ -101,7 +101,7 @@ for(const mode of ['modern','legacy'])test(`古い保存名でも単独の先頭
  ];
  const f=fixture(t,{mode,profiles,rows:[...cases.map(([id,body])=>row(id,body)),row('stale-whole-magazine',changed,'a','https://note.com/actor_a/m/mfictional')]});await f.refresh();
  for(const[id,,expected]of cases)assert.equal(f.hidden(id),expected,id);assert.equal(f.hidden('stale-whole-magazine'),false,'IDを確認できない全体リンクでは別人の通知を推測して消さない');
- assert.deepEqual(f.requests,['/api/v2/current_user'],'既知の名前が古くても自動で人物全員を再取得しない');
+ assert.deepEqual(f.requests,['/api/v2/current_user','/api/v2/creators/actor_a'],'曖昧な集合avatarにいる登録人物だけ再確認し、既知の他人物は再取得しない');
  f.values.set(ENABLED,false);await f.refresh();for(const[id]of cases)assert.equal(f.hidden(id),false,id+' off');
 });
 

@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.11';
+const VERSION='4.2.12';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -24,10 +24,10 @@ const modern=()=>Boolean(globalThis.GM);
 async function put(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
 let profileJob=null;const profileAttempt=new Map(),profileQueue=new Map(),profilePlans=new Map(),profileKey=(id,who)=>key(PROFILE,id)+'|'+who;
 function canHydrate(id,who){const attempt=profileAttempt.get(profileKey(id,who));return!attempt||attempt.count<2&&attempt.manualReady&&!attempt.pending}
-function hydrateProfiles(id,ids,profiles){
+function hydrateProfiles(id,ids,profiles,recheck=[]){
  profilePlans.set(id,(profilePlans.get(id)||0)+1);
- const wanted=new Set(ids);for(const[k,item]of profileQueue)if(item.id===id&&!wanted.has(item.who))profileQueue.delete(k);
- for(const who of ids){const resolved=profiles.some(p=>p.id===who&&p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==who);if(!resolved&&canHydrate(id,who))profileQueue.set(profileKey(id,who),{id,who})}
+ const wanted=new Set(ids),force=new Set(recheck);for(const[k,item]of profileQueue)if(item.id===id&&!wanted.has(item.who))profileQueue.delete(k);
+ for(const who of ids){const resolved=profiles.some(p=>p.id===who&&p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==who);if((!resolved||force.has(who))&&canHydrate(id,who))profileQueue.set(profileKey(id,who),{id,who})}
  flushProfiles();
 }
 async function fetchProfile(who){
@@ -138,12 +138,13 @@ function leadId(el,lead,st){const links=creatorLinks(el);
  const avatars=[...el.querySelectorAll('a[href]')].filter(a=>!clean(a.textContent)&&a.querySelector('img')&&startsText(el,a)),avatarIds=avatars.map(a=>creatorIdFromUrl(a.getAttribute('href')));if(avatarIds.length&&avatarIds.every(Boolean)&&new Set(avatarIds).size===1)return avatarIds[0];
  const prof=st.profiles.find(p=>p.name&&nameMatch(lead,p.name));return prof?.id||''}
 function profileIdsForRows(st,list){
- const unresolved=list.filter(el=>classificationCache.get(el)?.needsProfile);if(!st.enabled||!unresolved.length)return[];
- const resolved=new Set(st.profiles.filter(p=>p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==p.id).map(p=>p.id)),missing=[...st.ids].filter(id=>!resolved.has(id)),missingSet=new Set(missing),wanted=new Set();
+ const unresolved=list.filter(el=>classificationCache.get(el)?.needsProfile);if(!st.enabled||!unresolved.length)return{ids:[],recheck:[]};
+ const resolved=new Set(st.profiles.filter(p=>p.name&&clean(p.name).replace(/^@/,'').toLowerCase()!==p.id).map(p=>p.id)),missing=[...st.ids].filter(id=>!resolved.has(id)),wanted=new Set(),recheck=new Set();
  // Grouped avatars are hints for lookup priority, never proof that their
- // owner is the leading actor. Keep name-only fallback for incomplete markup.
- for(const el of unresolved)for(const link of creatorLinks(el))if(!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&missingSet.has(link.id))wanted.add(link.id);
- return[...wanted,...missing.filter(id=>!wanted.has(id))];
+ // owner is the leading actor. A visible registered candidate may have changed
+ // its name, so recheck just that ID under the existing per-account budget.
+ for(const el of unresolved)for(const link of creatorLinks(el))if(!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&st.ids.has(link.id)){wanted.add(link.id);if(resolved.has(link.id))recheck.add(link.id)}
+ return{ids:[...wanted,...missing.filter(id=>!wanted.has(id))],recheck:[...recheck]};
 }
 function rememberOwnAttributes(el){ownAttributeValues.set(el,{style:el.getAttribute('style'),'aria-hidden':el.getAttribute('aria-hidden')})}
 function forceVisible(el,on){if(!el)return;if(on){if(!el.style.getPropertyValue('--mumei-v2939-display'))el.style.setProperty('--mumei-v2939-display',el.tagName==='LI'?'list-item':'block');if(el.getAttribute(FORCE)!=='1')el.setAttribute(FORCE,'1')}else if(el.hasAttribute(FORCE))el.removeAttribute(FORCE);rememberOwnAttributes(el)}
@@ -242,7 +243,7 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);hydrateProfiles(accountId,profileIdsForRows(st,list),st.profiles);return true}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateHasRows=Boolean(candidate&&rows(candidate).length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}

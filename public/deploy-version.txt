@@ -1,4 +1,4 @@
-INSIGHT 2026.10.27.1 / notification 3.6.50 / dashboard 1.7.5 / DM 1.4.13
+INSIGHT 2026.10.27.2 / notification 3.6.51 / dashboard 1.7.5 / DM 1.4.13
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
@@ -8,3 +8,4 @@ Distinguish durable comment storage totals from loaded and visible rows; keep bo
 Apply resolved filter actors without waiting for unrelated profiles; look up names only for unresolved magazine-add rows and stop obsolete queued reads.
 Suspend the dashboard collector behind native account menus and foreground dialogs; retain metric popups, OFF state and pending saves.
 Handle truncated magazine labels without weakening other notification action guards; show local anonymous filter status.
+Recheck stale names only for registered creators pictured on unresolved magazine-add notices; preserve per-account request bounds.

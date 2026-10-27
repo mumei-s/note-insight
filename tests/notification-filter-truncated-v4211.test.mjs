@@ -82,7 +82,7 @@ for(const mode of ['modern','legacy'])test(`省略した括弧付きタイトル
 
 for(const mode of ['modern','legacy'])test(`状態報告は匿名の件数だけを返し、再判定・通信を増やさない (${mode})`,async t=>{
  const f=fixture(t,{mode,items:[row('matched',lead+'架空の【作品棚...'+suffix),row('other','<a href="/other">別人物</a>さんが架空の【作品棚...'+suffix),row('unresolved','未確認の架空人物さんが架空の【作品棚...'+suffix),row('like',lead+'あなたの記事にスキしました')]});await f.refresh();
- assert.deepEqual(JSON.parse(JSON.stringify(f.state())),{version:'4.2.11',enabled:true,registered:1,total:4,hidden:1,magazineAdd:3,unresolved:1});
+ assert.deepEqual(JSON.parse(JSON.stringify(f.state())),{version:f.w.__mumeiNotificationFilterV4.version,enabled:true,registered:1,total:4,hidden:1,magazineAdd:3,unresolved:1});
  assert.doesNotMatch(JSON.stringify(f.state()),/fictional_actor|架空|tester|https:/);
  const before=f.requests.length;await f.refresh();assert.equal(f.requests.length,before,'状態確認のための追加APIなし');
  f.values.set(FIL,false);await f.refresh();const off=JSON.parse(JSON.stringify(f.state()));assert.equal(off.enabled,false);assert.equal(off.hidden,0);assert.equal(off.registered,1);

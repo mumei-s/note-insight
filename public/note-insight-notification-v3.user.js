@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.50
-// @description  本人通知V3.6.50。省略されたマガジン名の記事追加を判定し、端末内でフィルターの状態を確認できます。起動版を確認して更新後はINSIGHTへ戻ります。初回は全履歴、次回は保存済み境界までの差分を保存します。
+// @version      3.6.51
+// @description  本人通知V3.6.51。省略されたマガジン名と、登録後に変わった名前を必要な人物だけ再照合します。端末内でフィルターの状態を確認できます。起動版を確認して更新後はINSIGHTへ戻ります。初回は全履歴、次回は保存済み境界までの差分を保存します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -26,7 +26,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3633
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=154
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=362
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=4211
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=4212
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=120
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-status-bridge-v1.js?v=110
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-settings-bridge-v1.js?v=114
@@ -40,7 +40,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.50',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.51',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function publishLive(){if(location.origin!=='https://mumei-s.github.io'||!location.pathname.startsWith('/note-insight/'))return;if(!document.documentElement){document.addEventListener('DOMContentLoaded',publishLive,{once:true});return}const root=document.documentElement;if(root.getAttribute('data-mumei-notification-live-version')!==VERSION)root.setAttribute('data-mumei-notification-live-version',VERSION);window.dispatchEvent(new Event('mumei-insight-tool-ready'))}
