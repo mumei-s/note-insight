@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync,readdirSync} from 'node:fs';
 import ts from 'typescript';
 import {PGlite} from '@electric-sql/pglite';
+import {assertPreparedProjectionBehavior} from './notification-prepared-projection-cases.mjs';
 
 // The frozen oracle runs in the UTC Edge runtime, including Date.parse(0).
 process.env.TZ='UTC';
@@ -28,6 +29,11 @@ const boundedMigration=readFileSync('supabase/migrations/'+boundedName,'utf8');
 const parameterPlanName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_parameter_plans.sql'));
 assert.ok(parameterPlanName,'the parameter-plan migration is required');
 const parameterPlanMigration=readFileSync('supabase/migrations/'+parameterPlanName,'utf8');
+const projectionMigrations=['_insight_notification_prepared_format.sql','_insight_notification_prepared_projection.sql','_insight_notification_prepared_consumer.sql'].map(suffix=>{
+ const name=readdirSync('supabase/migrations').find(n=>n.endsWith(suffix));assert.ok(name,suffix+' is required');return readFileSync('supabase/migrations/'+name,'utf8');
+});
+const consumerMigration=projectionMigrations[2];
+const queryParameters=['p_member_ids','p_scope','p_note_id','v_kind','v_day','v_handling','p_page','p_page_size','p_preview'];
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -51,6 +57,9 @@ before(async()=>{
  await db.exec(slimMigration);
  await db.exec(boundedMigration);
  await db.exec(parameterPlanMigration);
+ await db.exec(projectionMigrations[0]);await db.exec(projectionMigrations[1]);
+ await db.exec('INSERT INTO insight_notification_internal.prepared_rows SELECT p.* FROM public.insight_notifications n CROSS JOIN LATERAL insight_notification_internal.project_row(n) p ON CONFLICT(id) DO NOTHING');
+ await db.exec(consumerMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -297,9 +306,9 @@ test('early pruning skips excluded-only groups while retaining richer excluded r
  assert.equal((await equivalent({id:'prune-foreign',scope:'prune-foreign',noteId:'prune_foreign'},{})).total,1);
  // Inspect actual source cardinality rather than a timing threshold: history
  // consisting only of excluded kinds must not enter metadata decode/window work.
- let inner=boundedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
+ let inner=consumerMigration.split('EXECUTE $query$')[1].split('$query$ INTO')[0];
  const parameters={p_member_ids:"ARRAY['prune-fixture']::text[]",p_scope:"'prune-fixture'::text",p_note_id:"'prune_fixture'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
- for(const [name,value] of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
+ for(const [name,value] of Object.entries(parameters))inner=inner.replace(new RegExp('\\$'+(queryParameters.indexOf(name)+1)+'\\b','g'),()=>value);
  const plan=(await db.query('EXPLAIN (ANALYZE,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0].Plan;
  function findSource(node){return node['Subplan Name']==='CTE source_order'?node:(node.Plans||[]).map(findSource).find(Boolean)}
  assert.equal(findSource(plan)?.['Actual Rows'],4,'only both complete mixed semantic groups enter source metadata decode');
@@ -368,12 +377,21 @@ test('bounded cover partitions preserve UTF8 byte boundaries, cross-branch group
  const all=await equivalent(m,{includeCategoryPreview:true});assert.ok(all.rows.some(row=>row.id===rich.id&&row.confirmed&&row.meta.body==='両分岐を合わせた架空本文'));assert.ok(all.rows.some(row=>row.id===hugeUnicode.id));assert.ok(!all.rows.some(row=>[nullKey.id,rows.at(-3).id,rows.at(-2).id].includes(row.id)));
  await equivalent(m,{handlingStatus:'completed'});await equivalent(m,{kind:'badge',page:2,pageSize:20});
  await db.exec('VACUUM ANALYZE public.insight_notifications');
- let inner=boundedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];const parameters={p_member_ids:"ARRAY['scope','participant_境界']::text[]",p_scope:"'scope'::text",p_note_id:"'byte_boundary'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
- for(const[name,value]of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
+ let inner=consumerMigration.split('EXECUTE $query$')[1].split('$query$ INTO')[0];const parameters={p_member_ids:"ARRAY['scope','participant_境界']::text[]",p_scope:"'scope'::text",p_note_id:"'byte_boundary'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
+ for(const[name,value]of Object.entries(parameters))inner=inner.replace(new RegExp('\\$'+(queryParameters.indexOf(name)+1)+'\\b','g'),()=>value);
  const explain=(await db.query('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0];
  const nodes=[];function walk(node){nodes.push(node);for(const child of node.Plans||[])walk(child)}walk(explain.Plan);
- const short=nodes.find(node=>node['Index Name']==='insight_notifications_feed_short_cover_idx'),long=nodes.find(node=>node['Index Name']==='insight_notifications_feed_long_key_idx');
- assert.ok(short,'bounded branch can use the covering partial index without forced planner settings');assert.equal(short['Node Type'],'Index Only Scan');assert.equal(short['Heap Fetches'],0);assert.ok(long,'oversized branch uses its narrow partial index');
+ const prepared=nodes.find(node=>node['Index Name']==='prepared_rows_member_idx');
+ assert.ok(prepared,'the current consumer reads the private prepared scope index');
+ const decoded=nodes.find(node=>node['Subplan Name']==='CTE source');assert.equal(decoded['Actual Rows'],3,'only the mixed duplicate group enters raw metadata decoding; all singleton rows use prepared scalars');
+ let ownerInner=consumerMigration.split('EXECUTE $query$')[1].split('$query$ INTO')[0];
+ const ownerParameters={...parameters,p_member_ids:"ARRAY['owner','owner-app']::text[]",p_scope:"'owner'::text",p_note_id:"'ss_yr'::text"};
+ for(const[name,value]of Object.entries(ownerParameters))ownerInner=ownerInner.replace(new RegExp('\\$'+(queryParameters.indexOf(name)+1)+'\\b','g'),()=>value);
+ const ownerPlan=(await db.query('EXPLAIN (ANALYZE,FORMAT JSON) '+ownerInner)).rows[0]['QUERY PLAN'][0].Plan;
+ nodes.length=0;walk(ownerPlan);
+ const winning=nodes.filter(node=>node.Alias==='raw_winner');assert.equal(winning.length,1);assert.equal(winning[0]['Node Type'],'Index Scan');assert.equal(winning[0]['Index Name'],'insight_notifications_pkey');assert.match(winning[0]['Index Cond'],/\bid\s*=/);
+ assert.equal(winning[0]['Actual Loops'],100);assert.equal(winning[0]['Actual Rows'],1,'only the 100 visible winning rows are fetched, never the scoped raw history');
+ const boundedLookup=nodes.find(node=>node['Node Type']==='Limit'&&node.Plans?.some(child=>child.Alias==='raw_winner'));assert.ok(boundedLookup);assert.equal(boundedLookup['Actual Loops'],100);assert.equal(boundedLookup['Actual Rows'],1);
 });
 
 test('bounded migration reuses the exact prebuild and rejects same-name index or prerequisite drift',async()=>{
@@ -420,4 +438,29 @@ test('USING-bound dynamic execution matches the current static RPC for repeated 
   }
  }finally{await db.exec('DROP FUNCTION '+signature)}
  assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.insight_notifications WHERE member_id=$1",[quotedScope])).rows[0].count,1,'quote/backslash/filter values remain data, never SQL text');
+});
+
+test('prepared projection stays atomic across no-op, identity, scope, delete and truncate changes',async()=>{await assertPreparedProjectionBehavior(db)});
+
+test('one immutable formatter preserves canonical cases and both singleton/duplicate NULL representations',async()=>{
+ const rows=[],types=['badge','rating','purchase','membership_reaction','reply','quote','other','tip','comment_like','membership_board_reply','follow','like','comment',null,'unknown_custom'];
+ const kinds=[undefined,'embed_note','stock_photo','user_badge','thank_you_message','store_create','qa_answer',null,[],{},false,0,''];
+ const bodies=[undefined,null,false,0,'',[],[[]],['あなたの記事が話題です'],'あなたの記事が話題になりました','架空さんが架空記事を投稿しました','記事であなたの画像を使用しました',{},true,12.5,'通常の架空本文'];
+ for(const type of types)for(const kind of kinds)for(const body of bodies)rows.push({notification_type:type,raw_text:'架空さんが架空記事を投稿しました',meta:{source:'note-notification-reader-v3',event_identity:'notice:'+rows.length,classifier:'action-v28-context',recovery_version:'evidence-v2-articles',...(kind===undefined?{}:{kind}),...(body===undefined?{}:{body})}});
+ for(const meta of [null,false,0,'',[],[null,{body:'nested'}],'non-object',{}, {body:null,kind:null}])rows.push({notification_type:'badge',raw_text:'架空通知',meta});
+ for(let group=0;group<4;group++)for(let j=0;j<4;j++)rows.push({notification_type:j%2?'other':'badge',raw_text:'架空通知',meta:{source:group===1?'canonical-public-comments':'note-notification-reader-v3',kind:group%2?'embed_note':'stock_photo',body:j%2?'あなたの記事が話題です':null,event_identity:[['notice:12'],[['notice:12']],['notice:12',[]],[[],['notice:12']]][j],classification_status:group===1?'insufficient_evidence':null,reclassify_pending:[null,false,0,'',[],{},true,['']][(group*4+j)%8],classifier:'action-v28-context',recovery_version:'evidence-v2-articles'}});
+ assert.equal(rows.length,2950);
+ const fields=['source','event_identity','body','kind','classification_status','reclassify_pending','classifier','recovery_version'];
+ const inputs=`SELECT input.position::bigint*2+mode AS id,input.value->>'notification_type' AS notification_type,input.value->>'raw_text' AS raw_text,NULL::text AS target_url,NULL::timestamptz AS occurred_at,NULL::timestamptz AS captured_at,${fields.map(field=>`CASE WHEN mode=0 THEN NULLIF(input.value->'meta'->'${field}','null'::jsonb) ELSE input.value->'meta'->'${field}' END AS m_${field}`).join(',')} FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY input(value,position) CROSS JOIN (VALUES(0),(1)) representation(mode)`;
+ // Keep the immutable pre-projection CASE/array formulas as the oracle. Raw
+ // excluded-type pruning belongs to the caller and is tested by the RPC cases.
+ const formatStart=slimMigration.indexOf('format_value_walk('),formatEnd=slimMigration.indexOf('), contexts AS');
+ const canonicalFormats=(slimMigration.slice(formatStart,formatEnd)+')').replace("  WHERE COALESCE(notification_type,'') NOT IN ('like','follow','comment')\n",'');
+ const result=(await db.query(`WITH RECURSIVE folded_rows AS MATERIALIZED (${inputs}),${canonicalFormats}, expected AS (SELECT id,type AS notification_type,CASE WHEN completion_identity ~ '^notice:\\d+$' THEN completion_identity ELSE 'row:'||id::text END AS completion_key,is_question_answer,is_canonical,insufficient,reclassify_pending FROM format_types), actual AS (SELECT r.id,p.* FROM folded_rows r CROSS JOIN LATERAL insight_notification_internal.prepare_format(r.id,r.notification_type,r.raw_text,r.m_source,r.m_event_identity,r.m_body,r.m_kind,r.m_classification_status,r.m_reclassify_pending,r.m_classifier,r.m_recovery_version) p), compared AS (SELECT COALESCE(a.id,e.id) AS id,to_jsonb(e)-'id' AS expected,to_jsonb(a)-'id' AS actual FROM expected e FULL JOIN actual a USING(id)) SELECT count(*)::integer AS count,count(*) FILTER(WHERE actual IS DISTINCT FROM expected)::integer AS differences,(SELECT jsonb_agg(example) FROM (SELECT * FROM compared WHERE actual IS DISTINCT FROM expected LIMIT 3) example) AS examples FROM compared`,[JSON.stringify(rows)])).rows[0];
+ assert.equal(result.count,5900);assert.equal(result.differences,0,JSON.stringify(result.examples));
+ const signature='insight_notification_internal.prepare_format(bigint,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb)';
+ const rights=(await db.query("SELECT provolatile,proparallel,proisstrict,prosecdef,proconfig,prorows,has_function_privilege('anon',oid,'EXECUTE') AS anon,has_function_privilege('authenticated',oid,'EXECUTE') AS authenticated,has_function_privilege('service_role',oid,'EXECUTE') AS service FROM pg_proc WHERE oid=$1::regprocedure",[signature])).rows[0];
+ assert.equal(rights.provolatile,'i');assert.equal(rights.proparallel,'s');assert.equal(rights.proisstrict,false);assert.equal(rights.prosecdef,false);assert.deepEqual(rights.proconfig,['search_path=""']);assert.equal(rights.prorows,1);assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
+ const emptyRows=(await db.query('SELECT to_jsonb(p) AS value FROM insight_notification_internal.prepare_format(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL) p')).rows;assert.equal(emptyRows.length,1);const empty=emptyRows[0].value;
+ assert.deepEqual(empty,{notification_type:null,completion_key:null,is_question_answer:null,is_canonical:null,insufficient:null,reclassify_pending:true});
 });
