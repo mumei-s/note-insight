@@ -39,8 +39,10 @@ test('再起動後の新着確認が保存済み通知と同じなら、進行�
 
 test('初回新着で同じ通知の実返信が更新された場合は、古い一覧応答から本文を戻さない',async t=>{
  const h=await fixture(t,{incoming:row('更新された実返信')});
- assert.equal(h.feeds().length,2,'a changed body really does require a current full-page result');
+ assert.equal(h.feeds().length,1,'share the pending full-page request before deciding whether repair is required');
+ assert.match(h.w.document.querySelector('.minf-comment-context').textContent,/更新された実返信/);
  await settle(h.deliver);
+ assert.equal(h.feeds().length,2,'an unreflected response requires exactly one follow-up after completion');
  const body=h.w.document.querySelector('.minf-comment-context').textContent;
  assert.match(body,/更新された実返信/);assert.doesNotMatch(body,/保存済みの実返信/);
 });
@@ -48,9 +50,10 @@ test('初回新着で同じ通知の実返信が更新された場合は、古�
 test('本文が同じでも投稿者を新着で補修したら、遅い一覧の旧投稿者へ戻さない',async t=>{
  const saved={...row(),meta:{...row().meta,comment_author:'旧投稿者'}},incoming={...saved,meta:{...saved.meta,comment_author:'新投稿者'}};
  const h=await fixture(t,{saved,incoming});
- assert.equal(h.feeds().length,2,'a changed visible author needs a current full-page result');
+ assert.equal(h.feeds().length,1,'keep the original full-page flight while showing the newer author');
  assert.match(h.w.document.querySelector('.minf-comment-context').textContent,/新投稿者/);
  await settle(h.deliver);
+ assert.equal(h.feeds().length,2,'repair an old-author response once after it completes');
  const body=h.w.document.querySelector('.minf-comment-context').textContent;
  assert.match(body,/保存済みの実返信/);assert.match(body,/新投稿者/);assert.doesNotMatch(body,/旧投稿者/);
 });

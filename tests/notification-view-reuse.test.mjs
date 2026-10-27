@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as React from 'react';
 import {sceneFixture,pause} from './react-scene-fixture.mjs';
+import './notification-stale-page-retention.test.mjs';
+import './notification-page-repair-coalescing.test.mjs';
 
 const key='mumei-insight-access-token';
 const row=(id,type='tip',extra={})=>({id:String(id),notification_type:type,display_category:type,actor_name:'人物'+id,raw_text:'通知概要'+id,captured_at:new Date(Date.parse('2026-10-14T12:00:00Z')-id*1000).toISOString(),confirmed:false,...extra});

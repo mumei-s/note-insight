@@ -102,3 +102,7 @@ html[data-insight-layout] .minf .minf-list article:has(>.minf-row-actions .minf-
 .minf .minf-message.self{align-self:flex-end;background:#e0f2fe}
 .minf .minf-message p{white-space:pre-wrap;margin:4px 0}
 .minf .minf-message small{font-size:11px;color:#475569}
+
+/* Keep retry controls explicit on mobile browsers while a saved page stays visible. */
+.minf .minf-error button{appearance:none;-webkit-appearance:none;min-height:36px;width:max-content;max-width:100%;margin-top:8px;padding:6px 12px;border:1px solid #7395a6;border-radius:8px;background:#173747;color:#f0fbff;font:700 var(--insight-meta-text,12px)/1.4 system-ui;white-space:nowrap;cursor:pointer;touch-action:manipulation}
+.minf .minf-error button:disabled{opacity:.55;cursor:wait}

@@ -19,6 +19,7 @@ type NotificationSelection={kind:string;handlingStatus:string;selectedDay:string
 type SavedNotificationView={selection:NotificationSelection;rows:Row[];statusCounts:Record<string,number>;total:number;categoryCounts:Record<string,number>;updatedAt:string;syncAt:string;serverSync:{received:number;confirmed:number;source:string}};
 const NOTIFICATION_SELECTION_CACHE=new Map<string,NotificationSelection>();
 const selectionId=(selection:NotificationSelection)=>JSON.stringify([selection.kind,selection.handlingStatus,selection.selectedDay,selection.page]);
+function matchesNotificationSelection(row:Row,selection:Pick<NotificationSelection,"kind"|"handlingStatus"|"selectedDay">){return matchesHandling(row,selection.handlingStatus)&&(selection.kind==="all"||displayType(row)===selection.kind)&&(!selection.selectedDay||new Date(row.occurred_at||row.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selection.selectedDay)}
 function savedNotificationView(account:string,token:string){
  const saved=readSavedInsightView<SavedNotificationView>("notifications",{account,token}),value=saved?.value,selection=value?.selection;
  const counts=(v:unknown)=>v&&typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(n=>typeof n==="number"&&Number.isFinite(n)&&n>=0);
@@ -226,7 +227,8 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const[checking,setChecking]=useState(false),[loadFailed,setLoadFailed]=useState(false),pendingChecks=useRef(0);
   const visibleState=useRef({rows,total,selection:visibleSelection,failed:loadFailed});visibleState.current={rows,total,selection:visibleSelection,failed:loadFailed};
   const beginCheck=()=>{pendingChecks.current++;setChecking(true)},finishCheck=()=>{pendingChecks.current=Math.max(0,pendingChecks.current-1);if(!pendingChecks.current)setChecking(false)};
-  const request=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});
+  const request=useRef<{id:number;controller:AbortController|null;repair:{id:number;selection:string;rows:Row[];needsReload:boolean}|null}>({id:0,controller:null,repair:null});
+  const currentPageRepair=()=>request.current.repair;
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:localStorage.getItem(`mumei-notification-recent-watermark:${accountKey(memberNoteId)}`)||""});
   const recentDeferred=useRef(false);
   const lastReaderRun=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
@@ -246,15 +248,18 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     setLoadFailed(false);
     recentRequest.current.controller?.abort();recentRequest.current.controller=null;
     const cacheKey=`${accountKey(memberNoteId)}|${k}|${day||""}|${p}|${handlingStatus}`,cached=NOTIFICATION_VIEW_CACHE.get(cacheKey),token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",pageChanged=p!==view.current.page;
-    if(!force&&cached?.complete&&cached.token===token&&cached.revision===revision&&isFreshInsightView(cached.cachedAt)){
-      request.current.id++;request.current.controller?.abort();request.current.controller=null;
-      setRows(overlayEdits(cached.rows,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)));setPage(p);setTotal(cached.total);setStatusCounts(cached.statusCounts||{});setCategoryCounts(cached.categoryCounts);setUpdatedAt(cached.updatedAt);setSyncAt(cached.syncAt);setServerSync(cached.serverSync);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setLoading(false);setError("");
-      if(pageChanged)document.querySelector("#minf-notifications .minf-filter-panel")?.scrollIntoView?.({block:"start"});return;
+    const retained=cached?.complete&&cached.token===token&&canRetainInsightView(cached.cachedAt)?cached:null,reusable=Boolean(retained&&retained.revision===revision);
+    // Complete pages verified in this document stay reusable until a real
+    // invalidation. Explicit checks can keep the target visible while running.
+    if(retained){
+      setRows(overlayEdits(retained.rows,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)));setPage(p);setTotal(retained.total);setStatusCounts(retained.statusCounts||{});setCategoryCounts(retained.categoryCounts);setUpdatedAt(retained.updatedAt);setSyncAt(retained.syncAt);setServerSync(retained.serverSync);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(!force&&reusable?0:retained.cachedAt);setLoading(false);setError("");
+      if(pageChanged&&!silent)document.querySelector("#minf-notifications .minf-filter-panel")?.scrollIntoView?.({block:"start"});
     }
-    request.current.controller?.abort();const controller=new AbortController(),id=++request.current.id;request.current.controller=controller;
+    if(!force&&reusable){request.current.id++;request.current.controller?.abort();request.current.controller=null;request.current.repair=null;return}
+    request.current.controller?.abort();const controller=new AbortController(),id=++request.current.id;request.current.controller=controller;request.current.repair=null;
     const valid=()=>id===request.current.id&&!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
     const visible=visibleState.current,retainingEmpty=!visible.failed&&visible.total===0&&visible.selection===selectionId({kind:k,selectedDay:day,handlingStatus,page:p});
-    beginCheck();if(!silent||!retainingEmpty&&!visible.rows.some(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)))setLoading(true);setError("");
+    beginCheck();if(!retained&&(!silent||!retainingEmpty&&!visible.rows.some(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day))))setLoading(true);setError("");
     // Fetch the selected page only; unseen category previews delay it and repeat on every refresh.
     try{const x=await post({kind:k,page:p,pageSize:PAGE,day:day||null,includeCategoryPreview:false,classificationRevision:repairRevision.current,handlingStatus},controller.signal);if(!valid())return;
       const feedId=String(x.noteId||"").toLowerCase(),expected=accountKey(memberNoteId).toLowerCase();
@@ -264,6 +269,14 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const stored=new Map(readBoard(accountKey(memberNoteId)).map(r=>[String(r.id||rowKey(r)),r]));const baseList=mergeMagazineJoinRows(repairActorRows(x.rows||[])).map(r=>keepIcon(r,stored.get(String(r.id||rowKey(r))))).sort(notificationBoardOrder);
       // Validate server rows before applying optimistic local completion changes.
       if(Number(x.total)>0&&!baseList.some(r=>matchesHandling(r,handlingStatus)&&(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)))throw new Error("通知一覧の応答が不完全です。指定した条件の本文を取得できませんでした。");
+      const repair=currentPageRepair();
+      if(repair?.id===id&&repair.selection===JSON.stringify({kind:k,selectedDay:day,handlingStatus,page:p})){
+        const authoritative=new Map(baseList.map(row=>[String(row.id||rowKey(row)),row]));
+        repair.needsReload=!repair.rows.every(row=>{const verified=authoritative.get(String(row.id||rowKey(row)));return matchesNotificationSelection(row,{kind:k,selectedDay:day,handlingStatus})?verified&&notificationRevision(verified)===notificationRevision(row):!verified});
+        // Do not replace a newer delta with an older in-flight page. Recheck
+        // once after it finishes only when that page did not reflect the delta.
+        if(repair.needsReload)return;
+      }
       const list=overlayEdits(baseList,p===1).filter(r=>(k==="all"||displayType(r)===k)&&(!day||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===day)).sort(notificationBoardOrder);if(!valid())return;
       const nextCounts=x.categoryCounts||{},nextStatusCounts=x.statusCounts||{},nextServer={received:Number(x.lastSyncReceived||0),confirmed:Number(x.lastSyncConfirmed??x.lastSyncInserted??0),source:String(x.lastSyncSource||"")},cacheAccount=feedId||expected||"current",cacheKey=`${cacheAccount}|${k}|${day||""}|${p}|${handlingStatus}`;
       passiveDisplay.current.blocked=true;setRows(list);setVisibleSelection(selectionId({kind:k,selectedDay:day,handlingStatus,page:p}));setSavedDisplayAt(0);setStatusCounts(nextStatusCounts);if(x.unresolved)setUnresolved(x.unresolved);setTotal(Number(x.total||0));setCategoryCounts(nextCounts);setPage(p);setCheckedAt(new Date());setUpdatedAt(String(x.lastUpdatedAt||""));setSyncAt(String(x.lastSyncAt||""));setServerSync(nextServer);
@@ -275,7 +288,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         NOTIFICATION_VIEW_CACHE.set(previewKey,{rows:entries,total:Number(nextCounts[category]||0),categoryCounts:nextCounts,updatedAt:String(x.lastUpdatedAt||""),syncAt:String(x.lastSyncAt||""),serverSync:nextServer,cachedAt:Date.now(),complete:entries.length>=Math.min(Number(nextCounts[category]||0),PAGE),revision,token});
       }
       retainBoard(cacheAccount,boardIncoming);markBoardFresh(cacheAccount,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
-      if(pageChanged&&!silent)document.querySelector("#minf-notifications .minf-filter-panel")?.scrollIntoView?.({block:"start"});
+      if(pageChanged&&!silent&&!retained)document.querySelector("#minf-notifications .minf-filter-panel")?.scrollIntoView?.({block:"start"});
       if(Number(x.reclassifyPending)>0&&!repairRunning.current&&lastRepairSync.current!==String(x.lastSyncAt||"initial")){lastRepairSync.current=String(x.lastSyncAt||"initial");void reclassify(true)}
       // Identity enrichment never delays the notification text.
       void enrich(baseList).then(enriched=>{if(!valid())return;setRows(previous=>previous.map(row=>keepIcon(row,enriched.find(e=>e.id===row.id))));retainEnrichedIcons(cacheAccount,enriched);const cached=NOTIFICATION_VIEW_CACHE.get(cacheKey);if(cached)NOTIFICATION_VIEW_CACHE.set(cacheKey,{...cached,rows:cached.rows.map(row=>keepIcon(row,enriched.find(icon=>icon.id===row.id)))})});
@@ -287,19 +300,19 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       const detail=e instanceof Error?e.message:"時間をおいて再試行してください",reason=/57014|statement timeout/i.test(detail)?"通知の取得が時間切れになりました。時間をおいて再試行してください。":detail;
       setLoadFailed(true);setError("通知履歴の読込に失敗しました："+reason+(fallback?"｜最新確認に失敗したため前回保存分を表示しています":""));
     }}
-    finally{finishCheck();if(id===request.current.id){request.current.controller=null;setLoading(false);if(recentDeferred.current){recentDeferred.current=false;void refreshRecent()}}}
+    finally{finishCheck();if(id===request.current.id){const repair=currentPageRepair(),reload=Boolean(repair?.id===id&&repair.needsReload&&valid());request.current.repair=null;request.current.controller=null;setLoading(false);if(reload)void load(p,k,true,day,true);else if(recentDeferred.current){recentDeferred.current=false;void refreshRecent()}}}
   }
   async function refreshRecent(allowDuringFull=false){
     if(view.current.page!==1||recentRequest.current.controller||document.visibilityState==="hidden")return;
     if(request.current.controller&&!allowDuringFull){recentDeferred.current=true;return}
-    const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId),selection=JSON.stringify(view.current);recentRequest.current.controller=controller;beginCheck();let paginationChanged=false;
+    const controller=new AbortController(),token=localStorage.getItem(INSIGHT_TOKEN_KEY),account=accountKey(memberNoteId),selection=JSON.stringify(view.current);recentRequest.current.controller=controller;beginCheck();let paginationChanged=false,changedRows:Row[]=[];
     try{
       const x=await post({action:"recent",since:recentRequest.current.watermark||null},controller.signal);
       if(controller.signal.aborted||localStorage.getItem(INSIGHT_TOKEN_KEY)!==token||view.current.page!==1||JSON.stringify(view.current)!==selection)return;
       if(String(x.noteId||"").toLowerCase()!==account){discardSavedDisplay(token||"");request.current.id++;request.current.controller?.abort();request.current.controller=null;setLoading(false);setError("通知アカウントが一致しないため前回表示分を閉じました。");return}
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
       if(hasFreshBoard(account))markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
-      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map([...readBoard(account),...rows].map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});retainBoard(account,serverIncoming);
+      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map([...readBoard(account),...rows].map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged){changedRows=serverIncoming.filter(row=>{const before=prior.get(String(row.id||rowKey(row)));return matchesNotificationSelection(row,view.current)||Boolean(before&&matchesNotificationSelection(before,view.current))});for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false})}retainBoard(account,serverIncoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
         return [...map.values()].filter(r=>matchesHandling(r,handlingStatus)&&(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort(notificationBoardOrder).slice(0,PAGE);
@@ -310,7 +323,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&[401,403].includes(Number((e as {status?:number})?.status))){discardSavedDisplay(token||"");request.current.id++;request.current.controller?.abort();request.current.controller=null;setLoading(false);setError("ログインを確認できないため前回表示分を閉じました。")}
       // Network failures keep the explicitly labelled previous display.
     }
-    finally{finishCheck();if(recentRequest.current.controller===controller)recentRequest.current.controller=null;if(paginationChanged&&!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&JSON.stringify(view.current)===selection)void load(view.current.page,view.current.kind,true,view.current.selectedDay,true)}
+    finally{finishCheck();if(recentRequest.current.controller===controller)recentRequest.current.controller=null;if(paginationChanged&&!controller.signal.aborted&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&JSON.stringify(view.current)===selection){if(request.current.controller){const prior=request.current.repair,rows=new Map((prior?.id===request.current.id?prior.rows:[]).map(row=>[String(row.id||rowKey(row)),row]));for(const row of changedRows)rows.set(String(row.id||rowKey(row)),row);request.current.repair={id:request.current.id,selection,rows:[...rows.values()],needsReload:false}}else void load(view.current.page,view.current.kind,true,view.current.selectedDay,true)}}
   }
   async function reclassify(auto=true){
     if(repairRunning.current)return false;
@@ -329,6 +342,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         try{const r=await fetchInsightResource(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor,onlyPending:auto}),signal:ac.signal});x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||"再分類失敗")}
         finally{window.clearTimeout(timer)}
         checked+=Number(x.checked||0);moved+=Number(x.moved||0);if(x.unresolved){remaining=x.unresolved;setUnresolved(x.unresolved)}
+        if(x.moved||Array.isArray(x.rows)&&x.rows.length)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&cached.token===token)NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});
         const next=x.nextCursor||null;if(next&&(next===cursor||seen.has(next)))throw new Error("分類位置が進まないため停止しました");if(next)seen.add(next);cursor=next;finished=!next;
         try{localStorage.setItem(progressKey,JSON.stringify({version:CLASSIFIER_VERSION,cursor,checked,moved}))}catch{/* Server progress remains acknowledged even if browser storage is full. */}
         setRepairStatus(`${checked}件確認・${moved}件修正${cursor?"・続きあり":""}`);
@@ -336,7 +350,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
           const repaired=repairActorRows(x.rows),current=view.current;retainBoard(account,repaired);repairRevision.current++;
           setRows(previous=>{const map=new Map(previous.map(r=>[String(r.id),r]));for(const r of repaired)if(map.has(String(r.id)))map.set(String(r.id),keepIcon(r,map.get(String(r.id))));return [...map.values()].filter(r=>current.kind==="all"||displayType(r)===current.kind)});
         }
-        if(x.moved){repairRevision.current++;void load(view.current.page,view.current.kind,true,view.current.selectedDay,true);}
+        if(x.moved){repairRevision.current++;if(cursor)void load(view.current.page,view.current.kind,true,view.current.selectedDay,true);}
         if(cursor)await new Promise(r=>window.setTimeout(r,50));
       }while(cursor);
       if(!finished){setRepairStatus(`${checked}件まで確認・停止中（続きから再開できます）`);return false}
