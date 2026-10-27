@@ -18,8 +18,8 @@ const markup='<section id="panel" class="notificationList"><button>通知</butto
 async function fixture(t,{mode='modern',filter=true,pending=false,clipboard='success',nativeCapture}={}){
  const dom=new JSDOM(markup,{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;t.after(()=>w.close());
  w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:320,top:0,bottom:320,left:0,right:360});
- const values=new Map([[FIL,true],[GRP,[{enabled:true,ids:['fictional_actor']}]],['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'fictional_actor',name:'架空の登録人物'}]],['mumei_insight_notification_panel_enabled_v1',true]]),requests=[],writes=[],copies=[];let outside=0;
- const get=(key,fallback)=>values.get(key)??fallback,set=(key,value)=>{writes.push({key,value});values.set(key,value)};
+ const values=new Map([[FIL,true],[GRP,[{enabled:true,ids:['fictional_actor']}]],['mumei_insight_magazine_mute_profiles_v5:tester',[{id:'fictional_actor',name:'架空の登録人物'}]],['mumei_insight_notification_panel_enabled_v1',true]]),requests=[],writes=[],copies=[],gmReads=[];let outside=0;
+ const get=(key,fallback)=>{gmReads.push(key);return values.get(key)??fallback},set=(key,value)=>{writes.push({key,value});values.set(key,value)};
  if(mode==='modern')w.GM={getValue:async(...args)=>get(...args),setValue:async(...args)=>set(...args)};
  else{w.GM_getValue=get;w.GM_setValue=set}
  w.fetch=async url=>{requests.push(String(url));assert.equal(url,'/api/v2/current_user','diagnostics do not request notifications, profiles, or a backend');if(pending)return new Promise(()=>{});return Response.json({data:{urlname:'tester'}})};
@@ -38,7 +38,7 @@ async function fixture(t,{mode='modern',filter=true,pending=false,clipboard='suc
  const open=async()=>{opener().focus();opener().click();await until(()=>card());return card()};
  const button=name=>[...card().querySelectorAll('button')].find(el=>el.textContent===name);
  const rows=()=>Object.fromEntries([...card().querySelectorAll('dt')].map(el=>[el.textContent,el.nextElementSibling.textContent]));
- return{w,values,requests,writes,copies,open,opener,overlay,card,button,rows,outside:()=>outside};
+ return{w,values,requests,writes,copies,gmReads,open,opener,overlay,card,button,rows,outside:()=>outside};
 }
 
 for(const mode of ['modern','legacy'])test(`実際のフィルター件数を匿名で確認・コピーし、設定や通信を増やさない (${mode})`,async t=>{
@@ -98,4 +98,38 @@ for(const nativeCapture of ['before','after'])test(`noteの外側クリック監
  f.button('閉じる').click();assert.equal(f.overlay(),null);assert.equal(f.outside(),0);
  await f.open();f.overlay().click();assert.equal(f.overlay(),null);assert.equal(f.outside(),0);
  await f.open();f.button('閉じる').dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert.equal(f.overlay(),null);assert.equal(f.outside(),0);assert.equal(f.w.document.getElementById('panel').hidden,false);
+});
+
+for(const mode of ['modern','legacy'])test(`同じ描画フレームの連続した判定は最新の一回だけ表示し、開く・コピーは最新値を読む (${mode})`,async t=>{
+ const f=await fixture(t,{mode});await pause(220); // Drain initial discovery before measuring the next frame.
+ const api=f.w.__mumeiNotificationFilterV4;let state={...api.getState(),total:200,magazineAdd:150},reads=0,formats=0,refreshes=0;
+ const Format=f.w.Intl.NumberFormat;f.w.Intl.NumberFormat=function(...args){formats++;return new Format(...args)};
+ api.getState=()=>{reads++;return state};api.refresh=()=>{refreshes++};
+ const before={requests:f.requests.length,gmReads:f.gmReads.length,writes:f.writes.length};
+ await f.open();assert.equal(reads,1,'opening reads the live state once');assert.ok(formats<=1,'one formatter is reused for all count values');
+ const frames=[];f.w.requestAnimationFrame=callback=>{frames.push(callback);return frames.length};
+ for(let i=0;i<100;i++){state={...state,hidden:i};f.w.dispatchEvent(new f.w.CustomEvent('mumei-notification-filter-status',{detail:state}))}
+ assert.equal(frames.length,1,'the same frame does not queue repeated paints');assert.equal(reads,1,'a burst does not synchronously reread state');
+ frames.shift()();assert.equal(reads,2,'one state read feeds both toolbar and dialog');assert.equal(f.rows()['非表示'],'99件');assert.ok(formats<=1);
+ state={...state,hidden:147};f.button('状態をコピー').click();await until(()=>f.copies.length===1);
+ assert.equal(reads,3,'copy uses the current state even before another UI event');assert.match(f.copies[0],/非表示: 147件/);
+ assert.equal(f.requests.length,before.requests);assert.equal(f.gmReads.length,before.gmReads);assert.equal(f.writes.length,before.writes);assert.equal(refreshes,0);
+});
+
+test('外部から消えた状態画面へ描画を続けず、状態ボタンから新しい画面を開ける',async t=>{
+ const f=await fixture(t);f.w.document.body.style.setProperty('overflow','auto','important');await f.open();
+ const oldOverlay=f.overlay(),oldCard=f.card(),oldText=oldCard.textContent,api=f.w.__mumeiNotificationFilterV4,state={...api.getState(),hidden:2};
+ oldOverlay.remove();api.getState=()=>state;
+ f.w.dispatchEvent(new f.w.CustomEvent('mumei-notification-filter-status',{detail:state}));
+ await new Promise(resolve=>f.w.requestAnimationFrame(resolve));
+ assert.equal(f.overlay(),null);assert.equal(oldCard.textContent,oldText,'removed UI is not repainted');assert.equal(f.w.document.body.style.getPropertyValue('overflow'),'auto');assert.equal(f.w.document.body.style.getPropertyPriority('overflow'),'important');
+ await f.open();assert.notEqual(f.overlay(),oldOverlay);assert.equal(f.rows()['非表示'],'2件');f.button('閉じる').click();assert.equal(f.w.document.body.style.getPropertyValue('overflow'),'auto');
+});
+
+test('状態画面が外部削除された直後も元のページのキー操作を遮らない',async t=>{
+ const f=await fixture(t);f.w.document.body.style.setProperty('overflow','auto','important');await f.open();f.overlay().remove();
+ let delivered=0;f.w.document.addEventListener('keydown',()=>delivered++);
+ const event=new f.w.KeyboardEvent('keydown',{key:'a',bubbles:true,cancelable:true});f.w.document.querySelector('#panel button').dispatchEvent(event);
+ assert.equal(delivered,1);assert.equal(event.defaultPrevented,false);assert.equal(f.w.document.body.style.getPropertyValue('overflow'),'auto');
+ await f.open();assert.ok(f.card());f.button('閉じる').click();assert.equal(f.overlay(),null);
 });
