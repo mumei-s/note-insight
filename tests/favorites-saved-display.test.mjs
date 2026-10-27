@@ -8,9 +8,10 @@ const creator=(key,name)=>({creator_key:key,actor_name:name,actor_url:'https://n
 const snapshot={rows:[creator('old','前回の作者')],groups:['読む'],assigned:{old:'読む'},filter:'読む',total:125};
 async function settle(work=()=>{}){await React.act(async()=>{work();for(let i=0;i<5;i++)await pause()})}
 async function fixture(t,{saved=snapshot,handler}={}){
+ let now=Date.now();class Clock extends Date{static now(){return now}}
  const calls=[],pending=[],fallbackCalls=[];
  const fetch=async(url,init)=>{const body=JSON.parse(init.body);calls.push(body);return handler?handler(body,init,url):new Promise(resolve=>pending.push({body,signal:init.signal,response:resolve,resolve:value=>resolve(Response.json({ok:true,...value}))}))};
- const h=await sceneFixture(t,{fetch,dependencies:{
+ const h=await sceneFixture(t,{fetch,globals:{Date:Clock},dependencies:{
   './creator-avatar':{CreatorAvatar:()=>React.createElement('span')},
   './insight-account-store':{INSIGHT_TOKEN_KEY:tokenKey,currentStoredInsightAccount:()=>({noteId:h.w.localStorage.getItem(tokenKey)==='token-a'?'tester':'other'})},
   './insight-view-lifecycle':{fetchInsightResource:fetch},
@@ -18,7 +19,7 @@ async function fixture(t,{saved=snapshot,handler}={}){
  }});
  h.w.localStorage.setItem(tokenKey,'token-a');const helper=h.load('src/insight-saved-view.ts');if(saved)helper.writeSavedInsightView('favorites-last',scope,saved,Date.now()-600000);
  const Component=h.load('src/member-insight-favorites-final.tsx').MemberInsightFavoritesFinal;await h.render(Component,{});await settle();
- return{...h,Component,helper,calls,pending,fallbackCalls,body:()=>h.w.document.querySelector('.miff').textContent};
+ return{...h,Component,helper,calls,pending,fallbackCalls,advance:ms=>{now+=ms},body:()=>h.w.document.querySelector('.miff').textContent};
 }
 
 test('保存した作者とグループを即表示し、一覧とグループだけを最新確認する',async t=>{
@@ -99,4 +100,41 @@ for(const mode of ['other-token','denied','edited'])test(`お気に入りの遅�
  const h=await fixture(t,{saved:null,handler:mode==='denied'?async()=>Response.json({ok:false,error:'INSIGHT_SESSION_INVALID'},{status:401}):undefined});
  if(mode==='edited')await h.change(h.w.document.querySelector('.miff-create input'),'作成途中');
  await settle(()=>{h.helper.writeSavedInsightView('favorites-last',{...scope,token:mode==='other-token'?'other':scope.token},snapshot,1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});assert.doesNotMatch(h.body(),/前回の作者/);
+});
+
+
+test('確認済み一覧・記事・選択条件は時間経過後の画面戻りと記事再展開で再読取しない',async t=>{
+ let articleVersion='確認済みの記事';
+ const h=await fixture(t,{handler:async body=>Response.json({ok:true,...(body.action==='favorites'?{rows:[creator('old','確認済み作者')]}:body.action==='list'?{definitions:[{name:'読む'}],assignments:[{creatorKey:'old',groupName:'読む'}]}:{rows:[{key:'article',title:articleVersion,url:'https://note.test/article'}]})})});
+ const articleButton=label=>[...h.w.document.querySelectorAll('button')].find(button=>button.textContent===label);
+ await h.click(articleButton('記事を見る'));assert.equal(h.calls.length,3);await h.change(h.w.document.querySelector('.miff-articles input'),'記事');
+ await h.click(articleButton('記事を閉じる'));h.advance(86400000);await h.click(articleButton('記事を見る'));assert.equal(h.calls.length,3);assert.match(h.body(),/確認済みの記事/);
+ await h.render(()=>null);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,3);assert.match(h.body(),/確認済み作者|確認済みの記事/);assert.ok(h.w.document.querySelector('.miff-articles'));assert.equal(h.w.document.querySelector('.miff-articles input').value,'記事');assert.doesNotMatch(h.body(),/前回表示分/);
+ articleVersion='手動確認後の記事';await h.click(articleButton('再読込'));await settle();assert.equal(h.calls.length,6);assert.match(h.body(),/手動確認後の記事/);
+ articleVersion='明示更新後の記事';await h.render(h.Component,{revision:1});await settle();assert.equal(h.calls.length,9);assert.match(h.body(),/明示更新後の記事/);
+});
+
+test('記事の失敗は確認済み扱いにせず再展開時に再試行し成功後は保持する',async t=>{
+ let articles=0;const h=await fixture(t,{saved:null,handler:async body=>body.action==='favorite_articles'&&++articles===1?Response.json({ok:false,error:'ARTICLE_TEMPORARILY_OFFLINE'},{status:500}):Response.json({ok:true,...(body.action==='favorites'?{rows:[creator('old','確認済み作者')]}:body.action==='list'?{definitions:[],assignments:[]}:{rows:[{key:'article',title:'再試行で確認した記事',url:'https://note.test/article'}]})})});
+ const button=label=>[...h.w.document.querySelectorAll('button')].find(button=>button.textContent===label);
+ await h.click(button('記事を見る'));assert.match(h.body(),/ARTICLE_TEMPORARILY_OFFLINE/);await h.click(button('記事を閉じる'));await h.click(button('記事を見る'));assert.equal(articles,2);assert.match(h.body(),/再試行で確認した記事/);
+ await h.click(button('記事を閉じる'));await h.click(button('記事を見る'));assert.equal(articles,2);
+});
+
+test('一覧だけ成功しグループ未確認の画面はruntime確認済みとして再利用しない',async t=>{
+ const groups=[];const h=await fixture(t,{saved:null,handler:async(body,init)=>body.action==='list'?new Promise(resolve=>groups.push({resolve,signal:init.signal})):Response.json({ok:true,rows:[creator('old','一覧だけ確認した作者')]})});
+ assert.equal(h.calls.length,2);await h.render(()=>null);assert.equal(groups[0].signal.aborted,true);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,4);
+ await settle(()=>groups.forEach(item=>item.resolve(Response.json({ok:true,definitions:[],assignments:[]}))));
+});
+
+test('確認済みruntimeも認証拒否後に画面を作り直して復活させない',async t=>{
+ let denied=false;const h=await fixture(t,{saved:null,handler:async body=>denied?Response.json({ok:false,error:'DENIED'},{status:403}):Response.json({ok:true,...(body.action==='favorites'?{rows:[creator('old','私的な確認済み作者')]}:{definitions:[],assignments:[]})})});
+ assert.match(h.body(),/私的な確認済み作者/);denied=true;await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='再読込'));await settle();assert.doesNotMatch(h.body(),/私的な確認済み作者/);
+ await h.render(()=>null);await h.render(h.Component,{});assert.doesNotMatch(h.body(),/私的な確認済み作者/);assert.equal(h.helper.readSavedInsightView('favorites-last',scope),null);
+});
+
+
+test('別画面のお気に入り変更は非表示中のruntimeも失効させる',async t=>{
+ const h=await fixture(t,{saved:null,handler:async body=>Response.json({ok:true,...(body.action==='favorites'?{rows:[creator('old','確認済み作者')]}:{definitions:[],assignments:[]})})});
+ await h.render(()=>null);await settle(()=>h.w.dispatchEvent(new h.w.Event('mumei-insight-favorites-changed')));await h.render(h.Component,{});await settle();assert.equal(h.calls.length,4);
 });
