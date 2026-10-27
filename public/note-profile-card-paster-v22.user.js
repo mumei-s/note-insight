@@ -1379,6 +1379,7 @@ async function restartFixed300(){
  if(busy||exportWaiter||coreBusy()){setStatus('実行中です。先に「停止」を押してください',true);return;}
  try{
   await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
+  if(readRun()?.purchasedReview)throw new Error('購入記事紹介の作成中です。「購入記事紹介」の再開を使ってください');
   const options=historyOptions(),run=readRun();
   if(run?.likesHistoryFix230&&Array.isArray(run.rows)&&run.rows.length>1){
    validateFixedRows(run.rows);
@@ -1403,6 +1404,7 @@ async function resumeFixed300(){
  try{
   await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
   const run=readRun();
+  if(run?.purchasedReview)return pastePurchasedReview();
   if(run?.pauseStage==='cards'&&!galleryNeedsParticipantUpgrade(run)&&typeof page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__==='function')return page.__MUMEI_PROFILE_CARD_CREATE_CARDS_AT_TAP__();
   if(!run?.gallery126&&run?.coreImageRun&&typeof page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__==='function')return page.__MUMEI_PROFILE_CARD_RESUME_CORE_IMAGES__();
   if(run?.items?.length||run?.rows?.length)return createFixed300();
@@ -1962,6 +1964,138 @@ function stopFix(){
 }
 
 const panelBindings=new WeakMap();
+
+// Purchase introductions are a separate, explicit input flow. They never scan
+// likes, profiles or another account's articles and never add a final entry.
+const PURCHASE_REVIEW_FORMAT='mumei-note-purchase-review-v1';
+const PURCHASE_REVIEW_PREPARED='mumei_purchase_review_prepared_v1';
+function validatePurchasedReview(data){
+ if(data?.format!==PURCHASE_REVIEW_FORMAT||!Array.isArray(data.items)||!data.items.length||data.items.length>100)throw new Error('購入記事の紹介データを確認できません');
+ const seen=new Set();
+ return data.items.map((item,index)=>{
+  let url,thumb;try{url=new URL(item.url);thumb=new URL(item.thumbUrl)}catch{throw new Error('記事・画像のURLを確認できません')}
+  const match=url.pathname.match(/^\/([a-z0-9_\-]+)\/n\/(n[a-f0-9]{12})$/i);
+  if(url.origin!=='https://note.com'||url.username||url.password||url.search||url.hash||!match||match[1]!==item.urlname||match[2]!==item.key||seen.has(item.key))throw new Error('記事の人物・URL・重複を確認してください');
+  if(thumb.protocol!=='https:'||thumb.hostname!=='assets.st-note.com'||thumb.username||thumb.password)throw new Error('noteの記事サムネイルを指定してください');
+  for(const [field,max] of [['creator',300],['displayCreator',80],['title',500],['summary',200]])if(typeof item[field]!=='string'||!item[field].trim()||item[field].length>max)throw new Error('紹介文の'+field+'を確認してください');
+  if(item.sourceScope!=='public-free-section'||!Number.isFinite(Date.parse(item.sourceCheckedAt)))throw new Error('無料公開部分の確認記録がありません');
+  seen.add(item.key);
+  return{url:url.href,urlname:match[1],key:match[2],actorUrl:url.origin+'/'+match[1],creator:item.displayCreator.replace(/さん$/,''),displayCreator:item.displayCreator,title:item.title,summary:item.summary,thumbUrl:thumb.href,sourceScope:item.sourceScope,sourceCheckedAt:item.sourceCheckedAt,purchasedReview:true,index:index+1,finalMarker:false};
+ });
+}
+function purchaseReviewLines(ctx,value,width){
+ const lines=[];
+ const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'word'}):null;
+ for(const paragraph of String(value).split(/\r?\n/)){
+  let line='';
+  const tokens=segmenter?Array.from(segmenter.segment(paragraph),part=>part.segment):Array.from(paragraph);
+  for(const token of tokens){
+   if(ctx.measureText(token).width>width){
+    if(line){lines.push(line);line=''}
+    const graphemes=typeof Intl.Segmenter==='function'?Array.from(new Intl.Segmenter('ja',{granularity:'grapheme'}).segment(token),part=>part.segment):Array.from(token);
+    for(const char of graphemes){if(line&&ctx.measureText(line+char).width>width){lines.push(line);line=''}line+=char}
+   }else if(line&&ctx.measureText(line+token).width>width&&!/^[、。，．！？!?）」』】]/u.test(token)){lines.push(line);line=token}
+   else line+=token;
+  }
+  if(line||!paragraph)lines.push(line);
+ }
+ return lines;
+}
+function drawPurchasedReview(canvas,row,thumb){
+ const ctx=canvas.getContext('2d'),width=860,left=18,thumbWidth=420,textX=470,textWidth=372;
+ const font='system-ui,-apple-system,"Noto Sans CJK JP",sans-serif';
+ ctx.font='600 23px '+font;
+ const names=purchaseReviewLines(ctx,row.displayCreator,textWidth);
+ ctx.font='400 22px '+font;
+ const descriptions=purchaseReviewLines(ctx,row.summary,textWidth);
+ const textHeight=names.length*31+12+descriptions.length*33;
+ const imageWidth=thumb.width||thumb.naturalWidth,imageHeight=thumb.height||thumb.naturalHeight;
+ if(!(imageWidth>0&&imageHeight>0))throw new Error('サムネイルのサイズを確認できません');
+ const scale=Math.min(thumbWidth/imageWidth,236/imageHeight),dw=imageWidth*scale,dh=imageHeight*scale;
+ canvas.width=width;canvas.height=Math.max(252,textHeight+36);
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+ // The complete, original thumbnail is contained, never cropped or stretched.
+ ctx.drawImage(thumb,left+(thumbWidth-dw)/2,(canvas.height-dh)/2,dw,dh);
+ ctx.textBaseline='top';let y=(canvas.height-textHeight)/2;
+ ctx.font='600 23px '+font;ctx.fillStyle='#45504a';
+ for(const line of names){ctx.fillText(line,textX,y);y+=31}
+ y+=12;ctx.font='400 22px '+font;ctx.fillStyle='#444';
+ for(const line of descriptions){ctx.fillText(line,textX,y);y+=33}
+ return{width:canvas.width,height:canvas.height,thumbnailWidth:dw,descriptionLines:descriptions.length};
+}
+async function makePurchasedReviewFile(row){
+ await document.fonts?.ready;
+ const thumb=await bitmapFromUrl(galleryAssetUrl(row.thumbUrl,720));
+ if(!thumb)throw new Error(row.creator+'さんの記事サムネイルを読み込めません');
+ try{
+  const canvas=document.createElement('canvas');drawPurchasedReview(canvas,row,thumb);
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('紹介画像を作成できません')),'image/png'));
+  return new page.File([blob],'mumei_purchased_'+row.key+'.png',{type:'image/png'});
+ }finally{try{thumb.close?.()}catch{}}
+}
+async function pastePurchasedReview(input=null){
+ if(busy||exportWaiter||coreBusy()){setStatus('実行中です。一時停止が完了してから再開してください',true);return;}
+ busy=true;stopRequested=false;pauseRequested=false;notifyFixedState();
+ try{
+  await hydrateRunBackup();
+  let run=readRun();
+  if(run&&!run.purchasedReview)throw new Error('別の作成記録があります。購入記事は新しい下書きで作成してください');
+  if(!editorArticleKey())throw new Error('先にnoteの下書きを保存してください');
+  const view=findView();if(!view)throw new Error('note本文編集欄を取得できません');
+  if(run?.articleKey&&run.articleKey!==editorArticleKey())throw new Error('別の記事の作成記録です');
+  nativeImageCommand();selectionApi();
+  if(!run){
+   const prepared=input||await Promise.resolve(GM_getValue(PURCHASE_REVIEW_PREPARED,null));
+   const rows=validatePurchasedReview(prepared);
+   run={version:VERSION,articleKey:editorArticleKey(),purchasedReview:true,purchaseFormat:PURCHASE_REVIEW_FORMAT,likesHistoryFix230:true,rows,count:rows.length,items:[],cardKeys:[],activityTexts:[],sectionHeadings:[],dividerUrls:[],imageBaselineRecords:imageNodes(view).map(hit=>({id:String(hit.node.attrs?.id||''),src:String(hit.node.attrs?.src||''),link:String(hit.node.attrs?.link||'')})),cardBaselineKeys:embedNodes(view).map(cardKey).filter(Boolean),imageAnchorPos:cardAnchorFromSelection(view),stage:'images_building',createdAt:Date.now()};
+   writeRun(run);await flushRunBackup();
+  }
+  const rows=validatePurchasedReview({format:PURCHASE_REVIEW_FORMAT,items:run.rows});
+  assertGalleryTracking(view,run);
+  const images=ownedImagesForRun(view,run),done=completedImagePrefix(rows,images);
+  if(done===rows.length&&['images_ready','cards_building','complete'].includes(run.stage)){setStatus('購入記事 '+done+'件は貼り付け済みです');return;}
+  let insertPos=done?addDivider(view,images.at(-1),rows[done-1]):Number(run.imageAnchorPos);
+  if(!Number.isFinite(insertPos))throw new Error('貼り付け位置の記録を確認できません');
+  writeRun({...readRun(),rows,stage:'images_building',paused:false,pauseStage:null});await flushRunBackup();
+  await keepAwake();
+  for(let index=done;index<rows.length;index++){
+   checkPause();if(stopRequested)throw new Error('停止しました');
+   const row=rows[index];setStatus('購入記事紹介 '+(index+1)+'/'+rows.length+'｜'+row.creator+'さん');
+   const file=await makePurchasedReviewFile(row);
+   checkPause();if(stopRequested)throw new Error('停止しました');
+   const made=await uploadOne(view,row,file,insertPos);
+   recordImage(made.hit,row);insertPos=addDivider(view,made.hit,row);await flushRunBackup();
+  }
+  writeRun({...readRun(),stage:'images_ready',paused:false,pauseStage:null,imagesCompletedAt:Date.now()});await flushRunBackup();
+  const saved=await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__?.('購入記事 '+rows.length+'件｜下書きを保存中…');
+  setStatus('購入記事 '+rows.length+'件の紹介が完成'+(saved?.confirmed?'・下書き保存確認済み':'｜note画面で保存完了を確認してください'));
+ }catch(error){
+  const run=readRun();if(run?.purchasedReview){
+   writeRun({...run,paused:true,pauseStage:'images'});await flushRunBackup();
+   if(error?.code==='PAUSED')try{await page.__MUMEI_PROFILE_CARD_SAVE_DRAFT__?.('購入記事紹介を一時停止｜完成分を保存中…')}catch{}
+  }
+  setStatus('購入記事紹介：'+(error?.message||String(error)),error?.code!=='PAUSED');
+ }finally{busy=false;notifyFixedState();await releaseAwake()}
+}
+function patchPurchasedReviewPanel(panel){
+ if(panel.querySelector('[data-purchased-review]'))return;
+ const detail=document.createElement('details');detail.dataset.purchasedReview='1';
+ detail.innerHTML='<summary>📚 購入記事の紹介</summary><div class="hint">通常サムネを小さめに｜無料部分の要約紹介｜番号・プロフィールなし</div><input type="file" accept="application/json,.json" data-purchase-file hidden><div class="special-actions"><button type="button" data-purchase-import>紹介データを読み込む</button><button type="button" data-purchase-start>紹介を貼り付け／再開</button><button type="button" data-purchase-pause>一時停止</button></div>';
+ const file=detail.querySelector('[data-purchase-file]');
+ detail.querySelector('[data-purchase-import]').addEventListener('click',()=>file.click());
+ file.addEventListener('change',async()=>{
+  try{
+   if(busy||exportWaiter||coreBusy())throw new Error('処理が終わってから読み込んでください');
+   const selected=file.files?.[0];if(!selected)return;if(selected.size>1024*1024)throw new Error('紹介データは1MB以内にしてください');
+   const data=JSON.parse(await selected.text()),rows=validatePurchasedReview(data);
+   await Promise.resolve(GM_setValue(PURCHASE_REVIEW_PREPARED,{format:PURCHASE_REVIEW_FORMAT,items:rows}));
+   setStatus(rows.length+'件の紹介データを読み込みました｜本文の位置をタップ→「紹介を貼り付け／再開」');
+  }catch(error){setStatus(error?.message||String(error),true)}finally{file.value=''}
+ });
+ detail.querySelector('[data-purchase-start]').addEventListener('click',()=>void pastePurchasedReview());
+ detail.querySelector('[data-purchase-pause]').addEventListener('click',pauseFix);
+ panel.querySelector('.body').prepend(detail);
+}
 function bindPanelAction(control,key,listener,options){
  if(!control)return;
  let keys=panelBindings.get(control);if(!keys){keys=new Set();panelBindings.set(control,keys)}
@@ -1970,6 +2104,7 @@ function bindPanelAction(control,key,listener,options){
 function patchPanel(){
  const panel=document.getElementById(PANEL);
  if(!panel||!panel.querySelector('.body')||!panel.querySelector('details[data-like300]'))return false;
+ patchPurchasedReviewPanel(panel);
  const title=panel.querySelector('.title');
  if(title&&title.textContent!=='紹介貼付 v'+VERSION)title.textContent='紹介貼付 v'+VERSION;
 
