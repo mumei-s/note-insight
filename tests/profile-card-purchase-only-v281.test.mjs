@@ -20,14 +20,14 @@ async function runtime(t,url='https://editor.note.com/notes/n123456789abc/edit')
  return{w,counts,gm,flush,panel:()=>w.document.getElementById(panelId)};
 }
 test('dedicated publication includes no gallery, profile, like-history or URL-entry workflow',()=>{
- assert.match(code,/@name\s+無名S note 購入記事紹介/);assert.match(code,/@version\s+2\.8\.1/);
+ assert.match(code,/@name\s+無名S note 購入記事紹介/);assert.match(code,/@version\s+2\.8\.2/);
  assert.doesNotMatch(code,/ハロウィン|スキ履歴|data-sources|data-gallery126|data-like300|@require|createInsight|gallery126/);
- assert.ok(Buffer.byteLength(code)<50000,'the dedicated tool does not include the general-purpose bundle');
+ assert.ok(Buffer.byteLength(code)<80000,'the dedicated tool does not include the general-purpose bundle');
 });
 test('purchase actions are visible at startup with no disclosure, and old panels cannot cover them',async t=>{
  const r=await runtime(t),panel=r.panel();assert.ok(panel);
  assert.equal(panel.querySelectorAll('details,textarea,select').length,0);
- for(const selector of ['[data-purchase-import]','[data-purchase-start]','[data-purchase-pause]','[data-purchase-stop]','[data-purchase-delete]']){
+ for(const selector of ['[data-purchase-import]','[data-purchase-start]','[data-purchase-pause]','[data-purchase-stop]','[data-purchase-delete]','[data-purchase-cards]','[data-purchase-delete-cards]']){
   const button=panel.querySelector(selector);assert.ok(button);assert.equal(button.type,'button');assert.equal(button.disabled,false);
   assert.equal(button.closest('[hidden],details'),null);
  }
