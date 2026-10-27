@@ -22,6 +22,9 @@ const storeName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_
 assert.ok(storeName,'the observed store-create notification migration is required');
 const storeMigration=readFileSync('supabase/migrations/'+storeName,'utf8');
 const slimMigration=readFileSync('supabase/migrations/20261020195704_insight_notification_slim_groups.sql','utf8');
+const boundedName=readdirSync('supabase/migrations').find(n=>n.endsWith('_insight_notification_bounded_cover.sql'));
+assert.ok(boundedName,'the bounded-cover migration is required');
+const boundedMigration=readFileSync('supabase/migrations/'+boundedName,'utf8');
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
 const oracle=context.oracle;
@@ -43,6 +46,7 @@ before(async()=>{
  await db.exec(customPlanMigration);
  await db.exec(storeMigration);
  await db.exec(slimMigration);
+ await db.exec(boundedMigration);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -289,7 +293,7 @@ test('early pruning skips excluded-only groups while retaining richer excluded r
  assert.equal((await equivalent({id:'prune-foreign',scope:'prune-foreign',noteId:'prune_foreign'},{})).total,1);
  // Inspect actual source cardinality rather than a timing threshold: history
  // consisting only of excluded kinds must not enter metadata decode/window work.
- let inner=slimMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
+ let inner=boundedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];
  const parameters={p_member_ids:"ARRAY['prune-fixture']::text[]",p_scope:"'prune-fixture'::text",p_note_id:"'prune_fixture'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
  for(const [name,value] of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
  const plan=(await db.query('EXPLAIN (ANALYZE,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0].Plan;
@@ -337,4 +341,56 @@ test('Edge reads one RPC page with authenticated scope and fails without full-hi
  rpcError={code:'PGRST202',message:'missing RPC'};
  const failed=await request({});assert.equal(failed.status,500);assert.equal((await failed.json()).error,'NOTIFICATION_FEED_READ_FAILED:PGRST202');assert.equal(calls.length,2);
  assert.doesNotMatch(source,/async function allRows|offset\+=1000.*insight_notifications/);
+});
+
+test('bounded cover partitions preserve UTF8 byte boundaries, cross-branch groups and complete RPC parity',async()=>{
+ const m={id:'participant_境界',scope:'scope',noteId:'byte_boundary'},rows=[],boundary=[];let id=7000000;
+ const byteLength=value=>Buffer.byteLength(value||'','utf8');
+ function signature(total,member,type,marker,unicode){const prefix=(unicode?'境界🙂':'ascii')+'-'+marker+'-',wanted=total-byteLength(member)-byteLength(type)-byteLength('client|');assert.ok(byteLength(prefix)<wanted);return prefix+'x'.repeat(wanted-byteLength(prefix))}
+ function item(member,type,client,patch={}){const key=id++;return row(key,{member_id:member,notification_type:type,meta:{source:'note-notification-reader-v3',event_identity:'classification-independent-v2',client_signature:client,classifier:'action-v28-context',recovery_version:'evidence-v2-articles'},...patch})}
+ for(const total of [1799,1800,1801])for(const unicode of [false,true])for(const type of ['badge',null])for(const member of [m.scope,m.id]){
+  const record=item(member,type,signature(total,member,type,id,unicode));rows.push(record);boundary.push({id:record.id,total});
+ }
+ for(const total of [2704,4096,12000])rows.push(item(m.id,'badge',signature(total,m.id,'badge',id,true)));
+ const hugeUnicode=item(m.scope,'badge','uncompressible-'+Array.from({length:1100},(_,i)=>String.fromCodePoint(0x4e00+i)).join(''));rows.push(hugeUnicode);
+ const mixedSignature=signature(1800,m.scope,'badge','cross-branch-group',true),poor=item(m.scope,'badge',mixedSignature),rich=item(m.id,'badge',mixedSignature,{actor_image_url:'https://images.invalid/branch-rich.png',meta:{source:'note-notification-reader-v3',client_signature:mixedSignature,body:'両分岐を合わせた架空本文',comment_body:'保持する架空返信',classifier:'action-v28-context',recovery_version:'evidence-v2-articles'}}),excluded=item(m.scope,'like',mixedSignature);
+ rows.push(poor,rich,excluded,item('foreign_境界','badge',mixedSignature),item(null,'badge',mixedSignature));
+ const nullKey=item(m.scope,'badge','excluded-null-key',{meta:{source:'canonical-public-comments'}});rows.push(nullKey);
+ await insert(rows);await db.query("INSERT INTO public.insight_manual_completions VALUES ($1,$2,'notification',$3)",[m.scope,m.noteId,'row:'+rich.id]);
+ const actual=(await db.query("SELECT id,octet_length(COALESCE(member_id,''))::bigint+octet_length(COALESCE(notification_type,''))+octet_length(insight_feed_key) AS bytes,insight_feed_key IS NULL AS excluded FROM public.insight_notifications WHERE id=ANY($1::bigint[])",[rows.map(row=>row.id)])).rows;
+ for(const expected of boundary)assert.equal(Number(actual.find(row=>Number(row.id)===expected.id).bytes),expected.total);
+ assert.equal(Number(actual.find(row=>Number(row.id)===poor.id).bytes),1800);assert.ok(Number(actual.find(row=>Number(row.id)===rich.id).bytes)>1800);assert.equal(actual.find(row=>Number(row.id)===nullKey.id).excluded,true);
+ const unicode=(await db.query('SELECT octet_length(insight_feed_key) AS bytes,length(insight_feed_key) AS characters FROM public.insight_notifications WHERE id=$1',[hugeUnicode.id])).rows[0];assert.ok(unicode.bytes>2704);assert.ok(unicode.characters<1800,'a character-count bound would be unsafe for this future UTF8 key');
+ const all=await equivalent(m,{includeCategoryPreview:true});assert.ok(all.rows.some(row=>row.id===rich.id&&row.confirmed&&row.meta.body==='両分岐を合わせた架空本文'));assert.ok(all.rows.some(row=>row.id===hugeUnicode.id));assert.ok(!all.rows.some(row=>[nullKey.id,rows.at(-3).id,rows.at(-2).id].includes(row.id)));
+ await equivalent(m,{handlingStatus:'completed'});await equivalent(m,{kind:'badge',page:2,pageSize:20});
+ await db.exec('VACUUM ANALYZE public.insight_notifications');
+ let inner=boundedMigration.split('  RETURN (')[1].split('\n  );\nEND;')[0];const parameters={p_member_ids:"ARRAY['scope','participant_境界']::text[]",p_scope:"'scope'::text",p_note_id:"'byte_boundary'::text",v_kind:"'all'::text",v_day:"''::text",v_handling:"'all'::text",p_page_size:'100',p_page:'1',p_preview:'false'};
+ for(const[name,value]of Object.entries(parameters))inner=inner.replace(new RegExp('\\b'+name+'\\b','g'),value);
+ const explain=(await db.query('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+inner)).rows[0]['QUERY PLAN'][0];
+ const nodes=[];function walk(node){nodes.push(node);for(const child of node.Plans||[])walk(child)}walk(explain.Plan);
+ const short=nodes.find(node=>node['Index Name']==='insight_notifications_feed_short_cover_idx'),long=nodes.find(node=>node['Index Name']==='insight_notifications_feed_long_key_idx');
+ assert.ok(short,'bounded branch can use the covering partial index without forced planner settings');assert.equal(short['Node Type'],'Index Only Scan');assert.equal(short['Heap Fetches'],0);assert.ok(long,'oversized branch uses its narrow partial index');
+});
+
+test('bounded migration reuses the exact prebuild and rejects same-name index or prerequisite drift',async()=>{
+ const slimFunction=slimMigration.slice(slimMigration.indexOf('CREATE OR REPLACE FUNCTION public.insight_notification_feed_page('));
+ const indexes=async()=>(await db.query("SELECT indexrelid FROM pg_index WHERE indexrelid=ANY(ARRAY['public.insight_notifications_feed_short_cover_idx'::regclass,'public.insight_notifications_feed_long_key_idx'::regclass]) ORDER BY indexrelid")).rows;
+ const original=await indexes();
+ await db.exec('BEGIN');try{
+  await db.exec(slimFunction);await db.exec(boundedMigration);assert.deepEqual(await indexes(),original,'a correct concurrent prebuild is reused without replacing index OIDs');
+ }finally{await db.exec('ROLLBACK')}
+ for(const wrong of [
+  'CREATE INDEX insight_notifications_feed_short_cover_idx ON public.insight_notifications(member_id)',
+  "CREATE INDEX insight_notifications_feed_short_cover_idx ON public.insight_notifications(member_id) INCLUDE(id,notification_type,insight_feed_key) WHERE insight_feed_key IS NOT NULL AND octet_length(COALESCE(member_id,''))::bigint+octet_length(COALESCE(notification_type,''))+octet_length(insight_feed_key)<=1700",
+ ]){
+  await db.exec('BEGIN');try{
+   await db.exec(slimFunction);await db.exec('DROP INDEX public.insight_notifications_feed_short_cover_idx');await db.exec(wrong);
+   await assert.rejects(db.exec(boundedMigration),/cover index .* differs from the approved definition/);
+  }finally{await db.exec('ROLLBACK')}
+ }
+ await db.exec('BEGIN');try{
+  const drift=slimFunction.replace('BEGIN\n  IF p_member_ids','BEGIN\n  -- unapproved prerequisite edit\n  IF p_member_ids');assert.notEqual(drift,slimFunction);await db.exec(drift);
+  await assert.rejects(db.exec(boundedMigration),/differs from the approved slim-groups prerequisite/);
+ }finally{await db.exec('ROLLBACK')}
+ assert.deepEqual(await indexes(),original);
 });
