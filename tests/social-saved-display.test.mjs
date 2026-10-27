@@ -221,6 +221,17 @@ for(const action of ['events','investigation'])test(`旧判定の${action}の保
  const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyEvidenceVersion,3);assert.equal(saved.value.query.page,2);
 });
 
+test('旧判定の相互から減の保存本文を起動時・最新確認失敗時に復活させず、条件とページは保持する',async t=>{
+ const query={action:'comparison',window:'oldest',relationship:'lost',query:'',page:2,pageSize:50},h=await fixture(t,query,{historyEvidenceVersion:2});
+ assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].body,query);assert.equal(h.w.document.querySelector('.mis2-relationship-filter select').value,'lost');
+ await settle(()=>h.deliver({ok:false,error:'保存先が一時的に利用できません'},500));assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.match(h.body(),/保存先が一時的に利用できません/);
+ await settle(()=>h.w.dispatchEvent(new h.w.Event('focus')));assert.equal(h.calls.length,2);assert.deepEqual(h.calls[1].body,query);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{person_key:'confirmed-loss',actor_name:'新判定で確認した架空の人物',relation:'following_only',is_following:true,is_follower:false,lost_at:'2026-10-28T00:00:00Z'}],total:51}));
+ assert.match(h.body(),/新判定で確認した架空の人物/);assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);
+ const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyEvidenceVersion,3);assert.equal(saved.value.query.relationship,'lost');assert.equal(saved.value.query.page,2);
+ await h.render(()=>null);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,2,'新判定の同じ照合ページへ戻る時は通信しない');assert.match(h.body(),/新判定で確認した架空の人物/);assert.equal(h.w.document.querySelector('.mis2-pager span').textContent,'2 / 2');
+});
+
 test('確認済みの過去の減少と後日の相互・再フォローを同じ人物カードで区別する',async t=>{
  const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query);
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'loss',person_key:'returned',actor_name:'再フォローした架空の人物',direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship',detected_at:'2026-09-10T00:00:00Z',current_is_following:true,current_is_follower:true,current_relation:'mutual',current_verified_at:'2026-10-28T00:00:00Z',current_direction_verified_at:'2026-10-28T00:00:00Z',current_following_verified_at:'2026-10-27T00:00:00Z',current_follower_verified_at:'2026-10-28T00:00:00Z'}],total:1}));
