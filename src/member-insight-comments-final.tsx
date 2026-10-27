@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import { memberDbReadFallback, memberReadAuthFailure } from "./insight-member-db-fallback";
 import { readInsightSnapshot, writeInsightSnapshot } from "./insight-persistent-cache";
-import { canRetainInsightView, fetchInsightResource, isFreshInsightView } from "./insight-view-lifecycle";
+import { canRetainInsightView, fetchInsightResource } from "./insight-view-lifecycle";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import "./member-insight-comments-final.css";
 
@@ -20,12 +20,12 @@ const SAVED_COMMENTS="comments-default";
 type Row=Record<string,any>;type Heart=Record<string,any>;
 type CapturedRequest={token:string;signal:AbortSignal};
 type CommentRequest=CapturedRequest&{seq:number};
-type CommentCache={rows:Row[];total:number;at:number;revision:number;page?:number};
+type CommentCache={rows:Row[];total:number;at:number;revision:number;page?:number;invalidated?:boolean};
 type SavedComments={rows:Row[];total:number};
 const COMMENT_CACHE=new Map<string,CommentCache>();
 type CommentView={status:string;day:string;articleKey:string;draft:string;query:string;renderLimit:number};
 const COMMENT_VIEWS=new Map<string,CommentView>();
-const COMMENT_ARTICLES=new Map<string,{rows:Row[];at:number;revision:number}>();
+const COMMENT_ARTICLES=new Map<string,{rows:Row[];at:number;revision:number;invalidated?:boolean}>();
 type ArticleFailure={articleKey:string;title:string;url:string;stage:"note"|"save";code:string;retryable:boolean};
 const COMMENT_COLLECTION=new Map<string,{at:number;revision:number;message:string;failures?:ArticleFailure[];retryAt?:number}>();
 const COMMENT_AUX=new Map<string,{detail:Record<string,Row[]>;hearts:Record<string,Heart>}>();
@@ -132,8 +132,10 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",viewScope=`${memberNoteId.trim().toLowerCase()}|${token}`,savedView=COMMENT_VIEWS.get(viewScope)||defaultView(),initialKey=viewCacheKey(viewScope,savedView),initialCached=COMMENT_CACHE.get(initialKey),initialRetained=initialCached&&canRetainInsightView(initialCached.at)?initialCached:null,initialAux=initialRetained?COMMENT_AUX.get(initialKey):null,storageScope={account:memberNoteId,token},initialSaved=!initialRetained&&savedView.status==="all"&&!savedView.day&&!savedView.articleKey?savedComments(storageScope):null,initialSavedRows=Array.isArray(initialSaved?.value.rows)?initialSaved.value.rows.slice(0,EVENT_PAGE):[];
  const[rows,setRows]=useState<Row[]>(initialRetained?.rows||initialSavedRows),[articles,setArticles]=useState<Row[]>([]),[articleKey,setArticleKey]=useState(savedView.articleKey),[day,setDay]=useState(savedView.day),[draft,setDraft]=useState(savedView.draft),[query,setQuery]=useState(savedView.query),[total,setTotal]=useState(initialRetained?.total||Number(initialSaved?.value.total)||0),[status,setStatus]=useState(savedView.status),[detail,setDetail]=useState<Record<string,Row[]>>(initialAux?.detail||{}),[hearts,setHearts]=useState<Record<string,Heart>>(initialAux?.hearts||{}),[loading,setLoading]=useState(!initialRetained),[error,setError]=useState(""),[syncPhase,setSyncPhase]=useState<"initial"|"delta"|"result"|"idle">(initialRetained?"idle":"initial"),[syncMessage,setSyncMessage]=useState("保存履歴を構築中"),[renderLimit,setRenderLimit]=useState(savedView.renderLimit),[collecting,setCollecting]=useState(false),[collectionMessage,setCollectionMessage]=useState("");
  const [savedDisplay,setSavedDisplay]=useState(initialSaved?.savedAt||0),[loadedPage,setLoadedPage]=useState(initialRetained?.page||1),[moreLoading,setMoreLoading]=useState(false);
+ const [articleRefresh,setArticleRefresh]=useState(0);
  const [collectionFailures,setCollectionFailures]=useState<ArticleFailure[]>([]),[collectionRetryAt,setCollectionRetryAt]=useState(0),[collectionNow,setCollectionNow]=useState(Date.now());
  const loadSeq=useRef(0),pageBusy=useRef(false),syncTimer=useRef(0),moreRef=useRef<HTMLDivElement|null>(null),activeRequest=useRef<AbortController|null>(null),articleSeq=useRef(0),collectionSeq=useRef(0),collectionController=useRef<AbortController|null>(null),reloadSaved=useRef<(()=>void)|null>(null);
+ const articleController=useRef<AbortController|null>(null),detailLoads=useRef(new Set<string>());
  const range=useMemo(()=>day?{dateFrom:isoDay(day),dateTo:nextDay(day)}:{dateFrom:null,dateTo:null},[day]);
  const stateScope=useRef(viewScope),controlsReady=stateScope.current===viewScope;
  const cacheKey=viewCacheKey(viewScope,{status,day,articleKey,query}),persistKey=snapshotKey(memberNoteId);
@@ -146,10 +148,15 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
  const passiveDisplay=useRef({key:"",blocked:false,shown:false});
  const globalAll=status==="all"&&!day&&!articleKey;
  function current(request:CommentRequest){return request.seq===loadSeq.current&&!request.signal.aborted&&request.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")}
- function beginLoad():CommentRequest{pageBusy.current=false;setMoreLoading(false);activeRequest.current?.abort();window.clearTimeout(syncTimer.current);const controller=new AbortController();activeRequest.current=controller;return{seq:++loadSeq.current,token,signal:controller.signal}}
+ function beginLoad():CommentRequest{detailLoads.current.clear();pageBusy.current=false;setMoreLoading(false);activeRequest.current?.abort();window.clearTimeout(syncTimer.current);const controller=new AbortController();activeRequest.current=controller;return{seq:++loadSeq.current,token,signal:controller.signal}}
  function finishSync(request:CommentRequest,message:string,delay=1200){if(!current(request))return;window.clearTimeout(syncTimer.current);setSyncMessage(message);setSyncPhase("result");syncTimer.current=window.setTimeout(()=>{if(current(request))setSyncPhase("idle")},delay)}
  function publish(request:CommentRequest,list:Row[],count:number){if(!current(request))return;setRows(previous=>{if(!current(request))return previous;const images=new Map(previous.map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));return list.map(row=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}))});setTotal(count)}
- function cache(request:CommentRequest,list:Row[],count:number,page=1){if(!current(request))return;lastVerifiedScope=viewScope;remember(COMMENT_CACHE,cacheKey,{rows:list,total:count,at:Date.now(),revision,page});if(globalAll)writeSavedInsightView<SavedComments>(SAVED_COMMENTS,storageScope,{rows:list.slice(0,EVENT_PAGE),total:count})}
+ function cache(request:CommentRequest,list:Row[],count:number,page=1,unverifiedBase?:CommentCache){
+  if(!current(request))return;
+  if(unverifiedBase){remember(COMMENT_CACHE,cacheKey,{...unverifiedBase,rows:list,total:count,page,invalidated:true});return}
+  lastVerifiedScope=viewScope;remember(COMMENT_CACHE,cacheKey,{rows:list,total:count,at:Date.now(),revision,page});
+  if(globalAll)writeSavedInsightView<SavedComments>(SAVED_COMMENTS,storageScope,{rows:list.slice(0,EVENT_PAGE),total:count});
+ }
  async function saveSnapshot(request:CommentRequest,list:Row[],count:number){if(!persistKey||!current(request))return;await writeInsightSnapshot<CommentSnapshot>(persistKey,{version:1,rows:list.slice(0,EVENT_PAGE),total:count,latestAt:latestAt(list),savedAt:Date.now()})}
  function enrichLater(list:Row[],request:CommentRequest){
   void enrich(list,request.signal).then(enriched=>{
@@ -170,8 +177,26 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    setHearts(v=>{if(!current(request))return v;const next={...v,...map};remember(COMMENT_AUX,cacheKey,{detail:COMMENT_AUX.get(cacheKey)?.detail||{},hearts:next});return next});
   }catch{if(!current(request))return}}
  }
+ function discardVerifiedScope(){
+  loadSeq.current++;activeRequest.current?.abort();detailLoads.current.clear();pageBusy.current=false;
+  articleSeq.current++;articleController.current?.abort();articleController.current=null;
+  collectionSeq.current++;collectionController.current?.abort();collectionController.current=null;
+  window.clearTimeout(syncTimer.current);setLoading(false);setMoreLoading(false);setSyncPhase("idle");
+  setArticles([]);setDetail({});setHearts({});setCollecting(false);setCollectionMessage("");setCollectionFailures([]);setCollectionRetryAt(0);
+  for(const key of COMMENT_CACHE.keys())if(key.startsWith(viewScope+"|"))COMMENT_CACHE.delete(key);
+  for(const key of COMMENT_AUX.keys())if(key.startsWith(viewScope+"|"))COMMENT_AUX.delete(key);
+  for(const key of COMMENT_ARTICLES.keys())if(key.startsWith(viewScope+"|"))COMMENT_ARTICLES.delete(key);
+  COMMENT_COLLECTION.delete(viewScope);lastVerifiedScope="";
+ }
+ function currentFallback():CommentCache|CommentSnapshot|undefined{
+  const retained=COMMENT_CACHE.get(cacheKey);
+  if(retained&&canRetainInsightView(retained.at))return retained;
+  return savedDisplay?{version:1,rows,total,latestAt:latestAt(rows),savedAt:savedDisplay}:undefined;
+ }
  async function loadAll(background=false,fallback?:CommentCache|CommentSnapshot,exhaustive=status==="all"&&Boolean(query.trim())){
   const request=beginLoad();let received=false;
+  const retained=background&&fallback&&"at" in fallback&&canRetainInsightView(fallback.at)?fallback:null;
+  if(retained)remember(COMMENT_CACHE,cacheKey,{...retained,invalidated:true});
   pageBusy.current=false;setMoreLoading(false);
   setLoading(true);setError("");setSyncPhase(background?"delta":"initial");setSyncMessage(exhaustive?"全履歴を検索中… 検索結果は確認途中です":"保存先のコメント履歴を確認中");
   try{
@@ -183,8 +208,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    const images=new Map((fallback?.rows||[]).map(row=>[String(row.comment_key||row.root_key),row.actor_image_url]));
    const firstRows=first.rows.map((row:Row)=>({...row,actor_image_url:row.actor_image_url||images.get(String(row.comment_key||row.root_key))||null}));
    let collected=events?mergeEvents([],firstRows):uniqueRows(firstRows),page=1;
-   const retained=background&&fallback&&"at" in fallback&&canRetainInsightView(fallback.at)?fallback:null;
-   const pages=exhaustive?Math.ceil(expected/pageSize):retained?Math.min(Math.ceil(retained.rows.length/pageSize),Math.ceil(renderLimit/pageSize),Math.ceil(expected/pageSize)):1;
+   const pages=exhaustive?Math.ceil(expected/pageSize):retained?Math.min(Math.ceil(retained.rows.length/pageSize),Math.ceil(expected/pageSize)):1;
    const displayed=(list:Row[])=>retained&&page<pages?(events?mergeEvents(retained.rows,list):uniqueRows([...list,...retained.rows])):list;
    if(collected.length!==Math.min(expected,pageSize))throw new Error("COMMENT_HISTORY_INCOMPLETE");
    received=true;passiveDisplay.current.blocked=true;setSavedDisplay(0);setLoadedPage(1);publish(request,displayed(collected),expected);enrichLater(collected,request);if(!events)void loadHearts(collected,request);
@@ -205,8 +229,14 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
    const message=e instanceof Error?e.message:"コメント履歴の読込に失敗しました";
    const lateSaved=!fallback&&globalAll?savedComments(storageScope):null;
    const displayFallback=fallback||(lateSaved?{...lateSaved.value,savedAt:lateSaved.savedAt}:null);
-   if(memberReadAuthFailure(message)){passiveDisplay.current.blocked=true;setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);COMMENT_CACHE.delete(cacheKey);finishSync(request,"コメント履歴を確認できませんでした")}
-   else if(!received&&displayFallback){publish(request,displayFallback.rows.slice(0,EVENT_PAGE),displayFallback.total);setSavedDisplay("at" in displayFallback?displayFallback.at:displayFallback.savedAt);finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
+   if(memberReadAuthFailure(message)){passiveDisplay.current.blocked=true;setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);discardVerifiedScope();finishSync(request,"コメント履歴を確認できませんでした")}
+   else if(retained){
+    // A failed recheck must not replace this document's verified loaded pages
+    // with its smaller offline copy, or leave the cursor at a partial recheck.
+    publish(request,retained.rows,retained.total);setLoadedPage(retained.page||1);setSavedDisplay(0);
+    finishSync(request,"最新確認に失敗しました。読み込み済み履歴を保持しています");
+   }
+   else if(!received&&displayFallback){publish(request,displayFallback.rows.slice(0,EVENT_PAGE),displayFallback.total);setLoadedPage(1);setSavedDisplay("at" in displayFallback?displayFallback.at:displayFallback.savedAt);finishSync(request,"通信を確認できないため保存済み履歴を表示中")}
    else if(!received&&globalAll&&persistKey){
     const previous=await bounded(readInsightSnapshot<CommentSnapshot>(persistKey),request.signal,1000).catch(()=>null);
     if(!current(request))return;
@@ -220,27 +250,35 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   if(pageBusy.current||loading||savedDisplay||rows.length>=total)return;
   const controller=activeRequest.current;if(!controller)return;
   const request={seq:loadSeq.current,token,signal:controller.signal},page=loadedPage+1,events=status==="all",pageSize=events?EVENT_PAGE:PAGE;
-  pageBusy.current=true;setMoreLoading(true);setError("");
+  const previous=COMMENT_CACHE.get(cacheKey),unverifiedBase=previous&&(previous.invalidated||previous.revision!==revision)?previous:undefined;
+  pageBusy.current=true;setMoreLoading(true);if(!unverifiedBase)setError("");
   try{
    const params=events?{pageSize,articleKey:articleKey||null,...range}:{action:"comments_filtered",pageSize,status,query,articleKey:articleKey||null,...range};
    const packet=await post(events?EVENTS:EXTRAS,{...params,page},request);
    if(!current(request))return;
    const count=Number(packet.total);
-   if(count!==total){void loadAll(true,{rows,total,at:Date.now(),revision});return}
+   if(count!==total){void loadAll(true,currentFallback());return}
    const list=events?mergeEvents(rows,packet.rows):uniqueRows([...rows,...packet.rows]);
    if(list.length!==Math.min(page*pageSize,count))throw new Error("COMMENT_HISTORY_INCOMPLETE");
-   publish(request,list,count);setLoadedPage(page);cache(request,list,count,page);enrichLater(packet.rows,request);if(!events)void loadHearts(packet.rows,request);
-   if(globalAll&&list.length===count)void saveSnapshot(request,list,count);
-  }catch(e){if(current(request)){const message=e instanceof Error?e.message:"続きの読込に失敗しました";setError(message);if(memberReadAuthFailure(message)){passiveDisplay.current.blocked=true;setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);COMMENT_CACHE.delete(cacheKey)}}}
+   publish(request,list,count);setLoadedPage(page);cache(request,list,count,page,unverifiedBase);enrichLater(packet.rows,request);if(!events)void loadHearts(packet.rows,request);
+   if(globalAll&&!unverifiedBase&&list.length===count)void saveSnapshot(request,list,count);
+  }catch(e){if(current(request)){const message=e instanceof Error?e.message:"続きの読込に失敗しました";setError(message);if(memberReadAuthFailure(message)){passiveDisplay.current.blocked=true;setRows([]);setTotal(0);setSavedDisplay(0);removeSavedInsightView(SAVED_COMMENTS,storageScope);discardVerifiedScope()}}}
   finally{if(current(request)){pageBusy.current=false;setMoreLoading(false)}}
  }
  async function open(k:string){
   if(detail[k])return;
   const controller=activeRequest.current;if(!controller)return;
-  const request={seq:loadSeq.current,token,signal:controller.signal};
-  try{const x=await post(HISTORY,{action:"comment_thread",rootKey:k},request);if(current(request))setDetail(v=>{if(!current(request))return v;const next={...v,[k]:x.rows||[]};remember(COMMENT_AUX,cacheKey,{detail:next,hearts:COMMENT_AUX.get(cacheKey)?.hearts||{}});return next})}catch(e){if(current(request))setError(e instanceof Error?e.message:"会話の読込に失敗しました")}
+  const request={seq:loadSeq.current,token,signal:controller.signal},requestKey=`${request.seq}|${k}`;
+  if(detailLoads.current.has(requestKey))return;detailLoads.current.add(requestKey);
+  try{const x=await post(HISTORY,{action:"comment_thread",rootKey:k},request);if(current(request))setDetail(v=>{if(!current(request))return v;const next={...v,[k]:x.rows||[]};remember(COMMENT_AUX,cacheKey,{detail:next,hearts:COMMENT_AUX.get(cacheKey)?.hearts||{}});return next})}catch(e){detailLoads.current.delete(requestKey);if(current(request))setError(e instanceof Error?e.message:"会話の読込に失敗しました")}
  }
- reloadSaved.current=()=>{COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});void loadAll(true,{rows,total,at:Date.now(),revision})};
+ reloadSaved.current=()=>{
+  for(const[key,value]of COMMENT_CACHE)if(key.startsWith(viewScope+"|"))COMMENT_CACHE.set(key,{...value,invalidated:true});
+  for(const key of COMMENT_AUX.keys())if(key.startsWith(viewScope+"|"))COMMENT_AUX.delete(key);
+  setDetail({});setHearts({});
+  for(const[key,value]of COMMENT_ARTICLES)if(key.startsWith(viewScope+"|"))COMMENT_ARTICLES.set(key,{...value,invalidated:true});
+  setArticleRefresh(value=>value+1);void loadAll(true,currentFallback());
+ };
  async function collectComments(selectedArticle:string|null=null,force=false,retryKeys?:string[]){
   if(collectionController.current||!token||!persistKey)return;
   const controller=new AbortController(),seq=++collectionSeq.current,capturedToken=token;
@@ -279,19 +317,19 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   const cleanup=()=>{collectionSeq.current++;collectionController.current?.abort();collectionController.current=null};
   setCollectionMessage("");setCollectionFailures([]);setCollectionRetryAt(0);setCollecting(false);
   const saved=COMMENT_COLLECTION.get(viewScope);
-  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)){setCollectionMessage(saved.message);setCollectionFailures(saved.failures||[]);setCollectionRetryAt(saved.retryAt||0);return cleanup}
+  if(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&canRetainInsightView(saved.at)){setCollectionMessage(saved.message);setCollectionFailures(saved.failures||[]);setCollectionRetryAt(saved.retryAt||0);return cleanup}
   if(persistKey&&token)void collectComments();
   return cleanup;
  },[persistKey,token,viewScope,revision,controlsReady]);
  useEffect(()=>{if(!collectionRetryAt)return;let timer=0;const tick=()=>{setCollectionNow(Date.now());if(Date.now()<collectionRetryAt)timer=window.setTimeout(tick,1000)};tick();return()=>window.clearTimeout(timer)},[collectionRetryAt]);
  useEffect(()=>{
   if(!controlsReady)return;
-  const controller=new AbortController(),seq=++articleSeq.current,capturedToken=token;
+  const controller=new AbortController(),seq=++articleSeq.current,capturedToken=token;articleController.current=controller;
   const key=`${viewScope}|${day}`,saved=COMMENT_ARTICLES.get(key);
   setArticles(saved&&canRetainInsightView(saved.at)?saved.rows:[]);
-  if(day&&!(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&isFreshInsightView(saved.at)))void post(EXTRAS,{action:"comment_articles",...range},{token:capturedToken,signal:controller.signal}).then(x=>{if(!controller.signal.aborted&&seq===articleSeq.current&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")){setArticles(x.rows||[]);remember(COMMENT_ARTICLES,key,{rows:x.rows||[],at:Date.now(),revision})}}).catch(()=>{});
-  return()=>{controller.abort();articleSeq.current++};
- },[day,token,viewScope,revision,controlsReady]);
+  if(day&&!(saved&&lastVerifiedScope===viewScope&&saved.revision===revision&&!saved.invalidated&&canRetainInsightView(saved.at)))void post(EXTRAS,{action:"comment_articles",...range},{token:capturedToken,signal:controller.signal}).then(x=>{if(!controller.signal.aborted&&seq===articleSeq.current&&capturedToken===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")){setArticles(x.rows||[]);remember(COMMENT_ARTICLES,key,{rows:x.rows||[],at:Date.now(),revision})}}).catch(()=>{});
+  return()=>{controller.abort();if(articleController.current===controller)articleController.current=null;articleSeq.current++};
+ },[day,token,viewScope,revision,controlsReady,articleRefresh]);
  useEffect(()=>{
   if(!controlsReady)return;
   passiveDisplay.current={key:JSON.stringify([viewScope,cacheKey,query,revision]),blocked:false,shown:false};
@@ -303,7 +341,7 @@ export function MemberInsightCommentsFinal({revision=0,noteId:memberNoteId=""}:{
   setError("");setRows(retained?cached.rows:savedRows);setTotal(retained?cached.total:Number(stored?.value.total)||0);setLoadedPage(retained?cached.page||1:1);setSavedDisplay(stored?.savedAt||0);
   setDetail(aux?.detail||{});setHearts(aux?.hearts||{});
   const exhaustive=status==="all"&&Boolean(query.trim());
-  if(cached&&lastVerifiedScope===viewScope&&cached.revision===revision&&isFreshInsightView(cached.at)&&(!exhaustive||cached.rows.length>=cached.total)){
+  if(cached&&lastVerifiedScope===viewScope&&cached.revision===revision&&!cached.invalidated&&canRetainInsightView(cached.at)&&(!exhaustive||cached.rows.length>=cached.total)){
    beginLoad();setLoading(false);setSyncPhase("idle");return cleanup;
   }
   COMMENT_AUX.delete(cacheKey);setDetail({});setHearts({});

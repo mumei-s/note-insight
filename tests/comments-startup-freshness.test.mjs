@@ -1,3 +1,4 @@
+import './comments-loaded-retention.test.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as React from 'react';
@@ -73,14 +74,13 @@ test('メモリキャッシュもアカウント別に分けて再取得を先�
  await settle(deliverB);assert.match(h.body(),/アカウントBの履歴/);
 });
 
-test('期限を過ぎた同session履歴と明示更新は表示を保って新しい本文を確認する',async t=>{
- let now=Date.now(),deliver,hold=false;
+test('同じ起動の履歴は時間経過だけで読み直さず、明示更新で新しい本文を確認する',async t=>{
+ let now=Date.now(),deliver,hold=false,reads=0;
  class Clock extends Date{static now(){return now}}
- const h=await fixture(t,{globals:{Date:Clock},fetch:async()=>hold?new Promise(resolve=>{deliver=()=>resolve(response([event('new','更新後のコメント')]))}):response([event('old','前回のコメント')])});
+ const h=await fixture(t,{globals:{Date:Clock},fetch:async()=>{reads++;return hold?new Promise(resolve=>{deliver=()=>resolve(response([event('new','更新後のコメント',{actor_image_url:'https://images.test/peer.png'})]))}):response([event('old','前回のコメント',{actor_image_url:'https://images.test/peer.png'})])}});
  await h.start();assert.match(h.body(),/前回のコメント/);
- await h.render(()=>null,{});now+=61000;hold=true;await h.start();assert.match(h.body(),/前回のコメント/);assert.match(h.body(),/保存先のコメント履歴を確認中/);
- await settle(deliver);assert.match(h.body(),/更新後のコメント/);
- await h.start({revision:1});assert.match(h.body(),/更新後のコメント/);assert.match(h.body(),/保存先のコメント履歴を確認中/);
+ await h.render(()=>null,{});now+=61000;hold=true;await h.start();assert.match(h.body(),/前回のコメント/);assert.doesNotMatch(h.body(),/保存先のコメント履歴を確認中/);assert.equal(reads,1);
+ await h.start({revision:1});assert.match(h.body(),/前回のコメント/);assert.match(h.body(),/保存先のコメント履歴を確認中/);assert.equal(reads,2);
  await settle(deliver);assert.match(h.body(),/更新後のコメント/);
 });
 
@@ -340,7 +340,7 @@ test('戻りで日付・記事・検索・対応状況と確認済み♡を復�
  assert.match(h.body(),/選択した会話/);assert.match(h.body(),/最終返信に相手さんの♡あり/);
 });
 
-test('期限超過でも現在の表示範囲だけ再確認し、表示中の古い末尾は更新完了まで保つ',async t=>{
+test('明示した更新では現在の表示範囲だけ再確認し、表示中の古い末尾は更新完了まで保つ',async t=>{
  let now=Date.now(),updating=false,deliverPage2;
  class Clock extends Date{static now(){return now}}
  const rows=Array.from({length:620},(_,i)=>event('c'+i,'保存本文'+i,{occurred_at:new Date(Date.parse('2026-10-08T09:00:00Z')-i*1000).toISOString(),actor_image_url:'https://images.test/peer.png'})),current=rows.filter(row=>row.comment_key!=='c618').map(row=>row.comment_key==='c619'?{...row,body:'最新の末尾本文'}:row),calls=[];
@@ -351,7 +351,7 @@ test('期限超過でも現在の表示範囲だけ再確認し、表示中の�
  }});
  await h.start();await settle();for(let i=0;i<6;i++)await h.click(h.w.document.querySelector('.micf-more button'));
  assert.match(h.body(),/保存本文619/);
- await h.render(()=>null,{});now+=61000;updating=true;await h.start();await settle();
+ await h.render(()=>null,{});now+=61000;updating=true;await h.start({revision:1});await settle();
  assert.match(h.body(),/保存本文619/,'表示中の末尾は更新途中で消さない');assert.equal(h.w.document.querySelector('.micf-head strong').textContent,'619件');
  await settle(deliverPage2);assert.match(h.body(),/最新の末尾本文/);assert.doesNotMatch(h.body(),/保存本文618/);
  assert.deepEqual(calls.filter(x=>x.updating).map(x=>x.page),[1,2]);assert.equal(h.savedView().value.rows.length,500);
