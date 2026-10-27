@@ -8,10 +8,11 @@ const row=name=>({person_key:'person',actor_name:name,actor_url:'https://note.co
 const comparison={action:'comparison',window:'latest',relationship:'mutual',query:'',page:2,pageSize:50};
 async function settle(work=()=>{}){await React.act(async()=>{work();await new Promise(r=>setTimeout(r,5));for(let i=0;i<3;i++)await pause()})}
 async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false}={}){
- const calls=[];let deliver;
- const fetch=async(_url,init)=>{calls.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});return new Promise(resolve=>{deliver=(value,status=200)=>resolve(Response.json(value,{status}))})};
- const h=await sceneFixture(t,{fetch,dependencies:{
-  './insight-view-lifecycle':{fetchInsightResource:fetch,isFreshInsightView:()=>false},
+ let now=Date.now();class Clock extends Date{static now(){return now}}
+ const calls=[],timers=[];let deliver,iconCalls=0;
+ const fetch=async(_url,init)=>{if(String(_url).endsWith('creator-icons')){iconCalls++;return Response.json({items:[]})}calls.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});return new Promise(resolve=>{deliver=(value,status=200)=>resolve(Response.json(value,{status}))})};
+ const h=await sceneFixture(t,{fetch,globals:{Date:Clock},dependencies:{
+  './insight-view-lifecycle':{fetchInsightResource:fetch,canRetainInsightView:at=>Number(at)<=now},
   './creator-avatar':{CreatorAvatar:()=>React.createElement('span')},
   './insight-account-store':{INSIGHT_TOKEN_KEY:tokenKey,readStoredInsightAccounts:()=>[{noteId:'tester',memberToken:'token-a'},{noteId:'other',memberToken:'token-b'}]},
   './insight-member-db-fallback':{memberReadAuthFailure:message=>/INSIGHT_(SESSION_INVALID|LOGIN_REQUIRED|MEMBER_INACTIVE)|HTTP_40[13]/.test(message),memberDbReadFallback:fallback},
@@ -19,8 +20,9 @@ async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('o
  Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});h.w.localStorage.setItem(tokenKey,'token-a');
  const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
  const savedKey=saved.savedInsightViewKey('social-last',scope),copy=h.w.localStorage.getItem(savedKey);if(delayed)h.w.localStorage.removeItem(savedKey);
+ h.w.setInterval=(fn,ms)=>{const timer={fn,ms,cancelled:false};timers.push(timer);return timer};h.w.clearInterval=timer=>{if(timer)timer.cancelled=true};
  const Component=h.load('src/member-insight-social-v2.tsx').MemberInsightSocialV2;await h.render(Component,{});await settle();
- return{...h,Component,calls,copy,hydrate:()=>settle(()=>{h.w.localStorage.setItem(savedKey,copy);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))}),deliver:(value,status)=>deliver(value,status),pending:()=>deliver,body:()=>h.w.document.querySelector('.mis2-social-root,.mis2').textContent};
+ return{...h,Component,calls,copy,iconCount:()=>iconCalls,advance:ms=>{now+=ms},poll:()=>settle(()=>timers.findLast(timer=>timer.ms===60000&&!timer.cancelled).fn()),hydrate:()=>settle(()=>{h.w.localStorage.setItem(savedKey,copy);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))}),deliver:(value,status)=>deliver(value,status),pending:()=>deliver,body:()=>h.w.document.querySelector('.mis2-social-root,.mis2').textContent};
 }
 
 test('前回の条件とページを先に表示し、50件の最新確認を1回行う',async t=>{
@@ -109,4 +111,21 @@ for(const transition of ['filter','route','token','revision'])test(`照合の${t
 
 test('一時的な照合失敗後の遅いコピーは確認失敗のまま表示し新しい通信を起こさない',async t=>{
  const h=await fixture(t,defaultComparison,{delayed:true});await settle(()=>h.deliver({ok:false,error:'TEMPORARILY_OFFLINE'},500));await h.hydrate();assert.match(h.body(),/前回の人物/);assert.match(h.body(),/前回表示分・最新確認できず/);assert.match(h.body(),/TEMPORARILY_OFFLINE/);assert.equal(h.calls.length,1);
+});
+
+
+for(const action of ['comparison','people'])test(`確認済み${action}は時間経過後のページ戻りと画面戻りでも通信せず条件を維持する`,async t=>{
+ const query=action==='comparison'?{...defaultComparison}:{action:'people',window:'latest',query:'',page:1,pageSize:50,direction:'followers'};
+ const pageRows=name=>Array.from({length:50},(_,i)=>({...row(name+'-'+i),person_key:'person-'+i}));
+ const h=await fixture(t,query);await settle(()=>h.deliver({ok:true,noteId:'tester',rows:pageRows('確認済みページ1'),total:150}));
+ const pager=label=>[...h.w.document.querySelectorAll('.mis2-pager button')].find(button=>button.textContent===label);
+ await h.click(pager('→'));await settle();assert.equal(h.calls.length,2);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:pageRows('確認済みページ2'),total:150}));
+ h.advance(86400000);await h.click(pager('←'));await settle();assert.equal(h.calls.length,2);assert.match(h.body(),/確認済みページ1/);
+ await h.render(()=>null);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,2);assert.match(h.body(),/確認済みページ1/);assert.equal(h.iconCount(),action==='people'?2:0);
+ await settle(()=>{h.w.dispatchEvent(new h.w.Event('focus'));h.w.dispatchEvent(new h.w.Event('pageshow'))});assert.equal(h.calls.length,2);
+ await h.poll();assert.equal(h.calls.length,3,'定期的な最新確認は保持済みcacheで止めない');assert.match(h.body(),/確認済みページ1/);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:pageRows('最新確認後のページ1'),total:150}));assert.match(h.body(),/最新確認後のページ1/);
+ await h.render(h.Component,{revision:1});await settle();assert.equal(h.calls.length,4,'明示更新は同条件でも再確認する');
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:pageRows('明示更新後のページ1'),total:150}));assert.match(h.body(),/明示更新後のページ1/);
 });
