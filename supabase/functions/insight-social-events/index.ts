@@ -34,15 +34,25 @@ async function investigateUnknown(scope:string,key:string,page=1){
  const candidates=investigationCandidates(people,verified,event),size=50;
  return{ok:true,personKey:key,event,relations:[],events:[],candidates:candidates.slice((page-1)*size,page*size),candidateTotal:candidates.length,candidatePage:page,candidatePages:Math.max(1,Math.ceil(candidates.length/size)),verifiedAbsent:candidates.filter(r=>r.current_relation==='absent').length,unverified:candidates.filter(r=>r.current_relation==='unverified').length,basis:"count_only_investigation",note:"この時点で総数が減ったことだけが確実です。過去に保存した人のうち現在の関係を確認する必要がある人を照合候補として表示します。候補をこの減少の本人と決めつけません。"};
 }
+function currentRelationship(key:string,row:any){
+ return{person_key:key,current_relation:row?.relation||"unknown",
+  current_is_following:typeof row?.is_following==="boolean"?row.is_following:null,
+  current_is_follower:typeof row?.is_follower==="boolean"?row.is_follower:null,
+  current_verified_at:row?.checked_at||null,
+  current_following_verified_at:row?.following_verified_at||null,
+  current_follower_verified_at:row?.follower_verified_at||null,
+  current_evidence:row?.evidence||null};
+}
 async function investigate(scope:string,key:string,page=1){
  if(key.startsWith("unknown:"))return investigateUnknown(scope,key,page);
  if(!key||key.length>400||key.startsWith("unknown:"))throw new Error("PERSON_REQUIRED");
- const [relations,events,history]=await Promise.all([
+ const [relations,events,history,current]=await Promise.all([
   db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("person_key",key),
   db.from("insight_relation_history_current").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
-  db.from("insight_social_comparison_history").select("id,previous_following,previous_follower,is_following,is_follower,observed_at,observation_kind",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("observed_at",{ascending:false}).range((page-1)*50,page*50-1)
- ]);if(relations.error)throw relations.error;if(events.error)throw events.error;if(history.error)throw history.error;
- return{ok:true,personKey:key,relations:relations.data||[],relationshipHistory:history.data||[],inspectionPage:page,inspectionPages:Math.max(1,Math.ceil(Math.max(history.count||0,events.count||0)/50)),events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
+  db.from("insight_social_comparison_history").select("id,previous_following,previous_follower,is_following,is_follower,observed_at,observation_kind",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("observed_at",{ascending:false}).range((page-1)*50,page*50-1),
+  db.from("insight_social_current_people").select("person_key,relation,is_following,is_follower,checked_at,following_verified_at,follower_verified_at,evidence").eq("member_id",scope).eq("person_key",key).maybeSingle()
+ ]);if(relations.error)throw relations.error;if(events.error)throw events.error;if(history.error)throw history.error;if(current.error)throw current.error;
+ return{ok:true,personKey:key,currentRelationship:currentRelationship(key,current.data),relations:relations.data||[],relationshipHistory:history.data||[],inspectionPage:page,inspectionPages:Math.max(1,Math.ceil(Math.max(history.count||0,events.count||0)/50)),events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。最新の関係は方向ごとの確認日時で別表示します。一覧から外れただけでは解除と決めつけません。解除・退会・ブロックなどの原因は断定しません。"};
 }
 async function windowPeople(scope:string,direction:string,window:string){
  let q=db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("direction",direction);

@@ -19,10 +19,10 @@ async function identity(req:Request){
   if(!app?.verified_at||app.status!=="active")throw new Error("SOCIAL_MEMBER_INACTIVE");
   return{scope,noteId:String(app.note_id).toLowerCase()};
 }
-async function archivedCandidates(scope:string,after:string){
+async function archivedCandidates(scope:string,after:string,pendingOnly=false){
  // Scope and cursor are applied in Postgres. Returning one small batch avoids
  // downloading every saved person and comparison for each 20-profile batch.
- const{data,error}=await db.rpc("insight_social_history_candidates",{p_member:scope,p_after:after,p_limit:20});
+ const{data,error}=await db.rpc(pendingOnly?"insight_social_pending_history_candidates":"insight_social_history_candidates",{p_member:scope,p_after:after,p_limit:20});
  if(error)throw error;
  return{ok:true,...data};
 }
@@ -47,7 +47,7 @@ Deno.serve(async req=>{
     const observed=Date.parse(body.checkedAt||"");
     if(!Number.isFinite(observed)||Math.abs(observed-Date.now())>900000)throw new Error("SOCIAL_OBSERVATION_EXPIRED");
     const checkedAt=new Date(Math.min(observed,Date.now())).toISOString();
-    if(body.action==="history_candidates")return out(await archivedCandidates(who.scope,text(body.after,200)||""));
+    if(body.action==="history_candidates")return out(await archivedCandidates(who.scope,text(body.after,200)||"",body.pendingOnly===true));
     const normalized=(Array.isArray(body.rows)?body.rows:[]).slice(0,100).map((x:any)=>({
       evidence:text(x.evidence,30),person_key:text(x.person_key,200),actor_name:text(x.actor_name),actor_url:url(x.actor_url),actor_image_url:url(x.actor_image_url),
       is_following:bool(x.is_following),is_follower:bool(x.is_follower),

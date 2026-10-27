@@ -39,6 +39,7 @@ test('過去の人物の明示照合は最新一覧を読み直さず、全件�
  assert.equal(h.values.get('mumei_social_comparison_v1:tester:history').historyChecked,2);
  assert.equal(h.values.get('mumei_social_comparison_v1:tester:history').complete,true);
  assert.ok(h.writes.every(body=>!body.status),'history-only scan must not erase whole-list coverage status');
+ assert.ok(h.batches.every(body=>body.pendingOnly===true),'history-only requests only unresolved saved people');
  const rows=h.writes.flatMap(body=>body.rows);assert.equal(rows.find(row=>row.person_key==='former').is_follower,false);assert.equal(rows.find(row=>row.person_key==='mutual').is_follower,true);
  const reads=h.requests.length;await h.run();assert.equal(h.requests.length,reads,'finished scan performs no background refresh');
 });
@@ -62,6 +63,23 @@ test('保存確認がない人物は照合の保存位置を進めない',async 
  const h=await reader(t,{people:['a','b'],missingAck:'b'});await h.run(true);
  const state=h.values.get('mumei_social_comparison_v1:tester:history');assert.equal(state.historyCursor,'a');assert.equal(state.historyChecked,1);assert.equal(state.error,'SOCIAL_SAVE_UNCONFIRMED');
  h.recover();await h.run(true);assert.equal(h.values.get('mumei_social_comparison_v1:tester:history').historyChecked,2);
+});
+test('旧方式の過去人物カーソルは一度だけ移行し、未確認人物を飛ばさず次回は続きから再開する',async t=>{
+ const h=await reader(t,{people:['a','b','c'],profileFailure:'b'});
+ h.values.set('mumei_social_comparison_v1:tester:history',{creatorKey:'self',complete:false,direction:'history',historyCursor:'z',historyChecked:1000,historySkipped:3,followingKeys:[],followerKeys:[],followingTotal:45,followerTotal:2100,version:'1.0.4'});
+ await h.run(true);let state=h.values.get('mumei_social_comparison_v1:tester:history');
+ assert.equal(h.batches[0].after,'');assert.equal(state.pendingOnly,true);assert.equal(state.historyCursor,'a');assert.equal(state.historyChecked,1);assert.equal(state.historySkipped,0);
+ h.recover();const offset=h.requests.length;await h.run(true);state=h.values.get('mumei_social_comparison_v1:tester:history');
+ assert.equal(h.batches[1].after,'a');assert.ok(!h.requests.slice(offset).includes('/api/v2/creators/a'));assert.equal(state.historyChecked,3);assert.equal(state.complete,true);
+ assert.deepEqual(h.values.get('mumei_social_comparison_v1:tester'),h.fullState);
+});
+test('全件照合の過去人物フェーズは従来どおり全保存人物を対象にする',async t=>{
+ const h=await reader(t,{historyOnly:false,people:['former']});h.values.set('mumei_social_comparison_v1:tester',{creatorKey:'self',complete:false,direction:'history',historyCursor:'',historyChecked:0,historySkipped:0,followingKeys:[],followerKeys:[],followingTotal:45,followerTotal:2100});
+ await h.run(true);assert.equal(h.batches.length,1);assert.equal(h.batches[0].pendingOnly,false);assert.equal(h.writes.flatMap(body=>body.rows||[]).length,1);assert.equal(h.values.has('mumei_social_comparison_v1:tester:history'),false);
+});
+test('再開時に本人IDが同じでもクリエイターキーが違えば過去の走査を読み書きしない',async t=>{
+ const h=await reader(t);h.values.set('mumei_social_comparison_v1:tester:history',{creatorKey:'different-creator',complete:false,direction:'history',historyCursor:'a',historyChecked:1,pendingOnly:true});
+ await h.run(true);assert.equal(h.batches.length,0);assert.equal(h.writes.length,0);assert.deepEqual(h.requests,['/api/v2/current_user','/api/v2/creators/tester']);assert.equal(h.values.get('mumei_social_comparison_v1:tester:history').error,'NOTE_ACCOUNT_CHANGED');
 });
 test('本人切替や実関係フラグの欠落を解除の証拠にしない',async t=>{
  const switched=await reader(t,{people:['a'],switchAccount:'a'});await switched.run(true);assert.equal(switched.writes.length,0);assert.equal(switched.values.get('mumei_social_comparison_v1:tester:history').error,'NOTE_ACCOUNT_CHANGED');

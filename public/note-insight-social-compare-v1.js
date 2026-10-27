@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.4',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.5',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -53,10 +53,14 @@ async function run(force=false){
   if(String(c.urlname||c.urlName||'').toLowerCase()!==id||!c.key||c.isMyself!==true)throw new Error('SOCIAL_ACCOUNT_UNVERIFIED');
   const historyOnly=sessionStorage.getItem(MODE)==='history';stateKey=STATE+id+(historyOnly?':history':'');
   state=await get(stateKey,null);
+  if(state?.creatorKey&&state.creatorKey!==String(c.key))throw new Error('NOTE_ACCOUNT_CHANGED');
+  // The pending-only queue has a different membership than the old all-person
+  // scan. Restart that old cursor once; fresh saved checks are reused by SQL.
+  if(historyOnly&&state&&state.pendingOnly!==true)state={...state,historyCursor:'',historyChecked:0,historySkipped:0,complete:false,error:null,pendingOnly:true,version:VERSION};
   if(state?.complete&&!force&&Date.now()-Number(state.finishedAt||0)<COOLDOWN)return;
   if(!state||state.complete||state.error==='SOCIAL_LIST_CHANGED'){
    const followingTotal=Math.max(0,Number(c.followingCount??c.following_count)||0),followerTotal=Math.max(0,Number(c.followerCount??c.follower_count)||0);
-   state={creatorKey:String(c.key),followingTotal,followerTotal,followingKeys:[],followerKeys:[],direction:historyOnly?'history':'followings',page:Math.ceil(Math.min(1000,followingTotal)/20),complete:false,startedAt:Date.now(),version:VERSION,historyCursor:'',historyChecked:0,historySkipped:0};
+   state={creatorKey:String(c.key),followingTotal,followerTotal,followingKeys:[],followerKeys:[],direction:historyOnly?'history':'followings',page:Math.ceil(Math.min(1000,followingTotal)/20),complete:false,startedAt:Date.now(),version:VERSION,pendingOnly:historyOnly,historyCursor:'',historyChecked:0,historySkipped:0};
    await set(stateKey,state);
   }
   const status=()=>({followingTotal:state.followingTotal,followerTotal:state.followerTotal,followingChecked:state.followingKeys.length,followerChecked:state.followerKeys.length,complete:state.complete&&!(state.historySkipped||0)&&state.followingKeys.length>=state.followingTotal&&state.followerKeys.length>=state.followerTotal,error:state.error||null});
@@ -64,7 +68,7 @@ async function run(force=false){
   show(historyOnly?'保存済みの人物を確認します。最新1,000人の一覧は読み直しません。':progress(),id);
   while(allowed()){
    if(state.direction==='history'){
-    const batch=await save({action:'history_candidates',noteId:id,checkedAt:new Date().toISOString(),after:state.historyCursor||''},auth);
+    const batch=await save({action:'history_candidates',pendingOnly:historyOnly,noteId:id,checkedAt:new Date().toISOString(),after:state.historyCursor||''},auth);
     if(!Array.isArray(batch.rows))throw new Error('SOCIAL_HISTORY_UNVERIFIED');
     for(const candidate of batch.rows){
      if(!allowed())break;
