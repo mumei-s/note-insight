@@ -24,12 +24,105 @@ async function fixture(t,{storage={},token='token-a',account='account_a',count=1
  return{...h,calls,timers,normal,start:props=>h.render(C,{active:true,revision:0,...props}),open:()=>h.click(h.w.document.querySelector('.midm-threads button')),text:()=>h.w.document.body.textContent,
   button:label=>[...h.w.document.querySelectorAll('button')].find(button=>button.textContent===label),
   copy:()=>Object.fromEntries(Object.keys(h.w.localStorage).map(key=>[key,h.w.localStorage.getItem(key)])),
-  setMessages:next=>{messages=next},poll:()=>settle(()=>{now+=61000;timers.findLast(timer=>timer.ms===60000&&!timer.cancelled).fn()})};
+  setMessages:next=>{messages=next},advance:ms=>{now+=ms},poll:()=>settle(()=>{now+=61000;timers.findLast(timer=>timer.ms===60000&&!timer.cancelled).fn()})};
 }
 async function saved(t,{count=1200,page=1}={}){
  const h=await fixture(t,{count});await h.start();await h.open();if(page>1)await h.click(h.button('過去のDM'));await settle();
  const storage=h.copy();await h.render(()=>null);return{h,storage};
 }
+
+test('同じ本人の既読DMページは60秒以内なら本文とページを即復元して通信しない',async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));
+ const before=h.calls.length;await h.click(h.button('新しいDM'));
+ assert.equal(h.calls.length,before);assert.match(h.text(),/1 \/ 3ページ/);assert.match(h.text(),/保存本文499/);assert.doesNotMatch(h.text(),/保存本文999/);
+ await h.click(h.button('過去のDM'));assert.equal(h.calls.length,before);assert.match(h.text(),/2 \/ 3ページ/);assert.match(h.text(),/保存本文999/);
+});
+
+test('DM相手一覧から同じ相手を開き直すと前回ページを通信なしで即表示する',async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));await h.click(h.button('← DM履歴一覧'));
+ const before=h.calls.length;await h.open();assert.equal(h.calls.length,before);assert.match(h.text(),/2 \/ 3ページ/);assert.match(h.text(),/保存本文999/);assert.equal(h.w.document.querySelectorAll('.midm-message').length,500);
+});
+
+test('60秒経過だけでは既読DMページ戻りと同じ相手の再選択で通信しない',async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));h.advance(61000);
+ const before=h.calls.length;await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before);assert.match(h.text(),/保存本文499/);
+ await h.click(h.button('← DM履歴一覧'));await h.open();assert.equal(h.calls.length,before);assert.match(h.text(),/保存本文499/);
+});
+
+test('保存変更後の既読ページは即表示したまま裏で確認し、遅い別ページ応答を適用しない',async t=>{
+ let hold=false;const waiting=[];
+ const h=await fixture(t,{handle:async(call,normal)=>hold&&call.body.action==='person_messages'?new Promise(resolve=>waiting.push({call,resolve})):normal(call.body)});
+ await h.start();await h.open();await h.click(h.button('過去のDM'));hold=true;h.setMessages(rows(1201));await h.poll();assert.equal(waiting.length,1);
+ await h.click(h.button('新しいDM'));assert.match(h.text(),/1 \/ 3ページ/);assert.match(h.text(),/保存本文499/);assert.equal(h.button('過去のDM').disabled,false);assert.equal(waiting.length,2);
+ await h.click(h.button('過去のDM'));assert.match(h.text(),/2 \/ 3ページ/);assert.match(h.text(),/保存本文999/);assert.equal(h.button('新しいDM').disabled,false);assert.equal(waiting.length,3);assert.equal(waiting[1].call.signal.aborted,true);
+ await settle(()=>waiting[1].resolve(response({rows:rows(1201,'遅い別ページ').slice(0,500),total:1201})));
+ assert.match(h.text(),/2 \/ 3ページ/);assert.doesNotMatch(h.text(),/遅い別ページ/);
+ await settle(()=>waiting[2].resolve(response({rows:rows(1201,'確認後の本文').slice(500,1000),total:1201})));
+ assert.match(h.text(),/確認後の本文999/);assert.doesNotMatch(h.text(),/前回表示分/);
+});
+
+test('取得中にsummaryの保存stampが変わったら旧応答を中断し新しい本文を確認する',async t=>{
+ let stamp='2026-10-17T00:00:00Z';const waiting=[];
+ const h=await fixture(t,{handle:async(call,normal)=>call.body.action==='summary'?response({messages:1200,threads:1,lastMessageSavedAt:stamp,lastSync:{created_at:stamp,upserted_count:1200},readerStatus:[]}):call.body.action==='person_messages'&&call.body.page===2?new Promise(resolve=>waiting.push({call,resolve})):normal(call.body)});
+ await h.start();await h.open();await h.click(h.button('過去のDM'));assert.equal(waiting.length,1);
+ stamp='2026-10-17T00:00:01Z';await h.poll();assert.equal(waiting.length,2);assert.equal(waiting[0].call.signal.aborted,true);
+ await settle(()=>waiting[1].resolve(response({rows:rows(1200,'新stampの本文').slice(500,1000),total:1200})));
+ await settle(()=>waiting[0].resolve(response({rows:rows(1200,'古stampの本文').slice(500,1000),total:1200})));
+ assert.match(h.text(),/新stampの本文999/);assert.doesNotMatch(h.text(),/古stampの本文/);
+ const before=h.calls.length;await settle(()=>h.w.dispatchEvent(new h.w.Event('focus')));assert.equal(h.calls.length,before);
+});
+
+test('DMの明示再確認は他の既読ページも無効化し同件数の編集を取得する',async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));h.setMessages(rows(1200,'明示確認後の本文'));
+ await h.click(h.button('保存先を再確認'));assert.match(h.text(),/明示確認後の本文999/);
+ const before=h.calls.length;await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before+1);assert.match(h.text(),/明示確認後の本文499/);
+});
+
+test('定期確認で同stampの本文編集を検出したら同じ相手の他ページだけ再確認する',async t=>{
+ let hold=false,finish;const h=await fixture(t,{handle:async(call,normal)=>call.body.action==='people'?response({rows:[person(),person('other')]}):call.body.action==='person_messages'&&call.body.personKey==='note:other'?response({rows:rows(1200,'別の相手本文').slice((call.body.page-1)*500,call.body.page*500),total:1200}):call.body.action==='person_messages'&&call.body.page===1&&hold?new Promise(resolve=>{finish=()=>resolve(normal(call.body))}):normal(call.body)});
+ await h.start();await h.click([...h.w.document.querySelectorAll('.midm-threads button')].find(button=>button.textContent.includes('相手 other')));await h.click(h.button('← DM履歴一覧'));await h.open();await h.click(h.button('過去のDM'));
+ h.setMessages(rows(1200,'定期確認後の本文'));await h.poll();assert.match(h.text(),/定期確認後の本文999/);
+ hold=true;const before=h.calls.length;await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before+1);assert.match(h.text(),/保存本文499/);assert.match(h.text(),/前回表示分・最新確認中/);assert.equal(h.button('過去のDM').disabled,false);
+ await settle(finish);assert.match(h.text(),/定期確認後の本文499/);assert.doesNotMatch(h.text(),/前回表示分/);
+ await h.click(h.button('← DM履歴一覧'));const beforeOther=h.calls.length;await h.click([...h.w.document.querySelectorAll('.midm-threads button')].find(button=>button.textContent.includes('相手 other')));
+ assert.equal(h.calls.length,beforeOther);assert.match(h.text(),/別の相手本文499/);
+});
+
+test('Readerの新規保存signalは既読DMページも無効化して最新本文を読む',async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));
+ const send=lastSaveAt=>h.w.dispatchEvent(new h.w.MessageEvent('message',{source:h.w,origin:h.w.location.origin,data:{source:'mumei-dm-status-bridge',noteId:'account_a',status:{lastSaveAt}}}));
+ await settle(()=>send(100));h.setMessages(rows(1200,'Reader保存後の本文'));await settle(()=>send(200));assert.match(h.text(),/Reader保存後の本文999/);
+ const before=h.calls.length;await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before+1);assert.match(h.text(),/Reader保存後の本文499/);
+});
+
+test('DM本文キャッシュは直近6ページだけ保持し未表示の過去を先読みしない',async t=>{
+ const h=await fixture(t,{count:4000});await h.start();await h.open();for(let i=0;i<6;i++)await h.click(h.button('過去のDM'));
+ assert.deepEqual(h.calls.filter(call=>call.body.action==='person_messages').map(call=>call.body.page),[1,2,3,4,5,6,7]);
+ const before=h.calls.length;for(let i=0;i<5;i++)await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before);assert.match(h.text(),/2 \/ 8ページ/);
+ await h.click(h.button('新しいDM'));assert.equal(h.calls.length,before+1);assert.match(h.text(),/1 \/ 8ページ/);
+});
+
+test('不完全なDMページを確認済みにせず再操作で取得をやり直す',async t=>{
+ let incomplete=true;const h=await fixture(t,{handle:async(call,normal)=>call.body.action==='person_messages'&&call.body.page===2&&incomplete?response({rows:rows(10),total:1200}):normal(call.body)});
+ await h.start();await h.open();await h.click(h.button('過去のDM'));assert.match(h.text(),/DM_HISTORY_INCOMPLETE/);assert.match(h.text(),/1 \/ 3ページ/);
+ incomplete=false;await h.click(h.button('過去のDM'));assert.match(h.text(),/2 \/ 3ページ/);assert.match(h.text(),/保存本文999/);
+ assert.deepEqual(h.calls.filter(call=>call.body.action==='person_messages').map(call=>call.body.page),[1,2,2]);
+});
+
+test('既読DMの最新確認失敗を新しい成功扱いせず、戻りで本文を保持して再確認する',async t=>{
+ let fail=false,hold=false,finish;const h=await fixture(t,{handle:async(call,normal)=>call.body.action==='person_messages'&&call.body.page===2&&fail?new Response(JSON.stringify({ok:false,error:'BODY_UNAVAILABLE'}),{status:500}):call.body.action==='person_messages'&&call.body.page===2&&hold?new Promise(resolve=>{finish=()=>resolve(normal(call.body))}):normal(call.body)});
+ await h.start();await h.open();await h.click(h.button('過去のDM'));fail=true;await h.poll();assert.match(h.text(),/BODY_UNAVAILABLE/);assert.match(h.text(),/保存本文999/);
+ await h.click(h.button('新しいDM'));fail=false;hold=true;const before=h.calls.length;await h.click(h.button('過去のDM'));
+ assert.equal(h.calls.length,before+1);assert.match(h.text(),/保存本文999/);assert.match(h.text(),/前回表示分・最新確認中/);assert.equal(h.button('新しいDM').disabled,false);
+ await settle(finish);assert.doesNotMatch(h.text(),/BODY_UNAVAILABLE|前回表示分/);
+});
+
+for(const transition of ['account','token'])test(`既読DMページも${transition}切替後には再利用しない`,async t=>{
+ const h=await fixture(t);await h.start();await h.open();await h.click(h.button('過去のDM'));h.setMessages(rows(1200,'切替後の本文'));
+ h.w.localStorage.setItem(transition==='account'?accountKey:tokenKey,transition==='account'?'account_b':'token-b');await h.start();await settle();await h.open();
+ assert.match(h.text(),/切替後の本文499/);assert.doesNotMatch(h.text(),/保存本文/);const before=h.calls.length;await h.click(h.button('過去のDM'));
+ assert.equal(h.calls.length,before+1);assert.match(h.text(),/切替後の本文999/);assert.doesNotMatch(h.text(),/保存本文/);
+});
 
 test('新しいdocumentで前回の相手と表示500件を即表示し、最新照合は1ページだけ裏で行う',async t=>{
  const {storage}=await saved(t),waiting=[];

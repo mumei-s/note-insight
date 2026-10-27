@@ -32,7 +32,14 @@ const fmt=(v:any)=>{if(!v)return"—";const d=new Date(typeof v==="number"?v:Str
 function Avatar({row}:{row:Row}){return <CreatorAvatar person={row} name={String(row.peer_name||row.sender_name||row.peer_note_id||"DM")} className="midm-avatar"/>}
 function validPerson(r:Row){const name=String(r.peer_name||"").trim();return Boolean(r.peer_note_id||r.peer_url||r.peer_image_url||(name&&name!=="DM相手"))}
 type VerifiedRead={at:number;revision:number;stamp:string};
-const MESSAGE_PAGE_SIZE=500, RECHECK_MS=60_000;
+type CachedMessagePage=VerifiedRead&{key:string;page:number;messages:Row[];total:number;failed?:boolean;invalidated?:boolean};
+const MESSAGE_PAGE_SIZE=500, RECHECK_MS=60_000, MESSAGE_CACHE_PAGES=6;
+function sameMessageValue(a:any,b:any):boolean{
+  if(a===b)return true;
+  if(!a||!b||typeof a!=="object"||typeof b!=="object")return false;
+  const keys=Object.keys(a);
+  return keys.length===Object.keys(b).length&&keys.every(key=>Object.prototype.hasOwnProperty.call(b,key)&&sameMessageValue(a[key],b[key]));
+}
 type SavedDmView={summary:Row|null;people:Row[];selected:Row|null;messages:Row[];messageOwner:string;messageTotal:number;messagePage:number};
 function readSavedDmView(account:string,token:string){
   const saved=readSavedInsightView<SavedDmView>("dm",{account,token}),value=saved?.value;
@@ -67,6 +74,9 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   const selectedRef=useRef(currentSelected);selectedRef.current=currentSelected;
   const requestedPageRef=useRef(1);
   const listVerified=useRef<VerifiedRead|null>(null),listRevision=useRef(revision),messageVerified=useRef<(VerifiedRead&{key:string;page:number})|null>(null),summaryVersion=useRef(""),readerSave=useRef<number|null>(null),pairVerified=useRef(0),summaryVerified=useRef(0);
+  const messagePages=useRef(new Map<string,CachedMessagePage>()),messagePageScope=useRef(""),messageFlightVersion=useRef<{stamp:string;summaryKnown:boolean}|null>(null);
+  const pageScope=JSON.stringify([accountNoteId,token,revision]);
+  if(messagePageScope.current!==pageScope){messagePageScope.current=pageScope;messagePages.current.clear()}
   const lateRestore=useRef<{allowed:boolean;revision:number;summary:Row|null;people:Row[]|null;messages:boolean}>({allowed:!initial,revision,summary:null,people:null,messages:false}),hydratedSelection=useRef("");
   const[historyRestored,setHistoryRestored]=useState(Boolean(initial?.selected));
   if(lateRestore.current.revision!==revision||!active)lateRestore.current.allowed=false;
@@ -74,6 +84,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   function discardDeniedView(error:unknown){
     const status=Number((error as {status?:number})?.status);if(status!==401&&status!==403)return false;
     lateRestore.current.allowed=false;
+    messagePages.current.clear();
     removeSavedInsightView("dm",{account:accountNoteId,token});pauseReads();listVerified.current=null;messageVerified.current=null;summaryVerified.current=0;summaryVersion.current="";verifiedMessageView.current="";
     setPeople([]);setSelected(null);setMessages([]);setMessageOwner("");setMessageTotal(0);setMessagePage(1);setSummary(null);setPeopleVerified(false);setPreviousList(false);setPreviousMessages(false);setSavedAt(0);setLoading(false);setMessagesLoading(false);setSummaryReadState("error");setReader(null);setPairState(null);setMessageReadError("");setError(error instanceof Error?error.message:"INSIGHT_LOGIN_REQUIRED");return true;
   }
@@ -131,10 +142,10 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
   async function load(silent=false,force=false){
     if(!activeRef.current||document.visibilityState!=="visible"||token!==(localStorage.getItem(INSIGHT_TOKEN_KEY)||""))return;
     const revisionChanged=listRevision.current!==revision;
-    const freshMessage=!selectedRef.current||(messageVerified.current?.key===`${token}|${selectedRef.current.person_key}`&&messageVerified.current.page===requestedPageRef.current&&isFreshInsightView(messageVerified.current.at,RECHECK_MS-1));
+    const freshMessage=!selectedRef.current||(messageVerified.current?.key===`${token}|${selectedRef.current.person_key}`&&messageVerified.current.page===requestedPageRef.current&&messageVerified.current.stamp===summaryVersion.current&&isFreshInsightView(messageVerified.current.at,RECHECK_MS-1));
     if(!force&&!revisionChanged&&listVerified.current&&isFreshInsightView(listVerified.current.at,RECHECK_MS-1)&&isFreshInsightView(summaryVerified.current,RECHECK_MS-1)&&freshMessage)return;
     if(listFlight.current){if(!force&&!revisionChanged)return;listFlight.current.abort()}
-    if(force||revisionChanged){messageRequest.current++;messageController.current?.abort();messageController.current=null;messageFlight.current=""}
+    if(force||revisionChanged){messagePages.current.clear();messageRequest.current++;messageController.current?.abort();messageController.current=null;messageFlight.current=""}
     listRevision.current=revision;
     const id=++listRequest.current,controller=new AbortController();listFlight.current=controller;
     const valid=()=>mounted.current&&activeRef.current&&!controller.signal.aborted&&document.visibilityState==="visible"&&id===listRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&String(currentStoredInsightAccount()?.noteId||"").toLowerCase()===accountNoteId;
@@ -149,7 +160,10 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     let lists=forced?readLists():null;
     try{
       const errors:unknown[]=[];
-      try{const s=await feed("summary",{},controller.signal,token);if(!valid())return;lateRestore.current.summary=s;setSummary(s);setSummaryReadState("ready");summaryVerified.current=Date.now();summaryReady=true;stamp=savedVersion(s,readerSave.current);summaryVersion.current=stamp;
+      try{const s=await feed("summary",{},controller.signal,token);if(!valid())return;lateRestore.current.summary=s;setSummary(s);setSummaryReadState("ready");summaryReady=true;stamp=savedVersion(s,readerSave.current);summaryVersion.current=stamp;
+        // The first summary labels the concurrent initial read; it is not a new save signal.
+        if(!summaryVerified.current&&messageFlight.current&&messageFlightVersion.current&&!messageFlightVersion.current.summaryKnown){messageFlightVersion.current.stamp=stamp;messageFlightVersion.current.summaryKnown=true}
+        summaryVerified.current=Date.now();
         const saved=listVerified.current;if(!lists&&(!saved||!stamp||saved.stamp!==stamp||!isFreshInsightView(saved.at)||!isFreshInsightView(pairVerified.current)))lists=readLists();
       }catch(e){if(!valid()||discardDeniedView(e))return;setSummaryReadState("error");summaryVerified.current=0;errors.push(e)}
       // A slow people refresh must not hold up the already selected conversation.
@@ -165,22 +179,30 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
       const latestPerson=selectedPerson();if((summaryReady||forced)&&latestPerson&&latestPerson.person_key!==bodyTarget)void loadMessages(latestPerson,true,force||revisionChanged);
     }catch(e){if(valid())setError(e instanceof Error?e.message:"DM読込失敗")}finally{if(listFlight.current===controller)listFlight.current=null;if(valid()&&!silent)setLoading(false)}
   }
-  async function loadMessages(person:Row|null,silent=false,force=false,page=requestedPageRef.current){
+  async function loadMessages(person:Row|null,silent=false,force=false,page=requestedPageRef.current,reuseVerified=false){
     if(person&&(!activeRef.current||document.visibilityState!=="visible"))return;
     if(token!==(localStorage.getItem(INSIGHT_TOKEN_KEY)||""))return;
     const key=person?`${token}|${person.person_key}`:'',flightKey=`${key}|${page}`;
-    if(key&&messageFlight.current===flightKey&&!force)return;
-    const saved=messageVerified.current;
-    if(!force&&key&&saved?.key===key&&saved.page===page&&saved.revision===revision&&summaryVersion.current&&saved.stamp===summaryVersion.current&&isFreshInsightView(saved.at,RECHECK_MS-1))return;
+    if(key&&messageFlight.current===flightKey&&messageFlightVersion.current?.stamp===summaryVersion.current&&!force)return;
+    if(force)messagePages.current.clear();
+    const cached=messagePages.current.get(flightKey),retained=!force&&cached?.revision===revision?cached:null;
     const seq=++messageRequest.current;messageController.current?.abort();
     if(!person){messageFlight.current='';messageView.current='';verifiedMessageView.current='';messageVerified.current=null;setMessages([]);setMessageOwner('');setMessageReadError('');setMessagesLoading(false);setMessageTotal(0);setMessagePage(1);setPreviousMessages(false);return}
+    if(retained){
+      messagePages.current.delete(flightKey);messagePages.current.set(flightKey,retained);
+      // Navigation reuses complete pages without extending their verification clock.
+      const fresh=!retained.failed&&!retained.invalidated&&retained.stamp===summaryVersion.current&&(reuseVerified||isFreshInsightView(retained.at,RECHECK_MS-1));
+      messageView.current=key;verifiedMessageView.current=key;messageVerified.current=retained;requestedPageRef.current=page;
+      setMessages(retained.messages);setMessageOwner(person.person_key);setMessageTotal(retained.total);setMessagePage(page);setMessagesLoading(false);setPreviousMessages(!fresh);setMessageReadError('');setError(previous=>previous===messageReadError?'':previous);
+      if(fresh){messageController.current=null;messageFlight.current='';return}
+    }
     const controller=new AbortController();messageController.current=controller;
     const changed=messageView.current!==key;
-    messageFlight.current=flightKey;if(!silent||changed)setMessagesLoading(true);
+    const capturedVersion={stamp:summaryVersion.current,summaryKnown:summaryVerified.current>0};
+    messageFlight.current=flightKey;messageFlightVersion.current=capturedVersion;if(!retained&&(!silent||changed))setMessagesLoading(true);
     setError(previous=>previous===messageReadError?'':previous);setMessageReadError('');
     if(changed){messageView.current=key;verifiedMessageView.current="";setMessages([]);setMessageOwner(person.person_key);setMessageTotal(0);setMessagePage(1);setPreviousMessages(false);page=1}
     requestedPageRef.current=page;
-    const capturedStamp=summaryVersion.current;
     const current=()=>mounted.current&&activeRef.current&&!controller.signal.aborted&&document.visibilityState==="visible"&&seq===messageRequest.current&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token&&String(currentStoredInsightAccount()?.noteId||"").toLowerCase()===accountNoteId;
     try{
       // The API orders newest first. Fetch only this visible page; older pages are explicit.
@@ -191,9 +213,14 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
       if(page>1&&total>0&&expected===0){void loadMessages(person,silent,true,Math.max(1,Math.ceil(total/MESSAGE_PAGE_SIZE)));return}
       if(total===0){page=1;requestedPageRef.current=1}
       lateRestore.current.messages=true;
-      setMessages(rows.slice().reverse());setMessageOwner(person.person_key);setMessageTotal(total);setMessagePage(page);setPreviousMessages(false);
-      verifiedMessageView.current=key;messageVerified.current={key,page,at:Date.now(),revision,stamp:capturedStamp};
-    }catch(e){if(current()){if(discardDeniedView(e))return;messageVerified.current=null;const message=e instanceof Error?e.message:"DM本文の読込に失敗しました";setError(message);setMessageReadError(message)}}
+      const messages=rows.slice().reverse(),verified={key,page,at:Date.now(),revision,stamp:capturedVersion.stamp};
+      setMessages(messages);setMessageOwner(person.person_key);setMessageTotal(total);setMessagePage(page);setPreviousMessages(false);
+      verifiedMessageView.current=key;messageVerified.current=verified;
+      const cacheKey=`${key}|${page}`,previous=messagePages.current.get(cacheKey);
+      if(previous&&(previous.total!==total||!sameMessageValue(previous.messages,messages)))for(const[id,saved]of messagePages.current)if(saved.key===key&&id!==cacheKey)messagePages.current.set(id,{...saved,invalidated:true});
+      messagePages.current.delete(cacheKey);messagePages.current.set(cacheKey,{...verified,messages,total});
+      if(messagePages.current.size>MESSAGE_CACHE_PAGES)messagePages.current.delete(messagePages.current.keys().next().value!);
+    }catch(e){if(current()){if(discardDeniedView(e))return;const previous=messagePages.current.get(flightKey);if(previous)messagePages.current.set(flightKey,{...previous,failed:true});messageVerified.current=null;const message=e instanceof Error?e.message:"DM本文の読込に失敗しました";setError(message);setMessageReadError(message)}}
     finally{if(current())setMessagesLoading(false);if(messageController.current===controller){messageController.current=null;if(messageFlight.current===flightKey)messageFlight.current=''}}
   }
   async function startPair(){
@@ -206,7 +233,7 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     }catch(e){setError(e instanceof Error?e.message:"DM連携を開始できませんでした")}finally{setBusy(false)}
   }
   useEffect(()=>{if(active)void load(false)},[revision,active,token,accountNoteId,accountRevision]);
-  useEffect(()=>{if(hydratedSelection.current){if(hydratedSelection.current===`${token}|${currentSelected?.person_key}`)hydratedSelection.current="";return}if(active&&!accountChanged)void loadMessages(currentSelected,true,false,messageVerified.current?.key===`${token}|${currentSelected?.person_key}`?requestedPageRef.current:1)},[currentSelected?.person_key,token,accountNoteId,accountChanged]);
+  useEffect(()=>{if(hydratedSelection.current){if(hydratedSelection.current===`${token}|${currentSelected?.person_key}`)hydratedSelection.current="";return}if(active&&!accountChanged)void loadMessages(currentSelected,true,false,requestedPageRef.current,true)},[currentSelected?.person_key,token,accountNoteId,accountChanged]);
   useEffect(()=>{
     if(!active)return;
     const refresh=()=>{if(document.visibilityState!=="visible"){pauseReads();setLoading(false);setMessagesLoading(false);return}void load(true)};
@@ -260,12 +287,12 @@ export function MemberInsightDm({revision=0,active=true}:{revision?:number;activ
     {loading&&!people.length?<p className="midm-empty">DM履歴を読み込み中…</p>:!peopleVerified?<p className="midm-empty">保存先のDM相手一覧を確認できませんでした。</p>:<details className="midm-history-panel" open={historyRestored?true:undefined}>
       <summary><span>DM履歴</span><b>{Number(people.length||0).toLocaleString()}人</b><small>タップして開く</small></summary>
       <div className={"midm-layout "+(selected?"is-person":"is-list")}>
-        {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>{messageRequest.current++;requestedPageRef.current=1;setMessagePage(1);setMessages([]);setSelected(r)}}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
+        {!selected?<aside className="midm-threads">{people.map(r=><button key={r.person_key} onClick={()=>{const previous=Array.from(messagePages.current.values()).reverse().find(item=>item.key===`${token}|${r.person_key}`);messageRequest.current++;requestedPageRef.current=previous?.page||1;setMessagePage(previous?.page||1);setMessages([]);setSelected(r)}}><Avatar row={r}/><span><b>{r.peer_name||r.peer_note_id||"DM相手"}</b><small>{Number(r.room_count||1)>1?String(r.room_count)+"ルーム統合 · ":""}{fmt(r.last_message_at)}</small></span></button>)}</aside>:null}
         {selected?<div className="midm-person-view">
           <button className="midm-back-list" onClick={()=>{setSelected(null);setMessages([])}}>← DM履歴一覧</button>
           <div className="midm-messages"><div className="midm-room-head"><Avatar row={selected}/><div><b>{selected.peer_name||selected.peer_note_id||"DM相手"}</b>{selected.peer_url?<a href={selected.peer_url} target="_blank" rel="noreferrer">プロフィール ↗</a>:null}<small>{Number(selected.room_count||1)>1?String(selected.room_count)+"ルームを1人分として統合":"この人とのDM履歴"}</small></div></div>{visibleMessages.length?messageElements:<p className="midm-empty">{messagesLoading?"DM本文を読み込み中…":messageReadError?"保存先のDM本文を確認できませんでした。":"この人との保存済みDMはありません。"}</p>}
           {messageReadError?<button type="button" disabled={messagesLoading} onClick={()=>void loadMessages(selected,false,true)}>DM本文を再確認</button>:null}
-          {messageTotal>MESSAGE_PAGE_SIZE?<div className="midm-message-pages"><button type="button" disabled={messagesLoading||messagePage<=1} onClick={()=>void loadMessages(selected,false,true,messagePage-1)}>新しいDM</button><span>{messagePage} / {Math.ceil(messageTotal/MESSAGE_PAGE_SIZE)}ページ · 全{messageTotal.toLocaleString()}件</span><button type="button" disabled={messagesLoading||messagePage>=Math.ceil(messageTotal/MESSAGE_PAGE_SIZE)} onClick={()=>void loadMessages(selected,false,true,messagePage+1)}>過去のDM</button></div>:null}</div>
+          {messageTotal>MESSAGE_PAGE_SIZE?<div className="midm-message-pages"><button type="button" disabled={messagesLoading||messagePage<=1} onClick={()=>void loadMessages(selected,false,false,messagePage-1,true)}>新しいDM</button><span>{messagePage} / {Math.ceil(messageTotal/MESSAGE_PAGE_SIZE)}ページ · 全{messageTotal.toLocaleString()}件</span><button type="button" disabled={messagesLoading||messagePage>=Math.ceil(messageTotal/MESSAGE_PAGE_SIZE)} onClick={()=>void loadMessages(selected,false,false,messagePage+1,true)}>過去のDM</button></div>:null}</div>
         </div>:null}
       </div>
     </details>}
