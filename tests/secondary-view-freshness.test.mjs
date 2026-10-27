@@ -78,7 +78,7 @@ test('お気に入りの古い遅延応答が新しい更新結果を上書き�
 });
 
 const socialQuery = { action: 'comparison', window: 'oldest', relationship: 'following_only', query: '', page: 1, pageSize: 50 };
-const socialSaved = saved => saved.writeSavedInsightView('social-last', { account: 'tester', token: 'session-a' }, { query: socialQuery, payload: { ok: true, noteId: 'tester', rows: [{ person_key: 'old', actor_name: '前回の人物', relation: 'following_only' }], total: 1 } }, Date.now() - 600000);
+const socialSaved = saved => saved.writeSavedInsightView('social-last', { account: 'tester', token: 'session-a' }, { historyEvidenceVersion: 3, query: socialQuery, payload: { ok: true, noteId: 'tester', rows: [{ person_key: 'old', actor_name: '前回の人物', relation: 'following_only' }], total: 1 } }, Date.now() - 600000);
 
 test('フォロー照合は本人の前回ページを明示して表示し、最新応答へ置き換える', async t => {
   const latest = deferred();
