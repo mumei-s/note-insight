@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.33',PROTOCOL='3.6.4';
+const VERSION='3.6.34',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -25,7 +25,8 @@ function creatorId(v){try{const u=new URL(String(v||''),location.href),p=u.pathn
 function accountFromDom(){const selectors=['header a[href]','nav a[href]','[class*="header" i] a[href]','[data-testid*="profile" i] a[href]'];for(const a of document.querySelectorAll(selectors.join(','))){if(!shown(a))continue;const id=creatorId(a.getAttribute('href'));if(!id)continue;const r=a.getBoundingClientRect();if(r.top<220||a.querySelector('img'))return{id}}return null}
 async function account(){try{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});if(r.ok){const j=await r.json(),u=(j.data??j).user||(j.data??j),id=String(u.urlname||u.url_name||u.username||'').toLowerCase();if(/^[a-z0-9_-]+$/.test(id))return{id}}}catch{}return null}
 function rowish(el,trusted=false){if(!shown(el))return false;const t=clean(el.textContent);return t.length>=3&&t.length<=4000&&(trusted||TIME_RE.test(t))}
-function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return exact.filter(el=>!exact.some(other=>other!==el&&other.contains(el)));const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return known.filter(el=>!known.some(other=>other!==el&&other.contains(el)));
+function outermostRows(candidates){const selected=new Set(candidates);return candidates.filter(el=>{for(let parent=el.parentElement;parent;parent=parent.parentElement)if(selected.has(parent))return false;return true})}
+function rows(root){if(!root?.querySelectorAll)return[];const exact=[...root.querySelectorAll('.m-navbarNoticeItem,[data-testid="notification-item"],[data-testid="notice-item"]')].filter(el=>rowish(el,true));if(exact.length)return outermostRows(exact);const known=[...root.querySelectorAll(ITEM)].filter(el=>rowish(el,true)&&!String(el.className).includes('__'));if(known.length)return outermostRows(known);
  // The enclosing notification list is already verified. Keep unknown wording as well.
  const out=[];for(const el of root.querySelectorAll('li,[role="listitem"],a[href]')){if(!rowish(el))continue;if(out.some(x=>x.contains(el)))continue;for(let i=out.length-1;i>=0;i--)if(el.contains(out[i]))out.splice(i,1);out.push(el)}return out;
 }
@@ -154,7 +155,7 @@ function noticeKeys(panel){
  const eligible=el=>panelEvidence(el)&&!el.closest('[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]');
  let candidates=[...panel.querySelectorAll(ITEM)].filter(eligible);
  if(!candidates.length)candidates=[...panel.querySelectorAll('li,[role="listitem"],a[href]')].filter(el=>eligible(el)&&TIME_RE.test(clean(el.textContent)));
- return candidates.filter(el=>!candidates.some(other=>other!==el&&other.contains(el))).slice(0,MAX_NOTICES).map(el=>[
+ return outermostRows(candidates).slice(0,MAX_NOTICES).map(el=>[
   el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||el.querySelector('[data-notification-id],[data-notice-id]')?.getAttribute('data-notification-id')||el.querySelector('[data-notice-id]')?.getAttribute('data-notice-id')||'',
   el.querySelector('time[datetime]')?.getAttribute('datetime')||'',stripTime(el.textContent),
   links(el).map(x=>x.u).join(' ')

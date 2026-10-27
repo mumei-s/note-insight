@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
+import './notification-reader-dom-budget.test.mjs';
 
 const networkSource=readFileSync('public/note-insight-notification-network-v3300.js','utf8');
 const readerSource=readFileSync('public/note-insight-notification-reader-v4.js','utf8');
