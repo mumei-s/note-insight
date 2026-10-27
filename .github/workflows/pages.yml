@@ -91,7 +91,7 @@ jobs:
       - name: Check read RPC results and permissions
         run: node --test tests/insight-rpc-read-performance.test.mjs tests/ranking-rpc-performance.test.mjs tests/ranking-count-branches.test.mjs tests/notification-feed-page-rpc.test.mjs tests/notification-store-started.test.mjs
       - name: Check retained social views and differences
-        run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs tests/social-oldest-window-v2.test.mjs tests/social-window-observations-v2.test.mjs tests/social-history-recovery-v2.test.mjs
+        run: node --experimental-vm-modules --test tests/social-mutual-v1.test.mjs tests/social-history-v1.test.mjs tests/social-comparison-review-v1.test.mjs tests/social-view-cache.test.mjs tests/social-oldest-window-v2.test.mjs tests/social-window-observations-v2.test.mjs tests/social-history-recovery-v2.test.mjs tests/social-legacy-zero-count-v2.test.mjs tests/social-fallback-read-repair-v1.test.mjs
       - name: Check manual dashboard panel and durable save queue
         run: node --experimental-vm-modules --test tests/dashboard-feature-toggle.test.mjs tests/dashboard-panels-v148.test.mjs tests/dashboard-save-confirmation.test.mjs tests/dashboard-save-queue.test.mjs tests/dashboard-daily-v146.test.mjs tests/dashboard-read-egress.test.mjs
       - name: Check retained views, reply bodies and notification pagination
