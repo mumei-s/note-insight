@@ -1,3 +1,4 @@
+import './magazine-document-reuse.test.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as React from 'react';
@@ -25,10 +26,9 @@ test('同じセッションの新鮮な戻りは全履歴を再取得せず、�
  assert.equal(historyCalls,1);assert.equal(searchCalls,1);assert.equal(h.toggle().getAttribute('aria-expanded'),'true');assert.match(h.body(),/検索で取得した記事/);
 });
 
-test('TTL超過後は保持した一覧を表示したまま最新を確認する',async t=>{
- let calls=0;const next=deferred();const h=await fixture(t,{history:()=>++calls===1?Promise.resolve({rows:[magazine('保存されたマガジン')]}):next.promise});
- h.advance(61001);await settle(()=>h.w.dispatchEvent(new h.w.Event('focus')));assert.equal(calls,2);assert.match(h.body(),/保存されたマガジン/);
- await settle(()=>next.resolve({rows:[magazine('再確認後のマガジン')]}));assert.match(h.body(),/再確認後のマガジン/);assert.doesNotMatch(h.body(),/保存されたマガジン/);
+test('60秒を超えても同じdocumentの確認済み一覧は復帰だけで読み直さない',async t=>{
+ let calls=0;const h=await fixture(t,{history:async()=>{calls++;return{rows:[magazine('保存されたマガジン')]}}});
+ h.advance(61001);await settle(()=>h.w.dispatchEvent(new h.w.Event('focus')));assert.equal(calls,1);assert.match(h.body(),/保存されたマガジン/);
 });
 
 test('revision変更時は古いhistoryFlightを使わず、古い完了で最新を上書きしない',async t=>{

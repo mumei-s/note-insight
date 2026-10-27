@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CreatorAvatar, creatorNoteId } from "./creator-avatar";
-import { isFreshInsightView } from "./insight-view-lifecycle";
+import { canRetainInsightView } from "./insight-view-lifecycle";
 import { readSavedInsightView, writeSavedInsightView, removeSavedInsightView } from "./insight-saved-view";
 import { INSIGHT_TOKEN_KEY } from "./insight-account-store";
 import "./member-insight-magazines.css";
@@ -24,6 +24,31 @@ function readSavedMagazines(account:string,token:string){
 function restoredStates(states:Record<string,SearchState>){return Object.fromEntries(Object.entries(states).map(([key,state])=>[key,{...state,busy:false,error:state.searched?"前回表示分です。最新確認は検索を押してください。":""}]))}
 function compactMagazine(row:Row):Row{return{key:keyOf(row),url:row.url,title:row.title,relation:row.relation,meNoteId:row.meNoteId,description:row.description,owner:row.owner,memberCount:row.memberCount??row.members?.length,followerCount:row.followerCount,noteCount:row.noteCount,members:Array.isArray(row.members)?row.members.slice(0,8):[],recentArticles:Array.isArray(row.recentArticles)?row.recentArticles.slice(0,12):[]}}
 
+type MagazineResult={at:number;rows:Row[];total:number};
+type MagazineDocumentView={at:number;payload:any;selection?:{mode:string;query:string;open:string|null;states:Record<string,SearchState>};results:Map<string,MagazineResult>};
+// Successful reads belong to this document and exact account/token/revision.
+// Persistent display copies never populate these bounded verification maps.
+const magazineDocumentViews=new Map<string,MagazineDocumentView>(),magazineDocumentFlights=new Map<string,{signature:string;promise:Promise<any>}>();
+let magazineAuthorizationGeneration=0;
+function magazineSignatureScope(signature:string){return String(JSON.parse(signature)[0])}
+function denyMagazineScope(signature:string){const scope=magazineSignatureScope(signature);magazineAuthorizationGeneration++;for(const key of magazineDocumentViews.keys())if(magazineSignatureScope(key)===scope)magazineDocumentViews.delete(key);for(const key of magazineDocumentFlights.keys())if(magazineSignatureScope(key)===scope)magazineDocumentFlights.delete(key)}
+function documentMagazineView(signature:string){const entry=magazineDocumentViews.get(signature);return entry&&canRetainInsightView(entry.at)?entry:null}
+function rememberMagazineView(signature:string,entry:MagazineDocumentView){magazineDocumentViews.delete(signature);magazineDocumentViews.set(signature,entry);while(magazineDocumentViews.size>6)magazineDocumentViews.delete(magazineDocumentViews.keys().next().value!)}
+function magazineFailureMessage(error:any,depth=0):string{if(depth>3)return "";if(typeof error==="string")return error;if(error&&typeof error==="object")return [error.message,error.code,error.error].map(value=>magazineFailureMessage(value,depth+1)).filter(Boolean).join(" ");return ""}
+function deniedMagazine(error:unknown){return /LOGIN|SESSION|INACTIVE/.test(magazineFailureMessage(error))}
+function validMagazineRows(rows:any){return Array.isArray(rows)&&rows.every(row=>row&&typeof row==="object"&&!Array.isArray(row))}
+function magazineHistoryJob(signature:string,token:string,history:()=>Promise<any>){
+ const existing=magazineDocumentFlights.get(signature);if(existing)return existing;const generation=magazineAuthorizationGeneration;
+ const job={signature,promise:Promise.resolve().then(history).then(payload=>{
+  if(magazineAuthorizationGeneration===generation&&(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")===token&&payload&&payload.ok!==false&&validMagazineRows(payload.rows)&&!payload.__offlineCache){
+   const at=payload.__retainedView?Number(payload.__cachedAt):Date.now(),previous=documentMagazineView(signature);
+   if(canRetainInsightView(at)&&payload.rows.length<=1000)rememberMagazineView(signature,{at,payload,selection:previous?.selection,results:previous?.results||new Map()});
+  }
+  return payload;
+ },error=>{if(deniedMagazine(error))denyMagazineScope(signature);throw error}).finally(()=>{if(magazineDocumentFlights.get(signature)===job)magazineDocumentFlights.delete(signature)})};
+ magazineDocumentFlights.set(signature,job);while(magazineDocumentFlights.size>6)magazineDocumentFlights.delete(magazineDocumentFlights.keys().next().value!);return job;
+}
+
 function SearchProgress({ count }: { count: number }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => { const start = Date.now(), timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000); return () => window.clearInterval(timer); }, []);
@@ -34,15 +59,16 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   revision: number; accountKey: string; history: () => Promise<any>; search: (params: Record<string, unknown>, signal: AbortSignal) => Promise<any>; cached?: any; active?: boolean;
 }) {
   const token = localStorage.getItem(INSIGHT_TOKEN_KEY) || "", scope = JSON.stringify([accountKey, token]), verificationSignature = JSON.stringify([scope, revision]);
-  const [initial] = useState(()=>readSavedMagazines(accountKey,token));
-  const passiveDisplay=useRef({scope,blocked:Boolean(initial)});
+  const [documentInitial]=useState(()=>documentMagazineView(verificationSignature));
+  const [initial] = useState(()=>documentInitial?null:readSavedMagazines(accountKey,token));
+  const passiveDisplay=useRef({scope,blocked:Boolean(documentInitial||initial)});
   const [savedDisplay,setSavedDisplay]=useState(initial),[checking,setChecking]=useState(false);
-  const [rows, setRows] = useState<Row[]>(initial?.value.rows||[]), [refreshed, setRefreshed] = useState(initial?.value.refreshed||""), [loading, setLoading] = useState(!initial);
-  const [mode, setMode] = useState(initial?.value.mode||"all"), [query, setQuery] = useState(initial?.value.query||""), [open, setOpen] = useState<string | null>(initial?.value.open||null), [states, setStates] = useState<Record<string, SearchState>>(()=>restoredStates(initial?.value.states||{})), [loadError, setLoadError] = useState("");
+  const [rows, setRows] = useState<Row[]>(documentInitial?.payload.rows||initial?.value.rows||[]), [refreshed, setRefreshed] = useState(documentInitial?.payload.refreshedAt||initial?.value.refreshed||""), [loading, setLoading] = useState(!documentInitial&&!initial);
+  const [mode, setMode] = useState(documentInitial?.selection?.mode||initial?.value.mode||"all"), [query, setQuery] = useState(documentInitial?.selection?.query||initial?.value.query||""), [open, setOpen] = useState<string | null>(documentInitial?.selection?.open||initial?.value.open||null), [states, setStates] = useState<Record<string, SearchState>>(()=>documentInitial?.selection?.states||restoredStates(initial?.value.states||{})), [loadError, setLoadError] = useState("");
   const id = useId().replace(/:/g, ""), run = useRef(0), activeRequest = useRef<AbortController | null>(null), activeKey = useRef<string | null>(null);
-  const resultCache = useRef(new Map<string, { at: number; rows: Row[]; total: number }>());
-  const historyRequest = useRef(0), historyFlight = useRef<{ signature: string; promise: Promise<any> } | null>(null), verifiedHistory = useRef<{ signature: string; at: number } | null>(null);
-  const lastHistoryAt=useRef(0),lastHistoryScope=useRef(""),restoredSearchKeys=useRef(new Set(Object.keys(initial?.value.states||{}))),refreshHistory=useRef(()=>{});
+  const resultCache = useRef(new Map<string,MagazineResult>(documentInitial?.results));
+  const historyRequest = useRef(0), historyFlight = useRef<{ signature: string; promise: Promise<any> } | null>(null), verifiedHistory = useRef<{ signature: string; at: number } | null>(documentInitial?{signature:verificationSignature,at:documentInitial.at}:null);
+  const lastHistoryAt=useRef(documentInitial?.at||0),lastHistoryScope=useRef(documentInitial?scope:""),restoredSearchKeys=useRef(new Set(Object.keys(initial?.value.states||{}))),refreshHistory=useRef(()=>{});
   const rowsRef = useRef(rows), statesRef = useRef(states), openRef = useRef(open), cachedScope = useRef(scope), previousScope = useRef(scope), currentView = useRef({ signature: verificationSignature, active });
   rowsRef.current = rows; statesRef.current = states; openRef.current = open; currentView.current = { signature: verificationSignature, active };
   useEffect(()=>{
@@ -53,32 +79,32 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
   const patch = (key: string, change: Partial<SearchState>) => setStates(old => ({ ...old, [key]: { ...(old[key] || blank()), ...change } }));
   useEffect(() => {
     if (previousScope.current !== scope) {
-      previousScope.current = scope; passiveDisplay.current={scope,blocked:false};verifiedHistory.current = null; resultCache.current.clear(); stop();
-      const saved=readSavedMagazines(accountKey,token);setSavedDisplay(saved);rowsRef.current=saved?.value.rows||[];setRows(rowsRef.current);setRefreshed(saved?.value.refreshed||"");setLoadError("");setStates(restoredStates(saved?.value.states||{}));setOpen(saved?.value.open||null);setMode(saved?.value.mode||"all");setQuery(saved?.value.query||"");restoredSearchKeys.current=new Set(Object.keys(saved?.value.states||{}));lastHistoryAt.current=0;lastHistoryScope.current="";
+      previousScope.current = scope;const retained=documentMagazineView(verificationSignature);passiveDisplay.current={scope,blocked:Boolean(retained)};verifiedHistory.current=retained?{signature:verificationSignature,at:retained.at}:null;resultCache.current=new Map(retained?.results);stop();
+      const saved=retained?null:readSavedMagazines(accountKey,token);setSavedDisplay(saved);rowsRef.current=retained?.payload.rows||saved?.value.rows||[];setRows(rowsRef.current);setRefreshed(retained?.payload.refreshedAt||saved?.value.refreshed||"");setLoadError("");setStates(retained?.selection?.states||restoredStates(saved?.value.states||{}));setOpen(retained?.selection?.open||saved?.value.open||null);setMode(retained?.selection?.mode||saved?.value.mode||"all");setQuery(retained?.selection?.query||saved?.value.query||"");restoredSearchKeys.current=new Set(Object.keys(saved?.value.states||{}));lastHistoryAt.current=retained?.at||0;lastHistoryScope.current=retained?scope:"";
     }
     if (!active) { stop(); setLoading(false); return; }
     let live = true;
     const refresh = async () => {
       if (!live || document.visibilityState !== "visible") { historyRequest.current++; stop(); setLoading(false); return; }
-      if (verifiedHistory.current?.signature === verificationSignature && isFreshInsightView(verifiedHistory.current.at)) { setLoading(false); return; }
+      if (verifiedHistory.current?.signature === verificationSignature && canRetainInsightView(verifiedHistory.current.at)) { setLoading(false); return; }
       const request = ++historyRequest.current;
       const valid = () => live && currentView.current.active && document.visibilityState === "visible" && request === historyRequest.current && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
       stop();
       setLoading(!rowsRef.current.length);setChecking(true);
-      const job = historyFlight.current?.signature === verificationSignature ? historyFlight.current : { signature: verificationSignature, promise: Promise.resolve().then(history) }; historyFlight.current = job;
+      const job = historyFlight.current?.signature === verificationSignature ? historyFlight.current : magazineHistoryJob(verificationSignature,token,history); historyFlight.current = job;
       try {
         const x = await job.promise;
         if (!valid()) return;
-        if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error(String(x?.error||"INVALID_MAGAZINE_HISTORY"));
+        if (!x || x.ok === false || !validMagazineRows(x.rows)) throw new Error(magazineFailureMessage(x?.error)||"INVALID_MAGAZINE_HISTORY");
         passiveDisplay.current.blocked=true;setRows(x.rows); setRefreshed(x.refreshedAt || ""); setLoadError(x.__offlineCache ? "保存済みのマガジンを表示中です。最新確認は再読込できます。" : "");
         if (!x.__offlineCache) {
-          const at=Date.now();verifiedHistory.current = { signature: verificationSignature, at };lastHistoryAt.current=at;lastHistoryScope.current=scope;setSavedDisplay(null);resultCache.current.clear();
+          const at=x.__retainedView?Number(x.__cachedAt):documentMagazineView(verificationSignature)?.at||Date.now();if(!canRetainInsightView(at))throw new Error("INVALID_MAGAZINE_VERIFICATION");verifiedHistory.current = { signature: verificationSignature, at };lastHistoryAt.current=at;lastHistoryScope.current=scope;setSavedDisplay(null);if(!x.__retainedView)resultCache.current.clear();
           const key = openRef.current, state = key ? statesRef.current[key] : null, magazine = key ? x.rows.find((row: Row) => keyOf(row) === key) : null;
-          if (magazine && state?.searched&&!restoredSearchKeys.current.has(key!)) void searchArticles(magazine, state.day, state.query);
+          if (!x.__retainedView&&magazine && state?.searched&&!restoredSearchKeys.current.has(key!)) void searchArticles(magazine, state.day, state.query);
         }
       } catch (error) {
         if (valid()) {
-          if(error instanceof Error&&/LOGIN|SESSION|INACTIVE/.test(error.message)){passiveDisplay.current.blocked=true;removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error.message);return;}
+          if(deniedMagazine(error)){denyMagazineScope(verificationSignature);verifiedHistory.current=null;lastHistoryAt.current=0;lastHistoryScope.current="";resultCache.current.clear();passiveDisplay.current.blocked=true;removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error instanceof Error?error.message:String(error));return;}
           if (!rowsRef.current.length && cachedScope.current === scope && Array.isArray(cached?.rows)) { setRows(cached.rows); setRefreshed(cached.refreshedAt || ""); }
           setLoadError("マガジンの更新を確認できませんでした。保存済みの情報を表示しています。");
         }
@@ -101,6 +127,7 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     if(savedDisplay||lastHistoryScope.current!==scope||!lastHistoryAt.current||previousScope.current!==scope)return;
     const savedStates:Record<string,SearchState>={};
     if(open&&states[open]&&!states[open].busy){const state=states[open];let criteria:any[]=[];try{criteria=JSON.parse(state.signature)}catch{}if(!state.searched||criteria[1]===open&&criteria[2]===state.day&&criteria[3]===state.query.trim().toLowerCase())savedStates[open]={...state,rows:state.rows.slice(0,100),busy:false,error:""};}
+    const entry=documentMagazineView(verificationSignature);if(entry&&verifiedHistory.current?.signature===verificationSignature){const selectionStates=Object.fromEntries(Object.entries(states).filter(([key,state])=>state.rows.length<=1000&&(key===open||resultCache.current.has(state.signature))).slice(-24).map(([key,state])=>[key,{...state,busy:false}]));rememberMagazineView(verificationSignature,{...entry,selection:{mode,query,open,states:selectionStates},results:new Map(resultCache.current)});}
     const copy:SavedMagazines={mode,query,open:open&&visible.slice(0,100).some(row=>keyOf(row)===open)?open:null,rows:visible.slice(0,100).map(compactMagazine),total:rows.length,visibleTotal:visible.length,refreshed,states:savedStates};
     writeSavedInsightView("magazines-last",{account:accountKey,token},copy,lastHistoryAt.current);
   },[rows,refreshed,mode,query,open,states,savedDisplay,scope]);
@@ -119,21 +146,22 @@ export function MemberInsightMagazines({ revision, accountKey, history, search, 
     const valid = () => currentRun === run.current && !controller.signal.aborted && currentView.current.active && document.visibilityState === "visible" && currentView.current.signature === verificationSignature && (localStorage.getItem(INSIGHT_TOKEN_KEY) || "") === token;
     activeRequest.current = controller; activeKey.current = key;
     const local = localMatches(r.recentArticles || [], day, q), saved = resultCache.current.get(signature);
-    patch(key, { day, query: queryValue, rows: saved?.rows || local, searched: true, signature, error: "", busy: !saved || !isFreshInsightView(saved.at), total: saved?.total });
-    if (saved && isFreshInsightView(saved.at)) { activeRequest.current = null; activeKey.current = null; return; }
+    patch(key, { day, query: queryValue, rows: saved?.rows || local, searched: true, signature, error: "", busy: !saved || !canRetainInsightView(saved.at), total: saved?.total });
+    if (saved && canRetainInsightView(saved.at)) { activeRequest.current = null; activeKey.current = null; return; }
     try {
       const range = day ? { dateFrom: `${day}T00:00:00+09:00`, dateTo: new Date(Date.parse(`${day}T00:00:00+09:00`) + 86400000).toISOString() } : { dateFrom: null, dateTo: null };
       const x = await search({ magazineKey: key, query: q, ...range }, controller.signal);
       if (!valid()) return;
-      if (!x || x.ok === false || !Array.isArray(x.rows)) throw new Error("INVALID_MAGAZINE_SEARCH");
+      if (!x || x.ok === false || !validMagazineRows(x.rows)) throw new Error(magazineFailureMessage(x?.error)||"INVALID_MAGAZINE_SEARCH");
       const merged = new Map<string, Row>();
       // Keep local hits only from this magazine and these exact criteria.
       for (const a of [...local, ...localMatches(x.rows || [], day, q)]) merged.set(String(a.url || a.key), a);
       const result = [...merged.values()].sort((a, b) => (Date.parse(b.publishAt || b.publish_at) || 0) - (Date.parse(a.publishAt || a.publish_at) || 0));
       const total = Math.max(result.length, Number(x.total || 0));
-      resultCache.current.set(signature, { at: x.__offlineCache ? 0 : Date.now(), rows: result, total });
+      resultCache.current.delete(signature);if(result.length<=1000)resultCache.current.set(signature, { at: x.__offlineCache ? 0 : Date.now(), rows: result, total });while(resultCache.current.size>24)resultCache.current.delete(resultCache.current.keys().next().value!);
       patch(key, { rows: result, total, error: x.__offlineCache ? "保存済みの検索結果です。最新確認は再検索できます。" : "" });
-    } catch {
+    } catch (error) {
+      if(valid()&&deniedMagazine(error)){denyMagazineScope(verificationSignature);verifiedHistory.current=null;lastHistoryAt.current=0;lastHistoryScope.current="";resultCache.current.clear();removeSavedInsightView("magazines-last",{account:accountKey,token});setSavedDisplay(null);rowsRef.current=[];setRows([]);setStates({});setOpen(null);setLoadError(error instanceof Error?error.message:String(error));return;}
       if (valid()) patch(key, { error: "追加確認が完了しませんでした。表示済みの記事は残しています。再検索できます。" });
     } finally {
       if (currentRun === run.current) { patch(key, { busy: false }); activeRequest.current = null; activeKey.current = null; }
