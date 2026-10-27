@@ -6,7 +6,7 @@ async function auth(req:Request){const raw=req.headers.get("X-Insight-Token")||"
 function valid(v:any){if(!v)return null;const d=new Date(String(v));return Number.isNaN(d.getTime())?null:d.toISOString()}
 const num=(v:any)=>Number.isFinite(Number(v))?Number(v):0;
 async function liveCounts(noteId:string){const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(`${NOTE}/api/v2/creators/${encodeURIComponent(noteId)}`,{headers:{Accept:"application/json","User-Agent":"Mumei-S-note-INSIGHT/6.0 (+live-social-counts)"},cache:"no-store",signal:c.signal});if(!r.ok)throw new Error(`NOTE_${r.status}`);const j:any=await r.json(),d=j?.data??j??{};return{followers:num(d.followerCount??d.follower_count),followings:num(d.followingCount??d.following_count),at:new Date().toISOString()}}catch{return null}finally{clearTimeout(timer)}}
-async function latestRuns(scope:string,noteId:string){const{data,error}=await db.from("insight_relation_sync_runs").select("direction,expected_count,received_count,complete,baseline,error,created_at,added_count,removed_count").eq("member_id",scope).order("created_at",{ascending:false}).limit(20);if(error)throw error;const latest:any={followers:null,followings:null};for(const r of data||[]){const d=String(r.direction||"");if((d==="followers"||d==="followings")&&!latest[d])latest[d]=r}const live=await liveCounts(noteId);if(live){for(const d of ["followers","followings"] as const){const count=live[d];latest[d]={...(latest[d]||{direction:d,received_count:0,complete:false,baseline:true,error:"RELATION_SCAN_PENDING",created_at:null,added_count:0,removed_count:0}),live_expected_count:count,live_count_at:live.at}}}return latest}
+async function latestRuns(scope:string,noteId:string,refreshLive=true){const{data,error}=await db.from("insight_relation_sync_runs").select("direction,expected_count,received_count,complete,baseline,error,created_at,added_count,removed_count").eq("member_id",scope).order("created_at",{ascending:false}).limit(20);if(error)throw error;const latest:any={followers:null,followings:null};for(const r of data||[]){const d=String(r.direction||"");if((d==="followers"||d==="followings")&&!latest[d])latest[d]=r}const live=refreshLive?await liveCounts(noteId):null;if(live){for(const d of ["followers","followings"] as const){const count=live[d];latest[d]={...(latest[d]||{direction:d,received_count:0,complete:false,baseline:true,error:"RELATION_SCAN_PENDING",created_at:null,added_count:0,removed_count:0}),live_expected_count:count,live_count_at:live.at}}}return latest}
 const PERSON_FIELDS="person_key,actor_name,actor_url,actor_image_url,active,last_seen_at,first_seen_at,last_changed_at,source_rank,direction";
 function searchText(v:any){return String(v||"").normalize("NFKC").replace(/[^\p{L}\p{N}_@ -]/gu,"").replace(/^@/,"").slice(0,100)}
 function evidence(row:any,run:any){
@@ -22,15 +22,15 @@ async function savedPeople(scope:string,direction:string){
 function investigationCandidates(people:any[],verified:any[],event:any){
  const byKey=new Map(verified.map(r=>[r.person_key,r]));
  return people.filter(r=>Date.parse(r.first_seen_at)<=Date.parse(event.detected_at)).map(r=>{
-  const v=byKey.get(r.person_key),checked=Date.parse(v?.checked_at||""),seen=Date.parse(r.last_seen_at||""),field=event.direction==='followers'?'is_follower':'is_following';
+  const v=byKey.get(r.person_key),field=event.direction==='followers'?'is_follower':'is_following',verifiedAt=v?.[event.direction==='followers'?'follower_verified_at':'following_verified_at'],checked=Date.parse(verifiedAt||''),seen=Date.parse(r.last_seen_at||'');
   const known=typeof v?.[field]==='boolean'&&checked>=seen;
-  return{...r,current_relation:known?(v[field]?'present':'absent'):'unverified',verified_at:known?v.checked_at:null,evidence:known?'authenticated_relationship':'saved_window',assigned_to_event:false};
+  return{...r,current_relation:known?(v[field]?'present':'absent'):'unverified',verified_at:known?verifiedAt:null,evidence:known?(v?.[event.direction==='followers'?'follower_evidence':'following_evidence']||'saved_relationship'):'saved_window',assigned_to_event:false};
  }).filter(r=>r.current_relation==='absent'||!r.active&&r.current_relation==='unverified').sort((a,b)=>Number(b.current_relation==='absent')-Number(a.current_relation==='absent')||String(b.last_seen_at).localeCompare(String(a.last_seen_at))||a.person_key.localeCompare(b.person_key));
 }
 async function investigateUnknown(scope:string,key:string,page=1){
  const{data:event,error}=await db.from("insight_relation_events").select(EVENT_FIELDS).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).limit(1).maybeSingle();if(error)throw error;if(!event)throw new Error("EVENT_NOT_FOUND");
  const people=await savedPeople(scope,event.direction),verified:any[]=[];
- for(let start=0;;start+=1000){const r=await db.from("insight_social_comparisons").select("person_key,is_following,is_follower,checked_at").eq("member_id",scope).order("person_key").range(start,start+999);if(r.error)throw r.error;verified.push(...(r.data||[]));if((r.data||[]).length<1000)break}
+ for(let start=0;;start+=1000){const r=await db.from("insight_social_current_people").select("person_key,is_following,is_follower,following_verified_at,follower_verified_at,following_evidence,follower_evidence").eq("member_id",scope).order("person_key").range(start,start+999);if(r.error)throw r.error;verified.push(...(r.data||[]));if((r.data||[]).length<1000)break}
  const candidates=investigationCandidates(people,verified,event),size=50;
  return{ok:true,personKey:key,event,relations:[],events:[],candidates:candidates.slice((page-1)*size,page*size),candidateTotal:candidates.length,candidatePage:page,candidatePages:Math.max(1,Math.ceil(candidates.length/size)),verifiedAbsent:candidates.filter(r=>r.current_relation==='absent').length,unverified:candidates.filter(r=>r.current_relation==='unverified').length,basis:"count_only_investigation",note:"この時点で総数が減ったことだけが確実です。過去に保存した人のうち現在の関係を確認する必要がある人を照合候補として表示します。候補をこの減少の本人と決めつけません。"};
 }
@@ -39,7 +39,7 @@ async function investigate(scope:string,key:string,page=1){
  if(!key||key.length>400||key.startsWith("unknown:"))throw new Error("PERSON_REQUIRED");
  const [relations,events,history]=await Promise.all([
   db.from("insight_relations").select(PERSON_FIELDS).eq("member_id",scope).eq("person_key",key),
-  db.from("insight_relation_history_rows").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
+  db.from("insight_relation_history_current").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).order("id",{ascending:false}).range((page-1)*50,page*50-1),
   db.from("insight_social_comparison_history").select("id,previous_following,previous_follower,is_following,is_follower,observed_at,observation_kind",{count:"exact"}).eq("member_id",scope).eq("person_key",key).order("observed_at",{ascending:false}).range((page-1)*50,page*50-1)
  ]);if(relations.error)throw relations.error;if(events.error)throw events.error;if(history.error)throw history.error;
  return{ok:true,personKey:key,relations:relations.data||[],relationshipHistory:history.data||[],inspectionPage:page,inspectionPages:Math.max(1,Math.ceil(Math.max(history.count||0,events.count||0)/50)),events:await annotate(scope,events.data||[]),basis:"saved_comparisons",note:"保存した一覧と照合記録です。候補・未確定の記録は、最新一覧の範囲外になった可能性があります。解除・退会・ブロックなどの原因は断定しません。"};
@@ -54,19 +54,29 @@ async function windowPeople(scope:string,direction:string,window:string){
  const{data,error}=await q.limit(1000);if(error)throw error;return data||[];
 }
 const EVENT_FIELDS="id,run_id,direction,event_type,person_key,actor_name,actor_url,actor_image_url,detected_at,change_count";
-const HISTORY_FIELDS=EVENT_FIELDS+",evidence,identity_exact,source,evidence_window_start";
+const HISTORY_FIELDS=EVENT_FIELDS+",evidence,identity_exact,source,evidence_window_start,current_relation,current_is_following,current_is_follower,current_verified_at,current_following_verified_at,current_follower_verified_at,current_evidence,current_direction_present,current_direction_verified_at,candidate_resolved";
 async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,size:number){
  const direction=String(b.direction||"all"),change=b.action==="investigation"?"removed":String(b.change||"all"),from=valid(b.dateFrom),to=valid(b.dateTo),term=searchText(b.query);
  const chunks:(string[]|null)[]=keys===null?[null]:Array.from({length:Math.ceil(keys.length/80)},(_,i)=>keys.slice(i*80,(i+1)*80));
  let total=0;const rows:any[]=[];
  for(let i=0;i<chunks.length;i+=3){
   const results=await Promise.all(chunks.slice(i,i+3).map(async chunk=>{
-   let q=db.from("insight_relation_history_rows").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
+   let q=db.from("insight_relation_history_current").select(HISTORY_FIELDS,{count:"exact"}).eq("member_id",scope).not("person_key","like","aggregate:%");
    if(chunk)q=q.in("person_key",chunk);
    
    if(direction==="followers"||direction==="followings")q=q.eq("direction",direction);
    if(change==="added"||change==="removed")q=q.eq("event_type",change);
-   if(term)q=q.or(`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`);
+   // Unidentified count drops and finite-window removal observations are a separate
+   // investigation queue, never verified changes. Resolve candidates using the
+   // latest dated relationship evidence in SQL before counting or paginating.
+   if(b.action==="investigation")q=q.eq("identity_exact",false).eq("candidate_resolved",false);
+   else if(change==="removed")q=q.eq("identity_exact",true);
+   const policy=b.action!=="investigation"&&change!=="removed"&&change!=="added"?"event_type.eq.added,identity_exact.eq.true":null;
+   const search=term?`actor_name.ilike.%${term}%,actor_url.ilike.%${term}%`:null;
+   // PostgREST receives one logical parameter so a searched all-history view
+   // cannot replace its confirmed-removal policy with the search condition.
+   if(policy&&search)q=q.or(`and(or(${policy}),or(${search}))`);
+   else if(policy||search)q=q.or((policy||search)!);
    if(from)q=q.gte("detected_at",from);if(to)q=q.lt("detected_at",to);
    q=q.order("detected_at",{ascending:false}).order("id",{ascending:false});
    if(chunk===null)return await q.range(offset,offset+size-1);
@@ -80,47 +90,33 @@ async function windowEvents(scope:string,b:any,keys:string[]|null,offset:number,
  rows.sort((a,b)=>String(b.detected_at).localeCompare(String(a.detected_at))||String(b.id).localeCompare(String(a.id)));
  return{total,rows:await annotate(scope,keys===null?rows:rows.slice(offset,offset+size))};
 }
-function comparisonRows(relations:any[],verified:any[],latest:any){
- const following=new Map(relations.filter(x=>x.direction==="followings").map(x=>[x.person_key,x]));
- const followers=new Map(relations.filter(x=>x.direction==="followers").map(x=>[x.person_key,x]));
- const exact=new Map(verified.map(x=>[x.person_key,x]));
- const keys=new Set([...following.keys(),...followers.keys(),...exact.keys()]);
- return [...keys].map(key=>{
-  const a=following.get(key),b=followers.get(key),v=exact.get(key),person=v||a||b;
-  const value=(direction:string,row:any,field:string)=>{
-   const run=latest[direction],newer=run?.complete&&Date.parse(run.created_at)>Date.parse(v?.checked_at||'1970-01-01');
-   if(newer)return Boolean(row);
-   if(row&&Date.parse(row.last_seen_at)>Date.parse(v?.checked_at||'1970-01-01'))return true;
-   if(typeof v?.[field]==="boolean")return v[field];
-   return row?true:run?.complete?false:null;
-  };
-  const isFollowing=value('followings',a,'is_following'),isFollower=value('followers',b,'is_follower');
-  const relation=isFollowing===true&&isFollower===true?'mutual':isFollowing===true&&isFollower===false?'following_only':isFollowing===false&&isFollower===true?'follower_only':isFollowing===false&&isFollower===false?'none':'unknown';
-  return{...person,person_key:key,is_following:isFollowing,is_follower:isFollower,relation,
-   following_rank:a?.source_rank??v?.following_rank??null,follower_rank:b?.source_rank??v?.follower_rank??null,
-   lost_at:relation==='following_only'?v?.lost_at||null:null,gained_at:relation==='mutual'?v?.gained_at||null:null,
-   checked_at:v?.checked_at||[a?.last_seen_at,b?.last_seen_at].filter(Boolean).sort()[0]||null,
-   evidence:v?'authenticated_relationship':'saved_lists',identity_exact:isFollowing!==null&&isFollower!==null};
- }).filter(x=>x.relation!=='none');
+async function historySummary(scope:string,b:any){
+ const direction=["followers","followings"].includes(b.direction)?String(b.direction):"all";
+ const{data,error}=await db.rpc("insight_social_history_summary",{p_member:scope,p_direction:direction,p_from:valid(b.dateFrom),p_to:valid(b.dateTo),p_query:searchText(b.query)||null});
+ if(error)throw error;return data;
+}
+function comparisonWindow(current:any[],b:any){
+ const window=b.window==='latest'?'latest':'oldest',ascending=window==='latest',rank=(r:any)=>Number(r.following_rank??r.follower_rank??0);
+ const all=current.filter(r=>r.relation!=='none').map(r=>({...r,lost_at:r.relation==='following_only'?r.lost_at||null:null,gained_at:r.relation==='mutual'?r.gained_at||null:null})).sort((a,b)=>Number(b.is_following===true)-Number(a.is_following===true)||(ascending?rank(a)-rank(b):rank(b)-rank(a))||a.person_key.localeCompare(b.person_key));
+ // Select one shared window before tabs/search so changing filters cannot
+ // silently substitute a different set of people.
+ const selected=all.slice(0,1000),counts:any={all:selected.length,lost:0,following_only:0,mutual:0,follower_only:0,unknown:0,gained:0};
+ for(const r of selected){counts[r.relation]=(counts[r.relation]||0)+1;if(r.lost_at)counts.lost++;if(r.gained_at)counts.gained++}
+ const filter=String(b.relationship||'following_only'),term=searchText(b.query).toLowerCase();
+ const rows=selected.filter(r=>(filter==='all'||filter==='lost'&&r.lost_at||filter==='gained'&&r.gained_at||r.relation===filter)&&(!term||String(r.actor_name||'').normalize('NFKC').toLowerCase().includes(term)||String(r.actor_url||'').toLowerCase().includes(term)));
+ return{rows,counts,window,windowTotal:selected.length,selfFollowingCount:all.filter(r=>r.is_following===true).length};
 }
 async function comparison(scope:string,noteId:string,b:any,page:number,pageSize:number){
- const allRows=async(table:string,fields:string,active=false)=>{const rows:any[]=[];for(let from=0;from<20000;from+=1000){let q=db.from(table).select(fields).eq('member_id',scope);if(active)q=q.eq('active',true);const{data,error}=await q.order('person_key').range(from,from+999);if(error)throw error;rows.push(...(data||[]));if(!data||data.length<1000)break}return rows};
- const [relations,verified,runs,statusResult]=await Promise.all([
-  allRows('insight_relations',PERSON_FIELDS,true),allRows('insight_social_comparisons','*'),
+ const allRows=async(table:string,fields:string)=>{const rows:any[]=[];for(let from=0;from<20000;from+=1000){const q=db.from(table).select(fields).eq('member_id',scope);const{data,error}=await q.order('person_key').range(from,from+999);if(error)throw error;rows.push(...(data||[]));if(!data||data.length<1000)break}return rows};
+ const [current,runs,statusResult]=await Promise.all([
+  allRows('insight_social_current_people','*'),
   db.from('insight_relation_sync_runs').select('direction,expected_count,received_count,complete,created_at,error').eq('member_id',scope).order('created_at',{ascending:false}).limit(20),
   db.from('insight_social_comparison_status').select('checked_at,complete,following_total,follower_total,following_checked,follower_checked,error').eq('member_id',scope).maybeSingle()
  ]);
  if(runs.error)throw runs.error;if(statusResult.error)throw statusResult.error;
  const latest:any={};for(const r of runs.data||[])if(!latest[r.direction])latest[r.direction]=r;
- const window=b.window==='latest'?'latest':'oldest',ascending=window==='latest',rank=(r:any)=>Number(r.following_rank??r.follower_rank??0);
- const all=comparisonRows(relations,verified,latest).sort((a,b)=>Number(b.is_following===true)-Number(a.is_following===true)||(ascending?rank(a)-rank(b):rank(b)-rank(a))||a.person_key.localeCompare(b.person_key));
- // The comparison window is selected before filtering, so every tab uses
- // the same people. The initial window starts with my own oldest followings.
- const selected=all.slice(0,1000),counts:any={all:selected.length,lost:0,following_only:0,mutual:0,follower_only:0,unknown:0,gained:0};
- for(const r of selected){counts[r.relation]=(counts[r.relation]||0)+1;if(r.lost_at)counts.lost++;if(r.gained_at)counts.gained++}
- const filter=String(b.relationship||'following_only'),term=searchText(b.query).toLowerCase();
- const rows=selected.filter(r=>(filter==='all'||filter==='lost'&&r.lost_at||filter==='gained'&&r.gained_at||r.relation===filter)&&(!term||String(r.actor_name||'').normalize('NFKC').toLowerCase().includes(term)||String(r.actor_url||'').toLowerCase().includes(term)));
- return{ok:true,rows:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,counts,page,pageSize,window,windowTotal:selected.length,latest,status:statusResult.data,noteId,basis:'mutual_relationship',selfFollowingCount:all.filter(r=>r.is_following===true).length};
+ const selected=comparisonWindow(current,b),rows=selected.rows;
+ return{ok:true,...selected,rows:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,page,pageSize,latest,status:statusResult.data,noteId,basis:'mutual_relationship'};
 }
 Deno.serve(async req=>{
  if(req.method==="OPTIONS")return new Response("ok",{headers:H});
@@ -130,12 +126,13 @@ Deno.serve(async req=>{
   if(action==="comparison")return out(await comparison(m.scope,m.noteId,b,page,pageSize));
   if(action==="investigate")return out(await investigate(m.scope,String(b.personKey||""),page));
   const window=["latest","oldest","all"].includes(b.window)?String(b.window):action==="people"?"latest":"all",direction=b.direction==="followings"?"followings":"followers";
-  const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId),window==="all"?(action==="people"?savedPeople(m.scope,direction):Promise.resolve(null)):windowPeople(m.scope,direction,window)]);
+  const [latest,people]=await Promise.all([latestRuns(m.scope,m.noteId,page===1||b.refreshLive===true),window==="all"?(action==="people"?savedPeople(m.scope,direction):Promise.resolve(null)):windowPeople(m.scope,direction,window)]);
   if(action==="people"){
    const term=searchText(b.query).toLowerCase(),list=(people||[]).filter((r:any)=>!term||String(r.actor_name||"").normalize("NFKC").toLowerCase().includes(term)||String(r.actor_url||"").toLowerCase().includes(term));
    return out({ok:true,page,pageSize,total:list.length,windowTotal:people?.length||0,rows:list.slice(offset,offset+pageSize),direction,run:latest[direction],latest,noteId:m.noteId,window,basis:window==="all"?"all_saved_people":window==="oldest"?"first_saved_people":"latest_snapshot"});
   }
-  const result=await windowEvents(m.scope,{...b,action,direction:window==="all"?String(b.direction||"all"):direction},people?.map((r:any)=>r.person_key)||null,offset,pageSize);
-  return out({ok:true,...result,page,pageSize,latest,noteId:m.noteId,window,windowTotal:people?.length??null});
+  const historyFilters={...b,action,direction:window==="all"?String(b.direction||"all"):direction};
+  const [result,summary]=await Promise.all([windowEvents(m.scope,historyFilters,people?.map((r:any)=>r.person_key)||null,offset,pageSize),historySummary(m.scope,historyFilters)]);
+  return out({ok:true,...result,historySummary:summary,page,pageSize,latest,noteId:m.noteId,window,windowTotal:people?.length??null});
  }catch(e){const msg=e instanceof Error?e.message:String(e);console.error(msg);return out({ok:false,error:msg},/LOGIN|SESSION|INACTIVE/.test(msg)?401:500)}
 });

@@ -11,3 +11,14 @@
 .mis2-investigate-guide{display:grid;gap:3px;margin:8px 0;padding:10px 12px;border:1px solid #b9853a;border-radius:11px;background:linear-gradient(145deg,#2a2115,#15191d);color:#f7e4bd}.mis2-investigate-guide strong{font-size:12px}.mis2-investigate-guide span{font-size:10px;line-height:1.5;color:#cdbf9f}.mis2-viewtabs button:last-child{border-color:#6b5532}.mis2-viewtabs button:last-child.active{border-color:#e4a84f;background:#3a2b18;color:#fff1cf}
 
 .mis2-list article.candidate{border-left:4px solid #cba966}.mis2-list article.candidate strong{color:#efd28f;font-size:12px}
+.mis2-social-root>.mis2-viewtabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mis2-history-scope{margin:9px 0;padding:9px 11px;border:1px solid #38566c;border-radius:9px;background:#0c202d;color:#a9c8d8;font-size:11px;line-height:1.6}
+.mis2-body .mis2-current-relation{display:grid;gap:3px;border-top:1px solid #284253;margin-top:8px;padding-top:7px;line-height:1.5}
+.mis2-current-relation b{white-space:normal;overflow:visible;text-overflow:clip;font-size:11px;color:#b6d5e2}
+.mis2-current-relation.restored b,.mis2-current-relation.restored span{color:#a6ebc2}
+.mis2-current-relation span{font-size:10px}
+.mis2-current-relation time{margin:0}
+.mis2-investigate-guide a{justify-self:start;margin-top:5px;color:#9fe9fb;font-size:11px;font-weight:800;line-height:1.5;text-underline-offset:3px;overflow-wrap:anywhere}
+.mis2-list article.count-only{border-left:4px solid #7da0bd}.mis2-list article.count-only strong{color:#bdd8ed;font-size:12px}
+.mis2-history-summary{margin:10px 0;padding:10px;border:1px solid #38566c;border-radius:10px;background:#0a1b26}
+.mis2-history-summary small{display:block;color:#9bb5c8;font-size:10px;line-height:1.5}.mis2-history-summary dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.mis2-history-summary dl>div{min-width:0}.mis2-history-summary dt{font-size:10px;line-height:1.4;color:#b5c8d7}.mis2-history-summary dd{margin:2px 0 0;font-size:17px;font-weight:800;color:#d8f3fc}.mis2-history-summary p{font-size:10px;line-height:1.5;color:#99b2c5;margin:5px 0 0}

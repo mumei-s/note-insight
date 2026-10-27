@@ -6,16 +6,17 @@ import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 const source=readFileSync('public/note-insight-social-compare-v1.js','utf8');
 const plain=x=>JSON.parse(JSON.stringify(x));
-function comparison(){const src=readFileSync('supabase/functions/insight-social-events/index.ts','utf8'),part=src.slice(src.indexOf('function comparisonRows('),src.indexOf('async function comparison(')),ctx=vm.createContext({});vm.runInContext(ts.transpileModule(part+'\nthis.compare=comparisonRows;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,ctx);return ctx.compare}
-const row=(key,direction)=>({person_key:key,direction,actor_name:key,source_rank:key==='older'?950:1,last_seen_at:'2026-09-22T00:00:00Z'});
-test('フォローとフォロワーを相手ごとに照合し、1000人範囲外は解除としない',()=>{
- const r=comparison()([row('mutual','followings'),row('mutual','followers'),row('older','followings')],[],{followers:{complete:false},followings:{complete:true}});
- assert.equal(r.find(x=>x.person_key==='mutual').relation,'mutual');const older=r.find(x=>x.person_key==='older');assert.equal(older.is_follower,null);assert.equal(older.relation,'unknown');assert.equal(older.lost_at,null);
+function comparison(){const src=readFileSync('supabase/functions/insight-social-events/index.ts','utf8'),part=src.slice(src.indexOf('function comparisonWindow('),src.indexOf('async function comparison(')),ctx=vm.createContext({searchText:v=>String(v||'')});vm.runInContext(ts.transpileModule(part+'\nthis.compare=comparisonWindow;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,ctx);return ctx.compare}
+test('1000人の窓を関係の条件より先に選び、別の人で補充しない',()=>{
+ const rows=Array.from({length:1001},(_,i)=>({person_key:'p'+i,actor_name:'p'+i,is_following:true,following_rank:i+1,relation:i===0?'following_only':'mutual'}));
+ const result=comparison()(rows,{window:'oldest',relationship:'following_only'});
+ assert.equal(result.windowTotal,1000);assert.equal(result.rows.length,0);assert.equal(result.counts.mutual,1000);
 });
-test('本人の実関係フラグで範囲外の相手も照合し、初回の非相互を過去の解除と混同しない',()=>{
- const r=comparison()([row('older','followings')],[{person_key:'older',is_following:true,is_follower:false,checked_at:'2026-09-22T01:00:00Z',lost_at:null}],{});
- assert.equal(r[0].relation,'following_only');assert.equal(r[0].identity_exact,true);assert.equal(r[0].lost_at,null);
- const lost=comparison()([row('older','followings')],[{person_key:'older',is_following:true,is_follower:false,checked_at:'2026-09-22T01:00:00Z',lost_at:'2026-09-22T01:00:00Z'}],{});assert.equal(lost[0].lost_at,'2026-09-22T01:00:00Z');
+test('最新と下からの窓は同じ照合情報を使い、人物キーで同順位を固定する',()=>{
+ const rows=[{person_key:'older',is_following:true,following_rank:950,relation:'following_only',lost_at:'2026-09-22T01:00:00Z'}, {person_key:'newer',is_following:true,following_rank:1,relation:'mutual'}, {person_key:'follower',is_following:false,follower_rank:1,relation:'follower_only'}];
+ assert.deepEqual(plain(comparison()(rows,{window:'oldest',relationship:'all'}).rows.map(r=>r.person_key)),['older','newer','follower']);
+ assert.deepEqual(plain(comparison()(rows,{window:'latest',relationship:'all'}).rows.map(r=>r.person_key)),['newer','older','follower']);
+ assert.equal(comparison()(rows,{relationship:'lost'}).rows[0].person_key,'older');
 });
 async function fixture(t,{legacy=false,authorized=true,history=[]}={}){
  const dom=new JSDOM('<main></main>',{url:'https://note.com/tester',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,gm=new Map(),calls=[],writes=[];t.after(()=>dom.window.close());

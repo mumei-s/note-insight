@@ -6,10 +6,10 @@ import "./insight-top-install-v16";
 import "./insight-notification-update-route-v1";
 import "./insight-update-guide-v18";
 
-export const CURRENT_INSIGHT_APP_VERSION = "2026.10.28.1";
-export const CURRENT_NOTIFICATION_VERSION = "3.6.53";
+export const CURRENT_INSIGHT_APP_VERSION = "2026.10.28.2";
+export const CURRENT_NOTIFICATION_VERSION = "3.6.54";
 export const CURRENT_DASHBOARD_VERSION = "1.7.5";
-export const CURRENT_DM_VERSION = "1.4.13";
+export const CURRENT_DM_VERSION = "1.4.14";
 export const NOTIFICATION_VERSION_STORAGE_KEY = "mumei-notification-tool-version";
 export const DASHBOARD_VERSION_STORAGE_KEY = "mumei-dashboard-tool-version";
 export const DM_VERSION_STORAGE_KEY = "mumei-dm-tool-version";

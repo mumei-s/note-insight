@@ -185,8 +185,8 @@ test('ordinary note pages never start follower scans or inspect auth/editor traf
   assert.match(dmNet,/const dmSurface=/);
   assert.match(dmNet,/!dmSurface\(\)&&!apiEndpoint\(meta\.url\)&&!roomFromUrl\(meta\.url\)/);
   assert.match(dmNet,/if\(!res\|\|!\/\^\\\/messages\\\/rooms/);
-  assert.match(noticeUser,/note-insight-social-compare-v1\.js\?v=103/);
-  assert.match(dmUser,/note-insight-social-compare-v1\.js\?v=103/);
+  const scannerVersion=social.match(/const VERSION='([^']+)'/)[1];
+  for(const wrapper of [noticeUser,dmUser])assert.ok(wrapper.includes('note-insight-social-compare-v1.js?v='+scannerVersion.replaceAll('.','')),'load the current scanner instead of the previous require cache');
 });
 
 

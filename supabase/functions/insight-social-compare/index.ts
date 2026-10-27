@@ -20,12 +20,11 @@ async function identity(req:Request){
   return{scope,noteId:String(app.note_id).toLowerCase()};
 }
 async function archivedCandidates(scope:string,after:string){
- const all=async(table:string,fields:string)=>{const rows:any[]=[];for(let from=0;;from+=1000){const r=await db.from(table).select(fields).eq("member_id",scope).order("person_key").range(from,from+999);if(r.error)throw r.error;rows.push(...(r.data||[]));if((r.data||[]).length<1000)break}return rows};
- const [people,verified]=await Promise.all([all("insight_relations","person_key,actor_name,actor_url,last_seen_at"),all("insight_social_comparisons","person_key,actor_name,actor_url,checked_at,is_following,is_follower")]);
- const seen=new Map(verified.map(r=>[r.person_key,typeof r.is_following==="boolean"&&typeof r.is_follower==="boolean"?Date.parse(r.checked_at):0])),cutoff=Date.now()-86400000,unique=new Map<string,any>();
- for(const r of [...people,...verified])if(r.person_key>after&&Number(seen.get(r.person_key)||0)<cutoff&&/^https:\/\/note\.com\/[A-Za-z0-9_-]+\/?$/.test(r.actor_url||""))unique.set(r.person_key,{person_key:r.person_key,actor_name:r.actor_name,actor_url:r.actor_url});
- const pending=[...unique.values()].sort((a,b)=>a.person_key<b.person_key?-1:a.person_key>b.person_key?1:0),rows=pending.slice(0,20);
- return{ok:true,rows,nextCursor:pending.length>20?rows.at(-1).person_key:null,remaining:pending.length};
+ // Scope and cursor are applied in Postgres. Returning one small batch avoids
+ // downloading every saved person and comparison for each 20-profile batch.
+ const{data,error}=await db.rpc("insight_social_history_candidates",{p_member:scope,p_after:after,p_limit:20});
+ if(error)throw error;
+ return{ok:true,...data};
 }
 async function acceptedRows(scope:string,input:any[]){
  const rows:any[]=[];

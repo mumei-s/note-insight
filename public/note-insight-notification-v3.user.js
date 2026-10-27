@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.53
-// @description  本人通知V3.6.53。🔔操作パネルを状態追加前と同じ高さに戻しました。フィルターの状態は既存の操作行から確認できます。初回は全履歴、次回は保存済み境界までの差分を保存します。
+// @version      3.6.54
+// @description  本人通知V3.6.54。保存済み人物のフォロー関係を、最新一覧を読み直さずに履歴から照合できます。🔔操作パネルの高さと保存済み境界までの差分取得は維持します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -33,14 +33,14 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-account-pair-v1.js?v=101
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-outgoing-comment-capture-v1.js?v=100
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-outgoing-comment-reader-v1.js?v=101
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=103
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=104
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='3.6.53',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.54',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function publishLive(){if(location.origin!=='https://mumei-s.github.io'||!location.pathname.startsWith('/note-insight/'))return;if(!document.documentElement){document.addEventListener('DOMContentLoaded',publishLive,{once:true});return}const root=document.documentElement;if(root.getAttribute('data-mumei-notification-live-version')!==VERSION)root.setAttribute('data-mumei-notification-live-version',VERSION);window.dispatchEvent(new Event('mumei-insight-tool-ready'))}

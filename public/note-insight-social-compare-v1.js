@@ -2,8 +2,8 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.3',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
-const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1';
+const VERSION='1.0.4',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function get(k,d){if(typeof gm().getValue==='function')return gm().getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
@@ -42,7 +42,7 @@ function show(message,id,paused=false,finished=false){
 async function run(force=false){
  if(!force&&sessionStorage.getItem(ACTIVE)!==location.pathname)return;
  if(running||document.visibilityState==='hidden'||!/^\/[a-z0-9_-]+\/?$/i.test(location.pathname))return;
- running=true;stopped=false;let id='',auth=null,state=null,lock=null;
+ running=true;stopped=false;let id='',auth=null,state=null,lock=null,stateKey='';
  const w=pageWindow();
  const allowed=()=>!stopped&&document.visibilityState!=='hidden'&&ownPath(id);
  try{
@@ -51,16 +51,17 @@ async function run(force=false){
   if(w.__mumeiSocialCompareBusy)return;lock={noteId:id};w.__mumeiSocialCompareBusy=lock;
   const p=await json('/api/v2/creators/'+encodeURIComponent(id)),c=p.data||p;
   if(String(c.urlname||c.urlName||'').toLowerCase()!==id||!c.key||c.isMyself!==true)throw new Error('SOCIAL_ACCOUNT_UNVERIFIED');
-  state=await get(STATE+id,null);
+  const historyOnly=sessionStorage.getItem(MODE)==='history';stateKey=STATE+id+(historyOnly?':history':'');
+  state=await get(stateKey,null);
   if(state?.complete&&!force&&Date.now()-Number(state.finishedAt||0)<COOLDOWN)return;
   if(!state||state.complete||state.error==='SOCIAL_LIST_CHANGED'){
    const followingTotal=Math.max(0,Number(c.followingCount??c.following_count)||0),followerTotal=Math.max(0,Number(c.followerCount??c.follower_count)||0);
-   state={creatorKey:String(c.key),followingTotal,followerTotal,followingKeys:[],followerKeys:[],direction:'followings',page:Math.ceil(Math.min(1000,followingTotal)/20),complete:false,startedAt:Date.now(),version:VERSION,historyCursor:'',historyChecked:0,historySkipped:0};
-   await set(STATE+id,state);
+   state={creatorKey:String(c.key),followingTotal,followerTotal,followingKeys:[],followerKeys:[],direction:historyOnly?'history':'followings',page:Math.ceil(Math.min(1000,followingTotal)/20),complete:false,startedAt:Date.now(),version:VERSION,historyCursor:'',historyChecked:0,historySkipped:0};
+   await set(stateKey,state);
   }
-  const status=()=>({followingTotal:state.followingTotal,followerTotal:state.followerTotal,followingChecked:state.followingKeys.length,followerChecked:state.followerKeys.length,complete:state.complete,error:state.error||null});
+  const status=()=>({followingTotal:state.followingTotal,followerTotal:state.followerTotal,followingChecked:state.followingKeys.length,followerChecked:state.followerKeys.length,complete:state.complete&&!(state.historySkipped||0)&&state.followingKeys.length>=state.followingTotal&&state.followerKeys.length>=state.followerTotal,error:state.error||null});
   const progress=()=>`照合中 · フォロー ${state.followingKeys.length}/${Math.min(1000,state.followingTotal)}人 · フォロワー ${state.followerKeys.length}/${Math.min(1000,state.followerTotal)}人`;
-  show(progress(),id);
+  show(historyOnly?'保存済みの人物を確認します。最新1,000人の一覧は読み直しません。':progress(),id);
   while(allowed()){
    if(state.direction==='history'){
     const batch=await save({action:'history_candidates',noteId:id,checkedAt:new Date().toISOString(),after:state.historyCursor||''},auth);
@@ -78,20 +79,20 @@ async function run(force=false){
       if(!ack.confirmedPersonKeys?.includes(row.person_key))throw new Error('SOCIAL_SAVE_UNCONFIRMED');
       state.historyChecked=(state.historyChecked||0)+1;
      }else state.historySkipped=(state.historySkipped||0)+1;
-     state.historyCursor=candidate.person_key;state.error=null;await set(STATE+id,state);await sleep(500);
+     state.historyCursor=candidate.person_key;state.error=null;await set(stateKey,state);await sleep(500);
     }
     if(!allowed())break;
     if(batch.nextCursor)continue;
     state={...state,complete:true,finishedAt:Date.now(),error:state.historySkipped?'SOCIAL_PROFILE_UNVERIFIED:'+state.historySkipped:null};
     if(await account()!==id)throw new Error('NOTE_ACCOUNT_CHANGED');
-    await save({noteId:id,checkedAt:new Date().toISOString(),rows:[],status:status()},auth);await set(STATE+id,state);sessionStorage.removeItem(ACTIVE);
-    show(`保存しました · フォロー${state.followingKeys.length}人・フォロワー${state.followerKeys.length}人・過去の人物${state.historyChecked||0}人${state.historySkipped?`（関係未確認 ${state.historySkipped}人）`:''}`,id,false,true);break;
+    if(!historyOnly)await save({noteId:id,checkedAt:new Date().toISOString(),rows:[],status:status()},auth);await set(stateKey,state);sessionStorage.removeItem(ACTIVE);
+    show(`${historyOnly?'過去の保存人物を確認しました':'保存しました · フォロー'+state.followingKeys.length+'人・フォロワー'+state.followerKeys.length+'人'} · 関係を確認${state.historyChecked||0}人${state.historySkipped?`（未確認 ${state.historySkipped}人）`:''}`,id,false,true);break;
    }
    if(state.page<1){
-    if(state.direction==='followings'){state={...state,direction:'followers',page:Math.ceil(Math.min(1000,state.followerTotal)/20)};await set(STATE+id,state);continue}
+    if(state.direction==='followings'){state={...state,direction:'followers',page:Math.ceil(Math.min(1000,state.followerTotal)/20)};await set(stateKey,state);continue}
     const covered=state.followingKeys.length>=Math.min(1000,state.followingTotal)&&state.followerKeys.length>=Math.min(1000,state.followerTotal);
     if(!covered)throw new Error('SOCIAL_LIST_CHANGED');
-    state={...state,direction:'history',historyCursor:state.historyCursor||'',historyChecked:state.historyChecked||0,historySkipped:state.historySkipped||0};await set(STATE+id,state);continue;
+    state={...state,direction:'history',historyCursor:state.historyCursor||'',historyChecked:state.historyChecked||0,historySkipped:state.historySkipped||0};await set(stateKey,state);continue;
    }
    const checkedAt=new Date().toISOString(),direction=state.direction,page=state.page;
    const p=await json('/api/v3/users/'+encodeURIComponent(state.creatorKey)+'/'+direction+'?page='+page+'&per=20'),data=p.data||p,raw=data.follows??data.followers??data.followings??data.users;
@@ -105,20 +106,20 @@ async function run(force=false){
    const pendingStatus={...status(),[direction==='followings'?'followingChecked':'followerChecked']:nextKeys.length};
    const ack=await save({noteId:id,checkedAt,rows,status:pendingStatus},auth),confirmed=new Set(ack.confirmedPersonKeys||[]);
    if(rows.some(r=>!confirmed.has(r.person_key)))throw new Error('SOCIAL_SAVE_UNCONFIRMED');
-   state={...state,[field]:nextKeys,page:page-1,error:null};await set(STATE+id,state);
+   state={...state,[field]:nextKeys,page:page-1,error:null};await set(stateKey,state);
    if(allowed())show(progress(),id);
    await sleep(200);
   }
  }catch(e){
   const error=String(e?.message||e);sessionStorage.removeItem(ACTIVE);
-  if(state&&id&&auth){state={...state,error};await set(STATE+id,state).catch(()=>{});
-   if(error!=='NOTE_ACCOUNT_CHANGED')await save({noteId:id,checkedAt:new Date().toISOString(),rows:[],status:{followingTotal:state.followingTotal,followerTotal:state.followerTotal,followingChecked:state.followingKeys.length,followerChecked:state.followerKeys.length,complete:false,error}},auth).catch(()=>{});
+  if(state&&id&&auth){state={...state,error};await set(stateKey,state).catch(()=>{});
+   if(error!=='NOTE_ACCOUNT_CHANGED'&&sessionStorage.getItem(MODE)!=='history')await save({noteId:id,checkedAt:new Date().toISOString(),rows:[],status:{followingTotal:state.followingTotal,followerTotal:state.followerTotal,followingChecked:state.followingKeys.length,followerChecked:state.followerKeys.length,complete:false,error}},auth).catch(()=>{});
   }
   const reason=error==='NOTE_ACCOUNT_CHANGED'?'noteのログイン先が変わりました。':/429/.test(error)?'noteの混雑・回数制限で停止しました。時間を置いて再開してください。':error==='SOCIAL_ACCOUNT_UNVERIFIED'?'本人のプロフィールと確認できませんでした。':'照合が止まりました。保存済みの続きから再開できます。';
   if(id&&!stopped)show(reason+' '+error,id,true);
  }finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy;running=false;if(panel&&stopped)show('停止しました。保存済みの続きから再開できます。',id,true)}
 }
-function start(){const u=new URL(location.href),force=u.searchParams.get('mumei_social_scan')==='1';if(force){sessionStorage.setItem(ACTIVE,location.pathname);u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!==location.pathname)return;void run(force)}
+function start(){const u=new URL(location.href),requested=u.searchParams.get('mumei_social_scan'),force=requested==='1'||requested==='history';if(force){sessionStorage.setItem(ACTIVE,location.pathname);sessionStorage.setItem(MODE,requested==='history'?'history':'full');u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!==location.pathname)return;void run(force)}
 window.addEventListener('pageshow',start);window.addEventListener('focus',start);document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')start()});
 setTimeout(start,2500);
 window.__mumeiSocialComparisonV1={version:VERSION,run,person};

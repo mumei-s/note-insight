@@ -33,9 +33,9 @@ test('人物不明の総数変化は供給されたフラグにかかわらず�
  const r=rowEvidence({person_key:'unknown:7',evidence:'authenticated_relationship',identity_exact:true},{complete:true});assert.equal(r.identity_exact,false);assert.equal(r.evidence,'count_only');
 });
 test('ページ間で同時刻の仮想履歴IDの順番をサーバーと同じ文字列順に保つ',async()=>{
- const part=source.slice(source.indexOf('const EVENT_FIELDS='),source.indexOf('function comparisonRows('));
+ const part=source.slice(source.indexOf('const EVENT_FIELDS='),source.indexOf('function comparisonWindow('));
  const rows=[{id:'archive:9',person_key:'p1',member_id:'owner',direction:'followers',event_type:'removed',detected_at:'2026-10-28T00:00:00Z'}, {id:'event:2',person_key:'p2',member_id:'owner',direction:'followers',event_type:'removed',detected_at:'2026-10-28T00:00:00Z'}, {id:'archive:10',person_key:'p3',member_id:'owner',direction:'followers',event_type:'removed',detected_at:'2026-10-28T00:00:00Z'}];
- const ctx=vm.createContext({valid:()=>null,searchText:()=>'',annotate:async(_s,rs)=>rs,db:{from(table){assert.equal(table,'insight_relation_history_rows');const q={select(){return q},eq(){return q},not(){return q},in(){return q},order(){return q},range:async()=>({data:rows,count:rows.length,error:null})};return q}}});
+ const ctx=vm.createContext({valid:()=>null,searchText:()=>'',annotate:async(_s,rs)=>rs,db:{from(table){assert.equal(table,'insight_relation_history_current');const q={select(){return q},eq(){return q},not(){return q},in(){return q},order(){return q},range:async()=>({data:rows,count:rows.length,error:null})};return q}}});
  vm.runInContext(ts.transpileModule(part+'\nthis.read=windowEvents;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,ctx);
  const actual=await ctx.read('owner',{action:'events',direction:'followers',change:'removed'},['p1','p2','p3'],0,20);assert.deepEqual(Array.from(actual.rows,r=>r.id),['event:2','archive:9','archive:10']);
 });

@@ -5,23 +5,23 @@ import ts from 'typescript';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 const backend=readFileSync('supabase/functions/insight-social-events/index.ts','utf8');
-const part=backend.slice(backend.indexOf('function comparisonRows('),backend.indexOf('async function comparison('));
-const context=vm.createContext({});vm.runInContext(ts.transpileModule(part+'\nthis.rows=comparisonRows;',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,context);
-test('最新1000人の枠外を相手の解除として確定しない',()=>{
- const r=context.rows([{person_key:'p',direction:'followings',source_rank:895,last_seen_at:'2026-09-22T01:00:00Z'}],[],{followers:{complete:false}})[0];
- assert.equal(r.is_following,true);assert.equal(r.is_follower,null);assert.equal(r.relation,'unknown');assert.equal(r.lost_at,null);
+const part=backend.slice(backend.indexOf('function comparisonWindow('),backend.indexOf('async function comparison('));
+const context=vm.createContext({searchText:v=>String(v||'')});vm.runInContext(ts.transpileModule(part+'\nthis.read=comparisonWindow;',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,context);
+test('範囲外の未確認人物を相手の解除として確定しない',()=>{
+ const result=context.read([{person_key:'p',is_following:true,is_follower:null,relation:'unknown',lost_at:null}],{relationship:'lost'});
+ assert.equal(result.rows.length,0);assert.equal(result.counts.unknown,1);assert.equal(result.counts.lost,0);
 });
-test('本人の相互確認で減少した相手は古い取得範囲にいなくても表示する',()=>{
- const r=context.rows([{person_key:'p',direction:'followings',source_rank:895,last_seen_at:'2026-09-22T01:00:00Z'}],[{person_key:'p',is_following:true,is_follower:false,checked_at:'2026-09-22T02:00:00Z',lost_at:'2026-09-22T02:00:00Z'}],{followers:{complete:false}})[0];
- assert.equal(r.relation,'following_only');assert.equal(r.lost_at,'2026-09-22T02:00:00Z');assert.equal(r.identity_exact,true);
+test('本人確認で相互から減った相手を減少の条件で表示する',()=>{
+ const result=context.read([{person_key:'p',is_following:true,is_follower:false,relation:'following_only',lost_at:'2026-09-22T02:00:00Z'}],{relationship:'lost'});
+ assert.equal(result.rows.length,1);assert.equal(result.rows[0].lost_at,'2026-09-22T02:00:00Z');assert.equal(result.counts.lost,1);
 });
 test('初回のフォロー返しなしを新しい減少履歴にしない',()=>{
- const r=context.rows([],[{person_key:'p',is_following:true,is_follower:false,checked_at:'2026-09-22T02:00:00Z'}],{})[0];
- assert.equal(r.relation,'following_only');assert.equal(r.lost_at,null);
+ const result=context.read([{person_key:'p',is_following:true,is_follower:false,relation:'following_only',lost_at:null}],{relationship:'lost'});
+ assert.equal(result.rows.length,0);assert.equal(result.counts.following_only,1);assert.equal(result.counts.lost,0);
 });
-test('新しい全件照合を古い相互確認で上書きしない',()=>{
- const r=context.rows([{person_key:'p',direction:'followers',last_seen_at:'2026-09-22T03:00:00Z'}],[{person_key:'p',is_following:true,is_follower:true,checked_at:'2026-09-22T02:00:00Z'}],{followings:{complete:true,created_at:'2026-09-22T03:00:00Z'}})[0];
- assert.equal(r.is_following,false);assert.equal(r.relation,'follower_only');
+test('現在相互の人に古い減少フラグが残っても減の一覧に混ぜない',()=>{
+ const result=context.read([{person_key:'p',is_following:true,is_follower:true,relation:'mutual',lost_at:'2026-09-22T02:00:00Z'}],{relationship:'lost'});
+ assert.equal(result.rows.length,0);assert.equal(result.counts.mutual,1);assert.equal(result.counts.lost,0);
 });
 function reader(t,myself=true,legacy=false){
  const dom=new JSDOM('<main></main>',{url:'https://note.com/tester',runScripts:'outside-only'}),w=dom.window;t.after(()=>w.close());
@@ -45,7 +45,7 @@ test('本人と確認できない公開プロフィールでは照合を保存�
 test('人数だけの減少に候補者を勝手に割り当てず、現在確認済みの人を候補から除く',()=>{
  const source=readFileSync('supabase/functions/insight-social-events/index.ts','utf8'),part=source.slice(source.indexOf('function investigationCandidates('),source.indexOf('async function investigateUnknown(')),c=vm.createContext({});vm.runInContext(ts.transpileModule(part+'\nthis.candidates=investigationCandidates',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,c);
  const people=['outside','present','absent','future'].map(key=>({person_key:key,first_seen_at:key==='future'?'2026-09-27T01:00:00Z':'2026-09-01T00:00:00Z',last_seen_at:'2026-09-20T00:00:00Z',active:false}));
- const result=c.candidates(people,[{person_key:'present',is_follower:true,checked_at:'2026-09-26T00:00:00Z'},{person_key:'absent',is_follower:false,checked_at:'2026-09-26T00:00:00Z'}],{direction:'followers',detected_at:'2026-09-25T00:00:00Z'});
+ const result=c.candidates(people,[{person_key:'present',is_follower:true,follower_verified_at:'2026-09-26T00:00:00Z'},{person_key:'absent',is_follower:false,follower_verified_at:'2026-09-26T00:00:00Z'}],{direction:'followers',detected_at:'2026-09-25T00:00:00Z'});
  assert.deepEqual(Array.from(result,r=>r.person_key),['absent','outside']);assert.equal(result[0].assigned_to_event,false);assert.equal(result[1].current_relation,'unverified');
 });
 

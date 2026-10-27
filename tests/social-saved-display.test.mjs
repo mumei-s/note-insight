@@ -7,7 +7,7 @@ const tokenKey='fixture-token',scope={account:'tester',token:'token-a'};
 const row=name=>({person_key:'person',actor_name:name,actor_url:'https://note.com/peer',relation:'mutual'});
 const comparison={action:'comparison',window:'latest',relationship:'mutual',query:'',page:2,pageSize:50};
 async function settle(work=()=>{}){await React.act(async()=>{work();await new Promise(r=>setTimeout(r,5));for(let i=0;i<3;i++)await pause()})}
-async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false,historyWindowVersion}={}){
+async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('offline')},delayed=false,historyWindowVersion,historyEvidenceVersion=3}={}){
  let now=Date.now();class Clock extends Date{static now(){return now}}
  const calls=[],timers=[];let deliver,iconCalls=0;
  const fetch=async(_url,init)=>{if(String(_url).endsWith('creator-icons')){iconCalls++;return Response.json({items:[]})}calls.push({body:JSON.parse(init.body),token:init.headers['X-Insight-Token']});return new Promise(resolve=>{deliver=(value,status=200)=>resolve(Response.json(value,{status}))})};
@@ -18,7 +18,7 @@ async function fixture(t,query=comparison,{fallback=async()=>{throw new Error('o
   './insight-member-db-fallback':{memberReadAuthFailure:message=>/INSIGHT_(SESSION_INVALID|LOGIN_REQUIRED|MEMBER_INACTIVE)|HTTP_40[13]/.test(message),memberDbReadFallback:fallback},
  }});
  Object.defineProperty(h.w.document,'visibilityState',{value:'visible',writable:true});h.w.localStorage.setItem(tokenKey,'token-a');
- const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{historyWindowVersion,query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
+ const saved=h.load('src/insight-saved-view.ts');saved.writeSavedInsightView('social-last',scope,{historyWindowVersion,historyEvidenceVersion,query,payload:{ok:true,noteId:'tester',rows:[row('前回の人物')],total:150}},Date.now()-600000);
  const savedKey=saved.savedInsightViewKey('social-last',scope),copy=h.w.localStorage.getItem(savedKey);if(delayed)h.w.localStorage.removeItem(savedKey);
  h.w.setInterval=(fn,ms)=>{const timer={fn,ms,cancelled:false};timers.push(timer);return timer};h.w.clearInterval=timer=>{if(timer)timer.cancelled=true};
  const Component=h.load('src/member-insight-social-v2.tsx').MemberInsightSocialV2;await h.render(Component,{});await settle();
@@ -149,38 +149,35 @@ test('過去から1000人は現在一覧の下端ではなく保存開始時の�
  assert.match(h.body(),/保存開始時からの1,000人/);assert.match(h.body(),/現在の一覧から外れた人も含みます/);assert.match(h.body(),/過去の保存人物/);assert.equal(h.calls.length,1);
 });
 
-test('関係確認で復元した人物と全件照合と人数だけの不明を区別して表示する',async t=>{
+test('関係確認で復元した人物と全件照合の確認済み減少を表示する',async t=>{
  const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
  const h=await fixture(t,query),removed={event_type:'removed',direction:'followers',change_count:1};
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[
   {...removed,id:1,person_key:'verified',actor_name:'履歴から復元した人物',actor_url:'https://note.com/verified',identity_exact:true,evidence:'authenticated_relationship'},
-  {...removed,id:2,person_key:'complete',actor_name:'全件確認した人物',actor_url:'https://note.com/complete',identity_exact:true,evidence:'complete_snapshot'},
-  {...removed,id:3,person_key:'unknown:drop',identity_exact:false,evidence:'count_only'}
- ],total:3}));
- const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,3);
+  {...removed,id:2,person_key:'complete',actor_name:'全件確認した人物',actor_url:'https://note.com/complete',identity_exact:true,evidence:'complete_snapshot'}
+ ],total:2}));
+ const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,2);
  assert.match(articles[0].textContent,/履歴から復元した人物/);assert.match(articles[0].textContent,/関係確認履歴で確認/);assert.doesNotMatch(articles[0].textContent,/全件照合/);
- assert.match(articles[1].textContent,/全件照合で確認/);assert.match(articles[2].textContent,/不明 −1/);assert.doesNotMatch(articles[2].textContent,/全件照合で確認|関係確認履歴で確認/);
+ assert.match(articles[1].textContent,/全件照合で確認/);assert.match(h.body(),/確認済み 2件/);assert.match(h.body(),/減った全人数ではありません/);
 });
 
-test('古い27人と直近の保存人物を候補として表示し、確認済みの減少と人数だけの不明へ混ぜない',async t=>{
- const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+test('調査画面に古い27人と直近の保存人物と人数だけの不明を表示し、減少とは断定しない',async t=>{
+ const query={action:'investigation',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
  const h=await fixture(t,query),removed={event_type:'removed',direction:'followers',detected_at:'2026-10-28T01:00:00Z'};
  const old=Array.from({length:27},(_,i)=>({...removed,id:'event-'+i,person_key:'old-'+i,actor_name:'過去の保存人物'+i,actor_url:'https://note.com/old_'+i,evidence:'window_candidate',identity_exact:false,change_count:1,source:'relation_event'}));
  const recent={...removed,id:'archive-recent',person_key:'recent',actor_name:'直近の保存人物',actor_url:'https://note.com/recent',evidence:'window_candidate',identity_exact:false,change_count:0,source:'saved_archive'};
- const confirmed={...removed,id:'verified',person_key:'verified',actor_name:'関係終了を確認した人物',actor_url:'https://note.com/verified',evidence:'authenticated_relationship',identity_exact:true,change_count:1};
  const unknown={...removed,id:'count',person_key:'unknown:drop',evidence:'count_only',identity_exact:false,change_count:48};
- const rows=[...old,recent,confirmed,unknown];await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:rows.length}));
- const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,30);assert.match(h.body(),/記録 30件/);
+ const rows=[...old,recent,unknown];await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:rows.length}));
+ const articles=[...h.w.document.querySelectorAll('.mis2-list article')];assert.equal(articles.length,29);assert.match(h.body(),/調査記録 29件/);
  assert.equal(articles.filter(article=>article.classList.contains('candidate')).length,28);
  for(const article of articles.slice(0,28)){assert.match(article.textContent,/範囲外・要確認/);assert.doesNotMatch(article.textContent,/【減】|変化を検知|関係確認履歴で確認/)}
  assert.match(articles[0].textContent,/範囲外を検知/);assert.doesNotMatch(articles[0].textContent,/最終確認/);
  assert.match(articles[27].textContent,/直近の保存人物/);assert.match(articles[27].textContent,/最終確認/);assert.match(articles[27].textContent,/減少人数には含めません/);assert.doesNotMatch(articles[27].textContent,/不明 −1/);
- assert.match(articles[28].textContent,/【減】/);assert.match(articles[28].textContent,/関係確認履歴で確認/);
- assert.match(articles[29].textContent,/不明 −48/);assert.doesNotMatch(articles[29].textContent,/直近の保存人物|範囲外・要確認/);
+ assert.match(articles[28].textContent,/不明 −48/);assert.doesNotMatch(articles[28].textContent,/直近の保存人物|範囲外・要確認/);assert.doesNotMatch(h.w.document.querySelector('.mis2-list').textContent,/【減】/);
 });
 
 test('今後の範囲外観測は人数0のまま候補と表示し、検知日時を過去の最終確認日時と混同しない',async t=>{
- const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+ const query={action:'investigation',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
  const h=await fixture(t,query);await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'window:new',event_type:'removed',direction:'followers',person_key:'new-window',actor_name:'新しく範囲外になった人物',actor_url:'https://note.com/new_window',source:'window_observation',evidence:'window_candidate',identity_exact:false,change_count:0,detected_at:'2026-10-28T01:00:00Z'}],total:1}));
  const article=h.w.document.querySelector('.mis2-list article');assert.match(article.textContent,/範囲外・要確認/);assert.match(article.textContent,/範囲外を検知/);assert.doesNotMatch(article.textContent,/【減】|最終確認|不明 −1/);assert.ok(article.classList.contains('candidate'));
 });
@@ -190,7 +187,7 @@ test('スマホ用の短いラベルでも方向と履歴の意味をアクセ�
  const following=h.w.document.querySelector('button[aria-label="あなたが相手をフォロー"]'),followers=h.w.document.querySelector('button[aria-label="相手があなたをフォロー"]');
  assert.equal(following.textContent,'フォロー中');assert.equal(followers.textContent,'フォロワー');
  assert.equal(h.w.document.querySelector('button[aria-label="【増】【減】履歴"]').textContent,'増減履歴');
- assert.equal(h.w.document.querySelector('button[aria-label="拾えなかった減少・不明人物を再調査"]').textContent,'不明分の調査');
+ assert.equal(h.w.document.querySelector('button[aria-label="拾えなかった減少・不明人物を再調査"]').textContent,'未確認・人数のみ');
  assert.equal(following.title,'あなたが相手をフォロー');assert.equal(followers.title,'相手があなたをフォロー');
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[row('確認済みの人物')],total:1}));
  await h.click(following);await settle();assert.equal(h.calls.at(-1).body.direction,'followings');
@@ -212,4 +209,48 @@ test('更新後に明示選択した最新枠と2ページ目は再表示でも�
  await settle(()=>h.deliver({ok:true,noteId:'tester',rows,total:150}));h.advance(86400000);await h.render(()=>null);await h.render(h.Component,{});await settle();
  assert.equal(h.calls.length,1);assert.match(h.body(),/選択した最新枠2ページ-0/);assert.equal(h.w.document.querySelector('.mis2-pager select').value,'2');assert.equal(h.w.document.querySelector('button[aria-pressed="true"]').textContent,'個別の履歴');
  const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyWindowVersion,2);assert.equal(saved.value.query.window,'latest');assert.equal(saved.value.query.page,2);
+});
+
+for(const action of ['events','investigation'])test(`旧判定の${action}の保存本文は再表示せず、同じ条件で一度だけ読み直す`,async t=>{
+ const query={action,window:'all',query:'',page:2,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null};
+ const h=await fixture(t,query,{historyWindowVersion:2,historyEvidenceVersion:2});
+ assert.doesNotMatch(h.body(),/前回の人物|前回表示分/);assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].body,query);
+ const actual={id:'proof',person_key:'proof',actor_name:'新判定の人物',direction:'followers',event_type:'removed',identity_exact:action==='events',evidence:action==='events'?'authenticated_relationship':'window_candidate'};
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[actual],total:51}));
+ assert.match(h.body(),/新判定の人物/);await h.render(()=>null);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,1);
+ const saved=h.load('src/insight-saved-view.ts').readSavedInsightView('social-last',scope);assert.equal(saved.value.historyEvidenceVersion,3);assert.equal(saved.value.query.page,2);
+});
+
+test('確認済みの過去の減少と後日の相互・再フォローを同じ人物カードで区別する',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'loss',person_key:'returned',actor_name:'再フォローした架空の人物',direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship',detected_at:'2026-09-10T00:00:00Z',current_is_following:true,current_is_follower:true,current_relation:'mutual',current_verified_at:'2026-10-28T00:00:00Z',current_direction_verified_at:'2026-10-28T00:00:00Z',current_following_verified_at:'2026-10-27T00:00:00Z',current_follower_verified_at:'2026-10-28T00:00:00Z'}],total:1}));
+ const article=h.w.document.querySelector('.mis2-list article');assert.match(article.textContent,/過去の【減】/);assert.match(article.textContent,/最新確認：相互フォロー/);assert.match(article.textContent,/相手からのフォロー確認 2026\/10\/28 09:00/);assert.match(article.textContent,/あなたのフォロー確認 2026\/10\/27 09:00/);assert.match(article.textContent,/再フォロー確認済み/);assert.match(article.textContent,/変化を検知 2026\/9\/10 09:00/);
+ assert.equal(h.calls.length,1,'最新の関係をカード別の追加通信で読まない');
+});
+
+test('最新の確認日時がない人物を相互・現在フォロー中と断定しない',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'loss',person_key:'missing-time',actor_name:'確認日時がない架空の人物',direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship',detected_at:'2026-09-10T00:00:00Z',current_is_following:true,current_is_follower:true}],total:1}));
+ const article=h.w.document.querySelector('.mis2-list article');assert.match(article.textContent,/最新の関係：未確認/);assert.doesNotMatch(article.textContent,/最新確認：相互フォロー|再フォロー確認済み|過去の【減】/);
+});
+
+test('別方向の後日の確認だけでフォロワーの再フォロー確認と断定しない',async t=>{
+ const query={action:'events',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query);
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'loss',person_key:'different-direction',actor_name:'方向別確認の架空の人物',direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship',detected_at:'2026-09-10T00:00:00Z',current_is_following:true,current_is_follower:true,current_verified_at:'2026-10-28T00:00:00Z',current_direction_verified_at:'2026-09-01T00:00:00Z'}],total:1}));
+ const article=h.w.document.querySelector('.mis2-list article');assert.doesNotMatch(article.textContent,/再フォロー確認済み|過去の【減】/);assert.match(article.textContent,/変化を検知 2026\/9\/10 09:00/);
+});
+
+test('調査画面は過去の保存人物を明示操作で再確認でき、自動でnoteへ通信しない',async t=>{
+ const query={action:'investigation',window:'all',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query);
+ const link=h.w.document.querySelector('.mis2-investigate-guide a');assert.ok(link);assert.equal(link.href,'https://note.com/tester?mumei_social_scan=history');assert.match(link.textContent,/保存済みの人物の関係をnoteで確認/);assert.equal(h.calls.length,1);assert.equal(h.calls[0].body.action,'investigation');
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[],total:0}));assert.equal(h.calls.length,1);
+});
+
+test('確認済みの少ない表示件数を全減少人数と混同せず、人数差分と未確認の候補人数を別集計する',async t=>{
+ const query={action:'events',window:'oldest',query:'',page:1,pageSize:50,direction:'followers',change:'removed',dateFrom:null,dateTo:null},h=await fixture(t,query,{historyWindowVersion:2});
+ const historySummary={confirmedRemoved:2,unknownDecrease:48,unresolvedCandidates:419,resolvedCandidates:52,savedPeople:1485,coverage:{followers:{received:1000,expected:2306,complete:false,at:'2026-10-28T00:00:00Z'}}};
+ await settle(()=>h.deliver({ok:true,noteId:'tester',rows:[{id:'loss',person_key:'proof',actor_name:'確認済みの架空の人物',direction:'followers',event_type:'removed',identity_exact:true,evidence:'authenticated_relationship'}],total:1,historySummary}));
+ const summary=h.w.document.querySelector('.mis2-history-summary');assert.ok(summary);const pairs=[...summary.querySelectorAll('dl>div')].map(el=>el.textContent);assert.deepEqual(pairs,['人物確認済みの減少2件','人物未特定の減少48人分','関係未確認419人','保存人物1,485人']);
+ assert.match(h.body(),/確認済み 1件/);assert.match(summary.textContent,/人物範囲の選択にかかわらず全履歴/);assert.match(summary.textContent,/1,000 \/ 2,306人（一部）/);assert.match(summary.textContent,/2026\/10\/28 09:00/);assert.doesNotMatch(summary.textContent,/419人.*減少/);assert.equal(h.calls.length,1);
+ await h.render(()=>null);await h.render(h.Component,{});await settle();assert.equal(h.calls.length,1);assert.match(h.w.document.querySelector('.mis2-history-summary').textContent,/人物未特定の減少48人分/);
 });

@@ -16,7 +16,9 @@ const manifestSource = await read('src/insight-release.ts');
 const results = { testedAt: new Date().toISOString(), mode: process.argv.includes('--live') ? 'public-delivery' : 'local-mocked-ui', assertions: 0, engines: [], scope: 'Browser engines, synthetic account/version state; not participant devices or extension-manager installation confirmation.' };
 function check(actual, expected, label) { assert.deepEqual(actual, expected, label); results.assertions++; }
 function ok(value, label) { assert.ok(value, label); results.assertions++; }
-check(release.appVersion, '2026.09.30.8', 'app release');
+const expectedAppVersion = process.env.INSIGHT_EXPECTED_APP_VERSION || manifestSource.match(/CURRENT_INSIGHT_APP_VERSION\s*=\s*"([^"]+)"/)?.[1];
+ok(expectedAppVersion, 'current source app release is present');
+check(release.appVersion, expectedAppVersion, 'app release');
 ok(manifestSource.includes(`CURRENT_INSIGHT_APP_VERSION = "${release.appVersion}"`), 'source/manifest coherence');
 ok(!live.includes('{dashboardUpdateAvailable||dashboardMissing?<a className="miv5-source-main"'), 'analysis always opens feature');
 ok(live.includes('onClick={()=>openMode("analysis")} aria-label='), 'analysis feature handler preserved');

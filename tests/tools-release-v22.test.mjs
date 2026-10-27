@@ -10,6 +10,13 @@ import './insight-update-return-context.test.mjs';
 
 const read = path => readFileSync(path, 'utf8');
 const release = JSON.parse(read('public/insight-release.json'));
+test('本体・共通設定・配信ラベルは現在のrelease manifestと一致する',()=>{
+ const source=read('src/insight-release.ts'),deploy=read('public/deploy-version.txt').split('\n')[0];
+ for(const [constant,key] of [['CURRENT_INSIGHT_APP_VERSION','appVersion'],['CURRENT_NOTIFICATION_VERSION','notificationVersion'],['CURRENT_DASHBOARD_VERSION','dashboardVersion'],['CURRENT_DM_VERSION','dmVersion']]){
+  assert.equal(source.match(new RegExp(constant+'\\s*=\\s*"([^"]+)"'))?.[1],release[key],key);
+  assert.ok(deploy.includes(release[key]),key+' appears in deployment label');
+ }
+});
 test('旧更新URLも元の画面・アカウント・hashを維持して共通installerへ進む',()=>{
  const base='https://mumei-s.github.io/note-insight/';
  for(const name of ['notification-install.html','notification-update.html','notification-update-v2961.html','notification-update-v2962.html','notification-update-v2963.html','notification-update-v2964.html','notification-update-v2965.html','notification-update-v2966.html','notification-update-v29665.html','tool-setup.html']){
@@ -23,6 +30,10 @@ for (const [file, field] of [['public/note-insight-dm.user.js', 'dmVersion'], ['
     const wrapper = read(file), meta = wrapper.match(/@version\s+(\S+)/)[1], runtime = wrapper.match(/const VERSION='([^']+)'/)[1];
     assert.equal(meta, release[field]);
     assert.equal(runtime, release[field]);
+    if(field!=='dashboardVersion'){
+      const scannerVersion=read('public/note-insight-social-compare-v1.js').match(/const VERSION='([^']+)'/)[1];
+      assert.ok(wrapper.includes('note-insight-social-compare-v1.js?v='+scannerVersion.replaceAll('.','')),'social scanner updates bypass the old require cache');
+    }
     for (const dependency of wrapper.matchAll(/@require\s+https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/(public\/note-insight-(?:dm-reader-v1|dm-network-v2|notification-filter-v4|notification-controls-v1)\.js)\?v=(\d+)/g)) {
       const version = read(dependency[1]).match(/const VERSION='([^']+)'/)[1];
       assert.equal(dependency[2], version.replaceAll('.', ''), dependency[1] + 'の古いrequireキャッシュを更新');

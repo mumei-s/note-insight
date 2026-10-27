@@ -77,3 +77,11 @@ test('取得成功と確認済みページへ戻る保存の両方に履歴範�
  delete copy.value.historyWindowVersion;a.storage.set(key,JSON.stringify(copy));
  await a.api.savedSocial(query);assert.equal(calls,2);const saved=JSON.parse(a.storage.get(key));assert.equal(saved.value.historyWindowVersion,2);assert.equal(saved.value.query.page,1);
 });
+
+test('人数が同じ公式再確認の時刻だけでは確認済みの別ページを失効させない',async()=>{
+ let stamp='2026-10-28T00:00:00Z',count=2306,calls=0;
+ const a=fixture(new Map(),async extra=>{calls++;return{noteId:'a',total:51,latest:{followers:{received_count:1000,expected_count:2306,live_expected_count:count,created_at:'2026-10-27T00:00:00Z',live_count_at:stamp}},rows:Array.from({length:extra.page===2?1:50},(_,i)=>({person_key:'person-'+extra.page+'-'+i}))}});
+ await a.api.savedSocial(query);await a.api.savedSocial({...query,page:2});stamp='2026-10-28T00:01:00Z';await a.api.savedSocial(query,0,true);
+ assert.ok(a.api.cachedSocial({...query,page:2}));await a.api.savedSocial({...query,page:2});assert.equal(calls,3,'ページ戻りは追加通信しない');
+ count=2305;await a.api.savedSocial(query,0,true);assert.equal(a.api.cachedSocial({...query,page:2}),null,'公式人数の変化は他ページも失効する');
+});
