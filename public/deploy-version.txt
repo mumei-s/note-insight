@@ -1,4 +1,4 @@
-INSIGHT 2026.10.28.4 / notification 3.6.55 / dashboard 1.7.5 / DM 1.4.15
+INSIGHT 2026.10.28.5 / notification 3.6.55 / dashboard 1.7.5 / DM 1.4.15
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
@@ -16,3 +16,4 @@ Restore native notification toolbar height by keeping state in the existing32px 
 Restore historical follower identities separately from count-only changes; preserve zero-count window observations across re-follow and keep loaded page reuse.
 Reconcile confirmed historical follower losses with latest verified relationships; keep unresolved windows and count-only decreases separate.
 Update the shared scanner cache for explicit saved-person history checks without rereading the latest1,000-person lists.
+Keep last confirmed positive relationships normal after a capped-window exit; do not classify them as unknown or a loss. Preserve their real dates and refresh once on return from an explicit saved-person recheck.

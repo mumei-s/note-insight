@@ -12,6 +12,13 @@ function sql(){
  return readFileSync('supabase/migrations/'+name,'utf8');
 }
 
+function restorationSql(){
+ if(process.env.SOCIAL_KNOWN_POSITIVE_RESTORE_SQL)return readFileSync(process.env.SOCIAL_KNOWN_POSITIVE_RESTORE_SQL,'utf8');
+ const name=readdirSync('supabase/migrations').filter(name=>name.endsWith('_social_known_positive_restore.sql')).sort().at(-1);
+ assert.ok(name,'canonical latest-known positive restoration migration exists');
+ return readFileSync('supabase/migrations/'+name,'utf8');
+}
+
 test('過去人物だけの照合は未確認キューを使い、全件照合・旧クライアントは従来の対象を維持する',async()=>{
  const source=readFileSync('supabase/functions/insight-social-compare/index.ts','utf8');
  const part=source.slice(source.indexOf('async function archivedCandidates('),source.indexOf('async function acceptedRows('));
@@ -47,7 +54,8 @@ test('未確認人物の取得は名前あり未解決候補と不明関係だ�
     ('owner','only-added','Newly followed','https://note.com/only_added',now()-interval '2 days','added',false,false),
     ('owner','bad-url','Bad URL','https://example.com/bad',now()-interval '2 days','removed',false,false),
     ('other','foreign','Foreign member','https://note.com/foreign',now()-interval '2 days','removed',false,false),
-    ('owner','fresh-before-later','Needs newer confirmation','https://note.com/fresh_before_later',now()-interval '30 minutes','removed',false,false);
+    ('owner','fresh-before-later','Needs newer confirmation','https://note.com/fresh_before_later',now()-interval '30 minutes','removed',false,false),
+    ('owner','verified-negative','Latest confirmed absent','https://note.com/verified_negative',now()-interval '2 days','removed',false,false);
    insert into public.insight_social_current_people values
     ('owner','unknown-relation','Opposite direction not verified','https://note.com/unknown_relation','unknown'),
     ('owner','p002','Duplicate through unknown relation','https://note.com/p002','unknown'),
@@ -62,14 +70,20 @@ test('未確認人物の取得は名前あり未解決候補と不明関係だ�
     ('owner','fresh-before-later',true,true,now()-interval '1 hour'),
     ('other','p004',true,true,now());
   `);
-  await db.exec(sql());await db.exec(sql());
+  await db.exec(`alter table public.insight_relation_history_current add column current_direction_present boolean;alter table public.insight_relation_history_current add column current_direction_verified_at timestamptz;
+   update public.insight_relation_history_current set candidate_resolved=true,current_direction_present=true,current_direction_verified_at=detected_at-interval '1 day' where member_id='owner' and person_key='p003';
+   update public.insight_relation_history_current set candidate_resolved=true,current_direction_present=true,current_direction_verified_at=detected_at where member_id='owner' and person_key='p004';
+   update public.insight_relation_history_current set current_direction_present=true,current_direction_verified_at=detected_at+interval '1 day' where member_id='owner' and person_key='resolved';
+   update public.insight_relation_history_current set current_direction_present=false,current_direction_verified_at=detected_at+interval '1 day' where member_id='owner' and person_key='verified-negative';`);
+  await db.exec(sql());const restore=restorationSql(),helper=restore.slice(restore.indexOf('create or replace function public.insight_social_pending_history_candidates'));await db.exec(helper);await db.exec(helper);
   const fetch=async(after='',limit=20)=>(await db.query('select public.insight_social_pending_history_candidates($1,$2,$3) as payload',['owner',after,limit])).rows[0].payload;
   const first=await fetch();assert.equal(first.remaining,54);assert.equal(first.rows.length,20);assert.equal(first.rows[0].person_key,'fresh-before-later');
   const second=await fetch(first.nextCursor),third=await fetch(second.nextCursor);
   assert.equal(second.rows.length,20);assert.equal(third.rows.length,14);assert.equal(third.nextCursor,null);
   const rows=[...first.rows,...second.rows,...third.rows],keys=rows.map(row=>row.person_key);
   assert.equal(new Set(keys).size,54,'same person is returned once across events, relationship projection and pages');
-  for(const key of ['p001','resolved','confirmed','unknown:drop','only-added','bad-url','foreign','foreign-unknown'])assert.ok(!keys.includes(key),key+' is outside this pending queue');
+  for(const key of ['p001','resolved','confirmed','unknown:drop','only-added','bad-url','foreign','foreign-unknown','verified-negative'])assert.ok(!keys.includes(key),key+' is outside this pending queue');
+  assert.ok(keys.includes('p003')&&keys.includes('p004'),'older and equal-time saved positives return to normal display but stay eligible for explicit refresh');
   assert.ok(!keys.some(key=>key.startsWith('known-')),'known active people do not cause profile reads in history-only mode');
   for(const key of ['p002','p003','p004','fresh-before-later','unknown-relation'])assert.ok(keys.includes(key),key+' still needs a relationship check');
   assert.equal((await fetch('',1)).rows.length,1);assert.equal((await fetch('',200)).rows.length,54);

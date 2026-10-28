@@ -35,12 +35,15 @@ test('SQLの代替経路も確認済みの減少と未確認を分離し、現�
   await db.exec(`insert into public.insight_social_comparisons values('owner','refollow','refollow','https://note.com/refollow',null,true,false,'2026-01-10','2026-01-01',1,1,'2026-01-10',null);`);
   await person('resolved');await event('resolved');
   await person('pending','followers',{last:'2026-01-05',active:false});await event('pending');
+  await db.exec(`insert into public.insight_social_comparisons values('owner','pending','pending','https://note.com/pending',null,false,true,'2026-01-05','2026-01-05',null,1,null,null);`);
+  await event('no-evidence');
   await event('unknown:drop',{day:'2026-01-12',count:48});
   await person('newboth');await person('newboth','followings');await event('newboth',{day:'2026-01-20',count:1,type:'added'});
   await person('null-opposite','followings');
   await db.exec(`insert into public.insight_social_comparisons values('owner','null-opposite','null-opposite','https://note.com/null_opposite',null,true,null,'2026-01-20','2026-01-20',1,null,null,null);`);
   const other='00000000-0000-4000-8000-000000000002';await person('foreign','followers',{member:other});await event('foreign',{member:other,exact:true,count:99});
   await db.exec(migration('SOCIAL_CURRENT_RECONCILIATION_SQL','_social_current_reconciliation.sql'));
+  await db.exec(migration('SOCIAL_KNOWN_POSITIVE_RESTORE_SQL','_social_known_positive_restore.sql'));
   const old=readFileSync('supabase/migrations/20261027183919_social_fallback_read_repair.sql','utf8');await db.exec(old.slice(old.indexOf('CREATE OR REPLACE FUNCTION public.insight_social_events_fallback')));
   await db.exec('revoke all on function public.insight_social_events_fallback(text,text,jsonb) from public;grant execute on function public.insight_social_events_fallback(text,text,jsonb) to authenticated;');
   const metadata=async()=>(await db.query("select proowner,proacl,prosecdef,proconfig from pg_proc where oid='public.insight_social_events_fallback(text,text,jsonb)'::regprocedure")).rows[0];
@@ -48,9 +51,10 @@ test('SQLの代替経路も確認済みの減少と未確認を分離し、現�
   const read=async(action,extra={},token='ss_yr')=>(await db.query('select public.insight_social_events_fallback($1,$2,$3::jsonb) as result',[token,action,JSON.stringify(extra)])).rows[0].result;
   const decreases=await read('events',{change:'removed',direction:'followers'});assert.equal(decreases.total,1);assert.equal(decreases.rows[0].person_key,'refollow');assert.equal(decreases.rows[0].current_direction_present,true,'a true historical decrease survives a verified re-follow');assert.equal(decreases.rows[0].current_relation,'mutual');assert.equal(decreases.rows[0].identity_exact,true);
   const all=await read('events');assert.equal(all.total,2);assert.ok(all.rows.some(row=>row.person_key==='newboth'));assert.ok(!all.rows.some(row=>row.person_key==='pending'||row.person_key==='resolved'||row.person_key==='unknown:drop'));
-  const pending=await read('investigation',{change:'added'});assert.equal(pending.total,2);assert.deepEqual(pending.rows.map(row=>row.person_key).sort(),['pending','unknown:drop']);assert.equal(pending.rows.find(row=>row.person_key==='unknown:drop').change_count,48);assert.ok(pending.rows.every(row=>row.candidate_resolved===false));
-  assert.equal(pending.historySummary.confirmedRemoved,1);assert.equal(pending.historySummary.unknownDecrease,48);assert.equal(pending.historySummary.unresolvedCandidates,1);assert.equal(pending.historySummary.resolvedCandidates,1);
+  const pending=await read('investigation',{change:'added'});assert.equal(pending.total,2);assert.deepEqual(pending.rows.map(row=>row.person_key).sort(),['no-evidence','unknown:drop']);assert.equal(pending.rows.find(row=>row.person_key==='unknown:drop').change_count,48);assert.ok(pending.rows.every(row=>row.candidate_resolved===false));
+  assert.equal(pending.historySummary.confirmedRemoved,1);assert.equal(pending.historySummary.unknownDecrease,48);assert.equal(pending.historySummary.unresolvedCandidates,1);assert.equal(pending.historySummary.resolvedCandidates,2);
   const mutual=await read('comparison',{relationship:'mutual'});assert.ok(mutual.rows.some(row=>row.person_key==='refollow'&&row.lost_at===null));assert.ok(mutual.rows.some(row=>row.person_key==='newboth'),'two positive lists identify mutual even without an authenticated comparison record');assert.equal(mutual.counts.lost,0);assert.ok(!mutual.rows.some(row=>row.person_key==='null-opposite'));
+  const restored=await read('comparison',{relationship:'follower_only',query:'pending'});assert.equal(restored.total,1,'older saved positive returns to normal relationship result');assert.equal(restored.rows[0].person_key,'pending');assert.equal(restored.rows[0].follower_verified_at,'2026-01-05T00:00:00+00:00','original directional evidence date is preserved');
   const unknown=await read('comparison',{relationship:'unknown'});assert.ok(unknown.rows.some(row=>row.person_key==='null-opposite'&&row.is_follower===null));assert.ok(!unknown.rows.some(row=>row.person_key==='newboth'||row.person_key==='refollow'));
   assert.equal((await read('comparison',{relationship:'lost'})).total,0,'current mutual cannot remain in current-lost view');
   assert.equal((await read('events',{change:'removed',query:'refollow',dateFrom:'2026-01-10',dateTo:'2026-01-11'})).total,1);assert.equal((await read('events',{change:'removed',dateFrom:'2026-01-11'})).total,0);
