@@ -320,3 +320,29 @@ test('本人通知：異なる出所や異なる版のコードはコピー・�
  assert.match(h.w.document.getElementById('codeResult').textContent,/コピーできませんでした/);
  assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:notification'),null);
 });
+
+
+test('DM同期：文字列画面を開かず、既存スクリプトへの上書きコードをコピー',async t=>{
+ const h=installer(t,'dm');await wait(160);
+ const code=readFileSync('public/note-insight-dm.user.js','utf8');let written='',url='',options;
+ h.w.fetch=async(href,init)=>{url=String(href);options=init;return{ok:true,text:async()=>code}};
+ Object.defineProperty(h.w.navigator,'clipboard',{configurable:true,value:{writeText:async text=>{written=text}}});
+ h.w.document.getElementById('copyCode').click();await wait(90);
+ assert.equal(written,code);
+ assert.match(url,/^\.\/note-insight-dm\.user\.js\?_script=/);
+ assert.equal(options.cache,'no-store');
+ assert.equal(options.credentials,'same-origin');
+ assert.match(h.w.document.getElementById('codeResult').textContent,/コピーしました/);
+ assert.ok(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:dm'),'DM confirmation must not claim success before startup');
+ assert.equal(h.nav.length,0);
+});
+test('DM同期：本人通知スクリプトの取り違えや版違いではコードをコピーしない',async t=>{
+ const h=installer(t,'dm');await wait(160);
+ const wrong=readFileSync('public/note-insight-notification-v3.user.js','utf8');let copies=0;
+ h.w.fetch=async()=>({ok:true,text:async()=>wrong});
+ Object.defineProperty(h.w.navigator,'clipboard',{configurable:true,value:{writeText:async()=>{copies++}}});
+ h.w.document.getElementById('copyCode').click();await wait(90);
+ assert.equal(copies,0);
+ assert.match(h.w.document.getElementById('codeResult').textContent,/コピーできませんでした/);
+ assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:dm'),null);
+});
