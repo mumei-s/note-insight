@@ -85,18 +85,21 @@ function wireVerifiedUpdateAction(){
  const target=new URL(ROOT+'notification-update-now.html',location.origin);target.searchParams.set('tool',tool);if(account)target.searchParams.set('account',account);target.searchParams.set('return',resolve(q.get('return'),{fallbackMode:dm?'normal':'notifications',fallbackTab:dm?'dm':'notifications',account}));
  const action=document.createElement('a');action.id='verifiedUpdateAction';action.href=target.href;action.className=dm?'easy-link primary':'easy-action primary';action.style.cssText='display:flex;align-items:center;justify-content:center;min-height:52px;margin:10px 0;padding:12px;border:1px solid #86dab4;border-radius:10px;background:#215e43;color:#fff;text-decoration:none;text-align:center;font-weight:900';ready.prepend(action);
  const write=(node,text)=>{if(node&&node.textContent!==text)node.textContent=text};
+ let expected='',checked=false,loading=false;
+ async function readRelease(){
+  if(checked||loading)return;loading=true;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+  try{const response=await fetch('./insight-release.json?installer-check='+Date.now(),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('RELEASE_UNAVAILABLE');const manifest=await response.json();expected=version(manifest[dm?'dmVersion':'notificationVersion'])}catch{}finally{clearTimeout(timer);loading=false;checked=true;if(document.documentElement)paint()}
+ }
  function paint(){
-  const current=live(tool);let expected='';
-  // Both existing installer pages publish their already fetched manifest in
-  // the top-level latest binding. No extra API request or polling is needed.
-  try{expected=version(typeof latest==='string'?latest:'')}catch{}
-  action.hidden=!current;action.style.display=current?'flex':'none';
+  const current=live(tool);action.hidden=!current;action.style.display=current?'flex':'none';
   if(!current)return;
   write(action,'更新状態を確認して進む');
+  if(!checked&&!loading)void readRelease();
   if(!expected)return;
   const old=compare(current,expected)<0;
   action.hidden=!old;action.style.display=old?'flex':'none';
-  if(!old)return;
+  if(!old){write(status,'✓ 最新版 v'+current+' の起動を確認しました。');write(ready.querySelector('p'),'最新版が起動しています。次回以降も自動更新が有効なら、通常の手動更新は不要です。');return}
   ready.hidden=false;
   write(action,(dm?'DM同期':'本人通知')+'を v'+expected+' に更新する');
   write(status,'未更新：起動中 v'+current+' ／ 最新版 v'+expected);
