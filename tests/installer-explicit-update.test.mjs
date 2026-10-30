@@ -46,13 +46,14 @@ for(const tool of ['notification','dm'])test(`${tool}: an older installed tool h
  assert.equal(h.errors.length,0);
 });
 
-for(const tool of ['notification','dm'])test(`${tool}: update action goes to Tampermonkey confirmation rather than opening raw code`,async t=>{
+for(const tool of ['notification','dm'])test(`${tool}: update action lets the extension intercept a stable userscript URL without opening its intermediate page`,async t=>{
  const expected=release[tool==='dm'?'dmVersion':'notificationVersion'],h=fixture(t,{tool,current:'1.0.0'});
  await settle(()=>h.el('latest').textContent==='v'+expected,'published release is loaded');
  const action=h.el('installNow'),url=new URL(action.href);
  assert.equal(action.hidden,false);assert.equal(action.getAttribute('aria-disabled'),'false');
- assert.equal(url.origin,'https://www.tampermonkey.net');assert.equal(url.pathname,'/script_installation.php');
- const script=new URL(url.hash.slice('#url='.length));assert.equal(script.hostname,'raw.githubusercontent.com');assert.equal(script.pathname,'/mumei-s/note-insight/main/public/'+(tool==='dm'?'note-insight-dm.user.js':'note-insight-notification-v3.user.js'));
+ assert.equal(url.origin,new URL(BASE).origin);assert.equal(url.pathname,'/note-insight/'+(tool==='dm'?'note-insight-dm.user.js':'note-insight-notification-v3.user.js'));
+ assert.equal(url.search,'');assert.equal(url.hash,'');
+ assert.doesNotMatch(readFileSync('public/notification-update-now.html','utf8'),/https:\/\/www\.tampermonkey\.net\/script_installation\.php/);
  h.click('installNow');await wait(30);
  assert.match(h.el('status').textContent,/まだ更新を確認できません/);assert.equal(h.nav.length,0);
  assert.equal(h.w.document.documentElement.getAttribute('data-mumei-'+tool+'-live-version'),'1.0.0');
@@ -61,6 +62,36 @@ for(const tool of ['notification','dm'])test(`${tool}: update action goes to Tam
  await settle(()=>h.nav.length===1,'actual new runtime, not a button click, confirms update');
  assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:'+tool),null);
  assert.equal(new URL(h.nav[0]).origin,new URL(BASE).origin);
+ assert.equal(h.errors.length,0);
+});
+
+for(const tool of ['notification','dm'])test(`${tool}: URL import fallback copies the stable source but requires actual updated runtime`,async t=>{
+ const expected=release[tool==='dm'?'dmVersion':'notificationVersion'],h=fixture(t,{tool,current:'1.0.0'}),copied=[];
+ Object.defineProperty(h.w.navigator,'clipboard',{configurable:true,value:{writeText:async value=>copied.push(value)}});
+ await settle(()=>h.el('latest').textContent==='v'+expected,'published release is loaded');
+ h.click('copyUrl');
+ await settle(()=>h.el('copyStatus').textContent.includes('URLをコピーしました'),'fallback reports copy');
+ assert.deepEqual(copied,['https://raw.githubusercontent.com/mumei-s/note-insight/main/public/'+(tool==='dm'?'note-insight-dm.user.js':'note-insight-notification-v3.user.js')]);
+ assert.equal(h.el('scriptUrl').value,copied[0]);assert.equal(h.el('manualHelp').open,true);
+ assert.match(h.el('manualHelp').textContent,/ユーティリティ → URLからインポート/);
+ assert.equal(h.el('manualHelp').querySelectorAll('li').length,3);
+ assert.match(h.el('status').textContent,/まだ更新を確認できません/);assert.equal(h.nav.length,0);
+ assert.equal(h.w.document.documentElement.getAttribute('data-mumei-'+tool+'-live-version'),'1.0.0');
+ const pending=JSON.parse(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:'+tool));assert.equal(pending.targetVersion,expected);
+ h.w.document.documentElement.setAttribute('data-mumei-'+tool+'-live-version',expected);
+ await settle(()=>h.nav.length===1,'only the new running version completes the update');
+ assert.equal(h.errors.length,0);
+});
+
+test('clipboard failure keeps the import URL selectable and never claims an update or successful copy',async t=>{
+ const h=fixture(t,{current:'1.0.0'});
+ Object.defineProperty(h.w.navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('DENIED')}}});h.w.document.execCommand=()=>false;
+ await settle(()=>h.el('latest').textContent.startsWith('v'),'published release is loaded');h.click('copyUrl');
+ await settle(()=>h.el('copyStatus').textContent.includes('自動コピーができません'),'copy failure is explained');
+ assert.match(h.el('copyStatus').textContent,/長押ししてコピー/);assert.equal(h.el('manualHelp').open,true);
+ assert.match(h.el('scriptUrl').value,/^https:\/\/raw\.githubusercontent\.com\/mumei-s\/note-insight\/main\/public\/note-insight-notification-v3\.user\.js$/);
+ assert.match(h.el('status').textContent,/未更新/);assert.equal(h.el('readyBack').hidden,true);assert.equal(h.nav.length,0);
+ assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:notification'),null);
  assert.equal(h.errors.length,0);
 });
 

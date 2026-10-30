@@ -28,7 +28,7 @@
 <p id="edgeFallback" class="small" hidden>Edgeへ切り替わらない場合は、画面右上の「︙」から「ブラウザで開く」を選んでください。</p>
 </section>
 <p class="small">既存の本人通知・DM・コメント・フォロー履歴を削除する操作はありません。更新確認を開いただけでは「更新済み」にしません。</p>
-<details><summary>更新確認画面が開かない場合</summary><p class="help">「Script Installation」のまま動かない、または文字列だけが出る場合は、拡張機能からの更新起動が完了していません。新しい版の起動を確認するまで未更新の表示を残します。</p><a id="direct" class="back" href="#" target="_blank" rel="noopener noreferrer">別の更新リンクで確認画面を開く</a><p class="small">どちらも更新確認が開かない場合は、表示されている画面をそのまま送ってください。コード編集や既存ツールの削除は行わないでください。</p></details>
+<details id="manualHelp"><summary>更新確認が開かない・文字列だけが出る場合</summary><p class="help">文字列や「Script Installation」のまま止まった場合は、この画面へ戻り、次の3つの操作で更新できます。</p><ol class="help"><li>下の「更新用URLをコピー」を押す。</li><li>Edgeの「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポート」に貼り付け、取り込む。</li><li>表示された「更新」または「インストール」を確定し、この画面へ戻る。</li></ol><button id="copyUrl" type="button" disabled>更新用URLをコピー</button><p id="copyStatus" class="small" role="status" aria-live="polite">URLをコピーしただけでは更新は完了しません。</p><input id="scriptUrl" type="text" readonly aria-label="Tampermonkeyへ取り込む更新用URL" style="width:100%;padding:10px;border:1px solid #5a849b;border-radius:8px;background:#07131e;color:#edf7ff;font:13px system-ui"><p class="small">Safari・Firefoxでは、普段使っている拡張機能のURLからの取り込みを使ってください。新しい版の起動を確認するまで未更新の表示を残します。</p></details>
 </main>
 <script>
 (function(){
@@ -40,11 +40,11 @@ const account=String(q.get('account')||q.get('notificationAccount')||'').replace
 const back=api.resolve(q.get('return'),{fallbackMode:tool==='dm'?'normal':'notifications',fallbackTab:tool==='dm'?'dm':'notifications',account});
 const el=id=>document.getElementById(id),button=el('installNow');
 el('heading').textContent=label+'を更新';document.title='INSIGHT '+label+'を更新';el('back').href=back;el('readyBack').href=back;
-// Use Tampermonkey's installation handoff, not a source-code navigation.
-button.href='https://www.tampermonkey.net/script_installation.php#url='+source;
-el('direct').href=new URL('./'+wrapper,location.href).href;
-const agent=navigator.userAgent||'',isSafari=/Safari/i.test(agent)&&!/Chrome|Chromium|Edg|OPR|Android/i.test(agent);
-if(isSafari)button.href=el('direct').href;
+// Let the installed extension select its supported installation method.
+// Tampermonkey's intermediate page must not be opened directly.
+button.href=new URL('./'+wrapper,location.href).href;
+el('scriptUrl').value=source;
+const agent=navigator.userAgent||'';
 let latest='',error='',busy=null,lastCheck=0,started=false;
 const state=api.create({tool,account,returnTo:back,onStatus:message=>{if(message==='account-changed'){el('status').textContent='アカウントが変わったため、自動で戻りません。INSIGHTのアカウントを確認してください。'}else if(message==='storage-unavailable'){el('status').textContent='戻り先を保存できませんでした。更新確定後はこの画面で確認してください。'}}});
 function paint(){
@@ -52,6 +52,7 @@ function paint(){
  el('current').textContent=current?'v'+current:'起動未確認';el('latest').textContent=latest?'v'+latest:'確認できません';
  el('status').className='status'+(done?' ok':'');button.hidden=done;el('readyBack').hidden=!done;
  button.setAttribute('aria-disabled',latest?'false':'true');
+ el('copyUrl').disabled=!latest||done;
  button.textContent=latest?label+'を v'+latest+' に更新する':'最新版を確認中';
  el('status').textContent=done?'✓ 最新版の起動を確認しました。':error?'最新版の確認に失敗しました。「更新後の状態を確認」で再試行してください。':!latest?'最新版を確認しています。':current?(started||state.pending()?'まだ更新を確認できません。':'未更新です。')+' 起動中 v'+current+' → 最新 v'+latest:label+'の起動が未確認です。拡張機能を入れているブラウザで開いてください。';
  el('instruction').textContent=done?'新しい版が実際に動いていることを確認しました。':'確認画面で「更新」または「インストール」を確定し、この画面へ戻ってください。自動更新を待つだけでは完了扱いにしません。';
@@ -61,8 +62,19 @@ async function release(force=false){
  if(busy)return busy;if(!force&&latest&&Date.now()-lastCheck<30000)return;
  busy=(async()=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const response=await fetch('./insight-release.json?verify='+Date.now(),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('HTTP_'+response.status);const manifest=await response.json(),value=api.version(manifest[tool==='dm'?'dmVersion':'notificationVersion']);if(!value)throw Error('INVALID_VERSION');latest=value;error='';lastCheck=Date.now()}catch(e){error=String(e?.message||e)}finally{clearTimeout(timer);busy=null;paint()}})();return busy;
 }
-function begin(event){if(!latest||paint()){event.preventDefault();return}started=true;state.begin(latest);paint()}
-button.addEventListener('click',begin);el('direct').addEventListener('click',begin);
+function begin(event){if(!latest||paint()){event.preventDefault();return}started=true;state.begin(latest);el('manualHelp').open=true;paint()}
+button.addEventListener('click',begin);
+el('copyUrl').addEventListener('click',async()=>{
+ if(!latest||paint())return;
+ let copied=false;
+ try{await navigator.clipboard.writeText(source);copied=true}catch{
+  el('scriptUrl').focus();el('scriptUrl').select();
+  try{copied=document.execCommand('copy')===true}catch{}
+ }
+ if(copied){started=true;state.begin(latest);el('copyStatus').textContent='URLをコピーしました。Tampermonkeyの「URLからインポート」に貼り付け、更新を確定してください。'}
+ else el('copyStatus').textContent='自動コピーができません。下のURL欄を長押ししてコピーし、Tampermonkeyの「URLからインポート」に貼り付けてください。';
+ el('manualHelp').open=true;paint();
+});
 async function verify(returned=false,force=false){await release(force);const done=paint();if(done){state.finish(latest);return}if(returned&&state.pending()&&state.reload()){const u=new URL(location.href);u.searchParams.set('verify',String(Date.now()));location.replace(u.href)}}
 el('check').addEventListener('click',()=>void verify(true,true));
 window.addEventListener('focus',()=>void verify(true));window.addEventListener('pageshow',()=>void verify(true));
