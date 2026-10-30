@@ -88,7 +88,7 @@ const q=new URLSearchParams(location.search),install=document.getElementById('in
 const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl');scriptUrl.value=RAW;
 copyScriptUrl.addEventListener('click',async()=>{let copied=false;try{await navigator.clipboard.writeText(RAW);copied=true}catch{scriptUrl.focus();scriptUrl.select();try{copied=document.execCommand('copy')===true}catch{}}copyScriptUrl.textContent=copied?'URLをコピーしました':'下のURL欄を長押ししてコピーしてください'});
 const updater=window.MumeiInsightUpdateReturn,account=String(q.get('account')||q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'normal',fallbackTab:'dm',account});document.getElementById('back').href=back;
-for(const id of ['dmEasyReturn','dmEasyBack'])document.getElementById(id).href=back;
+document.getElementById('dmEasyReturn').href=new URL('./?insightMode=normal#dashboard',location.href).href;document.getElementById('dmEasyBack').href=back;
 const dmEasyStatus=document.getElementById('dmEasyStatus'),dmEasyFirst=document.getElementById('dmEasyFirst'),dmEasyReady=document.getElementById('dmEasyReady'),dmEasyInstall=document.getElementById('dmEasyInstall'),dmEasyExtension=document.getElementById('dmEasyExtension');
 dmEasyInstall.href=new URL('./note-insight-dm.user.js',location.href).href;
 const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/i.test(ua),android=/Android/i.test(ua);
