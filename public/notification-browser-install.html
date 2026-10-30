@@ -62,6 +62,23 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 .code-copy:disabled{opacity:.65}
 .code-result{font-size:10px;line-height:1.6;color:#dcffee;margin:7px 0 0}
 .install.secondary{border-color:#456a7f;background:#102b3d;color:#d9e9f5;font-size:11px;min-height:35px}
+.easy-start{margin-top:9px;padding:12px;border:1px solid #4c8a89;border-radius:13px;background:#102632}
+.easy-start h2{margin:0 0 7px;font-size:16px;color:#e7f8ff}
+.easy-start p{font-size:12px;line-height:1.6;margin:5px 0;color:#cfdee8}
+.easy-start .easy-status{margin:9px 0;padding:9px;border:1px solid #507f8a;border-radius:9px;background:#081d28;font-size:12px;font-weight:800;color:#def7ff}
+.easy-start .easy-status.ok{border-color:#60ba89;background:#123023;color:#d9ffe7}
+.easy-start .easy-status.warn{border-color:#a78643;background:#2c2617;color:#fff0c9}
+.easy-start .easy-actions{display:grid;gap:8px;margin-top:8px}
+.easy-start .easy-action{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:46px;padding:10px;border:1px solid #69b5c7;border-radius:9px;background:#174154;color:#ecfbff;font-size:13px;font-weight:900;text-align:center;text-decoration:none}
+.easy-start .easy-action.primary{border-color:#7cdaac;background:#20513a;color:#effff4}
+.easy-start [hidden]{display:none!important}
+.help-collapse{margin-top:10px;border:1px solid #3d586a;border-radius:10px;padding:7px 9px;background:#0b1b27}
+.help-collapse>summary{cursor:pointer;list-style:none;min-height:30px;display:flex;align-items:center;font-size:12px;font-weight:900;color:#d5eafa}
+.help-collapse>summary::before{content:"＋";margin-right:7px;font-weight:950}
+.help-collapse[open]>summary::before{content:"−"}
+.help-collapse p,.help-collapse li{font-size:11px;line-height:1.65;color:#c3d9e9}
+.help-collapse ol{margin:8px 0;padding-left:21px}
+
 
 .foot{margin-top:10px;color:#8ea4b3;font-size:9px;line-height:1.5}
 @media(max-width:360px){.wrap{width:min(620px,calc(100% - 10px))}.card{padding:9px}.browser summary{padding:5px 7px}.bname{font-size:10px}}
@@ -72,10 +89,32 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <a id="back" class="back" href="./?insightMode=notifications#dashboard">← INSIGHT【通知】へ戻る</a>
 <section class="card">
 <div class="eyebrow">PRIVATE NOTIFICATION / 設定</div>
-<h1>INSIGHTをインストール / 更新</h1>
+<h1>本人通知のかんたん準備</h1>
 <div class="toolname">本人通知ツール</div>
-<p class="lead">使っている端末とブラウザのパネルだけ開いて進めます。すでに導入済みなら、拡張機能の入れ直しは不要です。</p>
-<div class="notice"><b>通知画面は下部固定の4パネル。</b><br>「読込 / フィルター ON・OFF / 設定 / INSIGHT」。読込は自動を基本にし、保存済み境界から差分だけを続行します。</div>
+<p class="lead">INSIGHT本体は設定なしで使えます。自分の🔔通知を自動保存したい人だけ、最初に追加します。</p>
+<div class="easy-start" id="easyStart">
+  <h2>したいことを選ぶだけ</h2>
+  <p>記事分析や保存済み履歴を使うだけなら、追加設定は必要ありません。</p>
+  <div class="easy-actions"><a id="easyNormal" class="easy-action" href="./">INSIGHTをそのまま開く</a></div>
+  <div id="easyStatus" class="easy-status" role="status" aria-live="polite">このブラウザの本人通知を確認中…</div>
+  <div id="easyFirst" class="easy-actions">
+    <p>🔔自分の通知を自動保存したい人だけ、最初に2つの操作をします。</p>
+    <a id="easyExtension" class="easy-action" href="https://www.tampermonkey.net/index.php?browser=edge&amp;locale=ja" target="_blank" rel="noopener noreferrer">① Tampermonkeyを準備（初回だけ）</a>
+    <a id="easyInstall" class="easy-action primary" href="./note-insight-notification-v3.user.js" target="_blank" rel="noopener noreferrer">② 本人通知を追加する（初回だけ）</a>
+    <p>インストール確認画面で「インストール」を選びます。文字列が出た場合だけ、下の「うまくいかない場合」を開いてください。</p>
+  </div>
+  <div id="easyReady" hidden>
+    <p>導入済みです。Tampermonkeyの自動更新が有効なら、通常は手作業で更新する必要はありません。</p>
+    <div class="easy-actions"><a id="easyReturn" class="easy-action primary" href="./">INSIGHTに戻る</a></div>
+  </div>
+  <details class="help-collapse" id="easyUpdate">
+    <summary>すでに使っている人：更新の確認方法</summary>
+    <p>Tampermonkeyが自動更新を有効にしていれば、更新を定期的に確認します。今すぐ確認する場合だけ次の操作です。</p>
+    <ol><li>Edgeで「拡張機能 → Tampermonkey」を開く</li><li>「ユーザースクリプトの更新を確認」を押す</li><li>noteとINSIGHTを開き直す</li></ol>
+    <p>反映しない場合はTampermonkeyの設定で自動更新が有効か確認してください。</p>
+  </details>
+</div>
+<details class="help-collapse" id="expertHelp"><summary>うまくいかない場合（詳細な復旧方法）</summary>
 <div class="code-update" aria-label="文字列になってしまう端末向けの更新">
   <b>文字列画面を開かずに更新する</b>
   <p>EdgeのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知</b> の「更新を確認」を実行してください。</p>
@@ -91,12 +130,13 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
   <button id="copyScriptUrl" class="import-copy" type="button">更新用URLをコピー</button>
   <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込む本人通知URL">
   <small>既存の本人通知スクリプトを更新します。二重インストールや拡張機能の削除は不要です。更新後、ここへ戻って最新版を確認してください。</small>
-</div>
+</div></details>
 <div class="panel-setting">
   <div><b>note公式🔔パネル</b><small>OFFでも本人通知の読取・保存は継続します。noteの🔔画面に重なる操作パネルだけ非表示にします。</small></div>
   <button id="panelToggle" class="panel-toggle" type="button">確認中…</button>
 </div>
 
+<details class="help-collapse" id="browserHelp"><summary>ブラウザ別の詳しい設定を見る</summary>
 <section class="section">
 <h2>ブラウザ別インストール</h2>
 <div id="detected" class="detected">使用環境を確認中…</div>
@@ -194,7 +234,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 </div>
 </details>
 </div>
-</section>
+</section></details>
 
 <div class="foot">更新は同じ本人通知ツールを上書きします。二重導入は不要です。起動確認のため、note.com と mumei-s.github.io で拡張機能の実行を許可してください。保存画面からこのタブへ戻ると自動で確認します。その後、開いているnoteの🔔画面も再読み込みしてください。</div>
 </section>
@@ -205,8 +245,11 @@ const install=document.getElementById('install'),result=document.getElementById(
 const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl'),copyCode=document.getElementById('copyCode'),codeResult=document.getElementById('codeResult');
 scriptUrl.value=RAW_SCRIPT;
 let latest='',browserId='other',loadingLatest=null;
+const easyStatus=document.getElementById('easyStatus'),easyFirst=document.getElementById('easyFirst'),easyReady=document.getElementById('easyReady'),easyInstall=document.getElementById('easyInstall'),easyExtension=document.getElementById('easyExtension'),easyUpdate=document.getElementById('easyUpdate');
+easyInstall.href=new URL('./note-insight-notification-v3.user.js',location.href).href;
 function rawScriptUrl(){return RAW_SCRIPT}
 const q=new URLSearchParams(location.search),updater=window.MumeiInsightUpdateReturn,notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'notifications',fallbackTab:'notifications',account:notificationAccount});document.getElementById('back').href=back;
+document.getElementById('easyNormal').href=back;document.getElementById('easyReturn').href=back;
 const update=updater.create({tool:'notification',returnTo:back,account:notificationAccount,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ 更新確認済み。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1';
 let panelOn=true;
@@ -240,13 +283,33 @@ const names={
 };
 function setDetected(){
   browserId=env();
-  detected.textContent='現在: '+(names[browserId]||'その他')+'　→ 該当パネルを開いてください。';
+  detected.textContent='現在: '+(names[browserId]||'その他')+'　→ 必要な場合だけ説明を開いてください。';
+  const browsers={
+   'android-edge':['https://www.tampermonkey.net/index.php?browser=edge&locale=ja','① Tampermonkeyを準備（初回だけ）'],
+   'pc-edge':['https://www.tampermonkey.net/index.php?browser=edge&locale=ja','① Tampermonkeyを準備（初回だけ）'],
+   'android-firefox':['https://addons.mozilla.org/android/addon/tampermonkey/','① Firefox用Tampermonkeyを準備'],
+   'pc-firefox':['https://addons.mozilla.org/firefox/addon/tampermonkey/','① Firefox用Tampermonkeyを準備'],
+   'ios-safari':['https://apps.apple.com/jp/app/userscripts/id1463298887','① SafariのUserscriptsを準備'],
+   'mac-safari':['https://apps.apple.com/app/userscripts/id1463298887','① SafariのUserscriptsを準備']
+  };
+  if(browsers[browserId]){easyExtension.href=browsers[browserId][0];easyExtension.textContent=browsers[browserId][1]}
+  paintEasyStatus();
   document.querySelectorAll('.browser').forEach(x=>{x.classList.toggle('active',x.dataset.browser===browserId);x.open=x.dataset.browser===browserId});
 }
 function installed(){return updater.live('notification')}
 function compareVersion(a,b){const pa=String(a||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const av=pa[i]||0,bv=pb[i]||0;if(av!==bv)return av>bv?1:-1}return 0}
+function paintEasyStatus(){
+ const current=installed(),ready=Boolean(current),supported=!['android-other','ios-other'].includes(browserId);
+ easyFirst.hidden=ready||!supported;
+ easyReady.hidden=!ready;
+ const upToDate=Boolean(latest&&ready&&compareVersion(current,latest)>=0);
+ easyStatus.className='easy-status '+(upToDate?'ok':ready?'warn':'');
+ easyStatus.textContent=upToDate?'✓ 最新版です。設定し直す必要はありません。':ready?'✓ 導入済み（v'+current+'）。普段はTampermonkeyの自動更新を利用できます。':'このブラウザでは本人通知の起動が未確認です。'+(supported?'使う場合だけ初回設定してください。':'対応ブラウザで初回設定してください。');
+ if(ready&&latest&&!upToDate)easyUpdate.open=true;
+}
 function check(){
   const current=installed();
+  paintEasyStatus();
   if(latest&&current&&compareVersion(current,latest)>=0){result.className='result ok';result.textContent='✓ 本人通知ツールは最新版です。';return}
   if(latest&&current){result.className='result warn';result.textContent='更新があります。上の「本人通知をインストール / 更新」を押してください。';return}
   if(latest&&!current){result.className='result warn';result.textContent='本人通知は未確認です。文字列が出ただけでは更新されません。下のURLからインポートし、戻ってきたら実際の起動を確認します。';return}
