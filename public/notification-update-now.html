@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>INSIGHT ツールを更新</title>
+<script src="./insight-update-return.js?v=verified-update-20261030"></script>
+<style>
+*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:#07131e;color:#edf7ff;font-family:system-ui,-apple-system,sans-serif;line-height:1.65}.wrap{max-width:520px;margin:auto;padding:20px 16px 36px}.back{color:#9be5f8;font-size:14px}h1{font-size:25px;line-height:1.4;margin:24px 0 8px}.lead{color:#c0d5e4;font-size:15px}.card{margin:18px 0;padding:18px;border:1px solid #42677e;border-radius:14px;background:#0e2433}.versions{display:grid;grid-template-columns:1fr 1fr;gap:12px}dl{margin:0}dt{color:#acc6d9;font-size:13px}dd{margin:5px 0 0;font-size:23px;font-weight:800}.status{padding:12px;border-radius:9px;background:#342a13;border:1px solid #927132;color:#ffedbf;font-weight:700}.status.ok{background:#113b2a;border-color:#5cb68b;color:#d7ffeb}.action{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;border:1px solid #79d6ae;border-radius:10px;background:#245d43;color:#fff;text-decoration:none;text-align:center;padding:12px;font:800 16px/1.5 system-ui;margin:14px 0}.action.secondary{background:#153c50;border-color:#73b6d0}.action[aria-disabled=true]{opacity:.6;pointer-events:none}.help{color:#c0d5e4;font-size:14px}.small{color:#a7c0d0;font-size:13px}.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}button{min-height:44px;padding:8px 13px;border:1px solid #5a849b;border-radius:8px;background:#102b3e;color:#eaf8ff;font:700 14px system-ui;cursor:pointer}details{margin-top:18px;border-top:1px solid #355466;padding-top:14px}summary{cursor:pointer;font-size:14px;font-weight:700}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="wrap">
+<a id="back" class="back" href="./">← INSIGHTに戻る</a>
+<h1 id="heading">本人通知を更新</h1>
+<p class="lead">この画面ではまだ更新されません。下のボタンから確認画面を開き、そこで更新を確定してください。</p>
+<section class="card" aria-label="実際に起動している版と配信版">
+<div class="versions"><dl><dt>この画面で起動中</dt><dd id="current">確認中</dd></dl><dl><dt>配信中の最新版</dt><dd id="latest">確認中</dd></dl></div>
+<p id="status" class="status" role="status" aria-live="polite">更新状態を確認しています。</p>
+<a id="installNow" class="action" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">更新確認画面を開く</a>
+<p id="instruction" class="help">Tampermonkeyの確認画面で「更新」または「インストール」を押し、この画面へ戻ってください。</p>
+<div class="row"><button id="check" type="button">更新後の状態を確認</button><a id="readyBack" class="back" href="./" hidden>INSIGHTへ戻る</a></div>
+</section>
+<section id="edgeHelp" hidden>
+<p class="help">アプリ内の小さなブラウザで開いている場合は、普段使っているEdgeで続けてください。</p>
+<a id="openEdge" class="action secondary" href="#">Edgeでこの更新画面を開く</a>
+<p id="edgeFallback" class="small" hidden>Edgeへ切り替わらない場合は、画面右上の「︙」から「ブラウザで開く」を選んでください。</p>
+</section>
+<p class="small">既存の本人通知・DM・コメント・フォロー履歴を削除する操作はありません。更新確認を開いただけでは「更新済み」にしません。</p>
+<details><summary>更新確認画面が開かない場合</summary><p class="help">「Script Installation」のまま動かない、または文字列だけが出る場合は、拡張機能からの更新起動が完了していません。新しい版の起動を確認するまで未更新の表示を残します。</p><a id="direct" class="back" href="#" target="_blank" rel="noopener noreferrer">別の更新リンクで確認画面を開く</a><p class="small">どちらも更新確認が開かない場合は、表示されている画面をそのまま送ってください。コード編集や既存ツールの削除は行わないでください。</p></details>
+</main>
+<script>
+(function(){
+'use strict';
+const api=window.MumeiInsightUpdateReturn,q=new URLSearchParams(location.search),tool=q.get('tool')==='dm'?'dm':'notification',label=tool==='dm'?'DM同期':'本人通知';
+const wrapper=tool==='dm'?'note-insight-dm.user.js':'note-insight-notification-v3.user.js';
+const source='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/'+wrapper;
+const account=String(q.get('account')||q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase();
+const back=api.resolve(q.get('return'),{fallbackMode:tool==='dm'?'normal':'notifications',fallbackTab:tool==='dm'?'dm':'notifications',account});
+const el=id=>document.getElementById(id),button=el('installNow');
+el('heading').textContent=label+'を更新';document.title='INSIGHT '+label+'を更新';el('back').href=back;el('readyBack').href=back;
+// Use Tampermonkey's installation handoff, not a source-code navigation.
+button.href='https://www.tampermonkey.net/script_installation.php#url='+source;
+el('direct').href=new URL('./'+wrapper,location.href).href;
+const agent=navigator.userAgent||'',isSafari=/Safari/i.test(agent)&&!/Chrome|Chromium|Edg|OPR|Android/i.test(agent);
+if(isSafari)button.href=el('direct').href;
+let latest='',error='',busy=null,lastCheck=0,started=false;
+const state=api.create({tool,account,returnTo:back,onStatus:message=>{if(message==='account-changed'){el('status').textContent='アカウントが変わったため、自動で戻りません。INSIGHTのアカウントを確認してください。'}else if(message==='storage-unavailable'){el('status').textContent='戻り先を保存できませんでした。更新確定後はこの画面で確認してください。'}}});
+function paint(){
+ const current=api.live(tool),done=Boolean(latest&&current&&api.compare(current,latest)>=0);
+ el('current').textContent=current?'v'+current:'起動未確認';el('latest').textContent=latest?'v'+latest:'確認できません';
+ el('status').className='status'+(done?' ok':'');button.hidden=done;el('readyBack').hidden=!done;
+ button.setAttribute('aria-disabled',latest?'false':'true');
+ button.textContent=latest?label+'を v'+latest+' に更新する':'最新版を確認中';
+ el('status').textContent=done?'✓ 最新版の起動を確認しました。':error?'最新版の確認に失敗しました。「更新後の状態を確認」で再試行してください。':!latest?'最新版を確認しています。':current?(started||state.pending()?'まだ更新を確認できません。':'未更新です。')+' 起動中 v'+current+' → 最新 v'+latest:label+'の起動が未確認です。拡張機能を入れているブラウザで開いてください。';
+ el('instruction').textContent=done?'新しい版が実際に動いていることを確認しました。':'確認画面で「更新」または「インストール」を確定し、この画面へ戻ってください。自動更新を待つだけでは完了扱いにしません。';
+ return done;
+}
+async function release(force=false){
+ if(busy)return busy;if(!force&&latest&&Date.now()-lastCheck<30000)return;
+ busy=(async()=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const response=await fetch('./insight-release.json?verify='+Date.now(),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('HTTP_'+response.status);const manifest=await response.json(),value=api.version(manifest[tool==='dm'?'dmVersion':'notificationVersion']);if(!value)throw Error('INVALID_VERSION');latest=value;error='';lastCheck=Date.now()}catch(e){error=String(e?.message||e)}finally{clearTimeout(timer);busy=null;paint()}})();return busy;
+}
+function begin(event){if(!latest||paint()){event.preventDefault();return}started=true;state.begin(latest);paint()}
+button.addEventListener('click',begin);el('direct').addEventListener('click',begin);
+async function verify(returned=false,force=false){await release(force);const done=paint();if(done){state.finish(latest);return}if(returned&&state.pending()&&state.reload()){const u=new URL(location.href);u.searchParams.set('verify',String(Date.now()));location.replace(u.href)}}
+el('check').addEventListener('click',()=>void verify(true,true));
+window.addEventListener('focus',()=>void verify(true));window.addEventListener('pageshow',()=>void verify(true));
+window.addEventListener('mumei-insight-tool-ready',()=>void verify(false));window.addEventListener(tool==='dm'?'mumei-dm-version-changed':'mumei-notification-version-changed',()=>void verify(false));
+const observer=new MutationObserver(()=>{if(paint())state.finish(latest)});observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-'+tool+'-live-version']});
+if(/Android/i.test(agent)){
+ el('edgeHelp').hidden=false;
+ const target=new URL('./notification-update-now.html',location.href);target.searchParams.set('tool',tool);if(/^[a-z0-9_-]+$/.test(account))target.searchParams.set('account',account);target.searchParams.set('return',back);
+ const fallback=new URL(target);fallback.searchParams.set('edgeLaunchFailed','1');
+ el('openEdge').href='intent://'+target.host+target.pathname+target.search+'#Intent;scheme=https;package=com.microsoft.emmx;S.browser_fallback_url='+encodeURIComponent(fallback.href)+';end';
+ el('edgeFallback').hidden=q.get('edgeLaunchFailed')!=='1';
+}
+paint();void release(true);
+})();
+</script>
+</body>
+</html>
