@@ -54,6 +54,15 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 .import-copy{display:block;width:100%;min-height:42px;margin-top:7px;border:1px solid #e6bb5b;border-radius:8px;background:#47330d;color:#fff1ca;font-size:12px;font-weight:900}
 .import-url{width:100%;min-height:32px;margin-top:5px;padding:5px 7px;border:1px solid #775f3f;border-radius:7px;background:#0d161e;color:#d4eefe;font-size:10px}
 .import-help small{display:block;margin-top:5px;font-size:9px;color:#e3cda1}
+.code-update{border:1px solid #579e81;background:#0b281f;border-radius:10px;padding:10px;margin-top:9px}
+.code-update b{display:block;font-size:12px;color:#cffff0}
+.code-update p,.code-update li{font-size:10px;line-height:1.65;color:#d3eee2}
+.code-update ol{margin:6px 0;padding-left:19px}
+.code-copy{display:block;width:100%;min-height:48px;border-radius:9px;border:1px solid #7ae8b8;background:#23654f;color:#fff;font-size:13px;font-weight:950}
+.code-copy:disabled{opacity:.65}
+.code-result{font-size:10px;line-height:1.6;color:#dcffee;margin:7px 0 0}
+.install.secondary{border-color:#456a7f;background:#102b3d;color:#d9e9f5;font-size:11px;min-height:35px}
+
 .foot{margin-top:10px;color:#8ea4b3;font-size:9px;line-height:1.5}
 @media(max-width:360px){.wrap{width:min(620px,calc(100% - 10px))}.card{padding:9px}.browser summary{padding:5px 7px}.bname{font-size:10px}}
 </style>
@@ -67,7 +76,14 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <div class="toolname">本人通知ツール</div>
 <p class="lead">使っている端末とブラウザのパネルだけ開いて進めます。すでに導入済みなら、拡張機能の入れ直しは不要です。</p>
 <div class="notice"><b>通知画面は下部固定の4パネル。</b><br>「読込 / フィルター ON・OFF / 設定 / INSIGHT」。読込は自動を基本にし、保存済み境界から差分だけを続行します。</div>
-<a id="install" class="install" href="#">本人通知をインストール / 更新</a>
+<div class="code-update" aria-label="文字列になってしまう端末向けの更新">
+  <b>文字列画面を開かずに更新する</b>
+  <p>EdgeのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知 V3</b> の「更新を確認」を実行してください。</p>
+  <p>更新できない場合は、下のボタンで最新版のスクリプトをコピーできます。ブラウザに文字列を表示する必要はありません。</p>
+  <button id="copyCode" class="code-copy" type="button">更新用コードをコピー（既存スクリプトの上書き用）</button>
+  <div id="codeResult" class="code-result" role="status" aria-live="polite">コピー後：Tampermonkeyで既存の本人通知スクリプトを開き、エディター内を全選択 → 貼り付け → 保存。スクリプトを削除する必要はありません。</div>
+</div>
+<a id="install" class="install secondary" href="#">通常更新リンク（文字列になる場合は使用しない）</a>
 <div id="verifyResult" class="result">更新状態を自動確認します。</div>
 <div class="import-help" aria-label="文字列表示時の更新方法">
   <b>⚠ コードが文字列で表示されて更新できない場合</b>
@@ -186,7 +202,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <script>
 const RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
 const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
-const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl');
+const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl'),copyCode=document.getElementById('copyCode'),codeResult=document.getElementById('codeResult');
 scriptUrl.value=RAW_SCRIPT;
 let latest='',browserId='other',loadingLatest=null;
 function rawScriptUrl(){return RAW_SCRIPT}
@@ -238,6 +254,35 @@ function check(){
 }
 async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;paintInstall();check()}})();return loadingLatest}
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
+async function copyCurrentNotificationCode(){
+ if(copyCode.disabled)return;
+ copyCode.disabled=true;
+ codeResult.textContent='INSIGHTから最新版の本人通知コードを確認中…';
+ try{
+  // Fetch our same-origin deployed copy, not a raw source page or another site's script.
+  const response=await fetch('./note-insight-notification-v3.user.js?_script='+Date.now(),{cache:'no-store',credentials:'same-origin'});
+  if(!response.ok)throw new Error('SCRIPT_FETCH_'+response.status);
+  const source=await response.text();
+  const marker=source.indexOf('// ==/UserScript==');
+  const header=marker>=0?source.slice(0,marker+19):'';
+  const match=header.match(/^\/\/\s*@version\s+(\d+(?:\.\d+)+)\s*$/m);
+  if(!source.startsWith('// ==UserScript==')||!/^\/\/\s*@namespace\s+https:\/\/github\.com\/mumei-s\/note-insight\/notification-v3\s*$/m.test(header)||!/^\/\/\s*@name\s+無名S note INSIGHT 本人通知 V3\s*$/m.test(header)||!match||source.length>500000||source.length<1000)throw new Error('INVALID_NOTIFICATION_SOURCE');
+  if(latest&&match[1]!==latest)throw new Error('VERSION_MISMATCH');
+  let copied=false;
+  try{await navigator.clipboard.writeText(source);copied=true}catch{}
+  if(!copied){
+   const area=document.createElement('textarea');area.value=source;area.setAttribute('readonly','');area.style.cssText='position:fixed;opacity:0;left:-9999px';
+   document.body.appendChild(area);area.select();try{copied=document.execCommand('copy')===true}catch{}area.remove();
+  }
+  if(!copied)throw new Error('CLIPBOARD_UNAVAILABLE');
+  update.begin(latest);
+  codeResult.textContent='✓ v'+match[1]+' のコードをコピーしました。Edge → Tampermonkey → ダッシュボード → インストール済み → 本人通知 V3 → エディター → 全選択 → 貼り付け → 保存。保存後はnoteとINSIGHTを再読み込みしてください。';
+  copyCode.textContent='✓ 更新用コードをコピーしました';
+ }catch(error){
+  codeResult.textContent='コピーできませんでした（'+String(error?.message||error)+'）。Tampermonkeyの「ユーティリティ → URLからインポート」を試してください。既存のツールは変更されていません。';
+ }finally{copyCode.disabled=false}
+}
+copyCode.addEventListener('click',()=>void copyCurrentNotificationCode());
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
 copyScriptUrl.addEventListener('click',async()=>{
   let copied=false;
