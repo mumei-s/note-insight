@@ -30,8 +30,23 @@ async function prepare(noteId,token){const key=PREFIX+await hash(JSON.stringify(
 const read=key=>{try{return JSON.parse(cached(key)||'[]')}catch{return []}};
 const write=(key,rows)=>remember(key,JSON.stringify(rows));
 function stage(key,pending){const rows=read(key);pending.queueId=pending.queueId||crypto.randomUUID();if(read(key+':confirmed').some(r=>r.id===pending.queueId))return pending.queueId;const row={id:pending.queueId,payload:pending.payload,saved:pending.saved||null,at:Date.now()},index=rows.findIndex(r=>r.id===row.id);if(index<0)rows.push(row);else rows[index]={...row,saved:row.saved||rows[index].saved};write(key,rows);return row.id}
-function request(body,token){return new Promise((resolve,reject)=>{const fn=typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:typeof GM!=='undefined'?GM?.xmlHttpRequest?.bind(GM):null;if(!fn)return reject(Error('DASHBOARD_REQUEST_UNAVAILABLE'));fn({method:'POST',url:API,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload:r=>{let p;try{p=JSON.parse(r.responseText)}catch{return reject(Error('SAVE_RESPONSE'))}if(r.status>=200&&r.status<300&&p.ok!==false)resolve(p);else reject(Error(p.error||'HTTP_'+r.status))},onerror:()=>reject(Error('NETWORK_ERROR')),ontimeout:()=>reject(Error('TIMEOUT'))})})}
-async function identity(){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);let r;try{r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:controller.signal})}finally{clearTimeout(timer)};if(!r.ok)throw Error('DASHBOARD_ACCOUNT_UNKNOWN');const j=await r.json(),u=(j.data??j).user||(j.data??j);return String(u.urlname||u.url_name||u.username||'').toLowerCase()}
+function request(body,token){return new Promise((resolve,reject)=>{
+ const fn=typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:typeof GM!=='undefined'?GM?.xmlHttpRequest?.bind(GM):null;
+ if(!fn)return reject(Error('DASHBOARD_REQUEST_UNAVAILABLE'));
+ let settled=false,handle;
+ const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve(value)};
+ const onload=r=>{let p;try{p=JSON.parse(r.responseText)}catch{return finish(Error('SAVE_RESPONSE'))}if(r.status>=200&&r.status<300&&p.ok!==false)finish(null,p);else finish(Error(p.error||'HTTP_'+r.status))};
+ const timer=setTimeout(()=>{finish(Error('TIMEOUT'));try{handle?.abort?.()}catch{}},45000);
+ try{
+  handle=fn({method:'POST',url:API,headers:{'Content-Type':'application/json','X-Ingest-Token':token},data:JSON.stringify(body),timeout:45000,onload,onerror:()=>finish(Error('NETWORK_ERROR')),ontimeout:()=>finish(Error('TIMEOUT')),onabort:()=>finish(Error('NETWORK_ERROR'))});
+  if(handle&&typeof handle.then==='function')Promise.resolve(handle).then(onload,()=>finish(Error('NETWORK_ERROR'))).catch(error=>finish(error));
+ }catch(error){finish(error)}
+})}
+async function identity(){
+ const controller=new AbortController();let timer;
+ const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('DASHBOARD_ACCOUNT_TIMEOUT'))},10000)});
+ try{return await Promise.race([(async()=>{const r=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('DASHBOARD_ACCOUNT_UNKNOWN');const j=await r.json(),u=(j.data??j).user||(j.data??j);return String(u.urlname||u.url_name||u.username||'').toLowerCase()})(),deadline])}finally{clearTimeout(timer)}
+}
 function verify(payload,saved,v){const metrics=payload.metricSeries||[],charts=payload.chartSeries||[];if(!saved?.snapshotId||v.confirmed!==true||String(v.snapshotId)!==String(saved.snapshotId)||v.noteId!==payload.noteId||Number(v.articleCount)!==payload.articles.length||Number(v.dailyMetricCount)!==metrics.length||Number(v.dailyPvDays)!==metrics.filter(r=>r.pageViews!=null).length||(charts.length&&Number(v.chartMetricCount)!==charts.length))throw Error('保存件数が一致しません [SAVE_COUNT]');for(const[k,n]of Object.entries(payload.totals||{}))if(n!=null&&Number(v.totals?.[k])!==n)throw Error('保存した数値を確認できません [SAVE_VALUE]')}
 async function run(key,wanted){await settled(key);await settled(key+':confirmed');const token=localStorage.getItem(TOKEN)||'',noteId=(localStorage.getItem(NOTE)||'').toLowerCase();if(!token||key!==await prepare(noteId,token)||await identity()!==noteId)throw Error('DASHBOARD_ACCOUNT_MISMATCH');await Promise.all([refresh(key),refresh(key+':confirmed')]);if(localStorage.getItem(TOKEN)!==token||localStorage.getItem(NOTE)?.toLowerCase()!==noteId)throw Error('DASHBOARD_ACCOUNT_MISMATCH');let answer=read(key+':confirmed').find(r=>r.id===wanted)?.result||null;
  for(const item of read(key)){if(item.payload?.noteId!==noteId)throw Error('DASHBOARD_ACCOUNT_MISMATCH');if(localStorage.getItem(TOKEN)!==token||localStorage.getItem(NOTE)?.toLowerCase()!==noteId)throw Error('DASHBOARD_ACCOUNT_MISMATCH');
@@ -44,7 +59,7 @@ async function run(key,wanted){await settled(key);await settled(key+':confirmed'
  return answer;
 }
 function flush(key,wanted){if(jobs.has(key))return jobs.get(key).then(()=>read(key).some(r=>r.id===wanted)?flush(key,wanted):read(key+':confirmed').find(r=>r.id===wanted)?.result||null);const task=(navigator.locks?.request?navigator.locks.request(key,()=>run(key,wanted)):run(key,wanted)).finally(()=>jobs.delete(key));jobs.set(key,task);return task}
-window.__mumeiDashboardSaveQueueV1={version:'1.0.2',prepare,stage,flush,hash,remember,recall,cached,settled};
+window.__mumeiDashboardSaveQueueV1={version:'1.0.3',prepare,stage,flush,hash,remember,recall,cached,settled};
 // Retry only a previously authorised save for the currently paired account.
 (async()=>{try{const token=localStorage.getItem(TOKEN),id=localStorage.getItem(NOTE)?.toLowerCase();if(!token||!id)return;const key=await prepare(id,token);if(read(key).length)await flush(key)}catch{}})();
 })();

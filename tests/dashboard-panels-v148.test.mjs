@@ -236,7 +236,7 @@ test('保存応答だけ成功でもDB照合で件数が違えば完了や自動
 
 test('クリックしても開かないパネルは完了として保存しない',async t=>{
  const h=page(t,'<p>全体ビュー 12</p><button aria-expanded="false">日別アクセスグラフ</button>');
- await pause(500);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/パネルを開けません/);
+ for(let i=0;i<150&&!/パネルを開けません/.test(h.w.document.querySelector('.status')?.textContent||'');i++)await pause(20);assert.equal(h.saves.length,0);assert.match(h.w.document.querySelector('.status').textContent,/パネルを開けません/);
 });
 
 test('通常記事では通信を差し替えず、SPAで公式画面へ入った時から読める',async t=>{
@@ -274,7 +274,7 @@ for(const change of ['period','route'])test('読取途中の画面変更でも�
  const h=page(t,'<p id="range">2026/8/30〜2026/9/26</p><p>ページビュー 12</p><button role="tab" aria-selected="true">記事</button><button role="tab" aria-selected="false" id="next">メンバーシップ</button>',{before:w=>{
   w.document.getElementById('next').onclick=()=>{if(change==='period')w.document.getElementById('range').textContent='2026/8/2〜2026/8/29';else w.history.pushState(null,'','/tester/n/n123')};
  }});
- await pause(400);assert.equal(h.saves.length,1);assert.equal(h.saves[0].periodStart,'2026-08-30');assert.equal(h.saves[0].contentSections.article.scope,'partial-read');if(change==='route')assert.equal(h.w.document.querySelector('#mumei-dashboard-sync'),null);else assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);
+ await saved(h);assert.equal(h.saves.length,1);assert.equal(h.saves[0].periodStart,'2026-08-30');assert.equal(h.saves[0].contentSections.article.scope,'partial-read');if(change==='route')assert.equal(h.w.document.querySelector('#mumei-dashboard-sync'),null);else assert.match(h.w.document.querySelector('.status').textContent,/取得済みデータを保存しました/);
 });
 
 test('パネル読取が失敗した後の通信で自動巡回を再開せず、手動でだけ再試行する',async t=>{
