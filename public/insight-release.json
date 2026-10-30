@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.10.30.1",
-  "notificationVersion": "3.6.58",
+  "notificationVersion": "3.6.59",
   "dashboardVersion": "1.7.5",
   "releasedAt": "2026-10-30",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "🔔の無関係なDOM監視と通知保存配列の頻繁な読み直しを減らし、表示中の新着確認を軽量化しました。スキ・コメント・DM・フォロー等の履歴は維持します。",
+  "note": "🔔通知の監視範囲を絞り、無関係なDOM更新での全体再探索、端末通知状態の過剰な取得と履歴再集計を削減しました。保存済み通知・DM・コメント・フォローは維持します。",
   "dmVersion": "1.4.17",
   "dmLabel": "DM同期"
 }
