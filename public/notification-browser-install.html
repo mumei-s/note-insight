@@ -249,7 +249,7 @@ const easyStatus=document.getElementById('easyStatus'),easyFirst=document.getEle
 easyInstall.href=new URL('./note-insight-notification-v3.user.js',location.href).href;
 function rawScriptUrl(){return RAW_SCRIPT}
 const q=new URLSearchParams(location.search),updater=window.MumeiInsightUpdateReturn,notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'notifications',fallbackTab:'notifications',account:notificationAccount});document.getElementById('back').href=back;
-document.getElementById('easyNormal').href=back;document.getElementById('easyReturn').href=back;
+document.getElementById('easyNormal').href=new URL('./?insightMode=normal#dashboard',location.href).href;document.getElementById('easyReturn').href=back;
 const update=updater.create({tool:'notification',returnTo:back,account:notificationAccount,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ 更新確認済み。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1';
 let panelOn=true;
