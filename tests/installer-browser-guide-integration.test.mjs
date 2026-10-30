@@ -9,6 +9,22 @@ const browserGuide=readFileSync('public/insight-browser-guide.js','utf8');
 const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
 const settle=async()=>{await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve))};
 
+const browserCases=[
+ ['pc-chrome','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36','chrome'],
+ ['pc-edge','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0','edge'],
+ ['pc-firefox','Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0','firefox'],
+ ['pc-opera','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36 OPR/114.0.0.0','opera'],
+ ['android-edge','Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36 EdgA/130.0.0.0','edge'],
+ ['android-firefox','Mozilla/5.0 (Android 15; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0','firefox']
+];
+for(const tool of ['notification','dm'])for(const [browser,ua,store] of browserCases)test(tool+': '+browser+' の拡張機能の準備先が別ブラウザにならない',async t=>{
+ const h=fixture(t,tool,{ua});await settle();
+ assert.equal(h.w.MumeiInsightBrowserGuide.forTool(tool).actualBrowser,browser);
+ const url=new URL(h.el(tool==='dm'?'dmEasyExtension':'easyExtension').href);
+ if(store==='firefox'){assert.ok(url.searchParams.get('browser')==='firefox'||url.hostname==='addons.mozilla.org')}
+ else assert.equal(url.searchParams.get('browser'),store);
+});
+
 function fixture(t,tool,{ua,platform='',touch=0,loadGuide=true}={}){
  const file=tool==='dm'?'dm-browser-install.html':'notification-browser-install.html',html=readFileSync('public/'+file,'utf8');
  const dom=new JSDOM(html,{url:BASE+file+'?account=tester&return='+encodeURIComponent(BASE+'?insightMode=normal&insightTab=dm#dashboard'),runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;

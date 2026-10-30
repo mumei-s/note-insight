@@ -48,7 +48,7 @@ APIをglobalThisへコピーするshimは使わない。
 - 新規互換・ブラウザ案内・実installer統合テストをPagesの公開ゲートに含める。
 - Android Edgeは利用者による実機確認あり。新しい版のiPhone/iPad/Mac/Windows全実機の操作をこの環境で完了したとは主張しない。
 
-ローカル結果：Userscripts API互換14件、ブラウザ案内39件、実installer統合11件、更新/設定のまとまったゲート198件が成功。本番build・Pagesで要求する既存の各検査グループも成功。
+ローカル結果：Userscripts API互換14件、ブラウザ案内39件、実installer統合23件、更新/設定のまとまったゲート210件が成功。本番build・Pagesで要求する既存の各検査グループも成功。
 旧版の@require固定値を検査していた箇所は、モジュール版と配布wrapperの一致へ変更した。
 既存の履歴SQLテストはfixtureがUTCなのに境界がローカル時差に依存していたため、UTC明示の範囲へ安定化し、Los Angeles/Tokyoの両方で確認した。本番DB・migrationの変更はない。
 
