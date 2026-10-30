@@ -175,7 +175,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    // committed head boundary never advances until the whole new segment saves.
    let cursor='',newHead=null,headDone=false;const boundary=new Set(state.headKeys||[]),pendingHead=new Set(state.pendingHeadKeys||[]),resume=state.headResumeBefore||'';
    while(await canRead()){
-    const p=await page(cursor);if(p.stopped||shouldStop())return{read,saved:newSaved,complete:false,stopped:true};if(newHead===null)newHead=p.keys;
+    const p=await page(cursor);if(p.stopped)return{read,saved:newSaved,complete:false,stopped:true};if(newHead===null)newHead=p.keys;
     if(p.empty){await checkpoint({complete:true,headKeys:newHead,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
     if(!boundary.size){await checkpoint({headKeys:newHead,before:state.before||p.before,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
     if(p.keys.some(k=>boundary.has(k))){await checkpoint({headKeys:newHead,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
@@ -186,7 +186,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    if(state.complete)return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'delta'};
    cursor=state.before||'';
    while(await canRead()){
-    const p=await page(cursor);if(p.stopped||shouldStop())return{read,saved:newSaved,complete:false,stopped:true};
+    const p=await page(cursor);if(p.stopped)return{read,saved:newSaved,complete:false,stopped:true};
     if(p.empty){await checkpoint({complete:true,before:null});return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'history'}}
     cursor=p.before;await checkpoint({before:cursor,complete:false});
    }

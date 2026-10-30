@@ -14,8 +14,6 @@ async function fixture(t) {
   const dom = new JSDOM('', { url: 'https://note.com/tester', runScripts: 'outside-only' }), w = dom.window;
   t.after(() => w.close());
   Object.defineProperty(w.crypto, 'subtle', { value: webcrypto.subtle }); w.TextEncoder = TextEncoder;
-  w.localStorage.setItem('mumei-dashboard-note-id-v1', 'tester');
-  w.localStorage.setItem('mumei-dashboard-ingest-token-v1', 'fixture-token');
   let now = 0, sequence = 0, identity = 'normal', transport = 'normal', delayedIdentity;
   const timers = new Map(), identities = [], requests = [], values = new Map();
   w.setTimeout = (fn, ms = 0) => { const key = ++sequence; timers.set(key, { fn, at: now + ms }); return key; };
@@ -42,6 +40,8 @@ async function fixture(t) {
     },
   };
   w.eval(source);
+  w.localStorage.setItem('mumei-dashboard-note-id-v1', 'tester');
+  w.localStorage.setItem('mumei-dashboard-ingest-token-v1', 'fixture-token');
   const api = w.__mumeiDashboardSaveQueueV1, key = await api.prepare('tester', 'fixture-token'), pending = { payload };
   api.stage(key, pending); await settle();
   return { w, api, key, pending, identities, requests,
