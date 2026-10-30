@@ -5,7 +5,7 @@ if(window.__mumeiNotificationFeatureBridgeV1Loaded)return;window.__mumeiNotifica
 const KEY='mumei_insight_notification_feature_enabled_v1',PAGE='mumei-notification-feature-ui-v1',BRIDGE='mumei-notification-feature-bridge-v1',EVENT='mumei-notification-feature-changed';
 const NOTE=location.hostname==='note.com',OWNED='#mumei-inline-notification-controls-v1,[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339,#mumei-v325-dock,#mumei-v325-filter-settings,#mumei-v3-saved-boundary-v3223,#mumei-v3-reader-progress-v3223';
 let enabled=null,revision=0,queue=Promise.resolve();
-const modern=()=>Boolean(globalThis.GM);
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 async function get(d=true){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(KEY,d);if(typeof GM_getValue==='function')return GM_getValue(KEY,d)}catch{}return d}
 async function write(k,v){if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);throw new Error('ON/OFFを保存できるツールがありません')}
 async function verify(k,v){let actual;if(modern()&&typeof GM.getValue==='function')actual=await GM.getValue(k,null);else if(typeof GM_getValue==='function')actual=GM_getValue(k,null);else throw new Error('ON/OFFの保存を確認できません');if(actual!==v)throw new Error('ON/OFFの保存を確認できません')}
@@ -21,7 +21,7 @@ function apply(value){
 }
 async function refresh(){const at=revision,value=await get(true);if(at===revision)apply(value);return enabled===true}
 function setEnabled(value){const next=Boolean(value);const job=queue.catch(()=>{}).then(async()=>{revision++;try{if(next){const panel='mumei_insight_notification_panel_enabled_v1';await write(panel,true);await verify(panel,true)}await write(KEY,next);await verify(KEY,next);apply(next);send();return next}catch(e){await refresh();send(String(e?.message||e));throw e}});queue=job;return job}
-window.__mumeiNotificationFeatureV1={version:'1.2.0',setEnabled,isEnabled:()=>enabled===true,refresh,ready:null};
+window.__mumeiNotificationFeatureV1={version:'1.2.1',setEnabled,isEnabled:()=>enabled===true,refresh,ready:null};
 if(NOTE){
  const style=document.createElement('style');style.id='mumei-notification-feature-style-v1';
  style.textContent=OWNED.split(',').map(s=>'html[data-mumei-notification-feature="off"] '+s).join(',')+'{display:none!important}';
