@@ -48,6 +48,12 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 .small{margin-top:6px;color:#839baa;font-size:8.8px;line-height:1.5}
 .copyrow{display:grid;grid-template-columns:1fr;gap:5px}
 .copybtn{min-height:32px;border:1px solid #42677e;border-radius:7px;background:#10293a;color:#ddf6ff;font-weight:900;font-size:10px}
+.import-help{margin-top:9px;padding:9px;border:1px solid #836d3a;border-radius:10px;background:#20190c;color:#ffedc0}
+.import-help b{display:block;font-size:11px}
+.import-help p{margin:5px 0;font-size:10px;line-height:1.6}
+.import-copy{display:block;width:100%;min-height:42px;margin-top:7px;border:1px solid #e6bb5b;border-radius:8px;background:#47330d;color:#fff1ca;font-size:12px;font-weight:900}
+.import-url{width:100%;min-height:32px;margin-top:5px;padding:5px 7px;border:1px solid #775f3f;border-radius:7px;background:#0d161e;color:#d4eefe;font-size:10px}
+.import-help small{display:block;margin-top:5px;font-size:9px;color:#e3cda1}
 .foot{margin-top:10px;color:#8ea4b3;font-size:9px;line-height:1.5}
 @media(max-width:360px){.wrap{width:min(620px,calc(100% - 10px))}.card{padding:9px}.browser summary{padding:5px 7px}.bname{font-size:10px}}
 </style>
@@ -63,6 +69,13 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <div class="notice"><b>通知画面は下部固定の4パネル。</b><br>「読込 / フィルター ON・OFF / 設定 / INSIGHT」。読込は自動を基本にし、保存済み境界から差分だけを続行します。</div>
 <a id="install" class="install" href="#">本人通知をインストール / 更新</a>
 <div id="verifyResult" class="result">更新状態を自動確認します。</div>
+<div class="import-help" aria-label="文字列表示時の更新方法">
+  <b>⚠ コードが文字列で表示されて更新できない場合</b>
+  <p>文字列が開いただけでは更新されません。Edgeの「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポート」で、下のURLを取り込んで「更新 / インストール」を確定してください。</p>
+  <button id="copyScriptUrl" class="import-copy" type="button">更新用URLをコピー</button>
+  <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込む本人通知URL">
+  <small>既存の本人通知スクリプトを更新します。二重インストールや拡張機能の削除は不要です。更新後、ここへ戻って最新版を確認してください。</small>
+</div>
 <div class="panel-setting">
   <div><b>note公式🔔パネル</b><small>OFFでも本人通知の読取・保存は継続します。noteの🔔画面に重なる操作パネルだけ非表示にします。</small></div>
   <button id="panelToggle" class="panel-toggle" type="button">確認中…</button>
@@ -173,8 +186,10 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <script>
 const RELEASE='./insight-release.json',RAW_SCRIPT='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js';
 const install=document.getElementById('install'),result=document.getElementById('verifyResult'),detected=document.getElementById('detected');
+const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl');
+scriptUrl.value=RAW_SCRIPT;
 let latest='',browserId='other',loadingLatest=null;
-function rawScriptUrl(){const url=new URL(RAW_SCRIPT);url.searchParams.set('v',latest||'check-'+Date.now());return url.href}
+function rawScriptUrl(){return RAW_SCRIPT}
 const q=new URLSearchParams(location.search),updater=window.MumeiInsightUpdateReturn,notificationAccount=String(q.get('notificationAccount')||q.get('account')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'notifications',fallbackTab:'notifications',account:notificationAccount});document.getElementById('back').href=back;
 const update=updater.create({tool:'notification',returnTo:back,account:notificationAccount,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ 更新確認済み。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 const PANEL_PAGE='mumei-notification-install-page-v1',PANEL_BRIDGE='mumei-filter-bridge-v1';
@@ -218,13 +233,21 @@ function check(){
   const current=installed();
   if(latest&&current&&compareVersion(current,latest)>=0){result.className='result ok';result.textContent='✓ 本人通知ツールは最新版です。';return}
   if(latest&&current){result.className='result warn';result.textContent='更新があります。上の「本人通知をインストール / 更新」を押してください。';return}
-  if(latest&&!current){result.className='result warn';result.textContent='本人通知ツールの起動確認待ちです。この画面に戻ると自動確認し、完了後はINSIGHTへ戻ります。';return}
+  if(latest&&!current){result.className='result warn';result.textContent='本人通知は未確認です。文字列が出ただけでは更新されません。下のURLからインポートし、戻ってきたら実際の起動を確認します。';return}
   result.className='result';result.textContent=current?'本人通知ツールを検出しました。更新状態を確認中…':'更新状態を確認中…'
 }
 async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;paintInstall();check()}})();return loadingLatest}
 function paintInstall(){install.href=rawScriptUrl();install.target='_blank';install.rel='noopener noreferrer'}
 document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
-install.addEventListener('click',()=>{paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'userscriptを開きます。拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。':'userscriptを開きます。Tampermonkeyで保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。'});
+copyScriptUrl.addEventListener('click',async()=>{
+  let copied=false;
+  try{await navigator.clipboard.writeText(RAW_SCRIPT);copied=true}catch{
+    scriptUrl.focus();scriptUrl.select();
+    try{copied=document.execCommand('copy')===true}catch{}
+  }
+  copyScriptUrl.textContent=copied?'URLをコピーしました':'下のURL欄を長押ししてコピーしてください';
+});
+install.addEventListener('click',()=>{paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'拡張機能で更新を確定してください。文字列だけが出た場合は下のURLをインポートしてください。':'Tampermonkeyで更新を確定してください。文字列だけが出た場合は下の「更新用URLをコピー」を使ってください。'});
 async function refresh(){check();await loadLatest();return update.finish(latest)}
 async function verifyAfterInstall(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
 addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));
