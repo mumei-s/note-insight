@@ -177,6 +177,26 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   }
   async function relationSync(force=false){
     const now=Date.now();
+    if(force){
+      // Preserve the existing explicit-sync contract: acknowledge a successful
+      // direction without pretending that the other direction succeeded.
+      if(relationRunning.current)return false;
+      relationRunning.current=true;
+      try{
+        const results=await Promise.allSettled([
+          post(RELATIONS,"sync",{direction:"followers"},120_000),
+          post(RELATIONS,"sync",{direction:"followings"},120_000)
+        ]);
+        const ok=results.some(result=>result.status==="fulfilled");
+        if(ok){
+          lastRelationRun.current=now;
+          try{localStorage.setItem(relationSyncKey,String(now))}catch{}
+          lastSavedCheck.current=Date.now();setRevision(v=>v+1);
+        }
+        return ok;
+      }catch{return false}finally{relationRunning.current=false}
+    }
+
     if(relationRunning.current||(!force&&(now-lastRelationRun.current<RELATION_MS||now-lastRelationAttempt.current<120_000)))return false;
     relationRunning.current=true;lastRelationAttempt.current=now;
     try{
@@ -359,13 +379,15 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     // independently of which tab the user visited. A due sync runs in the
     // background; opening a tab never forces a full history reload.
     const check=()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void relationSync(false)};
-    // After app update/navigation restoration, do not add a second startup
-    // network roundtrip. The next real foreground return may check again.
-    if(!skipSocialBootstrap.current)check();
-    window.addEventListener("focus",check);
-    window.addEventListener("pageshow",check);
-    document.addEventListener("visibilitychange",check);
-    return()=>{window.removeEventListener("focus",check);window.removeEventListener("pageshow",check);document.removeEventListener("visibilitychange",check)};
+    // Let the session and first visible saved page finish before starting a
+    // bounded background relationship checkpoint, not an extra first-paint call.
+    let armed=false;
+    const pending=window.setTimeout(()=>{armed=true;if(!skipSocialBootstrap.current)check()},4500);
+    const resume=()=>{if(armed)check()};
+    window.addEventListener("focus",resume);
+    window.addEventListener("pageshow",resume);
+    document.addEventListener("visibilitychange",resume);
+    return()=>{window.clearTimeout(pending);window.removeEventListener("focus",resume);window.removeEventListener("pageshow",resume);document.removeEventListener("visibilitychange",resume)};
   },[]);
   useEffect(()=>{
     if(!official)void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
