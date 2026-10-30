@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.34',PROTOCOL='3.6.4';
+const VERSION='3.6.35',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -84,7 +84,7 @@ let scanning=false,stop=false,active=null,retryAt=0,retryFailures=0,autoComplete
 const PAUSE_KEY='mumei-notification-read-paused-v1';
 let lastProgress={},userPaused=false;window.addEventListener('mumei-notification-reader-status',e=>{lastProgress=e.detail||{}});try{userPaused=sessionStorage.getItem(PAUSE_KEY)==='1'}catch{}
 function rememberPause(value){userPaused=value;try{value?sessionStorage.setItem(PAUSE_KEY,'1'):sessionStorage.removeItem(PAUSE_KEY)}catch{}}
-function pauseReading(){rememberPause(true);clearTimeout(autoTimer);pauseCapture();health(scanning?'一時停止中｜取得済み分の保存を確認しています':'一時停止しました','done',{scanning,stopping:true});return 0}
+function pauseReading(){rememberPause(true);clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;pauseCapture();health(scanning?'一時停止中｜取得済み分の保存を確認しています':'一時停止しました','done',{scanning,stopping:true});return 0}
 async function resumeReading(opts={}){if(scanning)return 0;rememberPause(false);stop=false;pausedPanel=null;retryAt=0;retryFailures=0;lastAutoAt=0;const result=await scan({...opts,forceNetwork:true});scheduleAuto();return result}
 const OUTBOX='mumei-notification-outbox-v318:';
 function readOutbox(id){try{const value=JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]');return Array.isArray(value)?value:[]}catch{throw new Error('未送信通知の保存データを確認できません')}}
@@ -147,7 +147,7 @@ async function scan(opts={}){
  }
  finally{scanning=false;if(userPaused&&lastProgress.state!=='error')health('一時停止しました','done',{...lastProgress,state:'done',scanning:false,stopping:true});else if(pendingCapture&&!stop)scheduleAuto(80)}
 }
-let autoTimer=0,autoPanel=null,pausedPanel=null,lastAutoAt=0,panelMissingAt=0;
+let autoTimer=0,autoDueAt=0,autoPanel=null,pausedPanel=null,lastAutoAt=0,panelMissingAt=0,lastIdleProbe=0;
 const observedNoticeKeys=new Map();
 let observedNoticeOrder=[];
 function resetNoticeKeys(){observedNoticeKeys.clear();observedNoticeOrder=[]}
@@ -192,8 +192,12 @@ document.addEventListener('mumei-notification-captured',e=>{
  pendingCapture=true;lastAutoAt=0;autoComplete=false;scheduleAuto(80);
 });
 function scheduleAuto(delay=150){
- clearTimeout(autoTimer);
-  autoTimer=setTimeout(()=>{
+ const wait=Math.max(0,Number(delay)||0),due=Date.now()+wait;
+ // Keep the earliest due scan even when note redraws repeatedly.
+ if(autoTimer&&autoDueAt<=due)return;
+ clearTimeout(autoTimer);autoDueAt=due;
+ autoTimer=setTimeout(()=>{
+  autoTimer=0;autoDueAt=0;
   if(!featureOn()){pauseCapture();return}
   if(userPaused)return;
   const panel=isDmRoute()?null:findPanel();
@@ -213,16 +217,42 @@ function scheduleAuto(delay=150){
   if(autoComplete&&!pendingCapture)return;
   if(autoPanel===panel&&Date.now()-lastAutoAt<5000)return;
   autoPanel=panel;lastAutoAt=Date.now();void scan({automatic:true});
- },delay);
+ },wait);
 }
 setTimeout(()=>scheduleAuto(),80);
-function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element?r.target:r.target.parentElement)?.closest('[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]')))scheduleAuto()}).observe(document.documentElement,{subtree:true,childList:true,characterData:true})}observe();
-const poll=setInterval(()=>scheduleAuto(),5000);
-window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);window.__mumeiNotificationNetwork3300?.stop?.()});
+const OWNED_NOTICE='[data-mumei-notification-controls],#mumei-notification-filter-continuation-v4,#mumei-v3-saved-boundary-v3223,[data-mumei-checkpoint]';
+const NOTICE_SURFACE=SHELL+',.m-navbarNotice,.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationList" i],[class*="noticeList" i],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
+function noticeMutation(record){
+ const target=record.target instanceof Element?record.target:record.target.parentElement;
+ if(target?.closest?.(OWNED_NOTICE))return false;
+ if(autoPanel&&(!autoPanel.isConnected||target&&autoPanel.contains(target)))return true;
+ if(target?.closest?.(NOTICE_SURFACE))return true;
+ if(record.type==='characterData')return false;
+ for(const node of [...record.addedNodes,...record.removedNodes]){
+  if(!(node instanceof Element))continue;
+  if(node.matches(NOTICE_SURFACE)||node.querySelector?.(NOTICE_SURFACE))return true;
+ }
+ return false;
+}
+function observe(){
+ if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}
+ new MutationObserver(records=>{
+  if(document.visibilityState==='hidden'||/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
+  if(records.some(noticeMutation))scheduleAuto(150);
+ }).observe(document.documentElement,{subtree:true,childList:true,characterData:true})
+}observe();
+// Native notification additions wake the reader immediately; a light fallback
+// checks unknown layouts every 30 seconds instead of scanning all note pages.
+const poll=setInterval(()=>{
+ if(document.visibilityState==='hidden'||/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
+ const now=Date.now(),active=Boolean(autoPanel&&autoPanel.isConnected)||Boolean(document.querySelector(SHELL))||/^\/notifications(?:\/|$)/i.test(location.pathname);
+ if(active||now-lastIdleProbe>=30000){lastIdleProbe=now;scheduleAuto(200)}
+},5000);
+window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;window.__mumeiNotificationNetwork3300?.stop?.()});
 window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
 window.addEventListener('focus',()=>scheduleAuto());
 window.addEventListener('mumei-notification-feature-changed',e=>{
- clearTimeout(autoTimer);autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;resetNoticeKeys();
+ clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;resetNoticeKeys();
  if(e.detail?.enabled){stop=false;scheduleAuto(0)}else pauseCapture();
 });
 window.__mumeiNotificationReaderV4={version:VERSION,pause:pauseReading,resume:resumeReading,isPaused:()=>userPaused,scan,scheduleAuto,rowData,visibleRows:()=>rows(findPanel()),findPanel,directPanel,isDmRoute};
