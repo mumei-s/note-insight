@@ -74,4 +74,37 @@ function create(options){
  return{begin,pending,finish,reload,cancel};
 }
 window.MumeiInsightUpdateReturn=Object.freeze({resolve,capture,live,create,version,compare});
+// Installed is not the same as current. Keep the actual update action visible
+// on both installer screens; do not alter runtime version records or data.
+function wireVerifiedUpdateAction(){
+ const name=location.pathname.split('/').pop(),tool=name==='notification-browser-install.html'?'notification':name==='dm-browser-install.html'?'dm':'';
+ if(!tool)return;
+ const dm=tool==='dm',status=document.getElementById(dm?'dmEasyStatus':'easyStatus'),ready=document.getElementById(dm?'dmEasyReady':'easyReady');
+ if(!status||!ready||document.getElementById('verifiedUpdateAction'))return;
+ const q=new URLSearchParams(location.search),account=id(q.get('account')||q.get('notificationAccount'));
+ const target=new URL(ROOT+'notification-update-now.html',location.origin);target.searchParams.set('tool',tool);if(account)target.searchParams.set('account',account);target.searchParams.set('return',resolve(q.get('return'),{fallbackMode:dm?'normal':'notifications',fallbackTab:dm?'dm':'notifications',account}));
+ const action=document.createElement('a');action.id='verifiedUpdateAction';action.href=target.href;action.className=dm?'easy-link primary':'easy-action primary';action.style.cssText='display:flex;align-items:center;justify-content:center;min-height:52px;margin:10px 0;padding:12px;border:1px solid #86dab4;border-radius:10px;background:#215e43;color:#fff;text-decoration:none;text-align:center;font-weight:900';ready.prepend(action);
+ const write=(node,text)=>{if(node&&node.textContent!==text)node.textContent=text};
+ function paint(){
+  const current=live(tool);let expected='';
+  // Both existing installer pages publish their already fetched manifest in
+  // the top-level latest binding. No extra API request or polling is needed.
+  try{expected=version(typeof latest==='string'?latest:'')}catch{}
+  action.hidden=!current;action.style.display=current?'flex':'none';
+  if(!current)return;
+  write(action,'更新状態を確認して進む');
+  if(!expected)return;
+  const old=compare(current,expected)<0;
+  action.hidden=!old;action.style.display=old?'flex':'none';
+  if(!old)return;
+  ready.hidden=false;
+  write(action,(dm?'DM同期':'本人通知')+'を v'+expected+' に更新する');
+  write(status,'未更新：起動中 v'+current+' ／ 最新版 v'+expected);
+  write(ready.querySelector('p'),'まだ更新されていません。下の説明を探す必要はありません。この更新ボタンから確認画面へ進んでください。');
+  const help=document.getElementById(dm?'dmEasyUpdates':'easyUpdate');if(help)help.open=false;
+ }
+ const observer=new MutationObserver(paint);observer.observe(status,{childList:true,characterData:true,subtree:true});observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-'+tool+'-live-version']});
+ window.addEventListener('mumei-insight-tool-ready',paint);window.addEventListener('pageshow',paint);paint();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wireVerifiedUpdateAction,{once:true});else wireVerifiedUpdateAction();
 })();
