@@ -1,0 +1,30 @@
+name: Installer verified update regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/insight-update-return.js'
+      - 'public/notification-update-now.html'
+      - 'public/notification-browser-install.html'
+      - 'public/dm-browser-install.html'
+      - 'tests/installer-explicit-update.test.mjs'
+      - '.github/workflows/installer-update-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installer-regression-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify outdated-installed, explicit install, runtime confirmation and account isolation
+        run: node --test tests/installer-explicit-update.test.mjs tests/insight-update-return.test.mjs
