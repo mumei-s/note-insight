@@ -13,6 +13,13 @@
 .import-help p{font-size:10px;color:#f1dab5;line-height:1.6;margin:5px 0}
 .import-copy{width:100%;min-height:42px;border:1px solid #e3b851;border-radius:8px;background:#49330c;color:#fff0c4;font-weight:900;font-size:12px}
 .import-url{box-sizing:border-box;width:100%;min-height:32px;margin-top:6px;padding:5px;border:1px solid #7c6342;border-radius:7px;background:#0d1720;color:#d4ecff;font-size:10px}
+.code-update{margin-top:9px;padding:10px;border:1px solid #579e81;border-radius:10px;background:#0b281f}
+.code-update strong{display:block;color:#d7ffed;font-size:12px}
+.code-update p{margin:5px 0;color:#d4f0e3;font-size:10px;line-height:1.65}
+.code-copy{display:block;width:100%;min-height:48px;border:1px solid #78e7b6;border-radius:9px;background:#22664e;color:white;font-size:13px;font-weight:950}
+.code-copy:disabled{opacity:.6}
+.code-result{margin-top:7px;color:#d7ffed;font-size:10px;line-height:1.6}
+.install.secondary{border-color:#456a7f;background:#102b3d;color:#d9e9f5;font-size:11px;min-height:35px}
 </style>
 </head>
 <body>
@@ -23,7 +30,14 @@
 <h1>DM同期をインストール / 更新</h1>
 <p class="lead">本人通知ツールとは別です。DM同期だけ単独で使えます。</p>
 <div class="notice"><b>使い方は簡単です。</b><br>① DM同期ツールを入れる → ② INSIGHTのDMタブで「DMを連携」 → ③ noteのDMを通常どおり開きます。開いている一覧・会話だけを受動保存し、勝手に別の相手へ移動しません。</div>
-<a id="install" class="install" href="#">DM同期ツールをインストール / 更新</a>
+<div class="code-update" aria-label="文字列が表示される端末のDM更新方法">
+ <strong>文字列画面を開かずにDM同期を更新</strong>
+ <p>EdgeのTampermonkey → ダッシュボード → インストール済み → <b>無名S note INSIGHT DM同期</b> →「更新を確認」を先にお試しください。</p>
+ <p>更新できなければ、下のボタンで最新版のコードだけをコピーし、Tampermonkeyの既存DM同期スクリプトを開いて、エディター内で全選択 → 貼り付け → 保存してください。</p>
+ <button id="copyCode" class="code-copy" type="button">DM更新用コードをコピー（上書き用）</button>
+ <div id="codeResult" class="code-result" role="status" aria-live="polite">既存スクリプトやDM履歴を削除する必要はありません。</div>
+</div>
+<a id="install" class="install secondary" href="#">通常更新リンク（文字列になる場合は使用しない）</a>
 <div id="result" class="result">更新状態を確認中…</div>
 <div class="import-help" aria-label="文字列だけ表示されたときのDM更新方法">
  <strong>⚠ 文字列だけが表示され、更新できない場合</strong>
@@ -51,6 +65,27 @@ const current=()=>updater.live('dm');
 function cmp(a,b){const pa=String(a||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1}return 0}
 function paint(){const c=current();if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールは未確認です。文字列が出ただけでは更新されません。URLからインポート後、この画面に戻って起動を確認します。'}
 async function load(){if(loading)return loading;loading=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.dmVersion)}catch{latest=''}finally{clearTimeout(timer);loading=null;paint()}})();return loading}
+const copyCode=document.getElementById('copyCode'),codeResult=document.getElementById('codeResult');
+async function copyCurrentDmCode(){
+ if(copyCode.disabled)return;
+ copyCode.disabled=true;codeResult.textContent='配信中のDM同期コードを確認中…';
+ try{
+  const response=await fetch('./note-insight-dm.user.js?_script='+Date.now(),{cache:'no-store',credentials:'same-origin'});
+  if(!response.ok)throw new Error('SCRIPT_FETCH_'+response.status);
+  const source=await response.text(),marker=source.indexOf('// ==/UserScript=='),header=marker>=0?source.slice(0,marker+19):'';
+  const match=header.match(/^\/\/\s*@version\s+(\d+(?:\.\d+)+)\s*$/m);
+  if(!source.startsWith('// ==UserScript==')||!/^\/\/\s*@namespace\s+https:\/\/github\.com\/mumei-s\/note-insight\/dm\s*$/m.test(header)||!/^\/\/\s*@name\s+無名S note INSIGHT DM同期\s*$/m.test(header)||!match||source.length>500000||source.length<1000)throw new Error('INVALID_DM_SOURCE');
+  if(latest&&match[1]!==latest)throw new Error('VERSION_MISMATCH');
+  let copied=false;try{await navigator.clipboard.writeText(source);copied=true}catch{}
+  if(!copied){const area=document.createElement('textarea');area.value=source;area.setAttribute('readonly','');area.style.cssText='position:fixed;opacity:0;left:-9999px';document.body.appendChild(area);area.select();try{copied=document.execCommand('copy')===true}catch{}area.remove()}
+  if(!copied)throw new Error('CLIPBOARD_UNAVAILABLE');
+  update.begin(latest);
+  codeResult.textContent='✓ DM同期 v'+match[1]+' をコピーしました。Tampermonkey → ダッシュボード → インストール済み → DM同期 → エディター → 全選択 → 貼り付け → 保存。その後noteとINSIGHTを再読み込みしてください。';
+  copyCode.textContent='✓ DM更新用コードをコピーしました';
+ }catch(error){codeResult.textContent='コピーできませんでした（'+String(error?.message||error)+'）。代わりに下のURLをTampermonkeyのユーティリティからインポートしてください。既存DMは変更されていません。'}
+ finally{copyCode.disabled=false}
+}
+copyCode.addEventListener('click',()=>void copyCurrentDmCode());
 install.href=RAW;install.target='_blank';install.rel='noopener noreferrer';install.addEventListener('click',()=>{if(!update.begin(latest))return;result.className='result';result.textContent='Tampermonkeyで更新を確定してください。文字列が出たら下の「DM更新用URLをコピー」からURLインポートを使ってください。'});
 async function refresh(){await load();return update.finish(latest)}
 async function verify(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
