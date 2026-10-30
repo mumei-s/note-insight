@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.5',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.6',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -123,8 +123,42 @@ async function run(force=false){
   if(id&&!stopped)show(reason+' '+error,id,true);
  }finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy;running=false;if(panel&&stopped)show('停止しました。保存済みの続きから再開できます。',id,true)}
 }
+// Bounded automatic owner-only recovery, resumed from the saved cursor.
+async function autoPending(){
+ if(running||document.visibilityState==='hidden'||sessionStorage.getItem(ACTIVE))return;
+ const id='ss_yr',key=STATE+id+':auto',now=Date.now(),previous=await get(key,null);
+ if(now-Number(previous?.lastAttempt||0)<6*60*60*1000)return;
+ const w=pageWindow();if(w.__mumeiSocialCompareBusy)return;
+ let lock=null,cursor=String(previous?.cursor||'');
+ try{
+  if(await account()!==id)return;
+  const auth=await tokenFor(id);if(!auth)return;
+  const self=await json('/api/v2/creators/'+id),own=self.data||self;
+  if(own.isMyself!==true||String(own.urlname||'').toLowerCase()!==id)return;
+  if(w.__mumeiSocialCompareBusy)return;
+  lock={kind:'auto-pending',noteId:id};w.__mumeiSocialCompareBusy=lock;
+  await set(key,{cursor,lastAttempt:now});
+  const batch=await save({action:'history_candidates',pendingOnly:true,noteId:id,checkedAt:new Date().toISOString(),after:cursor},auth);
+  if(!Array.isArray(batch.rows))return;
+  for(const candidate of batch.rows.slice(0,12)){
+   if(document.visibilityState==='hidden'||running||sessionStorage.getItem(ACTIVE))break;
+   const link=new URL(String(candidate.actor_url||''));if(link.hostname!=='note.com'||!/^\/[a-z0-9_-]+\/?$/i.test(link.pathname))continue;
+   const target=link.pathname.split('/')[1];
+   let profile;try{profile=await json('/api/v2/creators/'+encodeURIComponent(target))}
+   catch(e){if(!/NOTE_HTTP_(404|410)/.test(String(e?.message||'')))throw e;profile={data:{}}}
+   const row=person(profile.data||profile,'profile',null);
+   if(row&&row.person_key===candidate.person_key&&row.actor_url===String(candidate.actor_url).replace(/\/$/,'')&&typeof row.is_following==='boolean'&&typeof row.is_follower==='boolean'){
+    const ack=await save({noteId:id,checkedAt:new Date().toISOString(),rows:[{...row,evidence:'profile_flags'}]},auth);
+    if(!ack.confirmedPersonKeys?.includes(row.person_key))throw new Error('SOCIAL_SAVE_UNCONFIRMED');
+   }
+   cursor=String(candidate.person_key||'');await set(key,{cursor,lastAttempt:now});await sleep(200);
+  }
+  if(!batch.nextCursor||!batch.rows.length)await set(key,{cursor:'',lastAttempt:now});
+ }catch{}finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy}
+}
 function start(){const u=new URL(location.href),requested=u.searchParams.get('mumei_social_scan'),force=requested==='1'||requested==='history';if(force){sessionStorage.setItem(ACTIVE,location.pathname);sessionStorage.setItem(MODE,requested==='history'?'history':'full');u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!==location.pathname)return;void run(force)}
 window.addEventListener('pageshow',start);window.addEventListener('focus',start);document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')start()});
 setTimeout(start,2500);
+setTimeout(()=>{if(!sessionStorage.getItem(ACTIVE))void autoPending()},4500);
 window.__mumeiSocialComparisonV1={version:VERSION,run,person};
 })();
