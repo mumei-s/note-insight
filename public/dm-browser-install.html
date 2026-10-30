@@ -8,6 +8,11 @@
 <script src="./insight-update-return.js?v=20261026-1"></script>
 <style>
 *{box-sizing:border-box}:root{color-scheme:dark}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}.wrap{width:min(620px,calc(100% - 16px));margin:auto;padding:10px 0 28px}.back{display:inline-flex;min-height:34px;align-items:center;color:#80eaff;text-decoration:none;font-weight:900;font-size:12px}.card{border:1px solid #31506a;border-radius:14px;background:#0a1722;padding:12px}.eyebrow{font-size:9px;color:#86cfe3;letter-spacing:.08em}h1{margin:4px 0 3px;font-size:22px}.lead{margin:0 0 8px;color:#a9bfce;font-size:11px;line-height:1.55}.notice{padding:8px;border:1px solid #38637c;border-radius:9px;background:#081722;color:#cfefff;font-size:10px;line-height:1.55}.install{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:9px;border:1px solid #61c98c;border-radius:9px;background:#123626;color:#edfff4;text-decoration:none;font:950 14px/1.2 system-ui;text-align:center;padding:8px}.result{margin-top:7px;padding:8px;border:1px solid #3b5b72;border-radius:8px;background:#08131d;font-size:10px;font-weight:800;line-height:1.5}.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}.grid{display:grid;gap:6px;margin-top:10px}.tip{border:1px solid #29475a;border-radius:9px;background:#08151e;padding:8px;font-size:10px;line-height:1.55;color:#afc3d0}.tip b{color:#e8f7ff}.small{font-size:9px;color:#7f98aa;margin-top:8px;line-height:1.5}
+.import-help{margin-top:9px;padding:9px;border:1px solid #836d3a;border-radius:9px;background:#21190b}
+.import-help strong{font-size:11px;color:#ffefc8}
+.import-help p{font-size:10px;color:#f1dab5;line-height:1.6;margin:5px 0}
+.import-copy{width:100%;min-height:42px;border:1px solid #e3b851;border-radius:8px;background:#49330c;color:#fff0c4;font-weight:900;font-size:12px}
+.import-url{box-sizing:border-box;width:100%;min-height:32px;margin-top:6px;padding:5px;border:1px solid #7c6342;border-radius:7px;background:#0d1720;color:#d4ecff;font-size:10px}
 </style>
 </head>
 <body>
@@ -20,6 +25,12 @@
 <div class="notice"><b>使い方は簡単です。</b><br>① DM同期ツールを入れる → ② INSIGHTのDMタブで「DMを連携」 → ③ noteのDMを通常どおり開きます。開いている一覧・会話だけを受動保存し、勝手に別の相手へ移動しません。</div>
 <a id="install" class="install" href="#">DM同期ツールをインストール / 更新</a>
 <div id="result" class="result">更新状態を確認中…</div>
+<div class="import-help" aria-label="文字列だけ表示されたときのDM更新方法">
+ <strong>⚠ 文字列だけが表示され、更新できない場合</strong>
+ <p>表示されただけでは更新されません。Edge → 拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポートへ進み、このURLを貼り付けて「更新 / インストール」を確定してください。既存データの削除は不要です。</p>
+ <button id="copyScriptUrl" class="import-copy" type="button">DM更新用URLをコピー</button>
+ <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込むDM同期URL">
+</div>
 <div class="grid">
   <div class="tip"><b>Android / Edge・Firefox</b><br>Tampermonkeyを有効にして上のボタンを押します。</div>
   <div class="tip"><b>iPhone / iPad / Safari</b><br>UserscriptsまたはTampermonkeyを使い、note.com と mumei-s.github.io での実行を許可します。</div>
@@ -31,14 +42,16 @@
 <script>
 const RAW='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js',RELEASE='./insight-release.json';
 const q=new URLSearchParams(location.search),install=document.getElementById('install'),result=document.getElementById('result');
+const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl');scriptUrl.value=RAW;
+copyScriptUrl.addEventListener('click',async()=>{let copied=false;try{await navigator.clipboard.writeText(RAW);copied=true}catch{scriptUrl.focus();scriptUrl.select();try{copied=document.execCommand('copy')===true}catch{}}copyScriptUrl.textContent=copied?'URLをコピーしました':'下のURL欄を長押ししてコピーしてください'});
 const updater=window.MumeiInsightUpdateReturn,account=String(q.get('account')||q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'normal',fallbackTab:'dm',account});document.getElementById('back').href=back;
 const update=updater.create({tool:'dm',returnTo:back,account,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ DM同期ツールの起動を確認しました。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 let latest='',loading=null;
 const current=()=>updater.live('dm');
 function cmp(a,b){const pa=String(a||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1}return 0}
-function paint(){const c=current();if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールをまだ確認できません。インストール後、この画面に戻ると自動確認します。'}
+function paint(){const c=current();if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールは未確認です。文字列が出ただけでは更新されません。URLからインポート後、この画面に戻って起動を確認します。'}
 async function load(){if(loading)return loading;loading=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.dmVersion)}catch{latest=''}finally{clearTimeout(timer);loading=null;paint()}})();return loading}
-install.href=RAW;install.target='_blank';install.rel='noopener noreferrer';install.addEventListener('click',()=>{if(!update.begin(latest))return;result.className='result';result.textContent='拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。'});
+install.href=RAW;install.target='_blank';install.rel='noopener noreferrer';install.addEventListener('click',()=>{if(!update.begin(latest))return;result.className='result';result.textContent='Tampermonkeyで更新を確定してください。文字列が出たら下の「DM更新用URLをコピー」からURLインポートを使ってください。'});
 async function refresh(){await load();return update.finish(latest)}
 async function verify(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
 addEventListener('pageshow',()=>setTimeout(verify,80));addEventListener('focus',()=>setTimeout(verify,100));addEventListener('mumei-dm-version-changed',()=>void refresh());addEventListener('mumei-insight-tool-ready',()=>void refresh());
