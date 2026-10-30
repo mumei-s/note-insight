@@ -88,6 +88,84 @@ test('グループ変更の認証拒否後は楽観状態のrollbackで旧グル
  assert.doesNotMatch(h.body(),/確認済み作者|前回表示分|読む 1/);assert.equal(h.w.document.querySelectorAll('.miff-creator').length,0);assert.equal(h.helper.readSavedInsightView('favorites-last',scope),null);assert.equal(h.fallbackCalls.length,0);
 });
 
+test('再確認中に既読を保存した記事は、先に開始した遅い未読応答で戻さない',async t=>{
+ let articleReads=0,lateArticles;
+ const h=await fixture(t,{saved:null,handler:async body=>{
+  if(body.action==='favorites')return Response.json({ok:true,rows:[creator('author','確認済み作者')]});
+  if(body.action==='list')return Response.json({ok:true,definitions:[],assignments:[]});
+  if(body.action==='favorite_articles'){
+   articleReads++;const value={ok:true,rows:[{key:'article',title:'既読状態を保持する記事',url:'https://note.test/article',read:false}]};
+   if(articleReads===1)return Response.json(value);
+   return new Promise(resolve=>{lateArticles=()=>resolve(Response.json(value))});
+  }
+  if(body.action==='favorite_read_set')return Response.json({ok:true,read:body.read});
+  throw new Error('Unexpected '+body.action);
+ }});
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='記事を見る'));
+ await h.render(h.Component,{revision:1});await settle();assert.ok(lateArticles);
+ await h.click([...h.w.document.querySelectorAll('.miff-articles button')].find(button=>button.textContent==='既読にする'));
+ assert.match(h.w.document.querySelector('.miff-articles').textContent,/未読に戻す/);
+ await settle(lateArticles);
+ assert.match(h.w.document.querySelector('.miff-articles').textContent,/未読に戻す/);
+ assert.equal(h.calls.filter(body=>body.action==='favorite_read_set').length,1);
+});
+
+test('お気に入りの61件目以降は明示した記事ページだけを取得し、最後から前へ戻れる',async t=>{
+ const h=await fixture(t,{saved:null,handler:async body=>{
+  if(body.action==='favorites')return Response.json({ok:true,rows:[creator('author','記事の多い作者')]});
+  if(body.action==='list')return Response.json({ok:true,definitions:[],assignments:[]});
+  if(body.action==='favorite_articles')return Response.json({ok:true,page:body.page,hasNext:body.page===1,rows:Array.from({length:body.page===1?60:1},(_,i)=>({key:'article-'+((body.page-1)*60+i+1),title:'記事'+((body.page-1)*60+i+1),url:'https://note.test/'+((body.page-1)*60+i+1),read:body.page===2}))});
+  throw new Error('Unexpected '+body.action);
+ }});
+ assert.equal(h.calls.filter(body=>body.action==='favorite_articles').length,0);
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='記事を見る'));
+ const pager=()=>h.w.document.querySelector('.miff-article-pager');
+ assert.equal(h.w.document.querySelectorAll('.miff-articles article').length,60);
+ assert.equal(pager().querySelector('button').disabled,true);
+ assert.equal(pager().querySelector('button:last-child').disabled,false);
+ assert.match(h.w.document.querySelector('.miff-articles input').placeholder,/このページ/);
+ assert.deepEqual(h.calls.filter(body=>body.action==='favorite_articles').map(body=>body.page),[1],'opening never preloads every page');
+ await h.click(pager().querySelector('button:last-child'));
+ assert.match(h.w.document.querySelector('.miff-articles').textContent,/記事61/);
+ assert.equal(h.w.document.querySelectorAll('.miff-articles article').length,1);
+ assert.match(pager().textContent,/記事ページ 2/);
+ assert.equal(pager().querySelector('button:last-child').disabled,true);
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='記事を閉じる'));
+ const reads=h.calls.filter(body=>body.action==='favorite_articles').length;
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='記事を見る'));
+ assert.equal(h.calls.filter(body=>body.action==='favorite_articles').length,reads,'reopening retains the verified page');
+ assert.match(pager().textContent,/記事ページ 2/);
+ await h.render(()=>null);await h.render(h.Component,{});await settle();
+ assert.match(pager().textContent,/記事ページ 2/);
+ assert.match(h.w.document.querySelector('.miff-articles').textContent,/記事61/);
+ assert.equal(h.calls.filter(body=>body.action==='favorite_articles').length,reads,'returning from another screen retains the verified page without another read');
+ await h.click(pager().querySelector('button'));
+ assert.match(pager().textContent,/記事ページ 1/);
+ assert.deepEqual(h.calls.filter(body=>body.action==='favorite_articles').map(body=>body.page),[1,2,1]);
+});
+
+test('記事ページの取得失敗と古い遅延応答は確認済みページや別本人へ混ぜない',async t=>{
+ let phase='fail',resolveOld;
+ const h=await fixture(t,{saved:null,handler:async body=>{
+  if(body.action==='favorites')return Response.json({ok:true,rows:[creator('author','記事の作者')]});
+  if(body.action==='list')return Response.json({ok:true,definitions:[],assignments:[]});
+  if(body.action==='favorite_articles'){
+   if(body.page===1)return Response.json({ok:true,hasNext:true,rows:[{key:'first',title:'確認済みの記事',url:'https://note.test/first'}]});
+   if(phase==='fail')return Response.json({ok:false,error:'TEMPORARY_ARTICLE_FAILURE'},{status:500});
+   return new Promise(resolve=>{resolveOld=()=>resolve(Response.json({ok:true,hasNext:false,rows:[{key:'late',title:'前の本人の遅い古記事',url:'https://note.test/late'}]}))});
+  }
+  throw new Error('Unexpected '+body.action);
+ }});
+ await h.click([...h.w.document.querySelectorAll('button')].find(button=>button.textContent==='記事を見る'));
+ await h.click(h.w.document.querySelector('.miff-article-pager button:last-child'));await settle();
+ assert.match(h.body(),/確認済みの記事/);assert.match(h.w.document.querySelector('.miff-article-pager').textContent,/記事ページ 1/);
+ phase='late';await h.click(h.w.document.querySelector('.miff-article-pager button:last-child'));assert.ok(resolveOld);
+ assert.equal(h.w.document.querySelector('.miff-article-pager button:last-child').disabled,true);
+ h.w.localStorage.setItem(tokenKey,'token-b');await h.render(h.Component,{});
+ await settle(resolveOld);
+ assert.doesNotMatch(h.body(),/前の本人の遅い古記事/);
+});
+
 test('遅いoverflow復元は前回作者を追加通信なしで表示し最新結果には勝たない',async t=>{
  const h=await fixture(t,{saved:null});const count=h.calls.length;
  await settle(()=>{h.helper.writeSavedInsightView('favorites-last',scope,snapshot,1);h.w.dispatchEvent(new h.w.Event('mumei-insight-storage-hydrated'))});
