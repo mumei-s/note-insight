@@ -8,6 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>INSIGHT インストール / 更新</title>
 <script src="./insight-update-return.js?v=20261026-1"></script>
+<script defer src="./insight-browser-guide.js?v=20261030-1"></script>
 <meta name="mumei-installer-boundary" content="LOCKED-INDEPENDENT-V1">
 <style>
 *{box-sizing:border-box}
@@ -92,6 +93,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <h1>本人通知のかんたん準備</h1>
 <div class="toolname">本人通知ツール</div>
 <p class="lead">INSIGHT本体は設定なしで使えます。自分の🔔通知を自動保存したい人だけ、最初に追加します。</p>
+<section id="insightBrowserGuide" data-insight-browser-guide data-tool="notification"><p class="notice">更新は拡張機能を入れたブラウザで行います。アプリ内で開いている場合はURLをコピーし、AndroidはEdgeかFirefox、iPhone・iPadはSafariで開いてください。SafariのUserscriptsでは、スクリプトの文字列を開いてから拡張機能の「Userscripts」で追加・更新を確定します。</p></section>
 <div class="easy-start" id="easyStart">
   <h2>したいことを選ぶだけ</h2>
   <p>記事分析や保存済み履歴を使うだけなら、追加設定は必要ありません。</p>
@@ -101,32 +103,32 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
     <p>🔔自分の通知を自動保存したい人だけ、最初に2つの操作をします。</p>
     <a id="easyExtension" class="easy-action" href="https://www.tampermonkey.net/index.php?browser=edge&amp;locale=ja" target="_blank" rel="noopener noreferrer">① Tampermonkeyを準備（初回だけ）</a>
     <a id="easyInstall" class="easy-action primary" href="./note-insight-notification-v3.user.js" target="_blank" rel="noopener noreferrer">② 本人通知を追加する（初回だけ）</a>
-    <p>インストール確認画面で「インストール」を選びます。文字列が出た場合だけ、下の「うまくいかない場合」を開いてください。</p>
+    <p id="easyInstallHelp">Tampermonkeyでは確認画面で「インストール」を選びます。SafariのUserscriptsでは文字列を開き、Safariの拡張機能メニューからUserscriptsを選んで追加・更新します。</p>
   </div>
   <div id="easyReady" hidden>
-    <p>導入済みです。Tampermonkeyの自動更新が有効なら、通常は手作業で更新する必要はありません。</p>
+    <p>導入済みです。更新はこの画面で実際の起動版を確認します。</p>
     <div class="easy-actions"><a id="easyReturn" class="easy-action primary" href="./">INSIGHTに戻る</a></div>
   </div>
   <details class="help-collapse" id="easyUpdate">
     <summary>すでに使っている人：更新の確認方法</summary>
-    <p>Tampermonkeyが自動更新を有効にしていれば、更新を定期的に確認します。今すぐ確認する場合だけ次の操作です。</p>
-    <ol><li>Edgeで「拡張機能 → Tampermonkey」を開く</li><li>「ユーザースクリプトの更新を確認」を押す</li><li>noteとINSIGHTを開き直す</li></ol>
-    <p>反映しない場合はTampermonkeyの設定で自動更新が有効か確認してください。</p>
+    <p id="easyUpdateText">拡張機能を入れたブラウザ単体で更新します。SafariのUserscriptsでは、最新版の文字列を開いて拡張機能メニューのUserscriptsから更新を確定します。</p>
+    <ol id="easyUpdateSteps"><li>いつも利用するブラウザでこの画面を開く</li><li>お使いの拡張機能で追加・更新を確定する</li><li>この画面へ戻り、最新版の起動を確認する</li></ol>
+    <p>iPhone・iPadはSafariのUserscriptsが無料で利用できます。以前からTampermonkeyを使っている場合は、その拡張機能で続けられます。</p>
   </details>
 </div>
 <details class="help-collapse" id="expertHelp"><summary>うまくいかない場合（詳細な復旧方法）</summary>
-<div class="code-update" aria-label="文字列になってしまう端末向けの更新">
-  <b>文字列画面を開かずに更新する</b>
-  <p>EdgeのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知</b> の「更新を確認」を実行してください。</p>
+<div class="code-update" data-tampermonkey-help aria-label="Tampermonkeyをご利用の場合の更新">
+  <b>Tampermonkeyをご利用の場合のみ</b>
+  <p>お使いのブラウザのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知</b> の「更新を確認」を実行してください。</p>
   <p>更新できない場合は、下のボタンで最新版のスクリプトをコピーできます。ブラウザに文字列を表示する必要はありません。</p>
   <button id="copyCode" class="code-copy" type="button">更新用コードをコピー（既存スクリプトの上書き用）</button>
   <div id="codeResult" class="code-result" role="status" aria-live="polite">コピー後：Tampermonkeyで既存の本人通知スクリプトを開き、エディター内を全選択 → 貼り付け → 保存。スクリプトを削除する必要はありません。</div>
 </div>
-<a id="install" class="install secondary" href="#">通常更新リンク（文字列になる場合は使用しない）</a>
+<a id="install" class="install secondary" href="#">最新版スクリプトを開く</a>
 <div id="verifyResult" class="result">更新状態を自動確認します。</div>
-<div class="import-help" aria-label="文字列表示時の更新方法">
-  <b>⚠ コードが文字列で表示されて更新できない場合</b>
-  <p>文字列が開いただけでは更新されません。Edgeの「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポート」で、下のURLを取り込んで「更新 / インストール」を確定してください。</p>
+<div class="import-help" data-tampermonkey-help aria-label="Tampermonkeyで文字列表示時の更新方法">
+  <b>Tampermonkeyで文字列のまま更新できない場合</b>
+  <p>Tampermonkeyをご利用の場合は「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポート」で下のURLを取り込み、更新を確定します。SafariのUserscriptsはURLインポートではなく、表示中の文字列をSafariの拡張機能メニューから追加・更新します。</p>
   <button id="copyScriptUrl" class="import-copy" type="button">更新用URLをコピー</button>
   <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込む本人通知URL">
   <small>既存の本人通知スクリプトを更新します。二重インストールや拡張機能の削除は不要です。更新後、ここへ戻って最新版を確認してください。</small>
@@ -163,7 +165,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <details class="browser" data-browser="android-other">
 <summary><span class="bname">Chrome / Yahoo!ブラウザー / その他</span><span class="badge switch">EdgeかFirefoxへ</span></summary>
 <div class="browser-body">
-<p>この環境では本人通知用userscriptを直接動かさず、EdgeまたはFirefoxへ移します。Chrome Androidは拡張機能を端末上で実行できません。</p>
+<p>本人通知用の拡張機能の起動を確認できない場合は、拡張機能を導入したEdgeまたはFirefoxで開いてください。INSIGHT本体はそのまま利用できます。</p>
 <div class="actions">
 <a class="action primary" href="https://play.google.com/store/apps/details?id=com.microsoft.emmx" target="_blank" rel="noopener noreferrer">Edgeを入れる</a>
 <a class="action" href="https://play.google.com/store/apps/details?id=org.mozilla.firefox" target="_blank" rel="noopener noreferrer">Firefoxを入れる</a>
@@ -179,12 +181,11 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <details class="browser" data-browser="ios-safari">
 <summary><span class="bname">Safari</span><span class="badge good">推奨</span></summary>
 <div class="browser-body">
-<p>SafariではUserscriptsを使う方法が簡単です。Userscriptsを有効化後、Safariでこのページに戻り、画面上部の「② 本人通知を追加する（初回だけ）」を押します。</p>
+<p>Safariでは無料のUserscriptsを利用できます。Userscriptsを有効化し、このページの追加・更新ボタンでスクリプトの文字列を開いてから、Safariの拡張機能メニュー → Userscriptsで追加・更新を確定します。この画面へ戻ると実際の起動版を確認します。</p>
 <div class="actions">
 <a class="action primary" href="https://apps.apple.com/jp/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscriptsを開く</a>
-<a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkey（有料・INSIGHTとは別料金）</a>
 </div>
-<div class="small">Userscripts：Safari → 拡張機能 → UserscriptsをON → note.com と mumei-s.github.io を許可。Tampermonkeyを選ぶ場合はApp Store側の表示内容を確認して進めます。</div>
+<div class="small">Userscripts：Safari → 拡張機能 → UserscriptsをON → note.com と mumei-s.github.io を許可。すでにTampermonkeyを利用している場合も、その拡張機能で更新を続けられます。</div>
 </div>
 </details>
 
@@ -226,10 +227,9 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <details class="browser" data-browser="mac-safari">
 <summary><span class="bname">Safari（Mac）</span><span class="badge good">対応</span></summary>
 <div class="browser-body">
-<p>Mac SafariはUserscriptsまたはTampermonkeyで使えます。どちらか一方を用意して、画面上部の「② 本人通知を追加する（初回だけ）」から導入します。</p>
+<p>Mac Safariは無料のUserscriptsを利用できます。最新版の文字列を開いて、Safariの拡張機能メニュー → Userscriptsで追加・更新を確定し、この画面へ戻って起動版を確認してください。すでにTampermonkeyを利用している場合は、その拡張機能で続けられます。</p>
 <div class="actions">
 <a class="action primary" href="https://apps.apple.com/app/userscripts/id1463298887" target="_blank" rel="noopener noreferrer">Userscripts</a>
-<a class="action alt" href="https://www.tampermonkey.net/index.php?browser=safari&locale=ja" target="_blank" rel="noopener noreferrer">Tampermonkey（有料・INSIGHTとは別料金）</a>
 </div>
 </div>
 </details>
@@ -282,8 +282,8 @@ const names={
 'mac-safari':'Mac / Safari'
 };
 function setDetected(){
-  browserId=env();
-  detected.textContent='現在: '+(names[browserId]||'その他')+'　→ 必要な場合だけ説明を開いてください。';
+  const guide=browserGuideState();browserId=guide?.browser||env();
+  detected.textContent='案内: '+(names[browserId]||'その他')+'　→ 拡張機能の起動は別に確認します。';
   const browsers={
    'android-edge':['https://www.tampermonkey.net/index.php?browser=edge&locale=ja','① Tampermonkeyを準備（初回だけ）'],
    'pc-edge':['https://www.tampermonkey.net/index.php?browser=edge&locale=ja','① Tampermonkeyを準備（初回だけ）'],
@@ -293,18 +293,29 @@ function setDetected(){
    'mac-safari':['https://apps.apple.com/app/userscripts/id1463298887','① SafariのUserscriptsを準備']
   };
   if(browsers[browserId]){easyExtension.href=browsers[browserId][0];easyExtension.textContent=browsers[browserId][1]}
+  const safari=browserId==='ios-safari'||browserId==='mac-safari',userscripts=usesUserscripts();
+  easyExtension.hidden=safari&&!userscripts;
+  document.querySelectorAll('[data-tampermonkey-help]').forEach(node=>{node.hidden=userscripts});
+  document.getElementById('easyInstallHelp').textContent=platformInstruction();
+  document.getElementById('easyUpdateText').textContent=platformInstruction();
+  const steps=userscripts?['Safariで最新版スクリプトの文字列を開く','Safariの拡張機能メニュー → Userscriptsで追加・更新を確定する','この画面へ戻り、最新版の起動を確認する']:['拡張機能を入れたブラウザでTampermonkeyを開く','「ユーザースクリプトの更新を確認」または最新版のインストール確認で更新を確定する','この画面へ戻り、最新版の起動を確認する'];
+  const list=document.getElementById('easyUpdateSteps');list.replaceChildren(...steps.map(value=>{const li=document.createElement('li');li.textContent=value;return li}));
   paintEasyStatus();
   document.querySelectorAll('.browser').forEach(x=>{x.classList.toggle('active',x.dataset.browser===browserId);x.open=x.dataset.browser===browserId});
 }
 function installed(){return updater.live('notification')}
+function browserGuideState(){return window.MumeiInsightBrowserGuide?.forTool?.('notification')||null}
+function usesUserscripts(){const guide=browserGuideState();return guide?.manager?guide.manager==='userscripts':['ios-safari','mac-safari'].includes(browserId)}
+function canInstall(){const guide=browserGuideState();return Boolean(installed())||(guide?guide.canInstall:!['android-other','ios-other'].includes(browserId))}
+function platformInstruction(){const guide=browserGuideState();if(guide?.instruction)return guide.instruction;return usesUserscripts()?'Safariで最新版のスクリプトを開きます。文字列表示は正常な途中画面です。Safariの拡張機能メニュー → Userscriptsで追加・更新を確定し、この画面へ戻って起動版を確認してください。':'拡張機能を入れたブラウザで更新します。Tampermonkeyの確認画面で「更新／インストール」を確定します。文字列だけが出る場合はTampermonkeyのURLからインポートを使い、この画面へ戻って実際の起動版を確認してください。'}
 function compareVersion(a,b){const pa=String(a||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(v=>Number((v.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const av=pa[i]||0,bv=pb[i]||0;if(av!==bv)return av>bv?1:-1}return 0}
 function paintEasyStatus(){
- const current=installed(),ready=Boolean(current),supported=!['android-other','ios-other'].includes(browserId);
+ const current=installed(),ready=Boolean(current),supported=canInstall();
  easyFirst.hidden=ready||!supported;
  easyReady.hidden=!ready;
  const upToDate=Boolean(latest&&ready&&compareVersion(current,latest)>=0);
  easyStatus.className='easy-status '+(upToDate?'ok':ready?'warn':'');
- easyStatus.textContent=upToDate?'✓ 最新版です。設定し直す必要はありません。':ready?'✓ 導入済み（v'+current+'）。普段はTampermonkeyの自動更新を利用できます。':'このブラウザでは本人通知の起動が未確認です。'+(supported?'使う場合だけ初回設定してください。':'対応ブラウザで初回設定してください。');
+ easyStatus.textContent=upToDate?'✓ 最新版の起動を確認しました。':ready?'導入済み（v'+current+'）。更新ボタンから最新版を確認してください。':'このブラウザでは本人通知の起動が未確認です。'+(supported?'上のブラウザ案内を確認して初回追加してください。':'上の案内で対応ブラウザ単体を開いてください。');
  if(ready&&latest&&!upToDate)easyUpdate.open=true;
 }
 function check(){
@@ -312,7 +323,7 @@ function check(){
   paintEasyStatus();
   if(latest&&current&&compareVersion(current,latest)>=0){result.className='result ok';result.textContent='✓ 本人通知ツールは最新版です。';return}
   if(latest&&current){result.className='result warn';result.textContent='更新があります。上の「本人通知をインストール / 更新」を押してください。';return}
-  if(latest&&!current){result.className='result warn';result.textContent='本人通知は未確認です。文字列が出ただけでは更新されません。下のURLからインポートし、戻ってきたら実際の起動を確認します。';return}
+  if(latest&&!current){result.className='result warn';result.textContent='本人通知の起動は未確認です。'+platformInstruction();return}
   result.className='result';result.textContent=current?'本人通知ツールを検出しました。更新状態を確認中…':'更新状態を確認中…'
 }
 async function loadLatest(){if(loadingLatest)return loadingLatest;loadingLatest=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.notificationVersion)}catch{latest=''}finally{clearTimeout(timer);loadingLatest=null;paintInstall();check()}})();return loadingLatest}
@@ -339,14 +350,14 @@ async function copyCurrentNotificationCode(){
   }
   if(!copied)throw new Error('CLIPBOARD_UNAVAILABLE');
   update.begin(latest);
-  codeResult.textContent='✓ v'+match[1]+' のコードをコピーしました。Edge → Tampermonkey → ダッシュボード → インストール済み → 本人通知ツール → エディター → 全選択 → 貼り付け → 保存。保存後はnoteとINSIGHTを再読み込みしてください。';
+  codeResult.textContent='✓ v'+match[1]+' のコードをコピーしました。お使いのブラウザのTampermonkey → ダッシュボード → インストール済み → 本人通知ツール → エディター → 全選択 → 貼り付け → 保存。保存後はnoteとINSIGHTを再読み込みしてください。';
   copyCode.textContent='✓ 更新用コードをコピーしました';
  }catch(error){
   codeResult.textContent='コピーできませんでした（'+String(error?.message||error)+'）。Tampermonkeyの「ユーティリティ → URLからインポート」を試してください。既存のツールは変更されていません。';
  }finally{copyCode.disabled=false}
 }
 copyCode.addEventListener('click',()=>void copyCurrentNotificationCode());
-document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const url=location.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='アドレス欄のURLをコピーしてください'}}));
+document.querySelectorAll('[data-copy-page]').forEach(btn=>btn.addEventListener('click',async()=>{const fallback=new URL('./notification-browser-install.html',location.href);fallback.searchParams.set('return',back);if(notificationAccount)fallback.searchParams.set('notificationAccount',notificationAccount);const url=window.MumeiInsightBrowserGuide?.safePage?.('notification')||fallback.href;try{await navigator.clipboard.writeText(url);btn.textContent='コピーしました'}catch{btn.textContent='上のブラウザ案内に表示されたURLを選択してコピーしてください'}}));
 copyScriptUrl.addEventListener('click',async()=>{
   let copied=false;
   try{await navigator.clipboard.writeText(RAW_SCRIPT);copied=true}catch{
@@ -355,11 +366,13 @@ copyScriptUrl.addEventListener('click',async()=>{
   }
   copyScriptUrl.textContent=copied?'URLをコピーしました':'下のURL欄を長押ししてコピーしてください';
 });
-install.addEventListener('click',()=>{paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=browserId==='ios-safari'||browserId==='mac-safari'?'拡張機能で更新を確定してください。文字列だけが出た場合は下のURLをインポートしてください。':'Tampermonkeyで更新を確定してください。文字列だけが出た場合は下の「更新用URLをコピー」を使ってください。'});
+function beginInstall(event){if(!canInstall()){event.preventDefault();result.className='result warn';result.textContent='この画面のブラウザでは拡張機能の起動を確認できません。上の案内から対応ブラウザで開いてください。';return}paintInstall();if(!update.begin(latest))return;result.className='result';result.textContent=platformInstruction()}
+install.addEventListener('click',beginInstall);easyInstall.addEventListener('click',beginInstall);
 async function refresh(){check();await loadLatest();return update.finish(latest)}
 async function verifyAfterInstall(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
 addEventListener('pageshow',()=>setTimeout(verifyAfterInstall,100));addEventListener('focus',()=>setTimeout(verifyAfterInstall,120));
 addEventListener('mumei-notification-version-changed',()=>void refresh());addEventListener('mumei-insight-tool-ready',()=>void refresh());
+document.addEventListener('mumei-insight-browser-guide-change',()=>{setDetected();check()});
 paintInstall();setDetected();refresh();
 </script>
 </body>
