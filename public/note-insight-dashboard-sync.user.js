@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         無名S note INSIGHT｜公式Dashboard同期
 // @namespace    https://mumei-s.github.io/note-insight/
-// @version      1.7.5
+// @version      1.7.6
 // @description  小型の手動読み込みパネル。読み込み・一時停止・履歴・OFF対応。取得済みデータは画面を離れても保存します。ON/OFFはメイン🔔から変更できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
@@ -18,8 +18,8 @@
 // @grant        GM_addValueChangeListener
 // @grant        GM_deleteValue
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-feature-bridge-v1.js?v=101
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-save-queue-v1.js?v=101
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-feature-bridge-v1.js?v=102
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-save-queue-v1.js?v=102
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dashboard-sync-core-v1.1.0.js?v=174
 // @updateURL    https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
 // @downloadURL  https://mumei-s.github.io/note-insight/note-insight-dashboard-sync.user.js
@@ -28,7 +28,7 @@
 (function startDashboardWrapper() {
   'use strict';
   if(!document.documentElement){const ready=new MutationObserver(()=>{if(document.documentElement){ready.disconnect();startDashboardWrapper()}});ready.observe(document,{childList:true});return}
-  const VERSION='1.7.5',CORE_VERSION='1.7.4';
+  const VERSION='1.7.6',CORE_VERSION='1.7.4';
   let featureEpoch=0,resumeBoot=false;
   const featureOn=()=>window.__mumeiDashboardFeatureV1?.isEnabled?.()!==false;
   const autoOn=()=>window.__mumeiDashboardFeatureV1?.isAutomatic?.()??(localStorage.getItem('mumei_insight_dashboard_auto_enabled_v1')!=='false');
@@ -43,21 +43,21 @@
   const HANDOFF_ID='mumei-dashboard-handoff';
   const HIDE_STYLE_ID='mumei-dashboard-panel-hide-v143';
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-  const modern=()=>Boolean(globalThis.GM);
+  const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
   const modernRequest=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest.bind(GM):null;
-  if(typeof globalThis.GM_xmlhttpRequest!=='function'&&modernRequest){try{globalThis.GM_xmlhttpRequest=opts=>modernRequest(opts)}catch{}}
-  async function gmGet(k,d=''){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof globalThis.GM_getValue==='function')return globalThis.GM_getValue(k,d);return d}
-  async function gmSet(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof globalThis.GM_setValue==='function')return globalThis.GM_setValue(k,v)}
-  async function gmDel(k){if(modern()&&typeof GM.deleteValue==='function')return GM.deleteValue(k);if(typeof globalThis.GM_deleteValue==='function')return globalThis.GM_deleteValue(k)}
-  function request(body){const fn=modernRequest||(typeof globalThis.GM_xmlhttpRequest==='function'?globalThis.GM_xmlhttpRequest:null);if(fn)return new Promise((resolve,reject)=>fn({method:'POST',url:TOKEN_API,headers:{'Content-Type':'application/json'},data:JSON.stringify(body),timeout:60000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300&&p?.ok!==false)resolve(p);else reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}));return fetch(TOKEN_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||`HTTP_${r.status}`);return p})}
+  async function gmGet(k,d=''){if(modern()&&typeof GM.getValue==='function')return GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
+  async function gmSet(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
+  async function gmDel(k){if(modern()&&typeof GM.deleteValue==='function')return GM.deleteValue(k);if(typeof GM_deleteValue==='function')return GM_deleteValue(k)}
+  function request(body){const fn=modernRequest||(typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null);if(fn)return new Promise((resolve,reject)=>fn({method:'POST',url:TOKEN_API,headers:{'Content-Type':'application/json'},data:JSON.stringify(body),timeout:60000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{}if(r.status>=200&&r.status<300&&p?.ok!==false)resolve(p);else reject(new Error(p?.error||`HTTP_${r.status}`))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))}));return fetch(TOKEN_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok||p?.ok===false)throw new Error(p?.error||`HTTP_${r.status}`);return p})}
   function safeReturn(v){try{const u=new URL(String(v||''));return u.origin==='https://mumei-s.github.io'&&u.pathname.startsWith('/note-insight/')?u.href:''}catch{return''}}
+  function liveManager(){try{const info=typeof GM_info!=='undefined'?GM_info:typeof GM!=='undefined'?GM?.info:null,name=String(info?.scriptHandler||'').toLowerCase();return ['Userscripts','Tampermonkey','Violentmonkey','Greasemonkey','Stay'].find(value=>value.toLowerCase()===name)||''}catch{return''}}
   function markVersion(){try{localStorage.setItem('mumei-dashboard-tool-version',VERSION)}catch{}}
   function installHideStyle(forceAll=false){if(document.getElementById(HIDE_STYLE_ID))return;const s=document.createElement('style');s.id=HIDE_STYLE_ID;s.textContent=forceAll?'#mumei-dashboard-sync{display:none!important}':'#mumei-dashboard-sync{display:none!important}#mumei-dashboard-sync[data-mumei-recovery="1"]{display:block!important}';(document.head||document.documentElement).appendChild(s)}
 
   if(location.origin==='https://mumei-s.github.io'){
     if(!/\/(?:tool-setup|dashboard-setup)\.html$/.test(location.pathname))return;
     installHideStyle(true);markVersion();
-    const markBridge=()=>{const root=document.documentElement;if(!root)return;let changed=false;if(root.getAttribute('data-mumei-dashboard-bridge')!==VERSION){root.setAttribute('data-mumei-dashboard-bridge',VERSION);changed=true}if(root.getAttribute('data-mumei-dashboard-live-version')!==VERSION){root.setAttribute('data-mumei-dashboard-live-version',VERSION);changed=true}if(changed)window.dispatchEvent(new Event('mumei-insight-tool-ready'))};
+    const markBridge=()=>{const root=document.documentElement;if(!root)return;let changed=false;const manager=liveManager();if(manager&&root.getAttribute('data-mumei-dashboard-live-manager')!==manager){root.setAttribute('data-mumei-dashboard-live-manager',manager);changed=true}else if(!manager&&root.hasAttribute('data-mumei-dashboard-live-manager')){root.removeAttribute('data-mumei-dashboard-live-manager');changed=true}if(root.getAttribute('data-mumei-dashboard-bridge')!==VERSION){root.setAttribute('data-mumei-dashboard-bridge',VERSION);changed=true}if(root.getAttribute('data-mumei-dashboard-live-version')!==VERSION){root.setAttribute('data-mumei-dashboard-live-version',VERSION);changed=true}if(changed)window.dispatchEvent(new Event('mumei-insight-tool-ready'))};
     const cleanup=()=>{document.getElementById('mumei-dashboard-sync')?.remove();markVersion();markBridge()};
     const saveHandoff=async()=>{
       const el=document.getElementById(HANDOFF_ID),raw=el?.getAttribute('data-payload')||'';if(!raw)return;
@@ -65,7 +65,7 @@
       try{
         const p=JSON.parse(raw);requestId=String(p.requestId||'');
         if(!/^\d{8}$/.test(String(p.code||''))||!/^[a-z0-9_-]+$/i.test(String(p.noteId||'')))throw new Error('HANDOFF_INVALID');
-        if(!(modern()&&typeof GM.setValue==='function'&&typeof GM.getValue==='function')&&!(typeof globalThis.GM_setValue==='function'&&typeof globalThis.GM_getValue==='function'))throw new Error('HANDOFF_STORAGE_UNAVAILABLE');
+        if(!(modern()&&typeof GM.setValue==='function'&&typeof GM.getValue==='function')&&!(typeof GM_setValue==='function'&&typeof GM_getValue==='function'))throw new Error('HANDOFF_STORAGE_UNAVAILABLE');
         p.version=VERSION;p.savedAt=Date.now();const saved=JSON.stringify(p);await gmSet(HANDOFF_KEY,saved);
         if(await gmGet(HANDOFF_KEY,'')!==saved)throw new Error('HANDOFF_SAVE_FAILED');
         document.documentElement?.setAttribute('data-mumei-dashboard-handoff-saved','1');

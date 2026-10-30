@@ -5,7 +5,7 @@ if(window.__mumeiDashboardFeatureV1)return;
 const KEY='mumei_insight_dashboard_feature_enabled_v1',MODE='mumei_insight_dashboard_auto_enabled_v1',PAGE='mumei-dashboard-feature-ui-v1',BRIDGE='mumei-dashboard-feature-bridge-v1',EVENT='mumei-dashboard-feature-changed',MODE_EVENT='mumei-dashboard-mode-changed';
 const NOTE=location.hostname==='note.com';
 let enabled=null,automatic=null,revision=0,queue=Promise.resolve();
-const api=()=>globalThis.GM;
+const api=()=>typeof GM!=='undefined'?GM:undefined;
 async function read(k=KEY){if(typeof api()?.getValue==='function')return (await api().getValue(k,true))!==false;if(typeof GM_getValue==='function')return GM_getValue(k,true)!==false;return true}
 async function write(value,k=KEY){if(typeof api()?.setValue==='function')return api().setValue(k,value);if(typeof GM_setValue==='function')return GM_setValue(k,value);throw new Error('設定を保存できません。ダッシュボード同期ツールを更新してください。')}
 function send(error=''){if(!NOTE)window.postMessage({source:BRIDGE,type:'state',enabled:enabled===true,automatic:automatic!==false,error},location.origin)}
@@ -14,7 +14,7 @@ function applyMode(value){const changed=automatic!==value;automatic=value;const 
 async function refresh(){const at=revision;try{const [value,mode]=await Promise.all([read(),read(MODE)]);if(at===revision){applyMode(mode);apply(value)}}catch{send('設定を確認できません。もう一度操作してください。')}return enabled===true}
 function setEnabled(value){const next=Boolean(value);queue=queue.catch(()=>{}).then(async()=>{revision++;try{await write(next);const saved=await read();if(saved!==next)throw new Error('設定の保存を確認できませんでした。');return apply(saved)}catch(e){send(String(e?.message||'設定を保存できませんでした。'));throw e}});return queue}
 function setAutomatic(value){const next=Boolean(value);queue=queue.catch(()=>{}).then(async()=>{revision++;try{await write(next,MODE);const saved=await read(MODE);if(saved!==next)throw new Error('読込モードの保存を確認できませんでした。');applyMode(saved);send();return saved}catch(e){send(String(e?.message||'読込モードを保存できませんでした。'));throw e}});return queue}
-window.__mumeiDashboardFeatureV1={isEnabled:()=>enabled===true,isAutomatic:()=>automatic!==false,refresh,setEnabled,setAutomatic,ready:null};
+window.__mumeiDashboardFeatureV1={version:'1.0.2',isEnabled:()=>enabled===true,isAutomatic:()=>automatic!==false,refresh,setEnabled,setAutomatic,ready:null};
 function style(){if(!document.documentElement)return false;if(!document.getElementById('mumei-dashboard-feature-style')){const s=document.createElement('style');s.id='mumei-dashboard-feature-style';s.textContent='html[data-mumei-dashboard-feature="off"] #mumei-dashboard-sync,html[data-mumei-dashboard-feature="off"] #mumei-dashboard-clearance,html[data-mumei-dashboard-surface="other"] #mumei-dashboard-sync,html[data-mumei-dashboard-surface="other"] #mumei-dashboard-clearance{display:none!important}';(document.head||document.documentElement).append(s)}if(enabled!==null)apply(enabled);return true}
 if(NOTE&&!style()){const observer=new MutationObserver(()=>{if(style())observer.disconnect()});observer.observe(document,{childList:true,subtree:true})}
 const listen=typeof api()?.addValueChangeListener==='function'?api().addValueChangeListener.bind(api()):typeof GM_addValueChangeListener==='function'?GM_addValueChangeListener:null;

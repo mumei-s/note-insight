@@ -38,33 +38,36 @@
   function stopAutomaticRead(){if(q.get('auto')!=='1')return;q.set('auto','0');const url=new URL(location.href);url.searchParams.set('auto','0');history.replaceState(history.state,'',url.href)}
   if(pending())stopAutomaticRead();
   function detect(){const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),safari=/Safari/i.test(ua)&&!/Chrome|CriOS|Edg|FxiOS|OPR|Android/i.test(ua);if(ios)return safari?'ios-safari':'ios-other';if(/Android/i.test(ua))return /EdgA/i.test(ua)?'android-edge':/Firefox/i.test(ua)?'android-firefox':'android-other';if(safari&&/Macintosh/i.test(ua))return'mac-safari';if(/Edg\//i.test(ua))return'pc-edge';if(/Firefox/i.test(ua))return'pc-firefox';if(/OPR\//i.test(ua))return'pc-opera';return'pc-chrome'}
-  $('browser').value=detect();
+  const guide=()=>window.MumeiInsightBrowserGuide?.forTool?.('dashboard')||null;
+  $('browser').value=guide()?.browser||detect();
   const TM=browser=>['Tampermonkey公式ページ','https://www.tampermonkey.net/index.php?browser='+browser+'&locale=ja'];
   function links(id,items){const root=$(id);root.replaceChildren();for(const [label,url] of items){const a=document.createElement('a');a.textContent=label;a.href=url;a.target='_blank';a.rel='noopener noreferrer';root.append(a)}}
   function browserGuide(){
-    const id=$('browser').value,safari=id==='ios-safari'||id==='mac-safari',other=id==='ios-other'||id==='android-other';
+    const state=guide(),id=state?.browser||$('browser').value,safari=id==='ios-safari'||id==='mac-safari',userscripts=state?.manager?state.manager==='userscripts':safari,other=state?!state.canInstall:['ios-other','android-other'].includes(id);
+    if([...$('browser').options].some(option=>option.value===id))$('browser').value=id;
     $('switchBrowser').hidden=!other;
-    text($('browserHelp'),other?'下の案内から対応ブラウザでこの画面を開いてください。':safari?'Safariの拡張機能を有効にして、上の更新ボタンを押します。':'Tampermonkeyを有効にして、上の更新ボタンを押します。すでに使っている方は拡張機能の入れ直し不要です。');
-    text($('codeHelp'),safari?'Safariの拡張機能メニューから、お使いのUserscriptsまたはTampermonkeyを開き、表示中のスクリプトをインストールしてください。その後、この更新画面に戻って「更新を確認」を押します。':'ブラウザの拡張機能一覧でTampermonkeyが有効か確認し、もう一度更新ボタンを押してください。拡張機能側のサイトへのアクセスやユーザースクリプト実行の許可も確認します。');
-    text($('extensionText'),safari?'UserscriptsまたはTampermonkeyのどちらかを有効にし、note.comとmumei-s.github.ioでの実行を許可してください。':'Tampermonkeyを追加して有効にします。note.comとmumei-s.github.ioでの実行を許可してください。');
-    links('extensionLinks',safari?[['Userscripts（Safari）','https://apps.apple.com/app/userscripts/id1463298887'],['Tampermonkey（有料・INSIGHTとは別料金）','https://www.tampermonkey.net/index.php?browser=safari&locale=ja']]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
+    text($('browserHelp'),other?'上の案内から、拡張機能を入れたブラウザ単体でこの画面を開いてください。操作説明の選択だけではブラウザは切り替わりません。':state?.instruction||(userscripts?'SafariのUserscriptsを有効にし、最新版の文字列を開いてSafariの拡張機能メニューから追加・更新を確定してください。':'Tampermonkeyを有効にして、上の更新ボタンを押します。すでに使っている方は拡張機能の入れ直し不要です。'));
+    text($('codeHelp'),userscripts?'SafariのUserscriptsでは正常な途中画面です。Safariの拡張機能メニュー → Userscriptsから表示中のスクリプトの追加・更新を確定してください。その後この画面へ戻り、「更新を確認」を押します。':'ブラウザの拡張機能一覧でTampermonkeyが有効か確認してください。文字列のままなら、Tampermonkeyのダッシュボード → ユーティリティ → URLからインポートで最新版のURLを取り込み、更新を確定します。');
+    text($('extensionText'),userscripts?'無料のUserscriptsをSafariで有効にし、note.comとmumei-s.github.ioでの実行を許可してください。':'お使いのTampermonkeyを有効にし、note.comとmumei-s.github.ioでの実行を許可してください。');
+    links('extensionLinks',safari?[['Userscripts（Safari・無料）','https://apps.apple.com/app/userscripts/id1463298887']]:[id==='android-firefox'?['Firefox Android用Tampermonkey','https://addons.mozilla.org/android/addon/tampermonkey/']:TM(id.includes('firefox')?'firefox':id.includes('edge')?'edge':id.includes('opera')?'opera':'chrome')]);
+    const managerHelp=$('scriptManagerHelp');if(managerHelp){managerHelp.href=userscripts?'https://github.com/quoid/userscripts#installation':'https://www.tampermonkey.net/faq.php';text(managerHelp,userscripts?'Userscripts公式ヘルプ':'Tampermonkey公式ヘルプ')}
     text($('switchHelp'),id==='ios-other'?'Safariでこの更新画面を開いてください。':'この案内では、AndroidのEdgeまたはFirefoxを使用します。移動先で同じINSIGHTアカウントへログインしてください。');
     links('switchLinks',id==='android-other'?[['Edge','https://play.google.com/store/apps/details?id=com.microsoft.emmx'],['Firefox','https://play.google.com/store/apps/details?id=org.mozilla.firefox']]:[]);
   }
-  const supported=()=>!['ios-other','android-other'].includes($('browser').value)||Boolean(current());
+  const supported=()=>Boolean(current())||(guide()?guide().canInstall:!['ios-other','android-other'].includes($('browser').value));
   let release=null,releaseError='',loadingRelease=null,busy=false,checking=false,readFeedback=null,autoStarted=false;
   function readStatus(message,kind=''){readFeedback={message,kind};status('readStatus',message,kind)}
   function paint(){
     readFeatureState();
-    const active=current(),last=version(get(DASH_KEY)),latest=version(release?.dashboardVersion),notice=version(get(NOTICE_KEY)),noticeLatest=version(release?.notificationVersion);
+    const active=current(),last=version(get(DASH_KEY)),latest=version(release?.dashboardVersion),notice=version(updater.live('notification')),noticeLast=version(get(NOTICE_KEY)),noticeLatest=version(release?.notificationVersion);
     const ready=Boolean(latest&&active&&compare(active,latest)>=0),noticeReady=Boolean(noticeLatest&&notice&&compare(notice,noticeLatest)>=0);
     text($('dashCurrent'),active?'v'+active:last?'前回検出 v'+last:'起動確認待ち');text($('dashLatest'),latest?'v'+latest:'確認できません');
-    text($('noticeCurrent'),notice?'v'+notice:'未確認');text($('noticeLatest'),noticeLatest?'v'+noticeLatest:'確認できません');
+    text($('noticeCurrent'),notice?'v'+notice:noticeLast?'前回検出 v'+noticeLast:'未確認');text($('noticeLatest'),noticeLatest?'v'+noticeLatest:'確認できません');
     text($('dashBadge'),ready?'最新版':active&&latest?'更新あり':'起動確認待ち');$('dashBadge').className='badge '+(ready?'ok':'warn');
     text($('noticeBadge'),noticeReady?'最新版':notice&&noticeLatest?'更新あり':'未確認');$('noticeBadge').className='badge '+(noticeReady?'ok':'warn');
     $('installDashboard').hidden=ready;$('verifyDashboard').hidden=ready;$('installNotice').hidden=noticeReady;
     text($('installDashboard'),(active||last?'ダッシュボード同期を更新':'ダッシュボード同期をインストール')+(latest?'（v'+latest+'）':''));
-    text($('installHint'),ready?'更新済みです。追加のインストール操作は不要です。':'確認画面で「更新／インストール」を押したら、このタブへ戻ってください。');
+    text($('installHint'),ready?'最新版の起動を確認しました。':guide()?.instruction||(['ios-safari','mac-safari'].includes($('browser').value)?'SafariのUserscriptsでは文字列を開いた後、Safariの拡張機能メニューから追加・更新を確定し、このタブへ戻ってください。':'Tampermonkeyの確認画面で「更新／インストール」を押したら、このタブへ戻ってください。'));
     $('startRead').disabled=!ready||busy||!supported()||!canRead()||Boolean(pending())||updateConfirmed;paintFeature();
     if(ready)status('dashStatus','✓ ダッシュボード同期 v'+active+' の起動を確認しました。','ok');
     else if(releaseError)status('dashStatus',releaseError,'warn');
@@ -87,10 +90,11 @@
     if(checking)return;checking=true;
     try{await loadRelease();const latest=releaseError?'':version(release?.dashboardVersion),active=current();if(update.finish(latest))return;if(latest&&active&&compare(active,latest)>=0)return;const p=pending();if(manual&&!p){update.begin(latest);stopAutomaticRead()}if((manual||p)&&!pending()?.reloaded)reloadForCheck();else if(p?.reloaded)status('dashStatus','更新をまだ確認できません。拡張機能で保存したことと、このサイトでの実行許可を確認してください。','warn')}finally{checking=false}
   }
-  $('installDashboard').addEventListener('click',e=>{if(!supported()){e.preventDefault();status('dashStatus','ブラウザの案内に沿って対応ブラウザで開いてください。','warn');document.querySelector('.browser-card').open=true;$('browser').focus();return}if(!update.begin(release?.dashboardVersion||''))return;stopAutomaticRead();status('dashStatus','更新画面を別タブで開きます。拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。')});
+  $('installDashboard').addEventListener('click',e=>{if(!supported()){e.preventDefault();status('dashStatus','ブラウザの案内に沿って対応ブラウザで開いてください。','warn');document.querySelector('.browser-card').open=true;$('browser').focus();return}if(!update.begin(release?.dashboardVersion||''))return;stopAutomaticRead();status('dashStatus',guide()?.instruction||(['ios-safari','mac-safari'].includes($('browser').value)?'文字列を開いた後、Safariの拡張機能メニュー → Userscriptsで追加・更新を確定し、この画面へ戻ってください。':'更新画面を別タブで開きます。拡張機能で保存後、このタブへ戻ると起動を確認し、INSIGHTへ戻ります。'))});
   $('verifyDashboard').addEventListener('click',()=>void verify(true));
-  $('browser').addEventListener('change',()=>{browserGuide();paint()});
-  $('copyPage').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(self.href);text($('copyPage'),'コピーしました')}catch{text($('copyPage'),'アドレス欄からこのページのURLをコピーしてください')}});
+  $('browser').addEventListener('change',()=>{window.MumeiInsightBrowserGuide?.setBrowser?.('dashboard',$('browser').value);browserGuide();paint()});
+  document.addEventListener('mumei-insight-browser-guide-change',()=>{browserGuide();paint()});
+  $('copyPage').addEventListener('click',async()=>{const fallback=new URL('./dashboard-setup.html',location.href);fallback.searchParams.set('return',back);fallback.searchParams.set('auto','0');if(expected)fallback.searchParams.set('account',expected);const url=window.MumeiInsightBrowserGuide?.safePage?.('dashboard')||fallback.href;try{await navigator.clipboard.writeText(url);text($('copyPage'),'コピーしました')}catch{text($('copyPage'),'上のブラウザ案内に表示されたURLを選択してコピーしてください')}});
   function saveReadHandoff(payload){
     return new Promise((resolve,reject)=>{
       const root=document.documentElement,id='mumei-dashboard-handoff',requestId=crypto.randomUUID();
@@ -129,7 +133,7 @@
     finally{clearTimeout(timer);busy=false;$('startRead').disabled=Boolean(pending())||updateConfirmed||!(release&&current()&&compare(current(),release.dashboardVersion)>=0&&supported()&&canRead())}
   }
   $('startRead').addEventListener('click',()=>void startRead());
-  const observer=new MutationObserver(paint);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-dashboard-bridge','data-mumei-dashboard-feature']});
+  const observer=new MutationObserver(paint);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-dashboard-bridge','data-mumei-dashboard-live-version','data-mumei-notification-live-version','data-mumei-dashboard-feature']});
   addEventListener('storage',e=>{if([DASH_KEY,NOTICE_KEY].includes(e.key))paint()});addEventListener('mumei-notification-version-changed',paint);
   const resume=()=>{requestFeature();void verify(false)};addEventListener('pageshow',resume);addEventListener('focus',resume);addEventListener('mumei-insight-tool-ready',()=>void verify(false));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resume()});
   browserGuide();paint();requestFeature();void verify(false);

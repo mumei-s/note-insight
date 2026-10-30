@@ -3,10 +3,11 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>ダッシュボードの更新・設定｜INSIGHT</title>
-<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><link rel="stylesheet" href="./analysis-settings-menu.css?v=2026100326"><script src="./insight-update-return.js?v=20261026-1"></script><script src="./dashboard-setup.js?v=20261026-1" defer></script>
+<link rel="stylesheet" href="./dashboard-setup.css?v=2026092212"><link rel="stylesheet" href="./analysis-settings-menu.css?v=2026100326"><script src="./insight-update-return.js?v=20261026-1"></script><script defer src="./insight-browser-guide.js?v=20261030-1"></script><script src="./dashboard-setup.js?v=20261030-1" defer></script>
 </head><body><main class="wrap">
 <a id="back" class="back" href="./?insightMode=analysis#dashboard">← INSIGHTへ戻る</a>
 <header><p class="eyebrow">INSIGHT / SETTINGS</p><h1>分析の設定・更新</h1><p class="lead">ツールの連携・更新と分析の入口をまとめています。</p></header>
+<section id="insightBrowserGuide" data-insight-browser-guide data-tool="dashboard"><p class="hint">更新は拡張機能を入れたブラウザで行います。アプリ内で開いている場合はURLをコピーし、AndroidはEdgeかFirefox、iPhone・iPadはSafariで開いてください。SafariのUserscriptsでは最新版の文字列を開き、拡張機能メニュー → Userscriptsで追加・更新を確定します。</p></section>
 <nav class="analysis-settings-menu" aria-label="分析の使用・設定">
 <a id="normalAnalysis" href="./install-free-analysis-v3.html"><b>通常分析</b><small>ツール不要・公開データで利用</small></a>
 <a href="#dashboardTitle"><b>ダッシュボード INSIGHTプロ</b><small>公式データの連携・更新</small></a>
@@ -38,10 +39,10 @@
 <optgroup label="Android"><option value="android-edge">Android / Edge</option><option value="android-firefox">Android / Firefox</option><option value="android-other">Android / Chrome・Yahoo!など</option></optgroup>
 <optgroup label="iPhone・iPad"><option value="ios-safari">iPhone・iPad / Safari</option><option value="ios-other">iPhone・iPad / Safari以外</option></optgroup>
 <optgroup label="パソコン"><option value="pc-edge">PC・Mac / Edge</option><option value="pc-chrome">PC・Mac / Chrome系</option><option value="pc-firefox">PC・Mac / Firefox</option><option value="pc-opera">PC・Mac / Opera</option><option value="mac-safari">Mac / Safari</option></optgroup>
-</select><p id="browserHelp" class="hint"></p>
+</select><p id="browserHelp" class="hint">Safariは無料のUserscripts、Edge・Chrome・Firefox・Operaはお使いのTampermonkeyで更新します。</p>
 <div id="switchBrowser" class="switch-box" hidden><p id="switchHelp"></p><button id="copyPage" type="button">この更新画面のURLをコピー</button><div id="switchLinks" class="link-row"></div></div>
-<details><summary>初めて使う・拡張機能が動かない場合</summary><p id="extensionText" class="hint"></p><div id="extensionLinks" class="link-row"></div></details>
-<details><summary>コードの文字列が表示された場合</summary><p id="codeHelp" class="hint"></p><a class="text-link" href="https://www.tampermonkey.net/faq.php" target="_blank" rel="noopener noreferrer">Tampermonkey公式ヘルプ</a></details></details>
+<details><summary>初めて使う・拡張機能が動かない場合</summary><p id="extensionText" class="hint">iPhone・iPadはSafariでUserscriptsを有効にして、note.comとmumei-s.github.ioを許可してください。</p><div id="extensionLinks" class="link-row"></div></details>
+<details><summary>コードの文字列が表示された場合</summary><p id="codeHelp" class="hint">SafariのUserscriptsでは正常な途中画面です。Safariの拡張機能メニュー → Userscriptsから追加・更新を確定し、この画面へ戻って起動版を確認してください。Tampermonkeyでは拡張機能の確認画面で更新を確定します。</p><a id="scriptManagerHelp" class="text-link" href="https://github.com/quoid/userscripts#installation" target="_blank" rel="noopener noreferrer">Userscripts公式ヘルプ</a></details></details>
 <details class="card tool notice-option">
 <summary id="noticeTitle">本人通知（任意） <span id="noticeBadge" class="badge">確認中</span></summary>
 <p class="hint">通知と公式値を組み合わせた分析で使います。</p>
