@@ -2,8 +2,8 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReturnV1Loaded)return;window.__mumeiNotificationReturnV1Loaded=true;
-const VERSION='1.2.0',RETURN='mumei_insight_return_bell_v1';
-const modern=()=>Boolean(globalThis.GM);
+const VERSION='1.2.1',RETURN='mumei_insight_return_bell_v1';
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 const get=async(k,d)=>{try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d};
 const set=async(k,v)=>{try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}};
 const dm=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
