@@ -8,8 +8,17 @@ on:
       - 'public/notification-browser-install.html'
       - 'public/dm-browser-install.html'
       - 'public/notification-connection.html'
+      - 'public/insight-browser-guide.js'
+      - 'public/dashboard-setup.html'
+      - 'public/dashboard-setup.js'
+      - 'public/note-insight-notification-v3.user.js'
+      - 'public/note-insight-dm.user.js'
+      - 'public/note-insight-dashboard-sync.user.js'
       - 'tests/installer-explicit-update.test.mjs'
       - 'tests/notification-connection-v21.test.mjs'
+      - 'tests/insight-browser-guide.test.mjs'
+      - 'tests/installer-browser-guide-integration.test.mjs'
+      - 'tests/userscripts-manager-compat.test.mjs'
       - '.github/workflows/installer-update-regression.yml'
   workflow_dispatch:
 permissions:
@@ -29,4 +38,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify outdated-installed, explicit install, runtime confirmation and account isolation
-        run: node --test tests/installer-explicit-update.test.mjs tests/insight-update-return.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs
+        run: node --experimental-vm-modules --test tests/insight-browser-guide.test.mjs tests/installer-browser-guide-integration.test.mjs tests/userscripts-manager-compat.test.mjs tests/installer-explicit-update.test.mjs tests/insight-update-return.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs tests/dashboard-setup.test.mjs

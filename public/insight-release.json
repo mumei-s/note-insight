@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.30.2",
-  "notificationVersion": "3.6.60",
-  "dashboardVersion": "1.7.5",
+  "appVersion": "2026.10.30.3",
+  "notificationVersion": "3.6.61",
+  "dashboardVersion": "1.7.6",
   "releasedAt": "2026-10-30",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "アプリ切替後に通知の差分保存が止まる問題と、関係確認中に別アカウントの情報が混ざる問題を修正。更新は実際の起動版で確認し、文字列表示時の取り込み方法も案内します。",
-  "dmVersion": "1.4.18",
+  "note": "アプリ内ブラウザから普段のブラウザへの更新案内を統一。Safari Userscriptsの連携・保存API互換性と各OSの更新手順を修正しました。",
+  "dmVersion": "1.4.19",
   "dmLabel": "DM同期"
 }

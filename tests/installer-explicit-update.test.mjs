@@ -9,12 +9,12 @@ const shared=readFileSync('public/insight-update-return.js','utf8');
 const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function settle(check,message){for(let i=0;i<80&&!check();i++)await wait(10);assert.ok(check(),message)}
-function fixture(t,{tool='notification',current='3.6.57',manifest=release,fail=false,returnTo='',page='notification-update-now.html'}={}){
+function fixture(t,{tool='notification',current='3.6.57',manifest=release,fail=false,returnTo='',page='notification-update-now.html',ua='Mozilla/5.0 (Linux; Android 15) Chrome/130.0.0.0 Mobile Safari/537.36 EdgA/130.0.0.0'}={}){
  const params=new URLSearchParams({tool,account:'tester'});if(returnTo)params.set('return',returnTo);
  const html=readFileSync('public/'+page,'utf8');
  const dom=new JSDOM(html,{url:BASE+page+'?'+params,runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window,nav=[],fetches=[],errors=[];t.after(()=>w.close());
- Object.defineProperty(w.navigator,'userAgent',{configurable:true,value:'Mozilla/5.0 (Linux; Android 15) Chrome/130.0.0.0 Mobile Safari/537.36 EdgA/130.0.0.0'});
+ Object.defineProperty(w.navigator,'userAgent',{configurable:true,value:ua});
  w.localStorage.setItem(ACTIVE,'tester');
  if(current)w.document.documentElement.setAttribute('data-mumei-'+tool+'-live-version',current);
  w.addEventListener('error',e=>errors.push(e.error||e.message));
@@ -22,7 +22,9 @@ function fixture(t,{tool='notification',current='3.6.57',manifest=release,fail=f
  const loc=new URL(w.location.href);w.__location={href:loc.href,origin:loc.origin,pathname:loc.pathname,search:loc.search,hash:loc.hash,replace:url=>nav.push(url)};
  if(page==='notification-update-now.html'){
   w.eval('(()=>{const location=window.__location;'+shared+'})()');
+  w.eval('(()=>{const location=window.__location;'+readFileSync('public/insight-browser-guide.js','utf8')+'})()');
   for(const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi))if(match[1].trim())w.eval('(()=>{const location=window.__location;'+match[1]+'})()');
+  w.MumeiInsightBrowserGuide.mount(w.document.getElementById('insightBrowserGuide'),tool);
  }else{
   // Real global script evaluation preserves the existing page's manifest binding.
   w.eval(shared);
@@ -109,14 +111,35 @@ test('manifest failure remains unverified and never starts an install or marks i
 
 test('Edge launch stays explicit and return URLs never carry foreign hosts or login tokens',async t=>{
  const h=fixture(t,{returnTo:'https://outside.invalid/?token=secret'});await settle(()=>h.el('latest').textContent.startsWith('v'),'release loaded');
- assert.equal(h.el('edgeHelp').hidden,false);
- const uri=h.el('openEdge').href;assert.match(uri,/^intent:\/\/mumei-s\.github\.io\/note-insight\/notification-update-now\.html\?/);assert.match(uri,/package=com\.microsoft\.emmx;/);assert.doesNotMatch(uri,/outside\.invalid|secret/);
+ const uri=h.w.document.querySelector('.ibg-edge').href;assert.match(uri,/^intent:\/\/mumei-s\.github\.io\/note-insight\/notification-update-now\.html\?/);assert.match(uri,/package=com\.microsoft\.emmx;/);assert.doesNotMatch(uri,/outside\.invalid|secret/);
  assert.equal(new URL(h.el('back').href).origin,new URL(BASE).origin);
  assert.equal(h.nav.length,0,'opening the helper must not automatically launch another app');
+});
+
+for(const tool of ['notification','dm'])test(tool+': Safari Userscripts uses the script-page extension popup instead of Tampermonkey URL import',async t=>{
+ const h=fixture(t,{tool,current:'1.0.0',ua:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'});
+ await settle(()=>h.el('latest').textContent.startsWith('v'),'release loaded');
+ assert.equal(h.el('manualHelp').hidden,true);
+ assert.match(h.el('instruction').textContent,/文字列の画面は正常/);
+ assert.match(h.el('instruction').textContent,/拡張機能 → Userscripts/);
+ assert.doesNotMatch(h.el('instruction').textContent,/URLからインポート/);
+ h.click('installNow');await wait(10);
+ assert.equal(h.el('manualHelp').hidden,true);
+ assert.ok(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:'+tool));
+ assert.match(h.el('status').textContent,/まだ更新を確認できません/);
+});
+
+test('a ChatGPT Android webview cannot start pending update before moving into an extension browser',async t=>{
+ const h=fixture(t,{current:'',ua:'Mozilla/5.0 (Linux; Android 15; wv) AppleWebKit/537.36 Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36 ChatGPT/1.0'});
+ await settle(()=>h.el('latest').textContent.startsWith('v'),'release loaded');
+ assert.equal(h.el('installNow').getAttribute('aria-disabled'),'true');
+ h.click('installNow');assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:notification'),null);
+ assert.equal(h.nav.length,0);
+ assert.match(h.w.document.querySelector('.ibg-copy-status').textContent,/普段のブラウザ/);
 });
 
 test('a changed account cannot be redirected by the old pending update',async t=>{
  const h=fixture(t,{current:'1.0.0'});await settle(()=>h.el('latest').textContent.startsWith('v'),'release loaded');h.click('installNow');
  h.w.localStorage.setItem(ACTIVE,'someone_else');h.w.document.documentElement.setAttribute('data-mumei-notification-live-version',release.notificationVersion);
- await wait(50);assert.equal(h.nav.length,0);assert.match(h.el('status').textContent,/アカウントが変わった/);
+ await wait(50);assert.equal(h.nav.length,0);assert.match(h.el('status').textContent,/アカウントが変わった/);assert.equal(h.el('status').className,'status');
 });

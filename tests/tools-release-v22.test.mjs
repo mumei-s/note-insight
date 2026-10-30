@@ -47,7 +47,8 @@ test('ダッシュボードの配布版と互換coreの版・requireを検証す
  assert.ok(wrapper.includes("setAttribute('data-mumei-dashboard-wrapper',CORE_VERSION)"),'実行時のcore互換guardも同じ版を使う');
  assert.ok(wrapper.includes('panel()?.dataset.coreVersion!==CORE_VERSION'),'wrapperの読込guardは配布版とcore版を混同しない');
  assert.ok(wrapper.includes('sync-core-v1.1.0.js?v='+version.replaceAll('.','')));
- assert.ok(wrapper.includes('dashboard-feature-bridge-v1.js?v=101'));
+ const featureVersion=read('public/note-insight-dashboard-feature-bridge-v1.js').match(/version:'([^']+)'/)[1];
+ assert.ok(wrapper.includes('dashboard-feature-bridge-v1.js?v='+featureVersion.replaceAll('.','')));
  const queueVersion=read('public/note-insight-dashboard-save-queue-v1.js').match(/version:'([^']+)'/)[1];
  assert.ok(wrapper.includes('dashboard-save-queue-v1.js?v='+queueVersion.replaceAll('.','')),'保存処理の更新が古いrequireキャッシュに隠れない');
 });

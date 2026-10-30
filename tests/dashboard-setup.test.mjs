@@ -36,6 +36,7 @@ function page(t,options={}){
   if(options.wrapper){w.eval(featureBridge);w.eval(wrapper)}
   // Intercept browser navigation without replacing the production pairing, version or event logic.
   w.eval(updateReturn.replace("'use strict';","'use strict'; const location=window.__location;"));
+  if(options.guide)w.eval(readFileSync('public/insight-browser-guide.js','utf8'));
   if(options.pending)w.MumeiInsightUpdateReturn.create({tool:'dashboard',account:url.searchParams.get('account')||w.localStorage.getItem(ACTIVE)||'',returnTo:url.searchParams.get('return'),fallbackMode:'analysis'}).begin(release.dashboardVersion);
   w.eval(script.replace("'use strict';","'use strict'; const location=window.__location;"));
   return{w,calls,nav,gmStore,get:id=>w.document.getElementById(id),observerCalls:()=>observerCalls};
@@ -140,7 +141,29 @@ for(const problem of ['changed-before','changed-during','wrong-response'])test('
 });
 test('本人通知の更新は独立パネルを使い、完了後は元のINSIGHT分析へ戻る',async t=>{
   const h=page(t,{active:release.dashboardVersion,storage:{[NOTICE]:'3.5.0'}});await settle();const u=new URL(h.get('installNotice').href);assert.equal(u.pathname,'/note-insight/notification-browser-install.html');const back=new URL(u.searchParams.get('return'));assert.equal(back.pathname,'/note-insight/');assert.equal(back.searchParams.get('insightMode'),'analysis');assert.equal(back.hash,'#dashboard');assert.equal(back.searchParams.get('account'),'tester');assert.equal(h.get('installNotice').hidden,false);
-  h.w.localStorage.setItem(NOTICE,release.notificationVersion);h.w.dispatchEvent(new h.w.Event('mumei-notification-version-changed'));await settle();assert.equal(h.get('installNotice').hidden,true);
+  h.w.localStorage.setItem(NOTICE,release.notificationVersion);h.w.dispatchEvent(new h.w.Event('mumei-notification-version-changed'));await settle();assert.equal(h.get('installNotice').hidden,false,'保存版だけではこのブラウザの起動を証明しない');
+  h.w.document.documentElement.setAttribute('data-mumei-notification-live-version',release.notificationVersion);await settle();assert.equal(h.get('installNotice').hidden,true);
+});
+
+test('Safari Userscriptsの案内と実起動確認を共通ガイドから反映する',async t=>{
+ const h=page(t,{guide:true,ua:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18.0 Mobile/15E148 Safari/604.1'});await settle();
+ assert.equal(h.get('browser').value,'ios-safari');assert.match(h.get('browserHelp').textContent,/Userscripts/);assert.match(h.get('codeHelp').textContent,/正常な途中画面/);assert.doesNotMatch(h.get('codeHelp').textContent,/ユーティリティ/);
+ assert.equal(h.get('extensionLinks').querySelectorAll('a').length,1);assert.match(h.get('extensionLinks').querySelector('a').href,/id1463298887/);assert.match(h.get('scriptManagerHelp').href,/quoid\/userscripts/);
+ h.w.MumeiInsightBrowserGuide.setManager('dashboard','tampermonkey');await settle();assert.match(h.get('codeHelp').textContent,/Tampermonkey/);assert.match(h.get('scriptManagerHelp').href,/tampermonkey\.net/);
+ assert.equal(h.calls.filter(call=>call.init.method==='POST').length,0);assert.equal(h.nav.length,0);
+});
+
+test('説明をEdgeへ変更してもアプリ内ブラウザのまま更新済みや更新可能にしない',async t=>{
+ const h=page(t,{guide:true,ua:'Mozilla/5.0 (Linux; Android 15; wv) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36 ChatGPT/1.0'});await settle();
+ h.get('browser').value='android-edge';h.get('browser').dispatchEvent(new h.w.Event('change'));await settle();
+ const state=h.w.MumeiInsightBrowserGuide.forTool('dashboard');assert.equal(state.actualBrowser,'android-other');assert.equal(state.canInstall,false);assert.equal(h.get('switchBrowser').hidden,false);
+ h.get('installDashboard').addEventListener('click',event=>event.preventDefault());h.get('installDashboard').click();assert.equal(h.w.sessionStorage.getItem(PENDING),null);assert.equal(h.nav.length,0);assert.equal(h.calls.filter(call=>call.init.method==='POST').length,0);
+});
+
+test('ブラウザ切替用コピーは秘密queryを除き、本人と分析の戻り先を維持する',async t=>{
+ const h=page(t,{guide:true,query:'?account=tester&token=secret&auto=1&return='+encodeURIComponent(base+'?insightMode=analysis&analysisPanel=verdict&token=nested-secret#dashboard')});await settle();
+ let copied='';Object.defineProperty(h.w.navigator,'clipboard',{value:{writeText:async value=>{copied=value}}});h.get('copyPage').click();await settle();
+ const target=new URL(copied);assert.equal(target.searchParams.get('account'),'tester');assert.equal(target.searchParams.get('auto'),'0');assert.doesNotMatch(copied,/secret|token=/);assert.equal(new URL(target.searchParams.get('return')).searchParams.get('analysisPanel'),'verdict');
 });
 
 test('分析の設定入口は導入済みでも4パネルから常に開け、入口では分析を取得しない',async()=>{

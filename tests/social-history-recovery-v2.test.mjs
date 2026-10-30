@@ -148,7 +148,7 @@ test('historical view restores named evidence, preserves ambiguity and never rew
   const second=(await db.query("select id from public.insight_relation_history_rows where member_id='a' order by detected_at desc,id desc offset 4 limit 4")).rows;
   assert.equal(new Set([...first,...second].map(r=>r.id)).size,8);
   assert.deepEqual([...first,...second].map(r=>r.id),rows.slice(0,8).map(r=>r.id));
-  const filtered=(await db.query("select person_key from public.insight_relation_history_rows where member_id='a' and event_type='removed' and detected_at >= '2026-01-18' and detected_at < '2026-01-19' and actor_name ilike '%two-losses%'" )).rows;
+  const filtered=(await db.query("select person_key from public.insight_relation_history_rows where member_id='a' and event_type='removed' and detected_at >= '2026-01-18T00:00:00Z'::timestamptz and detected_at < '2026-01-19T00:00:00Z'::timestamptz and actor_name ilike '%two-losses%'" )).rows;
   assert.deepEqual(filtered,[{person_key:'two-losses'}]);
   assert.equal((await db.query("select count(*)::int as n from public.insight_relation_history_rows where member_id='b'")).rows[0].n,1);
   const privileges=(await db.query("select has_table_privilege('anon','public.insight_relation_history_rows','SELECT') as anonymous,has_table_privilege('authenticated','public.insight_relation_history_rows','SELECT') as browser,has_table_privilege('service_role','public.insight_relation_history_rows','SELECT') as service")).rows[0];

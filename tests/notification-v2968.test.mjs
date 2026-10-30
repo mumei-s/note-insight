@@ -110,7 +110,7 @@ test('notification and DM readers are hard separated with independent storage an
   assert.match(dm,/const dmRoute=\(\)=>\/\^\\\/messages\\\/rooms/);assert.match(dm,/if\(!dmRoute\(\)\)/);
   assert.match(dm,/insight-dm-ingest/);assert.doesNotMatch(dm,/insight-notification-ingest-v2/);
   assert.match(dm,/mumei_insight_dm_sync_token_v1:/);assert.doesNotMatch(dm,/mumei_insight_notification_sync_token_v2:/);
-  assert.equal(dmUser.match(/@version\s+([^\s]+)/)[1],JSON.parse(read('public/insight-release.json')).dmVersion);assert.match(dmUser,/note-insight-dm-account-pair-v1\.js\?v=100/);
+  assert.equal(dmUser.match(/@version\s+([^\s]+)/)[1],JSON.parse(read('public/insight-release.json')).dmVersion);assert.ok(dmUser.includes('note-insight-dm-account-pair-v1.js?v='+dmPair.match(/const VERSION='([^']+)'/)[1].replaceAll('.','')));
   assert.equal(dmUser.match(/note-insight-dm-network-v2\.js\?v=(\d+)/)[1],read('public/note-insight-dm-network-v2.js').match(/const VERSION='([^']+)'/)[1].replaceAll('.',''));
   assert.match(dmUser,/note-insight-dm-reader-v1\.js\?v=\d+/);
   assert.match(dmPair,/insight-dm-import-token/);assert.match(dmPair,/mumei_insight_dm_sync_token_v1:/);
