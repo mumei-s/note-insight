@@ -93,7 +93,7 @@ test('保存通信が無応答でも期限で停止し、遅い応答を無視�
 });
 test('保存前の本人確認が無応答でも期限で解除し、未保存データを保持する',async()=>{
  const timer=clock(),h=harness(undefined,timer),original=h.context.fetch;h.setNotices(69);let accounts=0,signal;
- h.context.fetch=(url,init)=>{if(String(url).includes('current_user')&&++accounts>1){signal=init?.signal;return new Promise(()=>{})}return original(url,init)};
+ h.context.fetch=(url,init)=>{if(String(url).includes('current_user')&&++accounts>3){signal=init?.signal;return new Promise(()=>{})}return original(url,init)};
  const run=h.api.syncCurrent(),rejected=assert.rejects(run,/本人確認が時間切れ/);await tick();h.api.stop();assert.equal(signal.aborted,false,'停止は保存の本人照合を中断しない');timer.fire(15000);await settles(rejected);assert.equal(signal.aborted,true);
  h.context.fetch=original;const before=h.calls;let pagesAtAck;h.setOnSave(()=>{if(pagesAtAck===undefined)pagesAtAck=h.calls});const next=await settles(h.api.syncCurrent());assert.equal(pagesAtAck,before);assert.equal(next.saved,69);assert.equal(h.calls-before,4);assert.deepEqual(orderedIds(h),Array.from({length:69},(_,i)=>i+1));
 });
@@ -115,12 +115,12 @@ test('次ページの待機中に別ページへ移動しても、取得済み�
  h.context.fetch=original;const next=await settles(h.api.syncCurrent());assert.equal(next.saved,24);assert.deepEqual(h.shared.saved,[...Array.from({length:12},(_,i)=>i+13),...Array.from({length:12},(_,i)=>i+1)]);
 });
 
- test('新着なしの同期はnote本人確認と1ページのみで、保存済み通知を再送しない',async()=>{
+ test('新着なしの同期は1ページだけ取得して開始時と受信後に本人を確認し、保存済み通知を再送しない',async()=>{
  const h=harness();h.setNotices(12);await h.api.syncCurrent();
  const accounts=h.accountCalls,pages=h.calls,saved=h.shared.saved.length;
  const result=await h.api.syncCurrent();
  assert.equal(result.historyComplete,true);assert.equal(result.saved,0);
- assert.equal(h.accountCalls-accounts,1);assert.equal(h.calls-pages,1);assert.equal(h.shared.saved.length,saved);
+ assert.equal(h.accountCalls-accounts,2);assert.equal(h.calls-pages,1);assert.equal(h.shared.saved.length,saved);
  });
 
 async function finishWindows(h){let result;for(let i=0;i<10;i++){result=await h.api.syncCurrent();if(result.historyComplete)return result}assert.fail('history did not complete within fixture windows')}
@@ -162,7 +162,7 @@ test('旧版の未完了journalを捨てず保存後に完全走査し、完了�
  const before=resumed.calls;assert.equal((await resumed.api.syncCurrent()).saved,0);assert.equal(resumed.calls-before,1);
 });
 test('途中でnote本人が変われば未送信分を別アカウントに保存しない',async()=>{
- const h=harness();h.setNotices(650);h.setOnSave(()=>h.changeAccount());await assert.rejects(h.api.syncCurrent(),/NOTE_ACCOUNT_CHANGED/);assert.equal(h.shared.saved.length,20);const journal=h.shared.gm.get('mumei_notification_window_v360:tester');assert.equal(journal.saved,20);assert.equal(journal.rows.length,28);assert.equal(new Set(journal.rows.map(r=>r.meta.event_identity)).size,28);
+ const h=harness();h.setNotices(650);h.setOnSave(()=>h.changeAccount());await assert.rejects(h.api.syncCurrent(),/NOTE_ACCOUNT_CHANGED/);assert.equal(h.shared.saved.length,20);const journal=h.shared.gm.get('mumei_notification_window_v360:tester');assert.equal(journal.saved,20);assert.equal(journal.rows.length,4,'既に本人確認した残りだけを保持し、本人切替後のページを取り込まない');assert.equal(new Set(journal.rows.map(r=>r.meta.event_identity)).size,4);assert.match(journal.nextRequest.url,/page=3/);
 });
 
 for(const total of [200,750])test(`保存中の新着でページがずれても同一走査中の保存を旧境界にせず${total}件を回収する`,async()=>{

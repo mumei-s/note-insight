@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.22';
+const VERSION='3.6.23';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -499,6 +499,11 @@ async function syncHistory(opts={}){
    if(stopRequested)break;
    const cap=journal.nextRequest?await replay(journal.nextRequest):await directNoticeCapture();
    if(!directNoticesCap(cap))throw new Error('NO_NOTIFICATION_API_CAPTURE');
+   // Cookies may switch accounts while a notice page is in flight. Verify
+   // its owner before changing the durable buffer or transport cursor; a
+   // pre-send check alone would retain foreign notices for the old owner's
+   // next visit. Previously verified rows remain available for that retry.
+   const current=await account();if(current?.id!==a.id){lastCapture=null;throw new Error('NOTE_ACCOUNT_CHANGED')}
    const pageRows=extractDirectNotices(cap.json,cap.url);
    // Backfill saves newest windows before older windows. Retain the head's
    // signatures separately so a large history cannot evict the next delta boundary.
