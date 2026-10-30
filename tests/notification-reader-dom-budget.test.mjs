@@ -31,10 +31,10 @@ test('300行の確認と12行追加で、通知同士の全組合せ比較をせ
  assert.deepEqual([...visible].map(el=>el.id),Array.from({length:312},(_,i)=>'row-'+i));
 });
 
-test('完了後の無関係DOM更新でも、実行される判定のDOM量を線形に保つ',async t=>{
+test('完了後の無関係DOM更新では通知再走査を起こさない',async t=>{
  const f=fixture(t,Array.from({length:300},(_,i)=>nativeRow(i)).join(''));await until(()=>f.measure.networkRuns===1,'initial read');await wait(180);
- const before=f.measure.scans;f.measure.contains=0;f.w.document.getElementById('unrelated').append(f.w.document.createElement('span'));await until(()=>f.measure.scans>before,'existing observer behavior is retained');
- assert.ok(f.measure.contains<5000,`completed-panel refresh does not compare every pair: ${f.measure.contains}`);assert.equal(f.measure.networkRuns,1);
+ const before=f.measure.scans;f.measure.contains=0;for(let i=0;i<30;i++)f.w.document.getElementById('unrelated').append(f.w.document.createElement('span'));await wait(320);
+ assert.equal(f.measure.scans,before,'unrelated DOM mutations must not rescan notices');assert.equal(f.measure.networkRuns,1);
 });
 
 test('入れ子の通知では外側だけを採用し、兄弟通知とDOM並び替えを保持する',t=>{
