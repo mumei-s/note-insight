@@ -194,7 +194,7 @@ document.addEventListener('mumei-notification-captured',e=>{
 function scheduleAuto(delay=150){
  const wait=Math.max(0,Number(delay)||0),due=Date.now()+wait;
  // Keep the earliest due scan even when note redraws repeatedly.
- if(autoTimer&&autoDueAt<=due)return;
+ if(autoTimer&&wait>0&&autoDueAt<=due)return;
  clearTimeout(autoTimer);autoDueAt=due;
  autoTimer=setTimeout(()=>{
   autoTimer=0;autoDueAt=0;
@@ -244,7 +244,7 @@ function noticeMutation(record){
 function observe(){
  if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}
  new MutationObserver(records=>{
-  if(document.visibilityState==='hidden'||/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
+  if(typeof document==='undefined'||!document.documentElement||document.visibilityState==='hidden'||/^\/messages\/rooms(?:\/|$)/i.test(location.pathname))return;
   if(records.some(noticeMutation))scheduleAuto(150);
  }).observe(document.documentElement,{subtree:true,childList:true,characterData:true})
 }observe();
