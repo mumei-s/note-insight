@@ -122,13 +122,14 @@ function errorText(code){const expected=cleanAccount(q.get('notificationExpected
 async function call(action,expected=session){const headers={'Content-Type':'application/json'};headers[expected.role==='owner'?'X-Owner-Token':'X-Insight-Token']=expected.token;const r=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify({action,role:expected.role}),cache:'no-store'}),p=await r.json().catch(()=>({}));if(expected!==session||!sameSession(expected,readSession()))throw new Error('INSIGHT_ACCOUNT_CHANGED');if(!r.ok||p?.ok===false)throw new Error(p?.error||`HTTP_${r.status}`);return p}
 function setupLinks(){setupReturn();const here=transientFree();if(account)here.searchParams.set('notificationAccount',account);else here.searchParams.delete('notificationAccount');const i=new URL('./notification-browser-install.html',location.href);i.searchParams.set('from','notification-connection');if(account)i.searchParams.set('notificationAccount',account);i.searchParams.set('return',here.href);install.href=i.href;update.href=i.href;if(account){openNote.href=`https://note.com/${encodeURIComponent(account)}`;history.href=`./?insightMode=notifications&notificationAccount=${encodeURIComponent(account)}#dashboard`;filter.href=`./notification-filter-settings.html?from=connection&notificationAccount=${encodeURIComponent(account)}`}else{history.href='./?insightMode=notifications#dashboard';filter.href='./notification-filter-settings.html?from=connection';openNote.href='https://note.com/'}}
 function older(a,b){const aa=String(a).split('.').map(Number),bb=String(b).split('.').map(Number);for(let n=0;n<Math.max(aa.length,bb.length);n++){const x=aa[n]||0,y=bb[n]||0;if(x!==y)return x<y}return false}
-function needsToolUpdate(){const installed=String(localStorage.getItem(TOOL)||'');return Boolean(installed&&latest&&older(installed,latest))}
+function liveToolVersion(){const value=String(document.documentElement.getAttribute('data-mumei-notification-live-version')||'');return /^\d+(?:\.\d+){1,3}$/.test(value)?value:''}
+function needsToolUpdate(){const installed=liveToolVersion();return Boolean(installed&&latest&&older(installed,latest))}
 function renderTool(){
-  const installed=String(localStorage.getItem(TOOL)||''),pending=needsToolUpdate();
+  const installed=liveToolVersion(),saved=String(localStorage.getItem(TOOL)||''),pending=needsToolUpdate();
   if(installed){toolState.textContent=pending?`v${installed}（更新あり v${latest}）`:`v${installed}`;toolState.className=pending?'warn':'good'}
   else{toolState.textContent=latest?`未確認（最新 v${latest}）`:'未確認';toolState.className='warn'}
   toolAction.hidden=Boolean(installed&&latest&&!pending);
-  update.textContent=installed?(latest?`本人通知の更新状態を確認（v${latest}）`:'本人通知の更新状態を確認'):'本人通知を初回追加する';
+  update.textContent=installed||saved?(latest?`本人通知の更新状態を確認（v${latest}）`:'本人通知の更新状態を確認'):'本人通知を初回追加する';
   if(message.dataset.toolUpdate==='1'&&installed&&latest&&!pending)setMessage(`本人通知ツール v${installed} を確認しました。保存済み本人通知は最上部のパネルから開けます。`,'success');
   return installed;
 }
@@ -138,6 +139,8 @@ async function load(){const generation=++loadGeneration,expected=session,valid=(
  }catch(e){if(!valid())return;loginState.textContent='再ログインが必要';loginState.className='bad';accountState.textContent='確認できません';pairState.textContent='確認不可';pairState.className='warn';setMessage(`INSIGHT認証を確認できません（${String(e?.message||e)}）。アカウント切替からログインを復帰してください。`,'error');pair.textContent='INSIGHTへログイン';pair.disabled=false;pair.onclick=()=>{setManualIntent('login');location.href='./#access/insight'};setupLinks()}}
 pair.addEventListener('click',async()=>{if(!sameSession(session,readSession())){refreshSession();return}if(!session.token||!account||pair.onclick)return;const expected=session;pair.disabled=true;pair.textContent='一時コード発行中…';setMessage('note本人IDと照合する準備をしています。');try{const p=await call('pair-start',expected);if(expected!==session||!sameSession(expected,readSession()))return;const u=new URL(p.noteUrl),backUrl=transientFree();backUrl.searchParams.set('notificationAccount',account);u.searchParams.set('mumei_return',backUrl.href);setMessage(`noteへ移動します。@${account} でログイン中か確認してください。`);location.href=u.href}catch(e){if(expected!==session||!sameSession(expected,readSession()))return;pair.disabled=false;pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';setMessage(`連携を開始できません（${String(e?.message||e)}）。`,'error')}});
 addEventListener('mumei-notification-version-changed',renderTool);
+addEventListener('mumei-insight-tool-ready',renderTool);
+new MutationObserver(renderTool).observe(document.documentElement,{attributes:true,attributeFilter:['data-mumei-notification-live-version']});
 function refreshSession(){const next=readSession();if(sameSession(session,next))return false;session=next;loadGeneration++;account='';paired=false;pair.disabled=true;pair.onclick=null;pair.textContent='ログイン確認中…';accountState.textContent='確認中…';pairState.textContent='連携確認中…';setupLinks();setMessage('現在のINSIGHTアカウントを確認しています。');void load();return true}
 addEventListener('storage',e=>{if(e.key===TOOL)renderTool();if(!e.key||[MEMBER,OWNER,'mumei-insight-active-account-v3'].includes(e.key))refreshSession()});
 addEventListener('focus',()=>{if(!refreshSession())void release()});

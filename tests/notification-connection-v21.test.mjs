@@ -6,12 +6,13 @@ import { JSDOM } from 'jsdom';
 const page = readFileSync('public/notification-connection.html', 'utf8');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function connection(t, installed = '3.6.20') {
+async function connection(t, installed = '3.6.20', live = installed) {
   const dom = new JSDOM(page, { url: 'https://mumei-s.github.io/note-insight/notification-connection.html', runScripts: 'outside-only', pretendToBeVisual: true });
   t.after(() => dom.window.close());
   const w = dom.window;
   w.localStorage.setItem('mumei-insight-access-token', 'fixture-member');
   if (installed) w.localStorage.setItem('mumei-notification-tool-version', installed);
+  if (live) w.document.documentElement.setAttribute('data-mumei-notification-live-version', live);
   const requests = [];
   w.fetch = async (url, init) => {
     if (String(url).includes('insight-release.json')) return { json: async () => ({ notificationVersion: '3.6.23' }) };
@@ -67,6 +68,9 @@ test('添付の旧v3.6.20には更新ボタンを出し、導入後は自動で�
   assert.match(w.document.getElementById('message').textContent, /Tampermonkeyが自動更新/);
   w.localStorage.setItem('mumei-notification-tool-version', '3.6.23');
   w.dispatchEvent(new w.Event('mumei-notification-version-changed'));
+  assert.equal(action.hidden, false, '保存値の変更だけでは最新版の起動を確認したことにしない');
+  w.document.documentElement.setAttribute('data-mumei-notification-live-version', '3.6.23');
+  w.dispatchEvent(new w.Event('mumei-insight-tool-ready'));
   assert.equal(action.hidden, true);
   assert.equal(w.document.getElementById('toolState').textContent, 'v3.6.23');
   assert.equal(w.document.getElementById('toolState').className, 'good');
@@ -81,6 +85,31 @@ test('最新版は更新案内を消し、未導入時はインストールへ�
   const missing = await connection(t, '');
   assert.equal(missing.w.document.getElementById('toolAction').hidden, false);
   assert.equal(missing.w.document.getElementById('update').textContent, '本人通知を初回追加する');
+});
+
+test('保存版が最新でも未起動は未確認のまま、実際の起動後だけ案内を消す', async t => {
+  const { w, requests } = await connection(t, '3.6.23', '');
+  const action = w.document.getElementById('toolAction'), state = w.document.getElementById('toolState');
+  assert.equal(action.hidden, false);
+  assert.equal(state.textContent, '未確認（最新 v3.6.23）');
+  assert.equal(state.className, 'warn');
+  w.dispatchEvent(new w.StorageEvent('storage', { key: 'mumei-notification-tool-version' }));
+  assert.equal(action.hidden, false);
+  w.document.documentElement.setAttribute('data-mumei-notification-live-version', '3.6.23');
+  await pause(0);
+  assert.equal(action.hidden, true);
+  assert.equal(state.className, 'good');
+  w.document.documentElement.removeAttribute('data-mumei-notification-live-version');
+  await pause(0);
+  assert.equal(action.hidden, false);
+  assert.equal(state.className, 'warn');
+  assert.deepEqual(requests, ['stats'], '起動版の通知で連携APIを再取得しない');
+});
+
+test('保存された最新版より、この画面で起動している旧版を優先する', async t => {
+  const { w } = await connection(t, '3.6.23', '3.6.20');
+  assert.equal(w.document.getElementById('toolAction').hidden, false);
+  assert.equal(w.document.getElementById('toolState').textContent, 'v3.6.20（更新あり v3.6.23）');
 });
 
 for(const mode of ['modern','legacy'])test(`本人設定の横長3行から保存確認つきON/OFFを切り替え、旧OFF設定も復帰する (${mode})`,async t=>{
