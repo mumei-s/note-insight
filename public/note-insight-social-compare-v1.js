@@ -2,10 +2,10 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.8',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.9',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
-const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const gm=()=>typeof GM!=='undefined'?(GM||{}):{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function get(k,d){if(typeof gm().getValue==='function')return gm().getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d);return d}
 async function set(k,v){if(typeof gm().setValue==='function')return gm().setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);throw new Error('SOCIAL_STORAGE_UNAVAILABLE')}
 async function json(path){const c=new AbortController(),timer=setTimeout(()=>c.abort(),15000);try{const r=await fetch(path,{credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('NOTE_HTTP_'+r.status);return await r.json()}finally{clearTimeout(timer)}}
