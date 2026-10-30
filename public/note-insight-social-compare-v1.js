@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.7',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.8',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -146,6 +146,12 @@ async function autoPending(){
    const target=link.pathname.split('/')[1];
    let profile;try{profile=await json('/api/v2/creators/'+encodeURIComponent(target))}
    catch(e){if(!/NOTE_HTTP_(404|410)/.test(String(e?.message||'')))throw e;profile={data:{}}}
+   // Profile flags belong to the note login that fetched them. Never persist
+   // another account's relationship state with the captured owner credential.
+   if(await account()!==id)throw new Error('NOTE_ACCOUNT_CHANGED');
+   const currentAuth=await tokenFor(id);
+   if(!currentAuth||currentAuth.kind!==auth.kind||currentAuth.token!==auth.token)throw new Error('SOCIAL_TOKEN_CHANGED');
+   if(document.visibilityState==='hidden'||running||sessionStorage.getItem(ACTIVE))break;
    const row=person(profile.data||profile,'profile',null);
    if(row&&row.person_key===candidate.person_key&&row.actor_url===String(candidate.actor_url).replace(/\/$/,'')&&typeof row.is_following==='boolean'&&typeof row.is_follower==='boolean'){
     const ack=await save({noteId:id,checkedAt:new Date().toISOString(),rows:[{...row,evidence:'profile_flags'}]},auth);
