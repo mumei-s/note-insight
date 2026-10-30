@@ -83,11 +83,11 @@ test('manual newlines, natural wrapping, suspicious word breaks and measured cli
  assert.ok(outside.some(f=>f.status==='candidate'&&f.evidence.bounds[2]===865));
  assert.ok(q.assessGeometry([],860,140).every(f=>f.status!=='confirmed'));r.close();
 });
-test('record-only observes an intentional mismatch without changing source data, editor nodes or the existing result',()=>{
+test('the observation API records mismatch evidence without rewriting the original data or File',()=>{
  const r=runtime(),source=acquire(r.q,row(),raw('person_b')),before=JSON.stringify(source),file={name:'original.png'};
  assert.equal(r.q.generated(source,file),file);r.q.beforePaste(source,file);
  assert.equal(JSON.stringify(source),before);assert.ok(r.q.snapshot().records.some(rec=>rec.findings.some(f=>f.status==='mismatch')));
- assert.equal(r.q.snapshot().mode,'record');r.close();
+ assert.equal(r.q.snapshot().mode,'on');r.close();
 });
 test('render observation delegates the exact original fillText arguments once and uses actual metrics',()=>{
  const r=runtime(),calls=[],ctx={fillText(...args){calls.push(args);return 42},measureText(){return{width:20,actualBoundingBoxLeft:0,actualBoundingBoxRight:20,actualBoundingBoxAscent:0,actualBoundingBoxDescent:10}}},source=acquire(r.q),file={};
@@ -114,7 +114,7 @@ test('quality UI is in the same header row, details overlay only after tap, and 
  assert.equal(head.children.length,4);assert.equal(head.querySelectorAll('[data-quality-badge]').length,1);assert.equal(doc.querySelector('.body').textContent,'元の操作');
  assert.equal(doc.querySelector('[data-quality-detail]').hidden,true);badge.click();assert.equal(doc.querySelector('[data-quality-detail]').hidden,false);
  doc.querySelector('[data-quality-detail] button').click();assert.equal(badge.textContent,'検査OFF');r.close();
- const next=runtime({storage});next.q.mountUI();assert.equal(next.w.document.querySelector('[data-quality-badge]').textContent,'検査OFF');next.w.document.querySelector('[data-quality-badge]').click();next.w.document.querySelector('[data-quality-detail] button').click();assert.equal(next.q.snapshot().mode,'record');next.close();
+ const next=runtime({storage});next.q.mountUI();assert.equal(next.w.document.querySelector('[data-quality-badge]').textContent,'検査OFF');next.w.document.querySelector('[data-quality-badge]').click();next.w.document.querySelector('[data-quality-detail] button').click();assert.equal(next.q.snapshot().mode,'on');next.close();
 });
 test('quality storage is bounded, separate, contains no profile copies, and disabling retains prior evidence and checkpoints',()=>{
  const storage=new Map([['mumei_profile_card_paster_run_v15:naaaaaaaaaaaa','original-checkpoint']]),r=runtime({storage});
@@ -139,6 +139,6 @@ test('a missing or failed draft result never becomes a successful save in the qu
 test('the shipped pair includes quality hooks, preserves update identity, excludes purchase UI and needs no @require',()=>{
  const a=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),b=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
  assert.equal(a.slice(a.indexOf('(function(){')),b.slice(b.indexOf('(function(){')));
- assert.match(a,/@version\s+2\.9\.0/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
+ assert.match(a,/@version\s+2\.9\.1/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
  assert.match(a,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/likes300-fix/);
 });

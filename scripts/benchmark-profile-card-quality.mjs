@@ -9,7 +9,7 @@ for(let round=-1;round<repetitions;round++){
   const r=await runtime({baseline,count,render:false,realWaits:true});
   const start=performance.now();await r.history();const elapsedMs=performance.now()-start;
   const waits=r.state.waits.reduce((sum,value)=>sum+value,0),run=r.editor.readRun();
-  if(run?.stage!=='images_ready'||r.state.images.length!==201||!baseline&&r.quality.snapshot().fault)throw Error('Benchmark run did not complete all original work and all additional inspections');
+  if(run?.stage!=='images_ready'||r.state.images.length!==201||r.quality?.snapshot().fault)throw Error('Benchmark run did not complete all original work and all additional inspections');
   // Execute the original 50ms waits, without adding quality-specific waits.
   // Native note/network capabilities remain simulated; this is not a phone test.
   if(round>=0)results[baseline?'baseline':'quality'].push({elapsedMs,scheduledWaitMs:waits});
@@ -17,4 +17,4 @@ for(let round=-1;round<repetitions;round++){
  }
 }
 const a=median(results.baseline.map(x=>x.elapsedMs)),b=median(results.quality.map(x=>x.elapsedMs));
-console.log(JSON.stringify({environment:'same managed executor / Node / real PM + canvas / original waits / fake cached note capabilities / no real network or phone',people:count,repetitions,results,medianElapsedMs:{baseline:a,quality:b,changePercent:(b/a-1)*100}},null,2));
+console.log(JSON.stringify({environment:'same managed executor / Node / real PM + canvas / original waits and real clock / fake cached note capabilities / no real network or phone',people:count,repetitions,results,medianElapsedMs:{baseline:a,quality:b,changePercent:(b/a-1)*100}},null,2));

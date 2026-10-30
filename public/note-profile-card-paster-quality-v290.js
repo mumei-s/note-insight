@@ -1,12 +1,13 @@
 // Additive, local-only quality observation. No editor writes or network requests.
-// Rollout policy: record-only. No new holds/corrections are enabled in this release.
+// Validated account/article/file contradictions hold before writes. No auto edits.
 (function(page){
 'use strict';
 if(!page||page.__MUMEI_PROFILE_CARD_QUALITY__)return;
-const VERSION='2.9.0',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
-const state={records:[],counts:{},mode:'record',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
+const VERSION='2.9.1',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
+const state={records:[],counts:{},mode:'on',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
 const renderings=new WeakMap(),files=new WeakMap(),layouts=new WeakMap();
 let sources=new Map();
+let legacyDiagnoses=new Map();
 const fingerprint=value=>{let h=2166136261;for(const c of String(value??'')){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return(h>>>0).toString(16)};
 const account=value=>/^[a-z0-9_-]+$/i.test(String(value||'').trim())?String(value).trim().toLowerCase():'';
 const cleanUrl=value=>{try{const u=new URL(String(value||''));if(u.protocol!=='https:')return'';u.search='';u.hash='';u.username='';u.password='';return u.href}catch{return''}};
@@ -28,7 +29,10 @@ function attach(row,proof){
  const ref='q1:'+proof.target+'/'+String(row.key||'')+'/'+fingerprint(JSON.stringify(proof));
  sources.set(ref,proof);if(sources.size>SOURCE_LIMIT)sources.delete(sources.keys().next().value);state.dirty=true;
  // Only a short reference travels through the original frequently flushed run.
- return{...row,qualityRef:ref};
+ const result={...row,qualityRef:ref};
+ const reasons=[...(row?.qualitySourceIssue?.version===1?row.qualitySourceIssue.reasons||[]:[]),...strictIdentityReasons(row,proof)];
+ if(reasons.length)result.qualitySourceIssue={version:1,reasons:[...new Map(reasons.map(reason=>[JSON.stringify(reason),reason])).values()]};
+ return result;
 }
 function beginBatch({run=null,resume=false}={}){
  safe(()=>{
@@ -61,17 +65,111 @@ function assessIdentity(row){
  const out=[],proof=provenance(row),target=proof?.target;
  if(!proof)return[finding('insufficient','取得元','以前の保存分には取得元の照合記録がない')];
  compare(out,'対象と記事URL',target,urlIdentity(row.url).account);
- if(!row.profileOnly)compare(out,'記事IDとURL',String(row.key||'').toLowerCase(),urlIdentity(row.url).key);
+ if(!row.profileOnly)compare(out,'記事IDとURL',articleKey(row.key),urlIdentity(row.url).key);
  for(const source of proof.articles||[]){
   compare(out,'対象と投稿者',target,source.account,{source:source.source});
-  compare(out,'選択記事と取得記事',String(row.key||'').toLowerCase(),source.key,{source:source.source});
-  if(source.url){compare(out,'投稿者の原URL',target,urlIdentity(source.url).account,{source:source.source});compare(out,'記事の原URL',String(row.key||'').toLowerCase(),urlIdentity(source.url).key,{source:source.source})}
+  compare(out,'選択記事と取得記事',articleKey(row.key),articleKey(source.key),{source:source.source});
+  if(source.url){compare(out,'投稿者の原URL',target,urlIdentity(source.url).account,{source:source.source});compare(out,'記事の原URL',articleKey(row.key),urlIdentity(source.url).key,{source:source.source})}
  }
  if(proof.profile)compare(out,'対象とプロフィール',target,proof.profile.account,{source:proof.profile.source});
  else out.push(finding('insufficient','プロフィール','投稿者プロフィールの独立したIDが未取得'));
  if(row.profileOnly)out.push(finding('unperformed','記事照合','記事なしの既存経路。記事の一致は判定しない'));
  if(!(proof.articles||[]).length&&!row.profileOnly)out.push(finding('insufficient','記事投稿者','取得記事の投稿者情報が未記録'));
  return out;
+}
+const articleKey=value=>/^n[a-f0-9]{12}$/i.test(String(value||''))?String(value).toLowerCase():'';
+function identityOf(row){const url=urlIdentity(row?.url);return{account:account(row?.urlname),key:articleKey(row?.key),urlAccount:url.account||'',urlKey:url.key||''}}
+function strictIdentityReasons(row,proof,binding=null){
+ const reasons=[],current=identityOf(row),target=account(proof?.target)||current.account;
+ const compareId=(code,expected,actual,source)=>{if(expected&&actual&&expected!==actual)reasons.push({code,expected,actual,source})};
+ compareId('ROW_ACCOUNT',account(proof?.target),current.account,'selected-target');
+ compareId('URL_ACCOUNT',target,current.urlAccount,'article-url');
+ if(!row?.profileOnly)compareId('URL_ARTICLE',current.key,current.urlKey,'article-url');
+ for(const source of proof?.articles||[]){
+  compareId('ARTICLE_ACCOUNT',target,account(source.account),source.source);
+  if(!row?.profileOnly)compareId('ARTICLE_KEY',current.key,articleKey(source.key),source.source);
+  const url=urlIdentity(source.url);
+  compareId('ORIGINAL_URL_ACCOUNT',target,url.account,source.source);
+  if(!row?.profileOnly)compareId('ORIGINAL_URL_ARTICLE',current.key,url.key,source.source);
+ }
+ if(proof?.profile){compareId('PROFILE_ACCOUNT',target,account(proof.profile.account),'creator-api');compareId('PROFILE_REQUEST',target,account(proof.profile.requested),'creator-api')}
+ if(binding){
+  compareId('FILE_ACCOUNT',current.account,account(binding.account),'generated-file');
+  const url=urlIdentity(binding.url);compareId('FILE_URL_ACCOUNT',current.urlAccount,url.account,'generated-file');
+  if(!row?.profileOnly){compareId('FILE_ARTICLE',current.key,articleKey(binding.key),'generated-file');compareId('FILE_URL_ARTICLE',current.urlKey,url.key,'generated-file')}
+ }
+ return reasons;
+}
+function preflight(row,{file=null,phase='images'}={}){
+ return safe(()=>{
+  const source=strictIdentityReasons(row,provenance(row));
+  const bound=file?strictIdentityReasons(row,null,files.get(file)?.binding).filter(reason=>reason.code.startsWith('FILE_')):[];
+  const reasons=[...source,...bound];
+  return reasons.length?{hold:true,kind:source.length?'source':'file',phase,reasons}:null;
+ },null);
+}
+function hasVerifiedFreshIdentity(row){
+ return safe(()=>{
+  const proof=provenance(row),id=identityOf(row),target=account(proof?.target);
+  if(!target||id.account!==target||id.urlAccount!==target||proof?.profile?.account!==target||strictIdentityReasons(row,proof).length)return false;
+  if(row.profileOnly)return !id.key&&!id.urlKey;
+  return !!id.key&&id.key===id.urlKey&&(proof?.articles||[]).some(source=>source.source==='note-api'&&account(source.account)===target&&articleKey(source.key)===id.key);
+ },false);
+}
+function hasVerifiedFileIdentity(row,file){
+ return safe(()=>{
+  const binding=files.get(file)?.binding,id=identityOf(row),url=urlIdentity(binding?.url);
+  return !!binding&&!!id.account&&id.urlAccount===id.account&&id.account===account(binding.account)&&id.urlAccount===url.account&&(row.profileOnly?!id.key&&!id.urlKey&&!articleKey(binding.key)&&!url.key:!!id.key&&id.urlKey===id.key&&id.key===articleKey(binding.key)&&id.urlKey===url.key);
+ },false);
+}
+function refreshed(row,{target,note,profile}={}){
+ return safe(()=>{
+  const clean={...row};delete clean.qualityRef;delete clean.qualitySource;delete clean.qualitySourceIssue;
+  return acquired(clean,{target,note,profile});
+ },null);
+}
+function historicalReasons(entry){
+ const codes={'対象と記事URL':'URL_ACCOUNT','記事IDとURL':'URL_ARTICLE','対象と投稿者':'ARTICLE_ACCOUNT','選択記事と取得記事':'ARTICLE_KEY','投稿者の原URL':'ORIGINAL_URL_ACCOUNT','記事の原URL':'ORIGINAL_URL_ARTICLE','対象とプロフィール':'PROFILE_ACCOUNT'};
+ const reasons=[];
+ const add=(code,expected,actual)=>{const valid=code.endsWith('ARTICLE')||code==='ARTICLE_KEY'?articleKey:account;const a=valid(expected),b=valid(actual);if(a&&b&&a!==b)reasons.push({code,expected:a,actual:b,source:'previous-quality-record'})};
+ for(const item of entry.findings||[]){
+  if(item.status!=='mismatch')continue;
+  const {expected,actual}=item.evidence||{};
+  if(codes[item.check])add(codes[item.check],expected,actual);
+  const field=String(item.check||'').match(/^(?:生成→リンク|生成→貼付画像) \/ (account|key|url)$/)?.[1];
+  if(field==='account')add('LEGACY_FILE_ACCOUNT',expected,actual);
+  if(field==='key')add('LEGACY_FILE_ARTICLE',expected,actual);
+  if(field==='url'){const first=urlIdentity(expected),second=urlIdentity(actual);add('LEGACY_FILE_ACCOUNT',first.account,second.account);add('LEGACY_FILE_ARTICLE',first.key,second.key)}
+ }
+ return reasons;
+}
+function loadHistoricalDiagnoses(){
+ legacyDiagnoses=new Map();
+ for(const entry of state.records){
+  if(entry.resolvedAt||entry.batchId!==state.batchId||!account(entry.target))continue;
+  const reasons=historicalReasons(entry);if(!reasons.length)continue;
+  const key=account(entry.target)+'|'+String(entry.key||'').toLowerCase(),previous=legacyDiagnoses.get(key);
+  legacyDiagnoses.set(key,{account:account(entry.target),key:String(entry.key||'').toLowerCase(),runId:state.runId,reasons:[...(previous?.reasons||[]),...reasons]});
+ }
+}
+function knownDiagnosis(row,run){
+ try{
+  selectScope();if(!legacyDiagnoses.size)return[];
+  const previous=legacyDiagnoses.get(account(row?.urlname)+'|'+String(row?.key||'').toLowerCase());
+  if(!previous)return[];
+  // Match the same persisted run, or the same still-cached contradictory
+  // snapshot. A fresh selection of the same person must not inherit a grade.
+  if(previous.runId!==run?.createdAt&&(!row?.qualityRef||!strictIdentityReasons(row,provenance(row)).length))return[];
+  return previous.reasons;
+ }catch{return[]}
+}
+function resolved(row){
+ safe(()=>{
+  const target=account(row?.urlname),key=String(row?.key||'').toLowerCase();
+  legacyDiagnoses.delete(target+'|'+key);
+  for(const entry of state.records)if(entry.target===target&&entry.key===key&&entry.findings.some(item=>item.status==='mismatch'))entry.resolvedAt=Date.now();
+  record(row,'再確認',[finding('confirmed','保留理由の再確認','この行の元の識別情報と対応が確認できたため保留を解除。未検査項目は保証しない')]);
+ });flush();updateBadge();
 }
 function assessBinding(row,binding,stage){
  if(!binding)return[finding('insufficient',stage,'生成元の対応記録がない')];
@@ -126,7 +224,8 @@ function scope(){return String(page.location?.pathname||location.pathname).match
 function selectScope(){
  const key=scope();if(state.scope===key)return;
  flush();state.scope=key;state.records=[];state.counts={};state.batchId='';state.batchSerial=0;state.runId=null;state.attention='';sources=new Map();
- try{state.mode=localStorage.getItem(PREF)==='off'?'off':'record';const saved=JSON.parse(localStorage.getItem(PREFIX+key)||'null');if(saved?.version===1&&Array.isArray(saved.records)){state.records=saved.records.slice(-LIMIT);state.counts=saved.counts||{};state.batchId=String(saved.batchId||'');state.batchSerial=Number(saved.batchSerial)||0;state.runId=saved.runId??null;sources=new Map((Array.isArray(saved.sources)?saved.sources:[]).slice(-SOURCE_LIMIT))}}catch{}
+ try{state.mode=localStorage.getItem(PREF)==='off'?'off':'on';const saved=JSON.parse(localStorage.getItem(PREFIX+key)||'null');if(saved?.version===1&&Array.isArray(saved.records)){state.records=saved.records.slice(-LIMIT);state.counts=saved.counts||{};state.batchId=String(saved.batchId||'');state.batchSerial=Number(saved.batchSerial)||0;state.runId=saved.runId??null;sources=new Map((Array.isArray(saved.sources)?saved.sources:[]).slice(-SOURCE_LIMIT))}}catch{}
+ loadHistoricalDiagnoses();
 }
 function record(row,stage,findings){
  selectScope();if(state.mode==='off'||state.fault)return;
@@ -215,7 +314,7 @@ function divider(row,node,isDivider){safe(()=>record(row,'区切り',[finding(is
 function nativeCard(row,result){safe(()=>{const identity=urlIdentity(result?.hit?.node?.attrs?.src);const out=assessIdentity(row);compare(out,'通知カードの記事ID',row.key,identity.key);compare(out,'通知カードの投稿者',account(row.urlname),identity.account);record(row,'通知カード',out)})}
 function saved(result,error){safe(()=>{state.runId=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.createdAt??state.runId;record(null,'下書き保存',[finding(error?'failed':result===true||result?.confirmed===true?'confirmed':'insufficient','保存結果',error?'既存保存処理が失敗。完了と判定しない':result===true||result?.confirmed===true?'既存処理の肯定的な保存結果を確認':'保存要求済みだが成功未確認')])});flush()}
 function updateBadge(){
- try{const button=document.querySelector?.('[data-quality-badge]');if(button){button.textContent=state.fault?'検査×':state.mode==='off'?'検査OFF':state.counts.mismatch?'検査相違':state.counts.candidate?'検査候補':'検査記録';button.title='品質検査：'+(state.fault?'検査失敗。追加検査を無効化':state.mode==='off'?'無効':'記録専用。停止・自動修正なし')}}catch{}
+ try{const button=document.querySelector?.('[data-quality-badge]');if(button){const held=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.qualityHold,unresolved=state.records.some(entry=>!entry.resolvedAt&&entry.batchId===state.batchId&&entry.findings.some(item=>item.status==='mismatch'));button.textContent=held?'検査保留':state.fault?'検査×':state.mode==='off'?'検査OFF':unresolved?'検査相違':state.counts.candidate?'検査候補':'品質検査';button.title='品質検査：'+(held?'明確な不一致を保留。再開時にこの一件を再確認':state.fault?'検査失敗。追加検査を無効化':state.mode==='off'?'追加検査は無効。既知の保留は維持':'識別情報の明確な矛盾だけ保留。候補・材料不足は停止しない')}}catch{}
 }
 const labels={confirmed:'確認済み（その検査の範囲）',candidate:'確認候補',mismatch:'明確な不一致',insufficient:'照合材料不足',failed:'検査失敗',unperformed:'未実施'};
 function mountUI(){
@@ -227,15 +326,17 @@ function mountUI(){
   const detail=document.createElement('div');detail.dataset.qualityDetail='1';detail.hidden=true;panel.append(detail);
   for(const type of ['mousedown','pointerdown','touchstart'])button.addEventListener(type,event=>{event.stopPropagation();if(type==='mousedown')event.preventDefault()});
   const render=()=>{
-   detail.replaceChildren();const intro=document.createElement('p');intro.textContent='記録専用：停止・修正なし。既存の安全停止は維持。未確認を合格にしません。取得元や絵柄の本人認識・スマホ表示の保証は含みません。';detail.append(intro);
-   const toggle=document.createElement('button');toggle.type='button';toggle.textContent=state.mode==='off'?'追加検査を記録する':'追加検査を無効化';toggle.onclick=()=>{state.mode=state.mode==='off'?'record':'off';state.fault=false;try{localStorage.setItem(PREF,state.mode)}catch{}updateBadge();render()};detail.append(toggle);
+   detail.replaceChildren();const intro=document.createElement('p');intro.textContent='毎回の対象を検査。明確な識別情報の矛盾だけ保留します。候補・材料不足では止めません。自動修正・画像からの本人認識・スマホ表示の保証は含みません。';detail.append(intro);
+   const hold=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.qualityHold;
+   if(hold){const notice=document.createElement('p');notice.textContent='保留：'+(hold.identity?.account||'対象')+'。元の「再開」でこの一件だけ再確認します。既知の保留は検査OFFでも解除しません。'+(hold.reasons||[]).map(reason=>reason.code+': '+reason.expected+' / '+reason.actual).join('、');detail.append(notice)}
+   const toggle=document.createElement('button');toggle.type='button';toggle.textContent=state.mode==='off'?'追加検査を有効にする':'追加検査を無効化';toggle.onclick=()=>{state.mode=state.mode==='off'?'on':'off';state.fault=false;try{localStorage.setItem(PREF,state.mode)}catch{}updateBadge();render()};detail.append(toggle);
    const summary=document.createElement('p');summary.textContent='今回の作成分の検査回数：'+Object.entries(labels).map(([key,label])=>label+' '+(state.counts[key]||0)).join(' / ')+'。根拠は直近'+LIMIT+'記録まで。';detail.append(summary);
-   for(const entry of [...state.records].filter(entry=>(entry.batchId||'')===state.batchId).reverse().slice(0,30)){const line=document.createElement('details'),title=document.createElement('summary');title.textContent=(entry.target||'今回分')+' / '+entry.stage;line.append(title);for(const f of entry.findings){const text=document.createElement('p');text.textContent=labels[f.status]+'：'+f.check+' — '+f.reason+(Object.keys(f.evidence||{}).length?' '+JSON.stringify(f.evidence):'');line.append(text)}detail.append(line)}
+   for(const entry of [...state.records].filter(entry=>(entry.batchId||'')===state.batchId).reverse().slice(0,30)){const line=document.createElement('details'),title=document.createElement('summary');title.textContent=(entry.resolvedAt?'［解決済みの記録］':'')+(entry.target||'今回分')+' / '+entry.stage;line.append(title);for(const f of entry.findings){const text=document.createElement('p');text.textContent=labels[f.status]+'：'+f.check+' — '+f.reason+(Object.keys(f.evidence||{}).length?' '+JSON.stringify(f.evidence):'');line.append(text)}detail.append(line)}
   };
   button.onclick=event=>{event.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));if(!detail.hidden){flush();render()}};updateBadge();
  }catch{failure('検査表示の初期化失敗')}
 }
-const api={VERSION,beginBatch,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),
+const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
  layout:(row,layout,text,measure)=>safe(()=>{const hash=fingerprint(text),cached=layouts.get(row);if(cached?.hash===hash)return;layouts.set(row,{hash,findings:assessText(text,{lines:layout.lines,maxWidth:layout.maxWidth,measure})})}),
  // Pure functions are also used by the anonymous regression fixtures.
  assessIdentity,assessBinding,assessText,assessGeometry,fingerprint,sourceBinding,provenance:row=>{const proof=provenance(row);return proof?JSON.parse(JSON.stringify(proof)):null},

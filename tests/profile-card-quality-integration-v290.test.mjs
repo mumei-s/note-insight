@@ -37,9 +37,9 @@ test('reverse completion does occur, but acquisition still binds each raw profil
  assert.notDeepEqual(r.state.returned.slice(0,12),r.state.requests.slice(0,12),'fixture must exercise actual reordering');
  for(const row of run.rows.slice(0,6)){const source=r.quality.provenance(row);assert.equal(source.target,row.urlname);assert.equal(source.profile.account,row.urlname);assert.ok(source.articles.every(a=>a.account===row.urlname));assert.ok(!row.qualitySource)}r.close();
 });
-test('a mixed raw profile/article is observed by the actual acquisition hooks, and an exception keeps the original fallback result',async()=>{
+test('a mixed raw profile/article is held before writes, while an observer exception preserves the generated File',async()=>{
  const r=await runtime();r.c.requestWrong=async url=>{const payload=await r.c.requestJSON(url);if(url.includes('/api/v3/notes/'))payload.data.user.urlname='different_person';return payload};r.editor.patch('xhrJSON=requestWrong');
- const run=await r.history();successful(r,run);assert.ok(r.quality.snapshot().records.some(rec=>rec.findings.some(f=>f.status==='mismatch'&&f.check==='対象と投稿者')));
+ const run=await r.history();assert.equal(run.stage,'images_building');assert.ok(run.qualityHold);assert.equal(r.state.images.length,0);assert.ok(r.quality.snapshot().records.some(rec=>rec.findings.some(f=>f.status==='mismatch'&&f.check==='対象と投稿者')));
  const old=r.quality.generated;r.quality.generated=()=>{throw Error('fault injected')};const output=await r.editor.makeFile(run.rows[0]);assert.equal(output.type,'image/png');assert.ok(r.quality.snapshot().fault);r.quality.generated=old;r.close();
 });
 test('pause/resume, failed native upload retry, and save failure match the baseline without duplication or false completion',async()=>{
