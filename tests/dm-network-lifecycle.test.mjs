@@ -153,6 +153,29 @@ test('本人確認の応答待ちで停止したら遅い応答後も次のDM取
  assert.equal(h.gets.length,startedGets);assert.equal(h.gm.has(historyKey),false);assert.equal(h.posts.length,0);
 });
 
+for(const mode of ['fetch-hang','json-hang'])test('DM本文の'+mode+'でも20秒で履歴読込の排他枠を解放し保存境界を保持する',async t=>{
+ const h=fixture(t);h.setRows([]);await h.advance(1200);await h.w.fetch(endpoint);await flush();
+ const state={complete:false,before:'old-cursor',headKeys:['api:'+room+':old-head']};h.gm.set(historyKey,structuredClone(state));
+ const delayed=h.delayApi(),body=deferred();let outcome;
+ const job=h.api.readHistory(room,'tester').then(value=>{outcome={value}},error=>{outcome={error}});await flush();
+ const request=h.gets.at(-1);assert.ok(request.init.signal);
+ if(mode==='json-hang'){delayed.resolve({ok:true,json:()=>body.promise});await flush()}
+ await h.advance(19999);assert.equal(outcome,undefined);await h.advance(1);
+ assert.equal(outcome?.error?.message,'DM_HISTORY_TIMEOUT');await job;
+ assert.equal(request.init.signal.aborted,true);assert.equal(outcome.error.dmProgress.complete,false);assert.deepEqual(h.gm.get(historyKey),state);assert.equal(h.posts.length,0);
+ h.resumeApi();assert.equal((await h.api.readHistory(room,'tester')).complete,true);const recovered=structuredClone(h.gm.get(historyKey));
+ if(mode==='fetch-hang')delayed.resolve(response([message]));else body.resolve({data:[message]});await flush();
+ assert.deepEqual(h.gm.get(historyKey),recovered);assert.equal(h.posts.length,0,'期限後の本文で保存や完了位置を変更しない');
+});
+
+test('停止中に空のDM本文応答が返っても全履歴完了や先頭境界へ進めない',async t=>{
+ const h=fixture(t);h.setRows([]);await h.advance(1200);await h.w.fetch(endpoint);await flush();
+ const state={complete:false,before:'old-cursor',headKeys:['api:'+room+':old-head']};h.gm.set(historyKey,structuredClone(state));
+ const delayed=h.delayApi();let stopped=false;
+ const job=h.api.readHistory(room,'tester',{shouldStop:()=>stopped});await flush();stopped=true;delayed.resolve(response([]));
+ const result=await job;assert.equal(result.complete,false);assert.equal(result.stopped,true);assert.deepEqual(h.gm.get(historyKey),state);assert.equal(h.posts.length,0);
+});
+
 test('API応答が遅れてnoteアカウントが変わったら旧アカウントの本文を保存しない',async t=>{
  const h=fixture(t),delayed=h.delayApi(),native=h.w.fetch(endpoint);
  await flush();h.setAccount('other');h.resumeApi();delayed.resolve(response([message]));await native;await flush();

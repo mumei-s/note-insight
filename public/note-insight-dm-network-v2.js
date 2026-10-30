@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiDmNetworkV2Loaded)return;window.__mumeiDmNetworkV2Loaded=true;
-const VERSION='1.4.12';
+const VERSION='1.4.13';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:',CHECK='mumei_insight_dm_checkpoint_v1:';
 const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),key=(p,id)=>p+String(id||'').toLowerCase();
@@ -149,8 +149,10 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    if(pages++>=250)throw new Error('DM_BATCH_LIMIT');
    const u=new URL(base);if(before)u.searchParams.set('before',before);
    const signature=u.href;if(seen.has(signature))throw new Error('DM_CURSOR_STALLED');seen.add(signature);
-   const ac=new AbortController(),timeout=setTimeout(()=>ac.abort(),20000);
-   let json;try{const res=await directFetch(u.href,{method:'GET',credentials:'include',headers:template.headers,cache:'no-store',signal:ac.signal});if(!res.ok)throw new Error('DM_HISTORY_HTTP_'+res.status);json=await res.json()}finally{clearTimeout(timeout)}
+   const ac=new AbortController();let timeout;
+   const deadline=new Promise((_,reject)=>{timeout=setTimeout(()=>{ac.abort();reject(new Error('DM_HISTORY_TIMEOUT'))},20000)});
+   let json;try{json=await Promise.race([(async()=>{const res=await directFetch(u.href,{method:'GET',credentials:'include',headers:template.headers,cache:'no-store',signal:ac.signal});if(!res.ok)throw new Error('DM_HISTORY_HTTP_'+res.status);return await res.json()})(),deadline])}finally{clearTimeout(timeout)}
+   if(shouldStop())return{stopped:true};
    if(!Array.isArray(json?.data))throw new Error('DM_HISTORY_RESPONSE_UNVERIFIED');
    const current=await account();if(current?.id!==owner)throw new Error('NOTE_ACCOUNT_CHANGED');
    const rows=extract(json,u.href,owner).filter(r=>r.thread_key===thread);
@@ -173,7 +175,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    // committed head boundary never advances until the whole new segment saves.
    let cursor='',newHead=null,headDone=false;const boundary=new Set(state.headKeys||[]),pendingHead=new Set(state.pendingHeadKeys||[]),resume=state.headResumeBefore||'';
    while(await canRead()){
-    const p=await page(cursor);if(newHead===null)newHead=p.keys;
+    const p=await page(cursor);if(p.stopped||shouldStop())return{read,saved:newSaved,complete:false,stopped:true};if(newHead===null)newHead=p.keys;
     if(p.empty){await checkpoint({complete:true,headKeys:newHead,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
     if(!boundary.size){await checkpoint({headKeys:newHead,before:state.before||p.before,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
     if(p.keys.some(k=>boundary.has(k))){await checkpoint({headKeys:newHead,headResumeBefore:null,pendingHeadKeys:null});headDone=true;break}
@@ -184,7 +186,7 @@ async function readHistory(thread,owner,{shouldStop=()=>false,onProgress=async()
    if(state.complete)return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'delta'};
    cursor=state.before||'';
    while(await canRead()){
-    const p=await page(cursor);
+    const p=await page(cursor);if(p.stopped||shouldStop())return{read,saved:newSaved,complete:false,stopped:true};
     if(p.empty){await checkpoint({complete:true,before:null});return{read,saved:newSaved,stored:(await get(key(SAVED,owner)+':'+thread,[])).filter(k=>k.startsWith('api:'+thread+':')).length,complete:true,mode:'history'}}
     cursor=p.before;await checkpoint({before:cursor,complete:false});
    }
