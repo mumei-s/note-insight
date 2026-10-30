@@ -7,8 +7,9 @@ const startup=source.slice(source.indexOf("    // Recheck a saved relationship c
 test("INSIGHT起動時・復帰時にはフォロワーとフォローを画面訪問に関係なく差分確認する",()=>{
  assert.match(startup,/void relationSync\(false\)/);
  assert.match(startup,/if\(!skipSocialBootstrap\.current\)check\(\)/);
- assert.match(startup,/window\.addEventListener\("pageshow",check\)/);
- assert.match(startup,/document\.addEventListener\("visibilitychange",check\)/);
+ assert.match(startup,/window\.setTimeout\(/);
+ assert.match(startup,/window\.addEventListener\("pageshow",resume\)/);
+ assert.match(startup,/document\.addEventListener\("visibilitychange",resume\)/);
  assert.doesNotMatch(startup,/publicSync\(true\)/,"startup must not force public-history sweep");
 });
 test("6時間のサーバー定期同期を活用し、30分以内なら重複する全員取得を省略する",()=>{
