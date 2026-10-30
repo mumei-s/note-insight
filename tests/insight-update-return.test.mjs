@@ -230,20 +230,49 @@ for(const tool of Object.keys(installers))test(`${tool}: 実インストーラ�
  const h=installer(t,tool,{installed:true});await wait(160);await h.focus();assert.equal(h.nav.length,0);h.noPairing();
 });
 
-test('本人通知の更新ファイルは公開版ごとのURLで開き、アカウントや戻り先を送らない',async t=>{
- const h=installer(t,'notification');await wait(160);
+for(const tool of ['notification','dm'])test(`${tool}: インストール用URLは文字列表示を避けるためクエリなしで .user.js で終わる`,async t=>{
+ const h=installer(t,tool);await wait(160);
  const link=h.w.document.getElementById('install'),url=new URL(link.href);
- assert.equal(url.origin,'https://raw.githubusercontent.com');assert.equal(url.pathname,'/mumei-s/note-insight/main/public/note-insight-notification-v3.user.js');
- assert.deepEqual([...url.searchParams.keys()],['v']);assert.equal(url.searchParams.get('v'),versions.notification);
- h.click();assert.equal(new URL(link.href).searchParams.get('v'),versions.notification);assert.equal(h.nav.length,0);h.noPairing();
- assert.match(h.w.document.querySelector('.foot').textContent,/noteの🔔画面も再読み込み/);
+ assert.equal(url.origin,'https://raw.githubusercontent.com');
+ assert.equal(url.pathname,'/mumei-s/note-insight/main/public/'+installers[tool].wrapper);
+ assert.equal(url.search,'','クエリ付きURLはTampermonkeyに捕捉されない場合がある');
+ assert.ok(link.href.endsWith('.user.js'));
+ assert.equal(h.w.document.getElementById('scriptUrl').value,link.href);
+ assert.equal(h.w.document.getElementById('scriptUrl').readOnly,true);
+ h.click();
+ assert.equal(new URL(link.href).search,'');
+ assert.equal(h.nav.length,0);
+ assert.match(h.w.document.getElementById(tool==='dm'?'result':'verifyResult').textContent,/文字列/);
+ h.noPairing();
 });
 
-test('公開版を確認できない時も更新ファイルの古いキャッシュを使わず、導入完了にはしない',async t=>{
- const h=installer(t,'notification',{releaseError:true});await wait(160);const link=h.w.document.getElementById('install');
- h.w.Date.now=()=>123456789;h.click();const first=new URL(link.href);h.w.Date.now=()=>123456790;h.click();const second=new URL(link.href);
- assert.equal(first.searchParams.get('v'),'check-123456789');assert.equal(second.searchParams.get('v'),'check-123456790');assert.equal(first.pathname,second.pathname);
- assert.deepEqual([...second.searchParams.keys()],['v']);assert.equal(h.nav.length,0);h.noPairing();
+test('本人通知の公開版を取得できない時もURLを汚さず、更新済みとは表示しない',async t=>{
+ const h=installer(t,'notification',{releaseError:true});await wait(160);
+ const link=h.w.document.getElementById('install'),before=link.href;
+ h.w.Date.now=()=>123456789;h.click();
+ h.w.Date.now=()=>123456790;h.click();
+ assert.equal(link.href,before);
+ assert.equal(new URL(link.href).search,'');
+ assert.equal(h.nav.length,0);
+ assert.doesNotMatch(h.w.document.getElementById('verifyResult').textContent,/更新確認済み|最新版です/);
+ h.noPairing();
+});
+
+for(const tool of ['notification','dm'])test(`${tool}: 文字列になる環境でも安定URLをワンタップでコピーしてインポートできる`,async t=>{
+ const h=installer(t,tool);await wait(160);
+ let copied='';
+ Object.defineProperty(h.w.navigator,'clipboard',{configurable:true,value:{writeText:async value=>{copied=value}}});
+ h.w.document.getElementById('copyScriptUrl').click();
+ await wait(10);
+ const expected=h.w.document.getElementById('install').href;
+ assert.equal(copied,expected);
+ assert.match(h.w.document.getElementById('copyScriptUrl').textContent,/コピーしました/);
+ const guide=h.w.document.querySelector('.import-help');
+ assert.match(guide.textContent,/ユーティリティ/);
+ assert.match(guide.textContent,/URLからインポート/);
+ assert.match(guide.textContent,/文字列/);
+ assert.equal(h.nav.length,0,'URLをコピーしただけでインストール完了にしない');
+ h.noPairing();
 });
 
 for(const tool of Object.keys(installers))test(`${tool}: 実インストーラーで古い保存版・クエリ・クリックだけでは戻らず、実起動後に元の画面へ戻る`,async t=>{
