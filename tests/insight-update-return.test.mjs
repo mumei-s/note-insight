@@ -346,3 +346,40 @@ test('DM同期：本人通知スクリプトの取り違えや版違いではコ
  assert.match(h.w.document.getElementById('codeResult').textContent,/コピーできませんでした/);
  assert.equal(h.w.sessionStorage.getItem('mumei-insight-update-pending-v1:dm'),null);
 });
+
+
+for(const tool of ['notification','dm'])test(`${tool}: 初回利用者には本体利用と初回追加だけを表示し、管理者向けコード操作は隠す`,async t=>{
+ const h=installer(t,tool);await wait(180);
+ const w=h.w,dm=tool==='dm',first=w.document.getElementById(dm?'dmEasyFirst':'easyFirst'),ready=w.document.getElementById(dm?'dmEasyReady':'easyReady'),install=w.document.getElementById(dm?'dmEasyInstall':'easyInstall'),expert=w.document.getElementById(dm?'dmExpertHelp':'expertHelp');
+ assert.equal(first.hidden,false);
+ assert.equal(ready.hidden,true);
+ assert.equal(expert.open,false);
+ assert.ok(install.href.endsWith('/note-insight/'+installers[tool].wrapper));
+ assert.equal(new URL(install.href).search,'');
+ assert.match(w.document.getElementById(dm?'dmEasyStatus':'easyStatus').textContent,/未確認/);
+ assert.equal(h.nav.length,0,'no auto navigation or fake installation');
+ h.noPairing();
+});
+for(const tool of ['notification','dm'])test(`${tool}: 導入済みなら初回インストールを隠して自動更新案内に切り替える`,async t=>{
+ const h=installer(t,tool,{installed:true});await wait(180);
+ const w=h.w,dm=tool==='dm',first=w.document.getElementById(dm?'dmEasyFirst':'easyFirst'),ready=w.document.getElementById(dm?'dmEasyReady':'easyReady'),expert=w.document.getElementById(dm?'dmExpertHelp':'expertHelp');
+ assert.equal(first.hidden,true);
+ assert.equal(ready.hidden,false);
+ assert.equal(expert.open,false);
+ assert.match(w.document.getElementById(dm?'dmEasyStatus':'easyStatus').textContent,/最新版/);
+ assert.match(ready.textContent,/自動更新/);
+ assert.equal(h.nav.length,0);
+ h.noPairing();
+});
+for(const [tool,script] of [['notification','public/note-insight-notification-v3.user.js'],['dm','public/note-insight-dm.user.js']])test(`${tool}: 一度導入すればTampermonkeyの標準更新先が設定済み`,()=>{
+ const code=readFileSync(script,'utf8');
+ const urls=[...code.matchAll(/^\/\/ @(updateURL|downloadURL)\s+(https:\/\/\S+)/gm)];
+ assert.equal(urls.length,2);
+ for(const [,kind,url] of urls){
+  const address=new URL(url);
+  assert.equal(address.hostname,'raw.githubusercontent.com');
+  assert.ok(address.pathname.endsWith('/'+script.split('/').at(-1)));
+  assert.equal(address.search,'');
+ }
+ assert.match(code,/^\/\/ @version\s+\d+\.\d+\.\d+$/m);
+});
