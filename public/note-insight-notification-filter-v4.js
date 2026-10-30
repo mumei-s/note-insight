@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.13';
+const VERSION='4.2.14';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -20,7 +20,7 @@ const STYLE='mumei-v2939-filter-style';
 const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)&&!shell();
 const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 const key=(p,id)=>p+String(id||'').toLowerCase();
-const modern=()=>Boolean(globalThis.GM);
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 async function put(k,v){if(modern()&&typeof GM.setValue==='function')return GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}
 let profileJob=null;const profileAttempt=new Map(),profileQueue=new Map(),profilePlans=new Map(),profileKey=(id,who)=>key(PROFILE,id)+'|'+who;
 function canHydrate(id,who){const attempt=profileAttempt.get(profileKey(id,who));return!attempt||attempt.count<2&&attempt.manualReady&&!attempt.pending}
