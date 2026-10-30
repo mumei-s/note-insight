@@ -1,4 +1,4 @@
-INSIGHT 2026.10.30.1 / notification 3.6.55 / dashboard 1.7.5 / DM 1.4.15
+INSIGHT 2026.10.30.1 / notification 3.6.56 / dashboard 1.7.5 / DM 1.4.15
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
@@ -19,3 +19,5 @@ Update the shared scanner cache for explicit saved-person history checks without
 Keep last confirmed positive relationships normal after a capped-window exit; do not classify them as unknown or a loss. Preserve their real dates and refresh once on return from an explicit saved-person recheck.
 
 2026-10-30: Recheck saved relationship checkpoint on INSIGHT open/resume; sync only overdue follower/following directions, keep other histories and scene state. Show same-run window exit names only as unconfirmed candidates for count-only decreases.
+
+2026-10-30: INSIGHT social checkpoint runs after first-screen hydration and uses saved server runs to avoid redundant profile reads. Notification v3.6.56 checks up to 12 saved pending people at most once per 6 hours during an authenticated owner note.com visit.
