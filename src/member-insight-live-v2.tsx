@@ -108,7 +108,7 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   const accountScope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase(),autoSyncKey=AUTO_SYNC_KEY+":"+accountScope,relationSyncKey=RELATION_SYNC_KEY+":"+accountScope;
   const official=officialData?.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&officialData?.scope===accountScope?officialData:null;
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastSavedCheck=useRef(Date.now()),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastRelationAttempt=useRef(0),lastSavedCheck=useRef(Date.now()),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
   useEffect(()=>{
@@ -176,16 +176,44 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     }
   }
   async function relationSync(force=false){
-    const now=Date.now();if(relationRunning.current||(!force&&now-lastRelationRun.current<RELATION_MS))return false;
-    relationRunning.current=true;
+    const now=Date.now();
+    if(relationRunning.current||(!force&&(now-lastRelationRun.current<RELATION_MS||now-lastRelationAttempt.current<120_000)))return false;
+    relationRunning.current=true;lastRelationAttempt.current=now;
     try{
-      const results=await Promise.allSettled([
-        post(RELATIONS,"sync",{direction:"followers"},120_000),
-        post(RELATIONS,"sync",{direction:"followings"},120_000),
-      ]);
-      const ok=results.some(x=>x.status==="fulfilled");
-      if(ok){lastRelationRun.current=now;try{localStorage.setItem(relationSyncKey,String(now))}catch{}lastSavedCheck.current=Date.now();setRevision(v=>v+1)}
-      return ok;
+      const directions=["followers","followings"] as const;
+      let due:(typeof directions)[number][]=[...directions];
+      if(!force){
+        // The 6-hour server collector may already have refreshed these lists.
+        // Read its tiny checkpoint first, never download 2,000 profiles merely
+        // because the INSIGHT screen opened again.
+        const checkpoint=await post(RELATIONS,"dashboard",{},15_000);
+        const latest=new Map<string,number>();
+        for(const run of Array.isArray(checkpoint.runs)?checkpoint.runs:[]){
+          const direction=String(run.direction||"");
+          if(!latest.has(direction))latest.set(direction,Date.parse(String(run.created_at||"")));
+        }
+        due=directions.filter(direction=>{
+          const verified=latest.get(direction);
+          return !Number.isFinite(verified)||verified!>now||now-verified!>=RELATION_MS;
+        });
+        if(!due.length){
+          lastRelationRun.current=now;
+          try{localStorage.setItem(relationSyncKey,String(now))}catch{}
+          return false;
+        }
+      }
+      const results=await Promise.allSettled(due.map(direction=>post(RELATIONS,"sync",{direction},120_000)));
+      const updated=results.some(result=>result.status==="fulfilled");
+      const complete=results.every(result=>result.status==="fulfilled");
+      // Only the social scene needs to redraw the saved relationship pages.
+      // Other visited INSIGHT scenes keep their current positions and cache.
+      if(updated&&navigation.current.mode==="social")setRevision(v=>v+1);
+      if(complete){
+        lastRelationRun.current=Date.now();
+        try{localStorage.setItem(relationSyncKey,String(lastRelationRun.current))}catch{}
+        lastSavedCheck.current=Date.now();
+      }
+      return complete;
     }catch{return false}finally{relationRunning.current=false}
   }
   async function publicSync(force=false){
@@ -326,6 +354,17 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     requestAnimationFrame(()=>requestAnimationFrame(waitForPanel));
     return()=>{stopped=true;if(timer)window.clearTimeout(timer);document.documentElement.style.overflowY=previousOverflow}
   },[mode]);
+  useEffect(()=>{
+    // Recheck a saved relationship checkpoint when INSIGHT opens or resumes,
+    // independently of which tab the user visited. A due sync runs in the
+    // background; opening a tab never forces a full history reload.
+    const check=()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void relationSync(false)};
+    check();
+    window.addEventListener("focus",check);
+    window.addEventListener("pageshow",check);
+    document.addEventListener("visibilitychange",check);
+    return()=>{window.removeEventListener("focus",check);window.removeEventListener("pageshow",check);document.removeEventListener("visibilitychange",check)};
+  },[]);
   useEffect(()=>{
     if(!official)void loadOfficial();const touch=()=>{lastInteraction.current=Date.now()};
     window.addEventListener("pointerdown",touch,{passive:true});window.addEventListener("touchstart",touch,{passive:true});window.addEventListener("wheel",touch,{passive:true});window.addEventListener("scroll",touch,{passive:true});
