@@ -231,7 +231,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const currentPageRepair=()=>request.current.repair;
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:localStorage.getItem(`mumei-notification-recent-watermark:${accountKey(memberNoteId)}`)||""});
   const recentDeferred=useRef(false);
-  const lastReaderRun=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
+  const lastReaderRun=useRef(0),lastReaderStatusSignature=useRef(""),lastReaderRefreshAt=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
   const view=useRef({kind,selectedDay,handlingStatus,page});view.current={kind,selectedDay,handlingStatus,page};
 
   const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>(initialView?.categoryCounts||{}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
@@ -312,7 +312,11 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
       if(String(x.noteId||"").toLowerCase()!==account){discardSavedDisplay(token||"");request.current.id++;request.current.controller?.abort();request.current.controller=null;setLoading(false);setError("通知アカウントが一致しないため前回表示分を閉じました。");return}
       recentRequest.current.watermark=String(x.watermark||recentRequest.current.watermark);try{localStorage.setItem(`mumei-notification-recent-watermark:${account}`,recentRequest.current.watermark)}catch{}
       if(hasFreshBoard(account))markBoardFresh(account,String(x.lastUpdatedAt||""),String(x.lastSyncAt||""));
-      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow),incoming=overlayEdits(serverIncoming),prior=new Map([...readBoard(account),...rows].map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged){changedRows=serverIncoming.filter(row=>{const before=prior.get(String(row.id||rowKey(row)));return matchesNotificationSelection(row,view.current)||Boolean(before&&matchesNotificationSelection(before,view.current))});for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false})}retainBoard(account,serverIncoming);
+      const serverIncoming=mergeMagazineJoinRows(repairActorRows(x.rows||[])).filter(boardRow);
+       // A no-change recent response must not sort 2,000 cached notices,
+       // rewrite the board, run image enrichment, or rerender every row.
+       if(!serverIncoming.length){return}
+       const incoming=overlayEdits(serverIncoming),prior=new Map([...readBoard(account),...rows].map(row=>[String(row.id||rowKey(row)),row]));paginationChanged=serverIncoming.some(row=>{const before=prior.get(String(row.id||rowKey(row)));return !before||displayType(before)!==displayType(row)||Boolean(before.confirmed)!==Boolean(row.confirmed)||Boolean(request.current.controller)&&notificationRevision(before)!==notificationRevision(row)});if(paginationChanged){changedRows=serverIncoming.filter(row=>{const before=prior.get(String(row.id||rowKey(row)));return matchesNotificationSelection(row,view.current)||Boolean(before&&matchesNotificationSelection(before,view.current))});for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|"))NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false})}retainBoard(account,serverIncoming);
       if(incoming.length)setRows(previous=>{
         const map=new Map(previous.map(r=>[String(r.id||rowKey(r)),r]));for(const r of incoming){const id=String(r.id||rowKey(r));map.set(id,keepIcon(r,map.get(id)))}
         return [...map.values()].filter(r=>matchesHandling(r,handlingStatus)&&(kind==="all"||displayType(r)===kind)&&(!selectedDay||new Date(r.occurred_at||r.captured_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})===selectedDay)).sort(notificationBoardOrder).slice(0,PAGE);
@@ -406,14 +410,14 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
     return()=>window.clearTimeout(t)
   },[memberNoteId,revision]);
 
-  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void refreshRecent()},timer=window.setInterval(refresh,8000),full=window.setInterval(()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay,true)},120000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);window.addEventListener("online",refresh);document.addEventListener("visibilitychange",refresh);return()=>{window.clearInterval(timer);window.clearInterval(full);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);window.removeEventListener("online",refresh);document.removeEventListener("visibilitychange",refresh)}},[kind,handlingStatus,selectedDay,page,memberNoteId]);
+  useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")void refreshRecent()},timer=window.setInterval(refresh,30000),full=window.setInterval(()=>{if(document.visibilityState==="visible")void load(page,kind,true,selectedDay,true)},600000);window.addEventListener("focus",refresh);window.addEventListener("pageshow",refresh);window.addEventListener("online",refresh);document.addEventListener("visibilitychange",refresh);return()=>{window.clearInterval(timer);window.clearInterval(full);window.removeEventListener("focus",refresh);window.removeEventListener("pageshow",refresh);window.removeEventListener("online",refresh);document.removeEventListener("visibilitychange",refresh)}},[kind,handlingStatus,selectedDay,page,memberNoteId]);
   useEffect(()=>{
     const noteId=accountKey(memberNoteId);
     if(!noteId)return;
     const PAGE_SOURCE="mumei-notification-status-ui-v1",BRIDGE="mumei-notification-status-bridge-v1";
-    const receive=(e:MessageEvent)=>{if(e.origin!==location.origin||e.data?.source!==BRIDGE||e.data?.type!=="state"||String(e.data?.noteId||"").toLowerCase()!==noteId)return;const next=e.data?.status||null;setReaderStatus(next);const run=Number(next?.lastRunAt||0);if(run&&run!==lastReaderRun.current){lastReaderRun.current=run;void refreshRecent()}};
+    const receive=(e:MessageEvent)=>{if(e.origin!==location.origin||e.data?.source!==BRIDGE||e.data?.type!=="state"||String(e.data?.noteId||"").toLowerCase()!==noteId)return;const next=e.data?.status||null,signature=JSON.stringify(next);if(signature!==lastReaderStatusSignature.current){lastReaderStatusSignature.current=signature;setReaderStatus(next)}const run=Number(next?.lastRunAt||0);if(run&&run!==lastReaderRun.current){lastReaderRun.current=run;if(next?.lastRunComplete||Date.now()-lastReaderRefreshAt.current>=30000){lastReaderRefreshAt.current=Date.now();void refreshRecent()}}};
     const ask=()=>window.postMessage({source:PAGE_SOURCE,type:"read",noteId},location.origin);
-    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,1000);
+    window.addEventListener("message",receive);ask();const timer=window.setInterval(ask,6000);
     return()=>{window.removeEventListener("message",receive);window.clearInterval(timer)}
   },[memberNoteId,revision,kind,selectedDay]);
   const pages=Math.max(1,Math.ceil(total/PAGE)),selfId=String(memberNoteId||"").toLowerCase(),latest=syncAt||updatedAt;

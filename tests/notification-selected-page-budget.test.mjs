@@ -32,7 +32,7 @@ test('起動・明示更新・定期確認では現在の100件だけを要求�
  assert.equal(h.w.document.querySelector('.minf-pager select').options.length,2,'exact total still permits page 2');
  assert.match(h.w.document.querySelector('.minf-filter-panel select').textContent,/購入 \(100\)/);
  await h.start({revision:1});await settle();
- await settle(h.timers.find(timer=>timer.ms===120000).fn);
+ await settle(h.timers.find(timer=>timer.ms===600000).fn);
  assert.equal(h.feeds().length,3);
  for(const body of h.feeds()){assert.equal(body.includeCategoryPreview,false,'unseen previews must not delay or increase any selected-page response');assert.equal(body.pageSize,100);assert.equal(body.kind,'all')}
 });

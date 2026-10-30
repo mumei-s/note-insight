@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync('public/note-insight-notification-status-bridge-v1.js','utf8');
+const screen=readFileSync('src/member-insight-notifications-final.tsx','utf8');
+test('status bridge never reads the entire saved-notification array for each poll',async()=>{
+ const records=[],posted=[],storage=new Map(),CHECK='mumei_insight_notification_checkpoint_v2922:tester',SAVED='mumei_insight_notification_saved_v2919:tester';
+ storage.set(CHECK,{lastSaveAt:100});
+ storage.set(SAVED,Array.from({length:15000},(_,i)=>i));
+ const win={postMessage:v=>posted.push(v)};
+ const ctx={window:win,location:{hostname:'mumei-s.github.io',origin:'https://mumei-s.github.io'},addEventListener(){},GM:{getValue:async(k,fallback)=>{records.push(k);return storage.has(k)?storage.get(k):fallback}}};
+ vm.runInNewContext(source,ctx);
+ await Promise.all(Array.from({length:9},()=>win.__mumeiNotificationStatusBridgeV1.send('tester')));
+ assert.equal(posted.at(-1).status.savedTotal,15000);
+ assert.equal(records.filter(k=>k===SAVED).length,1,'concurrent or repeated reads must share/cached legacy array');
+ await win.__mumeiNotificationStatusBridgeV1.send('tester');
+ assert.equal(records.filter(k=>k===SAVED).length,1);
+ storage.set(CHECK,{lastSaveAt:200,savedCount:15321,lastRunAt:200});
+ await win.__mumeiNotificationStatusBridgeV1.send('tester');
+ assert.equal(posted.at(-1).status.savedTotal,15321);
+ assert.equal(records.filter(k=>k===SAVED).length,1,'a confirmed saved count avoids the large array');
+ storage.set(CHECK,{lastSaveAt:300});
+ await win.__mumeiNotificationStatusBridgeV1.send('tester');
+ assert.equal(records.filter(k=>k===SAVED).length,2,'legacy count is rechecked only after a genuine save');
+});
+test('notification scene is bounded and empty recents avoid costly board work',()=>{
+ assert.match(screen,/window\.setInterval\(refresh,30000\)/);
+ assert.match(screen,/\},600000\)/);
+ assert.match(screen,/window\.setInterval\(ask,6000\)/);
+ assert.match(screen,/if\(!serverIncoming\.length\)\{return\}/);
+ assert.match(screen,/signature!==lastReaderStatusSignature\.current/);
+ assert.match(screen,/next\?\.lastRunComplete\|\|Date\.now\(\)-lastReaderRefreshAt\.current>=30000/);
+});
