@@ -4,7 +4,7 @@ if(location.hostname!=='mumei-s.github.io')return;
 if(window.__mumeiNotificationStatusBridgeV1Loaded)return;window.__mumeiNotificationStatusBridgeV1Loaded=true;
 const PAGE='mumei-notification-status-ui-v1',BRIDGE='mumei-notification-status-bridge-v1';
 const CHECK='mumei_insight_notification_checkpoint_v2922:',SAVED='mumei_insight_notification_saved_v2919:';
-const modern=()=>Boolean(globalThis.GM),watches=new Map(),savedCounts=new Map(),pendingSends=new Map();
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),watches=new Map(),savedCounts=new Map(),pendingSends=new Map();
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function watch(noteId){
  const id=String(noteId||'').trim().replace(/^@/,'').toLowerCase();if(!/^[a-z0-9_-]+$/.test(id)||watches.has(id))return;
@@ -45,5 +45,5 @@ async function send(noteId){
  return pending;
 }
 addEventListener('message',e=>{if(e.origin!==location.origin||e.data?.source!==PAGE||e.data?.type!=='read')return;void watch(e.data?.noteId);void send(e.data?.noteId)});
-window.__mumeiNotificationStatusBridgeV1={version:'1.1.1',send,watch};
+window.__mumeiNotificationStatusBridgeV1={version:'1.1.2',send,watch};
 })();
