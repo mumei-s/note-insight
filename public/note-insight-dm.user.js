@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT DM同期
 // @namespace    https://github.com/mumei-s/note-insight/dm
-// @version      1.4.19
-// @description  INSIGHT DM同期。通常のDM画面と入力欄を保ちながら本文を同期します。関係確認中のアカウント切替で別アカウントの情報を保存しないよう修正しました。
+// @version      1.4.20
+// @description  INSIGHT DM同期。通常のDM画面と入力欄を保ちながら本文を同期します。裏画面・明示停止後の自動再開を防ぎ、応答停止から安全に再試行できます。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -19,8 +19,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-account-pair-v1.js?v=101
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-network-v2.js?v=1412
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=1413
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-network-v2.js?v=1413
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=1414
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=109
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
@@ -28,7 +28,7 @@
 
 (function(){
 'use strict';
-const VERSION='1.4.19',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
+const VERSION='1.4.20',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
 const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(GMKEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(GMKEY,String(v||''))}catch{}}
 function liveManager(){try{const info=typeof GM_info!=='undefined'?GM_info:typeof GM!=='undefined'?GM?.info:null,name=String(info?.scriptHandler||'').toLowerCase();return ['Userscripts','Tampermonkey','Violentmonkey','Greasemonkey','Stay'].find(value=>value.toLowerCase()===name)||''}catch{return''}}
