@@ -63,6 +63,8 @@ jobs:
         run: node --test tests/profile-card-paster-v230.test.mjs tests/profile-export-session.test.mjs tests/editor-isolation.test.mjs
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
+      - name: Check whole-app audit regressions and account-safe persistence
+        run: node --experimental-vm-modules --test tests/notification-reclassify-account-lifecycle.test.mjs tests/notification-checkpoint-scope.test.mjs tests/notification-network-account-budget-v3621.test.mjs tests/dm-reader-background-budget.test.mjs tests/dm-history-v144.test.mjs tests/dashboard-queue-timeout.test.mjs tests/favorites-saved-display.test.mjs tests/outgoing-comment-history-panel.test.mjs
       - name: Check browser handoff and Safari Userscripts API compatibility
         run: node --test tests/insight-browser-guide.test.mjs tests/installer-explicit-update.test.mjs tests/installer-browser-guide-integration.test.mjs tests/userscripts-manager-compat.test.mjs
       - name: Check startup under full storage and legacy browser APIs

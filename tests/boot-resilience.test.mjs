@@ -168,6 +168,7 @@ for (const mode of ['normal', 'quota', 'quota-missing-token', 'session-quota', '
         assert.equal(w.localStorage.getItem('mumei-insight-access-token'), 'saved-session');
         assert.equal(JSON.parse(w.localStorage.getItem('mumei-insight-saved-accounts-v3'))[0].noteId, 'ss_yr');
         if (mode !== 'session-quota') assert.equal(JSON.parse(w.__nativeStorageGet.call(w.localStorage, 'mumei-insight-saved-accounts-v3'))[0].noteId, 'SS_YR', 'persisted original must remain intact');
+        await waitFor(() => w.document.getElementById('insight-storage-notice'));
         assert.ok(w.document.getElementById('insight-storage-notice'), 'temporary changes must be identified');
       }
       if (mode === 'optional-install-failure') assert.equal(w.document.querySelector('.insight-home-install'), null);

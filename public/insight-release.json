@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.30.3",
-  "notificationVersion": "3.6.61",
-  "dashboardVersion": "1.7.6",
+  "appVersion": "2026.10.30.4",
+  "notificationVersion": "3.6.62",
+  "dashboardVersion": "1.7.7",
   "releasedAt": "2026-10-30",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "アプリ内ブラウザから普段のブラウザへの更新案内を統一。Safari Userscriptsの連携・保存API互換性と各OSの更新手順を修正しました。",
-  "dmVersion": "1.4.19",
+  "note": "全体診断で確認した本人切替時の通知混入、保存線、自分コメント更新、既読表示、古いお気に入り記事、裏画面DM取得と保存待機の不具合を修正しました。",
+  "dmVersion": "1.4.20",
   "dmLabel": "DM同期"
 }

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.61
-// @description  本人通知V3.6.61。アプリ切替から戻った際の通知差分保存を再開し、関係確認中のアカウント切替を保護します。🔔操作パネルの高さと保存済み境界までの差分取得は維持します。
+// @version      3.6.62
+// @description  本人通知V3.6.62。通知取得結果の本人照合と保存線の通知ID・本人照合を強化しました。🔔操作パネルの高さと保存済み境界までの差分取得は維持します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -22,10 +22,10 @@
 // @connect      raw.githubusercontent.com
 // @connect      xxhaerjvrgmnadxjqetz.supabase.co
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-feature-bridge-v1.js?v=121
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3622
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3623
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3637
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=158
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=363
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=364
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=4214
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=121
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-status-bridge-v1.js?v=112
@@ -40,7 +40,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.61',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.62',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function liveManager(){try{const info=typeof GM_info!=='undefined'?GM_info:typeof GM!=='undefined'?GM?.info:null,name=String(info?.scriptHandler||'').toLowerCase();return ['Userscripts','Tampermonkey','Violentmonkey','Greasemonkey','Stay'].find(value=>value.toLowerCase()===name)||''}catch{return''}}
