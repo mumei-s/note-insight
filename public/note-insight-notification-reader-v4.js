@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.35',PROTOCOL='3.6.4';
+const VERSION='3.6.36',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -82,7 +82,7 @@ function eventIdentity(el,raw,tm){
 const sig=r=>[stripTime(r.raw_text),String(r.target_url||'').split('#')[0],String(r.actor_url||'').split('?')[0],r.meta?.event_identity||r.occurred_at||'unknown'].join('|');
 let scanning=false,stop=false,active=null,retryAt=0,retryFailures=0,autoComplete=false,traversalPending=false,rescanAfterCompletion=false;
 const PAUSE_KEY='mumei-notification-read-paused-v1';
-let lastProgress={},userPaused=false;window.addEventListener('mumei-notification-reader-status',e=>{lastProgress=e.detail||{}});try{userPaused=sessionStorage.getItem(PAUSE_KEY)==='1'}catch{}
+let lastProgress={},userPaused=false,backgroundPaused=false;window.addEventListener('mumei-notification-reader-status',e=>{lastProgress=e.detail||{}});try{userPaused=sessionStorage.getItem(PAUSE_KEY)==='1'}catch{}
 function rememberPause(value){userPaused=value;try{value?sessionStorage.setItem(PAUSE_KEY,'1'):sessionStorage.removeItem(PAUSE_KEY)}catch{}}
 function pauseReading(){rememberPause(true);clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;pauseCapture();health(scanning?'一時停止中｜取得済み分の保存を確認しています':'一時停止しました','done',{scanning,stopping:true});return 0}
 async function resumeReading(opts={}){if(scanning)return 0;rememberPause(false);stop=false;pausedPanel=null;retryAt=0;retryFailures=0;lastAutoAt=0;const result=await scan({...opts,forceNetwork:true});scheduleAuto();return result}
@@ -92,9 +92,10 @@ function writeOutbox(id,rs){localStorage.setItem(key(OUTBOX,id),JSON.stringify(r
 function retain(id,rs){const pending=new Map(readOutbox(id).map(r=>[sig(r),r]));for(const r of rs)pending.set(sig(r),r);writeOutbox(id,[...pending.values()])}
 function capturePending(){if(!active)return;const {a,panel,saved}=active;try{const rs=rows(panel).slice().reverse().map(rowData).filter(r=>r&&!saved.has(sig(r)));retain(a.id,rs)}catch(e){health(String(e?.message||e),'error')}}
 function pauseCapture(){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}
-window.addEventListener('pagehide',pauseCapture,{capture:true});
+function suspendCapture(){backgroundPaused=true;pauseCapture()}
+window.addEventListener('pagehide',suspendCapture,{capture:true});
 window.addEventListener('popstate',pauseCapture,{capture:true});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseCapture()},{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')suspendCapture();else resumeForeground()},{capture:true});
 function health(msg,cls='',extra={}){
  try{window.dispatchEvent(new CustomEvent('mumei-notification-reader-status',{detail:{message:String(msg||''),state:String(cls||''),scanning:scanning||cls==='saving',stopping:stop,version:VERSION,...extra,userPaused}}))}catch{}
 }
@@ -256,8 +257,21 @@ const poll=setInterval(()=>{
  if(active||now-lastIdleProbe>=30000){lastIdleProbe=now;scheduleAuto(200)}
 },5000);
 window.addEventListener('pagehide',()=>{clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;window.__mumeiNotificationNetwork3300?.stop?.()});
-window.addEventListener('pageshow',()=>{stop=false;scheduleAuto()});
-window.addEventListener('focus',()=>scheduleAuto());
+function resumeForeground(){
+ if(document.visibilityState==='hidden')return;
+ if(backgroundPaused){
+  backgroundPaused=false;
+  // Browser suspension is temporary; an explicit user pause remains in force.
+  // The same DOM panel can survive an app switch, so it needs a fresh delta
+  // even when note has not yet rendered its newest rows.
+  if(userPaused||!featureOn())return;
+  stop=false;pausedPanel=null;autoComplete=false;pendingCapture=true;lastAutoAt=0;
+  scheduleAuto(0);return;
+ }
+ scheduleAuto();
+}
+window.addEventListener('pageshow',resumeForeground);
+window.addEventListener('focus',resumeForeground);
 window.addEventListener('mumei-notification-feature-changed',e=>{
  clearTimeout(autoTimer);autoTimer=0;autoDueAt=0;autoPanel=null;pausedPanel=null;lastAutoAt=0;panelMissingAt=0;resetNoticeKeys();
  if(e.detail?.enabled){stop=false;scheduleAuto(0)}else pauseCapture();

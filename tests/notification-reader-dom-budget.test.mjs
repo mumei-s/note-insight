@@ -57,3 +57,30 @@ test('大きすぎる親や非表示の親を除外し、適格な子の採用�
  assert.deepEqual([...f.probe.rows(f.panel)].map(el=>el.id),['row-eligible']);
  assert.deepEqual([...f.probe.rows(f.w.document.getElementById('fallback'))].map(el=>el.id),['li']);
 });
+
+function visibility(f,value){Object.defineProperty(f.w.document,'visibilityState',{value,configurable:true});f.w.document.dispatchEvent(new f.w.Event('visibilitychange'))}
+
+test('スマホで別アプリから同じ通知パネルへ戻ると差分確認を一度再開し、新着と次の再表示も取得する',async t=>{
+ const f=fixture(t,nativeRow(1));await until(()=>f.measure.networkRuns===1,'initial read');await wait(180);
+ visibility(f,'hidden');f.w.__mumeiNotificationReaderV4.scheduleAuto(0);await wait(180);assert.equal(f.measure.networkRuns,1,'backgrounded tabs never start a read');
+ visibility(f,'visible');for(const event of ['focus','pageshow'])f.w.dispatchEvent(new f.w.Event(event));
+ await until(()=>f.measure.networkRuns===2,'same-panel foreground return verifies the newest delta');await wait(180);assert.equal(f.measure.networkRuns,2,'visibility/focus/pageshow share one foreground check');
+ f.panel.insertAdjacentHTML('afterbegin',nativeRow(2));await until(()=>f.measure.networkRuns===3,'new notices still wake the resumed reader');
+ f.panel.remove();f.w.__mumeiNotificationReaderV4.scheduleAuto(0);await wait(650);f.w.document.body.append(f.panel);await until(()=>f.measure.networkRuns===4,'reopening also begins a new delta after returning');
+});
+
+test('明示した一時停止はバックグラウンド復帰でも保持し、再開を押した時だけ取得する',async t=>{
+ const f=fixture(t,nativeRow(1));await until(()=>f.measure.networkRuns===1,'initial read');await wait(180);await f.w.__mumeiNotificationReaderV4.pause();
+ visibility(f,'hidden');f.panel.insertAdjacentHTML('afterbegin',nativeRow(2));visibility(f,'visible');for(const event of ['focus','pageshow'])f.w.dispatchEvent(new f.w.Event(event));f.w.__mumeiNotificationReaderV4.scheduleAuto(0);await wait(320);
+ assert.equal(f.w.__mumeiNotificationReaderV4.isPaused(),true);assert.equal(f.measure.networkRuns,1,'foreground return must not override the explicit pause');
+ await f.w.__mumeiNotificationReaderV4.resume();assert.equal(f.measure.networkRuns,2);assert.equal(f.w.__mumeiNotificationReaderV4.isPaused(),false);
+});
+
+test('pagehideで中断した取得が復帰後に終了しても、保存済み位置から次の差分を再開する',async t=>{
+ const f=fixture(t,nativeRow(1));let finish,stops=0;
+ f.w.__mumeiNotificationNetwork3300={syncCurrent:()=>{f.measure.networkRuns++;return f.measure.networkRuns===1?new Promise(resolve=>{finish=resolve}):Promise.resolve({historyComplete:true})},stop(){stops++}};
+ await until(()=>f.measure.networkRuns===1,'initial read is still pending');
+ Object.defineProperty(f.w.document,'visibilityState',{value:'hidden',configurable:true});f.w.dispatchEvent(new f.w.Event('pagehide'));f.w.__mumeiNotificationReaderV4.scheduleAuto(0);await wait(180);assert.equal(f.measure.networkRuns,1);assert.ok(stops>=1,'suspend the in-flight transport');
+ Object.defineProperty(f.w.document,'visibilityState',{value:'visible',configurable:true});f.w.dispatchEvent(new f.w.Event('pageshow'));await wait(30);assert.equal(f.measure.networkRuns,1,'do not overlap the saving flight');
+ finish({partial:true,historyComplete:false});await until(()=>f.measure.networkRuns===2,'finish the suspended flight, then continue its saved cursor');await wait(180);assert.equal(f.measure.networkRuns,2);
+});
