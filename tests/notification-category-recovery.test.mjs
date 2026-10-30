@@ -91,7 +91,7 @@ for(const previousEmpty of [false,true])test(`分類の取得失敗後に定期�
  const saved=previousEmpty?{selection:{kind:'rating',handlingStatus:'all',selectedDay:'',page:1},rows:[],total:0,statusCounts:{all:0,pending:0,completed:0},categoryCounts:{all:0,rating:0},updatedAt:'',syncAt:'',serverSync:{received:0,confirmed:0,source:''}}:undefined;
  const h=await fixture(t,{saved,selected:()=>++attempts===1?timeout():pending.promise});
  if(!previousEmpty)await choose(h,'rating');assert.match(h.text(),/通知履歴の読込に失敗/);
- const refresh=h.timers.findLast(timer=>timer.active&&timer.ms===120000);
+ const refresh=h.timers.findLast(timer=>timer.active&&timer.ms===600000);
  assert.ok(refresh);await settle(refresh.fn);
  assert.match(h.text(),/通知を読み込み中/);
  assert.doesNotMatch(h.text(),/この分類の通知はありません/);
