@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.6';
+const VERSION='1.5.7';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FILTER_STATE=TOOLBAR+'-filter-state',FILTER_STATE_STYLE=FILTER_STATE+'-style';
@@ -135,10 +135,11 @@ function dedupe(){
  if(keep){keep.removeAttribute('data-collapsed');for(const button of keep.querySelectorAll('[data-action="collapse"],.collapse'))button.remove()}
  return keep
 }
+let activeNoticePanel=null;
 function mount(live){
  connectedFilterStateDialog();
- if(!featureOn()||panelVisible!==true||isDmRoute()){closeFilterStateDialog();for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
- const panel=findPanel();if(!panel){closeFilterStateDialog();const old=dedupe();if(old)old.remove();return}
+ if(!featureOn()||panelVisible!==true||isDmRoute()){activeNoticePanel=null;closeFilterStateDialog();for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove();return}
+ const panel=findPanel();activeNoticePanel=panel;if(!panel){closeFilterStateDialog();const old=dedupe();if(old)old.remove();return}
  installStyle();installFilterStateStyle();
  let bar=dedupe()||makeBar();
  if(document.body&&bar.parentElement!==document.body){document.body.appendChild(bar);void sync(bar)}
@@ -149,7 +150,23 @@ let timer=0,lastStatus=null,lastFilter=null;
 function filterNotice(){return lastFilter?.enabled&&lastFilter.total>0&&lastFilter.hidden===lastFilter.total?`表示中の${lastFilter.total}件はすべてフィルター対象です｜OFFで表示`:''}
 const owned=node=>node instanceof Element&&Boolean(node.closest('#'+TOOLBAR+',#'+STYLE+',#'+FILTER_STATE+',#'+FILTER_STATE_STYLE));
 const schedule=(ms=180)=>{if(timer)return;timer=setTimeout(()=>{timer=0;mount()},ms)};
-function observe(){if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}new MutationObserver(records=>{if(records.some(r=>!owned(r.target)))schedule()}).observe(document.documentElement,{subtree:true,childList:true});schedule(150)}
+const NOTICE_HINT='[data-mumei-notice-shell-v2958="1"],.m-navbarNotice,.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationList" i],[class*="noticeList" i],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
+function relevantNoticeChange(record){
+ const target=record.target instanceof Element?record.target:record.target.parentElement;
+ if(owned(target))return false;
+ if(activeNoticePanel&&(!activeNoticePanel.isConnected||target&&activeNoticePanel.contains(target)))return true;
+ if(target?.closest?.(NOTICE_HINT))return true;
+ for(const node of [...record.addedNodes,...record.removedNodes]){
+  if(!(node instanceof Element)||owned(node))continue;
+  if(node.matches(NOTICE_HINT)||node.querySelector?.(NOTICE_HINT))return true;
+ }
+ return false;
+}
+function observe(){
+ if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}
+ new MutationObserver(records=>{if(typeof document!=='undefined'&&document.documentElement&&records.some(relevantNoticeChange))schedule()}).observe(document.documentElement,{subtree:true,childList:true});
+ schedule(150);
+}
 void refreshPanel().then(observe);
 window.addEventListener('pageshow',()=>{void refreshPanel();const bar=dedupe();if(bar)void sync(bar)});window.addEventListener('focus',()=>{void refreshPanel();const bar=dedupe();if(bar)void sync(bar)});
 function renderStatus(d){
