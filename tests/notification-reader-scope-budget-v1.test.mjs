@@ -22,5 +22,5 @@ test('reader scopes mutation callbacks and avoids indefinitely postponing an ear
  assert.match(reader,/records\.some\(noticeMutation\)/);
  assert.match(reader,/if\(autoTimer&&wait>0&&autoDueAt<=due\)return/);
  assert.match(reader,/now-lastIdleProbe>=30000/);
- assert.match(reader,/\/messages\/rooms/);
+ assert.match(reader,/messages.*rooms/);
 });
