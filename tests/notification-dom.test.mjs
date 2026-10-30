@@ -214,23 +214,24 @@ test('opening the notification panel never advances or fabricates the checkpoint
 });
 
 
-test('checkpoint exact identity prevents top-row false match',()=>{
-  assert.match(checkpoint,/function rowLegacySignature\(el\)/);
-  assert.match(checkpoint,/if\(eventId&&legacy\)\{if\(idOk&&legacyOk\)return el;continue\}/);
-  assert.doesNotMatch(checkpoint,/前回の保存位置を保持中｜全件再読込なし/);
-  const activate=runtime.slice(runtime.indexOf('async function activate(next)'),runtime.indexOf('async function activateIntent()'));
-  assert.doesNotMatch(activate,/__mumeiV3Checkpoint325\?\.mark\?\.\(\)/);
+test('checkpoint exact identity prevents top-row false match',async t=>{
+  const e=env();t.after(()=>e.w.close());await new Promise(resolve=>e.w.setTimeout(resolve,0));
+  const body='人物さんがあなたの記事にスキしました',list=e.w.document.getElementById('list');
+  list.innerHTML=['new','old'].map(id=>'<div class="m-navbarNoticeItem" data-notice-id="'+id+'" id="'+id+'">'+body+'<time>1分前</time></div>').join('');
+  e.values.set('mumei_insight_notification_checkpoint_v2922:fixture',{boundaryEventIdentity:'notice:old',boundaryDisplayText:body,boundaryAt:100});
+  e.w.eval(checkpoint);await e.w.__mumeiV3Checkpoint325.ready;
+  assert.equal(e.w.__mumeiV3Checkpoint325.mark(),true);assert.equal(e.w.document.getElementById('mumei-v3-saved-boundary-v3223').nextElementSibling.id,'old');
 });
 
 
-test('checkpoint identity never falls back to text when a stronger identity exists',()=>{
-  assert.match(checkpoint,/function rowLegacySignature\(el\)/);
-  assert.match(checkpoint,/if\(eventId&&legacy\)\{if\(idOk&&legacyOk\)return el;continue\}/);
-  assert.match(checkpoint,/if\(eventId\)\{if\(idOk\)return el;continue\}/);
-  assert.match(checkpoint,/if\(legacy\)\{if\(legacyOk\)return el;continue\}/);
-  assert.match(checkpoint,/if\(display&&stripTime\(el\.textContent\)===display\)return el/);
-  const activate=runtime.slice(runtime.indexOf('async function activate(next)'),runtime.indexOf('async function activateIntent()'));
-  assert.doesNotMatch(activate,/__mumeiV3Checkpoint325\?\.mark\?\.\(\)/);
+test('checkpoint identity never falls back to text when a stronger identity exists',async t=>{
+  const e=env();t.after(()=>e.w.close());await new Promise(resolve=>e.w.setTimeout(resolve,0));
+  const body='人物さんがあなたの記事にスキしました',list=e.w.document.getElementById('list');list.innerHTML='<div class="m-navbarNoticeItem" data-notice-id="new" id="candidate">'+body+'<time>1分前</time></div>';
+  e.values.set('mumei_insight_notification_checkpoint_v2922:fixture',{boundaryEventIdentity:'notice:old',boundaryDisplayText:body,boundaryAt:100});
+  e.w.eval(checkpoint);await e.w.__mumeiV3Checkpoint325.ready;assert.equal(e.w.__mumeiV3Checkpoint325.mark(),false);assert.equal(e.w.document.getElementById('mumei-v3-saved-boundary-v3223'),null);
+  // Old markup may omit native IDs. Its unique acknowledged body remains usable.
+  e.w.document.getElementById('candidate').removeAttribute('data-notice-id');assert.equal(e.w.__mumeiV3Checkpoint325.mark(),true);
+  list.append(e.w.document.getElementById('candidate').cloneNode(true));assert.equal(e.w.__mumeiV3Checkpoint325.mark(),false,'repeated ID-free bodies cannot prove a saved position');
 });
 
 
