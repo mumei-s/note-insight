@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiInsightDmReaderV1)return;window.__mumeiInsightDmReaderV1=true;
-const VERSION='1.4.12';
+const VERSION='1.4.13';
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-dm-ingest';
 const TOKEN='mumei_insight_dm_sync_token_v1:';
 const CHECK='mumei_insight_dm_checkpoint_v1:',QUEUE='mumei_insight_dm_queue_v1:',SAVED='mumei_insight_dm_saved_v1:',DONE='mumei_dm_just_completed_v1';
@@ -17,7 +17,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 function pending(id){try{return JSON.parse(localStorage.getItem(key(OUTBOX,id))||'[]')}catch{return[]}}
 function retainMessages(id,rows){const map=new Map(pending(id).map(r=>[r.message_key,r]));for(const r of rows)map.set(r.message_key,r);localStorage.setItem(key(OUTBOX,id),JSON.stringify([...map.values()]))}
 
-const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),key=(p,id)=>p+String(id||'').toLowerCase(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 function request(url,body,headers={}){return new Promise((resolve,reject)=>{const fn=modern()&&typeof GM.xmlHttpRequest==='function'?GM.xmlHttpRequest:typeof GM_xmlhttpRequest==='function'?GM_xmlhttpRequest:null;if(!fn)return reject(new Error('USERSCRIPT_REQUEST_UNAVAILABLE'));fn({method:'POST',url,headers:{'Content-Type':'application/json',...headers},data:JSON.stringify(body),timeout:60000,onload:r=>{let p={};try{p=JSON.parse(r.responseText||'{}')}catch{};r.status>=200&&r.status<300&&p.ok!==false?resolve(p):reject(new Error(p.error||('HTTP_'+r.status)))},onerror:()=>reject(new Error('NETWORK_ERROR')),ontimeout:()=>reject(new Error('TIMEOUT'))})})}
