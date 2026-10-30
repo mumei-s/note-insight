@@ -29,6 +29,7 @@ test('controls and wrapper keep the new @require fingerprint and no data-clear p
  assert.match(src,/function relevantNoticeChange/);
  assert.match(src,/records.some\(relevantNoticeChange\)/);
  assert.match(wrapper,/note-insight-notification-controls-v1\.js\?v=157/);
- assert.match(wrapper,/@version\s+3\.6\.59/);
+ const release=JSON.parse(readFileSync('public/insight-release.json','utf8'));
+ assert.equal(wrapper.match(/^\/\/ @version\s+(\S+)/m)?.[1],release.notificationVersion);
  assert.doesNotMatch(src,/localStorage\.clear\(|GM\.deleteValue\(/);
 });
