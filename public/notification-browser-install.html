@@ -78,7 +78,7 @@ h1{margin:4px 0 2px;font-size:22px;line-height:1.2}
 <div class="notice"><b>通知画面は下部固定の4パネル。</b><br>「読込 / フィルター ON・OFF / 設定 / INSIGHT」。読込は自動を基本にし、保存済み境界から差分だけを続行します。</div>
 <div class="code-update" aria-label="文字列になってしまう端末向けの更新">
   <b>文字列画面を開かずに更新する</b>
-  <p>EdgeのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知 V3</b> の「更新を確認」を実行してください。</p>
+  <p>EdgeのTampermonkeyを開き、「ダッシュボード → インストール済み」で、まず <b>無名S note INSIGHT 本人通知</b> の「更新を確認」を実行してください。</p>
   <p>更新できない場合は、下のボタンで最新版のスクリプトをコピーできます。ブラウザに文字列を表示する必要はありません。</p>
   <button id="copyCode" class="code-copy" type="button">更新用コードをコピー（既存スクリプトの上書き用）</button>
   <div id="codeResult" class="code-result" role="status" aria-live="polite">コピー後：Tampermonkeyで既存の本人通知スクリプトを開き、エディター内を全選択 → 貼り付け → 保存。スクリプトを削除する必要はありません。</div>
@@ -266,7 +266,7 @@ async function copyCurrentNotificationCode(){
   const marker=source.indexOf('// ==/UserScript==');
   const header=marker>=0?source.slice(0,marker+19):'';
   const match=header.match(/^\/\/\s*@version\s+(\d+(?:\.\d+)+)\s*$/m);
-  if(!source.startsWith('// ==UserScript==')||!/^\/\/\s*@namespace\s+https:\/\/github\.com\/mumei-s\/note-insight\/notification-v3\s*$/m.test(header)||!/^\/\/\s*@name\s+無名S note INSIGHT 本人通知 V3\s*$/m.test(header)||!match||source.length>500000||source.length<1000)throw new Error('INVALID_NOTIFICATION_SOURCE');
+  if(!source.startsWith('// ==UserScript==')||!/^\/\/\s*@namespace\s+https:\/\/github\.com\/mumei-s\/note-insight\/notification-v3\s*$/m.test(header)||!/^\/\/\s*@name\s+無名S note INSIGHT 本人通知 V\d+\s*$/m.test(header)||!match||source.length>500000||source.length<1000)throw new Error('INVALID_NOTIFICATION_SOURCE');
   if(latest&&match[1]!==latest)throw new Error('VERSION_MISMATCH');
   let copied=false;
   try{await navigator.clipboard.writeText(source);copied=true}catch{}
@@ -276,7 +276,7 @@ async function copyCurrentNotificationCode(){
   }
   if(!copied)throw new Error('CLIPBOARD_UNAVAILABLE');
   update.begin(latest);
-  codeResult.textContent='✓ v'+match[1]+' のコードをコピーしました。Edge → Tampermonkey → ダッシュボード → インストール済み → 本人通知 V3 → エディター → 全選択 → 貼り付け → 保存。保存後はnoteとINSIGHTを再読み込みしてください。';
+  codeResult.textContent='✓ v'+match[1]+' のコードをコピーしました。Edge → Tampermonkey → ダッシュボード → インストール済み → 本人通知ツール → エディター → 全選択 → 貼り付け → 保存。保存後はnoteとINSIGHTを再読み込みしてください。';
   copyCode.textContent='✓ 更新用コードをコピーしました';
  }catch(error){
   codeResult.textContent='コピーできませんでした（'+String(error?.message||error)+'）。Tampermonkeyの「ユーティリティ → URLからインポート」を試してください。既存のツールは変更されていません。';
