@@ -232,6 +232,7 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   const recentRequest=useRef<{controller:AbortController|null;watermark:string}>({controller:null,watermark:localStorage.getItem(`mumei-notification-recent-watermark:${accountKey(memberNoteId)}`)||""});
   const recentDeferred=useRef(false);
   const lastReaderRun=useRef(0),lastReaderStatusSignature=useRef(""),lastReaderRefreshAt=useRef(0),repairRunning=useRef(false),repairStop=useRef(false),repairRevision=useRef(0),lastRepairSync=useRef("");
+  const repairScope=useRef(selectionKey),repairRequest=useRef<{id:number;controller:AbortController|null}>({id:0,controller:null});repairScope.current=selectionKey;
   const view=useRef({kind,selectedDay,handlingStatus,page});view.current={kind,selectedDay,handlingStatus,page};
 
   const[categoryCounts,setCategoryCounts]=useState<Record<string,number>>(initialView?.categoryCounts||{}),[reclassifying,setReclassifying]=useState(false),[repairStatus,setRepairStatus]=useState("");
@@ -332,19 +333,22 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
   async function reclassify(auto=true){
     if(repairRunning.current)return false;
     repairRunning.current=true;repairStop.current=false;setReclassifying(true);
-    const account=accountKey(memberNoteId),progressKey=`mumei-notification-repair:${account}:${auto?"pending":"manual"}`,token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"";
+    const account=accountKey(memberNoteId),progressKey=`mumei-notification-repair:${account}:${auto?"pending":"manual"}`,token=localStorage.getItem(INSIGHT_TOKEN_KEY)||"",id=++repairRequest.current.id,scope=selectionKey;
+    const valid=()=>id===repairRequest.current.id&&repairScope.current===scope&&localStorage.getItem(INSIGHT_TOKEN_KEY)===token;
     let cursor:string|null=null,checked=0,moved=0,finished=false,remaining:{remaining:number;insufficient:number}|null=null;
     try{const saved=JSON.parse(localStorage.getItem(progressKey)||"null");if(auto&&saved?.version===CLASSIFIER_VERSION){cursor=saved.cursor;checked=saved.checked||0;moved=saved.moved||0}}catch{}
     setRepairStatus("その他・未分類の未処理分を確認中…");
     try{
       const seen=new Set<string>();
       do{
+        if(!valid())return false;
         if(repairStop.current||document.visibilityState==='hidden')break;
-        if(localStorage.getItem(INSIGHT_TOKEN_KEY)!==token)throw new Error("アカウントが切り替わりました");
         const ac=new AbortController(),timer=window.setTimeout(()=>ac.abort(),30000);
+        repairRequest.current.controller=ac;
         let x:any;
         try{const r=await fetchInsightResource(FEED.replace("feed-final","reclassify"),{method:"POST",headers:{"Content-Type":"application/json","X-Insight-Token":token},body:JSON.stringify({cursor,onlyPending:auto}),signal:ac.signal});x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||"再分類失敗")}
-        finally{window.clearTimeout(timer)}
+        finally{window.clearTimeout(timer);if(repairRequest.current.controller===ac)repairRequest.current.controller=null}
+        if(!valid())return false;
         checked+=Number(x.checked||0);moved+=Number(x.moved||0);if(x.unresolved){remaining=x.unresolved;setUnresolved(x.unresolved)}
         if(x.moved||Array.isArray(x.rows)&&x.rows.length)for(const [key,cached] of NOTIFICATION_VIEW_CACHE)if(key.startsWith(account+"|")&&cached.token===token)NOTIFICATION_VIEW_CACHE.set(key,{...cached,complete:false});
         const next=x.nextCursor||null;if(next&&(next===cursor||seen.has(next)))throw new Error("分類位置が進まないため停止しました");if(next)seen.add(next);cursor=next;finished=!next;
@@ -357,14 +361,20 @@ export function MemberInsightNotificationsFinal({revision=0,noteId:memberNoteId=
         if(x.moved){repairRevision.current++;if(cursor)void load(view.current.page,view.current.kind,true,view.current.selectedDay,true);}
         if(cursor)await new Promise(r=>window.setTimeout(r,50));
       }while(cursor);
+      if(!valid())return false;
       if(!finished){setRepairStatus(`${checked}件まで確認・停止中（続きから再開できます）`);return false}
       try{localStorage.removeItem(progressKey);localStorage.setItem(`mumei-notification-reclassify-version:${account}`,CLASSIFIER_VERSION)}catch{}
       setRepairStatus(remaining?.remaining?`確認済み：今回${checked}件を確認・${moved}件を分類。未解決${remaining.remaining}件（本文不足${remaining.insufficient}件）。`:checked?`${checked}件を確認・${moved}件を分類。未解決はありません。`:"新たに再分類する通知はありません。");window.dispatchEvent(new Event("mumei-notification-classified"));
       void load(view.current.page,view.current.kind,true,view.current.selectedDay,true);return true;
-    }catch(e){setRepairStatus(`途中保存済み・再開できます：${e instanceof Error?e.message:String(e)}`);return false}
-    finally{repairRunning.current=false;setReclassifying(false)}
+    }catch(e){if(valid())setRepairStatus(`途中保存済み・再開できます：${e instanceof Error?e.message:String(e)}`);return false}
+    finally{if(valid()){repairRunning.current=false;setReclassifying(false)}}
   }
-  useEffect(()=>()=>{repairStop.current=true},[]);
+  useEffect(()=>{
+    repairRunning.current=false;repairStop.current=false;repairRevision.current=0;lastRepairSync.current="";
+    lastReaderRun.current=0;lastReaderStatusSignature.current="";lastReaderRefreshAt.current=0;
+    setReclassifying(false);setRepairStatus("");setUnresolved(null);setReaderStatus(null);
+    return()=>{repairStop.current=true;repairRequest.current.id++;repairRequest.current.controller?.abort();repairRequest.current.controller=null;repairRunning.current=false}
+  },[selectionKey]);
   const loadedSelection=useRef(""),loadedRevision=useRef(revision);
   useEffect(()=>{
     const opening=!loadedSelection.current,account=accountKey(memberNoteId),selection=JSON.stringify([account,sessionToken,kind,selectedDay,handlingStatus]),changed=Boolean(loadedSelection.current&&loadedSelection.current!==selection),p=changed?1:page,force=loadedRevision.current!==revision;
