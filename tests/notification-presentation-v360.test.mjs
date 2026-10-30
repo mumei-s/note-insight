@@ -89,7 +89,7 @@ test('新着のアイコン補完を行い、次の差分応答に画像がな�
  globalThis.fetch=async(url,init)=>{if(String(url).includes('creator-icons')){if(holdIcons)return new Promise(()=>{});return{ok:true,json:async()=>({items:[{noteId:'person',image:'https://example.test/person.jpg'}]})}}const input=JSON.parse(init?.body||'{}');return{ok:true,json:async()=>({ok:true,noteId:'tester',rows:[row],total:1,categoryCounts:{all:1,buzz:1},categoryPreview:{buzz:[row]},watermark:'2026-09-22T01:00:00Z',unknownKinds:['future_kind']})}};
  const{MemberInsightNotificationsFinal:C}=await component('src/member-insight-notifications-final.tsx',h.ctx,stubs);
  await act(async()=>{h.root.render(React.createElement(C,{noteId:'tester'}));await new Promise(r=>setTimeout(r,25))});assert.equal(document.querySelector('.minf-avatar').getAttribute('src'),'https://example.test/person.jpg');assert.doesNotMatch(document.body.textContent,/新しい通知形式|分類ルールの更新が必要/);
- holdIcons=true;await act(async()=>{timers.find(t=>t.ms===8000).fn();await new Promise(r=>setTimeout(r,10))});assert.equal(document.querySelector('.minf-avatar').getAttribute('src'),'https://example.test/person.jpg');
+ holdIcons=true;await act(async()=>{timers.find(t=>t.ms===30000).fn();await new Promise(r=>setTimeout(r,10))});assert.equal(document.querySelector('.minf-avatar').getAttribute('src'),'https://example.test/person.jpg');
  await act(async()=>h.root.unmount());h.dom.window.close();
 });
 
