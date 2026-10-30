@@ -6,6 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate,max-age=0">
 <title>INSIGHT DM同期 インストール / 更新</title>
 <script src="./insight-update-return.js?v=20261026-1"></script>
+<script defer src="./insight-browser-guide.js?v=20261030-1"></script>
 <style>
 *{box-sizing:border-box}:root{color-scheme:dark}body{margin:0;background:#061019;color:#eef8ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}.wrap{width:min(620px,calc(100% - 16px));margin:auto;padding:10px 0 28px}.back{display:inline-flex;min-height:34px;align-items:center;color:#80eaff;text-decoration:none;font-weight:900;font-size:12px}.card{border:1px solid #31506a;border-radius:14px;background:#0a1722;padding:12px}.eyebrow{font-size:9px;color:#86cfe3;letter-spacing:.08em}h1{margin:4px 0 3px;font-size:22px}.lead{margin:0 0 8px;color:#a9bfce;font-size:11px;line-height:1.55}.notice{padding:8px;border:1px solid #38637c;border-radius:9px;background:#081722;color:#cfefff;font-size:10px;line-height:1.55}.install{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:9px;border:1px solid #61c98c;border-radius:9px;background:#123626;color:#edfff4;text-decoration:none;font:950 14px/1.2 system-ui;text-align:center;padding:8px}.result{margin-top:7px;padding:8px;border:1px solid #3b5b72;border-radius:8px;background:#08131d;font-size:10px;font-weight:800;line-height:1.5}.ok{border-color:#4f9c72;background:#0b2117;color:#caffdc}.warn{border-color:#8c7132;background:#211907;color:#ffe4a3}.grid{display:grid;gap:6px;margin-top:10px}.tip{border:1px solid #29475a;border-radius:9px;background:#08151e;padding:8px;font-size:10px;line-height:1.55;color:#afc3d0}.tip b{color:#e8f7ff}.small{font-size:9px;color:#7f98aa;margin-top:8px;line-height:1.5}
 .import-help{margin-top:9px;padding:9px;border:1px solid #836d3a;border-radius:9px;background:#21190b}
@@ -40,6 +41,7 @@
 <div class="eyebrow">PRIVATE DM SYNC / 独立ツール</div>
 <h1>DM同期のかんたん準備</h1>
 <p class="lead">DMを使わない人は何もしなくて大丈夫です。自分のDMも保存したい方だけ初回に設定します。</p>
+<section id="insightBrowserGuide" data-insight-browser-guide data-tool="dm"><p class="notice">更新は拡張機能を入れたブラウザで行います。アプリ内で開いている場合はURLをコピーし、AndroidはEdgeかFirefox、iPhone・iPadはSafariで開いてください。SafariのUserscriptsでは、スクリプトの文字列を開いてから拡張機能の「Userscripts」で追加・更新を確定します。</p></section>
 <div class="easy-start" id="dmEasyStart">
  <h2>DMを使いたい人だけ追加</h2>
  <a id="dmEasyReturn" class="easy-link" href="./">INSIGHTをそのまま使う</a>
@@ -48,35 +50,35 @@
   <p>初めて使う人だけ、この順番です。</p>
   <a id="dmEasyExtension" class="easy-link" href="https://www.tampermonkey.net/index.php?browser=edge&amp;locale=ja" target="_blank" rel="noopener noreferrer">① Tampermonkeyを準備（初回だけ）</a>
   <a id="dmEasyInstall" class="easy-link primary" href="./note-insight-dm.user.js" target="_blank" rel="noopener noreferrer">② DM同期を追加する（初回だけ）</a>
-  <p>確認画面が出たら「インストール」を選びます。文字列だけ出た時は下の「うまくいかない場合」を開いてください。</p>
+  <p id="dmEasyInstallHelp">Tampermonkeyでは確認画面で「インストール」を選びます。SafariのUserscriptsでは文字列を開き、Safariの拡張機能メニューからUserscriptsを選んで追加・更新します。</p>
  </div>
- <div id="dmEasyReady" hidden><p>✅ 導入済み。自動更新が有効なら普段の更新操作は不要です。</p><a id="dmEasyBack" class="easy-link primary" href="./">INSIGHTに戻る</a></div>
+ <div id="dmEasyReady" hidden><p>導入済みです。更新はこの画面で実際の起動版を確認します。</p><a id="dmEasyBack" class="easy-link primary" href="./">INSIGHTに戻る</a></div>
  <details id="dmEasyUpdates" class="simple-help"><summary>すでに使っている人：更新の確認方法</summary>
-  <p>Tampermonkeyが自動更新を有効にしていれば定期的に確認します。今すぐ確認したい場合だけ：</p>
-  <ol><li>Edgeの「拡張機能 → Tampermonkey」を開く</li><li>「ユーザースクリプトの更新を確認」を押す</li><li>noteとINSIGHTを開き直す</li></ol>
+  <p id="dmEasyUpdateText">拡張機能を入れたブラウザ単体で更新します。SafariのUserscriptsでは、最新版の文字列を開いて拡張機能メニューのUserscriptsから更新を確定します。</p>
+  <ol id="dmEasyUpdateSteps"><li>いつも利用するブラウザでこの画面を開く</li><li>お使いの拡張機能で追加・更新を確定する</li><li>この画面へ戻り、最新版の起動を確認する</li></ol>
  </details>
 </div>
 <details class="advanced-help" id="dmExpertHelp"><summary>うまくいかない場合（詳細な復旧方法）</summary>
-<div class="code-update" aria-label="文字列が表示される端末のDM更新方法">
- <strong>文字列画面を開かずにDM同期を更新</strong>
- <p>EdgeのTampermonkey → ダッシュボード → インストール済み → <b>無名S note INSIGHT DM同期</b> →「更新を確認」を先にお試しください。</p>
+<div class="code-update" data-tampermonkey-help aria-label="Tampermonkeyをご利用の場合のDM更新方法">
+ <strong>Tampermonkeyをご利用の場合のみ</strong>
+ <p>お使いのブラウザのTampermonkey → ダッシュボード → インストール済み → <b>無名S note INSIGHT DM同期</b> →「更新を確認」を先にお試しください。</p>
  <p>更新できなければ、下のボタンで最新版のコードだけをコピーし、Tampermonkeyの既存DM同期スクリプトを開いて、エディター内で全選択 → 貼り付け → 保存してください。</p>
  <button id="copyCode" class="code-copy" type="button">DM更新用コードをコピー（上書き用）</button>
  <div id="codeResult" class="code-result" role="status" aria-live="polite">既存スクリプトやDM履歴を削除する必要はありません。</div>
 </div>
-<a id="install" class="install secondary" href="#">通常更新リンク（文字列になる場合は使用しない）</a>
+<a id="install" class="install secondary" href="#">最新版のDM同期スクリプトを開く</a>
 <div id="result" class="result">更新状態を確認中…</div>
-<div class="import-help" aria-label="文字列だけ表示されたときのDM更新方法">
- <strong>⚠ 文字列だけが表示され、更新できない場合</strong>
- <p>表示されただけでは更新されません。Edge → 拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポートへ進み、このURLを貼り付けて「更新 / インストール」を確定してください。既存データの削除は不要です。</p>
+<div class="import-help" data-tampermonkey-help aria-label="Tampermonkeyで文字列表示時のDM更新方法">
+ <strong>Tampermonkeyで文字列のまま更新できない場合</strong>
+ <p>Tampermonkeyをご利用の場合は「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポート」で下のURLを取り込み、更新を確定します。SafariのUserscriptsはURLインポートではなく、表示中の文字列をSafariの拡張機能メニューから追加・更新します。</p>
  <button id="copyScriptUrl" class="import-copy" type="button">DM更新用URLをコピー</button>
  <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込むDM同期URL">
 </div></details>
 <details class="advanced-help" id="dmBrowserHelp"><summary>ほかのブラウザの説明</summary>
 <div class="grid">
   <div class="tip"><b>Android / Edge・Firefox</b><br>Tampermonkeyを有効にして上のボタンを押します。</div>
-  <div class="tip"><b>iPhone / iPad / Safari</b><br>UserscriptsまたはTampermonkeyを使い、note.com と mumei-s.github.io での実行を許可します。</div>
-  <div class="tip"><b>PC / Mac</b><br>Tampermonkey等のuserscript拡張から同じDM同期ツールを導入します。</div>
+  <div class="tip"><b>iPhone / iPad / Safari</b><br>無料のUserscriptsを有効にし、note.com と mumei-s.github.io を許可します。最新版の文字列を開き、Safariの拡張機能メニュー → Userscriptsで追加・更新を確定します。</div>
+  <div class="tip"><b>PC / Mac</b><br>Chrome・Edge・Firefox・OperaはTampermonkey、Mac SafariはUserscriptsで同じDM同期ツールを導入・更新します。すでにSafariのTampermonkeyを使っている方も、その拡張機能で続けられます。</div>
 </div>
 <div class="small">DM同期は本人通知Reader・フィルター・通知カテゴリには触れません。noteのDM画面遷移も変更せず、保存先もDM専用です。</div>
 </details>
@@ -91,20 +93,31 @@ const updater=window.MumeiInsightUpdateReturn,account=String(q.get('account')||q
 document.getElementById('dmEasyReturn').href=new URL('./?insightMode=normal#dashboard',location.href).href;document.getElementById('dmEasyBack').href=back;
 const dmEasyStatus=document.getElementById('dmEasyStatus'),dmEasyFirst=document.getElementById('dmEasyFirst'),dmEasyReady=document.getElementById('dmEasyReady'),dmEasyInstall=document.getElementById('dmEasyInstall'),dmEasyExtension=document.getElementById('dmEasyExtension');
 dmEasyInstall.href=new URL('./note-insight-dm.user.js',location.href).href;
-const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/i.test(ua),android=/Android/i.test(ua);
-const supported=ios?/Safari/i.test(ua)&&!/CriOS|EdgiOS|FxiOS/i.test(ua):!android||/EdgA|Firefox/i.test(ua);
-if(ios&&supported){dmEasyExtension.href='https://apps.apple.com/jp/app/userscripts/id1463298887';dmEasyExtension.textContent='① Safari用Userscriptsを準備'}
-else if(android&&/Firefox/i.test(ua)){dmEasyExtension.href='https://addons.mozilla.org/android/addon/tampermonkey/';dmEasyExtension.textContent='① Firefox用Tampermonkeyを準備'}
+function browserGuideState(){return window.MumeiInsightBrowserGuide?.forTool?.('dm')||null}
+function fallbackBrowser(){const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),safari=/Safari/i.test(ua)&&!/Chrome|CriOS|Edg|FxiOS|OPR|Android/i.test(ua);if(ios)return safari?'ios-safari':'ios-other';if(/Android/i.test(ua))return /EdgA/i.test(ua)?'android-edge':/Firefox/i.test(ua)?'android-firefox':'android-other';if(safari&&/Macintosh/i.test(ua))return'mac-safari';if(/Edg\//i.test(ua))return'pc-edge';if(/Firefox/i.test(ua))return'pc-firefox';if(/OPR\//i.test(ua))return'pc-opera';return'pc-chrome'}
+function usesUserscripts(){const guide=browserGuideState();return guide?.manager?guide.manager==='userscripts':['ios-safari','mac-safari'].includes(fallbackBrowser())}
+function supported(){const guide=browserGuideState();return Boolean(updater.live('dm'))||(guide?guide.canInstall:!['ios-other','android-other'].includes(fallbackBrowser()))}
+function platformInstruction(){const guide=browserGuideState();if(guide?.instruction)return guide.instruction;return usesUserscripts()?'Safariで最新版のスクリプトを開きます。文字列表示は正常な途中画面です。Safariの拡張機能メニュー → Userscriptsで追加・更新を確定し、この画面へ戻って起動版を確認してください。':'拡張機能を入れたブラウザで更新します。Tampermonkeyの確認画面で「更新／インストール」を確定します。文字列だけが出る場合はTampermonkeyのURLからインポートを使い、この画面へ戻って実際の起動版を確認してください。'}
+function browserGuide(){
+ const guide=browserGuideState(),browser=guide?.browser||fallbackBrowser(),userscripts=usesUserscripts(),safari=['ios-safari','mac-safari'].includes(browser);
+ const id=browser.includes('firefox')?'firefox':browser.includes('edge')?'edge':browser.includes('opera')?'opera':'chrome';
+ dmEasyExtension.href=userscripts?'https://apps.apple.com/jp/app/userscripts/id1463298887':browser==='android-firefox'?'https://addons.mozilla.org/android/addon/tampermonkey/':'https://www.tampermonkey.net/index.php?browser='+id+'&locale=ja';
+ dmEasyExtension.textContent=userscripts?'① Safari用Userscriptsを準備（無料）':'① '+(id==='firefox'?'Firefox用':'')+'Tampermonkeyを準備（初回だけ）';dmEasyExtension.hidden=safari&&!userscripts;
+ document.querySelectorAll('[data-tampermonkey-help]').forEach(node=>{node.hidden=userscripts});
+ document.getElementById('dmEasyInstallHelp').textContent=platformInstruction();document.getElementById('dmEasyUpdateText').textContent=platformInstruction();
+ const steps=userscripts?['Safariで最新版スクリプトの文字列を開く','Safariの拡張機能メニュー → Userscriptsで追加・更新を確定する','この画面へ戻り、最新版の起動を確認する']:['拡張機能を入れたブラウザでTampermonkeyを開く','「ユーザースクリプトの更新を確認」または最新版のインストール確認で更新を確定する','この画面へ戻り、最新版の起動を確認する'];
+ document.getElementById('dmEasyUpdateSteps').replaceChildren(...steps.map(value=>{const li=document.createElement('li');li.textContent=value;return li}));
+}
 const update=updater.create({tool:'dm',returnTo:back,account,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ DM同期ツールの起動を確認しました。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 let latest='',loading=null;
 const current=()=>updater.live('dm');
 function cmp(a,b){const pa=String(a||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1}return 0}
 function paint(){const c=current();
  const ready=Boolean(c),latestVersion=Boolean(latest&&ready&&cmp(c,latest)>=0);
- dmEasyFirst.hidden=ready||!supported;dmEasyReady.hidden=!ready;
+ dmEasyFirst.hidden=ready||!supported();dmEasyReady.hidden=!ready;
  dmEasyStatus.className='easy-status '+(latestVersion?'ok':ready?'warn':'');
- dmEasyStatus.textContent=latestVersion?'✓ 最新版です。更新作業は必要ありません。':ready?'✓ 導入済み（v'+c+'）。普段はTampermonkeyの自動更新を利用できます。':supported?'このブラウザではDM同期が未確認です。使う方だけ初回設定してください。':'このブラウザではDM同期が確認できません。対応ブラウザを使ってください。';
- if(ready&&latest&&!latestVersion)document.getElementById('dmEasyUpdates').open=true;if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールは未確認です。文字列が出ただけでは更新されません。URLからインポート後、この画面に戻って起動を確認します。'}
+ dmEasyStatus.textContent=latestVersion?'✓ 最新版の起動を確認しました。':ready?'導入済み（v'+c+'）。更新ボタンから最新版を確認してください。':supported()?'このブラウザではDM同期が未確認です。上のブラウザ案内を確認して初回追加してください。':'このブラウザではDM同期が確認できません。上の案内で対応ブラウザ単体を開いてください。';
+ if(ready&&latest&&!latestVersion)document.getElementById('dmEasyUpdates').open=true;if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールの起動は未確認です。'+platformInstruction()}
 async function load(){if(loading)return loading;loading=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.dmVersion)}catch{latest=''}finally{clearTimeout(timer);loading=null;paint()}})();return loading}
 const copyCode=document.getElementById('copyCode'),codeResult=document.getElementById('codeResult');
 async function copyCurrentDmCode(){
@@ -127,11 +140,13 @@ async function copyCurrentDmCode(){
  finally{copyCode.disabled=false}
 }
 copyCode.addEventListener('click',()=>void copyCurrentDmCode());
-install.href=RAW;install.target='_blank';install.rel='noopener noreferrer';install.addEventListener('click',()=>{if(!update.begin(latest))return;result.className='result';result.textContent='Tampermonkeyで更新を確定してください。文字列が出たら下の「DM更新用URLをコピー」からURLインポートを使ってください。'});
+function beginInstall(event){if(!supported()){event.preventDefault();result.className='result warn';result.textContent='この画面のブラウザでは拡張機能の起動を確認できません。上の案内から対応ブラウザで開いてください。';return}if(!update.begin(latest))return;result.className='result';result.textContent=platformInstruction()}
+install.href=RAW;install.target='_blank';install.rel='noopener noreferrer';install.addEventListener('click',beginInstall);dmEasyInstall.addEventListener('click',beginInstall);
 async function refresh(){await load();return update.finish(latest)}
 async function verify(){if(await refresh())return;if(update.reload()){result.className='result';result.textContent='更新したツールをこの画面で起動して確認しています…';const u=new URL(location.href);u.searchParams.set('verifyTs',String(Date.now()));location.replace(u.href)}}
 addEventListener('pageshow',()=>setTimeout(verify,80));addEventListener('focus',()=>setTimeout(verify,100));addEventListener('mumei-dm-version-changed',()=>void refresh());addEventListener('mumei-insight-tool-ready',()=>void refresh());
-refresh();
+document.addEventListener('mumei-insight-browser-guide-change',()=>{browserGuide();paint()});
+browserGuide();refresh();
 </script>
 </body>
 </html>
