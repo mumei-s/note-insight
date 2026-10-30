@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiSocialCompareV1Loaded)return;window.__mumeiSocialCompareV1Loaded=true;
-const VERSION='1.0.6',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
+const VERSION='1.0.7',API='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-social-compare';
 const STATE='mumei_social_comparison_v1:',COOLDOWN=15*60*1000,ACTIVE='mumei_social_explicit_scan_v1',MODE='mumei_social_explicit_scan_mode_v1';
 const pageWindow=()=>{try{return typeof unsafeWindow!=='undefined'?unsafeWindow:window}catch{return window}};
 const gm=()=>globalThis.GM||{},sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -153,7 +153,7 @@ async function autoPending(){
    }
    cursor=String(candidate.person_key||'');await set(key,{cursor,lastAttempt:now});await sleep(200);
   }
-  if(!batch.nextCursor||!batch.rows.length)await set(key,{cursor:'',lastAttempt:now});
+  if(!batch.rows.length||(!batch.nextCursor&&batch.rows.length<=12))await set(key,{cursor:'',lastAttempt:now});
  }catch{}finally{if(lock&&w.__mumeiSocialCompareBusy===lock)delete w.__mumeiSocialCompareBusy}
 }
 function start(){const u=new URL(location.href),requested=u.searchParams.get('mumei_social_scan'),force=requested==='1'||requested==='history';if(force){sessionStorage.setItem(ACTIVE,location.pathname);sessionStorage.setItem(MODE,requested==='history'?'history':'full');u.searchParams.delete('mumei_social_scan');history.replaceState(history.state,'',u.href)}if(sessionStorage.getItem(ACTIVE)!==location.pathname)return;void run(force)}
