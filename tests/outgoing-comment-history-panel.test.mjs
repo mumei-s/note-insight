@@ -132,6 +132,49 @@ test('no interval/focus polling, repeated opening reuses completed page, refresh
   await h.click(h.button('履歴を更新')); assert.equal(h.calls.length, 2); await h.resolve(1, listing());
 });
 
+test('revisions during a list request coalesce into one latest confirmation after it completes', async t => {
+  const h = await fixture(t);
+  await h.open(); await h.start({ revision: 1 }); await h.start({ revision: 2 });
+  assert.equal(h.calls.length, 1, 'an unfinished list is not duplicated');
+  await h.resolve(0, listing([row({ bodyPreview: '更新前の履歴' })]));
+  assert.equal(h.calls.length, 2, 'a revision arriving during the old read is checked after it');
+  assert.equal(h.calls[1].body.page, 1);
+  await h.resolve(1, listing([row({ bodyPreview: '新しく保存された履歴' })]));
+  assert.match(h.text(), /新しく保存された履歴/);
+  await h.close(); await h.open(); assert.equal(h.calls.length, 2, 'a confirmed revision is reused');
+});
+
+test('a revision while the archive is closed is read once on the next opening', async t => {
+  const h = await fixture(t);
+  await h.open(); await h.resolve(0, listing()); await h.close();
+  await h.start({ revision: 1 }); await h.start({ revision: 2 });
+  assert.equal(h.calls.length, 1, 'closed history adds no background request');
+  await h.open(); assert.equal(h.calls.length, 2);
+  await h.resolve(1, listing([row({ bodyPreview: '閉じている間に保存された履歴' })]));
+  assert.match(h.text(), /閉じている間に保存された履歴/);
+  await h.close(); await h.open(); assert.equal(h.calls.length, 2);
+});
+
+test('closing a revised in-flight archive stops the queued confirmation until it is opened', async t => {
+  const h = await fixture(t);
+  await h.open(); await h.start({ revision: 1 }); await h.close();
+  assert.equal(h.calls[0].signal.aborted, true);
+  await h.resolve(0, listing([row({ bodyPreview: '中断した古い履歴' })]));
+  assert.equal(h.calls.length, 1); assert.doesNotMatch(h.text(), /中断した古い履歴/);
+  await h.open(); assert.equal(h.calls.length, 2);
+  await h.resolve(1, listing()); assert.equal(h.calls.length, 2);
+});
+
+test('a queued revision check that fails remains retryable without an automatic retry loop', async t => {
+  const h = await fixture(t);
+  await h.open(); await h.start({ revision: 1 });
+  await settle(() => h.calls[0].reject(new Error('old-request-offline')));
+  assert.equal(h.calls.length, 2);
+  await settle(() => h.calls[1].reject(new Error('latest-request-offline')));
+  assert.equal(h.calls.length, 2); assert.equal(h.button('履歴を更新').disabled, false);
+  assert.match(h.text(), /保存済みの内容は保持/);
+});
+
 test('pagination is bounded, click-deduplicated, keeps previous rows, and copies only first page', async t => {
   const h = await fixture(t);
   const rows = Array.from({ length: 20 }, (_, i) => row({ id: 'self:n123:nc' + i, commentKey: 'nc' + i, bodyPreview: '履歴' + i, commentUrl: null }));

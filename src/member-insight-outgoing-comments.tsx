@@ -132,6 +132,8 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
   const detailFlights = useRef(new Map<string, AbortController>()), attemptedDetails = useRef(new Set<string>());
   const [detailBusy, setDetailBusy] = useState<Record<string, boolean>>({}), [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const priorRevision = useRef(revision);
+  const currentRevision = useRef(revision), verifiedRevision = useRef<number | null>(null), isOpen = useRef(false);
+  currentRevision.current = revision;
   const active = () => !rejected.current && alive.current && Boolean(token && id(account)) && localStorage.getItem(INSIGHT_TOKEN_KEY) === token;
   useEffect(() => {
     alive.current = true;
@@ -170,6 +172,7 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
   }
   async function loadList(nextPage: number) {
     if (!active() || listFlight.current) return;
+    const requestedRevision = currentRevision.current;
     const controller = new AbortController(); listFlight.current = controller; setBusy(true); setError("");
     try {
       const payload = await request("insight-outgoing-comment-history", { action: "list", page: nextPage, pageSize: PAGE_SIZE }, controller.signal);
@@ -180,9 +183,20 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
       const merged = new Map((nextPage > 1 ? snapshotRef.current.rows : []).map(row => [rowKey(row), row]));
       for (const row of rows as ArchiveRow[]) merged.set(rowKey(row), row);
       page.current = nextPage; save({ rows: [...merged.values()], details: snapshotRef.current.details, hasMore: payload.hasMore });
+      if (nextPage === 1) verifiedRevision.current = requestedRevision;
       setPermission(payload.permission); setChecked(true);
     } catch (error) { if (active() && !controller.signal.aborted) setError(failed(error)); }
-    finally { if (listFlight.current === controller) { listFlight.current = null; if (active()) setBusy(false); } }
+    finally {
+      if (listFlight.current === controller) {
+        listFlight.current = null;
+        if (active()) {
+          setBusy(false);
+          // A save completed after this read started. Confirm that revision
+          // once, sharing the latest request instead of losing or polling it.
+          if (isOpen.current && requestedRevision !== currentRevision.current) void loadList(1);
+        }
+      }
+    }
   }
   async function loadDetail(row: ArchiveRow, explicit = false) {
     const key = rowKey(row);
@@ -218,8 +232,9 @@ function OutgoingArchiveSession({ account, token, revision }: { account: string;
   }
   function closeConsent() { consentVersion.current++; consentFlight.current?.abort(); consentFlight.current = null; setConsentBusy(false); setHandoff(null); setConsentError(""); }
   function toggle(next: boolean) {
+    isOpen.current = next;
     setOpen(next);
-    if (next) { if (!checked) void loadList(1); }
+    if (next) { if (!checked || verifiedRevision.current !== currentRevision.current) void loadList(1); }
     else {
       closeConsent(); listFlight.current?.abort(); listFlight.current = null; setBusy(false);
       for (const [key, controller] of detailFlights.current) { controller.abort(); attemptedDetails.current.delete(key); }
