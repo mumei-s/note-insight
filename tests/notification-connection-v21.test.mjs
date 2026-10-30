@@ -58,13 +58,13 @@ test('添付の旧v3.6.20には更新ボタンを出し、導入後は自動で�
   const { w, requests } = await connection(t);
   const action = w.document.getElementById('toolAction'), update = w.document.getElementById('update');
   assert.equal(action.hidden, false);
-  assert.equal(update.textContent, '本人通知ツールを更新（v3.6.23）');
+  assert.equal(update.textContent, '本人通知の更新状態を確認（v3.6.23）');
   const target = new URL(update.href);
   assert.equal(target.pathname, '/note-insight/notification-browser-install.html');
   assert.equal(target.searchParams.get('notificationAccount'), 'creator_b');
   assert.equal(new URL(target.searchParams.get('return')).pathname, '/note-insight/notification-connection.html');
-  assert.match(w.document.getElementById('updateHelp').textContent, /本人通知をインストール \/ 更新/);
-  assert.match(w.document.getElementById('message').textContent, /上の「本人通知ツールを更新」/);
+  assert.match(w.document.getElementById('updateHelp').textContent, /自動更新が基本/);
+  assert.match(w.document.getElementById('message').textContent, /Tampermonkeyが自動更新/);
   w.localStorage.setItem('mumei-notification-tool-version', '3.6.23');
   w.dispatchEvent(new w.Event('mumei-notification-version-changed'));
   assert.equal(action.hidden, true);
@@ -80,7 +80,7 @@ test('最新版は更新案内を消し、未導入時はインストールへ�
   assert.equal(latest.w.document.getElementById('toolAction').hidden, true);
   const missing = await connection(t, '');
   assert.equal(missing.w.document.getElementById('toolAction').hidden, false);
-  assert.equal(missing.w.document.getElementById('update').textContent, '本人通知ツールをインストール');
+  assert.equal(missing.w.document.getElementById('update').textContent, '本人通知を初回追加する');
 });
 
 for(const mode of ['modern','legacy'])test(`本人設定の横長3行から保存確認つきON/OFFを切り替え、旧OFF設定も復帰する (${mode})`,async t=>{

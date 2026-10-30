@@ -42,8 +42,8 @@
     </div>
     <p class="hint">有効キーの件数には、再連携前のキーも含まれます。端末台数を示す数字ではありません。</p>
     <div id="toolAction" class="tool-update" hidden>
-      <a id="update" class="btn cyan" href="./notification-browser-install.html">本人通知ツールを更新</a>
-      <p id="updateHelp" class="hint">次の画面の「本人通知をインストール / 更新」を押し、表示された更新画面で確定してください。拡張機能の入れ直しは不要です。このページへ戻ると更新状態を自動確認します。</p>
+      <a id="update" class="btn cyan" href="./notification-browser-install.html">更新状態を確認する</a>
+      <p id="updateHelp" class="hint">導入済みならTampermonkeyによる自動更新が基本です。次の画面では状態を確認できます。急ぐ場合の更新方法も簡単に案内します。コード編集や再インストールは通常不要です。</p>
     </div>
     <div id="message" class="message" role="status" aria-live="polite">認証状態を確認しています。</div>
     <div class="actions" style="grid-template-columns:1fr">
@@ -55,11 +55,11 @@
   <section class="panel">
     <h2>初回だけ：付帯ツールを入れる</h2>
     <div class="steps">
-      <div class="step"><div><b>対応ブラウザでインストール／更新</b><p>端末内のnote画面で動きます。noteのパスワードやログインCookieをINSIGHTへ送りません。</p></div></div>
+      <div class="step"><div><b>必要な人だけ最初に追加</b><p>追加後は自動更新が基本です。端末内のnote画面で動き、noteのパスワードやログインCookieをINSIGHTへ送りません。</p></div></div>
       <div class="step"><div><b>上の「この端末を連携」を押す</b><p>ログイン中のnote本人IDとINSIGHT参加IDが一致した時だけ連携します。</p></div></div>
       <div class="step"><div><b>noteのベルを開くと自動読み込み</b><p>通知を端末内で読み取り、本人専用のINSIGHTへ保存します。必要なときだけ「一時停止」、続けるときは「再開」を押します。</p></div></div>
     </div>
-    <div class="actions"><a id="install" class="btn cyan" href="./notification-browser-install.html">付帯ツールをインストール／更新</a><a id="openNote" class="btn" href="https://note.com/" target="_blank" rel="noreferrer">noteを開く</a></div>
+    <div class="actions"><a id="install" class="btn cyan" href="./notification-browser-install.html">本人通知を初回追加・状態確認</a><a id="openNote" class="btn" href="https://note.com/" target="_blank" rel="noreferrer">noteを開く</a></div>
   </section>
 
   <section class="panel">
@@ -128,13 +128,13 @@ function renderTool(){
   if(installed){toolState.textContent=pending?`v${installed}（更新あり v${latest}）`:`v${installed}`;toolState.className=pending?'warn':'good'}
   else{toolState.textContent=latest?`未確認（最新 v${latest}）`:'未確認';toolState.className='warn'}
   toolAction.hidden=Boolean(installed&&latest&&!pending);
-  update.textContent=installed?(latest?`本人通知ツールを更新（v${latest}）`:'本人通知ツールの最新版を確認'):'本人通知ツールをインストール';
+  update.textContent=installed?(latest?`本人通知の更新状態を確認（v${latest}）`:'本人通知の更新状態を確認'):'本人通知を初回追加する';
   if(message.dataset.toolUpdate==='1'&&installed&&latest&&!pending)setMessage(`本人通知ツール v${installed} を確認しました。保存済み本人通知は最上部のパネルから開けます。`,'success');
   return installed;
 }
 async function release(){try{const r=await fetch(`./insight-release.json?ts=${Date.now()}`,{cache:'no-store'}),p=await r.json();latest=String(p.notificationVersion||'')}catch{}return renderTool()}
 async function load(){const generation=++loadGeneration,expected=session,valid=()=>generation===loadGeneration&&expected===session&&sameSession(expected,readSession());pair.disabled=true;pair.onclick=null;const installed=await release();if(!valid())return;let pairResult=q.get('notificationPaired'),pairError=q.get('notificationPairError');if(!expected.token){loginState.textContent='ログインが必要';loginState.className='bad';accountState.textContent='—';pairState.textContent='確認不可';pairState.className='warn';setMessage('INSIGHTへログインしてください。参加中でも、このブラウザにログイン情報がない場合はアカウント切替から復帰できます。','error');pair.textContent='INSIGHTへログイン';pair.disabled=false;pair.onclick=()=>{setManualIntent('login');location.href='./#access/insight'};setupLinks();return}
- try{const p=await call('stats',expected);if(!valid())return;account=cleanAccount(p.noteId);if(cleanAccount(q.get('notificationAccount'))&&cleanAccount(q.get('notificationAccount'))!==account){pairResult=null;pairError=null}paired=Boolean(p.paired);loginState.textContent='ログイン中・参加中';loginState.className='good';accountState.textContent=`@${account}`;accountState.className='good';pairState.textContent=paired?`連携済み${Number(p.activeDeviceCount||0)>1?`（有効キー${Number(p.activeDeviceCount)}件）`:''}`:'この端末は要連携';pairState.className=paired?'good':'warn';pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';pair.disabled=false;setupLinks();if(pairResult==='1'){setMessage(`@${account} の本人通知をこの端末へ連携しました。他の端末の連携は維持されます。`,'success')}else if(pairError){setMessage(errorText(pairError),'error')}else if(!installed){setMessage('先に付帯ツールをインストール／更新し、その後この端末を連携してください。')}else if(needsToolUpdate()){setMessage('付帯ツールの更新があります。上の「本人通知ツールを更新」を押してください。連携と保存済み通知は維持したまま更新できます。','update');message.dataset.toolUpdate='1'}else if(paired){setMessage(`@${account} は本人通知へ連携済みです。期限切れ表示が出た端末では「再連携」を1回押してください。`,'success')}else setMessage('付帯ツールを確認後、この端末を本人通知へ連携してください。')
+ try{const p=await call('stats',expected);if(!valid())return;account=cleanAccount(p.noteId);if(cleanAccount(q.get('notificationAccount'))&&cleanAccount(q.get('notificationAccount'))!==account){pairResult=null;pairError=null}paired=Boolean(p.paired);loginState.textContent='ログイン中・参加中';loginState.className='good';accountState.textContent=`@${account}`;accountState.className='good';pairState.textContent=paired?`連携済み${Number(p.activeDeviceCount||0)>1?`（有効キー${Number(p.activeDeviceCount)}件）`:''}`:'この端末は要連携';pairState.className=paired?'good':'warn';pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';pair.disabled=false;setupLinks();if(pairResult==='1'){setMessage(`@${account} の本人通知をこの端末へ連携しました。他の端末の連携は維持されます。`,'success')}else if(pairError){setMessage(errorText(pairError),'error')}else if(!installed){setMessage('先に付帯ツールをインストール／更新し、その後この端末を連携してください。')}else if(needsToolUpdate()){setMessage('本人通知に新しい版があります。通常はTampermonkeyが自動更新します。今すぐ確認したい場合は「更新状態を確認」を開いてください。連携と保存済み通知は維持されます。','update');message.dataset.toolUpdate='1'}else if(paired){setMessage(`@${account} は本人通知へ連携済みです。期限切れ表示が出た端末では「再連携」を1回押してください。`,'success')}else setMessage('付帯ツールを確認後、この端末を本人通知へ連携してください。')
  }catch(e){if(!valid())return;loginState.textContent='再ログインが必要';loginState.className='bad';accountState.textContent='確認できません';pairState.textContent='確認不可';pairState.className='warn';setMessage(`INSIGHT認証を確認できません（${String(e?.message||e)}）。アカウント切替からログインを復帰してください。`,'error');pair.textContent='INSIGHTへログイン';pair.disabled=false;pair.onclick=()=>{setManualIntent('login');location.href='./#access/insight'};setupLinks()}}
 pair.addEventListener('click',async()=>{if(!sameSession(session,readSession())){refreshSession();return}if(!session.token||!account||pair.onclick)return;const expected=session;pair.disabled=true;pair.textContent='一時コード発行中…';setMessage('note本人IDと照合する準備をしています。');try{const p=await call('pair-start',expected);if(expected!==session||!sameSession(expected,readSession()))return;const u=new URL(p.noteUrl),backUrl=transientFree();backUrl.searchParams.set('notificationAccount',account);u.searchParams.set('mumei_return',backUrl.href);setMessage(`noteへ移動します。@${account} でログイン中か確認してください。`);location.href=u.href}catch(e){if(expected!==session||!sameSession(expected,readSession()))return;pair.disabled=false;pair.textContent=paired?'この端末を再連携':'この端末を本人通知へ連携';setMessage(`連携を開始できません（${String(e?.message||e)}）。`,'error')}});
 addEventListener('mumei-notification-version-changed',renderTool);
