@@ -4,7 +4,7 @@ if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationNetwork3300)return;
 window.__mumeiNotificationNetwork3300=true;
 
-const VERSION='3.6.21';
+const VERSION='3.6.22';
 const MAX_NOTICES=300,MAX_PAGES=30;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
 const PROBE='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-network-probe';
@@ -20,7 +20,7 @@ const TEXT_KEYS=['message','text','body','title','label','description','content'
 const TIME_KEYS=['noticed_at','noticedAt','created_at','createdAt','occurred_at','occurredAt','published_at','publishedAt','updated_at','updatedAt','timestamp','datetime','date'];
 const ID_KEYS=['notification_id','notificationId','notice_id','noticeId','id','key','uuid'];
 const URL_KEYS=['target_url','targetUrl','url','href','link','path','permalink'];
-const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase();
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),key=(p,id)=>p+String(id||'').toLowerCase();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const clean=v=>String(v??'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 

@@ -11,7 +11,7 @@ const DEVICE_USED = 'mumei_insight_own_comment_device_used_v1';
 const params = new URLSearchParams(location.search);
 const consentCode = String(params.get('mumei_own_comment_scope') || '');
 const expectedAccount = String(params.get('mumei_account') || '').toLowerCase();
-const modern = () => Boolean(globalThis.GM);
+const modern = () => (typeof GM!=='undefined'&&Boolean(GM));
 const get = async (k, d) => modern() && typeof GM.getValue === 'function' ? GM.getValue(k, d) : typeof GM_getValue === 'function' ? GM_getValue(k, d) : d;
 const set = async (k, value) => { if (modern() && typeof GM.setValue === 'function') return GM.setValue(k, value); if (typeof GM_setValue === 'function') return GM_setValue(k, value); throw new Error('連携設定を保存できません'); };
 let account = '', token = '', enabled = false, controller, panel, message, startButton, stopButton, retryButton;
