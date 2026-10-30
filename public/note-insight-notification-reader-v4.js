@@ -206,6 +206,13 @@ function scheduleAuto(delay=150){
    if(autoPanel){if(!panelMissingAt)panelMissingAt=Date.now();const wait=500-(Date.now()-panelMissingAt);if(wait>0){scheduleAuto(wait);return}}
    if(scanning){stop=true;window.__mumeiNotificationNetwork3300?.stop?.()}autoPanel=null;pausedPanel=null;panelMissingAt=0;resetNoticeKeys();if(!scanning)stop=false;return
   }
+  // If the panel was genuinely absent across the grace interval, reopening
+  // is a new session even when note reuses the same DOM node. A quick React
+  // reparent/replacement with identical content keeps the confirmed boundary.
+  if(autoPanel&&panelMissingAt&&Date.now()-panelMissingAt>=500){
+   autoPanel=null;pausedPanel=null;autoComplete=false;lastAutoAt=0;resetNoticeKeys();
+   if(scanning||traversalPending)rescanAfterCompletion=true;
+  }
   panelMissingAt=0;
   const opening=!autoPanel;
   if(opening){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false;lastAutoAt=0;resetNoticeKeys()}
