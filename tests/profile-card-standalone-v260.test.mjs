@@ -13,7 +13,7 @@ function runtime(url){
  return{context,page,counts};
 }
 test('both installed identities are self-contained editor tools with the same implementation',()=>{
- for(const code of codes){assert.match(code,/@version\s+2\.9\.1/);assert.match(code,/@name\s+無名S note 極薄サムネイル\n/);assert.doesNotMatch(code,/@name[ \t]+[^\n]*(?:INSIGHT|300)/);assert.doesNotMatch(code,/@require/);assert.match(code,/@match\s+https:\/\/editor\.note\.com\/\*/);assert.doesNotMatch(code,/createInsightLikes300|buildInsightLikeRows|INSIGHTで準備/);assert.match(code,/極薄サム v/);}
+ for(const code of codes){assert.match(code,/@version\s+2\.9\.2/);assert.match(code,/@name\s+無名S note 極薄サムネイル\n/);assert.doesNotMatch(code,/@name[ \t]+[^\n]*(?:INSIGHT|300)/);assert.doesNotMatch(code,/@require/);assert.match(code,/@match\s+https:\/\/editor\.note\.com\/\*/);assert.doesNotMatch(code,/createInsightLikes300|buildInsightLikeRows|INSIGHTで準備/);assert.match(code,/極薄サム v/);}
  assert.equal(codes[0].slice(codes[0].indexOf('(function(){')),codes[1].slice(codes[1].indexOf('(function(){')));
 });
 test('neither identity runs on INSIGHT, note profile pages, or the history reader',()=>{
@@ -25,7 +25,7 @@ test('both identities enabled still register the editor and message handlers onl
  for(const ordered of [codes,[...codes].reverse()]){
   const c=runtime('https://editor.note.com/notes/n123456789abc/edit');vm.runInContext(ordered[0],c.context);
   const first={...c.counts},store=c.page.__MUMEI_PROFILE_CARD_RUN_STORE__;
-  assert.equal(c.page.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__,'2.9.1');assert.ok(store);assert.equal(c.counts.network,0);
+  assert.equal(c.page.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__,'2.9.2');assert.ok(store);assert.equal(c.counts.network,0);
   vm.runInContext(ordered[1],c.context);assert.deepEqual(c.counts,first);assert.equal(c.page.__MUMEI_PROFILE_CARD_RUN_STORE__,store);
  }
 });

@@ -20,7 +20,7 @@ function qualityAvailable(){return page.__MUMEI_PROFILE_CARD_QUALITY__===quality
 function qualityIdentity(row){return{account:String(row?.urlname||'').trim().toLowerCase(),key:String(row?.key||'').toLowerCase(),url:String(row?.url||'')}}
 function qualityRecordedReasons(row){
  const value=row?.qualitySourceIssue;if(value?.version!==1||!Array.isArray(value.reasons))return[];
- const sourceCodes=new Set(['ROW_ACCOUNT','URL_ACCOUNT','URL_ARTICLE','ARTICLE_ACCOUNT','ARTICLE_KEY','ORIGINAL_URL_ACCOUNT','ORIGINAL_URL_ARTICLE','PROFILE_ACCOUNT','PROFILE_REQUEST','LEGACY_FILE_ACCOUNT','LEGACY_FILE_ARTICLE']);
+ const sourceCodes=new Set(['ROW_ACCOUNT','URL_ACCOUNT','URL_ARTICLE','ARTICLE_ACCOUNT','ARTICLE_KEY','ORIGINAL_URL_ACCOUNT','ORIGINAL_URL_ARTICLE','PROFILE_ACCOUNT','PROFILE_REQUEST','PRESENTATION_ACCOUNT','PRESENTATION_URL_ACCOUNT','PRESENTATION_ARTICLE','PRESENTATION_URL_ARTICLE','LEGACY_FILE_ACCOUNT','LEGACY_FILE_ARTICLE']);
  return value.reasons.filter(reason=>sourceCodes.has(reason?.code)&&reason.expected!==reason.actual&&[reason.expected,reason.actual].every(id=>typeof id==='string'&&(reason.code.endsWith('ARTICLE')||reason.code==='ARTICLE_KEY'?/^n[a-f0-9]{12}$/.test(id):/^[a-z0-9_-]+$/.test(id))));
 }
 function qualityHoldApplies(run){const hold=run?.qualityHold;return !!hold&&hold.runId===run.createdAt&&hold.articleKey===run.articleKey&&run.articleKey===editorArticleKey()}
@@ -121,6 +121,7 @@ export function instrumentCore(source){
  return once(source,"if(document.readyState==='loading')",common+qualityRefreshHelpers+"\nif(document.readyState==='loading')");
 }
 export function instrumentEditor(source){
+ source=changeFunction(source,'restartFixed300',part=>once(part,'  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);',"  await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);\n  const heldPlan=await qualityMigrateKnown(readRun());\n  if(qualityHoldApplies(heldPlan))await qualityBlock(heldPlan.qualityHold);\n  const diagnosed=heldPlan?.rows?.find(row=>qualityRecordedReasons(row).length);\n  if(diagnosed)await qualityGate(diagnosed,null,'images');"));
  source=changeFunction(source,'createFixed300',part=>{
   part=once(part,'  let existing=readRun();',"  let existing=readRun();\n  qualityCall('beginBatch',[{run:existing,resume:Boolean(existing?.rows?.length)}]);\n  existing=await qualityPrepareRun(existing);");
   part=once(part,'   assertCreatorAllowed(row);',"   assertCreatorAllowed(row);\n   await qualityGate(row,null,'images');");

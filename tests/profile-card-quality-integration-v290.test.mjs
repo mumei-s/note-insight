@@ -5,8 +5,8 @@ const test=(name,fn)=>nodeTest(name,{skip:!dependencies||!baselineCode()?'Real P
 const recordClone=value=>JSON.parse(JSON.stringify(value));
 function successful(r,run){assert.equal(run?.stage,'images_ready',r.state.statuses.at(-1)?.text);assert.equal(run.rows.length,r.state.images.length);assert.equal(run.draftSaveState,'confirmed')}
 
-for(const count of [3,200])test('actual compiled history path preserves baseline pixels, paragraphs, links, captions, order and pacing for '+count+' people',async()=>{
- const before=await runtime({baseline:true,count,reverse:true}),after=await runtime({count,reverse:true});
+for(const count of [3,200])test('quality ON/OFF preserves current pixels, paragraphs, links, captions, order and pacing for '+count+' people',async()=>{
+ const before=await runtime({record:false,count,reverse:true}),after=await runtime({count,reverse:true});
  const a=await before.history(),b=await after.history();successful(before,a);successful(after,b);
  assert.deepEqual(after.doc(),before.doc());assert.deepEqual(after.state.images,before.state.images);assert.deepEqual(after.state.waits,before.state.waits);assert.deepEqual(after.state.requests,before.state.requests);
  assert.equal(b.rows.length,count+1);assert.equal(new Set(b.rows.slice(0,count).map(r=>r.urlname)).size,count);assert.equal(new Set(b.rows.slice(0,count).map(r=>r.designIndex)).size,count);
@@ -17,18 +17,18 @@ for(const count of [3,200])test('actual compiled history path preserves baseline
  assert.ok(!after.quality.snapshot().records.some(rec=>rec.findings.some(f=>f.status==='mismatch')));
  before.close();after.close();
 });
-for(const kind of ['tag','mag','note'])for(const choice of ['latest','fixed','oldest'])test('normal '+kind+' / '+choice+' retains baseline output and requests',async()=>{
- const before=await runtime({baseline:true}),after=await runtime();const a=await before.normal({kind,choice}),b=await after.normal({kind,choice});successful(before,a);successful(after,b);
+for(const kind of ['tag','mag','note'])for(const choice of ['latest','fixed','oldest'])test('normal '+kind+' / '+choice+' keeps the selected output and requests independent of quality ON/OFF',async()=>{
+ const before=await runtime({record:false}),after=await runtime();const a=await before.normal({kind,choice}),b=await after.normal({kind,choice});successful(before,a);successful(after,b);
  assert.deepEqual(after.doc(),before.doc());assert.deepEqual(after.state.images,before.state.images);assert.deepEqual(after.state.requests,before.state.requests);assert.deepEqual(after.state.waits,before.state.waits);before.close();after.close();
 });
 test('all-count mode retains the same source exhaustion and final article',async()=>{
- const before=await runtime({baseline:true}),after=await runtime();successful(before,await before.normal({mode:'all'}));successful(after,await after.normal({mode:'all'}));assert.deepEqual(after.doc(),before.doc());before.close();after.close();
+ const before=await runtime({record:false}),after=await runtime();successful(before,await before.normal({mode:'all'}));successful(after,await after.normal({mode:'all'}));assert.deepEqual(after.doc(),before.doc());before.close();after.close();
 });
 for(const flow of ['special','workmom','parenting'])test('the '+flow+' mode retains its existing selection, output, counts and pacing',async()=>{
- const before=await runtime({baseline:true}),after=await runtime();successful(before,await before.normal({flow}));successful(after,await after.normal({flow}));assert.deepEqual(after.doc(),before.doc());assert.deepEqual(after.state.images,before.state.images);assert.deepEqual(after.state.requests,before.state.requests);assert.deepEqual(after.state.waits,before.state.waits);before.close();after.close();
+ const before=await runtime({record:false}),after=await runtime();successful(before,await before.normal({flow}));successful(after,await after.normal({flow}));assert.deepEqual(after.doc(),before.doc());assert.deepEqual(after.state.images,before.state.images);assert.deepEqual(after.state.requests,before.state.requests);assert.deepEqual(after.state.waits,before.state.waits);before.close();after.close();
 });
 test('126-person gallery preserves all pixels, the profile-only participant, missing icon and verified missing thumbnail',async()=>{
- const args={count:126,noArticleIndex:87,noIconIndex:5,noThumbIndex:6},before=await runtime({baseline:true,...args}),after=await runtime(args);
+ const args={count:126,noArticleIndex:87,noIconIndex:5,noThumbIndex:6},before=await runtime({record:false,...args}),after=await runtime(args);
  const a=await before.gallery(),b=await after.gallery();successful(before,a);successful(after,b);assert.equal(b.rows.length,127);assert.equal(b.rows[87].profileOnly,true);assert.equal(b.rows[5].avatarMissing,true);assert.equal(b.rows[6].articleThumbnailMissing,true);
  assert.deepEqual(after.doc(),before.doc());assert.deepEqual(after.state.images,before.state.images);assert.deepEqual(after.state.requests,before.state.requests);assert.deepEqual(after.state.waits,before.state.waits);assert.ok(!after.quality.snapshot().records.some(rec=>rec.findings.some(f=>f.status==='mismatch')));before.close();after.close();
 });
@@ -53,8 +53,8 @@ test('pause/resume, failed native upload retry, and save failure match the basel
 });
 test('notification insertion at body tap and deletion preserve baseline nonowned content, links and quality-independent checkpoints',async()=>{
  const results=[];
- for(const baseline of [true,false]){
-  const r=await runtime({baseline,count:3});successful(r,await r.history());
+ for(const record of [false,true]){
+  const r=await runtime({record,count:3});successful(r,await r.history());
   const original=r.doc();await r.core.createCardsAtTap();assert.equal(r.state.cards.length,4,r.state.statuses.at(-1)?.text);assert.equal(r.editor.readRun().stage,'complete');
   await r.core.deleteNotificationCards({confirm:false,save:false});assert.deepEqual(r.doc(),original);assert.equal(r.editor.readRun().items.length,4);
   results.push(r.doc());r.close();
@@ -62,15 +62,16 @@ test('notification insertion at body tap and deletion preserve baseline nonowned
  assert.deepEqual(results[0],results[1]);
 });
 test('disabling quality leaves acquired rows, caches and completion history intact and reproduces baseline output',async()=>{
- const before=await runtime({baseline:true}),after=await runtime({record:false});successful(before,await before.history());successful(after,await after.history());assert.deepEqual(after.doc(),before.doc());assert.equal(after.quality.snapshot().records.length,0);assert.ok(after.editor.readRun().items.length);before.close();after.close();
+ const before=await runtime({record:true}),after=await runtime({record:false});successful(before,await before.history());successful(after,await after.history());assert.deepEqual(after.doc(),before.doc());assert.equal(after.quality.snapshot().records.length,0);assert.ok(after.editor.readRun().items.length);before.close();after.close();
 });
-test('the previous version resumes a current partial checkpoint without losing links, order or progress',async()=>{
+test('the previous version can continue a current partial checkpoint while preserving its owned prefix and original identities',async()=>{
  const current=await runtime({count:4});current.state.failAt=3;await current.history();assert.equal(current.state.images.length,2);
  const previous=await runtime({baseline:true,count:4});
  previous.view.state=dependencies.EditorState.create({schema:previous.schema,doc:previous.schema.nodeFromJSON(current.doc())});
  previous.editor.writeRun(recordClone(current.editor.readRun()));previous.state.serial=current.state.serial;previous.state.images.push(...recordClone(current.state.images));
  await previous.history();successful(previous,previous.editor.readRun());assert.equal(previous.editor.readRun().items.length,5);assert.equal(new Set(previous.editor.readRun().items.map(item=>item.url)).size,5);
- const control=await runtime({baseline:true,count:4});await control.history();assert.deepEqual(previous.doc(),control.doc());current.close();previous.close();control.close();
+ assert.deepEqual(previous.doc().content.filter(node=>node.type==='image').slice(0,2),current.doc().content.filter(node=>node.type==='image'));
+ assert.deepEqual(Array.from(previous.editor.readRun().rows,row=>row.url),Array.from(current.editor.readRun().rows,row=>row.url));current.close();previous.close();
 });
 test('changing counts, people and source modes on successive drafts runs fresh checks for every pasted row',async()=>{
  const r=await runtime({count:2});let run=await r.history();successful(r,run);let previousBatch=r.quality.snapshot().batchId;

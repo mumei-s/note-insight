@@ -30,7 +30,7 @@ test('distribution metadata names the same unrestricted tool while preserving ea
  for(let i=0;i<codes.length;i++){
   const code=codes[i];
   assert.equal(code.match(/^\/\/ @name\s+(.+)$/m)?.[1],'無名S note 極薄サムネイル');
-  assert.equal(code.match(/^\/\/ @version\s+(.+)$/m)?.[1],'2.9.1');
+  assert.equal(code.match(/^\/\/ @version\s+(.+)$/m)?.[1],'2.9.2');
   assert.equal(code.match(/^\/\/ @downloadURL\s+(.+)$/m)?.[1],'https://raw.githubusercontent.com/mumei-s/note-insight/main/'+paths[i]);
   assert.equal(code.match(/^\/\/ @updateURL\s+(.+)$/m)?.[1],'https://raw.githubusercontent.com/mumei-s/note-insight/main/'+paths[i]);
   assert.doesNotMatch(code,/@require|@name[ \t]+[^\n]*(?:INSIGHT|300)/);

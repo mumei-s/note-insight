@@ -74,9 +74,9 @@ async function qualityRetryHeldRun(run){
     thumbnailMissingEvidence={key:original.key,articleUrl:original.url,checkedAt:new Date().toISOString(),reason:'The verified article API reports an unconfigured eyecatch'};
    }else thumbUrl=mediaUrl(await articleMetaImage(original.url));
   }
-  // Core has always allowed its absent-thumbnail fallback. The editor's
-  // existing required-thumbnail path stays held when freshness is uncertain.
-  if(editorSource&&!original.profileOnly&&!thumbUrl&&!thumbnailMissingEvidence)return await blocked();
+  // Core and the final marker allow an absent-thumbnail fallback. Other
+  // editor rows keep their existing required-thumbnail policy.
+  if(editorSource&&!original.finalMarker&&!original.profileOnly&&!thumbUrl&&!thumbnailMissingEvidence)return await blocked();
   const freshCreator=String(profile.nickname||profile.name);
   let pending={...original,creator:editorSource&&original.finalMarker?freshCreator:freshCreator.trim(),actorImageUrl,thumbUrl,title:original.profileOnly?original.title:String(note.name||note.title||'無題の記事').trim()};
   if(editorSource||Object.prototype.hasOwnProperty.call(original,'avatarMissing'))pending.avatarMissing=!actorImageUrl;
@@ -88,12 +88,27 @@ async function qualityRetryHeldRun(run){
    }
   }
   if(original.gallery126&&!original.profileOnly){pending.articleThumbnailMissing=Boolean(thumbnailMissingEvidence);pending.thumbnailMissingEvidence=thumbnailMissingEvidence}
+  if(original.presentation){
+   const compose=page.__MUMEI_PROFILE_CARD_CONTENT__?.compose;
+   if(typeof compose!=='function')return await blocked();
+   const presentation=compose(pending,note,profile,original.presentation);
+   if(!presentation||typeof presentation!=='object'||presentation.size!==original.presentation.size||presentation.content!==original.presentation.content)return await blocked();
+   pending.presentation=presentation;
+  }
   pending=qualityCall('refreshed',[pending,{target:id,note,profile}],null);
   if(!pending||qualityCall('hasVerifiedFreshIdentity',[pending],false)!==true||qualityCall('preflight',[pending,{phase:'images'}],null)||qualityCall('enabled',[],false)!==true)return await blocked();
   // The response may only replace pending metadata. Selection, order, designs,
   // article/profile URLs and all native ownership data remain the saved plan.
   for(const field of ['urlname','key','url','actorUrl','index','designIndex','likerKey','finalMarker','gallery126','profileOnly'])if(JSON.stringify(pending[field])!==JSON.stringify(original[field]))return await blocked();
   const changesOwnedIntroduction=saved=>{
+   const presentationKey=typeof norm==='function'?norm(original.url):original.url,presentationOwned=saved.presentationTexts?.[presentationKey];
+   if(original.presentation&&typeof presentationOwned==='string'){
+    const aboveText=page.__MUMEI_PROFILE_CARD_CONTENT__?.aboveText;
+    if(typeof aboveText!=='function')return true;
+    const before=aboveText(original),after=aboveText(pending);
+    if(before!==after&&presentationOwned===before)return true;
+    if(presentationOwned!==after)return true;
+   }
    if(typeof activityText!=='function'||!hasProfileText)return false;
    const before=activityText(original),after=activityText(pending),galleryOwned=saved.galleryProfileTexts?.[original.url]||saved.galleryProfileTexts?.[id];
    return before!==after&&((saved.activityTexts||[]).includes(before)||typeof galleryOwned==='string'&&galleryOwned!==after);

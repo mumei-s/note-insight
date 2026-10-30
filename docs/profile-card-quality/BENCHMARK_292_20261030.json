@@ -1,0 +1,582 @@
+{
+  "environment": "Same managed executor; compiled userscripts; real ProseMirror/canvas; real clock and requested waits; simulated paginated note API with nonzero latency and synchronous native uploads. This does not measure live note.com or a phone.",
+  "baseline": {
+    "ref": "260d7c3",
+    "version": "2.9.1",
+    "sha256": "3ebf6eb2d0839140e15d3bd733e3036607d870b0d35f1dc02c9dc183608a1974"
+  },
+  "current": {
+    "version": "2.9.2",
+    "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9"
+  },
+  "people": 200,
+  "repetitions": 3,
+  "warmupRounds": 1,
+  "apiLatencyMs": 20,
+  "summary": {
+    "paginated_tag": {
+      "baseline": {
+        "extractionMs": 2628.519079999998,
+        "firstImageMs": 2640.42239599998,
+        "pasteMs": 38764.939461999995,
+        "totalMs": 41372.878711,
+        "scheduledWaitMs": 36810,
+        "sourceWaitMs": 630,
+        "pasteWaitMs": 36180
+      },
+      "current": {
+        "extractionMs": 1679.646597999992,
+        "firstImageMs": 1700.075754000005,
+        "pasteMs": 6242.322448999999,
+        "totalMs": 7908.807918000006,
+        "scheduledWaitMs": 4000,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 4000
+      },
+      "changePercent": {
+        "extractionMs": -36.099128563297576,
+        "pasteMs": -83.8969890431039,
+        "totalMs": -80.88407632148339
+      },
+      "baselineApi": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 5,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "currentApi": {
+        "started": 612,
+        "completed": 612,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 10,
+          "creatorContents": 200,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12240
+      }
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": {
+        "extractionMs": 2372.8476290000253,
+        "firstImageMs": 2386.837927000015,
+        "pasteMs": 38736.00616300001,
+        "totalMs": 41103.942232,
+        "scheduledWaitMs": 36320,
+        "sourceWaitMs": 140,
+        "pasteWaitMs": 36180
+      },
+      "current": {
+        "extractionMs": 1506.6457700000028,
+        "firstImageMs": 1525.676465000026,
+        "pasteMs": 6430.603040999966,
+        "totalMs": 7952.886134999979,
+        "scheduledWaitMs": 4000,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 4000
+      },
+      "changePercent": {
+        "extractionMs": -36.50474006057694,
+        "pasteMs": -83.39890020168788,
+        "totalMs": -80.65176792505187
+      },
+      "baselineApi": {
+        "started": 480,
+        "completed": 480,
+        "active": 0,
+        "peakActive": 5,
+        "byKind": {
+          "search": 3,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 72,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9600
+      },
+      "currentApi": {
+        "started": 608,
+        "completed": 608,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "creatorContents": 200,
+          "magazine": 1,
+          "likes": 2,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12160
+      }
+    }
+  },
+  "results": {
+    "paginated_tag": {
+      "baseline": [
+        {
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 2644.434371000003,
+          "firstImageMs": 2660.8528559999977,
+          "pasteMs": 38609.817739,
+          "totalMs": 41254.25211,
+          "scheduledWaitMs": 36810,
+          "sourceWaitMs": 630,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 2607.9392490000027,
+          "firstImageMs": 2619.13483000001,
+          "pasteMs": 38764.939461999995,
+          "totalMs": 41372.878711,
+          "scheduledWaitMs": 36810,
+          "sourceWaitMs": 630,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 2628.519079999998,
+          "firstImageMs": 2640.42239599998,
+          "pasteMs": 39386.08511099999,
+          "totalMs": 42014.60419099999,
+          "scheduledWaitMs": 36810,
+          "sourceWaitMs": 630,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        }
+      ],
+      "current": [
+        {
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1666.4854690000066,
+          "firstImageMs": 1700.075754000005,
+          "pasteMs": 6242.322448999999,
+          "totalMs": 7908.807918000006,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1679.646597999992,
+          "firstImageMs": 1690.777120999992,
+          "pasteMs": 6067.205473000009,
+          "totalMs": 7746.852071000001,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1824.4351380000007,
+          "firstImageMs": 1857.1352390000247,
+          "pasteMs": 6687.881763000012,
+          "totalMs": 8512.316901000013,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        }
+      ]
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": [
+        {
+          "api": {
+            "started": 480,
+            "completed": 480,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 3,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 72,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9600
+          },
+          "extractionMs": 2375.930722000019,
+          "firstImageMs": 2389.027117999998,
+          "pasteMs": 38891.798532999965,
+          "totalMs": 41267.729254999984,
+          "scheduledWaitMs": 36320,
+          "sourceWaitMs": 140,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 480,
+            "completed": 480,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 3,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 72,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9600
+          },
+          "extractionMs": 2372.8476290000253,
+          "firstImageMs": 2386.837927000015,
+          "pasteMs": 38731.094602999976,
+          "totalMs": 41103.942232,
+          "scheduledWaitMs": 36320,
+          "sourceWaitMs": 140,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 480,
+            "completed": 480,
+            "active": 0,
+            "peakActive": 5,
+            "byKind": {
+              "search": 3,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 72,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9600
+          },
+          "extractionMs": 2360.7700070000137,
+          "firstImageMs": 2369.913372000039,
+          "pasteMs": 38736.00616300001,
+          "totalMs": 41096.77617000003,
+          "scheduledWaitMs": 36320,
+          "sourceWaitMs": 140,
+          "pasteWaitMs": 36180,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        }
+      ],
+      "current": [
+        {
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1522.283094000013,
+          "firstImageMs": 1549.9085380000179,
+          "pasteMs": 6430.603040999966,
+          "totalMs": 7952.886134999979,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1506.6457700000028,
+          "firstImageMs": 1517.188599999994,
+          "pasteMs": 6469.21040500002,
+          "totalMs": 7975.856175000023,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        },
+        {
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1500.2872349999961,
+          "firstImageMs": 1525.676465000026,
+          "pasteMs": 6247.239723000035,
+          "totalMs": 7747.526958000031,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true
+        }
+      ]
+    }
+  },
+  "warmupSamples": [
+    {
+      "scenario": "paginated_tag",
+      "round": -1,
+      "kind": "current",
+      "api": {
+        "started": 612,
+        "completed": 612,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 10,
+          "creatorContents": 200,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12240
+      },
+      "extractionMs": 1729.6353860000002,
+      "firstImageMs": 1778.474149,
+      "pasteMs": 6597.641697999999,
+      "totalMs": 8327.277084,
+      "scheduledWaitMs": 4000,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 4000,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true
+    },
+    {
+      "scenario": "paginated_tag",
+      "round": -1,
+      "kind": "baseline",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 5,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 2625.026968,
+      "firstImageMs": 2640.261130000001,
+      "pasteMs": 38673.021420000005,
+      "totalMs": 41298.048388,
+      "scheduledWaitMs": 36810,
+      "sourceWaitMs": 630,
+      "pasteWaitMs": 36180,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "round": -1,
+      "kind": "current",
+      "api": {
+        "started": 608,
+        "completed": 608,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "creatorContents": 200,
+          "magazine": 1,
+          "likes": 2,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12160
+      },
+      "extractionMs": 1599.8220870000077,
+      "firstImageMs": 1616.046904000017,
+      "pasteMs": 6826.690449999995,
+      "totalMs": 8426.512537000002,
+      "scheduledWaitMs": 4000,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 4000,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "round": -1,
+      "kind": "baseline",
+      "api": {
+        "started": 480,
+        "completed": 480,
+        "active": 0,
+        "peakActive": 5,
+        "byKind": {
+          "search": 3,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 72,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9600
+      },
+      "extractionMs": 2391.862743000005,
+      "firstImageMs": 2411.393799000012,
+      "pasteMs": 39467.862081,
+      "totalMs": 41859.724824000004,
+      "scheduledWaitMs": 36320,
+      "sourceWaitMs": 140,
+      "pasteWaitMs": 36180,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true
+    }
+  ],
+  "validation": {
+    "requiredImages": 201,
+    "requiredFinalMathLast": true,
+    "requiredSaveState": "confirmed",
+    "qualityFaults": 0,
+    "invalidSamples": 0,
+    "measuredSamples": 12,
+    "warmupSampleCount": 4
+  },
+  "methodology": {
+    "tagPageSize": 20,
+    "magazinePageSize": 100,
+    "likesPageSize": 50,
+    "simulatedApiLatencyMsPerRequest": 20,
+    "nativeUploads": "synchronous simulated note capability",
+    "rendering": "actual PNG generation with real canvas",
+    "clockAndPacing": "real wall clock and actual requested waits",
+    "selection": "Both compiled versions must finish the same ordered 200 people plus one final math participant. The fixture supplies one public article per person; v2.9.2 performs additional creator-article selection requests."
+  }
+}

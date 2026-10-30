@@ -3,16 +3,22 @@
 (function(page){
 'use strict';
 if(!page||page.__MUMEI_PROFILE_CARD_QUALITY__)return;
-const VERSION='2.9.1',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
+const VERSION='2.9.2',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
 const state={records:[],counts:{},mode:'on',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
 const renderings=new WeakMap(),files=new WeakMap(),layouts=new WeakMap();
+const bindings=new WeakMap(),urlIdentities=new Map(),URL_IDENTITY_LIMIT=2048;
+let scopePath='',scopeKey='';
 let sources=new Map();
 let legacyDiagnoses=new Map();
 const fingerprint=value=>{let h=2166136261;for(const c of String(value??'')){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return(h>>>0).toString(16)};
 const account=value=>/^[a-z0-9_-]+$/i.test(String(value||'').trim())?String(value).trim().toLowerCase():'';
 const cleanUrl=value=>{try{const u=new URL(String(value||''));if(u.protocol!=='https:')return'';u.search='';u.hash='';u.username='';u.password='';return u.href}catch{return''}};
 function urlIdentity(value){
- try{const u=new URL(String(value||''));if(u.protocol!=='https:'||!['note.com','www.note.com'].includes(u.hostname)||u.username||u.password)return{};const match=u.pathname.match(/^\/([a-z0-9_-]+)(?:\/n\/(n[a-f0-9]{12}))?\/?$/i);return match?{account:account(match[1]),key:(match[2]||'').toLowerCase()}:{}}catch{return{}}
+ const text=String(value||'');if(urlIdentities.has(text))return urlIdentities.get(text);
+ let result={};
+ try{const u=new URL(text);if(u.protocol==='https:'&&['note.com','www.note.com'].includes(u.hostname)&&!u.username&&!u.password){const match=u.pathname.match(/^\/([a-z0-9_-]+)(?:\/n\/(n[a-f0-9]{12}))?\/?$/i);if(match)result={account:account(match[1]),key:(match[2]||'').toLowerCase()}}}catch{}
+ urlIdentities.set(text,result);if(urlIdentities.size>URL_IDENTITY_LIMIT)urlIdentities.delete(urlIdentities.keys().next().value);
+ return result;
 }
 function articleEvidence(raw,source='creator-list'){
  const note=raw?.note&&typeof raw.note==='object'?raw.note:raw||{},user=note.user||note.author||{};
@@ -22,7 +28,16 @@ function profileEvidence(raw,target){
  const p=raw||{};
  return{source:'creator-api',requested:account(target),account:account(p.urlname||p.urlName),nameHash:fingerprint(p.nickname||p.name||''),icon:cleanUrl(p.profileImageUrl||p.user_profile_image_url||p.profile_image_url||p.user_profile_image_path||p.profile_image_path||p.profileImagePath||p.icon_url||p.image_url)};
 }
-function sourceBinding(row){return{account:account(row?.urlname),key:String(row?.key||'').toLowerCase(),url:cleanUrl(row?.url),nameHash:fingerprint(row?.creator),profileHash:typeof row?.profileText==='string'?fingerprint(row.profileText):null,icon:cleanUrl(row?.actorImageUrl),thumbnail:cleanUrl(row?.thumbUrl)}};
+function sourceBinding(row){
+ // Reuse only calculations for exactly equal scalar inputs. Every gate still
+ // inspects the current row and source; edits to the same object invalidate it.
+ const inputs=[row?.urlname,row?.key,row?.url,row?.creator,row?.profileText,row?.actorImageUrl,row?.thumbUrl];
+ const cacheable=row&&typeof row==='object'&&inputs.every(value=>value==null||['string','number','boolean'].includes(typeof value)),cached=cacheable?bindings.get(row):null;
+ if(cached&&inputs.every((value,index)=>value===cached.inputs[index]))return{...cached.binding};
+ const binding={account:account(inputs[0]),key:String(inputs[1]||'').toLowerCase(),url:cleanUrl(inputs[2]),nameHash:fingerprint(inputs[3]),profileHash:typeof inputs[4]==='string'?fingerprint(inputs[4]):null,icon:cleanUrl(inputs[5]),thumbnail:cleanUrl(inputs[6])};
+ if(cacheable)bindings.set(row,{inputs,binding});
+ return{...binding};
+}
 const provenance=row=>row?.qualitySource||sources.get(row?.qualityRef);
 function attach(row,proof){
  selectScope();
@@ -93,6 +108,13 @@ function strictIdentityReasons(row,proof,binding=null){
   if(!row?.profileOnly)compareId('ORIGINAL_URL_ARTICLE',current.key,url.key,source.source);
  }
  if(proof?.profile){compareId('PROFILE_ACCOUNT',target,account(proof.profile.account),'creator-api');compareId('PROFILE_REQUEST',target,account(proof.profile.requested),'creator-api')}
+ const presentation=row?.presentation;
+ if(presentation?.status==='available'&&['profile','note-free','note-public-lead'].includes(presentation.source?.kind)){
+  const source=presentation.source,url=urlIdentity(source.url);
+  compareId('PRESENTATION_ACCOUNT',target,account(source.account),'presentation-'+source.kind);
+  compareId('PRESENTATION_URL_ACCOUNT',target,url.account,'presentation-'+source.kind);
+  if(['note-free','note-public-lead'].includes(source.kind)&&!row?.profileOnly){compareId('PRESENTATION_ARTICLE',current.key,articleKey(source.key),'presentation-'+source.kind);compareId('PRESENTATION_URL_ARTICLE',current.key,url.key,'presentation-'+source.kind)}
+ }
  if(binding){
   compareId('FILE_ACCOUNT',current.account,account(binding.account),'generated-file');
   const url=urlIdentity(binding.url);compareId('FILE_URL_ACCOUNT',current.urlAccount,url.account,'generated-file');
@@ -183,14 +205,26 @@ function assessBinding(row,binding,stage){
  return out;
 }
 function assessAssets(row){
- const proof=provenance(row),out=[];
+ const proof=provenance(row),out=[],binding=sourceBinding(row);
  for(const [field,label] of [['icon','アイコン取得元'],['thumbnail','記事画像取得元']]){
-  const selected=sourceBinding(row)[field];
+  const rendered=row?.finalMarker?row.renderAssetStatus?.[field==='icon'?'avatar':'thumbnail']:null;
+  if(rendered==='missing'||rendered==='failed'){out.push(finding(rendered==='missing'?'candidate':'insufficient',label,'最後の実績画像の'+(rendered==='missing'?'画像が未設定':'画像を読み込めず代替表示')+'。実画像の表示確認は未実施'));continue}
+  const selected=binding[field];
   if(!selected){out.push(finding('unperformed',label,'画像未設定の既存経路。人物認識の判定はしない'));continue}
   const evidence=[...(proof?.articles||[]),...(field==='icon'?[proof?.profile,proof?.actor].filter(Boolean):[])];
   const matched=evidence.find(source=>source.account===proof?.target&&source[field]===selected);
   out.push(matched?finding('confirmed',label,'同じアカウントの取得情報に採用URLがある。絵柄の本人認識ではない',{source:matched.source,url:selected}):finding('insufficient',label,'採用画像のURLは保持。独立した取得元との照合材料が不足'));
  }
+ return out;
+}
+function assessPresentation(row){
+ const value=row?.presentation;if(!value)return[];
+ if(value.status!=='available')return[finding('candidate','表示本文の取得元','選択した本文を確認できないため未取得として表示。自動補完しない')];
+ const source=value.source||{},out=[];
+ if(!['profile','note-free','note-public-lead'].includes(source.kind))return[finding('insufficient','表示本文の取得元','独立した取得元の識別情報が不足')];
+ compare(out,'表示本文の投稿者',account(row.urlname),account(source.account),{source:source.kind});
+ const url=urlIdentity(source.url);if(source.url)compare(out,'表示本文の原URL投稿者',account(row.urlname),url.account,{source:source.kind});
+ if(['note-free','note-public-lead'].includes(source.kind)&&!row.profileOnly){compare(out,'表示本文の記事ID',articleKey(row.key),articleKey(source.key),{source:source.kind});if(source.url)compare(out,'表示本文の原URL記事ID',articleKey(row.key),url.key,{source:source.kind})}
  return out;
 }
 function assessText(value,{lines,manualSource,maxWidth,measure}={}){
@@ -220,7 +254,7 @@ function assessGeometry(samples,width,height){
  out.push(finding('unperformed','画像内の重なり','文字同士・装飾との視覚的な重なりは未検査'));
  return out;
 }
-function scope(){return String(page.location?.pathname||location.pathname).match(/\/notes\/(n[a-z0-9]+)\/edit/i)?.[1]||'unknown'}
+function scope(){const path=String(page.location?.pathname||location.pathname);if(path!==scopePath){scopePath=path;scopeKey=path.match(/\/notes\/(n[a-z0-9]+)\/edit/i)?.[1]||'unknown'}return scopeKey||'unknown'}
 function selectScope(){
  const key=scope();if(state.scope===key)return;
  flush();state.scope=key;state.records=[];state.counts={};state.batchId='';state.batchSerial=0;state.runId=null;state.attention='';sources=new Map();
@@ -281,9 +315,9 @@ function generated(row,file){
  return safe(()=>{
   state.runId=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.createdAt??state.runId;
   const drawing=renderings.get(row);if(drawing)files.set(file,drawing);
-  const out=[...assessIdentity(row),...assessBinding(row,provenance(row)?.binding,'取得→生成'),...assessAssets(row)];
+  const out=[...assessIdentity(row),...assessBinding(row,provenance(row)?.binding,'取得→生成'),...assessAssets(row),...assessPresentation(row)];
   out.push(...(drawing?assessGeometry(drawing.samples,drawing.width,drawing.height):[finding('unperformed','画像内の文字','描画記録なし')]));
-  const exactName=drawing?.samples.some(sample=>sample.textHash===fingerprint(String(row.creator||'')+'さん'));
+  const nameHash=fingerprint(String(row.creator||'')+'さん'),exactName=drawing?.samples.some(sample=>sample.textHash===nameHash);
   out.push(finding(exactName?'confirmed':drawing?'candidate':'unperformed','キャプチャ内の名前',exactName?'実際のfillTextに完全名＋敬称を渡した記録がある。OCRは未実施':'既存の省略表示などにより、描画文字と完全名の一致は未確認。名前を追加・修正しない'));
   out.push(finding('unperformed','絵柄からの人物認識','画像の取得元を追跡するだけで、絵柄の本人認識はしない'));
   record(row,'画像生成',out);return file;
@@ -337,7 +371,7 @@ function mountUI(){
  }catch{failure('検査表示の初期化失敗')}
 }
 const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
- layout:(row,layout,text,measure)=>safe(()=>{const hash=fingerprint(text),cached=layouts.get(row);if(cached?.hash===hash)return;layouts.set(row,{hash,findings:assessText(text,{lines:layout.lines,maxWidth:layout.maxWidth,measure})})}),
+ layout:(row,layout,text,measure)=>safe(()=>{const cached=layouts.get(row);if(cached&&cached.text===text&&cached.maxWidth===layout.maxWidth&&cached.lines.length===layout.lines.length&&cached.lines.every((line,index)=>line===layout.lines[index]))return;layouts.set(row,{text,lines:layout.lines.slice(),maxWidth:layout.maxWidth,findings:assessText(text,{lines:layout.lines,maxWidth:layout.maxWidth,measure})})}),
  // Pure functions are also used by the anonymous regression fixtures.
  assessIdentity,assessBinding,assessText,assessGeometry,fingerprint,sourceBinding,provenance:row=>{const proof=provenance(row);return proof?JSON.parse(JSON.stringify(proof)):null},
  snapshot:()=>({mode:state.mode,fault:state.fault,batchId:state.batchId,runId:state.runId,records:JSON.parse(JSON.stringify(state.records)),counts:{...state.counts}})};

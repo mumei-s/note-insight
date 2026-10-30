@@ -130,7 +130,10 @@ test('a 2.9.0 recorded contradiction migrates while OFF and stays resolved after
 });
 
 test('fresh metadata cannot release a hold when an older version already owns the pending introduction',async t=>{
- const r=await runtime({count:3,requestMutator:wrongOwner(0)});t.after(()=>r.close());await r.history();const run=held(r,{index:0}),original=clone(run.rows[0]),known=clone(run.qualityHold),text=r.editor.activityText(run.rows[0]);
+ const r=await runtime({count:3,requestMutator:wrongOwner(0)});t.after(()=>r.close());await r.history();const run=held(r,{index:0});
+ // This case explicitly reproduces a pre-presentation version's owned profile.
+ run.rows=run.rows.map(({presentation,...row})=>row);r.editor.writeRun(run);
+ const original=clone(run.rows[0]),known=clone(run.qualityHold),text=r.editor.activityText(run.rows[0]);
  r.view.dispatch(r.view.state.tr.insert(run.imageAnchorPos,r.para(text)));r.editor.writeRun({...run,activityTexts:[text]});
  const legacyDoc=r.doc(),saves=r.state.saves;
  r.state.requestMutator=(url,payload)=>{if(new URL(url).pathname==='/api/v2/creators/quality_person_0')payload.data.creator.profile='新しいプロフィールへ変更されました。';return payload};
@@ -282,7 +285,7 @@ test('legacy rows, missing identity fields and missing optional assets retain th
  const options={count:3,noIconIndex:0,noThumbIndex:1},r=await runtime({...options,requestMutator:(url,payload)=>{const path=new URL(url).pathname;if(path.includes('/api/v3/notes/'))delete payload.data.user.urlname;else if(/^\/api\/v2\/creators\/[^/]+$/.test(path))delete payload.data.creator.urlname;return payload}});t.after(()=>r.close());
  await r.history();successful(r);assert.ok(!r.editor.readRun().qualityHold);
  if(baselineCode()){
-  const before=await runtime({baseline:true,...options});t.after(()=>before.close());await before.history();successful(before);assert.deepEqual(r.doc(),before.doc());assert.deepEqual(r.state.images,before.state.images);
+  const before=await runtime({record:false,...options});t.after(()=>before.close());await before.history();successful(before);assert.deepEqual(r.doc(),before.doc());assert.deepEqual(r.state.images,before.state.images);
  }
  const legacy=r.editor.readRun();legacy.rows=legacy.rows.map(({qualityRef,qualitySource,...row})=>row);r.editor.writeRun(legacy);
  await r.core.createCardsAtTap();assert.equal(r.editor.readRun().stage,'complete');assert.equal(r.state.nativeCardRequests.length,legacy.rows.length);
