@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.7';
+const VERSION='1.5.8';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FILTER_STATE=TOOLBAR+'-filter-state',FILTER_STATE_STYLE=FILTER_STATE+'-style';
@@ -12,7 +12,7 @@ const INSIGHT='https://mumei-s.github.io/note-insight/?insightMode=notifications
 const CONNECTION='https://mumei-s.github.io/note-insight/notification-connection.html?from=note';
 const ITEM='.m-navbarNoticeItem,[class*="navbarNoticeItem"],[class*="notificationItem" i],[class*="noticeItem" i],[data-testid*="notification-item" i],[data-testid*="notice-item" i]';
 const isDmRoute=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname)&&!findPanel();
-const modern=()=>Boolean(globalThis.GM),key=(p,id)=>p+String(id||'').toLowerCase(),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),key=(p,id)=>p+String(id||'').toLowerCase(),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v)}catch{}}
 async function refreshPanel(){panelVisible=Boolean(await get(PANEL,true));if(panelVisible)schedule(0);else{closeFilterStateDialog();for(const el of document.querySelectorAll('#'+TOOLBAR+',[data-mumei-notification-controls="1"],#mumei-inline-notification-tools-v339'))el.remove()}return panelVisible}
