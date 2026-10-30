@@ -5,7 +5,7 @@ if(window.__mumeiNotificationSettingsBridgeV1Loaded)return;window.__mumeiNotific
 const FIL='mumei_insight_magazine_filter_enabled_v3:',GRP='mumei_insight_notification_groups_v1:',MUT='mumei_insight_magazine_mute_ids_v5:',PROFILE='mumei_insight_magazine_mute_profiles_v5:',RETURN='mumei_insight_return_bell_v1',PANEL='mumei_insight_notification_panel_enabled_v1';
 const PAGE=location.pathname.endsWith('/notification-browser-install.html')?'mumei-notification-install-page-v1':'mumei-filter-page-v1',BRIDGE='mumei-filter-bridge-v1';
 const params=new URLSearchParams(location.search),account=(params.get('notificationAccount')||params.get('account')||'').replace(/^@/,'').toLowerCase();
-const modern=()=>Boolean(globalThis.GM),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
+const modern=()=>(typeof GM!=='undefined'&&Boolean(GM)),clean=v=>String(v||'').replace(/\s+/g,' ').trim();
 async function get(k,d){try{if(modern()&&typeof GM.getValue==='function')return await GM.getValue(k,d);if(typeof GM_getValue==='function')return GM_getValue(k,d)}catch{}return d}
 async function set(k,v){if(modern()&&typeof GM.setValue==='function')return await GM.setValue(k,v);if(typeof GM_setValue==='function')return GM_setValue(k,v);throw new Error('設定を保存できません。本人通知ツールを確認してください')}
 const norm=raw=>(Array.isArray(raw)?raw:[]).map((g,i)=>({name:clean(g?.name)||('グループ '+(i+1)),enabled:g?.enabled!==false,ids:[...new Set((Array.isArray(g?.ids)?g.ids:[]).map(x=>clean(x).replace(/^@/,'').toLowerCase()).filter(x=>/^[a-z0-9_-]+$/.test(x)))]}));
@@ -70,5 +70,5 @@ addEventListener('message',e=>{if(!/^[a-z0-9_-]+$/.test(account)||e.origin!==loc
  }catch(err){send('error',{message:clean(err?.message||'設定処理に失敗しました'),action:d.type,requestId:typeof d.requestId==='string'?d.requestId:undefined})}
 })()});
 void load();
-window.__mumeiNotificationSettingsBridgeV1={version:'1.1.4',load};
+window.__mumeiNotificationSettingsBridgeV1={version:'1.1.5',load};
 })();
