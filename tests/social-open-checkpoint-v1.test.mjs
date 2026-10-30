@@ -6,6 +6,7 @@ const relation=source.slice(source.indexOf("  async function relationSync(force=
 const startup=source.slice(source.indexOf("    // Recheck a saved relationship checkpoint"),source.indexOf("    if(!official)void loadOfficial();"));
 test("INSIGHT起動時・復帰時にはフォロワーとフォローを画面訪問に関係なく差分確認する",()=>{
  assert.match(startup,/void relationSync\(false\)/);
+ assert.match(startup,/if\(!skipSocialBootstrap\.current\)check\(\)/);
  assert.match(startup,/window\.addEventListener\("pageshow",check\)/);
  assert.match(startup,/document\.addEventListener\("visibilitychange",check\)/);
  assert.doesNotMatch(startup,/publicSync\(true\)/,"startup must not force public-history sweep");
