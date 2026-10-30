@@ -108,7 +108,7 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
   const accountScope=String(currentStoredInsightAccount()?.noteId||"").toLowerCase(),autoSyncKey=AUTO_SYNC_KEY+":"+accountScope,relationSyncKey=RELATION_SYNC_KEY+":"+accountScope;
   const official=officialData?.token===(localStorage.getItem(INSIGHT_TOKEN_KEY)||"")&&officialData?.scope===accountScope?officialData:null;
   const[appFeedback,setAppFeedback]=useState(()=>{const expected=sessionStorage.getItem(APP_UPDATE_RESULT_KEY)||"";if(expected&&!versionDiffers(CURRENT_INSIGHT_APP_VERSION,expected)){sessionStorage.removeItem(APP_UPDATE_RESULT_KEY);return`✅ INSIGHT本体 v${CURRENT_INSIGHT_APP_VERSION} 更新完了・最新版`;}if(expected)return`⚠ 更新を完了できていません。現在 v${CURRENT_INSIGHT_APP_VERSION}／更新先 v${expected}。通信を確認して本体更新を再試行してください。`;return""});
-  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),lastRelationAttempt=useRef(0),lastSavedCheck=useRef(Date.now()),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
+  const running=useRef(false),manualRefreshRunning=useRef(false),relationRunning=useRef(false),skipSocialBootstrap=useRef(new URLSearchParams(window.location.search).has("insightMode")||Boolean(window.history.state?.insightPendingTab)),lastRelationAttempt=useRef(0),lastSavedCheck=useRef(Date.now()),lastInteraction=useRef(Date.now()),lastRun=useRef(Number(localStorage.getItem(autoSyncKey)||0)),lastRelationRun=useRef(Number(localStorage.getItem(relationSyncKey)||0)),appFeedbackTimer=useRef(0),publicSyncController=useRef<AbortController|null>(null),publicSyncRun=useRef(0),notificationEntryY=useRef<number|null>(null),autoSyncEnabledRef=useRef(autoSyncEnabled);
   function showAppFeedback(text:string,ms=5000){setAppFeedback(text);if(appFeedbackTimer.current)window.clearTimeout(appFeedbackTimer.current);appFeedbackTimer.current=ms>0?window.setTimeout(()=>setAppFeedback(""),ms):0}
   useEffect(()=>{autoSyncEnabledRef.current=autoSyncEnabled;try{localStorage.setItem(AUTO_SYNC_ENABLED_KEY,autoSyncEnabled?"1":"0")}catch{}},[autoSyncEnabled]);
   useEffect(()=>{
@@ -359,7 +359,9 @@ export function MemberInsightLiveV2({initialSession=null}:{initialSession?:Insig
     // independently of which tab the user visited. A due sync runs in the
     // background; opening a tab never forces a full history reload.
     const check=()=>{if(autoSyncEnabledRef.current&&document.visibilityState==="visible")void relationSync(false)};
-    check();
+    // After app update/navigation restoration, do not add a second startup
+    // network roundtrip. The next real foreground return may check again.
+    if(!skipSocialBootstrap.current)check();
     window.addEventListener("focus",check);
     window.addEventListener("pageshow",check);
     document.addEventListener("visibilitychange",check);
