@@ -1,0 +1,63 @@
+{
+  "environment": "same managed executor / Node / real PM + canvas / original waits / fake cached note capabilities / no real network or phone",
+  "people": 200,
+  "repetitions": 5,
+  "results": {
+    "baseline": [
+      {
+        "elapsedMs": 13609.596259000002,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 14255.329845,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 13839.189710000006,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 13850.47845899999,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 13827.880653,
+        "scheduledWaitMs": 10050
+      }
+    ],
+    "quality": [
+      {
+        "elapsedMs": 14243.218827999997,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 14160.436722000006,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 14272.444361999995,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 14210.511173000006,
+        "scheduledWaitMs": 10050
+      },
+      {
+        "elapsedMs": 13928.814828000002,
+        "scheduledWaitMs": 10050
+      }
+    ]
+  },
+  "medianElapsedMs": {
+    "baseline": 13839.189710000006,
+    "quality": 14210.511173000006,
+    "changePercent": 2.683115635965949
+  },
+  "baselineCommit": "e2e1b3f8a4b37721f3ddc59b4fd7abc4c1419b1b",
+  "version": "2.9.0",
+  "fixtureClock": "deterministic Date and seeded Math.random; external elapsed time measured with performance.now; original waits executed",
+  "artifactsSHA256": {
+    "public/note-profile-card-likes300-fix-v220.user.js": "13e92a3cd731a60db3d80fefa78b046c7b16f01ca674ab0e6eb8188b30474a4b",
+    "public/note-profile-card-paster-v1.user.js": "fe590d5e36182fbaccaade0f3d7453f8506faf0f39f0d902b91ca3f72101360d"
+  }
+}
