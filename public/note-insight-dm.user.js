@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT DM同期
 // @namespace    https://github.com/mumei-s/note-insight/dm
-// @version      1.4.17
-// @description  INSIGHT DM同期。通常のDM画面と入力欄を保ちながら本文を同期します。保存済み人物のフォロー関係を履歴から照合する共通機能を更新しました。
+// @version      1.4.18
+// @description  INSIGHT DM同期。通常のDM画面と入力欄を保ちながら本文を同期します。関係確認中のアカウント切替で別アカウントの情報を保存しないよう修正しました。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -21,14 +21,14 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-account-pair-v1.js?v=100
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-network-v2.js?v=1411
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm-reader-v1.js?v=1412
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=107
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-social-compare-v1.js?v=108
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-dm.user.js
 // ==/UserScript==
 
 (function(){
 'use strict';
-const VERSION='1.4.17',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
+const VERSION='1.4.18',KEY='mumei-dm-tool-version',GMKEY='mumei-dm-active-version-v1';
 const modern=()=>Boolean(globalThis.GM);
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(GMKEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(GMKEY,String(v||''))}catch{}}
 function publishLive(){if(location.origin!=='https://mumei-s.github.io'||!location.pathname.startsWith('/note-insight/'))return;if(!document.documentElement){document.addEventListener('DOMContentLoaded',publishLive,{once:true});return}const root=document.documentElement;if(root.getAttribute('data-mumei-dm-live-version')!==VERSION)root.setAttribute('data-mumei-dm-live-version',VERSION);window.dispatchEvent(new Event('mumei-insight-tool-ready'))}

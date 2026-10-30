@@ -79,7 +79,7 @@ jobs:
       - name: Check analysis navigation, settings and retained data presentation
         run: node --experimental-vm-modules --test tests/analysis-menu-v26.test.mjs tests/dashboard-setup.test.mjs tests/public-analysis-counts.test.mjs tests/notification-presentation-v360.test.mjs tests/like-completion-current.test.mjs tests/notification-context-v28.test.mjs tests/notification-handling-v29.test.mjs tests/handling-immediate-v30.test.mjs
       - name: Check retained notification differences and saving after stop
-        run: node --experimental-vm-modules --test tests/notification-v2968.test.mjs tests/notification-window-v360.test.mjs tests/notification-reader-scope-budget-v1.test.mjs tests/notification-status-poll-budget-v1.test.mjs
+        run: node --experimental-vm-modules --test tests/notification-v2968.test.mjs tests/notification-window-v360.test.mjs tests/notification-reader-dom-budget.test.mjs tests/notification-reader-scope-budget-v1.test.mjs tests/notification-status-poll-budget-v1.test.mjs
       - name: Check fresh startup, resume, and cancelled requests
         run: node --experimental-vm-modules --test tests/startup-freshness.test.mjs tests/comments-startup-freshness.test.mjs tests/secondary-view-freshness.test.mjs tests/analysis-view-freshness.test.mjs
       - name: Check startup traffic, session reuse and account logout

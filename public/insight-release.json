@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.10.30.1",
-  "notificationVersion": "3.6.59",
+  "appVersion": "2026.10.30.2",
+  "notificationVersion": "3.6.60",
   "dashboardVersion": "1.7.5",
   "releasedAt": "2026-10-30",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "🔔通知の監視範囲を絞り、無関係なDOM更新での全体再探索、端末通知状態の過剰な取得と履歴再集計を削減しました。保存済み通知・DM・コメント・フォローは維持します。",
-  "dmVersion": "1.4.17",
+  "note": "アプリ切替後に通知の差分保存が止まる問題と、関係確認中に別アカウントの情報が混ざる問題を修正。更新は実際の起動版で確認し、文字列表示時の取り込み方法も案内します。",
+  "dmVersion": "1.4.18",
   "dmLabel": "DM同期"
 }

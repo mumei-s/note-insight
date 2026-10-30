@@ -7,7 +7,9 @@ on:
       - 'public/notification-update-now.html'
       - 'public/notification-browser-install.html'
       - 'public/dm-browser-install.html'
+      - 'public/notification-connection.html'
       - 'tests/installer-explicit-update.test.mjs'
+      - 'tests/notification-connection-v21.test.mjs'
       - '.github/workflows/installer-update-regression.yml'
   workflow_dispatch:
 permissions:
@@ -27,4 +29,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify outdated-installed, explicit install, runtime confirmation and account isolation
-        run: node --test tests/installer-explicit-update.test.mjs tests/insight-update-return.test.mjs
+        run: node --test tests/installer-explicit-update.test.mjs tests/insight-update-return.test.mjs tests/notification-connection-v21.test.mjs tests/notification-connection-navigation.test.mjs
