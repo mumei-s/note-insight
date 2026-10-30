@@ -27,12 +27,30 @@ function investigationCandidates(people:any[],verified:any[],event:any){
   return{...r,current_relation:known?(v[field]?'present':'absent'):'unverified',verified_at:known?verifiedAt:null,evidence:known?(v?.[event.direction==='followers'?'follower_evidence':'following_evidence']||'saved_relationship'):'saved_window',assigned_to_event:false};
  }).filter(r=>r.current_relation==='absent'||!r.active&&r.current_relation==='unverified').sort((a,b)=>Number(b.current_relation==='absent')-Number(a.current_relation==='absent')||String(b.last_seen_at).localeCompare(String(a.last_seen_at))||a.person_key.localeCompare(b.person_key));
 }
+function sameRunWindowCandidates(people:any[],verified:any[],event:any,exits:any[]){
+ const saved=new Map(people.map((r:any)=>[String(r.person_key),r])),checks=new Map(verified.map((r:any)=>[String(r.person_key),r]));
+ const eventAt=Date.parse(String(event.detected_at||""));
+ return exits.map((observation:any)=>{
+  const key=String(observation.person_key||"");if(!key||key.startsWith("unknown:"))return null;
+  const previous:any=saved.get(key)||{},check:any=checks.get(key)||{};
+  const present=event.direction==="followers"?check.is_follower:check.is_following;
+  const verifiedAtText=event.direction==="followers"?check.follower_verified_at:check.following_verified_at;
+  const verifiedAt=Date.parse(String(verifiedAtText||""));
+  const newer=Number.isFinite(eventAt)&&Number.isFinite(verifiedAt)&&verifiedAt>=eventAt;
+  if(newer&&present===true)return null;
+  const absent=newer&&present===false;
+  return{...previous,person_key:key,actor_name:observation.actor_name||previous.actor_name||"noteユーザー",actor_url:observation.actor_url||previous.actor_url||null,actor_image_url:observation.actor_image_url||previous.actor_image_url||null,last_seen_at:previous.last_seen_at||null,current_relation:absent?"absent":"unverified",verified_at:absent?verifiedAtText:null,candidate_source:"same_scan_window_exit",identity_exact:false};
+ }).filter(Boolean);
+}
 async function investigateUnknown(scope:string,key:string,page=1){
  const{data:event,error}=await db.from("insight_relation_events").select(EVENT_FIELDS).eq("member_id",scope).eq("person_key",key).order("detected_at",{ascending:false}).limit(1).maybeSingle();if(error)throw error;if(!event)throw new Error("EVENT_NOT_FOUND");
  const people=await savedPeople(scope,event.direction),verified:any[]=[];
  for(let start=0;;start+=1000){const r=await db.from("insight_social_current_people").select("person_key,is_following,is_follower,following_verified_at,follower_verified_at,following_evidence,follower_evidence").eq("member_id",scope).order("person_key").range(start,start+999);if(r.error)throw r.error;verified.push(...(r.data||[]));if((r.data||[]).length<1000)break}
- const candidates=investigationCandidates(people,verified,event),size=50;
- return{ok:true,personKey:key,event,relations:[],events:[],candidates:candidates.slice((page-1)*size,page*size),candidateTotal:candidates.length,candidatePage:page,candidatePages:Math.max(1,Math.ceil(candidates.length/size)),verifiedAbsent:candidates.filter(r=>r.current_relation==='absent').length,unverified:candidates.filter(r=>r.current_relation==='unverified').length,basis:"count_only_investigation",note:"この時点で総数が減ったことだけが確実です。過去に保存した人のうち現在の関係を確認する必要がある人を照合候補として表示します。候補をこの減少の本人と決めつけません。"};
+ const{data:exits,error:exitError}=event.run_id==null?{data:[],error:null}:await db.from("insight_relation_events").select("person_key,actor_name,actor_url,actor_image_url").eq("member_id",scope).eq("run_id",event.run_id).eq("direction",event.direction).eq("event_type","removed").eq("change_count",0).limit(1000);
+ if(exitError)throw exitError;
+ const sameScan=sameRunWindowCandidates(people,verified,event,exits||[]),seen=new Set<string>();
+ const candidates=[...sameScan,...investigationCandidates(people,verified,event)].filter((r:any)=>{const k=String(r.person_key||"");if(!k||seen.has(k))return false;seen.add(k);return true}),size=50;
+ return{ok:true,personKey:key,event,relations:[],events:[],candidates:candidates.slice((page-1)*size,page*size),candidateTotal:candidates.length,sameScanCandidates:sameScan.length,candidatePage:page,candidatePages:Math.max(1,Math.ceil(candidates.length/size)),verifiedAbsent:candidates.filter(r=>r.current_relation==='absent').length,unverified:candidates.filter(r=>r.current_relation==='unverified').length,basis:"count_only_investigation",note:"この時点で総数が減ったことだけが確実です。過去に保存した人のうち現在の関係を確認する必要がある人を照合候補として表示します。候補をこの減少の本人と決めつけません。"};
 }
 function currentRelationship(key:string,row:any){
  return{person_key:key,current_relation:row?.relation||"unknown",
