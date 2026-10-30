@@ -20,6 +20,17 @@
 .code-copy:disabled{opacity:.6}
 .code-result{margin-top:7px;color:#d7ffed;font-size:10px;line-height:1.6}
 .install.secondary{border-color:#456a7f;background:#102b3d;color:#d9e9f5;font-size:11px;min-height:35px}
+.easy-start{margin-top:9px;padding:12px;border:1px solid #4c8a89;border-radius:12px;background:#102632}
+.easy-start h2{font-size:16px;margin:0 0 8px}
+.easy-start p,.simple-help p,.simple-help li{font-size:12px;line-height:1.6;color:#cbe6f1}
+.easy-status{margin:9px 0;padding:10px;border:1px solid #466d84;border-radius:8px;background:#081d28;font-size:12px;font-weight:900}
+.easy-status.ok{border-color:#5bb880;background:#133323;color:#e0ffe8}
+.easy-status.warn{border-color:#9d8249;background:#2a2315;color:#fff0cf}
+.easy-link{display:flex;align-items:center;justify-content:center;text-align:center;min-height:46px;margin:8px 0;border:1px solid #4d8fa7;border-radius:9px;background:#184253;color:#edfbff;text-decoration:none;font-size:13px;font-weight:900;padding:10px}
+.easy-link.primary{background:#205a41;border-color:#70d6a1}
+.easy-start [hidden]{display:none!important}
+.simple-help,.advanced-help{margin-top:9px;border:1px solid #3e5b70;background:#091b29;border-radius:9px;padding:8px}
+.simple-help>summary,.advanced-help>summary{cursor:pointer;font-size:12px;font-weight:900;min-height:30px;color:#d4ebff}
 </style>
 </head>
 <body>
@@ -27,9 +38,25 @@
 <a id="back" class="back" href="./">← INSIGHTへ戻る</a>
 <section class="card">
 <div class="eyebrow">PRIVATE DM SYNC / 独立ツール</div>
-<h1>DM同期をインストール / 更新</h1>
-<p class="lead">本人通知ツールとは別です。DM同期だけ単独で使えます。</p>
-<div class="notice"><b>使い方は簡単です。</b><br>① DM同期ツールを入れる → ② INSIGHTのDMタブで「DMを連携」 → ③ noteのDMを通常どおり開きます。開いている一覧・会話だけを受動保存し、勝手に別の相手へ移動しません。</div>
+<h1>DM同期のかんたん準備</h1>
+<p class="lead">DMを使わない人は何もしなくて大丈夫です。自分のDMも保存したい方だけ初回に設定します。</p>
+<div class="easy-start" id="dmEasyStart">
+ <h2>DMを使いたい人だけ追加</h2>
+ <a id="dmEasyReturn" class="easy-link" href="./">INSIGHTをそのまま使う</a>
+ <div id="dmEasyStatus" class="easy-status" role="status" aria-live="polite">DM同期の起動を確認しています…</div>
+ <div id="dmEasyFirst">
+  <p>初めて使う人だけ、この順番です。</p>
+  <a id="dmEasyExtension" class="easy-link" href="https://www.tampermonkey.net/index.php?browser=edge&amp;locale=ja" target="_blank" rel="noopener noreferrer">① Tampermonkeyを準備（初回だけ）</a>
+  <a id="dmEasyInstall" class="easy-link primary" href="./note-insight-dm.user.js" target="_blank" rel="noopener noreferrer">② DM同期を追加する（初回だけ）</a>
+  <p>確認画面が出たら「インストール」を選びます。文字列だけ出た時は下の「うまくいかない場合」を開いてください。</p>
+ </div>
+ <div id="dmEasyReady" hidden><p>✅ 導入済み。自動更新が有効なら普段の更新操作は不要です。</p><a id="dmEasyBack" class="easy-link primary" href="./">INSIGHTに戻る</a></div>
+ <details id="dmEasyUpdates" class="simple-help"><summary>すでに使っている人：更新の確認方法</summary>
+  <p>Tampermonkeyが自動更新を有効にしていれば定期的に確認します。今すぐ確認したい場合だけ：</p>
+  <ol><li>Edgeの「拡張機能 → Tampermonkey」を開く</li><li>「ユーザースクリプトの更新を確認」を押す</li><li>noteとINSIGHTを開き直す</li></ol>
+ </details>
+</div>
+<details class="advanced-help" id="dmExpertHelp"><summary>うまくいかない場合（詳細な復旧方法）</summary>
 <div class="code-update" aria-label="文字列が表示される端末のDM更新方法">
  <strong>文字列画面を開かずにDM同期を更新</strong>
  <p>EdgeのTampermonkey → ダッシュボード → インストール済み → <b>無名S note INSIGHT DM同期</b> →「更新を確認」を先にお試しください。</p>
@@ -44,13 +71,15 @@
  <p>表示されただけでは更新されません。Edge → 拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ → URLからインポートへ進み、このURLを貼り付けて「更新 / インストール」を確定してください。既存データの削除は不要です。</p>
  <button id="copyScriptUrl" class="import-copy" type="button">DM更新用URLをコピー</button>
  <input id="scriptUrl" class="import-url" type="text" readonly aria-label="Tampermonkeyへ取り込むDM同期URL">
-</div>
+</div></details>
+<details class="advanced-help" id="dmBrowserHelp"><summary>ほかのブラウザの説明</summary>
 <div class="grid">
   <div class="tip"><b>Android / Edge・Firefox</b><br>Tampermonkeyを有効にして上のボタンを押します。</div>
   <div class="tip"><b>iPhone / iPad / Safari</b><br>UserscriptsまたはTampermonkeyを使い、note.com と mumei-s.github.io での実行を許可します。</div>
   <div class="tip"><b>PC / Mac</b><br>Tampermonkey等のuserscript拡張から同じDM同期ツールを導入します。</div>
 </div>
 <div class="small">DM同期は本人通知Reader・フィルター・通知カテゴリには触れません。noteのDM画面遷移も変更せず、保存先もDM専用です。</div>
+</details>
 </section>
 </main>
 <script>
@@ -59,11 +88,23 @@ const q=new URLSearchParams(location.search),install=document.getElementById('in
 const copyScriptUrl=document.getElementById('copyScriptUrl'),scriptUrl=document.getElementById('scriptUrl');scriptUrl.value=RAW;
 copyScriptUrl.addEventListener('click',async()=>{let copied=false;try{await navigator.clipboard.writeText(RAW);copied=true}catch{scriptUrl.focus();scriptUrl.select();try{copied=document.execCommand('copy')===true}catch{}}copyScriptUrl.textContent=copied?'URLをコピーしました':'下のURL欄を長押ししてコピーしてください'});
 const updater=window.MumeiInsightUpdateReturn,account=String(q.get('account')||q.get('notificationAccount')||'').replace(/^@/,'').toLowerCase(),back=updater.resolve(q.get('return'),{fallbackMode:'normal',fallbackTab:'dm',account});document.getElementById('back').href=back;
+for(const id of ['dmEasyReturn','dmEasyBack'])document.getElementById(id).href=back;
+const dmEasyStatus=document.getElementById('dmEasyStatus'),dmEasyFirst=document.getElementById('dmEasyFirst'),dmEasyReady=document.getElementById('dmEasyReady'),dmEasyInstall=document.getElementById('dmEasyInstall'),dmEasyExtension=document.getElementById('dmEasyExtension');
+dmEasyInstall.href=new URL('./note-insight-dm.user.js',location.href).href;
+const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/i.test(ua),android=/Android/i.test(ua);
+const supported=ios?/Safari/i.test(ua)&&!/CriOS|EdgiOS|FxiOS/i.test(ua):!android||/EdgA|Firefox/i.test(ua);
+if(ios&&supported){dmEasyExtension.href='https://apps.apple.com/jp/app/userscripts/id1463298887';dmEasyExtension.textContent='① Safari用Userscriptsを準備'}
+else if(android&&/Firefox/i.test(ua)){dmEasyExtension.href='https://addons.mozilla.org/android/addon/tampermonkey/';dmEasyExtension.textContent='① Firefox用Tampermonkeyを準備'}
 const update=updater.create({tool:'dm',returnTo:back,account,onStatus:state=>{result.className='result '+(state==='confirmed'?'ok':'warn');result.textContent=state==='confirmed'?'✓ DM同期ツールの起動を確認しました。INSIGHTへ戻ります…':state==='account-changed'?'アカウントが変わったため自動では戻りません。INSIGHTで利用するアカウントを確認してください。':'戻り先を保存できません。更新後は上の「INSIGHTへ戻る」を押してください。'}});
 let latest='',loading=null;
 const current=()=>updater.live('dm');
 function cmp(a,b){const pa=String(a||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),pb=String(b||'').split('.').map(x=>Number((x.match(/\d+/)||['0'])[0])),n=Math.max(pa.length,pb.length);for(let i=0;i<n;i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1}return 0}
-function paint(){const c=current();if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールは未確認です。文字列が出ただけでは更新されません。URLからインポート後、この画面に戻って起動を確認します。'}
+function paint(){const c=current();
+ const ready=Boolean(c),latestVersion=Boolean(latest&&ready&&cmp(c,latest)>=0);
+ dmEasyFirst.hidden=ready||!supported;dmEasyReady.hidden=!ready;
+ dmEasyStatus.className='easy-status '+(latestVersion?'ok':ready?'warn':'');
+ dmEasyStatus.textContent=latestVersion?'✓ 最新版です。更新作業は必要ありません。':ready?'✓ 導入済み（v'+c+'）。普段はTampermonkeyの自動更新を利用できます。':supported?'このブラウザではDM同期が未確認です。使う方だけ初回設定してください。':'このブラウザではDM同期が確認できません。対応ブラウザを使ってください。';
+ if(ready&&latest&&!latestVersion)document.getElementById('dmEasyUpdates').open=true;if(latest&&c&&cmp(c,latest)>=0){result.className='result ok';result.textContent='✓ DM同期ツールは最新版です。';return}if(latest&&c){result.className='result warn';result.textContent='DM同期の更新があります。上のボタンから更新してください。';return}result.className='result warn';result.textContent='DM同期ツールは未確認です。文字列が出ただけでは更新されません。URLからインポート後、この画面に戻って起動を確認します。'}
 async function load(){if(loading)return loading;loading=(async()=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(RELEASE+'?ts='+Date.now(),{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('release');const p=await r.json();latest=updater.version(p.dmVersion)}catch{latest=''}finally{clearTimeout(timer);loading=null;paint()}})();return loading}
 const copyCode=document.getElementById('copyCode'),codeResult=document.getElementById('codeResult');
 async function copyCurrentDmCode(){
