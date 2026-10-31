@@ -3,7 +3,7 @@
 (function(page){
 'use strict';
 if(!page||page.__MUMEI_PROFILE_CARD_QUALITY__)return;
-const VERSION='2.9.3',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
+const VERSION='2.9.4',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
 const state={records:[],counts:{},mode:'on',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
 const renderings=new WeakMap(),files=new WeakMap(),layouts=new WeakMap();
 const presentationNodes=new WeakMap();
@@ -454,6 +454,10 @@ function imageBoundary(row,view,hit,{dividerRequired=false,isDivider:predicate=n
  record(row,'区切り',[finding(isDivider?'confirmed':'mismatch','直後の区切り',isDivider?'この画像の直後のnative区切りを確認':'区切りが必要なこの画像の直後にnative区切りがない')]);
  })}
 function divider(row,node,isDivider){safe(()=>record(row,'区切り',[finding(isDivider(node)?'confirmed':'mismatch','直後の区切り',isDivider(node)?'この画像直後の区切りを確認':'この画像直後に区切りがない')]))}
+function externalBoundary(row,view,hit,options={}){
+ imageBoundary(row,view,hit,{...options,dividerRequired:true});
+ safe(()=>record(row,'区切りの所有',[finding('insufficient','既存区切りの所有','区切りの存在と所有記録は別です。この既存の線の所有・属性の由来は未確認のまま保持し、一括削除の対象にしません',{imageId:String(hit?.node?.attrs?.id||''),url:cleanUrl(row?.url),ownership:'unconfirmed',deleteEligible:false})]));
+}
 function nativeCard(row,result){safe(()=>{const identity=urlIdentity(result?.hit?.node?.attrs?.src);const out=assessIdentity(row);compare(out,'通知カードの記事ID',row.key,identity.key);compare(out,'通知カードの投稿者',account(row.urlname),identity.account);record(row,'通知カード',out)})}
 function saved(result,error){safe(()=>{state.runId=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.createdAt??state.runId;record(null,'下書き保存',[finding(error?'failed':result===true||result?.confirmed===true?'confirmed':'insufficient','保存結果',error?'既存保存処理が失敗。完了と判定しない':result===true||result?.confirmed===true?'既存処理の肯定的な保存結果を確認':'保存要求済みだが成功未確認')])});flush()}
 function updateBadge(){
@@ -492,7 +496,7 @@ function mountUI(){
   button.onclick=event=>{event.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));if(!detail.hidden){flush();render()}};updateBadge();
  }catch{failure('検査表示の初期化失敗')}
 }
-const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,presentationAt,presentationPasted,imageBoundary,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,reason.code==='TAG_SCOPE'?'貼付前に記事の実タグ条件の矛盾を保留':'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
+const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,presentationAt,presentationPasted,imageBoundary,externalBoundary,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,reason.code==='TAG_SCOPE'?'貼付前に記事の実タグ条件の矛盾を保留':'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
  layout:(row,layout,text,measure)=>safe(()=>{const cached=layouts.get(row);if(cached&&cached.text===text&&cached.maxWidth===layout.maxWidth&&cached.lines.length===layout.lines.length&&cached.lines.every((line,index)=>line===layout.lines[index]))return;layouts.set(row,{text,lines:layout.lines.slice(),maxWidth:layout.maxWidth,findings:assessText(text,{lines:layout.lines,maxWidth:layout.maxWidth,measure})})}),
  // Pure functions are also used by the anonymous regression fixtures.
  assessIdentity,assessBinding,assessText,assessGeometry,fingerprint,sourceBinding,provenance:row=>{const proof=provenance(row);return proof?JSON.parse(JSON.stringify(proof)):null},

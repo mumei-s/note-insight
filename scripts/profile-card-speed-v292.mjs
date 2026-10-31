@@ -27,11 +27,22 @@ export function transformEditorSpeed(source){
  source=once(source,'const IMAGE_GAP=50;','const IMAGE_GAP=0;');
  source=once(source,'await sleep(70)','await sleep(40)');
  source=once(source,'await sleep(gallery?20:IMAGE_GAP)','if(i+1<rows.length)await sleep(gallery?20:IMAGE_GAP)');
- // One serialization is reused for the local copy and two isolated snapshots.
- // The backup must not share objects with read(), whose callers update arrays.
+ source=once(source,'function createStoredState(localKey,backupPrefix){',`// The input is the already parsed, canonical JSON snapshot. Copy containers
+// while reusing immutable scalars; the existing JSON fallback handles depth
+// or unexpected exceptions without changing the stored value-object format.
+function cloneCanonicalCheckpoint(value,depth=0){
+ if(value===null||typeof value!=='object')return value;
+ if(depth>256)throw new Error('Checkpoint clone depth guard');
+ if(Array.isArray(value)){const out=new Array(value.length);for(let index=0;index<value.length;index++)out[index]=cloneCanonicalCheckpoint(value[index],depth+1);return out;}
+ const out={};for(const key of Object.keys(value)){const item=cloneCanonicalCheckpoint(value[key],depth+1);if(key==='__proto__')Object.defineProperty(out,key,{value:item,writable:true,enumerable:true,configurable:true});else out[key]=item;}return out;
+}
+function createStoredState(localKey,backupPrefix){`);
+ // One serialization canonicalizes JSON semantics before either copy is used.
+ // Complete the independent backup BEFORE exposing memory or invoking local
+ // callbacks: a caller may synchronously mutate the newly readable snapshot.
  source=once(source,
   "  const snapshot=value==null?null:JSON.parse(JSON.stringify({...value,updatedAt:stamp}));memory=snapshot;\n  let localOk=false;try{if(snapshot==null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(snapshot));localOk=true}catch{}\n  const envelope={value:snapshot==null?null:JSON.parse(JSON.stringify(snapshot)),updatedAt:stamp,deleted:snapshot==null,articleKey};",
-  "  const serialized=value==null?null:JSON.stringify({...value,updatedAt:stamp});\n  const snapshot=serialized==null?null:JSON.parse(serialized);memory=snapshot;\n  let localOk=false;try{if(serialized==null)localStorage.removeItem(key);else localStorage.setItem(key,serialized);localOk=true}catch{}\n  const envelope={value:serialized==null?null:JSON.parse(serialized),updatedAt:stamp,deleted:snapshot==null,articleKey};");
+  "  const serialized=value==null?null:JSON.stringify({...value,updatedAt:stamp});\n  const snapshot=serialized==null?null:JSON.parse(serialized);\n  let backup=null;if(snapshot!==null)try{backup=cloneCanonicalCheckpoint(snapshot)}catch{backup=JSON.parse(serialized)}\n  memory=snapshot;\n  let localOk=false;try{if(serialized==null)localStorage.removeItem(key);else localStorage.setItem(key,serialized);localOk=true}catch{}\n  const envelope={value:backup,updatedAt:stamp,deleted:snapshot==null,articleKey};");
  source=once(source,'row.gallery126?galleryAssetUrl(row.actorImageUrl,180):row.actorImageUrl,thumbSource=row.gallery126?galleryAssetUrl(row.thumbUrl,720):row.thumbUrl','galleryAssetUrl(row.actorImageUrl,180),thumbSource=galleryAssetUrl(row.thumbUrl,860)');
  // The final, fixed article is never removed or replaced because an optional
  // bitmap is unavailable. Its real identity/link still passes the same gates.

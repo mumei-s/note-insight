@@ -36,6 +36,33 @@ function fixture({rendered=true,overflow=false,font=12,owned=true,annotation=tru
 }
 const finding=(findings,check,status)=>findings.some(item=>item.check===check&&item.status===status);
 
+test('an existing boundary may be structurally present without becoming owned or delete-eligible',()=>{
+ const r=fixture();try{
+  r.positions.set(101,{type:{name:'horizontal_rule'},nodeSize:1});
+  const body=r.editor.outerHTML,run=clone(r.run);
+  r.q.externalBoundary(r.row,r.view,r.hit);
+  const records=r.q.snapshot().records;
+  assert.ok(records.some(entry=>entry.stage==='区切り'&&finding(entry.findings,'直後の区切り','confirmed')));
+  const ownership=records.find(entry=>entry.stage==='区切りの所有');
+  assert.ok(finding(ownership.findings,'既存区切りの所有','insufficient'));
+  assert.equal(ownership.findings[0].evidence.ownership,'unconfirmed');
+  assert.equal(ownership.findings[0].evidence.deleteEligible,false);
+  assert.ok(!ownership.findings.some(item=>item.status==='confirmed'));
+  assert.deepEqual(r.run,run);assert.equal(r.editor.outerHTML,body);
+  assert.ok(r.reads.every(pos=>[100,101].includes(pos)),'only the affected image and its boundary are read');
+ }finally{r.close()}
+});
+
+test('external-boundary observation does not invent a successful boundary when the node is absent',()=>{
+ const r=fixture();try{
+  r.q.externalBoundary(r.row,r.view,r.hit);
+  const records=r.q.snapshot().records;
+  assert.ok(records.some(entry=>entry.stage==='区切り'&&finding(entry.findings,'直後の区切り','mismatch')));
+  assert.ok(records.some(entry=>entry.stage==='区切りの所有'&&finding(entry.findings,'既存区切りの所有','insufficient')));
+  assert.ok(!records.some(entry=>entry.stage==='区切り'&&entry.findings.some(item=>item.status==='confirmed')));
+ }finally{r.close()}
+});
+
 test('source and bounded-geometry fixture evidence are recorded separately for one explicitly owned paragraph',()=>{
  const r=fixture();try{
   const before=r.editor.outerHTML,findings=r.observe();

@@ -1,0 +1,873 @@
+{
+  "mode": "operational",
+  "objective": "Predefined completed-operation elapsed-time study, including the existing fail-safe if additional inspection faults. Every sample starts quality ON. A quality fault remains fixture.valid=false and qualityVerified=false; it is retained and never converted into an inspection pass. All fixed samples contribute to speed only if their operational output completes. This does not establish fault-free quality-speed acceptance.",
+  "method": "Actual compiled userscripts, real Chromium canvas/toBlob/File/DataTransfer/DOMParser/timers and real ProseMirror model/state. Synthetic paginated API with fixed latency, synchronous simulated native uploads and positive simulated native save. All browser HTTP is intercepted; this is not live note.com, Edge, or a phone. Each sample uses a fresh Chromium process and context. Noto Sans JP is available through isolated Fontconfig and preloaded as a webfont before timing; no source font or quality-budget rewrite, Node GC subtraction, forced GC, invalid-sample replacement or discarded attempts.",
+  "sources": {
+    "baseline": {
+      "ref": "9a2f79d7",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "version": "2.9.3"
+    },
+    "current": {
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "version": "2.9.4"
+    }
+  },
+  "fixtureSha256": "2352081fc9658c0c510377ee02f980b1040980e2a63e087e6d04323b9c601c2a",
+  "pmSha256": {
+    "model": "979f44e6c7f63ce3a20b66dc2ef9e4c96ac2cbc32360f47375d4c88baf9ed181",
+    "state": "d4bd4e98520abd0bb0150436d84a3832d856aa59636ea23a59409d35929730a3"
+  },
+  "bundleSha256": "a8719a56418c4c8d61a72ca24e2dd922594a008bf5cd46042befb06869fbfedf",
+  "fontSha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "count": 200,
+  "repetitions": 3,
+  "apiLatencyMs": 20,
+  "scenarios": [
+    "paginated_tag",
+    "composite_tag_magazine_note_likes"
+  ],
+  "stopOnInvalid": true,
+  "engine": "Chromium 153.0.8010.0",
+  "samples": [
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1639.1000000014901,
+      "pasteMs": 4003.099999997765,
+      "totalMs": 5642.199999999255,
+      "firstImageMs": 1668.9000000022352,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 0,
+      "smoke": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1635,
+      "pasteMs": 4154.099999997765,
+      "totalMs": 5789.099999997765,
+      "firstImageMs": 1662.8999999985099,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 0,
+      "smoke": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1644.7000000029802,
+      "pasteMs": 4644.199999999255,
+      "totalMs": 6288.900000002235,
+      "firstImageMs": 1675.4000000022352,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 1,
+      "smoke": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1642.5999999977648,
+      "pasteMs": 3799,
+      "totalMs": 5441.599999997765,
+      "firstImageMs": 1670.8999999985099,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 1,
+      "smoke": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1634.300000000745,
+      "pasteMs": 4105.5,
+      "totalMs": 5739.800000000745,
+      "firstImageMs": 1660.699999999255,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 2,
+      "smoke": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1636.8999999985099,
+      "pasteMs": 3897.2000000029802,
+      "totalMs": 5534.10000000149,
+      "firstImageMs": 1666.8999999985099,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 2,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1243.5,
+      "pasteMs": 3565.599999997765,
+      "totalMs": 4809.099999997765,
+      "firstImageMs": 1274.8999999985099,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 0,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1277.5999999977648,
+      "pasteMs": 4749.20000000298,
+      "totalMs": 6026.800000000745,
+      "firstImageMs": 1324.5999999977648,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 0,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1222.300000000745,
+      "pasteMs": 4152.800000000745,
+      "totalMs": 5375.10000000149,
+      "firstImageMs": 1276,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793474520249,
+          "batchId": "mvwsf4l6-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": false,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 1,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1507,
+      "pasteMs": 4871.70000000298,
+      "totalMs": 6378.70000000298,
+      "firstImageMs": 1537.1000000014901,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 1,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1250.199999999255,
+      "pasteMs": 3792.10000000149,
+      "totalMs": 5042.300000000745,
+      "firstImageMs": 1281.199999999255,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 2,
+      "smoke": false
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "people": 200,
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1274.4000000022352,
+      "pasteMs": 3826.199999999255,
+      "totalMs": 5100.60000000149,
+      "firstImageMs": 1304.6000000014901,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 2,
+      "smoke": false
+    }
+  ],
+  "summary": {
+    "paginated_tag": {
+      "complete": true,
+      "requestedPerVariant": 3,
+      "baselineValid": 3,
+      "currentValid": 3,
+      "failed": 0,
+      "outputCompleted": 6,
+      "qualityVerified": 6,
+      "qualityFaults": 0,
+      "workflowFailures": 0,
+      "baseline": {
+        "extractionMs": 1639.1000000014901,
+        "pasteMs": 4003.099999997765,
+        "totalMs": 5642.199999999255
+      },
+      "current": {
+        "extractionMs": 1636.8999999985099,
+        "pasteMs": 4154.099999997765,
+        "totalMs": 5789.099999997765
+      },
+      "changePercent": {
+        "extractionMs": -0.1342199989615156,
+        "pasteMs": 3.772076640605637,
+        "totalMs": 2.6035943426062413
+      },
+      "speedTargetMet": true
+    },
+    "composite_tag_magazine_note_likes": {
+      "complete": true,
+      "requestedPerVariant": 3,
+      "baselineValid": 3,
+      "currentValid": 2,
+      "failed": 1,
+      "outputCompleted": 6,
+      "qualityVerified": 5,
+      "qualityFaults": 1,
+      "workflowFailures": 0,
+      "baseline": {
+        "extractionMs": 1250.199999999255,
+        "pasteMs": 3792.10000000149,
+        "totalMs": 5042.300000000745
+      },
+      "current": {
+        "extractionMs": 1274.4000000022352,
+        "pasteMs": 4152.800000000745,
+        "totalMs": 5375.10000000149
+      },
+      "changePercent": {
+        "extractionMs": 1.9356902897932127,
+        "pasteMs": 9.51187996094811,
+        "totalMs": 6.6001626242130795
+      },
+      "speedTargetMet": false
+    }
+  },
+  "outputAllCompleted": true,
+  "qualityAllVerified": false,
+  "speedTargetMet": false,
+  "sourceChangedDuringRun": false,
+  "completedAt": "2026-10-31T19:22:20.714Z"
+}

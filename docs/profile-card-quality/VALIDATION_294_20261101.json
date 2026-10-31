@@ -1,0 +1,74 @@
+{
+  "distributionVersion": "2.9.4",
+  "environment": "Managed executor, real PM/canvas and separate Chromium/KaTeX fixture. note API, uploads and save are mocked. No phone or production note operations.",
+  "isolatedMobileRecheck": {
+    "tests": 2,
+    "pass": 2,
+    "fail": 0,
+    "skipped": 0,
+    "productCodeChangedBeforeRecheck": false,
+    "qualityTimeBudgetChanged": false,
+    "candidateSha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d"
+  },
+  "mobileDiagnostic": {
+    "width": 430,
+    "theme": "dark",
+    "inheritedFontPx": 16,
+    "content": "profile",
+    "sample": "wide_ascii",
+    "failure": "real measured inspector entered its failure fallback",
+    "timeBudgetMs": 30,
+    "rootCause": "not determined; concurrent load is an unconfirmed possibility"
+  },
+  "currentDistributionSha256": "3c8d104ce10ea1ef24321c334d8f1683e5d9a9ca9a6bb7c1ff122e76a131b229",
+  "fullSuiteBeforePerformanceOptimization": {
+    "candidateSha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+    "tests": 776,
+    "pass": 768,
+    "fail": 8,
+    "skipped": 0,
+    "failedTests": [
+      "real mobile Chromium keeps thin profile and summary boxes within the article and compact at normal note font sizes",
+      "v1.7.1 is editor-only and direct-updated",
+      "first-note flow keeps strict one-public-note verification",
+      "parenting diary flow verifies exact tag, parenting context, and moderation",
+      "moderation excludes risky categories but does not block benign side-hustle by keyword",
+      "random thin design has eight themes and does not render sequence numbers",
+      "all paste flows use approximately 1.35x faster shared timing",
+      "first-note second round restores exclusions from the supplied previous published article"
+    ]
+  },
+  "optimizedAffectedRegression": {
+    "candidateSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "tests": 358,
+    "pass": 358,
+    "fail": 0,
+    "skipped": 0,
+    "files": [
+      "profile-card-dividers-v293.test.mjs",
+      "profile-card-layout-repair-v293.test.mjs",
+      "profile-card-layout-quality-v293.test.mjs",
+      "profile-card-quality-holds-v291.test.mjs",
+      "profile-card-quality-integration-v290.test.mjs",
+      "profile-card-quality-performance-v292.test.mjs",
+      "profile-card-source-scope-v293.test.mjs",
+      "profile-card-speed-v292.test.mjs",
+      "profile-card-content-v292.test.mjs",
+      "profile-card-content-v293.test.mjs",
+      "profile-card-standalone-v260.test.mjs",
+      "profile-card-distribution-v261.test.mjs",
+      "profile-card-panel-lifecycle-v266.test.mjs",
+      "profile-card-paster-v230.test.mjs",
+      "profile-card-quality-v290.test.mjs"
+    ]
+  },
+  "finalCanonicalBackupRegression": {
+    "candidateSha256": "3c8d104ce10ea1ef24321c334d8f1683e5d9a9ca9a6bb7c1ff122e76a131b229",
+    "tests": 463,
+    "pass": 463,
+    "fail": 0,
+    "skipped": 0,
+    "fileCount": 22,
+    "coverage": "The preceding 15 affected files plus storage, loading/resume, save, native editor, full delete, gallery flow and gallery repair."
+  }
+}

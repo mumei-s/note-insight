@@ -142,6 +142,6 @@ test('a missing or failed draft result never becomes a successful save in the qu
 test('the shipped pair includes quality hooks, preserves update identity, excludes purchase UI and needs no @require',()=>{
  const a=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),b=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
  assert.equal(a.slice(a.indexOf('(function(){')),b.slice(b.indexOf('(function(){')));
- assert.match(a,/@version\s+2\.9\.3/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
+ assert.match(a,/@version\s+2\.9\.4/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
  assert.match(a,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/likes300-fix/);
 });

@@ -1,0 +1,248 @@
+{
+  "method": "Actual compiled userscripts, real Chromium canvas/toBlob/File/DataTransfer/DOMParser/timers and real ProseMirror model/state. Synthetic paginated API with fixed latency, synchronous simulated native uploads and positive simulated native save. All browser HTTP is intercepted; this is not live note.com, Edge, or a phone. Each sample uses a fresh Chromium process and context. Noto Sans JP is available through isolated Fontconfig and preloaded as a webfont before timing; no source font or quality-budget rewrite, Node GC subtraction, forced GC, invalid-sample replacement or discarded attempts.",
+  "sources": {
+    "baseline": {
+      "ref": "9a2f79d7",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "version": "2.9.3"
+    },
+    "current": {
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "version": "2.9.4"
+    }
+  },
+  "fixtureSha256": "2352081fc9658c0c510377ee02f980b1040980e2a63e087e6d04323b9c601c2a",
+  "pmSha256": {
+    "model": "979f44e6c7f63ce3a20b66dc2ef9e4c96ac2cbc32360f47375d4c88baf9ed181",
+    "state": "d4bd4e98520abd0bb0150436d84a3832d856aa59636ea23a59409d35929730a3"
+  },
+  "bundleSha256": "a8719a56418c4c8d61a72ca24e2dd922594a008bf5cd46042befb06869fbfedf",
+  "fontSha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "count": 200,
+  "repetitions": 3,
+  "apiLatencyMs": 20,
+  "scenarios": [
+    "paginated_tag",
+    "composite_tag_magazine_note_likes"
+  ],
+  "stopOnInvalid": true,
+  "engine": "Chromium 153.0.8010.0",
+  "samples": [
+    {
+      "scenario": "paginated_tag",
+      "people": 2,
+      "api": {
+        "started": 7,
+        "completed": 7,
+        "active": 0,
+        "peakActive": 4,
+        "byKind": {
+          "search": 1,
+          "note": 3,
+          "profile": 3
+        },
+        "scheduledLatencyMs": 140
+      },
+      "extractionMs": 92.69999999925494,
+      "pasteMs": 88,
+      "totalMs": 180.69999999925494,
+      "firstImageMs": 149.19999999925494,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 3,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 3,
+        "immediateImageBoundaries": 3,
+        "qualityBoundaryCalls": 3,
+        "requiredQualityBoundaryCalls": 3,
+        "ownedDividerRecords": 3,
+        "retainedQualityBoundaryRecords": 3,
+        "retainedQualityBoundaryConfirmed": 3
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 3件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": -1,
+      "smoke": true
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 2,
+      "api": {
+        "started": 7,
+        "completed": 7,
+        "active": 0,
+        "peakActive": 4,
+        "byKind": {
+          "search": 1,
+          "note": 3,
+          "profile": 3
+        },
+        "scheduledLatencyMs": 140
+      },
+      "extractionMs": 73.19999999925494,
+      "pasteMs": 62.399999998509884,
+      "totalMs": 135.59999999776483,
+      "firstImageMs": 100,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 3,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 3,
+        "immediateImageBoundaries": 3,
+        "qualityBoundaryCalls": 3,
+        "requiredQualityBoundaryCalls": 3,
+        "ownedDividerRecords": 3,
+        "retainedQualityBoundaryRecords": 3,
+        "retainedQualityBoundaryConfirmed": 3
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 3件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": -1,
+      "smoke": true
+    },
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1774.5,
+      "pasteMs": 4634.199999999255,
+      "totalMs": 6408.699999999255,
+      "firstImageMs": 1807.7999999970198,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 39,
+        "retainedQualityBoundaryConfirmed": 39
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793474169559,
+          "batchId": "mvws7lm2-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "kind": "baseline",
+      "round": 0,
+      "smoke": false
+    }
+  ],
+  "summary": {
+    "paginated_tag": {
+      "complete": false,
+      "requestedPerVariant": 3,
+      "baselineValid": 0,
+      "currentValid": 0,
+      "failed": 1
+    },
+    "composite_tag_magazine_note_likes": {
+      "complete": false,
+      "requestedPerVariant": 3,
+      "baselineValid": 0,
+      "currentValid": 0,
+      "failed": 0
+    }
+  },
+  "allValid": false,
+  "stoppedOnInvalid": true,
+  "sourceChangedDuringRun": false,
+  "completedAt": "2026-10-31T19:16:10.485Z"
+}

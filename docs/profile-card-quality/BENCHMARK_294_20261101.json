@@ -1,0 +1,932 @@
+{
+  "benchmark": "v2.9.4 normalization repair versus v2.9.3",
+  "generatedAt": "2026-10-31T19:06:41.085765+00:00",
+  "status": "incomplete_unstable",
+  "allPassed": false,
+  "decision": "STOPPED: third rejected matched pair exceeded the predefined maximum of two. No final speed medians or +5% pass claim are available. Mixed scenario was not started.",
+  "configuration": {
+    "benchmarkConfig": true,
+    "variant": "comparison",
+    "baselineRef": "9a2f79d",
+    "version": "2.9.4",
+    "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "baseline": {
+      "ref": "9a2f79d",
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+    },
+    "current": {
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6"
+    },
+    "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+    "people": 200,
+    "apiLatencyMs": 20,
+    "repetitions": 3,
+    "processPolicy": "One fresh Node process per sample, sequential, no per-process warmup on either version. Runtime/module initialization is outside measured normal(); first PNG cold work remains included. Final comparisons interleave baseline/current,current/baseline,baseline/current within each scenario.",
+    "sampleWorkerSha256": "3684f611c92f804f6beeb26451fd8c66aad47d645b3fa40591ee273960a47b9f",
+    "driverSha256": "7424680cdea0bdbe2fde312d50a913b85cddb245d180d0b51bc0d9c90542a75d",
+    "boundedMatchedPairPolicy": {
+      "requiredValidPairsPerScenario": 3,
+      "maxRejectedPairs": 2,
+      "maxAttemptedSamples": 16,
+      "discard": "If either version faults or fails completion, discard BOTH samples of that pair, retain all raw records, and replace the whole pair fresh in the same balanced order."
+    },
+    "resumedSamples": 4,
+    "priorDriverSha256": "ca5623075bb80f7bec0aa62b7d867b90398da0c95a339405d062763855bc73b6"
+  },
+  "identities": {
+    "currentLegacySha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "currentOriginalSha256": "cf18cb13e107e863c62440d0c251543ad44cfa70b6c517304ae0b6a1690b704f",
+    "baseline": {
+      "ref": "9a2f79d",
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+    },
+    "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+    "sampleWorkerSha256": "3684f611c92f804f6beeb26451fd8c66aad47d645b3fa40591ee273960a47b9f",
+    "actualBoundedDriverSha256": "7424680cdea0bdbe2fde312d50a913b85cddb245d180d0b51bc0d9c90542a75d",
+    "priorActualDriverSha256": "ca5623075bb80f7bec0aa62b7d867b90398da0c95a339405d062763855bc73b6",
+    "portableReproducer": "scripts/benchmark-profile-card-normalization-v294.mjs",
+    "portableReproducerSha256": "3ab508c57340323fd53769d45fa05f418623f28364ee561b34159984b977a258",
+    "rawCollectionSha256": "74677f80036c82f985f46d2923eee6d002b8297fe8d39d44a92216ec42d9067a",
+    "rawCollectionPath": "docs/profile-card-quality/BENCHMARK_294_RAW_20261101.jsonl"
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuModel": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "logicalCpuCount": 9,
+    "cgroupCpuMax": "800000 100000",
+    "cachePolicy": "Fresh Node per sample, no per-process warmup, no forced GC, no explicit cache flush, no CPU pinning. First PNG cold work remains timed.",
+    "loadPolicy": "Sequential samples. Root confirmed no other project heavy jobs during timing. Runtime initialization is excluded from normal() timing.",
+    "scope": "Real ProseMirror and canvas with mocked API/native image upload and 20ms API latency. No live note.com, phone, or browser performance claim.",
+    "faultCause": "Undetermined. No causal claim about OS scheduling, GC, or other processes."
+  },
+  "collection": {
+    "collectionComplete": true,
+    "complete": false,
+    "unstable": true,
+    "validPairs": 2,
+    "rejectedPairs": 3,
+    "attemptedSamples": 10,
+    "output": "docs/profile-card-quality/BENCHMARK_294_RAW_20261101.jsonl"
+  },
+  "summary": {
+    "attemptedSamples": 10,
+    "validIndividualSamples": 7,
+    "qualityFaultSamples": 3,
+    "baselineFaultSamples": 2,
+    "currentFaultSamples": 1,
+    "acceptedMatchedPairs": 2,
+    "rejectedMatchedPairs": 3,
+    "samplesAcceptedForDescriptiveMedians": 4,
+    "samplesExcludedAsWholePairs": 6,
+    "allImagesAndBoundariesCompleted": true,
+    "inspectionValidityRequiredForTiming": true,
+    "retainedBoundaryConfirmationsValidSamples": [
+      {
+        "sampleId": "paginated_tag:0:0:baseline",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:0:0:current",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:1:0:current",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:1:1:current",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:1:2:current",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:1:2:baseline",
+        "retained": 40,
+        "confirmed": 40
+      },
+      {
+        "sampleId": "paginated_tag:2:0:baseline",
+        "retained": 40,
+        "confirmed": 40
+      }
+    ]
+  },
+  "scenarios": {
+    "paginated_tag": {
+      "requiredPairs": 3,
+      "acceptedPairs": 2,
+      "complete": false,
+      "mediansStatus": "insufficient samples; descriptive only, not an accepted speed result",
+      "medians": {
+        "baseline": {
+          "extractionMs": 1823.449523,
+          "pasteMs": 4466.171339500001,
+          "totalMs": 6289.6208625,
+          "firstImageMs": 1850.2113975000002,
+          "scheduledWaitMs": 0.0,
+          "sourceWaitMs": 0.0,
+          "pasteWaitMs": 0.0
+        },
+        "current": {
+          "extractionMs": 1814.9886465,
+          "pasteMs": 4546.593156000001,
+          "totalMs": 6361.581802500001,
+          "firstImageMs": 1845.0873215000001,
+          "scheduledWaitMs": 0.0,
+          "sourceWaitMs": 0.0,
+          "pasteWaitMs": 0.0
+        }
+      },
+      "descriptiveTotalChangePercent": 1.144122063526054,
+      "speedTargetPercent": 5,
+      "speedTargetMet": null,
+      "apiCounts": {
+        "baseline": [
+          {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          }
+        ],
+        "current": [
+          {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          }
+        ]
+      }
+    },
+    "composite_tag_magazine_note_likes": {
+      "requiredPairs": 3,
+      "acceptedPairs": 0,
+      "complete": false,
+      "mediansStatus": "insufficient samples; descriptive only, not an accepted speed result",
+      "medians": {
+        "baseline": null,
+        "current": null
+      },
+      "descriptiveTotalChangePercent": null,
+      "speedTargetPercent": 5,
+      "speedTargetMet": null,
+      "apiCounts": {
+        "baseline": [],
+        "current": []
+      }
+    }
+  },
+  "pairDecisions": [
+    {
+      "pairDecision": true,
+      "scenario": "paginated_tag",
+      "round": 0,
+      "pairAttempt": 0,
+      "order": [
+        "baseline",
+        "current"
+      ],
+      "valid": true,
+      "acceptedForMedians": true,
+      "sampleIds": [
+        "paginated_tag:0:0:baseline",
+        "paginated_tag:0:0:current"
+      ],
+      "reason": "both versions completed with all inspections"
+    },
+    {
+      "pairDecision": true,
+      "scenario": "paginated_tag",
+      "round": 1,
+      "pairAttempt": 0,
+      "order": [
+        "current",
+        "baseline"
+      ],
+      "valid": false,
+      "acceptedForMedians": false,
+      "sampleIds": [
+        "paginated_tag:1:0:current",
+        "paginated_tag:1:0:baseline"
+      ],
+      "reason": "At least one version failed the real inspection/completion guard; BOTH timings excluded."
+    },
+    {
+      "pairDecision": true,
+      "scenario": "paginated_tag",
+      "round": 1,
+      "pairAttempt": 1,
+      "order": [
+        "current",
+        "baseline"
+      ],
+      "valid": false,
+      "acceptedForMedians": false,
+      "sampleIds": [
+        "paginated_tag:1:1:current",
+        "paginated_tag:1:1:baseline"
+      ],
+      "reason": "At least one version failed the real inspection/completion guard; BOTH timings excluded."
+    },
+    {
+      "pairDecision": true,
+      "scenario": "paginated_tag",
+      "round": 1,
+      "pairAttempt": 2,
+      "order": [
+        "current",
+        "baseline"
+      ],
+      "valid": true,
+      "acceptedForMedians": true,
+      "sampleIds": [
+        "paginated_tag:1:2:current",
+        "paginated_tag:1:2:baseline"
+      ],
+      "reason": "both versions completed with all inspections"
+    },
+    {
+      "pairDecision": true,
+      "scenario": "paginated_tag",
+      "round": 2,
+      "pairAttempt": 0,
+      "order": [
+        "baseline",
+        "current"
+      ],
+      "valid": false,
+      "acceptedForMedians": false,
+      "sampleIds": [
+        "paginated_tag:2:0:baseline",
+        "paginated_tag:2:0:current"
+      ],
+      "reason": "At least one version failed the real inspection/completion guard; BOTH timings excluded."
+    }
+  ],
+  "rawSamples": [
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 0,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1888.314853,
+      "firstImageMs": 1916.4259680000002,
+      "pasteMs": 4571.313266,
+      "totalMs": 6459.628119,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:0:0:baseline"
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 0,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1767.717841,
+      "firstImageMs": 1797.060189,
+      "pasteMs": 4706.916601,
+      "totalMs": 6474.634442,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:0:0:current"
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 1,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1705.402437,
+      "firstImageMs": 1728.8772430000001,
+      "pasteMs": 4191.907499999999,
+      "totalMs": 5897.309937,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:1:0:current"
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 1,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1797.681131,
+      "firstImageMs": 1830.058721,
+      "pasteMs": 4344.061507,
+      "totalMs": 6141.742638000001,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793472908502,
+          "batchId": "mvwrgl4k-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "invalidSample": true,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:1:0:baseline"
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 1,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1835.70961,
+      "firstImageMs": 1889.091674,
+      "pasteMs": 5406.644435,
+      "totalMs": 7242.354045,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 1,
+      "sampleId": "paginated_tag:1:1:current",
+      "workerExitCode": 0
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 1,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 2088.890808,
+      "firstImageMs": 2124.5239330000004,
+      "pasteMs": 5408.174228,
+      "totalMs": 7497.065036,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793473471031,
+          "batchId": "mvwrspei-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "invalidSample": true,
+      "pairAttempt": 1,
+      "sampleId": "paginated_tag:1:1:baseline",
+      "workerExitCode": 1
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 1,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1862.2594520000002,
+      "firstImageMs": 1893.1144540000005,
+      "pasteMs": 4386.269711000001,
+      "totalMs": 6248.529163000001,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 2,
+      "sampleId": "paginated_tag:1:2:current",
+      "workerExitCode": 0
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 1,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1758.584193,
+      "firstImageMs": 1783.9968270000002,
+      "pasteMs": 4361.029413,
+      "totalMs": 6119.613606,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 2,
+      "sampleId": "paginated_tag:1:2:baseline",
+      "workerExitCode": 0
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 2,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1755.8536809999998,
+      "firstImageMs": 1784.0606609999998,
+      "pasteMs": 4548.716741,
+      "totalMs": 6304.570422,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:2:0:baseline",
+      "workerExitCode": 0
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 2,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1676.839629,
+      "firstImageMs": 1698.0313139999998,
+      "pasteMs": 3499.4317799999994,
+      "totalMs": 5176.271408999999,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793473502671,
+          "batchId": "mvwrtexe-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "invalidSample": true,
+      "pairAttempt": 0,
+      "sampleId": "paginated_tag:2:0:current",
+      "workerExitCode": 1
+    }
+  ],
+  "functionalProof": {
+    "functionalOnly": true,
+    "environment": "Real ProseMirror Schema/EditorState/Plugin.appendTransaction and actual compiled modules; synthetic API and native upload capabilities; no live note.com or browser layout claim.",
+    "currentSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "baselineRef": "9a2f79d",
+    "baselineSha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+    "cases": [
+      {
+        "name": "actual-v293-negative-control",
+        "passed": true,
+        "images": 1,
+        "rules": 1,
+        "stage": "images_building",
+        "pending": "uncertain"
+      },
+      {
+        "name": "200-plus-final-mapped-note-normalization",
+        "passed": true,
+        "images": 201,
+        "ownedRules": 201,
+        "normalizations": 201,
+        "resumeAddsImages": 0,
+        "resumeAddsRules": 0,
+        "confirmedSave": true
+      },
+      {
+        "name": "200-legacy-unowned-boundary-upgrade-and-delete",
+        "passed": true,
+        "imagesBeforeDelete": 201,
+        "newOwnedRules": 200,
+        "externalRules": 1,
+        "oldPrefixPNGPreserved": true,
+        "manualRuleRetainedAfterDelete": true
+      },
+      {
+        "name": "delete-rule-safely-stops",
+        "passed": true,
+        "images": 1,
+        "stage": "images_building",
+        "pending": "retryable"
+      },
+      {
+        "name": "wrong-image-safely-stops",
+        "passed": true,
+        "images": 1,
+        "stage": "images_building",
+        "pending": "uncertain"
+      }
+    ],
+    "allPassed": true
+  },
+  "earlierDiagnostics": [
+    {
+      "path": "docs/profile-card-quality/BENCHMARK_294_FIRST_GATE_DIAGNOSTIC_20261101.json",
+      "reason": "Earlier e0 bundle failed tag +5% goal; excluded from current c7 measurements."
+    },
+    {
+      "path": "docs/profile-card-quality/PROFILE_294_FIRST_GATE_DIAGNOSTIC_20261101.json",
+      "reason": "Instrumented e0 hotspot diagnosis, not a final timing sample."
+    },
+    {
+      "path": "docs/profile-card-quality/BENCHMARK_294_C7_BASELINE_FAULT_DIAGNOSTIC_20261101.json",
+      "reason": "Initial four c7 collection samples, all retained in this report. Rejected matched pair now excludes both versions symmetrically."
+    }
+  ],
+  "reproducerVerification": {
+    "syntaxCheckExitCode": 0,
+    "replayExitCode": 1,
+    "replayExpected": "Stops as incomplete/unstable before spawning any additional sample; preserves 10 attempts, 2 accepted pairs, 3 rejected pairs.",
+    "sampleWorkerBytesMatchActualCollection": true
+  }
+}

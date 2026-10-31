@@ -8,7 +8,7 @@ import {contentRuntime} from '../scripts/profile-card-content-v292.mjs';
 import {coreDividerRuntime} from '../scripts/profile-card-dividers-v293.mjs';
 import {layoutRepairRuntime,transformCoreLayoutRepair} from '../scripts/profile-card-layout-repair-v293.mjs';
 
-let oldCode;try{oldCode=execFileSync('git',['show','410c7d4:public/note-profile-card-likes300-fix-v220.user.js'],{encoding:'utf8',maxBuffer:3e6})}catch{}
+let oldCode,legacy293Code;try{oldCode=execFileSync('git',['show','410c7d4:public/note-profile-card-likes300-fix-v220.user.js'],{encoding:'utf8',maxBuffer:3e6});legacy293Code=execFileSync('git',['show','9a2f79d:public/note-profile-card-likes300-fix-v220.user.js'],{encoding:'utf8',maxBuffer:3e6})}catch{}
 const test=(name,fn)=>nodeTest(name,{skip:!dependencies||!oldCode?'Real PM/canvas and the published v2.9.2 baseline required':false},fn);
 const clone=value=>JSON.parse(JSON.stringify(value));
 const images=r=>r.doc().content.filter(node=>node.type==='image');
@@ -22,6 +22,17 @@ async function existing({count=2,cardsReady=false}={}){
  const before=r.doc();vm.runInContext(contentRuntime,r.c);r.core.patch(coreDividerRuntime+'\n'+layoutRepairRuntime);
  assert.deepEqual(r.doc(),before,'loading repair must never edit the old article');
  return r;
+}
+async function legacyPending({phase='prepared'}={}){
+ assert.ok(legacy293Code,'the published v2.9.3 script is required');
+ const r=await runtime({count:2,moduleCode:legacy293Code});
+ // Reproduce the old post-HR/pre-final-checkpoint failure in the real compiled
+ // path. One real owned image and its visible HR survive with legacy pending.
+ r.core.patch("globalThis.legacyBoundaryWriter=writeRun;writeRun=function(value){if(value?.coreDividerRecords?.length&&!state.legacyBoundaryFailure){state.legacyBoundaryFailure=true;throw Error('legacy boundary finalization failure')}return legacyBoundaryWriter(value)};");
+ await r.normal();r.core.patch('writeRun=legacyBoundaryWriter');
+ assert.equal(r.state.images.length,1);assert.equal(r.doc().content.filter(node=>node.type==='horizontal_rule').length,1);assert.equal(r.core.readRun().pendingCoreDivider.phase,'prepared');
+ if(phase!=='prepared'){const run=r.core.readRun();run.pendingCoreDivider.phase=phase;r.core.writeRun(run)}
+ vm.runInContext(contentRuntime,r.c);r.core.patch(coreDividerRuntime+'\n'+layoutRepairRuntime);return r;
 }
 
 test('the repair transform only registers an explicit API and fails on an ambiguous hook',()=>{
@@ -114,12 +125,64 @@ test('an image ID duplicated elsewhere cannot become a guessed repair target',as
  const before=r.doc();assert.throws(()=>r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__.preview(),/識別情報/);assert.deepEqual(r.doc(),before);
 });
 
-test('a pending boundary is cleared only after a new matching owned rule and a manual rule is kept',async t=>{
- const r=await existing();t.after(()=>r.close());const run=r.core.readRun();let image;r.view.state.doc.forEach((node,pos)=>{if(!image&&node.type.name==='image')image={node,pos}});
- const divider=r.schema.nodes.horizontal_rule.create();r.view.dispatch(r.view.state.tr.insert(image.pos+image.node.nodeSize,divider));
- run.pendingCoreDivider={version:1,image:r.page.__MUMEI_PROFILE_CARD_DIVIDERS__.identity(image),runId:run.createdAt,articleKey:run.articleKey,node:divider.toJSON(),phase:'uncertain'};r.core.writeRun(run);
- const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();await api.apply(plan.token);
- assert.equal(r.core.readRun().pendingCoreDivider,undefined);assert.equal(r.doc().content.filter(node=>node.type==='horizontal_rule').length,4);
+for(const phase of ['prepared','uncertain'])test('an explicit '+phase+' legacy recovery keeps the existing HR unowned without a duplicate or image resend',async t=>{
+ const r=await legacyPending({phase});t.after(()=>r.close());const before=r.doc(),run=clone(r.core.readRun()),requests=r.state.requests.length,canvas=r.state.canvasCount;let dispatches=0;const dispatch=r.view.dispatch.bind(r.view);r.view.dispatch=tr=>{dispatches++;dispatch(tr)};
+ const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();assert.equal(plan.dividers,0);assert.equal(plan.reconciledDividers,1);assert.equal(plan.changeCount,1);assert.match(plan.message,/既存区切り線の記録復旧/);assert.match(plan.samples[0].after,/所有未確認/);
+ assert.deepEqual(r.doc(),before);assert.deepEqual(clone(r.core.readRun()),run);const result=await api.apply(plan.token),repaired=r.core.readRun();
+ assert.equal(result.saved,'confirmed');assert.equal(result.reconciledDividers,1);assert.equal(dispatches,0,'record-only recovery sends no editor transaction');assert.deepEqual(r.doc(),before);assert.equal(r.state.requests.length,requests);assert.equal(r.state.canvasCount,canvas);assert.equal(r.state.images.length,1);
+ assert.equal(repaired.pendingCoreDivider,undefined);assert.equal(repaired.coreExternalDividerRecords.length,1);assert.equal(repaired.coreExternalDividerRecords[0].ownership,'unconfirmed');assert.ok(!repaired.coreDividerRecords?.length);
+ let image;r.view.state.doc.forEach((node,pos)=>{if(node.type.name==='image')image={node,pos}});assert.equal(r.page.__MUMEI_PROFILE_CARD_DIVIDERS__.owned(r.view,image,repaired),null);assert.ok(r.page.__MUMEI_PROFILE_CARD_DIVIDERS__.external(r.view,image,repaired));assert.equal(api.preview().changeCount,0);
+});
+
+test('legacy record recovery reports checkpoint failure without changing the existing document or claiming persistence',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const before=r.doc(),requests=r.state.requests.length,api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();r.state.storageFailure=()=>true;
+ const result=await api.apply(plan.token);assert.equal(result.applied,true);assert.equal(result.saved,'pending');assert.match(result.message,/未確認/);assert.deepEqual(r.doc(),before);assert.equal(r.state.requests.length,requests);assert.equal(r.state.images.length,1);
+ assert.equal(r.core.readRun().coreExternalDividerRecords[0].ownership,'unconfirmed');assert.equal(api.preview().changeCount,0,'in-memory recovery cannot duplicate the existing line');
+ const persisted=JSON.parse(r.local.get('mumei_profile_card_paster_run_v15:naaaaaaaaaaaa'));assert.ok(persisted.pendingCoreDivider);assert.ok(!persisted.coreExternalDividerRecords?.length,'failed persistence is not invented');
+});
+
+for(const unsupported of ['fresh-v2','retryable','different-planned-node'])test(unsupported+' cannot be treated as a legacy visible boundary',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const run=r.core.readRun();
+ if(unsupported==='fresh-v2')run.pendingCoreDivider.version=2;else if(unsupported==='retryable')run.pendingCoreDivider.phase='retryable';else run.pendingCoreDivider.node={type:'paragraph',content:[{type:'text',text:'different planned node'}]};r.core.writeRun(run);
+ const before=r.doc(),saved=clone(r.core.readRun());assert.throws(()=>r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__.preview(),/確認できません/);assert.deepEqual(r.doc(),before);assert.deepEqual(clone(r.core.readRun()),saved);
+});
+
+test('an acknowledged external HR remains excluded from whole-batch owned deletion',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();await api.apply(plan.token);await r.core.deleteAllGenerated({save:false});
+ assert.equal(images(r).length,0);assert.equal(r.doc().content.filter(node=>node.type==='horizontal_rule').length,1,'the acknowledged line was never promoted to owned output');
+});
+
+test('a later moved external boundary stops a new repair preview instead of inserting a duplicate',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();await api.apply(plan.token);let image;r.view.state.doc.forEach((node,pos)=>{if(node.type.name==='image')image={node,pos}});
+ r.view.dispatch(r.view.state.tr.insert(image.pos+image.node.nodeSize,r.para('手動で挿入した文章')));const before=r.doc();assert.throws(()=>api.preview(),/既存区切り線.*(?:移動|変更)/);assert.deepEqual(r.doc(),before);assert.equal(r.doc().content.filter(node=>node.type==='horizontal_rule').length,1);
+});
+
+test('a changed registered owned boundary stops preview rather than inserting a second line',async t=>{
+ const r=await existing();t.after(()=>r.close());const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();await api.apply(plan.token);let image;r.view.state.doc.forEach((node,pos)=>{if(!image&&node.type.name==='image')image={node,pos}});
+ const at=image.pos+image.node.nodeSize,node=r.view.state.doc.nodeAt(at);r.view.dispatch(r.view.state.tr.replaceWith(at,at+node.nodeSize,r.para('利用者が変更した区切り線')));const before=r.doc();
+ assert.throws(()=>api.preview(),/区切り線.*(?:確認|移動|変更)/);assert.deepEqual(r.doc(),before);assert.equal(r.doc().content.filter(node=>node.type==='horizontal_rule').length,2);
+});
+
+test('legacy boundary record recovery cannot release a separate known quality hold or mark images complete',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const run=r.core.readRun();run.qualityHold={version:1,kind:'source',phase:'images',index:0,runId:run.createdAt,articleKey:run.articleKey,identity:{account:run.rows[0].urlname,key:run.rows[0].key,url:run.rows[0].url},reasons:[{code:'ARTICLE_ACCOUNT',expected:run.rows[0].urlname,actual:'wrong_account'}]};r.core.writeRun(run);
+ const before=clone(r.core.readRun().qualityHold),api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();await api.apply(plan.token);
+ assert.deepEqual(clone(r.core.readRun().qualityHold),before);assert.equal(r.core.readRun().stage,'images_building');assert.ok(!r.core.readRun().imagesCompletedAt);assert.equal(r.state.images.length,1);
+});
+
+test('legacy visible-boundary acknowledgement rejects a stale token before writing its new record',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());const api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview();r.view.dispatch(r.view.state.tr.insert(r.view.state.doc.content.size,r.para('確認後の本文編集')));
+ const before=r.doc(),run=clone(r.core.readRun());await assert.rejects(api.apply(plan.token),/確認後/);assert.deepEqual(r.doc(),before);assert.deepEqual(clone(r.core.readRun()),run);assert.ok(r.core.readRun().pendingCoreDivider);assert.ok(!r.core.readRun().coreExternalDividerRecords?.length);
+});
+
+test('legacy native HR attribute normalization is retained as unowned actual JSON with ownership and provenance unconfirmed',async t=>{
+ const r=await legacyPending();t.after(()=>r.close());
+ const nodes={},marks={};r.schema.spec.nodes.forEach((name,spec)=>{nodes[name]=spec});r.schema.spec.marks.forEach((name,spec)=>{marks[name]=spec});nodes.horizontal_rule={...nodes.horizontal_rule,attrs:{variant:{default:'normalized'}}};
+ const schema=new dependencies.Schema({nodes,marks}),doc=schema.nodeFromJSON(r.doc());r.view.state=dependencies.EditorState.create({schema,doc});
+ const run=r.core.readRun();run.pendingCoreDivider.node={type:'horizontal_rule',attrs:{variant:'planned-before-note-normalization'}};r.core.writeRun(run);
+ delete r.page.__MUMEI_PROFILE_CARD_QUALITY__;vm.runInContext(readFileSync('public/note-profile-card-paster-quality-v290.js','utf8'),r.c);r.quality.externalBoundary=r.page.__MUMEI_PROFILE_CARD_QUALITY__.externalBoundary;
+ const before=r.doc(),api=r.page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__,plan=api.preview(),result=await api.apply(plan.token),record=r.core.readRun().coreExternalDividerRecords[0];
+ assert.equal(result.saved,'confirmed');assert.deepEqual(r.doc(),before);assert.equal(record.ownership,'unconfirmed');assert.equal(record.plannedMatch,'native-attributes-unconfirmed');assert.equal(record.node.attrs.variant,'normalized');assert.ok(!r.core.readRun().coreDividerRecords?.length);
+ const findings=r.page.__MUMEI_PROFILE_CARD_QUALITY__.snapshot().records.flatMap(item=>item.findings);assert.ok(findings.some(finding=>finding.check==='既存区切りの所有'&&finding.status==='insufficient'&&finding.evidence.deleteEligible===false));
 });
 
 test('a native-rule-free schema gets an explicitly owned fallback without adopting equal manual text',async t=>{

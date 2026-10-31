@@ -29,14 +29,23 @@ function completed(r,run=r.editor.readRun()){
 function restore(r){
  return{doc:r.doc(),selection:r.view.state.selection.from,url:r.page.location.href,state:clone({images:r.state.images,imageDimensions:r.state.imageDimensions,cards:r.state.cards,nativeCardRequests:r.state.nativeCardRequests,serial:r.state.serial,clock:r.state.clock,targetCount:r.state.targetCount,fixturePrefix:r.state.fixturePrefix,keyOffset:r.state.keyOffset})};
 }
-function installOwnedImage(r,{fallback=false,manual=false}={}){
+function installOwnedImage(r,{fallback=false,manual=false,nativeAttrs=false}={}){
  let schema=r.schema;
- if(fallback){schema=new dependencies.Schema({nodes:r.schema.spec.nodes.remove('horizontal_rule'),marks:r.schema.spec.marks});r.view.state=dependencies.EditorState.create({schema,doc:schema.nodeFromJSON(r.doc())});}
+ if(fallback||nativeAttrs){
+  let nodes=r.schema.spec.nodes;
+  if(fallback)nodes=nodes.remove('horizontal_rule');
+  if(nativeAttrs)nodes=nodes.update('horizontal_rule',{...nodes.get('horizontal_rule'),attrs:{noteId:{default:null}}}).update('image',{...nodes.get('image'),attrs:{...nodes.get('image').attrs,nativeState:{default:null}}});
+  schema=new dependencies.Schema({nodes,marks:r.schema.spec.marks});r.view.state=dependencies.EditorState.create({schema,doc:schema.nodeFromJSON(r.doc())});
+ }
  const row={index:1,urlname:'manual_fixture',key:'n333333333333',url:'https://note.com/manual_fixture/n/n333333333333',creator:'本人'},image=schema.nodes.image.create({id:'owned-manual-fixture',src:'https://assets.st-note.com/owned.png',link:row.url},schema.text('本人さん'));
  const pos=r.view.state.doc.content.size,tail=manual?(fallback?schema.nodes.paragraph.create(null,schema.text('────────────')):schema.nodes.horizontal_rule.create()):null;
  r.view.dispatch(r.view.state.tr.insert(pos,tail?[image,tail]:image));
  const run={version:'2.9.3',articleKey:r.page.location.pathname.match(/\/notes\/(.*?)\/edit/)[1],coreImageRun:true,createdAt:1700000000000,imageAnchorPos:pos,rows:[row],items:[{id:image.attrs.id,src:image.attrs.src,url:row.url,creator:row.creator}],cardKeys:[],sectionHeadings:[],activityTexts:[],dividerUrls:[],imageBaselineRecords:[],stage:'images_building'};
  r.editor.writeRun(run);return{row,image:{node:image,pos},manual:tail};
+}
+function legacyPending(r,fixture,{version=1,phase='uncertain',planned=null}={}){
+ const run=r.editor.readRun(),node=r.view.state.doc.nodeAt(fixture.image.pos+fixture.image.node.nodeSize);
+ r.editor.writeRun({...run,pendingCoreDivider:{version,...(version===2?{evidence:{kind:'fresh-before-insert'}}:{}),phase,image:{id:fixture.image.node.attrs.id,src:fixture.image.node.attrs.src,url:fixture.row.url},node:planned||node?.toJSON(),runId:run.createdAt,articleKey:run.articleKey,at:1}});
 }
 
 test('every newly generated generic image ends in one owned native rule, including the final article',async t=>{
@@ -171,4 +180,110 @@ test('divider identity keeps URL safety and avoids URL parsing for 200 canonical
   assert.equal(records.find(record=>same(record,identity)),identity);
  }
  assert.equal(parsed,0,'different stable IDs and equal canonical URL strings require no URL construction');
+});
+
+test('a native trailing paragraph does not invalidate a successful local rule insertion',async t=>{
+ const r=await rt();t.after(()=>r.close());const dispatch=r.view.dispatch.bind(r.view);let appended=false;
+ r.view.dispatch=transaction=>{const adds=transaction.doc.content.size>r.view.state.doc.content.size&&transaction.doc.lastChild?.type.name==='horizontal_rule';dispatch(transaction);if(adds&&!appended){appended=true;dispatch(r.view.state.tr.insert(r.view.state.doc.content.size,r.schema.nodes.paragraph.create()));}};
+ await r.normal();completed(r);assert.equal(rules(r).length,3);assert.ok(appended);assert.equal(r.editor.readRun().pendingCoreDivider??null,null);
+});
+
+test('unrelated edits before the image preserve the locally verified image and rule',async t=>{
+ const r=await rt();t.after(()=>r.close());const dispatch=r.view.dispatch.bind(r.view);let changed=false;
+ r.view.dispatch=transaction=>{const adds=transaction.doc.lastChild?.type.name==='horizontal_rule'&&transaction.doc.content.size>r.view.state.doc.content.size;dispatch(transaction);if(adds&&!changed){changed=true;dispatch(r.view.state.tr.insertText('追記',1));}};
+ await r.normal();completed(r);assert.ok(r.doc().content[0].content[0].text.includes('追記'));assert.equal(r.state.images.length,3);
+});
+
+test('native normalization of the new rule and image attributes is recorded from actual nodes',async t=>{
+ const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{nativeAttrs:true,manual:true}),dispatch=r.view.dispatch.bind(r.view),api=r.page.__MUMEI_PROFILE_CARD_DIVIDERS__;let normalized=false;
+ r.view.dispatch=transaction=>{dispatch(transaction);if(!normalized){normalized=true;dispatch(r.view.state.tr.setNodeMarkup(fixture.image.pos,null,{...fixture.image.node.attrs,nativeState:'normalized'}));const pos=fixture.image.pos+fixture.image.node.nodeSize;dispatch(r.view.state.tr.setNodeMarkup(pos,null,{noteId:'native-generated'}));}};
+ const result=await api.append(r.view,fixture.row,fixture.image);await r.page.__MUMEI_PROFILE_CARD_RUN_STORE__.flush();
+ assert.equal(result.hit.node.attrs.nativeState,'normalized');assert.equal(result.divider.node.attrs.noteId,'native-generated');assert.equal(r.editor.readRun().coreDividerRecords[0].node.attrs.noteId,'native-generated');
+ assert.equal(rules(r).length,2);assert.notEqual(result.divider.node,fixture.manual);
+});
+
+test('reordered pre-existing manual rules are never claimed as the new inserted rule',async t=>{
+ for(const nativeAttrs of [false,true]){
+  const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{nativeAttrs,manual:true}),dispatch=r.view.dispatch.bind(r.view),api=r.page.__MUMEI_PROFILE_CARD_DIVIDERS__;let reordered=false;
+  r.view.dispatch=transaction=>{dispatch(transaction);if(!reordered){reordered=true;const pos=fixture.image.pos+fixture.image.node.nodeSize,newNode=r.view.state.doc.nodeAt(pos),oldNode=r.view.state.doc.nodeAt(pos+newNode.nodeSize);dispatch(r.view.state.tr.replaceWith(pos,pos+newNode.nodeSize+oldNode.nodeSize,[oldNode,newNode]));}};
+  await assert.rejects(api.append(r.view,fixture.row,fixture.image),/区切り線の挿入を確認できません/);
+  assert.equal(r.editor.readRun().pendingCoreDivider.version,2);assert.equal(r.editor.readRun().coreDividerRecords?.length||0,0);assert.equal(rules(r)[0].node,fixture.manual);
+ }
+});
+
+test('a fresh failed dispatcher cannot excuse an existing manual rule via legacy recovery',async t=>{
+ const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{manual:true}),api=r.page.__MUMEI_PROFILE_CARD_DIVIDERS__,dispatch=r.view.dispatch;
+ r.view.dispatch=()=>{throw Error('fresh dispatch failed')};await assert.rejects(api.append(r.view,fixture.row,fixture.image),/fresh dispatch failed/);r.view.dispatch=dispatch;
+ const run=r.editor.readRun();assert.equal(run.pendingCoreDivider.version,2);assert.equal(run.coreExternalDividerRecords?.length||0,0);assert.equal(api.external(r.view,fixture.image),null);
+ // A fresh v2 prepared/uncertain checkpoint is not eligible even after reload.
+ r.editor.writeRun({...run,pendingCoreDivider:{...run.pendingCoreDivider,phase:'uncertain'}});const before=r.doc();await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),before);assert.ok(r.editor.readRun().pendingCoreDivider);assert.equal(r.editor.readRun().coreExternalDividerRecords?.length||0,0);
+});
+
+test('legacy pending with a matching visible rule continues as explicitly unowned, without upload or duplicate',async t=>{
+ const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{manual:true});legacyPending(r,fixture);const before=r.doc();
+ await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),before);assert.equal(r.state.images.length,0);assert.equal(r.editor.readRun().pendingCoreDivider??null,null);assert.equal(r.editor.readRun().coreDividerRecords?.length||0,0);assert.equal(r.editor.readRun().coreExternalDividerRecords.length,1);assert.equal(rules(r).length,1);
+ const snapshots=r.quality.snapshot().records.filter(record=>record.stage==='区切りの所有');assert.ok(snapshots.length);assert.ok(snapshots.every(record=>record.findings.some(finding=>finding.status==='insufficient')));
+ const writes=r.state.saves;await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),before);assert.equal(r.state.saves,writes,'a completed duplicate resume does not request another save');
+ const removed=await r.core.deleteAllGenerated({save:false});assert.equal(removed.removedDividers,0);assert.equal(rules(r).length,1);assert.equal(rules(r)[0].node,fixture.manual);
+});
+
+test('legacy native-rule attribute normalization remains unowned while malformed or fallback changes stop',async t=>{
+ const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{nativeAttrs:true,manual:true}),planned=r.page.__MUMEI_PROFILE_CARD_DIVIDERS__.create(r.view).toJSON(),pos=fixture.image.pos+fixture.image.node.nodeSize;
+ r.view.dispatch(r.view.state.tr.setNodeMarkup(pos,null,{noteId:'native-old'}));legacyPending(r,fixture,{planned});await r.core.pasteSavedSpecial();
+ assert.equal(r.editor.readRun().coreExternalDividerRecords[0].plannedMatch,'native-attributes-unconfirmed');assert.equal(r.editor.readRun().coreExternalDividerRecords[0].node.attrs.noteId,'native-old');assert.equal(r.editor.readRun().coreDividerRecords?.length||0,0);
+ for(const plannedNode of [{type:'does_not_exist'},{type:'paragraph',content:[{type:'text',text:'not a rule'}]}]){
+  const bad=await rt();t.after(()=>bad.close());const item=installOwnedImage(bad,{manual:true});legacyPending(bad,item,{planned:plannedNode});const doc=bad.doc();await bad.core.pasteSavedSpecial();assert.deepEqual(bad.doc(),doc);assert.ok(bad.editor.readRun().pendingCoreDivider);assert.equal(bad.editor.readRun().coreExternalDividerRecords?.length||0,0);
+ }
+ const fallback=await rt();t.after(()=>fallback.close());const item=installOwnedImage(fallback,{fallback:true,manual:true});legacyPending(fallback,item,{planned:{type:'paragraph',content:[{type:'text',text:'───────────'}]}});const doc=fallback.doc();await fallback.core.pasteSavedSpecial();assert.deepEqual(fallback.doc(),doc);assert.ok(fallback.editor.readRun().pendingCoreDivider);
+});
+
+test('duplicate actual image IDs cannot collapse into legacy external-boundary uniqueness',async t=>{
+ const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{manual:true});legacyPending(r,fixture);
+ r.view.dispatch(r.view.state.tr.insert(fixture.image.pos,fixture.image.node));const doc=r.doc();await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),doc);assert.ok(r.editor.readRun().pendingCoreDivider);assert.equal(r.editor.readRun().coreExternalDividerRecords?.length||0,0);assert.equal(r.state.images.length,0);
+});
+
+test('changed accepted external or owned boundaries stop instead of silently inserting another rule',async t=>{
+ for(const external of [true,false]){
+  const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{manual:external}),api=r.page.__MUMEI_PROFILE_CARD_DIVIDERS__;
+  if(external){legacyPending(r,fixture);await r.core.pasteSavedSpecial();}else{await api.append(r.view,fixture.row,fixture.image);await r.page.__MUMEI_PROFILE_CARD_RUN_STORE__.flush();}
+  const pos=fixture.image.pos+fixture.image.node.nodeSize;r.view.dispatch(r.view.state.tr.delete(pos,pos+1));const doc=r.doc();await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),doc);assert.ok(r.state.statuses.at(-1).text.includes('移動・変更'));assert.equal(r.state.images.length,0);
+ }
+});
+
+test('a final-image recovered boundary requests one real save and never invents successful persistence',async t=>{
+ for(const saved of [true,'unconfirmed',false,'error']){
+  const r=await rt();t.after(()=>r.close());const fixture=installOwnedImage(r,{manual:true});legacyPending(r,fixture);r.state.saveResult=saved==='unconfirmed'?{}:saved===true;if(saved==='error')r.state.saveError=Error('native save failure');const imagesBefore=r.state.images.length;
+  await r.core.pasteSavedSpecial();assert.equal(r.state.saves,1);assert.equal(r.state.images.length,imagesBefore);assert.equal(rules(r).length,1);assert.equal(r.editor.readRun().draftSaveState,saved===true?'confirmed':'pending');
+  if(saved==='unconfirmed'){assert.ok(r.state.statuses.at(-1).text.includes('下書き保存は未確認'));assert.equal(r.state.statuses.at(-1).bad,true);}
+  if(saved===false||saved==='error'){assert.ok(r.state.statuses.at(-1).text.includes('停止'));assert.equal(r.state.statuses.at(-1).bad,true);}
+ }
+});
+
+test('a recovered first-image external boundary continues after the existing rule and survives reload',async t=>{
+ const r=await rt();t.after(()=>r.close());r.state.pauseAt=1;await r.normal();const run=r.editor.readRun(),hit=images(r)[0],row=run.rows[0],node=r.view.state.doc.nodeAt(hit.pos+hit.node.nodeSize);
+ r.editor.writeRun({...run,coreDividerRecords:[],pendingCoreDivider:{version:1,phase:'uncertain',image:{id:hit.node.attrs.id,src:hit.node.attrs.src,url:row.url},node:node.toJSON(),runId:run.createdAt,articleKey:run.articleKey,at:1}});r.state.pauseAt=0;
+ await r.core.pasteSavedSpecial();assert.equal(r.state.images.length,3);assert.equal(rules(r).length,3);assert.equal(r.editor.readRun().coreExternalDividerRecords.length,1);assert.equal(r.editor.readRun().coreDividerRecords.length,2);
+ const doc=r.doc(),next=await r.reload();t.after(()=>next.close());await next.core.pasteSavedSpecial();assert.deepEqual(next.doc(),doc);assert.equal(next.state.images.length,3);assert.equal(rules(next).length,3);
+ const first=images(next)[0],pos=first.pos+first.node.nodeSize;next.view.dispatch(next.view.state.tr.delete(pos,pos+1));const changed=next.doc();await next.core.pasteSavedSpecial();assert.deepEqual(next.doc(),changed);assert.equal(next.state.images.length,3);assert.ok(next.state.statuses.at(-1).text.includes('移動・変更'));
+});
+
+test('duplicate ordinary owned image IDs cannot be collapsed into a falsely completed resume',async t=>{
+ const r=await rt({count:1});t.after(()=>r.close());await r.normal();completed(r);
+ const first=images(r)[0],rule=r.view.state.doc.nodeAt(first.pos+first.node.nodeSize);r.view.dispatch(r.view.state.tr.insert(first.pos,[first.node,rule]));
+ const run=r.editor.readRun();r.editor.writeRun({...run,stage:'images_building'});const before=r.doc(),checkpoint=clone(r.editor.readRun()),uploads=r.state.images.length;
+ await r.core.pasteSavedSpecial();assert.deepEqual(r.doc(),before);assert.deepEqual(clone(r.editor.readRun()),checkpoint);assert.equal(r.editor.readRun().stage,'images_building');assert.equal(r.state.images.length,uploads);assert.equal(r.state.statuses.at(-1).bad,true);assert.ok(r.state.statuses.at(-1).text.includes('一つに確認できません'));
+});
+
+test('exact transaction references avoid redundant fallback work while native changes still run the full proof',async t=>{
+ for(const normalize of [false,true]){
+  const r=await rt();t.after(()=>r.close());r.c.proofCalls={rules:0,anchor:0,proof:0};
+  r.core.patch(`const originalRulesForCount=coreDividerNeighborhood,originalAnchorForCount=coreEmptyAnchorNeighborhood,originalProofForCount=coreDividerInsertionProof;
+coreDividerNeighborhood=function(...args){proofCalls.rules++;return originalRulesForCount(...args)};
+coreEmptyAnchorNeighborhood=function(...args){proofCalls.anchor++;return originalAnchorForCount(...args)};
+coreDividerInsertionProof=function(...args){proofCalls.proof++;return originalProofForCount(...args)};`);
+  if(normalize){const dispatch=r.view.dispatch.bind(r.view);let changed=false;r.view.dispatch=transaction=>{const rule=transaction.doc.lastChild?.type.name==='horizontal_rule';dispatch(transaction);if(rule&&!changed){changed=true;dispatch(r.view.state.tr.insert(r.view.state.doc.content.size,r.schema.nodes.paragraph.create()));}};}
+  await r.normal();completed(r);
+  if(normalize){assert.ok(r.c.proofCalls.rules>0);assert.ok(r.c.proofCalls.proof>0);}
+  else assert.deepEqual(clone(r.c.proofCalls),{rules:0,anchor:0,proof:0});
+ }
 });

@@ -1,0 +1,306 @@
+{
+  "diagnosticOnly": true,
+  "status": "incomplete-historical-baseline-budget-fault",
+  "generatedAt": "2026-10-31T18:56:41.508951+00:00",
+  "config": {
+    "benchmarkConfig": true,
+    "variant": "comparison",
+    "baselineRef": "9a2f79d",
+    "version": "2.9.4",
+    "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "baseline": {
+      "ref": "9a2f79d",
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+    },
+    "current": {
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6"
+    },
+    "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+    "people": 200,
+    "apiLatencyMs": 20,
+    "repetitions": 3,
+    "processPolicy": "One fresh Node process per sample, sequential, no per-process warmup on either version. Runtime/module initialization is outside measured normal(); first PNG cold work remains included. Final comparisons interleave baseline/current,current/baseline,baseline/current within each scenario.",
+    "sampleWorkerSha256": "3684f611c92f804f6beeb26451fd8c66aad47d645b3fa40591ee273960a47b9f",
+    "driverSha256": "ca5623075bb80f7bec0aa62b7d867b90398da0c95a339405d062763855bc73b6"
+  },
+  "samples": [
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 0,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1888.314853,
+      "firstImageMs": 1916.4259680000002,
+      "pasteMs": 4571.313266,
+      "totalMs": 6459.628119,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 0,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1767.717841,
+      "firstImageMs": 1797.060189,
+      "pasteMs": 4706.916601,
+      "totalMs": 6474.634442,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "current",
+      "round": 1,
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1705.402437,
+      "firstImageMs": 1728.8772430000001,
+      "pasteMs": 4191.907499999999,
+      "totalMs": 5897.309937,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "invalidSample": false
+    },
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 1,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1797.681131,
+      "firstImageMs": 1830.058721,
+      "pasteMs": 4344.061507,
+      "totalMs": 6141.742638000001,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793472908502,
+          "batchId": "mvwrgl4k-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "invalidSample": true
+    }
+  ],
+  "excludedFromFinalMedians": [
+    {
+      "scenario": "paginated_tag",
+      "kind": "baseline",
+      "round": 1,
+      "version": "2.9.3",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+      "processIsolation": "fresh Node process; no per-process warmup",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1797.681131,
+      "firstImageMs": 1830.058721,
+      "pasteMs": 4344.061507,
+      "totalMs": 6141.742638000001,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "ownedDividerRecords": 201
+      },
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793472908502,
+          "batchId": "mvwrgl4k-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "valid": false,
+      "invalidSample": true
+    }
+  ],
+  "summary": {
+    "attempted": 4,
+    "valid": 3,
+    "invalid": 1,
+    "unexecuted": 8
+  },
+  "note": "Collection stopped at the first rejected historicalv293 baseline. Currentc7 has no fault. Rejected timing is retained but cannot be included in medians; no budget change or automatic retry was used."
+}

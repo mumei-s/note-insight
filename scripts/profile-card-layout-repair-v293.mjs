@@ -57,7 +57,7 @@ function previewLayoutRepair(){
  }
  view.state.doc.forEach((node,pos)=>blocks.push({node,pos}));
  const measure=content.presentationContext?.(view)||layoutRepairMeasure(view),changes=[],samples=[],activityIndices=new Set(),seenPresentation=new Set();
- let paragraphCount=0,dividerCount=0;
+ let paragraphCount=0,dividerCount=0,reconciledDividerCount=0;
  for(const image of images){
   const {hit,row,url}=image,owned=saved.presentationTexts?.[url];
   if(owned!==undefined){
@@ -78,14 +78,27 @@ function previewLayoutRepair(){
   }else if(content.aboveText(row,measure.bodyWidthPx,measure.fontBasePx))layoutRepairError('紹介文の所有記録がないため推測で修正できません');
   const divider=dividers.owned(view,hit,saved);
   if(!divider){
+   const imageIdentity=dividers.identity?.(hit,row)||{id:hit.node.attrs?.id,src:hit.node.attrs?.src,url};
+   const matchesImage=identity=>dividers.sameImage?.(identity,imageIdentity)??(identity?.id&&identity.id===imageIdentity.id&&norm(identity.url)===url);
+   if((saved.coreDividerRecords||[]).some(record=>record.runId===saved.createdAt&&record.articleKey===saved.articleKey&&matchesImage(record.image)))layoutRepairError('記録済みの区切り線の位置・内容を確認できません');
+   const external=dividers.external?.(view,hit,saved);if(external)continue;
+   if((saved.coreExternalDividerRecords||[]).some(record=>record.runId===saved.createdAt&&record.articleKey===saved.articleKey&&matchesImage(record.image)))layoutRepairError('記録済みの既存区切り線の位置・内容が変わっています');
+   const nextPos=hit.pos+hit.node.nodeSize,nextNode=view.state.doc.nodeAt(nextPos);
+   if(pending&&matchesImage(pending.image)&&dividers.isDivider(view,nextNode)){
+    let record;try{record=dividers.externalRecord?.(view,row,hit,nextNode,saved)}catch{}
+    if(!record||record.ownership!=='unconfirmed')layoutRepairError('保留中の既存区切り線を記録復旧の対象として確認できません');
+    changes.push({kind:'external-divider',pos:nextPos,node:nextNode,image:hit,row,url,externalRecord:record});reconciledDividerCount++;
+    samples.unshift({name:String(row.creator||''),before:'画像直後に既存の区切り線（記録未確定）',after:'既存の線を残し、所有未確認の対応記録だけ復旧',beforeText:'区切り線は追加・削除しません',afterText:'同じ画像・同じ区切り線を保持します'});samples.splice(3);
+    continue;
+   }
    const node=dividers.create(view);if(!node)layoutRepairError('区切り線を生成できません');
    changes.push({kind:'divider',pos:hit.pos+hit.node.nodeSize,node,image:hit,row,url});dividerCount++;
   }
  }
  for(const url of Object.keys(saved.presentationTexts||{}))if(!seenPresentation.has(url))layoutRepairError('紹介文に対応する作成画像を確認できません');
- const token='layout-'+Date.now().toString(36)+'-'+(++layoutRepairSerial),plan={token,view,doc:view.state.doc,runSnapshot:snapshot,articleKey,runId:run.createdAt,changes,images,measure,paragraphs:paragraphCount,dividers:dividerCount};
+ const token='layout-'+Date.now().toString(36)+'-'+(++layoutRepairSerial),plan={token,view,doc:view.state.doc,runSnapshot:snapshot,articleKey,runId:run.createdAt,changes,images,measure,paragraphs:paragraphCount,dividers:dividerCount,reconciledDividers:reconciledDividerCount};
  layoutRepairPlan=plan;
- return{token,changeCount:changes.length,paragraphs:paragraphCount,dividers:dividerCount,samples,message:changes.length?'紹介文 '+paragraphCount+'件・区切り線 '+dividerCount+'件を修正できます。画像・リンク・名前・本文内容はそのままです。':'修正が必要な作成分はありません。'};
+ return{token,changeCount:changes.length,paragraphs:paragraphCount,dividers:dividerCount,reconciledDividers:reconciledDividerCount,samples,message:changes.length?'紹介文 '+paragraphCount+'件・区切り線の追加 '+dividerCount+'件'+(reconciledDividerCount?'・既存区切り線の記録復旧 '+reconciledDividerCount+'件（既存の線は追加・削除せず、所有未確認のまま保持）':'')+'を確認できます。画像・リンク・名前・本文内容はそのままです。':'修正が必要な作成分はありません。'};
 }
 function layoutRepairMatches(plan){
  const run=readRun();return!!plan&&findView()===plan.view&&plan.view.state.doc===plan.doc&&editorArticleKey()===plan.articleKey&&run?.articleKey===plan.articleKey&&run.createdAt===plan.runId&&layoutRepairSnapshot(run)===plan.runSnapshot;
@@ -97,12 +110,12 @@ async function applyLayoutRepair(token){
  if(layoutRepairBusy())layoutRepairError('実行中の処理を一時停止してから修正してください');
  if(!layoutRepairMatches(plan))layoutRepairError('確認後に本文または作成記録が変わりました。もう一度確認してください');
  layoutRepairPlan=null;
- if(!plan.changes.length)return{applied:false,changeCount:0,paragraphs:0,dividers:0,saved:'unchanged',message:'修正が必要な作成分はありません。'};
+ if(!plan.changes.length)return{applied:false,changeCount:0,paragraphs:0,dividers:0,reconciledDividers:0,saved:'unchanged',message:'修正が必要な作成分はありません。'};
  const view=plan.view,run=JSON.parse(plan.runSnapshot),dividers=page.__MUMEI_PROFILE_CARD_DIVIDERS__,paragraphChanges=plan.changes.filter(change=>change.kind==='paragraph');
  let transaction=view.state.tr;
  // At a shared boundary, replace the old paragraph before inserting the HR in
  // front of it. Higher original positions are always processed first.
- const ordered=plan.changes.slice().sort((a,b)=>b.pos-a.pos||(a.kind==='paragraph'?-1:1));
+ const ordered=plan.changes.filter(change=>change.kind!=='external-divider').sort((a,b)=>b.pos-a.pos||(a.kind==='paragraph'?-1:1));
  for(const change of ordered){
   if(change.kind==='paragraph'){
    const current=plan.doc.nodeAt(change.pos);if(!current?.eq?.(change.node))layoutRepairError('紹介文の位置が変わりました');
@@ -128,14 +141,27 @@ async function applyLayoutRepair(token){
   updated.coreDividerFormat=1;updated.coreDividerRecords=[...(updated.coreDividerRecords||[]).filter(record=>!newDividerRecords.some(next=>sameImage(next.image,record.image))),...newDividerRecords];updated.dividerUrls=[...new Set([...(updated.dividerUrls||[]),...newDividerRecords.map(record=>record.image.url)])];
   if(updated.pendingCoreDivider?.runId===run.createdAt&&updated.pendingCoreDivider?.articleKey===run.articleKey&&newDividerRecords.some(record=>sameImage(record.image,updated.pendingCoreDivider.image)))delete updated.pendingCoreDivider;
  }
- updated.layoutRepair={version:1,at:Date.now(),paragraphs:plan.paragraphs,dividers:plan.dividers,saveState:'pending'};updated.draftSaveState='pending';updated.draftSaveError=null;updated.updatedAt=Date.now();
+ const externalRecords=[];
+ for(const change of plan.changes.filter(change=>change.kind==='external-divider')){
+  // This is an explicit acknowledgement of an existing legacy boundary, not
+  // proof that the tool inserted it. It remains excluded from owned deletion.
+  const verified=dividers.externalRecord?.(view,change.row,change.image,change.node,run);
+  const imagePos=mapping.map(change.image.pos,1),imageNode=expected.nodeAt(imagePos),node=expected.nodeAt(imagePos+imageNode?.nodeSize);
+  if(!verified||verified.ownership!=='unconfirmed'||imageNode?.type?.name!=='image'||norm(imageNode.attrs?.link)!==change.url||!node?.eq?.(change.node))layoutRepairError('復旧後の既存区切り線の対応を確認できません');
+  externalRecords.push(verified);
+ }
+ if(externalRecords.length){
+  updated.coreDividerFormat=1;updated.coreExternalDividerRecords=[...(updated.coreExternalDividerRecords||[]).filter(record=>!externalRecords.some(next=>sameImage(next.image,record.image))),...externalRecords].slice(-1501);
+  if(updated.pendingCoreDivider?.runId===run.createdAt&&updated.pendingCoreDivider?.articleKey===run.articleKey&&externalRecords.some(record=>sameImage(record.image,updated.pendingCoreDivider.image)))delete updated.pendingCoreDivider;
+ }
+ updated.layoutRepair={version:1,at:Date.now(),paragraphs:plan.paragraphs,dividers:plan.dividers,reconciledDividers:plan.reconciledDividers||0,saveState:'pending'};updated.draftSaveState='pending';updated.draftSaveError=null;updated.updatedAt=Date.now();
  // Validation above builds a complete transaction and checkpoint without
  // writing either one. Recheck the exact preview snapshot immediately before it.
  if(!layoutRepairMatches(plan))layoutRepairError('確認後に本文または作成記録が変わりました');
- let dispatchError=null,dispatchFailed=false;try{view.dispatch(transaction)}catch(error){dispatchError=error;dispatchFailed=true}
+ let dispatchError=null,dispatchFailed=false;if(transaction.docChanged)try{view.dispatch(transaction)}catch(error){dispatchError=error;dispatchFailed=true}
  if(view.state.doc!==expected&&!view.state.doc.eq?.(expected)){if(dispatchFailed)throw dispatchError;throw new Error('表示修正の結果を確認できません。本文を確認してください');}
  writeRun(updated);
- const response={applied:true,changeCount:plan.changes.length,paragraphs:plan.paragraphs,dividers:plan.dividers,saved:'pending'};
+ const response={applied:true,changeCount:plan.changes.length,paragraphs:plan.paragraphs,dividers:plan.dividers,reconciledDividers:plan.reconciledDividers||0,saved:'pending'};
  try{
   await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();
   if(dispatchFailed){response.message='表示の修正結果と作成記録を保持しました。下書き保存は未確認です：'+(dispatchError?.message||String(dispatchError));return response;}
@@ -144,8 +170,9 @@ async function applyLayoutRepair(token){
   for(const image of layoutRepairImages(view,readRun())){if(typeof dividers.observe==='function')dividers.observe(view,image.row,image.hit);else if(typeof qualityCall==='function')qualityCall('imageBoundary',[image.row,view,image.hit,{dividerRequired:true,isDivider:node=>dividers.isDivider(view,node)}]);}
   const saved=await saveOnce('作成済みの紹介表示・区切り線を修正｜下書き保存中…');
   if(saved===true||saved?.confirmed===true){const current=readRun();if(current?.createdAt===plan.runId&&current.articleKey===plan.articleKey){writeRun({...current,layoutRepair:{...current.layoutRepair,saveState:'confirmed'}});await page.__MUMEI_PROFILE_CARD_RUN_STORE__?.flush?.();response.saved='confirmed';}}
-  response.message=response.saved==='confirmed'?'紹介文と区切り線の修正・下書き保存を確認しました。':'表示を修正しました。下書き保存の完了は未確認です。note画面で保存完了を確認してください。';
- }catch(error){response.message='表示を修正しました。保存は未確認です：'+(error?.message||String(error));}
+  const recovery=plan.reconciledDividers?'既存区切り線 '+plan.reconciledDividers+'件の対応記録を復旧しました（所有未確認の線として保持）。':'';
+  response.message=recovery+(response.saved==='confirmed'?'紹介表示と区切り線の確認・下書き保存を確認しました。':'下書き保存の完了は未確認です。note画面で保存完了を確認してください。');
+ }catch(error){response.message=(plan.reconciledDividers?'既存区切り線の対応記録をメモリーに保持しました。':'表示を修正しました。')+'保存は未確認です：'+(error?.message||String(error));}
  return response;
 }
 page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__={preview:previewLayoutRepair,apply:applyLayoutRepair};

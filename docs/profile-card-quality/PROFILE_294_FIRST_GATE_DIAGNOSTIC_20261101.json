@@ -1,0 +1,365 @@
+{
+  "diagnosticOnly": true,
+  "intermediateCurrentSha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+  "note": "Actual-function diagnostic timings are nested/inclusive and cannot be summed. They are not a replacement for the failed balanced speed gate.",
+  "baseline": {
+    "diagnosticOnly": true,
+    "inclusiveTimings": true,
+    "note": "Cumulative nested function times overlap and must not be summed. Lightweight timing/count wrappers only; runtime bytes and real30ms budget unchanged.",
+    "variant": "baseline",
+    "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+    "metrics": {
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1701.731829,
+      "firstImageMs": 1725.9036160000003,
+      "pasteMs": 3789.3698369999997,
+      "totalMs": 5491.101666,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0
+    },
+    "stage": "images_ready",
+    "images": 201,
+    "qualityFault": false,
+    "qualityFailures": [],
+    "nodeAtCalls": 2208,
+    "fullDocScans": 806,
+    "stats": {
+      "core.makeFile": {
+        "calls": 201,
+        "totalMs": 1914.828253000002,
+        "maxMs": 16.80326799999966,
+        "bytes": 0
+      },
+      "core.uploadOne": {
+        "calls": 201,
+        "totalMs": 1514.205791000003,
+        "maxMs": 13.422818000000007,
+        "bytes": 0
+      },
+      "core.appendCoreDivider": {
+        "calls": 201,
+        "totalMs": 1322.7811000000042,
+        "maxMs": 12.355623000000378,
+        "bytes": 0
+      },
+      "core.writeRun": {
+        "calls": 406,
+        "totalMs": 1151.7458389999915,
+        "maxMs": 7.106824999999844,
+        "bytes": 0
+      },
+      "runStore.write": {
+        "calls": 406,
+        "totalMs": 1150.5093800000027,
+        "maxMs": 7.104574999999386,
+        "bytes": 0
+      },
+      "core.recordImage": {
+        "calls": 201,
+        "totalMs": 697.451599,
+        "maxMs": 7.245001000000229,
+        "bytes": 0
+      },
+      "JSON.parse.rows": {
+        "calls": 812,
+        "totalMs": 681.242134000011,
+        "maxMs": 3.6746320000002015,
+        "bytes": 154624024
+      },
+      "JSON.stringify.rows": {
+        "calls": 406,
+        "totalMs": 455.3181369999952,
+        "maxMs": 4.224383000000671,
+        "bytes": 77312012
+      },
+      "core.ownedCoreDivider": {
+        "calls": 402,
+        "totalMs": 28.38140200000089,
+        "maxMs": 1.5381470000002082,
+        "bytes": 0
+      },
+      "core.prepareCoreImageAnchor": {
+        "calls": 201,
+        "totalMs": 25.363714999997228,
+        "maxMs": 1.6547040000004927,
+        "bytes": 0
+      },
+      "core.observeCoreDivider": {
+        "calls": 201,
+        "totalMs": 25.27614400000857,
+        "maxMs": 1.5889860000006593,
+        "bytes": 0
+      },
+      "core.imageNodes": {
+        "calls": 805,
+        "totalMs": 22.879741000003378,
+        "maxMs": 2.313571000000593,
+        "bytes": 0
+      },
+      "view.dispatch": {
+        "calls": 1004,
+        "totalMs": 15.06764499999872,
+        "maxMs": 1.5702289999999266,
+        "bytes": 0
+      },
+      "core.coreDividerImage": {
+        "calls": 804,
+        "totalMs": 7.279040999986137,
+        "maxMs": 0.3387059999995472,
+        "bytes": 0
+      },
+      "JSON.stringify.quality": {
+        "calls": 1,
+        "totalMs": 6.381430999999793,
+        "maxMs": 6.381430999999793,
+        "bytes": 761470
+      },
+      "core.coreDividerRecord": {
+        "calls": 201,
+        "totalMs": 5.943509000004269,
+        "maxMs": 0.3577580000001035,
+        "bytes": 0
+      },
+      "JSON.stringify.other": {
+        "calls": 402,
+        "totalMs": 4.163916999999628,
+        "maxMs": 0.3911709999999857,
+        "bytes": 344861
+      },
+      "core.coreDividerType": {
+        "calls": 804,
+        "totalMs": 1.7808889999896564,
+        "maxMs": 0.05153900000004796,
+        "bytes": 0
+      },
+      "JSON.parse.other": {
+        "calls": 4,
+        "totalMs": 0.1496790000001056,
+        "maxMs": 0.13463099999989936,
+        "bytes": 12
+      }
+    },
+    "slow": []
+  },
+  "current": {
+    "diagnosticOnly": true,
+    "inclusiveTimings": true,
+    "note": "Cumulative nested function times overlap and must not be summed. Lightweight timing/count wrappers only; runtime bytes and real30ms budget unchanged.",
+    "variant": "current",
+    "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+    "metrics": {
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1835.7774980000002,
+      "firstImageMs": 1859.9844150000001,
+      "pasteMs": 3887.0078579999995,
+      "totalMs": 5722.785355999999,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0
+    },
+    "stage": "images_ready",
+    "images": 201,
+    "qualityFault": false,
+    "qualityFailures": [],
+    "nodeAtCalls": 4416,
+    "fullDocScans": 806,
+    "stats": {
+      "core.makeFile": {
+        "calls": 201,
+        "totalMs": 1940.8635600000034,
+        "maxMs": 17.826606999999967,
+        "bytes": 0
+      },
+      "core.uploadOne": {
+        "calls": 201,
+        "totalMs": 1593.6842340000017,
+        "maxMs": 24.686515000000327,
+        "bytes": 0
+      },
+      "core.appendCoreDivider": {
+        "calls": 201,
+        "totalMs": 1375.7572160000045,
+        "maxMs": 22.69649600000048,
+        "bytes": 0
+      },
+      "core.writeRun": {
+        "calls": 406,
+        "totalMs": 1180.4970749999957,
+        "maxMs": 17.48462699999982,
+        "bytes": 0
+      },
+      "runStore.write": {
+        "calls": 406,
+        "totalMs": 1179.005586000002,
+        "maxMs": 17.479669999999714,
+        "bytes": 0
+      },
+      "core.recordImage": {
+        "calls": 201,
+        "totalMs": 735.5572170000064,
+        "maxMs": 18.820470999999998,
+        "bytes": 0
+      },
+      "JSON.parse.rows": {
+        "calls": 812,
+        "totalMs": 716.6352830000078,
+        "maxMs": 12.87317400000029,
+        "bytes": 154653772
+      },
+      "JSON.stringify.rows": {
+        "calls": 406,
+        "totalMs": 449.40640499999836,
+        "maxMs": 3.257810999999492,
+        "bytes": 77326886
+      },
+      "core.coreDividerBoundary": {
+        "calls": 402,
+        "totalMs": 30.25816599999962,
+        "maxMs": 0.8277189999998882,
+        "bytes": 0
+      },
+      "core.prepareCoreImageAnchor": {
+        "calls": 201,
+        "totalMs": 28.443017999994936,
+        "maxMs": 1.4944259999997485,
+        "bytes": 0
+      },
+      "core.ownedCoreDivider": {
+        "calls": 402,
+        "totalMs": 26.12667299999339,
+        "maxMs": 0.6379120000001421,
+        "bytes": 0
+      },
+      "core.imageNodes": {
+        "calls": 805,
+        "totalMs": 25.393097000004673,
+        "maxMs": 0.6786950000005163,
+        "bytes": 0
+      },
+      "core.observeCoreDivider": {
+        "calls": 201,
+        "totalMs": 24.32532900000342,
+        "maxMs": 0.7458539999997811,
+        "bytes": 0
+      },
+      "core.coreDividerRecordFor": {
+        "calls": 603,
+        "totalMs": 19.47563299998319,
+        "maxMs": 0.6349629999995159,
+        "bytes": 0
+      },
+      "view.dispatch": {
+        "calls": 1004,
+        "totalMs": 17.052365000000464,
+        "maxMs": 0.6305380000003424,
+        "bytes": 0
+      },
+      "core.coreDividerInsertionProof": {
+        "calls": 201,
+        "totalMs": 12.229555999993408,
+        "maxMs": 1.5594220000002679,
+        "bytes": 0
+      },
+      "core.coreDividerImage": {
+        "calls": 1206,
+        "totalMs": 11.848568999987947,
+        "maxMs": 1.528479999999945,
+        "bytes": 0
+      },
+      "core.coreDividerCurrentImage": {
+        "calls": 201,
+        "totalMs": 7.750177999997959,
+        "maxMs": 1.540683999999601,
+        "bytes": 0
+      },
+      "JSON.stringify.other": {
+        "calls": 402,
+        "totalMs": 4.739739999995891,
+        "maxMs": 0.6914709999998649,
+        "bytes": 344861
+      },
+      "JSON.stringify.quality": {
+        "calls": 1,
+        "totalMs": 3.758563999999751,
+        "maxMs": 3.758563999999751,
+        "bytes": 761470
+      },
+      "core.coreDividerType": {
+        "calls": 1206,
+        "totalMs": 3.7495689999936985,
+        "maxMs": 0.7746349999997619,
+        "bytes": 0
+      },
+      "core.coreDividerRecord": {
+        "calls": 201,
+        "totalMs": 3.4948089999979857,
+        "maxMs": 0.33312100000011924,
+        "bytes": 0
+      },
+      "core.coreDividerNeighborhood": {
+        "calls": 603,
+        "totalMs": 3.2101380000012796,
+        "maxMs": 0.1401890000001913,
+        "bytes": 0
+      },
+      "core.externalCoreDivider": {
+        "calls": 201,
+        "totalMs": 1.9284160000001975,
+        "maxMs": 0.2177639999999883,
+        "bytes": 0
+      },
+      "core.coreEmptyAnchorNeighborhood": {
+        "calls": 400,
+        "totalMs": 1.6653960000044208,
+        "maxMs": 0.29945600000064587,
+        "bytes": 0
+      },
+      "JSON.parse.other": {
+        "calls": 4,
+        "totalMs": 0.05662600000027851,
+        "maxMs": 0.040670000000318396,
+        "bytes": 12
+      }
+    },
+    "slow": [
+      {
+        "name": "core.appendCoreDivider",
+        "startedAt": 6213.624448,
+        "elapsedMs": 22.69649600000048
+      },
+      {
+        "name": "core.uploadOne",
+        "startedAt": 6211.789062,
+        "elapsedMs": 24.686515000000327
+      },
+      {
+        "name": "core.uploadOne",
+        "startedAt": 6613.200986,
+        "elapsedMs": 21.449021999999786
+      }
+    ]
+  }
+}

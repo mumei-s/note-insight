@@ -1,0 +1,51 @@
+{
+  "functionalOnly": true,
+  "environment": "Real ProseMirror Schema/EditorState/Plugin.appendTransaction and actual compiled modules; synthetic API and native upload capabilities; no live note.com or browser layout claim.",
+  "currentSha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+  "baselineRef": "9a2f79d",
+  "baselineSha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+  "cases": [
+    {
+      "name": "actual-v293-negative-control",
+      "passed": true,
+      "images": 1,
+      "rules": 1,
+      "stage": "images_building",
+      "pending": "uncertain"
+    },
+    {
+      "name": "200-plus-final-mapped-note-normalization",
+      "passed": true,
+      "images": 201,
+      "ownedRules": 201,
+      "normalizations": 201,
+      "resumeAddsImages": 0,
+      "resumeAddsRules": 0,
+      "confirmedSave": true
+    },
+    {
+      "name": "200-legacy-unowned-boundary-upgrade-and-delete",
+      "passed": true,
+      "imagesBeforeDelete": 201,
+      "newOwnedRules": 200,
+      "externalRules": 1,
+      "oldPrefixPNGPreserved": true,
+      "manualRuleRetainedAfterDelete": true
+    },
+    {
+      "name": "delete-rule-safely-stops",
+      "passed": true,
+      "images": 1,
+      "stage": "images_building",
+      "pending": "retryable"
+    },
+    {
+      "name": "wrong-image-safely-stops",
+      "passed": true,
+      "images": 1,
+      "stage": "images_building",
+      "pending": "uncertain"
+    }
+  ],
+  "allPassed": true
+}

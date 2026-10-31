@@ -1,0 +1,1111 @@
+{
+  "diagnosticOnly": true,
+  "status": "failed-speed-gate",
+  "generatedAt": "2026-10-31T18:46:40.799570+00:00",
+  "environment": {
+    "scope": "Real ProseMirror/canvas with simulated note API latency and native uploads; not live note.com or phone speed.",
+    "nodeVersion": "v24.22.1",
+    "platform": "Linux",
+    "architecture": "x86_64",
+    "cpuModel": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "logicalCpuCount": 9,
+    "cpuQuota": "800000 100000"
+  },
+  "baseline": {
+    "ref": "9a2f79d",
+    "version": "2.9.3",
+    "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+  },
+  "current": {
+    "version": "2.9.4",
+    "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d"
+  },
+  "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+  "people": 200,
+  "repetitions": 3,
+  "apiLatencyMs": 20,
+  "processPolicy": "One fresh Node process per sample, sequential, no per-process warmup on either version. Runtime/module initialization is outside measured normal(); first PNG cold work remains included. Final comparisons interleave baseline/current,current/baseline,baseline/current within each scenario.",
+  "cachePolicy": "Fresh Node/VM/app caches per sample; no per-process warmup, forced GC, CPU affinity or OS page-cache flush. Runtime initialization is outside the measured normal() call; first PNG cold work is included. The same two synthetic bitmap capabilities are reused within each sample.",
+  "sampleOrder": {
+    "paginated_tag": [
+      "baseline-0",
+      "current-0",
+      "current-1",
+      "baseline-1",
+      "baseline-2",
+      "current-2"
+    ],
+    "composite_tag_magazine_note_likes": [
+      "baseline-0",
+      "current-0",
+      "current-1",
+      "baseline-1",
+      "baseline-2",
+      "current-2"
+    ]
+  },
+  "summary": {
+    "paginated_tag": {
+      "baseline": {
+        "extractionMs": 1727.4957510000002,
+        "firstImageMs": 1748.640706,
+        "pasteMs": 3949.218379,
+        "totalMs": 5663.913888,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "current": {
+        "extractionMs": 1770.6607729999998,
+        "firstImageMs": 1800.2845770000001,
+        "pasteMs": 4389.323538000001,
+        "totalMs": 6159.984311,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "changePercent": {
+        "extractionMs": 2.4987049591880472,
+        "pasteMs": 11.144107941466675,
+        "totalMs": 8.758438648776302
+      },
+      "baselineApi": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "currentApi": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "goalMet": false
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": {
+        "extractionMs": 1318.4002790000002,
+        "firstImageMs": 1341.842496,
+        "pasteMs": 4286.319970999999,
+        "totalMs": 5604.720249999999,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "current": {
+        "extractionMs": 1321.4917269999999,
+        "firstImageMs": 1346.8850679999998,
+        "pasteMs": 3899.007683,
+        "totalMs": 5220.499409999999,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "changePercent": {
+        "extractionMs": 0.23448478047536359,
+        "pasteMs": -9.036009691773883,
+        "totalMs": -6.855308077151578
+      },
+      "baselineApi": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "currentApi": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "goalMet": true
+    }
+  },
+  "results": {
+    "paginated_tag": {
+      "baseline": [
+        {
+          "scenario": "paginated_tag",
+          "kind": "baseline",
+          "round": 0,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1714.6955090000001,
+          "firstImageMs": 1740.4758809999998,
+          "pasteMs": 3949.218379,
+          "totalMs": 5663.913888,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "paginated_tag",
+          "kind": "baseline",
+          "round": 1,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1835.6661530000001,
+          "firstImageMs": 1861.4850690000003,
+          "pasteMs": 3824.262039,
+          "totalMs": 5659.928192,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "paginated_tag",
+          "kind": "baseline",
+          "round": 2,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1727.4957510000002,
+          "firstImageMs": 1748.640706,
+          "pasteMs": 4078.537911,
+          "totalMs": 5806.033662,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ],
+      "current": [
+        {
+          "scenario": "paginated_tag",
+          "kind": "current",
+          "round": 0,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1777.297999,
+          "firstImageMs": 1801.288885,
+          "pasteMs": 4366.622516,
+          "totalMs": 6143.920515,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "paginated_tag",
+          "kind": "current",
+          "round": 1,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1770.6607729999998,
+          "firstImageMs": 1800.2845770000001,
+          "pasteMs": 4389.323538000001,
+          "totalMs": 6159.984311,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "paginated_tag",
+          "kind": "current",
+          "round": 2,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1754.934922,
+          "firstImageMs": 1785.276006,
+          "pasteMs": 4455.911026,
+          "totalMs": 6210.845948,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ]
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": [
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 0,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1358.4675129999998,
+          "firstImageMs": 1382.435726,
+          "pasteMs": 4454.9863000000005,
+          "totalMs": 5813.453813,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 1,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1318.4002790000002,
+          "firstImageMs": 1341.842496,
+          "pasteMs": 4286.319970999999,
+          "totalMs": 5604.720249999999,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 2,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1307.90584,
+          "firstImageMs": 1331.44405,
+          "pasteMs": 3850.8469120000004,
+          "totalMs": 5158.752752,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ],
+      "current": [
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 0,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1321.4917269999999,
+          "firstImageMs": 1344.036033,
+          "pasteMs": 3899.007683,
+          "totalMs": 5220.499409999999,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 1,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1319.845815,
+          "firstImageMs": 1346.8850679999998,
+          "pasteMs": 3835.404045,
+          "totalMs": 5155.24986,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 2,
+          "version": "2.9.4",
+          "sha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+          "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1321.644697,
+          "firstImageMs": 1347.70826,
+          "pasteMs": 3953.6719860000003,
+          "totalMs": 5275.316683,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "ownedDividerRecords": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ]
+    }
+  },
+  "validation": {
+    "comparisonComplete": true,
+    "acceptedSamples": 12,
+    "invalidSamples": 0,
+    "qualityFaults": 0,
+    "allCompletionChecksPassed": true,
+    "allCurrentImagesAndImmediateOwnedRules201": true,
+    "noAddedApiOrScheduledWaits": true,
+    "maxAllowedTotalRegressionPercent": 5,
+    "goalMet": false
+  },
+  "functionalProof": {
+    "functionalOnly": true,
+    "environment": "Real ProseMirror Schema/EditorState/Plugin.appendTransaction and actual compiled modules; synthetic API and native upload capabilities; no live note.com or browser layout claim.",
+    "currentSha256": "e0c729d8c05a5d73fac9e84f7d8f57698b64a9f2094608a2daa1a76734af248d",
+    "baselineRef": "9a2f79d",
+    "baselineSha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+    "cases": [
+      {
+        "name": "actual-v293-negative-control",
+        "passed": true,
+        "images": 1,
+        "rules": 1,
+        "stage": "images_building",
+        "pending": "uncertain"
+      },
+      {
+        "name": "200-plus-final-mapped-note-normalization",
+        "passed": true,
+        "images": 201,
+        "ownedRules": 201,
+        "normalizations": 201,
+        "resumeAddsImages": 0,
+        "resumeAddsRules": 0,
+        "confirmedSave": true
+      },
+      {
+        "name": "200-legacy-unowned-boundary-upgrade-and-delete",
+        "passed": true,
+        "imagesBeforeDelete": 201,
+        "newOwnedRules": 200,
+        "externalRules": 1,
+        "oldPrefixPNGPreserved": true,
+        "manualRuleRetainedAfterDelete": true
+      },
+      {
+        "name": "delete-rule-safely-stops",
+        "passed": true,
+        "images": 1,
+        "stage": "images_building",
+        "pending": "retryable"
+      },
+      {
+        "name": "wrong-image-safely-stops",
+        "passed": true,
+        "images": 1,
+        "stage": "images_building",
+        "pending": "uncertain"
+      }
+    ],
+    "allPassed": true
+  },
+  "preliminaryBaselineDiagnostics": {
+    "includedInMedians": false,
+    "reason": "These earlier baseline-only runs are excluded; the actual gate uses the balanced interleaved samples above.",
+    "samples": [
+      {
+        "scenario": "paginated_tag",
+        "kind": "baseline",
+        "round": 0,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 1794.672596,
+        "firstImageMs": 1819.4774879999998,
+        "pasteMs": 4650.206443,
+        "totalMs": 6444.879039,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      },
+      {
+        "scenario": "paginated_tag",
+        "kind": "baseline",
+        "round": 1,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 1727.854246,
+        "firstImageMs": 1748.9092870000002,
+        "pasteMs": 3794.6631409999995,
+        "totalMs": 5522.517387,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      },
+      {
+        "scenario": "paginated_tag",
+        "kind": "baseline",
+        "round": 2,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 1725.82493,
+        "firstImageMs": 1746.243862,
+        "pasteMs": 4357.121898,
+        "totalMs": 6082.946828,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      },
+      {
+        "scenario": "composite_tag_magazine_note_likes",
+        "kind": "baseline",
+        "round": 0,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 478,
+          "completed": 478,
+          "active": 0,
+          "peakActive": 16,
+          "byKind": {
+            "search": 3,
+            "note": 201,
+            "magazine": 1,
+            "likes": 2,
+            "creatorContents": 70,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 9560
+        },
+        "extractionMs": 1532.7531279999998,
+        "firstImageMs": 1557.453715,
+        "pasteMs": 3732.505429,
+        "totalMs": 5265.258556999999,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      },
+      {
+        "scenario": "composite_tag_magazine_note_likes",
+        "kind": "baseline",
+        "round": 1,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 478,
+          "completed": 478,
+          "active": 0,
+          "peakActive": 16,
+          "byKind": {
+            "search": 3,
+            "note": 201,
+            "magazine": 1,
+            "likes": 2,
+            "creatorContents": 70,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 9560
+        },
+        "extractionMs": 1311.144156,
+        "firstImageMs": 1344.86363,
+        "pasteMs": 4436.955468,
+        "totalMs": 5748.0996239999995,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      },
+      {
+        "scenario": "composite_tag_magazine_note_likes",
+        "kind": "baseline",
+        "round": 2,
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+        "fixtureSha256": "0c485ad040b60251d1c8836606ff51db1433fd273a70a1099c365f550dd23509",
+        "processIsolation": "fresh Node process; no per-process warmup",
+        "api": {
+          "started": 478,
+          "completed": 478,
+          "active": 0,
+          "peakActive": 16,
+          "byKind": {
+            "search": 3,
+            "note": 201,
+            "magazine": 1,
+            "likes": 2,
+            "creatorContents": 70,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 9560
+        },
+        "extractionMs": 1504.358437,
+        "firstImageMs": 1528.9429229999998,
+        "pasteMs": 3911.1623710000003,
+        "totalMs": 5415.520808,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0,
+        "people": 200,
+        "images": 201,
+        "finalMathLast": true,
+        "orderedPeopleMatch": true,
+        "stage": "images_ready",
+        "draftSaveState": "confirmed",
+        "boundaries": {
+          "nativeDividerCount": 201,
+          "immediateImageBoundaries": 201,
+          "qualityBoundaryCalls": 201,
+          "requiredQualityBoundaryCalls": 201,
+          "retainedQualityBoundaryRecords": 40,
+          "retainedQualityBoundaryConfirmed": 40,
+          "ownedDividerRecords": 201
+        },
+        "qualityFault": false,
+        "qualityFailures": [],
+        "valid": true,
+        "invalidSample": false
+      }
+    ]
+  },
+  "interpretation": "Correctness/completion checks pass, but the tag median exceeds the authorized+5% speed gate. Mixed-source improvement does not waive that failure. This is a retained first-attempt diagnostic, not the final successful benchmark."
+}

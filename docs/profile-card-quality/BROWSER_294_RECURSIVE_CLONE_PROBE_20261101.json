@@ -1,0 +1,243 @@
+{
+  "mode": "recursive-clone-probe",
+  "objective": "One current completed 200-person browser pipeline followed by a separately timed clone diagnostic. This is not a repeated pipeline-speed study or a quality-pass claim.",
+  "method": "Actual compiled userscripts, real Chromium canvas/toBlob/File/DataTransfer/DOMParser/timers and real ProseMirror model/state. Synthetic paginated API with fixed latency, synchronous simulated native uploads and positive simulated native save. All browser HTTP is intercepted; this is not live note.com, Edge, or a phone. Each sample uses a fresh Chromium process and context. Noto Sans JP is available through isolated Fontconfig and preloaded as a webfont before timing; no source font or quality-budget rewrite, Node GC subtraction, forced GC, invalid-sample replacement or discarded attempts.",
+  "sources": {
+    "baseline": {
+      "ref": "9a2f79d7",
+      "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+      "version": "2.9.3"
+    },
+    "current": {
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "version": "2.9.4"
+    }
+  },
+  "fixtureSha256": "2352081fc9658c0c510377ee02f980b1040980e2a63e087e6d04323b9c601c2a",
+  "pmSha256": {
+    "model": "979f44e6c7f63ce3a20b66dc2ef9e4c96ac2cbc32360f47375d4c88baf9ed181",
+    "state": "d4bd4e98520abd0bb0150436d84a3832d856aa59636ea23a59409d35929730a3"
+  },
+  "bundleSha256": "a8719a56418c4c8d61a72ca24e2dd922594a008bf5cd46042befb06869fbfedf",
+  "fontSha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "count": 200,
+  "repetitions": 1,
+  "apiLatencyMs": 20,
+  "scenarios": [
+    "paginated_tag"
+  ],
+  "stopOnInvalid": true,
+  "engine": "Chromium 153.0.8010.0",
+  "samples": [
+    {
+      "scenario": "paginated_tag",
+      "people": 200,
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1653.1000000014901,
+      "pasteMs": 4951.699999999255,
+      "totalMs": 6604.800000000745,
+      "firstImageMs": 1680.300000000745,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "images": 201,
+      "stage": "images_ready",
+      "draftSaveState": "confirmed",
+      "finalMathLast": true,
+      "orderedPeopleMatch": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "ownedDividerRecords": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40
+      },
+      "qualityFault": false,
+      "qualityFailures": [],
+      "valid": true,
+      "lastStatus": {
+        "text": "①画像一覧 完了 ✅ 201件｜カードを置く位置を本文でタップ →「②ここから通知カード」"
+      },
+      "outputCompleted": true,
+      "qualityVerified": true,
+      "fontLoaded": true,
+      "errors": [],
+      "network": [
+        {
+          "url": "https://editor.note.com/notes/naaaaaaaaaaaa/edit",
+          "kind": "document"
+        },
+        {
+          "url": "https://editor.note.com/__profile_qa__/NotoSansJP.ttf",
+          "kind": "font"
+        }
+      ],
+      "version": "2.9.4",
+      "sha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "kind": "current",
+      "round": 0,
+      "smoke": false,
+      "cloneProbe": {
+        "objective": "Post-completion diagnostic only. Actual saved-run JSON.parse vs recursive clone of its already parsed canonical JSON tree. Scalars are reused; every object and array is copied; __proto__ is defined as an own data property and depth >256 throws. Three fixed alternating blocks of 100 iterations; no forced GC or fallback inside the measured candidate. Deep JSON equality, a full source-object WeakSet sharing check and edge checks are outside timed loops.",
+        "serializedBytes": 269387,
+        "people": 200,
+        "rows": 201,
+        "sourceObjectCount": 1820,
+        "iterationsPerBlock": 100,
+        "blocks": [
+          {
+            "block": 0,
+            "method": "jsonParse",
+            "iterations": 100,
+            "elapsedMs": 109.60000000149012,
+            "perCloneMs": 1.096000000014901,
+            "equal": true,
+            "independent": true
+          },
+          {
+            "block": 0,
+            "method": "recursiveClone",
+            "iterations": 100,
+            "elapsedMs": 46.19999999925494,
+            "perCloneMs": 0.4619999999925494,
+            "equal": true,
+            "independent": true
+          },
+          {
+            "block": 1,
+            "method": "recursiveClone",
+            "iterations": 100,
+            "elapsedMs": 52.30000000074506,
+            "perCloneMs": 0.5230000000074506,
+            "equal": true,
+            "independent": true
+          },
+          {
+            "block": 1,
+            "method": "jsonParse",
+            "iterations": 100,
+            "elapsedMs": 97.69999999925494,
+            "perCloneMs": 0.9769999999925494,
+            "equal": true,
+            "independent": true
+          },
+          {
+            "block": 2,
+            "method": "jsonParse",
+            "iterations": 100,
+            "elapsedMs": 117.19999999925494,
+            "perCloneMs": 1.1719999999925494,
+            "equal": true,
+            "independent": true
+          },
+          {
+            "block": 2,
+            "method": "recursiveClone",
+            "iterations": 100,
+            "elapsedMs": 55.599999997764826,
+            "perCloneMs": 0.5559999999776483,
+            "equal": true,
+            "independent": true
+          }
+        ],
+        "medianPerCloneMs": {
+          "jsonParse": 1.096000000014901,
+          "recursiveClone": 0.5230000000074506
+        },
+        "recursiveCloneChangePercent": -52.2810218977792,
+        "protoSafe": true,
+        "depthGuard": true,
+        "verified": true
+      }
+    }
+  ],
+  "summary": {},
+  "outputAllCompleted": true,
+  "qualityAllVerified": true,
+  "cloneProbe": {
+    "objective": "Post-completion diagnostic only. Actual saved-run JSON.parse vs recursive clone of its already parsed canonical JSON tree. Scalars are reused; every object and array is copied; __proto__ is defined as an own data property and depth >256 throws. Three fixed alternating blocks of 100 iterations; no forced GC or fallback inside the measured candidate. Deep JSON equality, a full source-object WeakSet sharing check and edge checks are outside timed loops.",
+    "serializedBytes": 269387,
+    "people": 200,
+    "rows": 201,
+    "sourceObjectCount": 1820,
+    "iterationsPerBlock": 100,
+    "blocks": [
+      {
+        "block": 0,
+        "method": "jsonParse",
+        "iterations": 100,
+        "elapsedMs": 109.60000000149012,
+        "perCloneMs": 1.096000000014901,
+        "equal": true,
+        "independent": true
+      },
+      {
+        "block": 0,
+        "method": "recursiveClone",
+        "iterations": 100,
+        "elapsedMs": 46.19999999925494,
+        "perCloneMs": 0.4619999999925494,
+        "equal": true,
+        "independent": true
+      },
+      {
+        "block": 1,
+        "method": "recursiveClone",
+        "iterations": 100,
+        "elapsedMs": 52.30000000074506,
+        "perCloneMs": 0.5230000000074506,
+        "equal": true,
+        "independent": true
+      },
+      {
+        "block": 1,
+        "method": "jsonParse",
+        "iterations": 100,
+        "elapsedMs": 97.69999999925494,
+        "perCloneMs": 0.9769999999925494,
+        "equal": true,
+        "independent": true
+      },
+      {
+        "block": 2,
+        "method": "jsonParse",
+        "iterations": 100,
+        "elapsedMs": 117.19999999925494,
+        "perCloneMs": 1.1719999999925494,
+        "equal": true,
+        "independent": true
+      },
+      {
+        "block": 2,
+        "method": "recursiveClone",
+        "iterations": 100,
+        "elapsedMs": 55.599999997764826,
+        "perCloneMs": 0.5559999999776483,
+        "equal": true,
+        "independent": true
+      }
+    ],
+    "medianPerCloneMs": {
+      "jsonParse": 1.096000000014901,
+      "recursiveClone": 0.5230000000074506
+    },
+    "recursiveCloneChangePercent": -52.2810218977792,
+    "protoSafe": true,
+    "depthGuard": true,
+    "verified": true
+  },
+  "completedAt": "2026-10-31T19:31:03.953Z"
+}

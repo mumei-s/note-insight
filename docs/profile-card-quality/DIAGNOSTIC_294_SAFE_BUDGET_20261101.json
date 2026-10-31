@@ -1,0 +1,511 @@
+{
+  "diagnosticOnly": true,
+  "maxAttempts": 3,
+  "stoppedOnFirstFault": true,
+  "currentSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+  "baselineSha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+  "attempts": [
+    {
+      "diagnosticOnly": true,
+      "notASpeedSample": true,
+      "attempt": 0,
+      "sourceSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "instrumentedSha256": "4aedde7bc31829b41f685ad6e89d67a4489d8f9db00e501b7f8b74c62f634365",
+      "safeBudgetMs": 30,
+      "unchangedFailureBehavior": true,
+      "qualityFault": false,
+      "qualityFailures": [],
+      "images": 201,
+      "stage": "images_ready",
+      "overruns": [],
+      "gc": [
+        {
+          "startTime": 3402.267345,
+          "duration": 14.11327700316906,
+          "endTime": 3416.3806220031693,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 3418.080478,
+          "duration": 1.2467790022492409,
+          "endTime": 3419.327257002249,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 3433.260499,
+          "duration": 8.689594000577927,
+          "endTime": 3441.950093000578,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 5104.340948,
+          "duration": 4.96670900285244,
+          "endTime": 5109.3076570028525,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 5841.522713,
+          "duration": 5.521839000284672,
+          "endTime": 5847.044552000285,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 6560.088422,
+          "duration": 4.392690002918243,
+          "endTime": 6564.481112002918,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7083.896861,
+          "duration": 0.924380000680685,
+          "endTime": 7084.821241000681,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7123.672469,
+          "duration": 12.557094000279903,
+          "endTime": 7136.22956300028,
+          "detail": {
+            "kind": 4,
+            "flags": 40
+          }
+        },
+        {
+          "startTime": 7549.378533,
+          "duration": 1.0641140006482601,
+          "endTime": 7550.442647000648,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7579.321944,
+          "duration": 5.137997999787331,
+          "endTime": 7584.459941999788,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 8010.578227,
+          "duration": 0.7117699980735779,
+          "endTime": 8011.289996998074,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 8050.677813,
+          "duration": 6.539271000772715,
+          "endTime": 8057.217084000773,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        }
+      ],
+      "metrics": {
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 2007.9057809999997,
+        "firstImageMs": 2039.872337,
+        "pasteMs": 4743.318571000001,
+        "totalMs": 6751.224352,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      }
+    },
+    {
+      "diagnosticOnly": true,
+      "notASpeedSample": true,
+      "attempt": 1,
+      "sourceSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "instrumentedSha256": "4aedde7bc31829b41f685ad6e89d67a4489d8f9db00e501b7f8b74c62f634365",
+      "safeBudgetMs": 30,
+      "unchangedFailureBehavior": true,
+      "qualityFault": false,
+      "qualityFailures": [],
+      "images": 201,
+      "stage": "images_ready",
+      "overruns": [],
+      "gc": [
+        {
+          "startTime": 2931.616091,
+          "duration": 20.5982560031116,
+          "endTime": 2952.2143470031115,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 2961.168443,
+          "duration": 1.4797709994018078,
+          "endTime": 2962.648213999402,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 2989.783596,
+          "duration": 7.080910000950098,
+          "endTime": 2996.8645060009503,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 4973.627226,
+          "duration": 26.37127799913287,
+          "endTime": 4999.9985039991325,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 6085.21928,
+          "duration": 5.963005997240543,
+          "endTime": 6091.182285997241,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7204.30451,
+          "duration": 8.257779996842146,
+          "endTime": 7212.562289996842,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7861.842852,
+          "duration": 2.1985119991004467,
+          "endTime": 7864.0413639991,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7905.270698,
+          "duration": 11.38757300004363,
+          "endTime": 7916.658271000044,
+          "detail": {
+            "kind": 4,
+            "flags": 40
+          }
+        },
+        {
+          "startTime": 8564.751874,
+          "duration": 1.0378419980406761,
+          "endTime": 8565.78971599804,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 8601.723191,
+          "duration": 6.98318799957633,
+          "endTime": 8608.706378999575,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 9167.709696,
+          "duration": 0.6942979991436005,
+          "endTime": 9168.403993999143,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 9194.213051,
+          "duration": 7.5522360019385815,
+          "endTime": 9201.76528700194,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        }
+      ],
+      "metrics": {
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 1805.8284510000003,
+        "firstImageMs": 1856.4584100000002,
+        "pasteMs": 6418.14206,
+        "totalMs": 8223.970511,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      }
+    },
+    {
+      "diagnosticOnly": true,
+      "notASpeedSample": true,
+      "attempt": 2,
+      "sourceSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+      "instrumentedSha256": "4aedde7bc31829b41f685ad6e89d67a4489d8f9db00e501b7f8b74c62f634365",
+      "safeBudgetMs": 30,
+      "unchangedFailureBehavior": true,
+      "qualityFault": true,
+      "qualityFailures": [
+        {
+          "target": "",
+          "key": "",
+          "stage": "追加検査",
+          "at": 1793473760355,
+          "batchId": "mvwrywaw-1",
+          "findings": [
+            {
+              "status": "failed",
+              "check": "追加検査",
+              "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+              "evidence": {}
+            }
+          ]
+        }
+      ],
+      "images": 201,
+      "stage": "images_ready",
+      "overruns": [
+        {
+          "dateStart": 1793473760314,
+          "dateElapsed": 33,
+          "performanceStart": 4017.419051,
+          "performanceEnd": 4049.914883,
+          "performanceElapsed": 32.495832000000064,
+          "functionSource": "()=>{\n  state.runId=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.createdAt??state.runId;\n  const drawing=renderings.get(row);if(drawing)files.set(file,drawing);\n  const out=[...assessIdentity(row),...assessBinding(row,provenance(row)?.binding,'取得→生成'),...assessAssets(row),...assessPresentation(row)];\n  out.push(...(drawing?assessGeometry(drawing.samples,drawing.width,drawing.height):[finding('unperformed','画像内の文字','描画記録なし')]));\n  const nameHash=fingerprint(String(row.creator||'')+'さん'),exactName=drawing?.samples.some(sample=>sample.textHash===nameHash);\n  out.push(finding(exactName?'confirmed':drawing?'candidate':'unperformed','キャプチャ内の名前',exactName?'実際のfillTextに完全名＋敬称を渡した記録がある。OCRは未実施':'既存の省略表示などにより、描画文字と完全名の一致は未確認。名前を追加・修正しない'));\n  out.push(finding('unperformed','絵柄からの人物認識','画像の取得元を追跡するだけで、絵柄の本人認識はしない'));\n  record(row,'画像生成',out);return file;\n }",
+          "stack": "Error: Actual safe overrun\n    at safe (evalmachine.<anonymous>:357:272)\n    at Object.generated (evalmachine.<anonymous>:379:9)\n    at qualityCall (evalmachine.<anonymous>:3638:74)\n    at makeFile (evalmachine.<anonymous>:3711:76)\n    at async Object.createImageList (evalmachine.<anonymous>:3022:15)\n    at async Object.normal (file://<repo>/tests/fixtures/profile-card-quality-runtime.mjs:107:8)\n    at async file://<repo>/[eval1]:5:15",
+          "overlappingGC": [],
+          "overlappingGCms": 0
+        }
+      ],
+      "gc": [
+        {
+          "startTime": 1668.001358,
+          "duration": 5.774234998971224,
+          "endTime": 1673.7755929989712,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 3478.187768,
+          "duration": 8.662485998123884,
+          "endTime": 3486.8502539981237,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 3487.155339,
+          "duration": 1.183883998543024,
+          "endTime": 3488.339222998543,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 3510.140989,
+          "duration": 8.140781000256538,
+          "endTime": 3518.2817700002565,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 4671.317708,
+          "duration": 5.663754001259804,
+          "endTime": 4676.981462001259,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 5896.235061,
+          "duration": 12.796659000217915,
+          "endTime": 5909.031720000218,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 7207.988965,
+          "duration": 11.791390001773834,
+          "endTime": 7219.780355001773,
+          "detail": {
+            "kind": 1,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 8552.225924,
+          "duration": 44.75196800008416,
+          "endTime": 8596.977892000084,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 8650.313092,
+          "duration": 27.968281000852585,
+          "endTime": 8678.281373000853,
+          "detail": {
+            "kind": 4,
+            "flags": 40
+          }
+        },
+        {
+          "startTime": 9367.36204,
+          "duration": 1.104637000709772,
+          "endTime": 9368.46667700071,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 9403.363176,
+          "duration": 5.962533000856638,
+          "endTime": 9409.325709000857,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 10088.459677,
+          "duration": 1.5004170015454292,
+          "endTime": 10089.960094001546,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        },
+        {
+          "startTime": 10129.690136,
+          "duration": 6.136357001960278,
+          "endTime": 10135.82649300196,
+          "detail": {
+            "kind": 4,
+            "flags": 64
+          }
+        },
+        {
+          "startTime": 10892.105314,
+          "duration": 1.6984959989786148,
+          "endTime": 10893.803809998979,
+          "detail": {
+            "kind": 8,
+            "flags": 0
+          }
+        }
+      ],
+      "metrics": {
+        "api": {
+          "started": 412,
+          "completed": 412,
+          "active": 0,
+          "peakActive": 8,
+          "byKind": {
+            "search": 10,
+            "note": 201,
+            "profile": 201
+          },
+          "scheduledLatencyMs": 8240
+        },
+        "extractionMs": 1875.761885,
+        "firstImageMs": 1902.2004970000003,
+        "pasteMs": 7359.403163999999,
+        "totalMs": 9235.165049,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      }
+    }
+  ],
+  "generatedAt": "2026-10-31T19:10:26.780976+00:00",
+  "interpretation": {
+    "observedMethod": "quality.generated() safe closure, called from makeFile()",
+    "observedOverrunDateMs": 33,
+    "observedOverrunPerformanceMs": 32.495832000000064,
+    "overlappingGCEntries": 0,
+    "overlappingGCms": 0,
+    "causeEstablished": false,
+    "note": "The exact observer is identified. No GC entry overlaps the overrun interval; this does not establish the cause as CPU work or scheduling. No product optimization, budget relaxation, or validated speed result follows from these diagnostic attempts."
+  },
+  "method": {
+    "privateCopyOnly": true,
+    "originalBudgetThresholdMs": 30,
+    "failureBehavior": "Original >30ms quality failure still runs; no retry or suppression.",
+    "instrumentation": "Two performance clock reads per safe invocation; function source and Error stack captured only after an overrun. PerformanceObserver records Node GC intervals. These diagnostics are not valid speed samples.",
+    "currentImmutableSourceSha256": "c7a4da167068ca689a4b5a0a5f4384fc2b959d84698e008dffb38bbfaf50b9b6",
+    "baselineImmutableSourceSha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+    "instrumentedSourceSha256": "4aedde7bc31829b41f685ad6e89d67a4489d8f9db00e501b7f8b74c62f634365",
+    "actualDiagnosticDriverSha256": "2c9d4089eb5b44fc3881f0b14d14b611d0d18ef4f2cf7f5255281e013ca534e9",
+    "sourceReadReview": "runStore.read is cached-memory access; generated uses bounded proof/geometry arrays and capped160 records. The specific slow subexpression is not established."
+  }
+}
