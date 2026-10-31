@@ -1,0 +1,1102 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-31T18:00:47.609290+00:00",
+  "environment": "Same managed executor; compiled userscripts; real ProseMirror/canvas; real clock and actual requested waits; simulated paginated note API with20ms latency per request and synchronous simulated native uploads. This is not a live note.com or phone speed measurement.",
+  "baseline": {
+    "ref": "410c7d4",
+    "version": "2.9.2",
+    "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9"
+  },
+  "current": {
+    "version": "2.9.3",
+    "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+  },
+  "people": 200,
+  "repetitions": 3,
+  "apiLatencyMs": 20,
+  "scenarioMethodology": {
+    "paginated_tag": "One shared Node process, one alternating warmup pair excluded, then three alternating measured pairs. Accepted before the later mixed-baseline fault in that process.",
+    "composite_tag_magazine_note_likes": "Exactly six samples, one fresh Node process per sample, sequential balanced order baseline/current/current/baseline/baseline/current. Identical no-per-process-warmup policy for both versions. Startup/module initialization is outside normal() timing; first PNG cold work remains included.",
+    "crossScenarioRestriction": "Compare versions only within each scenario. Process policy differs across scenarios, so do not compare their CPU/extraction timings against each other.",
+    "fixture": "Tag pages20, magazine pages100, like pages50; one public article per person; overlapping mixed sources must produce the identical ordered200 people plus the fixed final math participant.",
+    "qualityBoundaries": "Every current sample independently verifies201 native dividers immediately after all201 images and201 required calls to the real imageBoundary hook. All40 retained boundary verdicts in the bounded quality log are confirmed. The historical v2.9.2 zero-divider behavior is expected for its baseline control.",
+    "budget": "The real30ms inspection budget is unchanged. Invalid runs are rejected and explicitly retained below; no budget changes, forced GC, or inspection disabling were used."
+  },
+  "summary": {
+    "paginated_tag": {
+      "baseline": {
+        "extractionMs": 1700.8833830000003,
+        "firstImageMs": 1717.3965619999944,
+        "pasteMs": 6972.844062000004,
+        "totalMs": 8673.508476000003,
+        "scheduledWaitMs": 4000,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 4000
+      },
+      "current": {
+        "extractionMs": 1708.897559000001,
+        "firstImageMs": 1725.416212,
+        "pasteMs": 3704.931497999998,
+        "totalMs": 5415.829080000003,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "changePercent": {
+        "extractionMs": 0.47117727647296714,
+        "pasteMs": -46.86627916733704,
+        "totalMs": -37.55895788900361
+      },
+      "baselineApi": {
+        "started": 612,
+        "completed": 612,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 10,
+          "creatorContents": 200,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12240
+      },
+      "currentApi": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "baselineBoundaries": {
+        "nativeDividerCount": 0,
+        "immediateImageBoundaries": 0,
+        "qualityBoundaryCalls": 0,
+        "requiredQualityBoundaryCalls": 0,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "expectedDividers": 0
+      },
+      "currentBoundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "expectedDividers": 201
+      }
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": {
+        "extractionMs": 1663.7744180000002,
+        "firstImageMs": 1701.349047,
+        "pasteMs": 8323.543425,
+        "totalMs": 9932.228327,
+        "scheduledWaitMs": 4000,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 4000
+      },
+      "current": {
+        "extractionMs": 1330.4432210000002,
+        "firstImageMs": 1366.1064250000002,
+        "pasteMs": 4578.991661,
+        "totalMs": 5909.434882,
+        "scheduledWaitMs": 0,
+        "sourceWaitMs": 0,
+        "pasteWaitMs": 0
+      },
+      "changePercent": {
+        "extractionMs": -20.034638914612756,
+        "pasteMs": -44.98747195519076,
+        "totalMs": -40.50242616819778
+      },
+      "baselineApi": {
+        "started": 608,
+        "completed": 608,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "creatorContents": 200,
+          "magazine": 1,
+          "likes": 2,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12160
+      },
+      "currentApi": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "baselineBoundaries": {
+        "nativeDividerCount": 0,
+        "immediateImageBoundaries": 0,
+        "qualityBoundaryCalls": 0,
+        "requiredQualityBoundaryCalls": 0,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "expectedDividers": 0
+      },
+      "currentBoundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "expectedDividers": 201
+      }
+    }
+  },
+  "results": {
+    "paginated_tag": {
+      "baseline": [
+        {
+          "scenario": "paginated_tag",
+          "round": 0,
+          "kind": "baseline",
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1719.805048000002,
+          "firstImageMs": 1732.6389909999998,
+          "pasteMs": 7054.239836000001,
+          "totalMs": 8774.044884000003,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          }
+        },
+        {
+          "scenario": "paginated_tag",
+          "round": 1,
+          "kind": "baseline",
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1700.664413999999,
+          "firstImageMs": 1716.8387309999962,
+          "pasteMs": 6972.844062000004,
+          "totalMs": 8673.508476000003,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          }
+        },
+        {
+          "scenario": "paginated_tag",
+          "round": 2,
+          "kind": "baseline",
+          "api": {
+            "started": 612,
+            "completed": 612,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 10,
+              "creatorContents": 200,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12240
+          },
+          "extractionMs": 1700.8833830000003,
+          "firstImageMs": 1717.3965619999944,
+          "pasteMs": 6856.162843999999,
+          "totalMs": 8557.046226999999,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          }
+        }
+      ],
+      "current": [
+        {
+          "scenario": "paginated_tag",
+          "round": 0,
+          "kind": "current",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1708.897559000001,
+          "firstImageMs": 1725.416212,
+          "pasteMs": 3706.9315210000022,
+          "totalMs": 5415.829080000003,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          }
+        },
+        {
+          "scenario": "paginated_tag",
+          "round": 1,
+          "kind": "current",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1721.672097999999,
+          "firstImageMs": 1734.7638100000004,
+          "pasteMs": 3704.931497999998,
+          "totalMs": 5426.603595999997,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          }
+        },
+        {
+          "scenario": "paginated_tag",
+          "round": 2,
+          "kind": "current",
+          "api": {
+            "started": 412,
+            "completed": 412,
+            "active": 0,
+            "peakActive": 8,
+            "byKind": {
+              "search": 10,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 8240
+          },
+          "extractionMs": 1703.6602530000018,
+          "firstImageMs": 1723.654233000001,
+          "pasteMs": 3678.101447000001,
+          "totalMs": 5381.761700000003,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          }
+        }
+      ]
+    },
+    "composite_tag_magazine_note_likes": {
+      "baseline": [
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 0,
+          "version": "2.9.2",
+          "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1608.684902,
+          "firstImageMs": 1649.0237710000001,
+          "pasteMs": 8323.543425,
+          "totalMs": 9932.228327,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 1,
+          "version": "2.9.2",
+          "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1663.7744180000002,
+          "firstImageMs": 1701.349047,
+          "pasteMs": 7607.363802,
+          "totalMs": 9271.13822,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "baseline",
+          "round": 2,
+          "version": "2.9.2",
+          "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 608,
+            "completed": 608,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "creatorContents": 200,
+              "magazine": 1,
+              "likes": 2,
+              "note": 201,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 12160
+          },
+          "extractionMs": 1873.143129,
+          "firstImageMs": 1910.0959739999998,
+          "pasteMs": 8509.407842,
+          "totalMs": 10382.550971,
+          "scheduledWaitMs": 4000,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 4000,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 0,
+            "immediateImageBoundaries": 0,
+            "qualityBoundaryCalls": 0,
+            "requiredQualityBoundaryCalls": 0,
+            "retainedQualityBoundaryRecords": 0,
+            "retainedQualityBoundaryConfirmed": 0,
+            "expectedDividers": 0
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ],
+      "current": [
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 0,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1377.792976,
+          "firstImageMs": 1406.2865840000002,
+          "pasteMs": 4290.8119480000005,
+          "totalMs": 5668.604924,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 1,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1321.821579,
+          "firstImageMs": 1354.9740310000002,
+          "pasteMs": 5102.991064,
+          "totalMs": 6424.812642999999,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        },
+        {
+          "scenario": "composite_tag_magazine_note_likes",
+          "kind": "current",
+          "round": 2,
+          "version": "2.9.3",
+          "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+          "processIsolation": "fresh Node process; no per-process warmup",
+          "api": {
+            "started": 478,
+            "completed": 478,
+            "active": 0,
+            "peakActive": 16,
+            "byKind": {
+              "search": 3,
+              "note": 201,
+              "magazine": 1,
+              "likes": 2,
+              "creatorContents": 70,
+              "profile": 201
+            },
+            "scheduledLatencyMs": 9560
+          },
+          "extractionMs": 1330.4432210000002,
+          "firstImageMs": 1366.1064250000002,
+          "pasteMs": 4578.991661,
+          "totalMs": 5909.434882,
+          "scheduledWaitMs": 0,
+          "sourceWaitMs": 0,
+          "pasteWaitMs": 0,
+          "people": 200,
+          "images": 201,
+          "finalMathLast": true,
+          "orderedPeopleMatch": true,
+          "stage": "images_ready",
+          "draftSaveState": "confirmed",
+          "boundaries": {
+            "nativeDividerCount": 201,
+            "immediateImageBoundaries": 201,
+            "qualityBoundaryCalls": 201,
+            "requiredQualityBoundaryCalls": 201,
+            "retainedQualityBoundaryRecords": 40,
+            "retainedQualityBoundaryConfirmed": 40,
+            "expectedDividers": 201
+          },
+          "qualityFault": false,
+          "qualityFailures": [],
+          "valid": true,
+          "invalidSample": false
+        }
+      ]
+    }
+  },
+  "warmupSamples": [
+    {
+      "scenario": "paginated_tag",
+      "round": -1,
+      "kind": "current",
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1728.9937049999999,
+      "firstImageMs": 1757.96526,
+      "pasteMs": 5064.852220000001,
+      "totalMs": 6793.845925,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "expectedDividers": 201
+      }
+    },
+    {
+      "scenario": "paginated_tag",
+      "round": -1,
+      "kind": "baseline",
+      "api": {
+        "started": 612,
+        "completed": 612,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 10,
+          "creatorContents": 200,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12240
+      },
+      "extractionMs": 1763.3763930000005,
+      "firstImageMs": 1778.8998580000007,
+      "pasteMs": 6837.636342,
+      "totalMs": 8601.012735,
+      "scheduledWaitMs": 4000,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 4000,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "boundaries": {
+        "nativeDividerCount": 0,
+        "immediateImageBoundaries": 0,
+        "qualityBoundaryCalls": 0,
+        "requiredQualityBoundaryCalls": 0,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "expectedDividers": 0
+      }
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "round": -1,
+      "kind": "current",
+      "api": {
+        "started": 478,
+        "completed": 478,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "note": 201,
+          "magazine": 1,
+          "likes": 2,
+          "creatorContents": 70,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 9560
+      },
+      "extractionMs": 1302.6818679999997,
+      "firstImageMs": 1329.8773530000035,
+      "pasteMs": 4822.572129000007,
+      "totalMs": 6125.253997000007,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "boundaries": {
+        "nativeDividerCount": 201,
+        "immediateImageBoundaries": 201,
+        "qualityBoundaryCalls": 201,
+        "requiredQualityBoundaryCalls": 201,
+        "retainedQualityBoundaryRecords": 40,
+        "retainedQualityBoundaryConfirmed": 40,
+        "expectedDividers": 201
+      }
+    },
+    {
+      "scenario": "composite_tag_magazine_note_likes",
+      "round": -1,
+      "kind": "baseline",
+      "api": {
+        "started": 608,
+        "completed": 608,
+        "active": 0,
+        "peakActive": 16,
+        "byKind": {
+          "search": 3,
+          "creatorContents": 200,
+          "magazine": 1,
+          "likes": 2,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 12160
+      },
+      "extractionMs": 1576.8686029999953,
+      "firstImageMs": 1591.945001,
+      "pasteMs": 8029.446074000007,
+      "totalMs": 9606.314677000002,
+      "scheduledWaitMs": 4000,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 4000,
+      "people": 200,
+      "images": 201,
+      "finalMathLast": true,
+      "boundaries": {
+        "nativeDividerCount": 0,
+        "immediateImageBoundaries": 0,
+        "qualityBoundaryCalls": 0,
+        "requiredQualityBoundaryCalls": 0,
+        "retainedQualityBoundaryRecords": 0,
+        "retainedQualityBoundaryConfirmed": 0,
+        "expectedDividers": 0
+      }
+    }
+  ],
+  "validation": {
+    "acceptedMeasuredSamples": 12,
+    "acceptedSampleQualityFaults": 0,
+    "allAcceptedImagesPerSample": 201,
+    "finalMathLast": true,
+    "confirmedDraftSaves": true,
+    "currentNativeDividersPerSample": 201,
+    "currentImmediateImageBoundariesPerSample": 201,
+    "currentRequiredQualityBoundaryCallsPerSample": 201,
+    "retainedConfirmedQualityBoundaryRecordsPerCurrentSample": 40,
+    "historicalRejectedSamples": 3,
+    "rejectedCurrentSamplesOnFinalBuild": 0,
+    "isolatedMixedSamples": 6,
+    "isolatedMixedInvalidSamples": 0,
+    "totalRegressionGoalPercent": 5,
+    "goalMetWithinBothScenarios": true
+  },
+  "invalidHistoricalDiagnostics": [
+    {
+      "attemptLog": "general-benchmark-v293-final.jsonl",
+      "baseline": {
+        "ref": "410c7d4",
+        "version": "2.9.2",
+        "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9"
+      },
+      "current": {
+        "version": "2.9.3",
+        "sha256": "292a903933fb923abace46ad08f6abc260823d4f49c54f4c70f5c9d0696171f5"
+      },
+      "sample": {
+        "invalidSample": true,
+        "scenario": "paginated_tag",
+        "round": -1,
+        "kind": "baseline",
+        "stage": "images_ready",
+        "images": 201,
+        "orderedPeopleMatch": true,
+        "qualityFault": true,
+        "qualityFailures": [
+          {
+            "target": "",
+            "key": "",
+            "stage": "追加検査",
+            "at": 1793468679953,
+            "batchId": "mvwoxxtz-1",
+            "findings": [
+              {
+                "status": "failed",
+                "check": "追加検査",
+                "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+                "evidence": {}
+              }
+            ]
+          }
+        ],
+        "draftSaveState": "confirmed"
+      },
+      "failureEpochMs": [
+        1793468679953
+      ],
+      "failureTimesUtc": [
+        "2026-10-31T17:44:39.953000+00:00"
+      ],
+      "elapsedMs": null,
+      "elapsedAvailability": "The original rejected-sample logger did not retain elapsed timing; failure timestamps and full recorded reasons are retained.",
+      "excludedFromMedians": true
+    },
+    {
+      "attemptLog": "general-benchmark-v293-final-retry.jsonl",
+      "baseline": {
+        "ref": "410c7d4",
+        "version": "2.9.2",
+        "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9"
+      },
+      "current": {
+        "version": "2.9.3",
+        "sha256": "292a903933fb923abace46ad08f6abc260823d4f49c54f4c70f5c9d0696171f5"
+      },
+      "sample": {
+        "invalidSample": true,
+        "scenario": "paginated_tag",
+        "round": -1,
+        "kind": "current",
+        "stage": "images_ready",
+        "images": 201,
+        "orderedPeopleMatch": true,
+        "qualityFault": true,
+        "qualityFailures": [
+          {
+            "target": "",
+            "key": "",
+            "stage": "追加検査",
+            "at": 1793468834034,
+            "batchId": "mvwp1cps-1",
+            "findings": [
+              {
+                "status": "failed",
+                "check": "追加検査",
+                "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+                "evidence": {}
+              }
+            ]
+          }
+        ],
+        "draftSaveState": "confirmed"
+      },
+      "failureEpochMs": [
+        1793468834034
+      ],
+      "failureTimesUtc": [
+        "2026-10-31T17:47:14.034000+00:00"
+      ],
+      "elapsedMs": null,
+      "elapsedAvailability": "The original rejected-sample logger did not retain elapsed timing; failure timestamps and full recorded reasons are retained.",
+      "excludedFromMedians": true
+    },
+    {
+      "attemptLog": "general-benchmark-v293-gap0-final.jsonl",
+      "baseline": {
+        "ref": "410c7d4",
+        "version": "2.9.2",
+        "sha256": "180a6e3b4941354650b9af8e3ac49fee226553ce3e4fe1c0bdada92f6faf12e9"
+      },
+      "current": {
+        "version": "2.9.3",
+        "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16"
+      },
+      "sample": {
+        "invalidSample": true,
+        "scenario": "composite_tag_magazine_note_likes",
+        "round": 0,
+        "kind": "baseline",
+        "stage": "images_ready",
+        "images": 201,
+        "orderedPeopleMatch": true,
+        "qualityFault": true,
+        "qualityFailures": [
+          {
+            "target": "",
+            "key": "",
+            "stage": "追加検査",
+            "at": 1793469301220,
+            "batchId": "mvwpb6p7-1",
+            "findings": [
+              {
+                "status": "failed",
+                "check": "追加検査",
+                "reason": "1回の追加検査が30msを超過。追加検査を無効化し、既存処理は維持",
+                "evidence": {}
+              }
+            ]
+          }
+        ],
+        "draftSaveState": "confirmed"
+      },
+      "failureEpochMs": [
+        1793469301220
+      ],
+      "failureTimesUtc": [
+        "2026-10-31T17:55:01.220000+00:00"
+      ],
+      "elapsedMs": null,
+      "elapsedAvailability": "The original rejected-sample logger did not retain elapsed timing; failure timestamps and full recorded reasons are retained.",
+      "excludedFromMedians": true
+    }
+  ],
+  "finalBuildDiagnostic": {
+    "diagnosticOnly": true,
+    "method": "Real quality methods timed externally without budget changes or forced GC; original enabled() probes on-mode fault transitions; passive GC events >5ms.",
+    "sha256": "b01860841c425ebb668f254d8826e9d2e4dcf528601d58b8200259af6fffad16",
+    "version": "2.9.3",
+    "people": 200,
+    "apiLatencyMs": 20,
+    "stage": "images_ready",
+    "draftSaveState": "confirmed",
+    "images": 201,
+    "orderedPeopleMatch": true,
+    "dividers": 201,
+    "immediateImageBoundaries": 201,
+    "qualityFault": false,
+    "qualityFailures": [],
+    "counts": {
+      "beginBatch": 1,
+      "rawRow": 200,
+      "profileEvidence": 201,
+      "acquired": 201,
+      "knownDiagnosis": 603,
+      "preflight": 603,
+      "observeContext": 201,
+      "generated": 201,
+      "beforePaste": 201,
+      "presentationAt": 201,
+      "pasted": 201,
+      "presentationPasted": 201,
+      "imageBoundary": 201,
+      "saved": 1
+    },
+    "slowCalls": [],
+    "faultTransitions": [],
+    "gcEvents": [
+      {
+        "start": 1294.56078,
+        "duration": 7.1226699985563755,
+        "kind": 1
+      },
+      {
+        "start": 3005.691089,
+        "duration": 5.969574999064207,
+        "kind": 1
+      },
+      {
+        "start": 3429.707686,
+        "duration": 8.65276600047946,
+        "kind": 1
+      },
+      {
+        "start": 4858.336368,
+        "duration": 5.087961997836828,
+        "kind": 1
+      },
+      {
+        "start": 6062.539377,
+        "duration": 8.358288001269102,
+        "kind": 4
+      },
+      {
+        "start": 6495.294987,
+        "duration": 10.367754001170397,
+        "kind": 4
+      }
+    ],
+    "metrics": {
+      "api": {
+        "started": 412,
+        "completed": 412,
+        "active": 0,
+        "peakActive": 8,
+        "byKind": {
+          "search": 10,
+          "note": 201,
+          "profile": 201
+        },
+        "scheduledLatencyMs": 8240
+      },
+      "extractionMs": 1740.9616219999998,
+      "firstImageMs": 1766.539981,
+      "pasteMs": 3872.9150430000004,
+      "totalMs": 5613.876665,
+      "scheduledWaitMs": 0,
+      "sourceWaitMs": 0,
+      "pasteWaitMs": 0
+    }
+  },
+  "diagnosticInterpretation": "The one timed-method diagnostic of the final build reproduced no fault, no exported quality call over10ms, and no fault transition. Passive GC observations do not establish the cause of the historical faults. Diagnostic timings are not included in benchmark medians."
+}

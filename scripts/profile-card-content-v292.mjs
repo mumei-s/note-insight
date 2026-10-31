@@ -13,19 +13,22 @@ function composePresentation(row,note,profile){return contentOptions?contentApi?
 `;
 const scopedInsert=`
 function insertPresentationAt(view,row,pos){
- const text=contentApi?.aboveText?.(row);if(!text)return{nextPos:pos};
  const run=readRun();if(!run||run.articleKey!==editorArticleKey())throw new Error('紹介文の保存先を確認できません');
  const key=norm(row.url),owned=run.presentationTexts?.[key],at=Math.max(0,Math.min(view.state.doc.content.size,Number(pos)||0)),actual=view.state.doc.nodeAt(at);
  if(owned){
-  if(owned!==text)throw new Error('保存済みの紹介文と内容が変わっています。完成分は保持しています');
-  if(actual?.type?.name==='paragraph'&&actual.textContent===text){const result={text,pos:at,nextPos:at+actual.nodeSize};if(typeof qualityCall==='function')qualityCall('activity',[row,result,actual.textContent]);return result;}
+  const contract=run.presentationLayouts?.[key];
+  if(contentApi?.matchesAboveText?.(row,owned,contract)!==true)throw new Error('保存済みの紹介文と内容が変わっています。完成分は保持しています');
+  if(actual?.type?.name==='paragraph'&&actual.textContent===owned){const result={text:owned,pos:at,nextPos:at+actual.nodeSize,layout:contract||{version:1,font:'scriptsize',maxFontPx:14,maxHeightPx:140}};if(typeof qualityCall==='function')qualityCall('activity',[row,result,actual.textContent]);return result;}
   throw new Error('保存済みの紹介文の位置を確認できません。二重挿入を停止しました');
  }
+ if(!row.presentation||row.presentation.size!=='thin'||row.presentation.content==='name'||row.finalMarker)return{nextPos:pos};
+ const context=contentApi?.presentationContext?.(view),layout=contentApi?.aboveLayout?.(row,context?.bodyWidthPx,context?.fontBasePx),text=layout?.text||'';if(!text)return{nextPos:pos};
  const type=view.state.schema.nodes.paragraph;if(!type)throw new Error('紹介文用の段落を取得できません');
  const node=type.create(null,view.state.schema.text(text));view.dispatch(view.state.tr.insert(at,node));
  const inserted=view.state.doc.nodeAt(at);if(inserted?.type?.name!=='paragraph'||inserted.textContent!==text)throw new Error('紹介文の挿入を確認できません');
- writeRun({...run,presentationTexts:{...(run.presentationTexts||{}),[key]:text},presentationPositions:{...(run.presentationPositions||{}),[key]:at},activityTexts:[...(run.activityTexts||[]),text],updatedAt:Date.now()});
- const result={text,pos:at,nextPos:at+inserted.nodeSize};if(typeof qualityCall==='function')qualityCall('activity',[row,result,inserted.textContent]);return result;
+ const contract=contentApi?.layoutContract?.(layout);
+ writeRun({...run,presentationTexts:{...(run.presentationTexts||{}),[key]:text},presentationPositions:{...(run.presentationPositions||{}),[key]:at},presentationLayouts:{...(run.presentationLayouts||{}),...(contract?{[key]:contract}:{})},activityTexts:[...(run.activityTexts||[]),text],updatedAt:Date.now()});
+ const result={text,pos:at,nextPos:at+inserted.nodeSize,layout:contract};if(typeof qualityCall==='function')qualityCall('activity',[row,result,inserted.textContent]);return result;
 }
 `;
 const coreInsert=scopedInsert+`
@@ -80,6 +83,6 @@ export function transformEditorContent(source){
   part=once(part,' if(!run?.likesHistoryFix230)return 0;',' if(!run?.likesHistoryFix230)return 0;\n const presentation=presentationActivityHits(view,run),presentationPositions=presentation?new Set(presentation.map(hit=>hit.pos)):null;');
   return once(part,"  if(node.type?.name==='paragraph'&&texts.has(String(node.textContent||'')))hits.push({node,pos});","  if(node.type?.name==='paragraph'&&texts.has(String(node.textContent||''))&&(!presentationPositions||presentationPositions.has(pos)))hits.push({node,pos});");
  });
- source=changeFunction(source,'restartFixed300',part=>once(part,'sectionHeadings:[],activityTexts:[],dividerUrls:[]','sectionHeadings:[],activityTexts:[],presentationTexts:{},presentationPositions:{},dividerUrls:[]'));
+ source=changeFunction(source,'restartFixed300',part=>once(part,'sectionHeadings:[],activityTexts:[],dividerUrls:[]','sectionHeadings:[],activityTexts:[],presentationTexts:{},presentationPositions:{},presentationLayouts:{},dividerUrls:[]'));
  return once(source,'function insertHeadingAt(view,text,pos){',coreInsert+'\nfunction insertHeadingAt(view,text,pos){');
 }

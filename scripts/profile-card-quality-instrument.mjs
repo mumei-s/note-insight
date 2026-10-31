@@ -12,7 +12,7 @@ function changeFunction(source,name,edit){
  const rest=source.slice(start),match=/\n(?:async )?function [A-Za-z]/.exec(rest),end=match?start+match.index+1:source.length;
  return source.slice(0,start)+edit(source.slice(start,end))+source.slice(end);
 }
-const common=`
+const common=String.raw`
 // BEGIN READ-ONLY QUALITY ADAPTERS (validated pre-write holds; no automatic edits)
 const quality=page.__MUMEI_PROFILE_CARD_QUALITY__;
 function qualityCall(method,args,fallback){try{return quality?.[method]?.(...args)??fallback}catch{try{quality?.failed?.()}catch{}return fallback}}
@@ -20,12 +20,13 @@ function qualityAvailable(){return page.__MUMEI_PROFILE_CARD_QUALITY__===quality
 function qualityIdentity(row){return{account:String(row?.urlname||'').trim().toLowerCase(),key:String(row?.key||'').toLowerCase(),url:String(row?.url||'')}}
 function qualityRecordedReasons(row){
  const value=row?.qualitySourceIssue;if(value?.version!==1||!Array.isArray(value.reasons))return[];
+ const validTag=name=>typeof name==='string'&&name.length>0&&Array.from(name).length<=100&&name===name.trim().replace(/^[#＃]+/u,'').normalize('NFC').trim()&&!/[\u0000-\u001f\u007f]/u.test(name);
  const sourceCodes=new Set(['ROW_ACCOUNT','URL_ACCOUNT','URL_ARTICLE','ARTICLE_ACCOUNT','ARTICLE_KEY','ORIGINAL_URL_ACCOUNT','ORIGINAL_URL_ARTICLE','PROFILE_ACCOUNT','PROFILE_REQUEST','PRESENTATION_ACCOUNT','PRESENTATION_URL_ACCOUNT','PRESENTATION_ARTICLE','PRESENTATION_URL_ARTICLE','LEGACY_FILE_ACCOUNT','LEGACY_FILE_ARTICLE']);
- return value.reasons.filter(reason=>sourceCodes.has(reason?.code)&&reason.expected!==reason.actual&&[reason.expected,reason.actual].every(id=>typeof id==='string'&&(reason.code.endsWith('ARTICLE')||reason.code==='ARTICLE_KEY'?/^n[a-f0-9]{12}$/.test(id):/^[a-z0-9_-]+$/.test(id))));
+ return value.reasons.filter(reason=>reason?.code==='TAG_SCOPE'?validTag(reason.expected)&&Array.isArray(reason.actual)&&reason.actual.length<=50&&reason.actual.every(validTag)&&!reason.actual.includes(reason.expected)&&/^n[a-f0-9]{12}$/.test(reason.articleKey)&&String(row.key||'').toLowerCase()===reason.articleKey:sourceCodes.has(reason?.code)&&reason.expected!==reason.actual&&[reason.expected,reason.actual].every(id=>typeof id==='string'&&(reason.code.endsWith('ARTICLE')||reason.code==='ARTICLE_KEY'?/^n[a-f0-9]{12}$/.test(id):/^[a-z0-9_-]+$/.test(id))));
 }
 function qualityHoldApplies(run){const hold=run?.qualityHold;return !!hold&&hold.runId===run.createdAt&&hold.articleKey===run.articleKey&&run.articleKey===editorArticleKey()}
 function qualityHoldError(hold,note=''){
- const reason=(hold.reasons||[]).map(item=>item.code+' '+item.expected+' / '+item.actual).join('、');
+ const reason=(hold.reasons||[]).map(item=>item.code==='TAG_SCOPE'?item.code+' #'+item.expected+' / '+(item.actual?.length?item.actual.map(tag=>'#'+tag).join('、'):'タグなし'):item.code+' '+item.expected+' / '+item.actual).join('、');
  return Object.assign(new Error('品質保留：'+(hold.identity?.account||'対象')+'｜'+reason+'。順序と完成分は保持。「再開」でこの一件を再確認します'+note),{code:'QUALITY_HOLD',qualityHold:hold});
 }
 async function qualityBlock(hold){
@@ -89,7 +90,11 @@ articleFromRaw=function(raw,creator={}){const row=originalArticleFromRaw(raw,cre
 const originalMakeFile=makeFile;
 makeFile=async function(row){const file=await originalMakeFile(row);return qualityCall('generated',[row,file],file)};
 const originalUploadOne=uploadOne;
-uploadOne=async function(view,row,file,pos){await qualityGate(row,file,'images');qualityCall('beforePaste',[row,file]);const result=await originalUploadOne(view,row,file,pos);qualityCall('pasted',[row,file,result]);return result};
+uploadOne=async function(view,row,file,pos){await qualityGate(row,file,'images');qualityCall('beforePaste',[row,file]);const result=await originalUploadOne(view,row,file,pos);qualityCall('pasted',[row,file,result]);qualityCall('presentationPasted',[row,view,result?.hit]);return result};
+if(typeof insertPresentationAt==='function'){
+ const qualityOriginalInsertPresentationAt=insertPresentationAt;
+ insertPresentationAt=function(view,row,pos){const result=qualityOriginalInsertPresentationAt(view,row,pos);qualityCall('presentationAt',[row,view,result]);return result};
+}
 // END READ-ONLY QUALITY ADAPTERS
 `;
 export function instrumentCore(source){
@@ -145,7 +150,7 @@ export function instrumentEditor(source){
 const originalInsertActivityAt=insertActivityAt;
 insertActivityAt=function(view,row,pos){const result=originalInsertActivityAt(view,row,pos);qualityCall('activity',[row,result,view.state.doc.nodeAt(result.pos)?.textContent]);return result};
 const originalAddDivider=addDivider;
-addDivider=function(view,hit,row){const result=originalAddDivider(view,hit,row);qualityCall('divider',[row,view.state.doc.nodeAt(hit.pos+hit.node.nodeSize),node=>isDivider(view,node)]);return result};
+addDivider=function(view,hit,row){const result=originalAddDivider(view,hit,row);qualityCall('divider',[row,view.state.doc.nodeAt(hit.pos+hit.node.nodeSize),node=>isDivider(view,node)]);qualityCall('imageBoundary',[row,view,hit,{dividerRequired:true,isDivider:node=>isDivider(view,node)}]);return result};
 // END READ-ONLY QUALITY ADAPTERS
 `;
  return once(source,'let attempts=0;',adapters+'\nlet attempts=0;');

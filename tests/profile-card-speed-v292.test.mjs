@@ -22,7 +22,7 @@ test('normal image/native-card pacing is shorter with no tenth-card block or fin
  const r=await runtime({count:12});t.after(()=>r.close());
  await r.normal();assert.equal(r.editor.readRun()?.stage,'images_ready',r.state.statuses.at(-1)?.text);
  assert.equal(r.state.images.length,13);
- assert.deepEqual(Array.from(r.state.waits),Array(12).fill(20));
+ assert.deepEqual(Array.from(r.state.waits),Array(12).fill(0));
  r.state.waits=[];await r.core.createCardsAtTap();
  assert.equal(r.state.nativeCardRequests.length,13);assert.equal(r.editor.readRun().stage,'complete');
  assert.deepEqual(Array.from(r.state.waits),Array(12).fill(200));

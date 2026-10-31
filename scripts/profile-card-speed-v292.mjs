@@ -5,7 +5,7 @@ function once(source,from,to){
  return source.replace(from,()=>to);
 }
 export function transformCoreSpeed(source){
- source=once(source,'const IMAGE_PASTE_GAP=180;','const IMAGE_PASTE_GAP=20;');
+ source=once(source,'const IMAGE_PASTE_GAP=180;','const IMAGE_PASTE_GAP=0;');
  source=once(source,'const CARD_GAP_FAST=600;','const CARD_GAP_FAST=200;');
  source=once(source,'const CARD_BLOCK_PAUSE=2500;','const CARD_BLOCK_PAUSE=0;');
  source=once(source,'await sleep(120)','await sleep(40)');
@@ -24,7 +24,7 @@ async function bitmapFromUrl(url){`);
  return source;
 }
 export function transformEditorSpeed(source){
- source=once(source,'const IMAGE_GAP=50;','const IMAGE_GAP=20;');
+ source=once(source,'const IMAGE_GAP=50;','const IMAGE_GAP=0;');
  source=once(source,'await sleep(70)','await sleep(40)');
  source=once(source,'await sleep(gallery?20:IMAGE_GAP)','if(i+1<rows.length)await sleep(gallery?20:IMAGE_GAP)');
  // One serialization is reused for the local copy and two isolated snapshots.

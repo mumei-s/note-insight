@@ -11,6 +11,7 @@ const baselineCode=process.env.QUALITY_GENERAL_BASELINE_SCRIPT?readFileSync(proc
 const currentCode=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8');
 const codeIdentity=code=>({version:code.match(/@version\s+(\S+)/)?.[1],sha256:createHash('sha256').update(code).digest('hex')});
 const snapshot={baseline:{ref:baselineRef,...codeIdentity(baselineCode)},current:codeIdentity(currentCode)};
+const requiresImageDividers=version=>{const [major,minor,patch]=String(version||'').split('.').map(Number);return major>2||major===2&&(minor>9||minor===9&&patch>=3)};
 console.log(JSON.stringify({benchmarkConfig:true,...snapshot,people:count,repetitions,warmupRounds:1,apiLatencyMs}));
 const range=(start,end)=>Array.from({length:Math.max(0,end-start)},(_,i)=>start+i);
 const first=Math.max(2,Math.floor(count*.3)),second=Math.max(first+1,Math.floor(count*.65));
@@ -24,11 +25,16 @@ for(const scenario of scenarios)for(let round=-1;round<repetitions;round++){
  for(const kind of round%2===0?['baseline','current']:['current','baseline']){
   const r=await runtime({moduleCode:kind==='baseline'?baselineCode:currentCode,count,render:false,realWaits:true,sourceFixtures:scenario.sourceFixtures,apiLatencyMs});
   try{
+   const boundaryCalls={all:0,required:0},originalBoundary=r.quality?.imageBoundary;
+   if(typeof originalBoundary==='function')r.quality.imageBoundary=function(...args){boundaryCalls.all++;if(args[3]?.dividerRequired)boundaryCalls.required++;return Reflect.apply(originalBoundary,this,args)};
    const run=await r.normal({sources:scenario.sources}),metrics=r.metrics(),ids=Array.from(run?.rows||[],row=>row.urlname),expected=[...range(0,count).map(i=>'quality_person_'+i),'fuku444'];
    const inspection=r.quality?.snapshot(),valid=run?.stage==='images_ready'&&r.state.images.length===count+1&&!inspection?.fault&&JSON.stringify(ids)===JSON.stringify(expected)&&!run.qualityHold&&run.draftSaveState==='confirmed';
    if(!valid){console.log(JSON.stringify({invalidSample:true,scenario:scenario.name,round,kind,stage:run?.stage,images:r.state.images.length,orderedPeopleMatch:JSON.stringify(ids)===JSON.stringify(expected),qualityFault:inspection?.fault,qualityFailures:inspection?.records.filter(record=>record.findings.some(finding=>finding.status==='failed')),hold:run?.qualityHold,draftSaveState:run?.draftSaveState}));throw Error('Benchmark did not complete the same ordered people, final math row, quality checks and confirmed save: '+r.state.statuses.at(-1)?.text)}
    if(!metrics.api.byKind.search||scenario.name.startsWith('composite')&&(!metrics.api.byKind.magazine||!metrics.api.byKind.likes))throw Error('Benchmark did not actually exercise its advertised source paths');
-   const sample={...metrics,people:count,images:r.state.images.length,finalMathLast:ids.at(-1)==='fuku444'};
+   const blocks=r.doc().content||[],nativeDividerCount=blocks.filter(node=>node.type==='horizontal_rule').length,immediateImageBoundaries=blocks.filter((node,index)=>node.type==='image'&&blocks[index+1]?.type==='horizontal_rule').length,expectsDividers=requiresImageDividers(snapshot[kind].version),retained=inspection?.records.filter(record=>record.stage==='区切り')||[],retainedConfirmed=retained.filter(record=>record.findings.some(finding=>finding.check==='直後の区切り'&&finding.status==='confirmed')).length;
+   const boundaries={nativeDividerCount,immediateImageBoundaries,qualityBoundaryCalls:boundaryCalls.all,requiredQualityBoundaryCalls:boundaryCalls.required,retainedQualityBoundaryRecords:retained.length,retainedQualityBoundaryConfirmed:retainedConfirmed,expectedDividers:expectsDividers?count+1:0};
+   if(expectsDividers?(nativeDividerCount!==count+1||immediateImageBoundaries!==count+1||boundaryCalls.required!==count+1||!retained.length||retainedConfirmed!==retained.length):nativeDividerCount!==0){console.log(JSON.stringify({invalidSample:true,scenario:scenario.name,round,kind,boundaryFailure:boundaries}));throw Error('Benchmark native divider/quality boundary validation failed')}
+   const sample={...metrics,people:count,images:r.state.images.length,finalMathLast:ids.at(-1)==='fuku444',boundaries};
    if(round>=0)results[scenario.name][kind].push(sample);
    console.log(JSON.stringify({scenario:scenario.name,round,kind,...sample}));
   }finally{r.close()}

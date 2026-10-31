@@ -103,11 +103,20 @@ async function qualityRetryHeldRun(run){
   const changesOwnedIntroduction=saved=>{
    const presentationKey=typeof norm==='function'?norm(original.url):original.url,presentationOwned=saved.presentationTexts?.[presentationKey];
    if(original.presentation&&typeof presentationOwned==='string'){
-    const aboveText=page.__MUMEI_PROFILE_CARD_CONTENT__?.aboveText;
-    if(typeof aboveText!=='function')return true;
-    const before=aboveText(original),after=aboveText(pending);
-    if(before!==after&&presentationOwned===before)return true;
-    if(presentationOwned!==after)return true;
+    const content=page.__MUMEI_PROFILE_CARD_CONTENT__,contract=saved.presentationLayouts?.[presentationKey];
+    if(!contract||contract.version===1){
+     const before=original.presentation,after=pending.presentation;
+     const sourceKind=value=>['note-free','note-public-lead'].includes(value)?'article':value;
+     if(before.text!==after?.text||before.content!==after?.content||before.size!==after?.size||sourceKind(before.source?.kind)!==sourceKind(after?.source?.kind))return true;
+    }
+    if(typeof content?.matchesAboveText==='function'){
+     if(content.matchesAboveText(original,presentationOwned,contract)!==true||content.matchesAboveText(pending,presentationOwned,contract)!==true)return true;
+    }else{
+     const aboveText=content?.aboveText;if(typeof aboveText!=='function')return true;
+     const before=aboveText(original),after=aboveText(pending);
+     if(before!==after&&presentationOwned===before)return true;
+     if(presentationOwned!==after)return true;
+    }
    }
    if(typeof activityText!=='function'||!hasProfileText)return false;
    const before=activityText(original),after=activityText(pending),galleryOwned=saved.galleryProfileTexts?.[original.url]||saved.galleryProfileTexts?.[id];

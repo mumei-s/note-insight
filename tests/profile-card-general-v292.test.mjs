@@ -33,7 +33,7 @@ test('full-width tags and hashtag URLs retain token order and repeated magazine 
  assert.equal(r.state.apiStats.byKind.search,2);assert.equal(r.state.apiStats.byKind.magazine,1);
 });
 
-for(const choice of ['latest','fixed','oldest','pinned'])test('generic tag selection honors '+choice+' independently of the source search article',async t=>{
+for(const choice of ['latest','fixed','oldest','pinned'])test('generic tag selection keeps '+choice+' inside actual assigned-tag articles',async t=>{
  const r=await runtime({count:3,render:false,sourceFixtures:{tags:{fixture:range(0,6)}}});t.after(()=>r.close());const articles=new Map();
  const article=(personIndex,variant)=>{
   const id='quality_person_'+personIndex,key='n'+(1000+personIndex*3+variant).toString(16).padStart(12,'0');
@@ -46,7 +46,7 @@ for(const choice of ['latest','fixed','oldest','pinned'])test('generic tag selec
   return key&&articles.has(key)?{data:articles.get(key)}:payload;
  };
  await r.normal({choice});const expected=choice==='pinned'?[1,2,3]:[0,1,2],run=complete(r,expected);
- for(const row of run.rows.slice(0,-1)){const person=Number(row.urlname.split('_').at(-1)),variant=choice==='oldest'?2:choice==='pinned'||choice==='fixed'&&person!==0?1:0;assert.equal(row.key,article(person,variant).key);assert.equal(row.title,article(person,variant).name)}
+ for(const row of run.rows.slice(0,-1)){const person=Number(row.urlname.split('_').at(-1)),pinned=choice==='pinned'||choice==='fixed'&&person!==0,expected=pinned?article(person,1):r.note(row.urlname);assert.equal(row.key,expected.key);assert.equal(row.title,expected.name);assert.equal(row.sourceScope.kind,'tag');assert.equal(row.sourceScope.tag,'fixture')}
  if(choice==='pinned'){assert.equal(run.sourceSelection.unavailable,1);assert.ok(run.sourceSelection.issues.some(issue=>issue.account==='quality_person_0'&&issue.reason.includes('固定')))}
 });
 
@@ -110,7 +110,7 @@ test('nonzero simulated API latency is measured separately from original image p
  const r=await runtime({count:6,render:false,sourceFixtures:{tags:{fixture:range(0,6)}},apiLatencyMs:2});t.after(()=>r.close());await r.normal();complete(r,range(0,6));const metrics=r.metrics();
  assert.equal(metrics.api.started,r.state.requests.length);assert.equal(metrics.api.completed,metrics.api.started);assert.equal(metrics.api.active,0);assert.ok(metrics.api.peakActive>=2);
  assert.equal(metrics.api.scheduledLatencyMs,metrics.api.started*2);assert.ok(metrics.extractionMs>0);assert.ok(metrics.firstImageMs>=metrics.extractionMs);assert.ok(metrics.totalMs>=metrics.extractionMs);assert.ok(metrics.pasteMs>0);
- assert.ok(metrics.pasteWaitMs>0);assert.equal(metrics.scheduledWaitMs,metrics.sourceWaitMs+metrics.pasteWaitMs);assert.ok(r.state.requestEvents.every(event=>event.finishedAt>=event.startedAt));
+ assert.equal(metrics.pasteWaitMs,0,'native completion and checkpoint confirmation need no extra image timer');assert.equal(metrics.scheduledWaitMs,metrics.sourceWaitMs+metrics.pasteWaitMs);assert.ok(r.state.requestEvents.every(event=>event.finishedAt>=event.startedAt));
 });
 
 test('quality OFF preserves composite selection, image order, captions, pixels and final math output',async t=>{

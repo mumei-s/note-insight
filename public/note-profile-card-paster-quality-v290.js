@@ -1,11 +1,12 @@
 // Additive, local-only quality observation. No editor writes or network requests.
-// Validated account/article/file contradictions hold before writes. No auto edits.
+// Validated account/article/file or assigned-tag contradictions hold before writes. No auto edits.
 (function(page){
 'use strict';
 if(!page||page.__MUMEI_PROFILE_CARD_QUALITY__)return;
-const VERSION='2.9.2',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
+const VERSION='2.9.3',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
 const state={records:[],counts:{},mode:'on',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
 const renderings=new WeakMap(),files=new WeakMap(),layouts=new WeakMap();
+const presentationNodes=new WeakMap();
 const bindings=new WeakMap(),urlIdentities=new Map(),URL_IDENTITY_LIMIT=2048;
 let scopePath='',scopeKey='';
 let sources=new Map();
@@ -20,9 +21,30 @@ function urlIdentity(value){
  urlIdentities.set(text,result);if(urlIdentities.size>URL_IDENTITY_LIMIT)urlIdentities.delete(urlIdentities.keys().next().value);
  return result;
 }
+function tagName(value){
+ if(typeof value!=='string')return'';
+ const normalized=value.trim().replace(/^[#＃]+/u,'').normalize('NFC').trim();
+ return normalized&&Array.from(normalized).length<=100&&!/[\u0000-\u001f\u007f]/u.test(normalized)?normalized:'';
+}
+function assignedTagEvidence(note){
+ const fields=['hashtags','tags','hashtag_names','tag_names','note_hashtags','hashtag_notes'],names=[],seen=new Set();let present=false,complete=true;
+ for(const field of fields){
+  if(!Object.prototype.hasOwnProperty.call(note,field))continue;
+  present=true;const entries=note[field];if(!Array.isArray(entries)){complete=false;continue}
+  if(entries.length>50)complete=false;
+  for(const entry of entries.slice(0,50)){
+   const name=[entry,entry?.name,entry?.hashtag?.name,entry?.tag?.name].map(tagName).find(Boolean);
+   if(!name){complete=false;continue}if(seen.has(name))continue;
+   if(names.length>=50){complete=false;continue}seen.add(name);names.push(name);
+  }
+ }
+ return present?{names,complete}:null;
+}
 function articleEvidence(raw,source='creator-list'){
  const note=raw?.note&&typeof raw.note==='object'?raw.note:raw||{},user=note.user||note.author||{};
- return{source,key:String(note.key||'').toLowerCase(),account:account(user.urlname||user.urlName||note.urlname),url:cleanUrl(note.noteUrl||note.url),nameHash:fingerprint(user.nickname||user.name||''),icon:cleanUrl(user.profileImageUrl||user.user_profile_image_url||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||user.icon_url||user.image_url),thumbnail:cleanUrl(typeof note.eyecatch==='string'?note.eyecatch:note.eyecatch?.url||note.eyecatch_url||note.thumbnailExternalUrl||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url)};
+ const result={source,key:String(note.key||'').toLowerCase(),account:account(user.urlname||user.urlName||note.urlname),url:cleanUrl(note.noteUrl||note.url),nameHash:fingerprint(user.nickname||user.name||''),icon:cleanUrl(user.profileImageUrl||user.user_profile_image_url||user.profile_image_url||user.user_profile_image_path||user.profile_image_path||user.profileImagePath||user.icon_url||user.image_url),thumbnail:cleanUrl(typeof note.eyecatch==='string'?note.eyecatch:note.eyecatch?.url||note.eyecatch_url||note.thumbnailExternalUrl||note.image_url||note.imageUrl||note.thumbnail_url||note.thumbnailUrl||note.eyecatch_image?.url||note.eyecatchImage?.url||note.image?.url||note.thumbnail?.url)};
+ if(source==='note-api'){const tags=assignedTagEvidence(note);if(tags)result.assignedTags=tags}
+ return result;
 }
 function profileEvidence(raw,target){
  const p=raw||{};
@@ -78,7 +100,7 @@ function compare(out,check,expected,actual,evidence={}){
 // Pure inspectors: no mutation, semantic inference, OCR, or DOM traversal.
 function assessIdentity(row){
  const out=[],proof=provenance(row),target=proof?.target;
- if(!proof)return[finding('insufficient','取得元','以前の保存分には取得元の照合記録がない')];
+ if(!proof)return[finding('insufficient','取得元','以前の保存分には取得元の照合記録がない'),...assessTagScope(row,proof)];
  compare(out,'対象と記事URL',target,urlIdentity(row.url).account);
  if(!row.profileOnly)compare(out,'記事IDとURL',articleKey(row.key),urlIdentity(row.url).key);
  for(const source of proof.articles||[]){
@@ -90,9 +112,23 @@ function assessIdentity(row){
  else out.push(finding('insufficient','プロフィール','投稿者プロフィールの独立したIDが未取得'));
  if(row.profileOnly)out.push(finding('unperformed','記事照合','記事なしの既存経路。記事の一致は判定しない'));
  if(!(proof.articles||[]).length&&!row.profileOnly)out.push(finding('insufficient','記事投稿者','取得記事の投稿者情報が未記録'));
- return out;
+ return[...out,...assessTagScope(row,proof)];
 }
 const articleKey=value=>/^n[a-f0-9]{12}$/i.test(String(value||''))?String(value).toLowerCase():'';
+function tagScopeEvidence(row,proof){
+ if(row?.sourceScope?.kind!=='tag')return null;
+ const expected=tagName(row.sourceScope.tag),key=articleKey(row.key),bound=articleKey(row.sourceScope.articleKey);
+ if(!expected||!key||key!==bound)return{status:'insufficient',expected,key,reason:'選択タグの条件をこの有効な記事IDに結びつける材料が不足'};
+ const source=(proof?.articles||[]).filter(item=>item.source==='note-api'&&articleKey(item.key)===key).at(-1),tags=source?.assignedTags;
+ if(!tags||!Array.isArray(tags.names)||tags.names.length>50||!tags.names.every(name=>tagName(name)&&tagName(name)===name)||typeof tags.complete!=='boolean')return{status:'insufficient',expected,key,reason:'この記事の詳細APIに有効な割り当てタグ情報がない。タイトル・本文・取得元のタグ名では代用しない'};
+ if(tags.names.includes(expected))return{status:'confirmed',expected,key,actual:tags.names,reason:'この同じ記事の詳細APIに選択タグの完全一致がある'};
+ if(tags.complete!==true)return{status:'insufficient',expected,key,actual:tags.names,reason:'実際のタグ一覧が不完全、形式不明、または保持上限を超えるため不存在とは判定しない'};
+ return{status:'mismatch',expected,key,actual:tags.names,reason:'この同じ記事の詳細APIが返した完全な割り当てタグ一覧に選択タグがない'};
+}
+function assessTagScope(row,proof){
+ const scope=tagScopeEvidence(row,proof);if(!scope)return[];
+ return[finding(scope.status,'選択タグと記事タグ',scope.reason,{expected:scope.expected||'',actual:scope.actual||null,articleKey:scope.key||'',source:'note-api-tags'})];
+}
 function identityOf(row){const url=urlIdentity(row?.url);return{account:account(row?.urlname),key:articleKey(row?.key),urlAccount:url.account||'',urlKey:url.key||''}}
 function strictIdentityReasons(row,proof,binding=null){
  const reasons=[],current=identityOf(row),target=account(proof?.target)||current.account;
@@ -108,6 +144,7 @@ function strictIdentityReasons(row,proof,binding=null){
   if(!row?.profileOnly)compareId('ORIGINAL_URL_ARTICLE',current.key,url.key,source.source);
  }
  if(proof?.profile){compareId('PROFILE_ACCOUNT',target,account(proof.profile.account),'creator-api');compareId('PROFILE_REQUEST',target,account(proof.profile.requested),'creator-api')}
+ const tagScope=tagScopeEvidence(row,proof);if(tagScope?.status==='mismatch')reasons.push({code:'TAG_SCOPE',expected:tagScope.expected,actual:tagScope.actual.slice(),articleKey:tagScope.key,source:'note-api-tags'});
  const presentation=row?.presentation;
  if(presentation?.status==='available'&&['profile','note-free','note-public-lead'].includes(presentation.source?.kind)){
   const source=presentation.source,url=urlIdentity(source.url);
@@ -134,6 +171,7 @@ function hasVerifiedFreshIdentity(row){
  return safe(()=>{
   const proof=provenance(row),id=identityOf(row),target=account(proof?.target);
   if(!target||id.account!==target||id.urlAccount!==target||proof?.profile?.account!==target||strictIdentityReasons(row,proof).length)return false;
+  if(row?.sourceScope?.kind==='tag'&&tagScopeEvidence(row,proof)?.status!=='confirmed')return false;
   if(row.profileOnly)return !id.key&&!id.urlKey;
   return !!id.key&&id.key===id.urlKey&&(proof?.articles||[]).some(source=>source.source==='note-api'&&account(source.account)===target&&articleKey(source.key)===id.key);
  },false);
@@ -157,6 +195,7 @@ function historicalReasons(entry){
  for(const item of entry.findings||[]){
   if(item.status!=='mismatch')continue;
   const {expected,actual}=item.evidence||{};
+  if(['選択タグと記事タグ','TAG_SCOPE'].includes(item.check)&&tagName(expected)&&tagName(expected)===expected&&Array.isArray(actual)&&actual.length<=50&&actual.every(name=>tagName(name)&&tagName(name)===name)&&!actual.includes(expected)&&articleKey(item.evidence?.articleKey)&&articleKey(item.evidence.articleKey)===articleKey(entry.key))reasons.push({code:'TAG_SCOPE',expected,actual:actual.slice(),articleKey:articleKey(item.evidence.articleKey),source:'previous-quality-record'});
   if(codes[item.check])add(codes[item.check],expected,actual);
   const field=String(item.check||'').match(/^(?:生成→リンク|生成→貼付画像) \/ (account|key|url)$/)?.[1];
   if(field==='account')add('LEGACY_FILE_ACCOUNT',expected,actual);
@@ -339,16 +378,86 @@ function pasted(row,file,result){
 function activity(row,result,actual,layout){
  safe(()=>{
   const out=assessBinding(row,provenance(row)?.binding,'紹介原文');
-  compare(out,'挿入した紹介',fingerprint(result?.text),fingerprint(actual));
+  if(typeof result?.text==='string'&&typeof actual==='string')compare(out,'挿入した紹介',fingerprint(result.text),fingerprint(actual));
+  else out.push(finding('insufficient','挿入した紹介','この挿入結果の文字列を取得できないため一致を判定しない'));
   out.push(...(layouts.get(row)?.findings||assessText(row.profileText)));
   record(row,'本文',out);
  });
 }
+function measuredRect(node){
+ try{const rect=node?.getBoundingClientRect?.(),keys=['left','right','top','bottom','width','height'];return rect&&keys.every(key=>Number.isFinite(rect[key]))&&rect.width>0&&rect.height>0?Object.fromEntries(keys.map(key=>[key,rect[key]])):null}catch{return null}
+}
+function computedStyle(node){try{return node?.ownerDocument?.defaultView?.getComputedStyle?.(node)||null}catch{return null}}
+const rectEvidence=rect=>rect?['left','top','right','bottom'].map(key=>Math.round(rect[key]*10)/10):null;
+const formulaSource=text=>String(text||'').trim().replace(/^\$\$/,'').replace(/\$\$$/,'').trim();
+function inspectPresentationDOM(row,view,entry,imageHit=null){
+ const out=[],unperformed=(check,reason,evidence={})=>out.push(finding('unperformed',check,reason,evidence));
+ const pos=entry?.pos,text=entry?.text;
+ if(!Number.isFinite(pos)||typeof text!=='string'||!text){unperformed('紹介の実表示','所有している紹介段落の位置・元文字列を取得できない');return out}
+ const run=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.(),ownedKey=cleanUrl(row?.url),ownedPos=run?.presentationPositions?.[ownedKey];
+ if(!run||run.articleKey!==scope()||!ownedKey||run.presentationTexts?.[ownedKey]!==text||Number.isFinite(ownedPos)&&ownedPos!==pos){out.push(finding('insufficient','紹介の所有範囲','この紹介の元文字列・位置を今回分の所有記録で確認できないため実表示を推測しない'));return out}
+ const node=view?.state?.doc?.nodeAt?.(pos);
+ if(node?.type?.name!=='paragraph'||node.textContent!==text){out.push(finding('insufficient','紹介の実表示','記録した位置の段落が元文字列と一致しないため表示範囲を推測しない'));return out}
+ const content=page.__MUMEI_PROFILE_CARD_CONTENT__,layout=entry.layout||run.presentationLayouts?.[ownedKey]||null;
+ let signature=null;
+ try{if(typeof content?.matchesAboveText==='function')signature=content.matchesAboveText(row,text,layout);else if(typeof content?.aboveText==='function')signature=content.aboveText(row,layout?.bodyWidthPx)===text}catch{}
+ out.push(finding(signature===true?'confirmed':signature===false?'candidate':'unperformed','紹介式の対応',signature===true?'この所有段落の数式文字列とレイアウト仕様が対応。実際の表示幅とは別の検査':signature===false?'この所有段落の式が現在のレイアウト仕様と異なる候補':'数式文字列のレイアウト仕様との対応は未検査',{sourceHash:fingerprint(text),layoutVersion:layout?.version||null,font:layout?.font||null,cellBudget:layout?.cellBudget??null,lineCount:layout?.lineCount??null}));
+ if(signature===true&&layout?.version>=2&&Number.isFinite(layout.cellBudget)&&Number.isFinite(layout.lineCount))out.push(finding(layout.wordSplitCandidate||layout.kinsokuCandidate?'candidate':'confirmed','紹介式の折り返し',layout.wordSplitCandidate?'式の行境界で英数字の語が分かれる候補。自動補正しない':layout.kinsokuCandidate?'式の行境界に句読点などが来る候補。自動補正しない':'元の数式に対応する行数・折り返し指定を確認。実際の画面幅の保証ではない',{cellBudget:layout.cellBudget,lineCount:layout.lineCount}));
+ else unperformed('紹介式の折り返し','この保存式の行数・折り返し仕様との対応は未検査');
+ unperformed('公開後の表示','ここで測定するのは現在の編集DOMだけ。公開記事・別の画面幅での表示は未実測');
+ if(layout?.truncated)out.push(finding('candidate','紹介文の省略','この紹介式は行数の上限に合わせた抜粋。省略表示の採用を記録',{lineCount:layout.lineCount??null}));
+ let dom=null;try{dom=view?.nodeDOM?.(pos)}catch{}
+ if(!dom||dom.nodeType!==1||dom.isConnected!==true||typeof view?.dom?.contains!=='function'||!view.dom.contains(dom)){unperformed('紹介の実表示','この所有段落の現在のDOMを取得できない。表示を待ったり合格扱いにしたりしない');return out}
+ const paragraphRect=measuredRect(dom),paragraphStyle=computedStyle(dom);
+ if(!paragraphRect||paragraphStyle?.display==='none'||paragraphStyle?.visibility==='hidden'){unperformed('紹介の実表示','この所有段落は非表示、または実際の大きさを測定できない');return out}
+ const boxes=dom.querySelectorAll?.('.katex');
+ if(!boxes||boxes.length!==1){unperformed('紹介の実表示',boxes?.length?'この所有段落の数式表示を一つに特定できない':'この所有段落のKaTeX表示は現在まだ取得できない。元の式だけで表示成功とは判定しない');return out}
+ const box=boxes[0],html=box.querySelector?.('.katex-html'),boxRect=measuredRect(html)||measuredRect(box);
+ if(!html||!boxRect){unperformed('紹介の実表示','可視KaTeX部分の実寸を取得できない');return out}
+ const annotation=box.querySelector?.('annotation[encoding="application/x-tex"]'),annotationText=annotation?.textContent,domSignature=typeof annotationText==='string'&&annotationText.length?formulaSource(annotationText)===formulaSource(text):null;
+ out.push(finding(domSignature===true?'confirmed':domSignature===false?'candidate':'unperformed','紹介DOMの対応',domSignature===true?'現在のKaTeX DOM内の式がこの所有段落の式と対応':domSignature===false?'現在のKaTeX DOM内の式がこの所有段落と異なる候補。表示更新待ちの可能性もある':'DOM内の元の式を取得できないため、現在の表示との対応は未確認'));
+ let imageDOM=null;try{if(imageHit&&Number.isFinite(imageHit.pos))imageDOM=view.nodeDOM?.(imageHit.pos)}catch{}
+ const imageCurrent=imageHit&&view?.state?.doc?.nodeAt?.(imageHit.pos);
+ const imageLink=cleanUrl(row.url),imageOwned=Boolean(imageLink&&imageDOM?.nodeType===1&&imageDOM.isConnected===true&&view.dom.contains(imageDOM)&&imageCurrent?.type?.name==='image'&&cleanUrl(imageCurrent.attrs?.link)===imageLink);
+ const imageRect=imageOwned?(measuredRect(imageDOM.querySelector?.('img'))||measuredRect(imageDOM)):null;
+ const leaves=Array.from(html.querySelectorAll?.('.mord, .text')||[]).filter(item=>item.children.length===0&&String(item.textContent||'').trim()),limit=128,selected=leaves.slice(0,limit),leafRects=selected.map(measuredRect),fonts=selected.map(item=>Number.parseFloat(computedStyle(item)?.fontSize));
+ const complete=leaves.length>0&&leaves.length<=limit&&leafRects.every(Boolean),fontComplete=complete&&fonts.every(Number.isFinite),rects=[boxRect,...leafRects.filter(Boolean)];
+ const bounds={left:Math.min(...rects.map(rect=>rect.left)),right:Math.max(...rects.map(rect=>rect.right)),top:Math.min(...rects.map(rect=>rect.top)),bottom:Math.max(...rects.map(rect=>rect.bottom))};bounds.width=bounds.right-bounds.left;bounds.height=bounds.bottom-bounds.top;
+ const evidence={bounds:rectEvidence(bounds),paragraph:rectEvidence(paragraphRect),image:rectEvidence(imageRect),measuredLeaves:leafRects.filter(Boolean).length,totalLeaves:leaves.length};
+ const reference=imageRect||paragraphRect,overflow=bounds.left<reference.left-1||bounds.right>reference.right+1;
+ if(overflow)out.push(finding('candidate','紹介の表示幅','実測した文字または数式枠が、この画像または所有段落の横幅を超える候補',evidence));
+ else if(imageRect&&complete&&signature===true&&domSignature===true)out.push(finding('confirmed','紹介の表示幅','現在の実測範囲では文字と数式枠がこの画像の幅内',evidence));
+ else unperformed('紹介の表示幅','画像の実幅・全ての文字境界・表示の対応のいずれかが未確認。元の改行指定だけで幅内とは判定しない',evidence);
+ const maxHeight=Number(layout?.maxHeightPx),maxFont=Number(layout?.maxFontPx),fontValues=fonts.filter(Number.isFinite),observedFont=fontValues.length?Math.max(...fontValues):null;
+ if(Number.isFinite(maxHeight)&&maxHeight>0&&bounds.height>maxHeight+1)out.push(finding('candidate','紹介の表示高さ','現在の実測文字・枠の高さが、この紹介の高さ上限を超える候補',{height:Math.round(bounds.height*10)/10,maxHeight}));
+ else if(Number.isFinite(maxHeight)&&maxHeight>0&&complete&&signature===true&&domSignature===true)out.push(finding('confirmed','紹介の表示高さ','現在の実測文字・枠の高さは、この紹介の高さ上限内',{height:Math.round(bounds.height*10)/10,maxHeight}));
+ else unperformed('紹介の表示高さ','紹介の高さ上限または全ての文字境界との対応は未確認');
+ if(observedFont!==null&&Number.isFinite(maxFont)&&maxFont>0&&observedFont>maxFont+.1)out.push(finding('candidate','紹介の実文字サイズ','実際のKaTeX文字サイズが、この紹介の上限を超える候補',{fontPx:Math.round(observedFont*10)/10,maxFontPx:maxFont}));
+ else if(fontComplete&&Number.isFinite(maxFont)&&maxFont>0&&signature===true&&domSignature===true)out.push(finding('confirmed','紹介の実文字サイズ','測定できた全ての可視文字サイズが、この紹介の上限内',{fontPx:Math.round(observedFont*10)/10,maxFontPx:maxFont}));
+ else unperformed('紹介の実文字サイズ','全ての可視文字の実サイズまたは仕様上限は未確認',{fontPx:observedFont===null?null:Math.round(observedFont*10)/10,maxFontPx:Number.isFinite(maxFont)&&maxFont>0?maxFont:null});
+ let ancestor=box;for(let depth=0;ancestor&&depth<12;depth++,ancestor=ancestor.parentElement){
+  const style=computedStyle(ancestor),rect=measuredRect(ancestor),width=Number(ancestor.clientWidth),scroll=Number(ancestor.scrollWidth),clipped=style&&/(?:hidden|clip|auto|scroll)/.test(String(style.overflowX||style.overflow||''));
+  if(rect&&clipped&&(bounds.left<rect.left-1||bounds.right>rect.right+1||width>0&&Number.isFinite(scroll)&&scroll>width+1)){out.push(finding('candidate','紹介の横方向の欠け','この所有段落から編集欄までの実際の表示枠に横方向の切り詰め・スクロールの候補',{ancestor:ancestor.tagName||'',bounds:rectEvidence(bounds),clip:rectEvidence(rect),clientWidth:width||null,scrollWidth:Number.isFinite(scroll)?scroll:null}));break}
+  if(ancestor===view.dom)break;
+ }
+ return out;
+}
+function presentationAt(row,view,result){safe(()=>{if(typeof result?.text!=='string'||!Number.isFinite(result?.pos))return;presentationNodes.set(row,{view,pos:result.pos,text:result.text,layout:result.layout||null});record(row,'紹介表示（挿入直後）',inspectPresentationDOM(row,view,result))})}
+function presentationPasted(row,view,hit){safe(()=>{const entry=presentationNodes.get(row);if(entry&&entry.view===view)record(row,'紹介表示（画像直後）',inspectPresentationDOM(row,view,entry,hit))})}
+function imageBoundary(row,view,hit,{dividerRequired=false,isDivider:predicate=null}={}){safe(()=>{
+ const entry=presentationNodes.get(row);if(entry&&entry.view===view)record(row,'紹介表示（区切り直後）',inspectPresentationDOM(row,view,entry,hit));
+ if(!dividerRequired)return;
+ const current=Number.isFinite(hit?.pos)?view?.state?.doc?.nodeAt?.(hit.pos):null;
+ if(!current||current.type?.name!=='image'||!cleanUrl(row?.url)||cleanUrl(current.attrs?.link)!==cleanUrl(row?.url)){record(row,'区切り',[finding('insufficient','直後の区切り','この画像の現在の位置・リンクを確認できないため隣接ノードを推測しない')]);return}
+ const next=view.state.doc.nodeAt(hit.pos+current.nodeSize);let isDivider=typeof predicate==='function'?Boolean(predicate(next)):['horizontal_rule','horizontalRule','horizontal-rule','divider','separator','hr'].includes(next?.type?.name);
+ if(typeof predicate!=='function'&&!isDivider&&next?.type?.spec?.toDOM)try{const dom=next.type.spec.toDOM(next);isDivider=Array.isArray(dom)&&dom[0]==='hr'}catch{}
+ record(row,'区切り',[finding(isDivider?'confirmed':'mismatch','直後の区切り',isDivider?'この画像の直後のnative区切りを確認':'区切りが必要なこの画像の直後にnative区切りがない')]);
+ })}
 function divider(row,node,isDivider){safe(()=>record(row,'区切り',[finding(isDivider(node)?'confirmed':'mismatch','直後の区切り',isDivider(node)?'この画像直後の区切りを確認':'この画像直後に区切りがない')]))}
 function nativeCard(row,result){safe(()=>{const identity=urlIdentity(result?.hit?.node?.attrs?.src);const out=assessIdentity(row);compare(out,'通知カードの記事ID',row.key,identity.key);compare(out,'通知カードの投稿者',account(row.urlname),identity.account);record(row,'通知カード',out)})}
 function saved(result,error){safe(()=>{state.runId=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.createdAt??state.runId;record(null,'下書き保存',[finding(error?'failed':result===true||result?.confirmed===true?'confirmed':'insufficient','保存結果',error?'既存保存処理が失敗。完了と判定しない':result===true||result?.confirmed===true?'既存処理の肯定的な保存結果を確認':'保存要求済みだが成功未確認')])});flush()}
 function updateBadge(){
- try{const button=document.querySelector?.('[data-quality-badge]');if(button){const held=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.qualityHold,unresolved=state.records.some(entry=>!entry.resolvedAt&&entry.batchId===state.batchId&&entry.findings.some(item=>item.status==='mismatch'));button.textContent=held?'検査保留':state.fault?'検査×':state.mode==='off'?'検査OFF':unresolved?'検査相違':state.counts.candidate?'検査候補':'品質検査';button.title='品質検査：'+(held?'明確な不一致を保留。再開時にこの一件を再確認':state.fault?'検査失敗。追加検査を無効化':state.mode==='off'?'追加検査は無効。既知の保留は維持':'識別情報の明確な矛盾だけ保留。候補・材料不足は停止しない')}}catch{}
+  try{const button=document.querySelector?.('[data-quality-badge]');if(button){const held=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.qualityHold,unresolved=state.records.some(entry=>!entry.resolvedAt&&entry.batchId===state.batchId&&entry.findings.some(item=>item.status==='mismatch'));button.textContent=held?'検査保留':state.fault?'検査×':state.mode==='off'?'検査OFF':unresolved?'検査相違':state.counts.candidate?'検査候補':'品質検査';button.title='品質検査：'+(held?'明確な不一致を保留。再開時にこの一件を再確認':state.fault?'検査失敗。追加検査を無効化':state.mode==='off'?'追加検査は無効。既知の保留は維持':'識別情報・実タグ条件の明確な矛盾だけ保留。候補・材料不足は停止しない')}}catch{}
 }
 const labels={confirmed:'確認済み（その検査の範囲）',candidate:'確認候補',mismatch:'明確な不一致',insufficient:'照合材料不足',failed:'検査失敗',unperformed:'未実施'};
 function mountUI(){
@@ -359,18 +468,31 @@ function mountUI(){
   const button=document.createElement('button');button.type='button';button.dataset.qualityBadge='1';button.setAttribute('aria-expanded','false');head.insertBefore(button,head.children[1]);
   const detail=document.createElement('div');detail.dataset.qualityDetail='1';detail.hidden=true;panel.append(detail);
   for(const type of ['mousedown','pointerdown','touchstart'])button.addEventListener(type,event=>{event.stopPropagation();if(type==='mousedown')event.preventDefault()});
+  let repairPreview=null,repairBusy=false,repairMessage='';
   const render=()=>{
-   detail.replaceChildren();const intro=document.createElement('p');intro.textContent='毎回の対象を検査。明確な識別情報の矛盾だけ保留します。候補・材料不足では止めません。自動修正・画像からの本人認識・スマホ表示の保証は含みません。';detail.append(intro);
+   detail.replaceChildren();const intro=document.createElement('p');intro.textContent='毎回の対象を検査。明確な識別情報または実際のタグ条件の矛盾だけ保留します。候補・材料不足では止めません。以前の検査はnote側の実際の表示幅・文字サイズを測定していませんでした。現在の表示を取得できる場合だけ実測し、取得できない場合は未実施と記録します。';detail.append(intro);
    const hold=page.__MUMEI_PROFILE_CARD_RUN_STORE__?.read?.()?.qualityHold;
    if(hold){const notice=document.createElement('p');notice.textContent='保留：'+(hold.identity?.account||'対象')+'。元の「再開」でこの一件だけ再確認します。既知の保留は検査OFFでも解除しません。'+(hold.reasons||[]).map(reason=>reason.code+': '+reason.expected+' / '+reason.actual).join('、');detail.append(notice)}
    const toggle=document.createElement('button');toggle.type='button';toggle.textContent=state.mode==='off'?'追加検査を有効にする':'追加検査を無効化';toggle.onclick=()=>{state.mode=state.mode==='off'?'on':'off';state.fault=false;try{localStorage.setItem(PREF,state.mode)}catch{}updateBadge();render()};detail.append(toggle);
+   const repair=page.__MUMEI_PROFILE_CARD_LAYOUT_REPAIR__;
+   if(typeof repair?.preview==='function'&&typeof repair?.apply==='function'){
+    const previewButton=document.createElement('button');previewButton.type='button';previewButton.textContent='今回分の表示を整える';previewButton.disabled=repairBusy;
+    previewButton.onclick=async()=>{if(repairBusy)return;repairBusy=true;repairPreview=null;repairMessage='今回分の所有記録を確認中…';render();try{repairPreview=await repair.preview();repairMessage=String(repairPreview?.message||'変更候補を確認しました')}catch(error){repairMessage='修正候補を確認できません：'+String(error?.message||error)}finally{repairBusy=false;render()}};detail.append(previewButton);
+    if(repairMessage){const message=document.createElement('p');message.textContent=repairMessage;detail.append(message)}
+    if(repairPreview){
+     const count=Number(repairPreview.changeCount)||0,counts=document.createElement('p');counts.textContent='変更候補 '+count+'件｜紹介 '+(Number(repairPreview.paragraphs)||0)+'件｜区切り '+(Number(repairPreview.dividers)||0)+'件';detail.append(counts);
+     for(const sample of (Array.isArray(repairPreview.samples)?repairPreview.samples:[]).slice(0,3)){const line=document.createElement('p');line.style.whiteSpace='pre-wrap';line.textContent=(sample.name?String(sample.name)+'：':'')+String(sample.before??sample.beforeText??'').slice(0,200)+' → '+String(sample.after??sample.afterText??'').slice(0,200)+(sample.reason?'｜'+String(sample.reason).slice(0,200):'');detail.append(line)}
+     if(Array.isArray(repairPreview.reasons)&&repairPreview.reasons.length){const reasons=document.createElement('p');reasons.textContent=repairPreview.reasons.slice(0,3).map(reason=>String(reason).slice(0,200)).join(' / ');detail.append(reasons)}
+     if(count>0&&repairPreview.token){const applyButton=document.createElement('button');applyButton.type='button';applyButton.textContent='この修正を適用';applyButton.disabled=repairBusy;applyButton.onclick=async()=>{if(repairBusy||!repairPreview?.token)return;const token=repairPreview.token;repairPreview=null;repairBusy=true;repairMessage='選択した修正を適用中…';render();try{const result=await repair.apply(token);repairMessage=String(result?.message||(result?.applied?'選択した修正を適用しました':'修正は適用されていません'))+(result?.applied?(result.saved==='confirmed'?'｜下書き保存を確認済み':'｜下書き保存は未確認。note画面で保存完了を確認してください。')+'表示の実測結果は取得できた範囲だけ記録します。':'')}catch(error){repairMessage='修正を適用できません：'+String(error?.message||error)}finally{repairBusy=false;updateBadge();render()}};detail.append(applyButton)}
+    }
+   }
    const summary=document.createElement('p');summary.textContent='今回の作成分の検査回数：'+Object.entries(labels).map(([key,label])=>label+' '+(state.counts[key]||0)).join(' / ')+'。根拠は直近'+LIMIT+'記録まで。';detail.append(summary);
    for(const entry of [...state.records].filter(entry=>(entry.batchId||'')===state.batchId).reverse().slice(0,30)){const line=document.createElement('details'),title=document.createElement('summary');title.textContent=(entry.resolvedAt?'［解決済みの記録］':'')+(entry.target||'今回分')+' / '+entry.stage;line.append(title);for(const f of entry.findings){const text=document.createElement('p');text.textContent=labels[f.status]+'：'+f.check+' — '+f.reason+(Object.keys(f.evidence||{}).length?' '+JSON.stringify(f.evidence):'');line.append(text)}detail.append(line)}
   };
   button.onclick=event=>{event.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));if(!detail.hidden){flush();render()}};updateBadge();
  }catch{failure('検査表示の初期化失敗')}
 }
-const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
+const api={VERSION,beginBatch,preflight,knownDiagnosis,knownDiagnoses:run=>{try{selectScope();return legacyDiagnoses.size&&Array.isArray(run?.rows)?run.rows.flatMap(row=>{const reasons=knownDiagnosis(row,run);return reasons.length?[{identity:{account:account(row.urlname),key:String(row.key||'').toLowerCase(),url:String(row.url||'')},reasons}]:[]}):[]}catch{return[]}},resolved,enabled:()=>safe(()=>true,false),refreshed,hasVerifiedFreshIdentity,hasVerifiedFileIdentity,rawRow:(...args)=>safe(()=>rawRow(...args),args[0]),acquired:(...args)=>safe(()=>acquired(...args),args[0]),profileEvidence,observeContext,generated,beforePaste,pasted,activity,presentationAt,presentationPasted,imageBoundary,divider,nativeCard,saved,flush,mountUI,failed:()=>failure(),held:hold=>{safe(()=>{state.runId=hold.runId??state.runId;record({urlname:hold.identity?.account,key:hold.identity?.key,index:hold.index+1},'保留',(hold.reasons||[]).map(reason=>finding('mismatch',reason.code,reason.code==='TAG_SCOPE'?'貼付前に記事の実タグ条件の矛盾を保留':'貼付前に明確な識別情報の矛盾を保留',reason)))});flush();updateBadge()},
  layout:(row,layout,text,measure)=>safe(()=>{const cached=layouts.get(row);if(cached&&cached.text===text&&cached.maxWidth===layout.maxWidth&&cached.lines.length===layout.lines.length&&cached.lines.every((line,index)=>line===layout.lines[index]))return;layouts.set(row,{text,lines:layout.lines.slice(),maxWidth:layout.maxWidth,findings:assessText(text,{lines:layout.lines,maxWidth:layout.maxWidth,measure})})}),
  // Pure functions are also used by the anonymous regression fixtures.
  assessIdentity,assessBinding,assessText,assessGeometry,fingerprint,sourceBinding,provenance:row=>{const proof=provenance(row);return proof?JSON.parse(JSON.stringify(proof)):null},

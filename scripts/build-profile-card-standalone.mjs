@@ -4,8 +4,11 @@ import {transformCoreGeneral,transformEditorGeneral} from './profile-card-genera
 import {transformCoreDesign,transformEditorDesign} from './profile-card-design-v292.mjs';
 import {transformCoreSpeed,transformEditorSpeed} from './profile-card-speed-v292.mjs';
 import {contentRuntime,transformCoreContent,transformEditorContent} from './profile-card-content-v292.mjs';
+import {transformCoreDividers} from './profile-card-dividers-v293.mjs';
+import {transformCoreLayoutRepair} from './profile-card-layout-repair-v293.mjs';
+import {transformCoreSourceScope} from './profile-card-source-scope-v293.mjs';
 
-const version='2.9.2';
+const version='2.9.3';
 let core=readFileSync('public/note-profile-card-paster-core-v232.js','utf8');
 let editor=readFileSync('public/note-profile-card-paster-v22.user.js','utf8').replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\s*/,'');
 const gallery=readFileSync('public/note-profile-card-gallery-v263.js','utf8');
@@ -33,8 +36,11 @@ editor=removeFlow(editor,'const PURCHASE_REVIEW_FORMAT=','function bindPanelActi
 core=transformCoreContent(core);editor=transformEditorContent(editor);
 core=instrumentCore(core);editor=instrumentEditor(editor);
 core=transformCoreGeneral(core);editor=transformEditorGeneral(editor);
+core=transformCoreSourceScope(core);
 core=transformCoreDesign(core);editor=transformEditorDesign(editor);
 core=transformCoreSpeed(core);editor=transformEditorSpeed(editor);
+core=transformCoreDividers(core);
+core=transformCoreLayoutRepair(core);
 
 const body=`(function(){\n'use strict';\nconst owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;\nif(location.hostname!=='editor.note.com')return;\nif(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='${version}')return;\nowner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='${version}';\nowner.__MUMEI_PROFILE_CARD_GALLERY_MANIFEST__=${JSON.stringify(manifest)};\n${quality}\n${contentRuntime}\n${gallery}\n// BEGIN INCLUDED EDITOR CORE\n${core}\n// BEGIN INCLUDED PROFILE IMPLEMENTATION\n${editor}\n})();\n`;
 function metadata(name,namespace,path){return `// ==UserScript==\n// @name         ${name}\n// @namespace    ${namespace}\n// @version      ${version}\n// @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、毎回の品質検査と通知カードに対応。\n// @match        https://editor.note.com/*\n// @noframes\n// @run-at       document-idle\n// @grant        GM_xmlhttpRequest\n// @grant        GM_setValue\n// @grant        GM_getValue\n// @grant        unsafeWindow\n// @connect      note.com\n// @connect      assets.st-note.com\n// @connect      *\n// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/${path}\n// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/${path}\n// ==/UserScript==\n\n`;}
