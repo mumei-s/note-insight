@@ -51,6 +51,15 @@ test('native pushState/back/forward/back traversal keeps the original notificati
  assert.equal(f.clicks(),2);
 });
 
+test('short note article URLs with a comment target also return to the original notification entry',async t=>{
+ const f=fixture(t);f.mount();f.scroll().scrollTop=510;
+ const path='/n/n123abc/?c=456#comment';f.w.document.querySelector('#article').href=path;f.click('article');
+ assert.equal(typeof f.w.history.state[ENTRY],'string','valid short article link marks its source');
+ f.w.history.pushState({article:true},'',path);f.w.document.querySelector('#shell').remove();f.w.history.back();
+ await until(()=>f.w.location.pathname==='/'&&f.scroll()?.scrollTop===510,'Back from short article opens the same bell position');
+ assert.equal(f.clicks(),1);
+});
+
 test('Back from a full-document article reload restores a tab-local source entry with outer native scroller',async t=>{
  const first=fixture(t,{outer:true});first.mount();first.scroll().scrollTop=730;first.click('article');
  const f=fixture(t,{outer:true,state:first.w.history.state,records:first.w.sessionStorage.getItem(STORAGE)});

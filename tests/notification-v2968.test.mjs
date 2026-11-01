@@ -212,7 +212,10 @@ test('filter and backend restriction fixes stay isolated',()=>{
   assert.match(filter,/while\(profileQueue\.size\)/);
   assert.match(filter,/flatMap\(g=>Array\.isArray\(g\?\.ids\)\?g\.ids:\[\]\)/);
   assert.match(filter,/data-mumei-filter-scroll-guard/);
-  assert.doesNotMatch(filter,/addEventListener\(['"]touchmove['"]/);
+  // A passive downward-gesture observer may rearm native pagination, while
+  // canceling or replacing note's own touch scrolling remains forbidden.
+  assert.match(filter,/addEventListener\(['"]touchmove['"][^\n]+\{passive:true,capture:true\}\)/);
+  assert.doesNotMatch(filter,/addEventListener\(['"]touchmove['"][^\n]+(?:preventDefault|stopPropagation|passive:false)/);
   assert.doesNotMatch(filter.replace(/continuation\.querySelector\('button'\)\.onclick=e=>\{[^}]*\}/,''),/preventDefault\(\)/,'続きへボタン以外ではネイティブのジェスチャーを止めない');
   assert.match(network,/BACKEND_RESTRICTED/);
   assert.match(network,/Supabaseの利用制限中/);

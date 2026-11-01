@@ -1,6 +1,6 @@
 # 本人通知：記事から🔔一覧への復帰
 
-本人通知3.6.63、returnモジュール1.3.0。開始点は `ed7c4cf564fd0737bc9900b1da0987b5c3d1d7c0`。
+本人通知3.6.64、returnモジュール1.3.1。開始点は `ed7c4cf564fd0737bc9900b1da0987b5c3d1d7c0`。
 
 ## 変更
 
@@ -14,8 +14,10 @@
 
 ## 検証
 
-`tests/notification-article-return.test.mjs` の16件と `tests/notification-native-integration-v3664.test.mjs` の実Reader／controls／filter併用3件を検査する。実連携ではパネル再生成／再利用の両方で外側スクロール位置・フィルター状態・32px操作列と待機後の余分な通信がないことを確認する。
+`tests/notification-article-return.test.mjs` の17件と `tests/notification-native-integration-v3664.test.mjs` の実Reader／controls／filter併用3件を検査する。実連携ではパネル再生成／再利用の両方で外側スクロール位置・フィルター状態・32px操作列と待機後の余分な通信がないことを確認する。
 
 Pagesの公開ゲートに復帰、重複・スワイプ、行の処理予算、公式ページ取得連携の検査を追加した。既存の導入／更新とUserscripts API互換検査150件も成功している。
 
-Android EdgeやiOS Safariの全実機操作はこの環境では未実施。端末側では拡張機能を利用している普段のブラウザから本人通知3.6.63へ更新する必要がある。
+Android EdgeやiOS Safariの全実機操作はこの環境では未実施。端末側では拡張機能を利用している普段のブラウザから本人通知3.6.64へ更新する必要がある。
+
+短縮記事URL `/n/n…` とコメント指定query/hashからの実履歴復帰も対象とする。旧検査のtouchmove一律禁止は、passiveで既定のスワイプを妨げないことの検査へ更新し、新規の実動作検査と併用する。

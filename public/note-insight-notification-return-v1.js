@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReturnV1Loaded)return;window.__mumeiNotificationReturnV1Loaded=true;
-const VERSION='1.3.0',RETURN='mumei_insight_return_bell_tab_v2',ENTRY='__mumeiNotificationReturnV2',MAX_AGE=6*60*60*1000;
+const VERSION='1.3.1',RETURN='mumei_insight_return_bell_tab_v2',ENTRY='__mumeiNotificationReturnV2',MAX_AGE=6*60*60*1000;
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const dm=()=>/^\/messages\/rooms(?:\/|$)/i.test(location.pathname);
 const query=()=>new URLSearchParams(location.search);
@@ -47,7 +47,7 @@ function readRecords(){try{const records=JSON.parse(sessionStorage.getItem(RETUR
 function writeRecords(records){try{sessionStorage.setItem(RETURN,JSON.stringify(records.slice(-12)))}catch{}}
 function currentRecord(){const id=history.state&&typeof history.state==='object'?history.state[ENTRY]:null;return typeof id==='string'?readRecords().find(r=>r.id===id&&r.source===location.href)||null:null}
 function forget(){const record=currentRecord();if(!record)return;const state={...history.state};delete state[ENTRY];try{history.replaceState(state,'',location.href)}catch{}writeRecords(readRecords().filter(r=>r.id!==record.id))}
-function articleUrl(link){try{const url=new URL(link.href,location.href);return url.origin===location.origin&&/^\/[^/]+\/n\/n[a-z0-9]+\/?$/i.test(url.pathname)?url:null}catch{return null}}
+function articleUrl(link){try{const url=new URL(link.href,location.href);return url.origin===location.origin&&/^\/(?:[^/]+\/)?n\/n[a-z0-9]+\/?$/i.test(url.pathname)?url:null}catch{return null}}
 function scrollNodes(panel){const nodes=[];const add=el=>{if(el&&shown(el)&&(el.scrollTop>0||el.scrollHeight>el.clientHeight&&/auto|scroll/.test(getComputedStyle(el).overflowY))&&!nodes.includes(el))nodes.push(el)};add(panel);for(let p=panel?.parentElement;p&&p!==document.body;p=p.parentElement)add(p);if(panel)for(const el of [...panel.querySelectorAll('*')].slice(0,500))add(el);return nodes}
 function pathFor(panel,node){if(node===panel)return[];if(panel.contains(node)){const path=[];for(let p=node;p&&p!==panel;p=p.parentElement)path.unshift([...p.parentElement.children].indexOf(p));return path}let steps=0;for(let p=panel;p;p=p.parentElement){if(p===node)return[-steps];steps++}return null}
 function nodeAt(panel,path){if(!Array.isArray(path)||path.length>24)return null;let node=panel;if(path[0]<0){for(let i=0;i<-path[0]&&node;i++)node=node.parentElement;return node}for(const index of path){if(!Number.isInteger(index)||index<0)return null;node=node?.children[index]}return node||null}
