@@ -33,6 +33,7 @@ const projectionMigrations=['_insight_notification_prepared_format.sql','_insigh
  const name=readdirSync('supabase/migrations').find(n=>n.endsWith(suffix));assert.ok(name,suffix+' is required');return readFileSync('supabase/migrations/'+name,'utf8');
 });
 const consumerMigration=projectionMigrations[2];
+const scopedTopPatch=readFileSync('scripts/notification-feed-scoped-top.sql','utf8');
 const queryParameters=['p_member_ids','p_scope','p_note_id','v_kind','v_day','v_handling','p_page','p_page_size','p_preview'];
 const context=vm.createContext({URL,Date,Intl,Set,Map});
 vm.runInContext(ts.transpileModule(readFileSync('tests/fixtures/notification-feed-before.ts','utf8')+'\nglobalThis.oracle={dedupe,decorateHandling,selectHandling,explicitManual,useful,semanticKey};',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
@@ -60,6 +61,7 @@ before(async()=>{
  await db.exec(projectionMigrations[0]);await db.exec(projectionMigrations[1]);
  await db.exec('INSERT INTO insight_notification_internal.prepared_rows SELECT p.* FROM public.insight_notifications n CROSS JOIN LATERAL insight_notification_internal.project_row(n) p ON CONFLICT(id) DO NOTHING');
  await db.exec(consumerMigration);
+ await db.exec(scopedTopPatch);
 });
 after(async()=>{await db?.close()});
 async function insert(rows){
@@ -463,4 +465,52 @@ test('one immutable formatter preserves canonical cases and both singleton/dupli
  assert.equal(rights.provolatile,'i');assert.equal(rights.proparallel,'s');assert.equal(rights.proisstrict,false);assert.equal(rights.prosecdef,false);assert.deepEqual(rights.proconfig,['search_path=""']);assert.equal(rights.prorows,1);assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
  const emptyRows=(await db.query('SELECT to_jsonb(p) AS value FROM insight_notification_internal.prepare_format(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL) p')).rows;assert.equal(emptyRows.length,1);const empty=emptyRows[0].value;
  assert.deepEqual(empty,{notification_type:null,completion_key:null,is_question_answer:null,is_canonical:null,insufficient:null,reclassify_pending:true});
+});
+
+test('scoped top metadata keeps paired/single scopes and the original NULL ordering',async()=>{
+ const m={id:'metadata-app',scope:'metadata-root',noteId:'metadata_note'},single={id:'metadata-root',scope:'metadata-root',noteId:'metadata_note'};
+ await insert([
+  row(999900001,{member_id:m.scope,notification_type:'capture_noise',captured_at:'2099-03-01T00:00:00Z'}),
+  row(999900002,{member_id:m.id,notification_type:'capture_noise',captured_at:'2099-04-01T00:00:00Z'}),
+  row(999900003,{member_id:'metadata-foreign',notification_type:'capture_noise',captured_at:'2099-12-01T00:00:00Z'}),
+ ]);
+ assert.equal((await sqlPage(m)).lastUpdatedAt,'2099-04-01T00:00:00.000Z');
+ assert.equal((await sqlPage(single)).lastUpdatedAt,'2099-03-01T00:00:00.000Z');
+ await equivalent(m,{kind:'all',handlingStatus:'all',page:1});
+ await equivalent(m,{kind:'reply_self',handlingStatus:'pending',day:'2026-10-17',page:2});
+ // DESC uses NULLS FIRST in the original query. Metadata optimization must
+ // retain that behavior instead of quietly changing the feed contract.
+ await insert([row(999900004,{member_id:m.id,notification_type:'capture_noise',captured_at:null})]);
+ assert.equal((await sqlPage(m)).lastUpdatedAt,null);
+ assert.equal((await sqlPage(single)).lastUpdatedAt,'2099-03-01T00:00:00.000Z');
+});
+
+test('confirmed sync metadata selects an exact per-scope top row through its small partial index',async()=>{
+ await db.exec(`INSERT INTO public.insight_notification_sync_runs(member_id,created_at,inserted_count,received_count,source)
+  SELECT CASE WHEN i%3=0 THEN 'owner-app' WHEN i%3=1 THEN 'owner' ELSE 'foreign-scope' END,
+   '2030-01-01'::timestamptz+i*interval '1 second',i,i+1,
+   CASE WHEN i%7=0 THEN 'browser-notification-stable-v3-confirmed' ELSE 'unrelated-run' END
+  FROM generate_series(1,6000) i;
+  INSERT INTO public.insight_notification_sync_runs VALUES
+   ('owner','2099-05-01',12,13,'browser-notification-stable-v3-confirmed'),
+   ('owner-app','2099-06-01',21,22,'browser-notification-stable-v3-confirmed'),
+   ('foreign-scope','2099-07-01',31,32,'browser-notification-stable-v3-confirmed'),
+   ('owner-app','2099-08-01',41,42,'unrelated-run');
+  ANALYZE public.insight_notification_sync_runs;`);
+ const paired=await sqlPage(),single=await sqlPage({id:'owner',scope:'owner',noteId:'ss_yr'});
+ assert.equal(Date.parse(paired.lastSyncAt),Date.parse('2099-06-01T00:00:00Z'));
+ assert.equal(paired.lastSyncConfirmed,21);assert.equal(paired.lastSyncReceived,22);
+ assert.equal(Date.parse(single.lastSyncAt),Date.parse('2099-05-01T00:00:00Z'));
+ assert.equal(single.lastSyncConfirmed,12);assert.equal(single.lastSyncReceived,13);
+ const plan=(await db.query(`EXPLAIN (ANALYZE,FORMAT JSON,TIMING OFF)
+  SELECT newest.* FROM unnest(ARRAY['owner','owner-app']) scope(member_id)
+  CROSS JOIN LATERAL (SELECT r.created_at,r.inserted_count,r.received_count,r.source
+   FROM public.insight_notification_sync_runs r WHERE r.member_id=scope.member_id
+    AND r.source='browser-notification-stable-v3-confirmed'
+   ORDER BY r.created_at DESC LIMIT 1) newest
+  ORDER BY newest.created_at DESC LIMIT 1`)).rows[0]['QUERY PLAN'][0].Plan;
+ const nodes=[];const walk=node=>{nodes.push(node);for(const child of node.Plans||[])walk(child)};walk(plan);
+ const lookup=nodes.find(node=>node['Index Name']==='insight_notification_sync_runs_confirmed_scope_latest_idx');
+ assert.ok(lookup,'use the confirmed-run metadata index instead of scanning unrelated sync history');
+ assert.equal(lookup['Actual Loops'],2);assert.ok(lookup['Actual Rows']<=1,'one candidate per authenticated scope');
 });
