@@ -325,7 +325,8 @@ window.addEventListener(EVT,()=>{for(const[k,attempt]of profileAttempt)if(accoun
 window.addEventListener('mumei-notification-feature-changed',()=>{invalidate();clearTimeout(timer);timer=0;pendingForce=false;if(featureOn())schedule(0,true);else{attach(null);clearHides()}});
 document.addEventListener('click',()=>schedule(80),true);
 addEventListener('focus',discover);addEventListener('pageshow',discover);addEventListener('popstate',discover);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')discover()});
-addEventListener('resize',()=>schedule(0));
+let nativeLayoutWidth=document.documentElement?.clientWidth||innerWidth;
+addEventListener('resize',()=>{const width=document.documentElement?.clientWidth||innerWidth;if(width===nativeLayoutWidth)return;nativeLayoutWidth=width;schedule(0)});
 // Catch a panel mounted after the bell click, including a reused hidden panel.
 // Observe only relevant mutations; no background polling or repeated API scan.
 const discovery=new MutationObserver(ms=>{if(!featureOn())return;if(root&&(!root.isConnected||root.hidden)){schedule(0);return}for(const m of ms){const target=m.target,panel=root||watchedPanel;if(m.type==='attributes'){if(owned(target))continue;if((panel&&(target===panel||target.contains(panel)))||target.matches?.(PANEL_HINT)){if(changed(m)){nativeLayoutValidation=null;schedule();return}}}else{if(root?.contains(target))continue;if([...m.addedNodes].some(n=>n.nodeType===1&&!owned(n)&&(n.matches(PANEL_HINT)||n.querySelector(PANEL_HINT)||n.matches(FALLBACK_ITEM)&&fallbackRow(n)||[...n.querySelectorAll(FALLBACK_ITEM)].some(fallbackRow)))){schedule();return}}}});

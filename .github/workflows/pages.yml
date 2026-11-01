@@ -80,6 +80,8 @@ jobs:
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
       - name: Check notification duplicate rows, downward gestures and article return
         run: node --test tests/notification-filter-gesture-dedupe-v4215.test.mjs tests/notification-article-return.test.mjs tests/notification-native-integration-v3664.test.mjs tests/notification-filter-incremental-v426.test.mjs tests/notification-filter-row-budget-v4213.test.mjs tests/notification-native-page-budget.test.mjs
+      - name: Check notification retry cooldown and visible mobile controls
+        run: node --test tests/notification-reader-retry-cooldown-v3638.test.mjs tests/notification-controls-viewport-v159.test.mjs tests/notification-filter-native-width-v4216.test.mjs
       - name: Check notification feed saved order
         run: node --experimental-vm-modules --test tests/notification-save-order.test.mjs tests/notification-board-storage.test.mjs
       - name: Check magazine search and creator presentation

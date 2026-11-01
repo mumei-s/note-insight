@@ -25,7 +25,7 @@ function fixture(t,{viewport=344,nativeWidth=376,rowWidth=500,visualWidth=172,re
  }
  if(reading){list.style.overflowY='auto';list.scrollTop=400;Object.defineProperties(list,{clientHeight:{get:()=>200},scrollHeight:{get:()=>1500}})}
  w.HTMLElement.prototype.getBoundingClientRect=function(){if(this.classList.contains('m-navbarNoticeItem'))reads.rows++;const rect=bounds(width(this));if(reading&&this===first)return{...rect,top:-list.scrollTop,bottom:(first.style.maxWidth==='100%'?600:400)-list.scrollTop,height:first.style.maxWidth==='100%'?600:400};if(reading&&this.id==='second'){const top=(first.style.maxWidth==='100%'?600:400)-list.scrollTop;return{...rect,top,bottom:top+300}}return rect};
- w.GM={getValue:async(k,d)=>k.includes('filter_enabled')?true:d};w.fetch=async()=>{calls++;return Response.json({data:{urlname:'tester'}})};
+ w.GM={getValue:async(k,d)=>{reads.gm=(reads.gm||0)+1;return k.includes('filter_enabled')?true:d}};w.fetch=async()=>{calls++;return Response.json({data:{urlname:'tester'}})};
  w.__mumeiNotificationFeatureV1={isEnabled:()=>enabled};w.__mumeiNotificationReaderV4={findPanel:()=>shell.isConnected?shell.querySelector('#list'):null};w.eval(source);
  return{w,shell,list,first,originals,reads,calls:()=>calls,width,viewport:value=>{layoutWidth=value;w.dispatchEvent(new w.Event('resize'))},off:()=>{enabled=false;w.dispatchEvent(new w.CustomEvent('mumei-notification-feature-changed',{detail:{enabled:false}}))},ready:()=>until(()=>w.__mumeiNotificationFilterV4.getState(),'native notification filter settles')};
 }
@@ -68,4 +68,11 @@ test('300 normal mobile rows reuse width validation across idle and settings pas
  const added=f.w.document.querySelector('#second').cloneNode(true);added.id='added';f.list.append(added);await until(()=>f.w.__mumeiNotificationFilterV4.getState()?.total===301,'native append invalidates width evidence');
  assert.equal(f.reads.rows,301,'the changed native collection is measured once');
  f.first.style.width='500px';await until(()=>f.first.style.maxWidth==='100%','external native row style invalidates the fitting-width cache');assert.equal(f.width(f.first),344);
+});
+
+test('browser bars changing only viewport height do not restart filter state reads',async t=>{
+ const f=fixture(t,{nativeWidth:344,rowWidth:344,count:300});await f.ready();await wait(150);
+ const reads=f.reads.gm,now=f.w.Date.now();f.w.Date.now=()=>now+4000;
+ for(let i=0;i<50;i++)f.w.dispatchEvent(new f.w.Event('resize'));
+ await wait(120);assert.equal(f.reads.gm,reads,'height-only resize leaves expired filter state alone');assert.equal(f.calls(),1);
 });
