@@ -181,9 +181,8 @@ async function notificationComment(m:any,b:any){
 
 async function recentRows(m:any,b:any){
  const ids=m.scope===m.id?[m.id]:[m.scope,m.id],since=typeof b.since==="string"&&Number.isFinite(Date.parse(b.since))?new Date(b.since).toISOString():"";
- let q=db.from("insight_notifications").select("id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta").in("member_id",ids).not("notification_type","in","(like,follow,comment,capture_noise)");
- if(since)q=q.or(`captured_at.gte.${since},meta->>last_reclassified_at.gte.${since}`);
- const{data,error}=await q.order("captured_at",{ascending:false}).order("id").limit(300);if(error)throw error;
+ const{data,error}=await db.rpc("insight_notification_recent_rows",{p_member_ids:ids,p_since:since});if(error)throw error;
+ if(!Array.isArray(data))throw new Error("NOTIFICATION_RECENT_READ_INVALID");
  const selected=dedupe(data||[]),[completed,favorites]=await Promise.all([completionKeys(m,selected),recentFavoriteRows(m,selected)]),rows=decorateHandling(selected,m,completed,favorites);
  const watermark=(data||[]).reduce((at,r)=>[at,String(r.captured_at||""),String(r.meta?.last_reclassified_at||"")].sort().at(-1)!,since);
  return{ok:true,noteId:m.noteId,rows:rows.map(notificationListRow),watermark,partial:true,feedAt:new Date().toISOString()};

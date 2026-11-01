@@ -10,6 +10,8 @@ import {PGlite} from '@electric-sql/pglite';
 // from the implementation under test. All SQL below is local synthetic data.
 const baseline=readFileSync('tests/fixtures/notification-recent-before.ts','utf8');
 const source=readFileSync(process.env.NOTIFICATION_RECENT_SOURCE||'supabase/functions/insight-notification-feed-final/index.ts','utf8');
+const recentScopedSql=readFileSync('scripts/notification-recent-scoped.sql','utf8');
+const recentReclassifiedSql=readFileSync('scripts/notification-recent-reclassified-index.sql','utf8');
 const bytes=value=>Buffer.byteLength(JSON.stringify(value),'utf8');
 const quote=value=>'"'+value.replaceAll('"','""')+'"';
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -18,6 +20,7 @@ class FixedDate extends Date{constructor(...args){super(...(args.length?args:['2
 let sql;
 before(async()=>{
  sql=new PGlite();
+ await sql.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;');
  await sql.exec(`
   CREATE TABLE insight_member_sessions(id text,application_id text,token_hash text,expires_at timestamptz,revoked_at timestamptz);
   CREATE TABLE insight_access_applications(id text,note_id text,status text);
@@ -25,6 +28,8 @@ before(async()=>{
   CREATE TABLE insight_manual_completions(member_id text,creator_urlname text,item_type text,item_key text,PRIMARY KEY(member_id,creator_urlname,item_type,item_key));
   CREATE TABLE insight_favorite_creators(member_id text,creator_key text,actor_url text,PRIMARY KEY(member_id,creator_key));
  `);
+ await sql.exec(recentScopedSql);
+ await sql.exec(recentReclassifiedSql);
  for(const [id,noteId,token] of [['owner-app','ss_yr','owner-token'],['participant','participant','participant-token']]){
   await sql.query("INSERT INTO insight_member_sessions VALUES ($1,$1,$2,'2099-01-01',null)",[id,hash(token)]);
   await sql.query("INSERT INTO insight_access_applications VALUES ($1,$2,'active')",[id,noteId]);
@@ -87,6 +92,12 @@ function backend(code=source,failTable=null){
    then(resolve,reject){return run().then(resolve,reject)},
   };
   return q;
+ },async rpc(name,parameters){
+  assert.equal(name,'insight_notification_recent_rows');
+  if(failTable==='insight_notifications'){reads.push({table:'insight_notifications',error:true});return{data:null,error:{code:'FIXTURE_READ_FAILED',message:'fixture insight_notifications'}}}
+  const rows=JSON.parse(JSON.stringify((await sql.query('SELECT * FROM public.insight_notification_recent_rows($1,$2)',[parameters.p_member_ids,parameters.p_since])).rows));
+  reads.push({table:'insight_notifications',rpc:name,columns:'id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta',rows,bytes:bytes(rows),filters:[],params:[parameters.p_member_ids,parameters.p_since],rawFilters:[],offset:0,limit:300});
+  return{data:rows,error:null};
  }};
  const context=vm.createContext({URL,Request,Response,TextEncoder,crypto:webcrypto,console:{error(){}},Date:FixedDate,Intl,createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>handle=fn}});
  vm.runInContext(ts.transpileModule(code.replace(/^import[^\n]+\n/,''),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
@@ -248,5 +259,36 @@ test('invalid/absent since keep the old response and authentication/read failure
   const current=backend(source,table),legacy=backend(baseline,table);
   const actual=await current.call();assert.equal(actual.status,500);assert.deepEqual(actual,await legacy.call());
   if(table==='insight_notifications')assert.equal(auxiliary(current.reads).length,0);
+ }
+});
+
+test('recent RPC preserves exact raw top 300 before dedupe across scopes, ties, NULLs and both change branches',async()=>{
+ const rows=Array.from({length:1500},(_,i)=>row(i+1,{
+  member_id:i%3===0?'owner':i%3===1?'owner-app':'unrelated',
+  notification_type:i%11===0?'like':i%13===0?'capture_noise':i%17===0?null:'other',
+  captured_at:i%89===0?null:new Date(Date.parse(at)-(i%90)*60_000).toISOString(),
+  meta:{source:'note-notification-reader-v3',event_identity:'notice:'+Math.floor(i/3),
+   ...(i%23===0?{last_reclassified_at:'z'.repeat(4000)}:i%29===0?{last_reclassified_at:'あ'.repeat(1000)}:i%31===0?{last_reclassified_at:'z'.repeat(1800)}:i%37===0?{last_reclassified_at:'z'.repeat(1801)}:i%4===0?{last_reclassified_at:at}:i%7===0?{last_reclassified_at:'zzzz legacy text'}:i%19===0?{last_reclassified_at:[at]}:{})},
+ }));
+ await insert('insight_notifications',rows);
+ const columns='id,member_id,notification_type,raw_text,actor_name,actor_url,actor_image_url,target_title,target_url,source_url,occurred_at,captured_at,is_read,meta';
+ const before=await snapshot();
+ for(const ids of [['owner','owner-app'],['owner'],['owner-app'],['owner','owner'],['missing']])for(const since of ['',at,'2026-10-20T09:30:00.000Z']){
+  const parameters=[ids],where=since?(parameters.push(since),' AND (captured_at>=$2::text::timestamptz OR meta->>\'last_reclassified_at\'>=$2::text)'):'';
+  const expected=(await sql.query(`SELECT ${columns} FROM public.insight_notifications WHERE member_id=ANY($1) AND notification_type NOT IN ('like','follow','comment','capture_noise')${where} ORDER BY captured_at DESC,id ASC LIMIT 300`,parameters)).rows;
+  const actual=(await sql.query('SELECT * FROM public.insight_notification_recent_rows($1,$2)',[ids,since])).rows;
+  assert.deepEqual(actual,expected,JSON.stringify({ids,since}));
+  assert.ok(actual.length<=300);
+ }
+ assert.deepEqual(await snapshot(),before,'the query helper cannot change source or handling data');
+});
+
+test('recent RPC remains service-only, invoker-scoped and rejects unbounded or malformed parameters',async()=>{
+ const [rights]=(await sql.query("SELECT prosecdef,provolatile,proconfig,has_function_privilege('anon',oid,'EXECUTE') AS anon,has_function_privilege('authenticated',oid,'EXECUTE') AS authenticated,has_function_privilege('service_role',oid,'EXECUTE') AS service FROM pg_proc WHERE oid='public.insight_notification_recent_rows(text[],text)'::regprocedure")).rows;
+ assert.equal(rights.prosecdef,false);assert.equal(rights.provolatile,'s');
+ assert.deepEqual(rights.proconfig,['search_path=""','plan_cache_mode=force_custom_plan']);
+ assert.equal(rights.anon,false);assert.equal(rights.authenticated,false);assert.equal(rights.service,true);
+ for(const [ids,since]of [[[],at],[null,at],[['owner',null],at],[['a','b','c'],at],[[''],at],[['x'.repeat(101)],at],[['owner'],'bad-date'],[['owner'],'x'.repeat(101)]]){
+  await assert.rejects(sql.query('SELECT * FROM public.insight_notification_recent_rows($1,$2)',[ids,since]),/INVALID_NOTIFICATION_RECENT_PARAMETERS/);
  }
 });
