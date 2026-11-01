@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationReaderV4Loaded)return;window.__mumeiNotificationReaderV4Loaded=true;
-const VERSION='3.6.37',PROTOCOL='3.6.4';
+const VERSION='3.6.38',PROTOCOL='3.6.4';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const MAX_NOTICES=300;
 const INGEST='https://xxhaerjvrgmnadxjqetz.supabase.co/functions/v1/insight-notification-ingest-v2';
@@ -216,7 +216,11 @@ function scheduleAuto(delay=150){
   }
   panelMissingAt=0;
   const opening=!autoPanel;
-  if(opening){stop=false;pausedPanel=null;retryAt=0;retryFailures=0;autoComplete=false;lastAutoAt=0;resetNoticeKeys()}
+  // Reopening the bell is automatic navigation, not an explicit retry. Keep
+  // finite transport cooldowns (including their failure streak), so article Back
+  // cannot hammer a rate-limited endpoint. Terminal errors may be cleared here:
+  // the user can have switched note accounts or repaired pairing while away.
+  if(opening){stop=false;pausedPanel=null;if(!Number.isFinite(retryAt)){retryAt=0;retryFailures=0}autoComplete=false;lastAutoAt=0;resetNoticeKeys()}
   watchNoticeKeys(panel,opening);autoPanel=panel;
   if(scanning||document.visibilityState==='hidden')return;
   if(stop){pausedPanel=panel;return}
