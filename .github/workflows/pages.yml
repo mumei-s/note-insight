@@ -46,6 +46,7 @@ jobs:
           node --check public/note-insight-notification-reader-v4.js
           node --check public/note-insight-notification-controls-v1.js
           node --check public/note-insight-notification-filter-v4.js
+          node --check public/note-insight-notification-return-v1.js
           node --check public/note-insight-notification-feature-bridge-v1.js
           node --check public/note-insight-notification-status-bridge-v1.js
           node --check public/note-insight-notification-sync.user.js
@@ -77,6 +78,8 @@ jobs:
         run: node --experimental-vm-modules --test tests/owner-route-loading.test.mjs
       - name: Check stable DM status and row-scoped filters
         run: node --experimental-vm-modules --test tests/dm-status-v1410.test.mjs tests/dm-view-v1410.test.mjs tests/dm-composer-v143.test.mjs tests/dm-resume-v140.test.mjs tests/reader-analysis-v362.test.mjs tests/notification-filter-return.test.mjs tests/tools-release-v22.test.mjs
+      - name: Check notification duplicate rows, downward gestures and article return
+        run: node --test tests/notification-filter-gesture-dedupe-v4215.test.mjs tests/notification-article-return.test.mjs tests/notification-native-integration-v3664.test.mjs tests/notification-filter-incremental-v426.test.mjs tests/notification-filter-row-budget-v4213.test.mjs tests/notification-native-page-budget.test.mjs
       - name: Check notification feed saved order
         run: node --experimental-vm-modules --test tests/notification-save-order.test.mjs tests/notification-board-storage.test.mjs
       - name: Check magazine search and creator presentation

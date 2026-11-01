@@ -1,4 +1,6 @@
-INSIGHT 2026.10.30.4 / notification 3.6.62 / dashboard 1.7.7 / DM 1.4.20
+INSIGHT 2026.11.01.1 / notification 3.6.63 / dashboard 1.7.7 / DM 1.4.20
+Restore native bell context after article history navigation; preserve each tab's source entry and bounded scroll restoration.
+Suppress proven duplicate native notices and rearm a collapsed filtered page only on a downward gesture or explicit continuation.
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
 Keep conversation archives out of lightweight lists; refresh source replies only on explicit request.
 Optional device-consented successful own-comment archive; no permission expansion for existing notification tokens.
