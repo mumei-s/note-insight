@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.14';
+const VERSION='4.2.15';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -233,13 +233,27 @@ let lastResult=null;
 function clearResult(){if(lastResult===null)return;lastResult=null;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:null}))}
 function reportResult(st,list){const result={version:VERSION,enabled:st.enabled,registered:st.ids.size,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length,magazineAdd:list.filter(el=>classificationCache.get(el)?.isMagazine).length,unresolved:list.filter(el=>classificationCache.get(el)?.needsProfile).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
 function classificationState(st){return JSON.stringify([revision,st.enabled,[...st.ids].sort(),st.profiles.map(p=>[p.id,p.name]).sort((a,b)=>a[0].localeCompare(b[0]))])}
+// Prefer native event identities. Without one, only exact grouped likes
+// (article/comment target, actor/preview text, avatar sequence and date) are enough
+// evidence to collapse a duplicate. Similar comments and single-person events
+// remain independent, even when their visible text happens to match.
+function duplicateKey(el,text){
+ const idNode=el.matches('[data-notification-id],[data-notice-id]')?el:el.querySelector('[data-notification-id],[data-notice-id]'),id=idNode?.getAttribute('data-notification-id')||idNode?.getAttribute('data-notice-id');
+ if(id)return 'notice:'+id;
+ const links=[...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')],urls=[];
+ for(const link of links){try{const url=new URL(link.getAttribute('href'),location.href);if(url.protocol!=='https:'||url.hostname!=='note.com')continue;for(const name of ['notification_id','notice_id'])if(url.searchParams.get(name))return 'notice:'+url.searchParams.get(name);urls.push(url)}catch{}}
+ const articleLike=/さん\s*他\s*\d[\d,]*\s*名\s*が\s*あなたの記事にスキしました/u.test(text),commentLike=/さん\s*他\s*\d[\d,]*\s*名\s*が.{0,180}あなたのコメントにスキしました/u.test(text);if(!articleLike&&!commentLike)return '';
+ const commentTarget=url=>Boolean(url.searchParams.get('c')||url.searchParams.get('comment_id')||/^#(?:comment[-_/=:]?)[a-z0-9_-]+$/i.test(url.hash));const target=urls.find(url=>/^\/[^/]+\/n\/n[a-f0-9]{12}\/?$/i.test(url.pathname)&&(commentLike?commentTarget(url):!commentTarget(url)&&!/comment/i.test(url.hash)));
+ const avatars=[...el.querySelectorAll('img[src]')].map(img=>img.getAttribute('src')),date=el.querySelector('time[datetime],[datetime]')?.getAttribute('datetime')||text.match(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u)?.[0];
+ return target&&avatars.length>=2&&date?JSON.stringify([commentLike?'grouped-comment-like':'grouped-article-like',commentLike?target.href:target.pathname,text,avatars,date]):'';
+}
 function classifyRow(el,st,fingerprint){
- const text=clean(el.textContent),markup=el.innerHTML,href=el.getAttribute('href'),cached=classificationCache.get(el);
- if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.fingerprint===fingerprint)return cached.hide;
+ const text=clean(el.textContent),markup=el.innerHTML,href=el.getAttribute('href'),nativeId=el.getAttribute('data-notification-id')||el.getAttribute('data-notice-id')||'',cached=classificationCache.get(el);
+ if(cached&&cached.text===text&&cached.markup===markup&&cached.href===href&&cached.nativeId===nativeId&&cached.fingerprint===fingerprint)return cached.hide;
  const lead=leadName(text);let hide=false,needsProfile=false,isMagazine=false;
  if(st.enabled&&st.ids.size&&lead){isMagazine=magazineNoise(magazineActionText(el));if(isMagazine){const id=leadId(el,lead,st);hide=Boolean(id&&st.ids.has(id));needsProfile=!id}}
  const profileCandidates=needsProfile?[...new Set(creatorLinks(el).filter(link=>!link.txt&&link.node.querySelector('img')&&startsText(el,link.node)&&st.ids.has(link.id)).map(link=>link.id))]:[];
- classificationCache.set(el,{text,markup,href,fingerprint,hide,needsProfile,isMagazine,profileCandidates});return hide;
+ classificationCache.set(el,{text,markup,href,nativeId,fingerprint,hide,needsProfile,isMagazine,profileCandidates,duplicateKey:st.enabled&&!hide?duplicateKey(el,text):''});return hide;
 }
 function viewportAnchor(surface,list){
  if(!surface?.isConnected||continuationAttempt)return null;
@@ -253,16 +267,28 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateRows=candidate?rows(candidate):[],candidateHasRows=Boolean(candidateRows.length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision,generation=domRevision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=r===candidate&&generation===domRevision?candidateRows:rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);for(const el of list)setHidden(el,classifyRow(el,st,fingerprint));for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
+async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateRows=candidate?rows(candidate):[],candidateHasRows=Boolean(candidateRows.length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision,generation=domRevision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=r===candidate&&generation===domRevision?candidateRows:rows(r),surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);const seen=new Set();for(const el of list){const hide=classifyRow(el,st,fingerprint),identity=classificationCache.get(el)?.duplicateKey,duplicate=Boolean(identity&&seen.has(identity));if(identity)seen.add(identity);setHidden(el,hide||duplicate)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
 function owned(el){return Boolean(el?.closest?.('[id^="mumei-"],[id^="miv5-"]'))}
 function changed(m){if(owned(m.target.nodeType===1?m.target:m.target.parentElement))return false;if(m.type==='childList'){const nodes=[...m.addedNodes,...m.removedNodes];if(nodes.length&&nodes.every(node=>owned(node.nodeType===1?node:node.parentElement)))return false}if(m.type==='attributes'){const own=ownAttributeValues.get(m.target);if(own&&Object.hasOwn(own,m.attributeName)&&own[m.attributeName]===m.target.getAttribute(m.attributeName))return false;if(m.attributeName==='class')return nativeClass(m.oldValue)!==nativeClass(m.target.getAttribute('class'))||!m.target.classList.contains(OWN)&&String(m.oldValue||'').split(/\s+/).includes(OWN)}return true}
 function releaseScrollGuard(r){if(!r||r.getAttribute('data-mumei-filter-scroll-guard')!=='1')return;r.removeAttribute('data-mumei-filter-scroll-guard')}
-function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){clearResult();if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed)){domRevision++;schedule(50)}});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class'],attributeOldValue:true,subtree:true})}
+function attach(r){if(root===r)return;const previous=root,sameSurface=Boolean(previous?.isConnected&&r?.isConnected&&(previous.contains(r)||r.contains(previous)));obs?.disconnect();obs=null;if(root){if(!sameSurface){clearContinuation();for(const el of root.querySelectorAll(`.${OWN}`))setHidden(el,false)}releaseScrollGuard(root)}root=r;if(!sameSurface){clearResult();if(accountId)hydrateProfiles(accountId,[],[]);accountId='';accountJob=null}retries=0;invalidate();if(!r)return;watchedPanel=r;r.setAttribute('data-mumei-filter-scroll-guard','1');obs=new MutationObserver(ms=>{if(ms.some(changed)){domRevision++;schedule(50)}});obs.observe(r,{childList:true,characterData:true,attributes:true,attributeFilter:['href','class','src','datetime','data-notification-id','data-notice-id'],attributeOldValue:true,subtree:true})}
 // Native touch and wheel gestures must reach note's actual scroll ancestor.
 // A panel can be nested inside that ancestor or use the document viewport.
+// Filtered pages may collapse while the native sentinel stays intersecting.
+// A real downward gesture at the end rearms that same native observer once;
+// programmatic scrolls and idle time never start another page traversal.
+let gestureFrame=0,touchY=null,touchContinued=false;
+function continueFromGesture(target){
+ if(gestureFrame||!continuation?.isConnected||continuationAttempt||!root||!shown(root)||!root.contains(target)&&!continuationSurface?.contains(target))return;
+ gestureFrame=requestAnimationFrame(()=>{gestureFrame=0;if(!continuation?.isConnected||continuationAttempt||!featureOn()||!root||!shown(root))return;const list=rows(root),surface=retainedSurface(list)||scrollSurface(root,list)||scrollFallback?.el;if(!surface)return;const max=Math.max(0,surface.scrollHeight-(surface.clientHeight||innerHeight));if(max>1&&surface.scrollTop>=max-48){touchContinued=true;advanceContinuation()}});
+}
+document.addEventListener('wheel',event=>{if(event.deltaY>0)continueFromGesture(event.target)},{passive:true,capture:true});
+document.addEventListener('touchstart',event=>{touchY=event.touches?.length===1?event.touches[0].clientY:null;touchContinued=false},{passive:true,capture:true});
+document.addEventListener('touchmove',event=>{const y=event.touches?.length===1?event.touches[0].clientY:null;if(y!==null&&touchY!==null&&y<touchY-4&&!touchContinued)continueFromGesture(event.target);touchY=y},{passive:true,capture:true});
+document.addEventListener('touchend',()=>{touchY=null},{passive:true,capture:true});
 function discover(){retries=0;schedule(40,true)}
 window.addEventListener(EVT,()=>{for(const[k,attempt]of profileAttempt)if(accountId&&k.startsWith(key(PROFILE,accountId)+'|')&&attempt.count<2&&!attempt.pending)attempt.manualReady=true;invalidate();schedule(0,true)});
 window.addEventListener('mumei-notification-feature-changed',()=>{invalidate();clearTimeout(timer);timer=0;pendingForce=false;if(featureOn())schedule(0,true);else{attach(null);clearHides()}});
