@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.8';
+const VERSION='1.5.9';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FILTER_STATE=TOOLBAR+'-filter-state',FILTER_STATE_STYLE=FILTER_STATE+'-style';
@@ -32,7 +32,7 @@ function findPanel(){
  for(const a of ns)for(const b of os){let p=a.parentElement,d=0;while(p&&p!==document.body&&d++<12){if(p.contains(b)&&shown(p)){let q=p,k=0;while(q&&q!==document.body&&k++<6){if(hasRows(q))return q;q=q.parentElement}}p=p.parentElement}}
  return null
 }
-function installStyle(){let s=document.getElementById(STYLE);if(s?.dataset.version===VERSION)return;if(!s){s=document.createElement('style');s.id=STYLE;document.documentElement.append(s)}s.dataset.version=VERSION;s.textContent=`#${TOOLBAR}{overflow:hidden;position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:2147483000;display:grid;grid-template-columns:.95fr 1fr .65fr .45fr 1.1fr .45fr;gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{appearance:none;-webkit-appearance:none;box-sizing:border-box;min-height:32px!important;height:32px!important;min-width:0;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:800 11px/1.2 system-ui;padding:0 3px!important;white-space:nowrap;touch-action:manipulation;cursor:pointer}#${TOOLBAR} button[data-action=insight]{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px}#${TOOLBAR} button[data-action=insight] small{font-size:9px}#${TOOLBAR} button[data-action=filter]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;overflow:hidden;white-space:normal;font-size:10px;line-height:1.05}#${TOOLBAR} button[data-action=filter] small{font-size:9px;line-height:1.1}#${TOOLBAR} .panel-meta{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}#${TOOLBAR} .read-status{min-width:0;flex:1;margin:0 3px;color:#bedce9;font:600 10px/1.3 system-ui;white-space:normal;overflow-wrap:anywhere}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button[data-state="done"]{background:#123d26;border-color:#63cf85;color:#dfffea}#${TOOLBAR} button[data-state="error"]{background:#3a171d;border-color:#a95b68;color:#ffdbe0}#${TOOLBAR} .panel-settings{flex:0 0 auto;white-space:nowrap;text-align:right;color:#bedce9;font:9px/1.3 system-ui;text-decoration:none}#${TOOLBAR} button[data-paused="1"]{background:#77dff7;color:#07151a;border-color:#c5f5ff}#${TOOLBAR} button:disabled{opacity:.55}#${TOOLBAR} button:active{transform:scale(.98)}#${TOOLBAR}[aria-busy="true"]::after{content:"";position:absolute;bottom:0;left:2%;width:24%;height:2px;background:#8aebff;border-radius:3px;pointer-events:none;animation:mumei-notification-progress 1s ease-in-out infinite}@keyframes mumei-notification-progress{0%{transform:translateX(0);opacity:.4}50%{opacity:1}100%{transform:translateX(300%);opacity:.4}}@media(prefers-reduced-motion:reduce){#${TOOLBAR}[aria-busy="true"]::after{animation:none;width:96%}}`}
+function installStyle(){let s=document.getElementById(STYLE);if(s?.dataset.version===VERSION)return;if(!s){s=document.createElement('style');s.id=STYLE;document.documentElement.append(s)}s.dataset.version=VERSION;s.textContent=`#${TOOLBAR}{overflow:hidden;box-sizing:border-box;min-width:0;position:fixed;left:8px;right:8px;bottom:calc(var(--mumei-notification-viewport-bottom,0px) + max(8px,env(safe-area-inset-bottom,0px)));z-index:2147483000;display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1fr) minmax(0,.65fr) minmax(0,.45fr) minmax(0,1.1fr) minmax(0,.45fr);gap:3px;padding:3px;margin:0;background:rgba(8,20,29,.94);border:1px solid #35576d;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.28);backdrop-filter:blur(5px)}#${TOOLBAR} button{appearance:none;-webkit-appearance:none;box-sizing:border-box;min-height:32px!important;height:32px!important;min-width:0;border:1px solid #496a80;border-radius:6px;background:#102534;color:#e9f8ff;font:800 11px/1.2 system-ui;padding:0 3px!important;white-space:nowrap;touch-action:manipulation;cursor:pointer}#${TOOLBAR} button[data-action=insight]{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px}#${TOOLBAR} button[data-action=insight] small{font-size:9px}#${TOOLBAR} button[data-action=filter]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;overflow:hidden;white-space:normal;font-size:10px;line-height:1.05}#${TOOLBAR} button[data-action=filter] small{font-size:9px;line-height:1.1}#${TOOLBAR} .panel-meta{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}#${TOOLBAR} .read-status{min-width:0;flex:1;margin:0 3px;color:#bedce9;font:600 10px/1.3 system-ui;white-space:normal;overflow-wrap:anywhere}#${TOOLBAR} button[data-on="1"]{background:#163421;border-color:#57b878;color:#d9ffe5}#${TOOLBAR} button[data-state="done"]{background:#123d26;border-color:#63cf85;color:#dfffea}#${TOOLBAR} button[data-state="error"]{background:#3a171d;border-color:#a95b68;color:#ffdbe0}#${TOOLBAR} .panel-settings{flex:0 0 auto;white-space:nowrap;text-align:right;color:#bedce9;font:9px/1.3 system-ui;text-decoration:none}#${TOOLBAR} button[data-paused="1"]{background:#77dff7;color:#07151a;border-color:#c5f5ff}#${TOOLBAR} button:disabled{opacity:.55}#${TOOLBAR} button:active{transform:scale(.98)}#${TOOLBAR}[aria-busy="true"]::after{content:"";position:absolute;bottom:0;left:2%;width:24%;height:2px;background:#8aebff;border-radius:3px;pointer-events:none;animation:mumei-notification-progress 1s ease-in-out infinite}@keyframes mumei-notification-progress{0%{transform:translateX(0);opacity:.4}50%{opacity:1}100%{transform:translateX(300%);opacity:.4}}@media(prefers-reduced-motion:reduce){#${TOOLBAR}[aria-busy="true"]::after{animation:none;width:96%}}`}
 async function sync(bar){if(!bar?.isConnected)return;const a=await account();if(!a)return;const enabled=Boolean(await get(key(FIL,a.id),false)),b=bar.querySelector('[data-action="filter"]');if(b){b.dataset.on=enabled?'1':'0';b.setAttribute('aria-label',enabled?'フィルター ON':'フィルター OFF');if(!b.querySelector('span'))b.innerHTML='<span>フィルター </span><small></small>';text(b.querySelector('small'),enabled?'ON':'OFF')}}
 let filterStateDialog=null,filterCountFormat=null,filterStatePaintPending=false;
 function liveFilterState(){const api=window.__mumeiNotificationFilterV4;let data=null;try{data=api&&typeof api.getState==='function'?api.getState():null}catch{}return{api,data}}
@@ -135,6 +135,23 @@ function dedupe(){
  if(keep){keep.removeAttribute('data-collapsed');for(const button of keep.querySelectorAll('[data-action="collapse"],.collapse'))button.remove()}
  return keep
 }
+function layoutToolbar(bar){
+ if(!bar?.isConnected)return;
+ const dimension=value=>Number.isFinite(Number(value))&&Number(value)>0?Number(value):0,offset=value=>Number.isFinite(Number(value))?Math.max(0,Number(value)):0;
+ const layoutWidth=dimension(document.documentElement.clientWidth)||dimension(innerWidth),layoutHeight=dimension(document.documentElement.clientHeight)||dimension(innerHeight),view=window.visualViewport;
+ if(!layoutWidth||!layoutHeight)return;
+ const validView=dimension(view?.width)&&dimension(view?.height),left=validView?Math.min(offset(view.offsetLeft),Math.max(0,layoutWidth-1)):0,top=validView?offset(view.offsetTop):0;
+ const width=validView?Math.min(dimension(view.width),layoutWidth-left):layoutWidth,height=validView?dimension(view.height):layoutHeight;
+ // Fixed elements follow the layout viewport. Browser chrome, keyboards and
+ // pinch panning can leave a smaller visible rectangle inside that viewport.
+ // Match that rectangle without scaling the page or changing native scrolling.
+ const values={left:(left+8)+'px',right:'auto',width:Math.max(0,width-16)+'px','--mumei-notification-viewport-bottom':Math.max(0,layoutHeight-top-height)+'px'};
+ for(const[name,value]of Object.entries(values))if(bar.style.getPropertyValue(name)!==value)bar.style.setProperty(name,value);
+}
+let viewportFrame=0;
+function scheduleToolbarLayout(){if(viewportFrame||!document.getElementById(TOOLBAR))return;viewportFrame=requestAnimationFrame(()=>{viewportFrame=0;layoutToolbar(document.getElementById(TOOLBAR))})}
+for(const type of ['resize','orientationchange'])window.addEventListener(type,scheduleToolbarLayout,{passive:true});
+for(const type of ['resize','scroll'])window.visualViewport?.addEventListener(type,scheduleToolbarLayout,{passive:true});
 let activeNoticePanel=null;
 function mount(live){
  connectedFilterStateDialog();
@@ -143,6 +160,7 @@ function mount(live){
  installStyle();installFilterStateStyle();
  let bar=dedupe()||makeBar();
  if(document.body&&bar.parentElement!==document.body){document.body.appendChild(bar);void sync(bar)}
+ layoutToolbar(bar);
  lastFilter=(live||liveFilterState()).data||lastFilter;
  if(lastStatus)renderStatus(lastStatus);else if(window.__mumeiNotificationReaderV4?.isPaused?.())renderStatus({state:'done',userPaused:true});else text(bar.querySelector('.read-status'),filterNotice()||'新着を自動で確認します')
 }
