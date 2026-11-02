@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.16';
+const VERSION='4.2.17';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -264,18 +264,35 @@ let lastResult=null;
 function clearResult(){if(lastResult===null)return;lastResult=null;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:null}))}
 function reportResult(st,list){const result={version:VERSION,enabled:st.enabled,registered:st.ids.size,total:list.length,hidden:list.filter(el=>el.classList.contains(OWN)).length,magazineAdd:list.filter(el=>classificationCache.get(el)?.isMagazine).length,unresolved:list.filter(el=>classificationCache.get(el)?.needsProfile).length};if(JSON.stringify(result)===JSON.stringify(lastResult))return;lastResult=result;window.dispatchEvent(new CustomEvent('mumei-notification-filter-status',{detail:result}))}
 function classificationState(st){return JSON.stringify([revision,st.enabled,[...st.ids].sort(),st.profiles.map(p=>[p.id,p.name]).sort((a,b)=>a[0].localeCompare(b[0]))])}
-// Prefer native event identities. Without one, only exact grouped likes
-// (article/comment target, actor/preview text, avatar sequence and date) are enough
-// evidence to collapse a duplicate. Similar comments and single-person events
-// remain independent, even when their visible text happens to match.
+// A comment's own target ID outranks a notice ID: note may deliver the same
+// comment in two notification records. Never use a mere article URL as an ID.
+// If the native record has no identity, suppress only an exact visual echo
+// (same article link, full text, one or more avatar URLs and time label).
+// Unidentifiable replies stay separate; distinct comment targets always survive.
 function duplicateKey(el,text){
- const idNode=el.matches('[data-notification-id],[data-notice-id]')?el:el.querySelector('[data-notification-id],[data-notice-id]'),id=idNode?.getAttribute('data-notification-id')||idNode?.getAttribute('data-notice-id');
- if(id)return 'notice:'+id;
+ const idNode=el.matches('[data-notification-id],[data-notice-id]')?el:el.querySelector('[data-notification-id],[data-notice-id]');
+ const nativeId=idNode?.getAttribute('data-notification-id')||idNode?.getAttribute('data-notice-id')||'';
  const links=[...(el.matches('a[href]')?[el]:[]),...el.querySelectorAll('a[href]')],urls=[];
- for(const link of links){try{const url=new URL(link.getAttribute('href'),location.href);if(url.protocol!=='https:'||url.hostname!=='note.com')continue;for(const name of ['notification_id','notice_id'])if(url.searchParams.get(name))return 'notice:'+url.searchParams.get(name);urls.push(url)}catch{}}
- const articleLike=/さん\s*他\s*\d[\d,]*\s*名\s*が\s*あなたの記事にスキしました/u.test(text),commentLike=/さん\s*他\s*\d[\d,]*\s*名\s*が.{0,180}あなたのコメントにスキしました/u.test(text);if(!articleLike&&!commentLike)return '';
- const commentTarget=url=>Boolean(url.searchParams.get('c')||url.searchParams.get('comment_id')||/^#(?:comment[-_/=:]?)[a-z0-9_-]+$/i.test(url.hash));const target=urls.find(url=>/^\/[^/]+\/n\/n[a-f0-9]{12}\/?$/i.test(url.pathname)&&(commentLike?commentTarget(url):!commentTarget(url)&&!/comment/i.test(url.hash)));
- const avatars=[...el.querySelectorAll('img[src]')].map(img=>img.getAttribute('src')),date=el.querySelector('time[datetime],[datetime]')?.getAttribute('datetime')||text.match(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u)?.[0];
+ let urlNoticeId='';
+ for(const link of links){try{const url=new URL(link.getAttribute('href'),location.href);if(url.protocol!=='https:'||url.hostname!=='note.com')continue;if(!urlNoticeId)urlNoticeId=url.searchParams.get('notification_id')||url.searchParams.get('notice_id')||'';urls.push(url)}catch{}}
+ const articleComment=/さん(?:が|から)\s*あなたの記事にコメントしました/u.test(text);
+ const replyComment=/さん(?:が|から).{0,100}あなたのコメントに返信しました/u.test(text);
+ const articles=urls.filter(url=>/^\/[^/]+\/n\/n[a-f0-9]{12}\/?$/i.test(url.pathname));
+ const commentId=url=>url.searchParams.get('c')||url.searchParams.get('comment_id')||url.hash.match(/^#comment[-_\/=:]?([a-z0-9_-]+)$/i)?.[1]||'';
+ const article=articles.find(url=>commentId(url))||articles[0],avatars=[...el.querySelectorAll('img[src]')].map(img=>img.getAttribute('src'));
+ if((articleComment||replyComment)&&article&&commentId(article)&&avatars.length&&leadName(text))return JSON.stringify(['comment-target-id',article.pathname,commentId(article),articleComment?'article':'reply',leadName(text),avatars[0]]);
+ if(nativeId||urlNoticeId)return 'notice:'+(nativeId||urlNoticeId);
+ if(articleComment&&article&&avatars.length&&leadName(text)){
+  const date=el.querySelector('time[datetime],[datetime]')?.getAttribute('datetime')||clean(el.querySelector('time')?.textContent)||text.match(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u)?.[0];
+  if(date)return JSON.stringify(['exact-article-comment',article.href,text,avatars,date]);
+ }
+ // Grouped likes are a single native event even when no notice ID exists.
+ const articleLike=/さん\s*他\s*\d[\d,]*\s*名\s*が\s*あなたの記事にスキしました/u.test(text);
+ const commentLike=/さん\s*他\s*\d[\d,]*\s*名\s*が.{0,180}あなたのコメントにスキしました/u.test(text);
+ if(!articleLike&&!commentLike)return '';
+ const hasCommentTarget=url=>Boolean(commentId(url));
+ const target=articles.find(url=>commentLike?hasCommentTarget(url):!hasCommentTarget(url)&&!/comment/i.test(url.hash));
+ const date=el.querySelector('time[datetime],[datetime]')?.getAttribute('datetime')||text.match(/(?:たった今|昨日|\d+\s*(?:秒|分|時間|日|週|か月|ヶ月|月|年)前|\d{1,2}月\d{1,2}日)$/u)?.[0];
  return target&&avatars.length>=2&&date?JSON.stringify([commentLike?'grouped-comment-like':'grouped-article-like',commentLike?target.href:target.pathname,text,avatars,date]):'';
 }
 function classifyRow(el,st,fingerprint){
