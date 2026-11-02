@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.11.02.1",
-  "notificationVersion": "3.6.66",
+  "appVersion": "2026.11.02.2",
+  "notificationVersion": "3.6.67",
   "dashboardVersion": "1.7.7",
   "releasedAt": "2026-11-02",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "単独コメント通知の重複判定を強化。別コメントを維持しつつ記事からの復帰と通知読み込みを保護します。",
+  "note": "本人通知V3.6.67：Edge下部バーとの位置ずれを実際の表示位置で再補正。通知・フィルター・記事からの復帰は維持。",
   "dmVersion": "1.4.20",
   "dmLabel": "DM同期"
 }
