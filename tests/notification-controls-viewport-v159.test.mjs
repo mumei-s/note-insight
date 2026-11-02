@@ -6,19 +6,27 @@ import {JSDOM} from 'jsdom';
 const source=readFileSync('public/note-insight-notification-controls-v1.js','utf8'),ID='mumei-inline-notification-controls-v1';
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check){for(let i=0;i<80&&!check();i++)await pause(10);assert.ok(check(),'toolbar settles')}
-async function fixture(t,{visual=true,width=360,height=800}={}){
+async function fixture(t,{visual=true,width=360,height=800,realDock=false}={}){
  const dom=new JSDOM('<main><section class="m-navbarNotice" id="panel"><button>通知</button><button>お知らせ</button><div class="m-navbarNoticeItem">人物さんがスキしました 1分前</div></section></main>',{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
  t.after(()=>w.close());
  const dimensions={width,height},view=new w.EventTarget();Object.assign(view,{width,height,offsetLeft:0,offsetTop:0,scale:1});
  Object.defineProperties(w.document.documentElement,{clientWidth:{get:()=>dimensions.width},clientHeight:{get:()=>dimensions.height}});
  Object.defineProperty(w,'visualViewport',{value:visual?view:undefined,configurable:true});
- w.HTMLElement.prototype.getBoundingClientRect=()=>({width:360,height:300,top:0,left:0,bottom:300,right:360});
+ const dockAnchor={bottom:height};
+ w.HTMLElement.prototype.getBoundingClientRect=function(){
+  if(realDock&&this.id===ID){
+   const left=parseFloat(this.style.left)||8,width=parseFloat(this.style.width)||Math.max(0,dimensions.width-16);
+   const lift=parseFloat(this.style.getPropertyValue('--mumei-notification-viewport-bottom'))||0,bottom=dockAnchor.bottom-8-lift;
+   return{left,right:left+width,top:bottom-56,bottom,width,height:56};
+  }
+  return{width:360,height:300,top:0,left:0,bottom:300,right:360};
+ };
  const values=new Map();w.GM={getValue:async(key,fallback)=>values.get(key)??fallback,setValue:async(key,value)=>values.set(key,value)};
  let requests=0;w.fetch=async()=>{requests++;return Response.json({data:{urlname:'tester'}})};
  w.__mumeiNotificationReaderV4={findPanel:()=>w.document.getElementById('panel')};
  w.document.getElementById('panel').scrollTop=270;w.document.body.style.overflow='hidden';
  w.eval(source);await until(()=>w.document.getElementById(ID));await pause(220);
- return{w,view,dimensions,values,bar:()=>w.document.getElementById(ID),requests:()=>requests,emit:type=>view.dispatchEvent(new w.Event(type))};
+ return{w,view,dimensions,dockAnchor,values,bar:()=>w.document.getElementById(ID),requests:()=>requests,emit:type=>view.dispatchEvent(new w.Event(type))};
 }
 function geometry(f){const bar=f.bar();return{left:parseFloat(bar.style.left),width:parseFloat(bar.style.width),occludedBottom:parseFloat(bar.style.getPropertyValue('--mumei-notification-viewport-bottom'))}}
 
@@ -69,4 +77,41 @@ test('viewport events while the controls are OFF do not remount them or make bac
  const f=await fixture(t);f.values.set('mumei_insight_notification_panel_enabled_v1',false);await f.w.__mumeiNotificationControlsV1.refreshPanel();
  assert.equal(f.bar(),null);const requests=f.requests();for(let i=0;i<30;i++){f.emit('resize');f.emit('scroll');f.w.dispatchEvent(new f.w.Event('resize'))}
  await pause(250);assert.equal(f.bar(),null);assert.equal(f.requests(),requests);
+});
+
+
+test('Edge transient viewport height: actual fixed dock stays above the browser controls even when html.clientHeight is already reduced',async t=>{
+ const f=await fixture(t,{realDock:true}),bar=f.bar(),requests=f.requests();
+ f.dimensions.height=625;f.view.height=625;f.dockAnchor.bottom=800;
+ f.emit('resize');await until(()=>geometry(f).occludedBottom===175);
+ assert.equal(bar.getBoundingClientRect().bottom,617,'toolbar ends 8px above true visible bottom');
+ assert.equal(f.bar(),bar);assert.equal(f.requests(),requests);
+});
+
+test('do not double-lift the toolbar when browser itself anchors fixed elements to the visual viewport',async t=>{
+ const f=await fixture(t,{realDock:true});
+ f.view.height=625;f.dockAnchor.bottom=625;f.emit('resize');await pause(70);
+ assert.equal(geometry(f).occludedBottom,0);
+ assert.equal(f.bar().getBoundingClientRect().bottom,617);
+});
+
+test('scroll finish reconciles a delayed Edge address-bar shift without remounting or any notification request',async t=>{
+ const f=await fixture(t,{realDock:true}),bar=f.bar(),children=[...bar.children],requests=f.requests();
+ f.view.height=625;f.dockAnchor.bottom=625;f.emit('resize');await pause(60);
+ assert.equal(geometry(f).occludedBottom,0);
+ f.dockAnchor.bottom=800;
+ f.w.dispatchEvent(new f.w.Event('touchend'));await until(()=>geometry(f).occludedBottom===175);
+ f.dockAnchor.bottom=625;
+ f.w.dispatchEvent(new f.w.Event('touchend'));await until(()=>geometry(f).occludedBottom===0);
+ assert.equal(f.bar(),bar);assert.deepEqual([...bar.children],children);
+ assert.equal(f.requests(),requests);assert.equal(f.w.document.getElementById('panel').scrollTop,270);
+});
+
+test('actual fixed dock is correctly anchored to the panned visual viewport while zoom remains untouched',async t=>{
+ const f=await fixture(t,{realDock:true});
+ Object.assign(f.view,{width:180,height:400,offsetLeft:90,offsetTop:180,scale:2});f.emit('resize');
+ await until(()=>geometry(f).occludedBottom===220);
+ assert.deepEqual(geometry(f),{left:98,width:164,occludedBottom:220});
+ assert.equal(f.bar().getBoundingClientRect().bottom,572);
+ assert.equal(f.view.scale,2);
 });

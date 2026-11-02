@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         無名S note INSIGHT 本人通知 V3
 // @namespace    https://github.com/mumei-s/note-insight/notification-v3
-// @version      3.6.66
-// @description  本人通知V3.6.66。単独コメント通知の重複判定を強化。別コメントを維持しつつ記事からの復帰と通知読み込みを保護します。
+// @version      3.6.67
+// @description  本人通知V3.6.67。通知下部操作列のEdge表示位置ずれを補正。既存の重複判定・記事からの復帰・通知読み込みを維持します。
 // @match        https://note.com/*
 // @match        https://mumei-s.github.io/note-insight/*
 // @run-at       document-start
@@ -24,7 +24,7 @@
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-feature-bridge-v1.js?v=121
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-network-v3300.js?v=3623
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-reader-v4.js?v=3638
-// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=159
+// @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-controls-v1.js?v=160
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-checkpoint-v325.js?v=364
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-filter-v4.js?v=4217
 // @require      https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-insight-notification-return-v1.js?v=131
@@ -40,7 +40,7 @@
 
 (function(){
 'use strict';
-const VERSION='3.6.66',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
+const VERSION='3.6.67',TOOL_KEY='mumei-notification-tool-version',RUNTIME_KEY='mumei-notification-v3-loader',ACTIVE_GM_KEY='mumei-notification-active-runtime-version-v1';
 const modern=()=>(typeof GM!=='undefined'&&Boolean(GM));
 async function setActive(v){try{if(modern()&&typeof GM.setValue==='function')return await GM.setValue(ACTIVE_GM_KEY,String(v||''));if(typeof GM_setValue==='function')return GM_setValue(ACTIVE_GM_KEY,String(v||''))}catch{}}
 function liveManager(){try{const info=typeof GM_info!=='undefined'?GM_info:typeof GM!=='undefined'?GM?.info:null,name=String(info?.scriptHandler||'').toLowerCase();return ['Userscripts','Tampermonkey','Violentmonkey','Greasemonkey','Stay'].find(value=>value.toLowerCase()===name)||''}catch{return''}}

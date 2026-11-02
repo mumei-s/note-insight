@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.9';
+const VERSION='1.5.10';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FILTER_STATE=TOOLBAR+'-filter-state',FILTER_STATE_STYLE=FILTER_STATE+'-style';
@@ -140,18 +140,42 @@ function layoutToolbar(bar){
  const dimension=value=>Number.isFinite(Number(value))&&Number(value)>0?Number(value):0,offset=value=>Number.isFinite(Number(value))?Math.max(0,Number(value)):0;
  const layoutWidth=dimension(document.documentElement.clientWidth)||dimension(innerWidth),layoutHeight=dimension(document.documentElement.clientHeight)||dimension(innerHeight),view=window.visualViewport;
  if(!layoutWidth||!layoutHeight)return;
- const validView=dimension(view?.width)&&dimension(view?.height),left=validView?Math.min(offset(view.offsetLeft),Math.max(0,layoutWidth-1)):0,top=validView?offset(view.offsetTop):0;
+ const validView=Boolean(dimension(view?.width)&&dimension(view?.height)),left=validView?Math.min(offset(view.offsetLeft),Math.max(0,layoutWidth-1)):0,top=validView?offset(view.offsetTop):0;
  const width=validView?Math.min(dimension(view.width),layoutWidth-left):layoutWidth,height=validView?dimension(view.height):layoutHeight;
- // Fixed elements follow the layout viewport. Browser chrome, keyboards and
- // pinch panning can leave a smaller visible rectangle inside that viewport.
- // Match that rectangle without scaling the page or changing native scrolling.
- const values={left:(left+8)+'px',right:'auto',width:Math.max(0,width-16)+'px','--mumei-notification-viewport-bottom':Math.max(0,layoutHeight-top-height)+'px'};
- for(const[name,value]of Object.entries(values))if(bar.style.getPropertyValue(name)!==value)bar.style.setProperty(name,value);
+ const leftPx=left+8,widthPx=Math.max(0,width-16),visibleBottom=top+height;
+ // Set horizontal geometry before measuring. A browser's fixed-position
+ // containing viewport is not always the same as documentElement.clientHeight.
+ const horizontal={left:leftPx+'px',right:'auto',width:widthPx+'px'};
+ for(const[name,value]of Object.entries(horizontal))if(bar.style.getPropertyValue(name)!==value)bar.style.setProperty(name,value);
+ const variable='--mumei-notification-viewport-bottom';
+ const previous=Number.parseFloat(bar.style.getPropertyValue(variable))||0;
+ const rect=bar.getBoundingClientRect();
+ const measured=rect&&Number.isFinite(rect.bottom)&&rect.height>=32
+  &&Math.abs(rect.width-widthPx)<=2&&Math.abs(rect.left-leftPx)<=2;
+ // Measure the actual fixed toolbar, not just the estimated layout viewport.
+ // This corrects Edge's intermittent address-bar transition while avoiding
+ // double compensation when the browser already anchors fixed items visibly.
+ const estimate=Math.max(0,layoutHeight-visibleBottom);
+ const correction=measured?Math.max(0,Math.round(previous+rect.bottom-(visibleBottom-8))):estimate;
+ const next=Math.min(Math.max(layoutHeight,dimension(innerHeight)),correction)+'px';
+ if(bar.style.getPropertyValue(variable)!==next)bar.style.setProperty(variable,next);
 }
-let viewportFrame=0;
-function scheduleToolbarLayout(){if(viewportFrame||!document.getElementById(TOOLBAR))return;viewportFrame=requestAnimationFrame(()=>{viewportFrame=0;layoutToolbar(document.getElementById(TOOLBAR))})}
-for(const type of ['resize','orientationchange'])window.addEventListener(type,scheduleToolbarLayout,{passive:true});
+let viewportFrame=0,viewportSettleTimer=0;
+function scheduleToolbarLayout(){
+ if(viewportFrame||!document.getElementById(TOOLBAR))return;
+ viewportFrame=requestAnimationFrame(()=>{viewportFrame=0;layoutToolbar(document.getElementById(TOOLBAR))});
+}
+function settleToolbarLayout(){
+ if(!document.getElementById(TOOLBAR))return;
+ scheduleToolbarLayout();
+ clearTimeout(viewportSettleTimer);
+ viewportSettleTimer=setTimeout(()=>{viewportSettleTimer=0;scheduleToolbarLayout()},340);
+}
+for(const type of ['resize','orientationchange','scroll'])window.addEventListener(type,scheduleToolbarLayout,{passive:true});
 for(const type of ['resize','scroll'])window.visualViewport?.addEventListener(type,scheduleToolbarLayout,{passive:true});
+window.addEventListener('touchend',settleToolbarLayout,{passive:true});
+window.addEventListener('pageshow',settleToolbarLayout,{passive:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')settleToolbarLayout()});
 let activeNoticePanel=null;
 function mount(live){
  connectedFilterStateDialog();
