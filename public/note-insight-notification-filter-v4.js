@@ -279,7 +279,9 @@ function duplicateKey(el,text){
  const replyComment=/さん(?:が|から).{0,100}あなたのコメントに返信しました/u.test(text);
  const articles=urls.filter(url=>/^\/[^/]+\/n\/n[a-f0-9]{12}\/?$/i.test(url.pathname));
  const commentId=url=>url.searchParams.get('c')||url.searchParams.get('comment_id')||url.hash.match(/^#comment[-_\/=:]?([a-z0-9_-]+)$/i)?.[1]||'';
- const article=articles.find(url=>commentId(url))||articles[0],avatars=[...el.querySelectorAll('img[src]')].map(img=>img.getAttribute('src'));
+ const article=articles.find(url=>commentId(url))||articles[0];
+ const needsAvatars=articleComment||replyComment||/さん\s*他\s*\d[\d,]*\s*名\s*が/u.test(text);
+ const avatars=needsAvatars?[...el.querySelectorAll('img[src]')].map(img=>img.getAttribute('src')):[];
  if((articleComment||replyComment)&&article&&commentId(article)&&avatars.length&&leadName(text))return JSON.stringify(['comment-target-id',article.pathname,commentId(article),articleComment?'article':'reply',leadName(text),avatars[0]]);
  if(nativeId||urlNoticeId)return 'notice:'+(nativeId||urlNoticeId);
  if(articleComment&&article&&avatars.length&&leadName(text)){
