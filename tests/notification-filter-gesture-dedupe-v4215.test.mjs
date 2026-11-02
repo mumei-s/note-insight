@@ -8,6 +8,11 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check){for(let i=0;i<80&&!check();i++)await pause(10);assert.ok(check(),'filter settles');}
 const mutedRow=id=>`<li class="m-navbarNoticeItem" id="${id}"><a href="/actor">登録人物</a>さんが共同マガジンに新しい記事を1本追加しました 1分前</li>`;
 const likeRow=(id,{notice='',article='n123456789abc',action='あなたの記事にスキしました',date='1分前',avatars=['a','b'],comment=''}={})=>`<li class="m-navbarNoticeItem" id="${id}" ${notice?`data-notification-id="${notice}"`:''}><a href="/writer/n/${article}${comment}">${avatars.map(a=>`<img src="https://images.example/${a}.jpg">`).join('')}<span>登録人物さん他2名が${action}</span><p>同じ記事の見出し</p><time>${date}</time></a></li>`;
+const commentRow=(id,{notice='',comment='',article='n123456789abc',avatar='a',date='5分前',author='堂安咲和',title='共同マガジン【魔法の入口】'}={})=>{
+ const attr=notice?' data-notification-id="'+notice+'"':'';
+ const href='/writer/n/'+article+(comment?'?c='+comment:'');
+ return '<li class="m-navbarNoticeItem" id="'+id+'"'+attr+'><a href="'+href+'"><img src="https://images.example/'+avatar+'.jpg"><span>'+author+'さんがあなたの記事にコメントしました</span><p>'+title+'</p><time>'+date+'</time></a></li>';
+};
 
 function fixture(t,{initial=Array.from({length:12},(_,i)=>mutedRow('old-'+i)).join(''),mode='modern',append=true}={}){
  const dom=new JSDOM(`<body style="overflow:hidden"><ul id="list" class="notificationList" style="height:400px;overflow-y:auto">${initial}<li id="loading"></li><div class="h-px" id="sentinel"></div></ul><aside id="outside">外部</aside></body>`,{url:'https://note.com/',runScripts:'outside-only',pretendToBeVisual:true});
@@ -71,4 +76,25 @@ test('nativeが同じ行の通知ID・avatar・日時を差し替えたら重複
  f.w.document.querySelector('#group-duplicate img').src='https://images.example/different.jpg';await until(()=>!f.hidden('group-duplicate'));
  f.w.document.querySelector('#group-duplicate img').src='https://images.example/a.jpg';await until(()=>f.hidden('group-duplicate'));
  f.w.document.querySelector('#group-duplicate time').setAttribute('datetime','2026-11-01T01:02:03Z');await until(()=>!f.hidden('group-duplicate'));
+});
+
+test('同一コメントIDは通知レコードIDが異なっても一件にし、別のコメントIDは消さない',async t=>{
+ const initial=[commentRow('original',{notice:'100',comment:'first'}),commentRow('repeat-target',{notice:'101',comment:'first'}),commentRow('another-comment',{notice:'102',comment:'second'}),commentRow('other-author',{notice:'103',comment:'first',author:'別の人',avatar:'b'}),commentRow('another-article',{notice:'104',comment:'first',article:'nabcdef123456'}),commentRow('same-native-different-comment',{notice:'100',comment:'third'})].join('');
+ const f=fixture(t,{initial,append:false});await f.ready();
+ assert.equal(f.hidden('repeat-target'),true,'same native comment is only one event');
+ for(const id of ['original','another-comment','other-author','another-article','same-native-different-comment'])assert.equal(f.hidden(id),false,id);
+ assert.equal(f.measure.requests,1,'dedupe causes no extra API calls');
+ f.w.document.querySelector('#repeat-target a').setAttribute('href','/writer/n/n123456789abc?c=fourth');await until(()=>!f.hidden('repeat-target'));
+ f.w.document.querySelector('#repeat-target a').setAttribute('href','/writer/n/n123456789abc?c=first');await until(()=>f.hidden('repeat-target'));
+ f.values.set('mumei_insight_magazine_filter_enabled_v3:tester',false);await f.refresh();assert.equal(f.hidden('repeat-target'),false,'OFF restores native rows');
+});
+
+test('IDのない単独コメントは本文・記事・人物画像・時刻・リンクが完全一致したときだけ隠す',async t=>{
+ const initial=[commentRow('first'),commentRow('echo'),commentRow('different-time',{date:'6分前'}),commentRow('different-article',{article:'nabcdef123456'}),commentRow('different-avatar',{avatar:'b'}),commentRow('different-title',{title:'別の記事'}),commentRow('known-a',{notice:'201'}),commentRow('known-b',{notice:'202'})].join('');
+ const f=fixture(t,{initial,append:false});await f.ready();
+ assert.equal(f.hidden('echo'),true,'identical no-ID native duplicate is hidden');
+ for(const id of ['first','different-time','different-article','different-avatar','different-title','known-a','known-b'])assert.equal(f.hidden(id),false,id);
+ assert.equal(f.measure.requests,1);
+ f.w.document.querySelector('#echo time').textContent='7分前';await until(()=>!f.hidden('echo'));
+ f.w.document.querySelector('#echo time').textContent='5分前';await until(()=>f.hidden('echo'));
 });
