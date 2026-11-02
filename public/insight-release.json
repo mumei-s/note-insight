@@ -1,12 +1,12 @@
 {
-  "appVersion": "2026.11.01.3",
-  "notificationVersion": "3.6.65",
+  "appVersion": "2026.11.02.1",
+  "notificationVersion": "3.6.66",
   "dashboardVersion": "1.7.7",
-  "releasedAt": "2026-11-01",
+  "releasedAt": "2026-11-02",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "通知の重複・続き読み込み・記事からの復帰に加え、再試行待機、履歴取得の遅延、スマホの表示ずれを改善しました。",
+  "note": "単独コメント通知の重複判定を強化。別コメントを維持しつつ記事からの復帰と通知読み込みを保護します。",
   "dmVersion": "1.4.20",
   "dmLabel": "DM同期"
 }
