@@ -3,20 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07131b">
-<title>note 巡回BOOST｜専用アプリ</title>
-<meta name="description" content="Yahoo! JAPANを普段使いのまま、#タグ・記事URL・マガジンURL・クリエイターIDからの巡回BOOSTをEdgeで起動・更新">
-<meta property="og:title" content="note巡回BOOST｜専用アプリ">
-<meta property="og:description" content="巡回BOOSTはEdgeで起動・更新">
+<meta http-equiv="Cache-Control" content="no-store">
+<meta name="theme-color" content="#0b141c">
+<title>巡回BOOST｜更新手順（旧入口）</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#05090e;color:#eef7ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 70% 20%,#102c58 0,#07131b 35%,#03070b 75%)}main{width:min(460px,100%);border:1px solid #31516a;border-radius:22px;padding:28px 18px;background:#09141ddd;box-shadow:0 24px 70px #0009;text-align:center}h1{margin:0;font-size:28px;letter-spacing:.02em}strong{background:linear-gradient(90deg,#55d9ff,#917cff);-webkit-background-clip:text;color:transparent}p{color:#a6bac8;line-height:1.75;font-size:13px;margin:16px 0}.btn{display:block;width:100%;margin-top:14px;padding:17px;border-radius:15px;text-decoration:none;font-weight:900;color:#fff;border:1px solid #6fc9ff;background:linear-gradient(100deg,#0b6f8f,#335fd2);box-shadow:0 10px 30px #163b8055}.update{background:linear-gradient(100deg,#6b4a0b,#a46a13);border-color:#f1c05b}.small{margin-top:14px;font-size:10px;color:#7891a2;line-height:1.6}
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#071018;color:#f0f8ff}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:#071018;padding:14px 12px}
+main{max-width:540px;margin:auto;padding:16px;background:#0d1b27;border:1px solid #335162;border-radius:14px}
+h1{margin:0;font-size:22px}p,li{line-height:1.7}p{font-size:13px;color:#c3d6df}h2{font-size:16px;margin:18px 0 6px}
+ol{padding-left:24px;margin:6px 0;font-size:14px}li{padding:4px 0}button,a.action{display:block;width:100%;text-align:center;border:1px solid #749bb2;border-radius:10px;background:#1a394d;color:#f3fcff;font-weight:800;font-size:15px;padding:12px;text-decoration:none;cursor:pointer}
+button{background:#204c3d;border-color:#4ab486}input{width:100%;min-height:50px;border:1px solid #405d6e;border-radius:8px;background:#06121a;color:#cde6ed;padding:10px;font-size:11px;overflow-wrap:anywhere;margin-top:8px}
+#status{font-size:12px;min-height:20px;color:#9ce1c0;margin-top:6px}.note{font-size:11px;color:#a2bac9}
 </style>
 </head>
-<body><main>
-<h1>note巡回<strong>BOOST</strong></h1>
-<p><b>普段のデフォルトはYahoo! JAPANのままでOK。</b><br>BOOSTの更新も起動も、Tampermonkeyを入れているEdgeへ直接渡します。</p>
-<a class="btn update" id="updateEdge" href="intent://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js#Intent;scheme=https;package=com.microsoft.emmx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end">BOOST v6.8.2 をEdgeで更新</a>
-<a class="btn" id="openEdge" href="intent://note.com/?boost_app=1#Intent;scheme=https;package=com.microsoft.emmx;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end">巡回BOOSTをEdgeで開く</a>
-<div class="small">ChatGPT内ブラウザでは更新しません。<br>「BOOSTをEdgeで更新」→ Tampermonkeyの更新 → 「巡回BOOSTをEdgeで開く」の順です。</div>
-</main></body>
+<body>
+<main>
+<h1>巡回BOOST</h1>
+<p>この画面は以前の起動・更新案内の<strong>旧入口</strong>です。ここでスクリプトの文字列が開いても、更新は完了していません。BOOSTと他ツールのスクリプトを混同しないでください。</p>
+<h2>Edge + Tampermonkeyから更新する</h2>
+<ol>
+<li>下の「更新URLをコピー」を押す。</li>
+<li>同じEdgeの「拡張機能 → Tampermonkey → ダッシュボード → ユーティリティ」を開く。</li>
+<li>「URLからインポート」に貼り付けて読み込み、既存の「note 巡回BOOST」の更新を確定する。</li>
+<li>インストール済み一覧で<strong>note 巡回BOOSTのバージョン</strong>を確認する。違う番号のままなら更新未完了。</li>
+</ol>
+<button type="button" id="copy">更新URLをコピー</button>
+<input id="url" aria-label="巡回BOOST更新スクリプトのURL" readonly>
+<div id="status" role="status" aria-live="polite"></div>
+<p class="note">追加の「OWNER起動ボタン」スクリプトは不要です。BOOST本体の更新だけを行ってください。</p>
+<a class="action" href="https://note.com/?boost_app=1">巡回BOOST本体を開く</a>
+</main>
+<script>
+const source='https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js';
+const field=document.getElementById('url'),status=document.getElementById('status');field.value=source;
+document.getElementById('copy').addEventListener('click',async()=>{
+try{await navigator.clipboard.writeText(source);status.textContent='コピーしました。Tampermonkeyの「URLからインポート」に貼り付けてください。';}
+catch{field.focus();field.select();status.textContent='自動コピーできません。上のURLを長押ししてコピーしてください。';}
+});
+</script>
+</body>
 </html>
