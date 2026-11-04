@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.3
+// @version      6.9.4
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -274,7 +274,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .boost-queue-more{display:block;width:100%;margin-top:10px}
 .fav-item .boost-card-placeholder,.fav-item img{width:45px;height:45px;flex:0 0 45px;object-fit:cover;border-radius:7px}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.3</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.4</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
@@ -571,7 +571,7 @@ async function boostSyncFollowButton(id){
 }
 function openQueue(){
   showModal('queueModal');
-  let shown=25;const root=$('#queueBody');
+  let shown=25;const root=$('#queueBody'),coverTried=new Set();
   const draw=()=>{
     const queue=state.queue||[];
     root.innerHTML='<div class="meta">巡回記事：'+queue.length+'件</div>'+
@@ -582,6 +582,14 @@ function openQueue(){
     for(const b of root.querySelectorAll('[data-select]'))b.onclick=()=>{state.index=Number(b.dataset.select);saveState();closeModal('queueModal');void render()};
     for(const b of root.querySelectorAll('[data-direct]'))b.onclick=()=>{const x=queue[Number(b.dataset.direct)];if(x)goOut('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key))};
     const more=root.querySelector('#queueMore');if(more)more.onclick=()=>{shown+=25;draw()};
+    const missing=queue.slice(0,shown).filter(x=>!x.thumb&&x.urlname&&x.key&&!coverTried.has(x.key)).slice(0,8);
+    if(missing.length){
+      for(const x of missing)coverTried.add(x.key);
+      void mapLimit(missing,2,async x=>{
+        const image=await ogImage('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key));
+        if(!image)return false;x.thumb=image;saveState();return true;
+      }).then(results=>{if(results.some(Boolean)&&root.isConnected)draw()}).catch(()=>{});
+    }
   };draw();
 }
 function stateText(detail,x){const dup=Boolean(x?.duplicateCreator||creatorWasLiked(x?.urlname)||detail?.liked===true);if(state.likedNow[x.key])return'❤️ この人は今回スキ済み｜⚠ 重複あり｜マガジン追加できます';if(detail?.liked===true)return'💗 この人は元からスキ済み｜⚠ 重複あり｜マガジン追加できます';if(state.likeSent[x.key])return'❤️ スキ送信済み・反映確認待ち｜⚠ 重複あり';if(dup)return'⚠ 重複あり｜この人には以前スキ済み。別の記事も確認できます';return'♡ この人は未スキ'}
@@ -591,7 +599,23 @@ function goOut(raw){saveState();location.assign(withReturn(raw))}
 async function likeCurrent(){if(busy)return;const x=current();if(!x)return;busy=true;const b=$('#likeBtn');try{enforce('likes');b.disabled=true;b.textContent='確認中…';const before=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),liked=readLiked(before),beforeCount=readLikeCount(before);if(liked===true){status('💗 元からスキ済み｜送信なし');await render();return}b.textContent='スキ中…';try{await api(`/api/v3/notes/${encodeURIComponent(x.key)}/likes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'})}catch(e){const body=JSON.stringify(e.body||'');if(/already|liked|exist/i.test(body)){status('💗 すでにスキ済み｜解除せず完了');await render();return}if(e.status===403)setGuard('likes',Date.now()+3600000,'403検出');if(e.status===429)setGuard('likes',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}state.likeSent[x.key]=true;pushHist('likes',x.key);saveState();let ok=false;for(const w of [300,800,1500,2500]){await sleep(w);try{const after=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),aLiked=readLiked(after),afterCount=readLikeCount(after);if(aLiked===true||(beforeCount!=null&&afterCount!=null&&afterCount>beforeCount)){ok=true;break}}catch{}}if(ok){state.likedNow[x.key]=true;x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,'tool');delete state.likeSent[x.key];saveState();status('❤️ スキ反映を確認しました｜次回この人は「⚠ 重複あり」と表示します')}else{status('❤️ スキは送信済み。反映表示は次回読み込みで再確認します')}await render()}catch(e){if(b){b.disabled=false;b.textContent='♡スキ'}status(formatError(e),true);refreshLimits()}finally{busy=false}}
 function sanitizeHtml(html){const d=new DOMParser().parseFromString(`<div id="x">${html||''}</div>`,'text/html'),root=d.querySelector('#x');for(const n of root.querySelectorAll('script,style,iframe,object,embed,form'))n.remove();for(const n of root.querySelectorAll('*'))for(const a of [...n.attributes])if(/^on/i.test(a.name)||a.name==='srcdoc')n.removeAttribute(a.name);return root.innerHTML}
 async function openPreview(){const x=current();if(!x)return;showModal('previewModal');$('#previewBody').innerHTML='読み込み中…';try{const d=await noteDetail(x.key);$('#previewBody').innerHTML=`${d.thumb?`<img class="thumb" src="${esc(d.thumb)}">`:''}<h2>${esc(d.title)}</h2><div class="meta">@${esc(d.urlname)}・♡${Number(d.likeCount||0)}</div><article style="margin-top:12px;line-height:1.8">${sanitizeHtml(d.body)||'<div class="empty">本文プレビューを取得できませんでした。</div>'}</article>`}catch(e){$('#previewBody').textContent=formatError(e)}}
-async function openCreator(){const x=current();if(!x)return;showModal('creatorModal');$('#creatorBody').innerHTML='記事一覧を読み込み中…';try{const p=await creatorProfile(x.urlname),r=await creatorContents(x.urlname,1),arts=(r.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);$('#creatorBody').innerHTML=`<div class="creator"><img id="creatorProfileGo" class="tap" src="${esc(p.icon||'')}"><div><div class="name">${esc(p.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${p.followers||'—'}・記事 ${p.articleCount||arts.length||'—'}</div></div></div><div class="bio">${esc(p.bio||'')}</div><div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧</div>${arts.map(a=>`<div class="listitem"><div class="listrow">${boostArticleThumbMarkup(a)}<div><b>${esc(a.title)}</b><div class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${Number(a.likeCount||0)}${a.liked===true?'・💗スキ済み':''}</div><button data-open="https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(a.key)}" style="margin-top:6px">実記事</button></div></div></div>`).join('')||'<div class="empty">記事を取得できませんでした</div>'}`;$('#creatorProfileGo').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);for(const b of $('#creatorBody [data-open]'))b.onclick=()=>goOut(b.dataset.open)}catch(e){$('#creatorBody').textContent=formatError(e)}}
+function hydrateCreatorCovers(id,articles){
+  const missing=articles.filter(x=>!x.thumb&&x.key).slice(0,12);
+  return mapLimit(missing,2,async item=>{
+    try{
+      const src=await ogImage('https://note.com/'+encodeURIComponent(id)+'/n/'+encodeURIComponent(item.key));
+      if(!src)return false;
+      item.thumb=src;
+      const row=[...document.querySelectorAll('#creatorBody .listrow[data-note-key]')]
+        .find(el=>el.dataset.noteKey===item.key);
+      if(!row)return false;
+      const ph=row.querySelector('.boost-card-placeholder');
+      if(ph){const img=document.createElement('img');img.src=src;img.alt='記事サムネイル';img.loading='lazy';ph.replaceWith(img)}
+      return true;
+    }catch{return false}
+  });
+}
+async function openCreator(){const x=current();if(!x)return;showModal('creatorModal');$('#creatorBody').innerHTML='記事一覧を読み込み中…';try{const p=await creatorProfile(x.urlname),r=await creatorContents(x.urlname,1),arts=(r.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);$('#creatorBody').innerHTML=`<div class="creator"><img id="creatorProfileGo" class="tap" src="${esc(p.icon||'')}"><div><div class="name">${esc(p.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${p.followers||'—'}・記事 ${p.articleCount||arts.length||'—'}</div></div></div><div class="bio">${esc(p.bio||'')}</div><div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧</div>${arts.map(a=>`<div class="listitem"><div class="listrow" data-note-key="${esc(a.key)}">${boostArticleThumbMarkup(a)}<div><b>${esc(a.title)}</b><div class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${Number(a.likeCount||0)}${a.liked===true?'・💗スキ済み':''}</div><button data-open="https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(a.key)}" style="margin-top:6px">実記事</button></div></div></div>`).join('')||'<div class="empty">記事を取得できませんでした</div>'}`;$('#creatorProfileGo').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);for(const b of $('#creatorBody [data-open]'))b.onclick=()=>goOut(b.dataset.open);void hydrateCreatorCovers(x.urlname,arts)}catch(e){$('#creatorBody').textContent=formatError(e)}}
 function magAdded(m,bel){for(const k of ['is_added','isAdded','has_note','hasNote','included','is_included','isIncluded','contains_note','containsNote','is_note_added','isNoteAdded','selected'])if(typeof m?.[k]==='boolean')return m[k];return bel.has(String(m?.key||''))}
 function magThumb(m){for(const x of [m?.image_url,m?.imageUrl,m?.thumbnail_url,typeof m?.thumbnail==='string'?m.thumbnail:m?.thumbnail?.url,typeof m?.eyecatch==='string'?m.eyecatch:m?.eyecatch?.url,m?.cover_image_url,m?.coverImage,m?.cover_image?.url,typeof m?.image==='string'?m.image:m?.image?.url,m?.icon_url,m?.iconUrl,m?.icon?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
 function magUrl(m,key){const raw=m?.url||m?.magazine_url||m?.magazineUrl;if(raw)return raw;const owner=m?.user?.urlname||m?.creator?.urlname||m?.owner?.urlname||state.me||'';return owner?`https://note.com/${encodeURIComponent(owner)}/m/${encodeURIComponent(key)}`:''}
