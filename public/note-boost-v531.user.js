@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.5
+// @version      6.9.6
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -120,6 +120,7 @@ function mountOwnerBoostPanel(){
 #${ROOT} .mb-item button{font-size:10px!important;min-height:28px!important}
 @media(max-height:550px){#${ROOT}{top:115px!important;max-height:calc(100dvh - 155px)!important}#${TAB}{top:72px!important}}`;
   css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid;grid-template-columns:64px minmax(0,1fr);gap:7px;align-items:start}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block;width:64px;height:48px;object-fit:cover;background:#162934;border-radius:6px}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid;place-items:center;color:#91acbd;font-size:9px}\n";
+  css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid!important;grid-template-columns:116px minmax(0,1fr)!important;gap:8px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block!important;width:116px!important;height:80px!important;object-fit:cover!important;background:#162934!important;border-radius:7px!important}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid!important;place-items:center!important;color:#91acbd!important;font-size:10px!important}\n#mumei-boost-native-panel-v681 .mb-card-info{min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:4px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-heading .mb-current-title{font:800 12px/1.32 system-ui!important;min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading button[data-follow]{all:initial!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;max-width:72px!important;height:25px!important;min-height:25px!important;padding:0 5px!important;white-space:nowrap!important;background:#122d39!important;color:#d9e9f4!important;border:1px solid #577486!important;border-radius:6px!important;font:700 10px/1 system-ui!important;cursor:pointer!important}\n#mumei-boost-native-panel-v681 .mb-actions{gap:4px!important;margin-top:4px!important}\n#mumei-boost-native-panel-v681 .mb-actions-four{grid-template-columns:repeat(4,minmax(0,1fr))!important}\n#mumei-boost-native-panel-v681 .mb-actions button{all:initial!important;box-sizing:border-box!important;display:flex!important;justify-content:center!important;align-items:center!important;width:100%!important;min-width:0!important;height:29px!important;min-height:29px!important;padding:2px 3px!important;border:1px solid #426072!important;border-radius:6px!important;background:#142e3f!important;color:#e9f6ff!important;font:700 10px/1.15 system-ui!important;cursor:pointer!important;text-align:center!important}\n#mumei-boost-native-panel-v681 .mb-actions button:disabled{opacity:.48!important;cursor:default!important}\n#mumei-boost-native-panel-v681 .mb-row button,#mumei-boost-native-panel-v681 header button{min-height:29px!important;padding:4px 6px!important;font:700 11px/1.15 system-ui!important}\n#mumei-boost-native-panel-v681 [data-current]{padding:6px!important;margin-top:5px!important}\n#mumei-boost-native-panel-v681 [data-status]{font-size:10px!important;margin:4px 0!important}\n#mumei-boost-native-panel-v681 .mb-card-info .mb-small{font-size:10px!important;line-height:1.3!important;margin-top:5px!important;overflow-wrap:anywhere!important}\n#mumei-boost-native-panel-v681{top:calc(env(safe-area-inset-top,0px) + 128px)!important;padding:7px!important}\n@media(max-width:350px){#mumei-boost-native-panel-v681 .mb-card-row{grid-template-columns:98px minmax(0,1fr)!important}#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{width:98px!important;height:72px!important}}\n";
   const tab=document.createElement('button');tab.id=TAB;tab.type='button';tab.textContent='💗 BOOST';
   const panel=document.createElement('div');panel.id=ROOT;panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','巡回BOOST運営者パネル');
   panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
@@ -130,7 +131,13 @@ function mountOwnerBoostPanel(){
   function refresh(){
     const v=state(),x=v.queue[v.index],area=panel.querySelector('[data-current]');
     if(!x){area.innerHTML='<div class="mb-small">まだ巡回リストはありません。#タグ・URL・@IDから開始できます。</div>';return}
-    area.innerHTML='<div class="mb-card-row">'+(x.thumb?'<img src="'+esc(x.thumb)+'" alt="記事サムネイル" loading="lazy">':'<span class="mb-card-placeholder">画像なし</span>')+'<div><div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div></div></div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div><div class="mb-row" style="justify-content:space-between"><button data-queue style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">🗂 記事一覧</button><button data-follow style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">状態を確認</button></div>';void nativeSyncFollow(x.urlname);
+    area.innerHTML='<div class="mb-card-row">'+
+      (x.thumb?'<img src="'+esc(x.thumb)+'" alt="記事サムネイル" loading="lazy">':'<span class="mb-card-placeholder">画像なし</span>')+
+      '<div class="mb-card-info"><div class="mb-card-heading"><div class="mb-current-title">'+esc(x.title||x.key)+'</div>'+
+      '<button type="button" data-follow title="確認してからフォローを操作">確認</button></div>'+
+      '<div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div></div></div>'+
+      '<div class="mb-actions"><button data-prev>←前</button><button data-real>実記事</button><button data-next>次→</button></div>'+
+      '<div class="mb-actions mb-actions-four"><button data-like>♡スキ</button><button data-mag>📚追加</button><button data-fav-person>☆人物</button><button data-queue>▤一覧</button></div>';void nativeSyncFollow(x.urlname);
     if(v.likedNow[x.key]||v.likeSent[x.key]){const b=area.querySelector('[data-like]');b.disabled=true;b.textContent='♡処理済み'}
   }
 
@@ -270,8 +277,25 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .boost-queue-actions{display:flex;gap:6px;margin-top:7px}.boost-queue-actions button{padding:6px 8px;font-size:11px;flex:1}
 .boost-queue-more{display:block;width:100%;margin-top:10px}
 .fav-item .boost-card-placeholder,.fav-item img{width:45px;height:45px;flex:0 0 45px;object-fit:cover;border-radius:7px}
+
+/* Mobile BOOST: larger article cover, smaller actions and stable full-screen width */
+html,body{width:100%!important;min-width:0!important;overflow-x:hidden!important}
+.app{width:100%!important;max-width:720px!important;margin:0 auto!important;padding:6px 9px calc(55px + env(safe-area-inset-bottom,0px))!important}
+#current .boost-article-row{display:grid!important;grid-template-columns:134px minmax(0,1fr)!important;gap:9px!important;align-items:start!important}
+#current .boost-article-thumb,#current .boost-card-placeholder{width:134px!important;height:90px!important;flex-basis:134px!important;object-fit:cover!important}
+#current .boost-article-caption h2{font-size:13px!important;line-height:1.35!important}
+.boost-queue-item{grid-template-columns:118px minmax(0,1fr)!important;gap:9px!important}
+.boost-queue-item>.boost-card-placeholder,.boost-queue-item>img{width:118px!important;height:78px!important;object-fit:cover!important;border-radius:7px!important}
+#current .actions button{min-height:30px!important;padding:5px 3px!important;font:700 11px/1.2 system-ui!important;border-radius:7px!important}
+#current .boost-creator-with-follow{grid-template-columns:38px minmax(0,1fr) auto!important;gap:6px!important}
+#current .creator img{width:38px!important;height:38px!important}
+#current .tiny-follow{max-width:75px!important;font-size:10px!important;min-height:27px!important;padding:4px 6px!important}
+.modalbody .listrow{grid-template-columns:94px minmax(0,1fr)!important;gap:9px!important}
+.modalbody .listrow img,.modalbody .listrow .boost-card-placeholder{width:94px!important;height:66px!important;object-fit:cover!important}
+@media(max-width:370px){#current .boost-article-row{grid-template-columns:114px minmax(0,1fr)!important}#current .boost-article-thumb,#current .boost-card-placeholder{width:114px!important;height:80px!important}.boost-queue-item{grid-template-columns:98px minmax(0,1fr)!important}.boost-queue-item>.boost-card-placeholder,.boost-queue-item>img{width:98px!important;height:70px!important}}
+
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.5</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.6</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
