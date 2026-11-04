@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.8.2
+// @version      6.9.0
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -20,6 +20,68 @@ const STORE = 'noteBoostDedicatedV640';
 const PREV_STORE = 'noteBoostDedicatedV630';
 const OLD_STORE = 'noteBoostDedicatedV620';
 const LIMIT_PREFIX = 'noteBoostDedicatedLimit:';
+function boostFollowState(raw){
+  const root=raw?.data??raw??{},user=root?.creator??root?.user??root,parts=[user,root,user?.relationship,user?.follow];
+  for(const obj of parts){
+    if(!obj||typeof obj!=='object')continue;
+    for(const key of ['isFollowing','is_following','isFollowed','is_followed','followed','followedByMe','followed_by_me']){
+      if(typeof obj[key]==='boolean')return obj[key];
+    }
+  }
+  return null;
+}
+async function boostFollowInfo(urlname){
+  const id=String(urlname||'').replace(/^@/,'').trim();
+  if(!/^[A-Za-z0-9_-]{1,60}$/.test(id))throw Error('クリエイターIDを確認できません');
+  const response=await fetch('/api/v2/creators/'+encodeURIComponent(id),{
+    credentials:'include',cache:'no-store',headers:{accept:'application/json'}
+  });
+  if(!response.ok)throw Error('フォロー状態の確認に失敗しました（HTTP '+response.status+'）');
+  const json=await response.json(),root=json?.data??json??{},user=root.creator??root.user??root;
+  return {id:String(user.id??user.user_id??user.userId??''),urlname:id,
+    name:String(user.nickname||user.name||id),following:boostFollowState(json)};
+}
+async function boostFollowChange(urlname,notify){
+  const name=String(urlname||'').trim().toLowerCase();
+  if(boostFollowBusy.has(name))return;
+  boostFollowBusy.add(name);
+  try{
+    const me=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});
+    if(!me.ok)throw Error('noteのログインが必要です');
+    const data=await me.json(),u=(data?.data??data??{}).user??(data?.data??data);
+    if(String(u.urlname||u.url_name||u.username||'').replace(/^@/,'').toLowerCase()!=='ss_yr')
+      throw Error('運営者本人以外では操作できません');
+    const previous=await boostFollowInfo(name);
+    const action=previous.following===true?'フォロー解除':previous.following===false?'フォロー':'公式プロフィールで状態を確認';
+    if(!confirm('対象：'+previous.name+'（@'+name+'）\n操作：'+action+'\n\nこの操作を実行しますか？'))return;
+    if(previous.following===null||!/^[0-9]+$/.test(previous.id)){
+      notify('現在の状態を確定できないため、note公式で確認してください');
+      location.assign('https://note.com/'+encodeURIComponent(name));
+      return;
+    }
+    if(Date.now()-boostFollowLastActionAt<5000)throw Error('連続操作を防ぐため少し間隔を空けてください');
+    const again=await boostFollowInfo(name);
+    if(again.id!==previous.id||again.following!==previous.following)
+      throw Error('フォロー状態が変わったため操作を中止しました');
+    const method=previous.following?'DELETE':'POST';
+    boostFollowLastActionAt=Date.now();
+    const res=await fetch('/api/v3/users/'+encodeURIComponent(previous.id)+'/following',{
+      method,credentials:'include',cache:'no-store',
+      headers:{accept:'application/json','x-requested-with':'XMLHttpRequest'}
+    });
+    if(!res.ok)throw Error('フォロー操作ができません（HTTP '+res.status+'）');
+    let success=false;
+    for(const delay of [250,700,1200]){
+      await new Promise(resolve=>setTimeout(resolve,delay));
+      try{if((await boostFollowInfo(name)).following===!previous.following){success=true;break}}catch{}
+    }
+    notify(success?(previous.following?'フォロー解除を確認しました':'フォローを確認しました'):
+      '操作は送信済みですが結果を確認できません。公式プロフィールで状態をご確認ください');
+  }catch(e){notify('⚠ '+String(e?.message||e))}
+  finally{boostFollowBusy.delete(name)}
+}
+const boostFollowBusy=new Set();
+let boostFollowLastActionAt=0;
 function mountOwnerBoostPanel(){
   if(window.__mumeiBoostNotePanelV681)return;
   window.__mumeiBoostNotePanelV681=true;
@@ -67,8 +129,26 @@ function mountOwnerBoostPanel(){
   function refresh(){
     const v=state(),x=v.queue[v.index],area=panel.querySelector('[data-current]');
     if(!x){area.innerHTML='<div class="mb-small">まだ巡回リストはありません。#タグ・URL・@IDから開始できます。</div>';return}
-    area.innerHTML='<div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div>';
+    area.innerHTML='<div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div><div class="mb-row" style="justify-content:flex-end"><button data-follow style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">状態を確認</button></div>';void nativeSyncFollow(x.urlname);
     if(v.likedNow[x.key]||v.likeSent[x.key]){const b=area.querySelector('[data-like]');b.disabled=true;b.textContent='♡処理済み'}
+  }
+
+  let nativeFollowLastId='',nativeFollowAt=0,nativeFollowLabel='フォロー確認',nativeFollowSeq=0;
+  async function nativeSyncFollow(id,force=false){
+    const b=panel.querySelector('[data-follow]');if(!b)return;
+    if(!force&&id===nativeFollowLastId&&Date.now()-nativeFollowAt<30000){
+      b.textContent=nativeFollowLabel;return;
+    }
+    nativeFollowLastId=id;nativeFollowAt=Date.now();
+    const seq=++nativeFollowSeq;b.textContent='確認中';
+    try{
+      const info=await boostFollowInfo(id);
+      if(seq!==nativeFollowSeq)return;
+      nativeFollowLabel=info.following===true?'フォロー中':info.following===false?'フォロー':'状態を確認';
+      panel.querySelector('[data-follow]').textContent=nativeFollowLabel;
+    }catch{
+      if(seq===nativeFollowSeq){nativeFollowLabel='状態を確認';panel.querySelector('[data-follow]').textContent=nativeFollowLabel}
+    }
   }
   function drawFavorites(){
     const v=favs(),el=panel.querySelector('[data-favorites]');
@@ -113,6 +193,7 @@ function mountOwnerBoostPanel(){
     if(b.hasAttribute('data-prev')||b.hasAttribute('data-next')){if(!v.queue.length)return;v.index=Math.min(v.queue.length-1,Math.max(0,v.index+(b.hasAttribute('data-next')?1:-1)));write(STORE,v);refresh();return}
     if(b.hasAttribute('data-real')&&x)return location.assign(urlOf(x));
     if(b.hasAttribute('data-like')){void like();return}
+    if(b.hasAttribute('data-follow')&&x){void boostFollowChange(x.urlname,message).then(()=>void nativeSyncFollow(x.urlname,true));return}
     if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL);return}
     if(b.hasAttribute('data-fav-person')&&x){const f=favs(),id=String(x.urlname||'').toLowerCase();f.creators=[{id,name:x.name||id},...f.creators.filter(y=>y.id!==id)].slice(0,200);write(FAV,f);message('☆ 人物を保存しました');drawFavorites();return}
     const type=b.dataset.do||b.dataset.del,idx=Number(b.dataset.i);
@@ -177,12 +258,12 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .fav-empty{color:#879ba9;font-size:11px;margin:5px 0}
 
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.8.2</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.0</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件を保存</button><button id="showFavorites">★ お気に入り</button></div>
 <div id="status" class="status" role="status">noteログイン状態を確認中…</div>
-<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div><div class="top-actions"><button id="preloadMags" disabled>マガジン先読み</button><button id="reset" class="danger">巡回をリセット</button></div></details>
+<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
 </section>
 <section id="current" class="card hidden"></section></main>
 <footer class="footer"><button id="prev">戻る</button><button id="next">次へ</button></footer>
@@ -463,12 +544,12 @@ function magAdded(m,bel){for(const k of ['is_added','isAdded','has_note','hasNot
 function magThumb(m){for(const x of [m?.image_url,m?.imageUrl,m?.thumbnail_url,typeof m?.thumbnail==='string'?m.thumbnail:m?.thumbnail?.url,typeof m?.eyecatch==='string'?m.eyecatch:m?.eyecatch?.url,m?.cover_image_url,m?.coverImage,m?.cover_image?.url,typeof m?.image==='string'?m.image:m?.image?.url,m?.icon_url,m?.iconUrl,m?.icon?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
 function magUrl(m,key){const raw=m?.url||m?.magazine_url||m?.magazineUrl;if(raw)return raw;const owner=m?.user?.urlname||m?.creator?.urlname||m?.owner?.urlname||state.me||'';return owner?`https://note.com/${encodeURIComponent(owner)}/m/${encodeURIComponent(key)}`:''}
 async function loadMagazineBase(force=false){const cached=loadRaw(MAG_CACHE_KEY);if(!force&&cached?.t&&Date.now()-Number(cached.t)<600000&&Array.isArray(cached.items)&&cached.items.length)return cached.items;let arr=[];for(const ep of ['/api/v1/my/magazines?includes_editable=true','/api/v1/my/magazines']){try{const j=await api(ep,{timeoutMs:10000}),d=j?.data??j??{},a=d.magazines||j?.magazines||[];if(Array.isArray(a)&&a.length){arr=a;break}}catch{}}const items=arr.map(m=>({raw:m,key:String(m.key||''),name:String(m.name||m.title||m.key||''),count:Number(m.note_count??m.noteCount??m.notes_count??0)||0,image:magThumb(m),url:magUrl(m,String(m.key||'')),added:false})).filter(x=>x.key);if(items.length)saveRaw(MAG_CACHE_KEY,{t:Date.now(),items});return items}
-async function preloadMagazineList(force=false,silent=false){const b=$('#preloadMags');if(b){b.disabled=true;b.textContent='📚 読込中…'}try{const a=await loadMagazineBase(force);if(!silent)status(a.length?`📚 マガジン ${a.length}誌を先読みしました`:'📚 マガジンを取得できませんでした',!a.length);return a}catch(e){if(!silent)status(formatError(e),true);return[]}finally{if(b){b.disabled=false;b.textContent='📚 マガジン先読み'}}}
+async function preloadMagazineList(force=false,silent=false){const b=null;try{const a=await loadMagazineBase(force);if(!silent)status(a.length?`📚 マガジン ${a.length}誌を先読みしました`:'📚 マガジンを取得できませんでした',!a.length);return a}catch(e){if(!silent)status(formatError(e),true);return[]}finally{ /* old preload button removed */ }}
 async function editableMagazines(noteKey){const [baseR,mjR,njR]=await Promise.allSettled([loadMagazineBase(false),api(`/api/v1/my/magazines?includes_editable=true&note_key=${encodeURIComponent(noteKey)}`,{timeoutMs:12000}),api(`/api/v3/notes/${encodeURIComponent(noteKey)}`,{timeoutMs:12000})]),base=baseR.status==='fulfilled'?baseR.value:[],mj=mjR.status==='fulfilled'?mjR.value:{},nj=njR.status==='fulfilled'?njR.value:{},md=mj?.data??mj??{},arr=md.magazines||mj?.magazines||[],nd=nj?.data??nj??{},n=nd.note||nd,bel=new Set(nd.belonging_magazine_keys||n.belonging_magazine_keys||nj?.belonging_magazine_keys||[]),map=new Map(base.map(x=>[x.key,{...x,added:bel.has(x.key)}]));for(const m of (Array.isArray(arr)?arr:[])){const key=String(m.key||'');if(!key)continue;const prev=map.get(key)||{};map.set(key,{...prev,raw:m,key,name:String(m.name||m.title||prev.name||key),count:Number(m.note_count??m.noteCount??m.notes_count??prev.count??0)||0,image:magThumb(m)||prev.image||'',url:magUrl(m,key)||prev.url||'',added:magAdded(m,bel)})}return[...map.values()]}
 async function ogImage(page){if(!page)return'';try{const html=await textReq(page),d=new DOMParser().parseFromString(html,'text/html');return d.querySelector('meta[property="og:image"]')?.content||d.querySelector('meta[name="twitter:image"]')?.content||''}catch{return''}}
 async function hydrateMagThumbs(){const jobs=currentMags.filter(m=>!m.image&&m.url);await mapLimit(jobs,3,async m=>{m.image=await ogImage(m.url);const img=$(`#magBody [data-magrow="${CSS.escape(m.key)}"] img`),ph=$(`#magBody [data-magrow="${CSS.escape(m.key)}"] .magph`);if(m.image){if(img)img.src=m.image;else if(ph){const el=document.createElement('img');el.src=m.image;el.alt='';el.dataset.magopen=m.url;ph.replaceWith(el);el.onclick=()=>goOut(m.url)}}return m})}
 function renderMagList(filter=''){const list=$('#magList');if(!list)return;const q=filter.trim().toLowerCase();list.innerHTML=currentMags.filter(m=>!q||m.name.toLowerCase().includes(q)).map(m=>`<label class="mag" data-magrow="${esc(m.key)}">${m.image?`<img src="${esc(m.image)}" data-magopen="${esc(m.url)}">`:'<div class="magph">📚</div>'}<input type="checkbox" data-magcheck value="${esc(m.key)}" ${m.added?'checked disabled':''}><span><b>${esc(m.name)}</b><div class="meta">${m.added?'✔ 追加済み':`${m.count}記事`}</div></span></label>`).join('')||'<div class="empty">該当するマガジンがありません</div>';for(const im of $$('#magList [data-magopen]'))im.onclick=e=>{e.preventDefault();e.stopPropagation();goOut(im.dataset.magopen)}}
-async function openMags(){const x=current();if(!x)return;showModal('magModal');$('#magBody').innerHTML='マガジンを読み込み中…';try{const base=await loadMagazineBase(false);currentMags=base;$('#magBody').innerHTML=`<div class="mag-controls"><div class="bar"><input id="magSearch" placeholder="マガジン検索"><button id="magReload">更新</button></div><button id="magAddTop" class="mag-add">選択したマガジンへ追加</button><div id="magMsg" class="msg">追加状態を確認中…</div></div><div id="magList" class="mag-list"></div><button id="magAddBottom" class="mag-add">選択したマガジンへ追加</button>`;renderMagList();$('#magSearch').oninput=e=>renderMagList(e.target.value);$('#magAddTop').onclick=addSelectedMags;$('#magAddBottom').onclick=addSelectedMags;$('#magReload').onclick=async()=>{await preloadMagazineList(true,true);currentMags=await editableMagazines(x.key);renderMagList($('#magSearch')?.value||'');setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()};currentMags=await editableMagazines(x.key);renderMagList();setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()}catch(e){$('#magBody').textContent=formatError(e)}}
+async function openMags(){const x=current();if(!x)return;showModal('magModal');$('#magBody').innerHTML='マガジンを読み込み中…';try{const base=await loadMagazineBase(false);currentMags=base;$('#magBody').innerHTML=`<div class="mag-controls"><div class="bar"><input id="magSearch" placeholder="マガジン検索"><button id="magReload">更新</button></div><button id="magAddTop" class="mag-add">選択したマガジンへ追加</button><div id="magMsg" class="msg">追加状態を確認中…</div></div><div id="magList" class="mag-list"></div><button id="magAddBottom" class="mag-add">選択したマガジンへ追加</button>`;renderMagList();$('#magSearch').oninput=e=>renderMagList(e.target.value);$('#magAddTop').onclick=addSelectedMags;$('#magAddBottom').onclick=addSelectedMags;$('#magReload').onclick=async()=>{await loadMagazineBase(true);currentMags=await editableMagazines(x.key);renderMagList($('#magSearch')?.value||'');setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()};currentMags=await editableMagazines(x.key);renderMagList();setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()}catch(e){$('#magBody').textContent=formatError(e)}}
 async function addSelectedMags(){if(magBusy)return;const x=current();if(!x)return;const keys=$$('#magBody [data-magcheck]:checked:not(:disabled)').map(e=>e.value);if(!keys.length){setMsg('追加先を選択してください');return}magBusy=true;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=true;b.textContent='追加中…'}let ok=0,already=0,fail=0;try{const detail=await noteDetail(x.key),noteId=x.id??detail.id;if(!noteId)throw new Error('記事IDを取得できません');for(const key of keys){try{enforce('mags');await api(`/api/v1/our/magazines/${encodeURIComponent(key)}/notes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:JSON.stringify({note_id:noteId,note_key:x.key})});pushHist('mags',`${key}:${x.key}`);ok++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;setMsg(`追加中… ${ok+already}/${keys.length}`)}catch(e){const body=JSON.stringify(e.body||'');if(/already|exist|included/i.test(body)||e.status===409||e.status===422){already++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;continue}if(e.status===403){setGuard('mags',Date.now()+3600000,'403検出');fail++;setMsg('403を検出したため停止しました');break}if(e.status===429){setGuard('mags',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');fail++;setMsg('429を検出したため停止しました');break}fail++}}renderMagList($('#magSearch')?.value||'');setMsg(`追加 ${ok}｜追加済み ${already}｜失敗 ${fail}`);refreshLimits()}catch(e){setMsg(formatError(e))}finally{magBusy=false;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=false;b.textContent='選択したマガジンへ追加'}}}
 function showModal(id){$('#'+id)?.classList.add('show')}
 function closeModal(id){$('#'+id)?.classList.remove('show')}
@@ -478,10 +559,10 @@ $('#next').onclick=async()=>{if(state.index<state.queue.length-1){state.index++;
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;
 
-$('#preloadMags').onclick=()=>void preloadMagazineList(true,false);
+
 
 try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(state.index>0){state.index--;saveState();void render()}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
-async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#preloadMags').disabled=false;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}}catch(e){ready=false;$('#preloadMags').disabled=true;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
 void diagnose();
 })();
