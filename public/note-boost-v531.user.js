@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.4
+// @version      6.9.5
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -227,9 +227,6 @@ function mountOwnerBoostPanel(){
 
 if (!dedicated) { mountOwnerBoostPanel(); return; }
 
-try { document.documentElement.style.visibility = 'hidden'; } catch {}
-try { window.stop(); } catch {}
-
 const HTML = `<!doctype html><html lang="ja"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07131b"><title>note 巡回BOOST</title>
 <style>
@@ -274,7 +271,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .boost-queue-more{display:block;width:100%;margin-top:10px}
 .fav-item .boost-card-placeholder,.fav-item img{width:45px;height:45px;flex:0 0 45px;object-fit:cover;border-radius:7px}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.4</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.5</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
@@ -288,8 +285,22 @@ const HTML = `<!doctype html><html lang="ja"><head>
 <section id="queueModal" class="modal"><div class="modalhead"><button data-close="queueModal">戻る</button><b>記事一覧</b></div><div id="queueBody" class="modalbody"></div></section><section id="magModal" class="modal"><div class="modalhead"><button data-close="magModal">戻る</button><b>マガジン追加</b></div><div id="magBody" class="modalbody"></div></section><section id="favModal" class="modal"><div class="modalhead"><button data-close="favModal">戻る</button><b>⭐ お気に入り</b></div><div id="favBody" class="modalbody"></div></section>
 </body></html>`;
 
-document.documentElement.innerHTML = HTML.replace(/^<!doctype html><html[^>]*>|<\/html>$/g,'');
-document.documentElement.style.visibility = 'visible';
+// Write a complete document rather than editing documentElement at document-start.
+// The document root may be unavailable while the note parser is still active.
+(function installBoostDocument(){
+  try {
+    document.open();
+    document.write(HTML);
+    document.close();
+    const viewport=document.querySelector('meta[name="viewport"]');
+    if(viewport) viewport.content='width=device-width,initial-scale=1,viewport-fit=cover';
+    if(document.documentElement)document.documentElement.style.visibility='visible';
+  } catch(error) {
+    if(!document.documentElement)throw error;
+    document.documentElement.innerHTML=HTML.slice(HTML.indexOf('<head>'),HTML.lastIndexOf('</html>'));
+    document.documentElement.style.visibility='visible';
+  }
+})();
 
 const $ = (s,r=document) => r.querySelector(s);
 const $$ = (s,r=document) => [...r.querySelectorAll(s)];
