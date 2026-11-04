@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.0
+// @version      6.9.1
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -257,11 +257,25 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .fav-name small{font-size:10px;color:#8eacbd}.fav-item button{flex:0 0 auto;padding:7px 8px;font-size:11px}
 .fav-empty{color:#879ba9;font-size:11px;margin:5px 0}
 
+
+.boost-creator-with-follow{grid-template-columns:42px minmax(0,1fr) auto!important}
+#current .tiny-follow{font:700 10px/1.1 system-ui!important;padding:4px 6px!important;min-height:29px!important;border:1px solid #55717e;background:#0b2230;color:#d7e8f1;border-radius:6px;max-width:88px;white-space:nowrap;align-self:start}
+.boost-article-row{display:flex;gap:8px;align-items:start;min-width:0}
+.boost-article-thumb,.boost-card-placeholder{display:block;flex:0 0 84px;width:84px;height:60px;object-fit:cover;background:#14242d;border-radius:7px}
+.boost-card-placeholder{display:grid;place-items:center;font:700 10px/1.3 system-ui;color:#839fb1;text-align:center;padding:4px}
+.boost-article-caption{min-width:0;flex:1}.boost-article-caption h2{font-size:13px;line-height:1.35;margin:0 0 4px}
+.boost-controls>.top-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+.boost-queue-item{display:grid;grid-template-columns:84px minmax(0,1fr);gap:8px;border:1px solid #2d4859;border-radius:10px;padding:7px;margin:5px 0;background:#081923}
+.boost-queue-item.selected{border-color:#d2ac69}
+.boost-queue-copy{min-width:0;font-size:12px}.boost-queue-copy b{display:block;overflow-wrap:anywhere;line-height:1.4}
+.boost-queue-actions{display:flex;gap:6px;margin-top:7px}.boost-queue-actions button{padding:6px 8px;font-size:11px;flex:1}
+.boost-queue-more{display:block;width:100%;margin-top:10px}
+.fav-item .boost-card-placeholder,.fav-item img{width:45px;height:45px;flex:0 0 45px;object-fit:cover;border-radius:7px}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.0</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.1</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
-<div class="top-actions"><button id="saveSource" disabled>☆ 条件を保存</button><button id="showFavorites">★ お気に入り</button></div>
+<div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
 <div id="status" class="status" role="status">noteログイン状態を確認中…</div>
 <details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
 </section>
@@ -269,7 +283,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 <footer class="footer"><button id="prev">戻る</button><button id="next">次へ</button></footer>
 <section id="previewModal" class="modal"><div class="modalhead"><button data-close="previewModal">戻る</button><b>プレビュー</b></div><div id="previewBody" class="modalbody"></div></section>
 <section id="creatorModal" class="modal"><div class="modalhead"><button data-close="creatorModal">戻る</button><b>クリエイター</b></div><div id="creatorBody" class="modalbody"></div></section>
-<section id="magModal" class="modal"><div class="modalhead"><button data-close="magModal">戻る</button><b>マガジン追加</b></div><div id="magBody" class="modalbody"></div></section><section id="favModal" class="modal"><div class="modalhead"><button data-close="favModal">戻る</button><b>⭐ お気に入り</b></div><div id="favBody" class="modalbody"></div></section>
+<section id="queueModal" class="modal"><div class="modalhead"><button data-close="queueModal">戻る</button><b>記事一覧</b></div><div id="queueBody" class="modalbody"></div></section><section id="magModal" class="modal"><div class="modalhead"><button data-close="magModal">戻る</button><b>マガジン追加</b></div><div id="magBody" class="modalbody"></div></section><section id="favModal" class="modal"><div class="modalhead"><button data-close="favModal">戻る</button><b>⭐ お気に入り</b></div><div id="favBody" class="modalbody"></div></section>
 </body></html>`;
 
 document.documentElement.innerHTML = HTML.replace(/^<!doctype html><html[^>]*>|<\/html>$/g,'');
@@ -333,7 +347,7 @@ function openFavorites(){
     '<div class="fav-group"><h2>クリエイター <small>'+v.creators.length+'人</small></h2>'+
     (v.creators.map((x,i)=>'<div class="fav-item"><span class="fav-name"><b>'+esc(x.name||x.id)+'</b><small>@'+esc(x.id)+'</small></span><button data-fav-creator="'+i+'">巡回</button><button data-fav-profile="'+i+'">人物</button><button aria-label="保存解除" data-fav-remove-creator="'+i+'">×</button></div>').join('')||'<p class="fav-empty">未登録</p>')+'</div>'+
     '<div class="fav-group"><h2>記事 <small>'+v.articles.length+'件</small></h2>'+
-    (v.articles.map((x,i)=>'<div class="fav-item"><span class="fav-name"><b>'+esc(x.title||x.key)+'</b><small>@'+esc(x.urlname)+'</small></span><button data-fav-article-start="'+i+'">巡回</button><button data-fav-article="'+i+'">記事</button><button aria-label="保存解除" data-fav-remove-article="'+i+'">×</button></div>').join('')||'<p class="fav-empty">未登録</p>')+'</div>';
+    (v.articles.map((x,i)=>'<div class="fav-item">'+boostArticleThumbMarkup(x)+'<span class="fav-name"><b>'+esc(x.title||x.key)+'</b><small>@'+esc(x.urlname)+'</small></span><button data-fav-article-start="'+i+'">巡回</button><button data-fav-article="'+i+'">記事</button><button aria-label="保存解除" data-fav-remove-article="'+i+'">×</button></div>').join('')||'<p class="fav-empty">未登録</p>')+'</div>';
   function start(val){$('#source').value=val;closeModal('favModal');void loadSource()}
   for(const b of root.querySelectorAll('[data-fav-start]'))b.onclick=()=>start(favorites().sources[Number(b.dataset.favStart)]);
   for(const b of root.querySelectorAll('[data-fav-creator]'))b.onclick=()=>start('@'+favorites().creators[Number(b.dataset.favCreator)]?.id);
@@ -359,7 +373,7 @@ function fmtClock(t){return new Date(t).toLocaleTimeString('ja-JP',{hour:'2-digi
 function noteObj(j){const d=j?.data??j??{};return d.note||d}
 function userOf(n){return n?.user||n?.creator||n?.note_user||{}}
 function keyOf(n){return String(n?.key||n?.note_key||n?.noteKey||n?.slug||'')}
-function thumbOf(n){for(const x of [n?.eyecatch_url,n?.eyecatch,n?.eyecatch_image,n?.eyecatchImage,n?.image_url,n?.thumbnail_url,n?.cover_image_url,n?.image?.url,n?.thumbnail?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
+function thumbOf(n){for(const x of [n?.eyecatch_url,n?.eyecatch?.url,n?.eyecatch,n?.eyecatch_image?.url,n?.eyecatch_image,n?.eyecatchImage?.url,n?.eyecatchImage,n?.image_url,n?.thumbnail_url,n?.cover_image_url,n?.image?.url,n?.thumbnail?.url,n?.thumbnail?.src])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
 function readLiked(j){for(const o of [j,j?.data,j?.note,j?.data?.note].filter(Boolean))for(const k of ['isLiked','is_liked','liked','hasLiked'])if(typeof o?.[k]==='boolean')return o[k];return null}
 function readLikeCount(j){for(const o of [j?.data?.note,j?.data,j?.note,j].filter(Boolean)){const n=Number(o?.likeCount??o?.like_count??o?.likes_count??o?.likesCount);if(Number.isFinite(n))return n}return null}
 async function api(path,init={}){const timeoutMs=Math.max(1500,Number(init.timeoutMs)||20000),{timeoutMs:_tm,...reqInit}=init,ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),timeoutMs);try{const r=await fetch(path,{credentials:'include',cache:'no-store',...reqInit,headers:{accept:'application/json',...(reqInit.headers||{})},signal:ctl.signal});const text=await r.text();let data={};try{data=text?JSON.parse(text):{}}catch{data={text}}if(!r.ok){const e=new Error(`HTTP ${r.status}`);e.status=r.status;e.body=data;const ra=r.headers.get('retry-after');e.retryAfter=ra?(/^\d+$/.test(ra)?Number(ra)*1000:Math.max(0,Date.parse(ra)-Date.now())):0;throw e}return data}catch(e){if(e?.name==='AbortError'){const x=new Error('API応答タイムアウト');x.code='TIMEOUT';throw x}throw e}finally{clearTimeout(tm)}}
@@ -387,7 +401,7 @@ async function rssArticles(url,restrictId=''){
     if(u.hostname!=='note.com'||n<1||!p[n+1])continue;
     const id=p[n-1].toLowerCase(),key=p[n+1];
     if(restrictId&&id!==restrictId.toLowerCase())continue;
-    const image=item.getElementsByTagName('media:thumbnail')[0]?.textContent||
+    const image=item.getElementsByTagName('media:thumbnail')[0]?.getAttribute('url')||
       item.getElementsByTagName('media:content')[0]?.getAttribute('url')||
       item.querySelector('enclosure')?.getAttribute('url')||'';
     out.push({key,id:null,urlname:id,name:id,title:item.querySelector('title')?.textContent?.trim()||key,
@@ -532,8 +546,44 @@ async function sourceFromCreator(p){
 function selectedArticleKey(){const raw=String($('#source')?.value||state.source||'');try{const u=new URL(raw,location.origin),p=u.pathname.split('/').filter(Boolean),i=p.indexOf('n');return i>=1?String(p[i+1]||''):''}catch{return''}}
 
 async function loadSource(){if(busy)return;const raw=$('#source').value.trim(),p=sourceType(raw);if(!p){status('#タグ・記事URL・マガジンURL・クリエイターIDを入力してください',true);return}busy=true;$('#startSource').disabled=true;try{const me=await who();if(me.urlname.toLowerCase()!=='ss_yr')throw Error('運営者本人のみ使用できます');state.me=me.urlname.toLowerCase();let q=p.type==='note'?await sourceFromArticle(p):p.type==='tag'?await sourceFromTag(p):p.type==='mag'?await sourceFromMagazine(p):p.type==='creator'?await sourceFromCreator(p):[];q=q.filter(x=>x?.key&&x?.urlname&&x.urlname.toLowerCase()!==state.me);if(p.type!=='creator')q=[...new Map(q.map(x=>[x.urlname.toLowerCase(),x])).values()];if(!q.length){status('対象を取得できませんでした。条件を確認してください。前の巡回リストは保持しています。',true);return}state.source=raw;state.queue=q;state.index=0;saveState();await render();status('✅ '+q.length+'件の巡回対象を取得しました')}catch(e){status(formatError(e),true)}finally{busy=false;$('#startSource').disabled=false}}
+function boostArticleThumbMarkup(item){
+  return item?.thumb?'<img src="'+esc(item.thumb)+'" alt="記事サムネイル" loading="lazy">':
+    '<div class="boost-card-placeholder">画像なし</div>';
+}
+function boostCurrentArticleHeader(x,detail){
+  const img=detail?.thumb||x.thumb||'',title=detail?.title||x.title||x.key||'記事';
+  return '<div class="boost-article-row">'+
+    (img?'<img class="boost-article-thumb" src="'+esc(img)+'" loading="lazy" alt="記事サムネイル">':
+      '<div class="boost-card-placeholder">画像なし</div>')+
+    '<div class="boost-article-caption"><h2>'+esc(title)+'</h2><div class="meta">記事スキ '+(detail?.likeCount??x.likeCount??'—')+'</div></div></div>';
+}
+async function boostSyncFollowButton(id){
+  const button=$('#followBtn');
+  if(!button||current()?.urlname?.toLowerCase()!==id?.toLowerCase())return;
+  button.textContent='確認中';
+  try{
+    const info=await boostFollowInfo(id);
+    if(current()?.urlname?.toLowerCase()!==id?.toLowerCase()||!button.isConnected)return;
+    button.textContent=info.following===true?'フォロー中':info.following===false?'フォロー':'状態確認';
+  }catch{if(button.isConnected)button.textContent='状態確認'}
+}
+function openQueue(){
+  showModal('queueModal');
+  let shown=25;const root=$('#queueBody');
+  const draw=()=>{
+    const queue=state.queue||[];
+    root.innerHTML='<div class="meta">巡回記事：'+queue.length+'件</div>'+
+      queue.slice(0,shown).map((x,i)=>'<div class="boost-queue-item'+(state.index===i?' selected':'')+'">'+
+      boostArticleThumbMarkup(x)+'<div class="boost-queue-copy"><b>'+esc(x.title||x.key)+'</b><div class="meta">@'+esc(x.urlname||'')+' ・ '+(i+1)+'/'+queue.length+'</div>'+
+      '<div class="boost-queue-actions"><button data-select="'+i+'">選ぶ</button><button data-direct="'+i+'">実記事</button></div></div></div>').join('')+
+      (shown<queue.length?'<button id="queueMore" class="boost-queue-more">次の'+Math.min(25,queue.length-shown)+'件を表示</button>':'');
+    for(const b of root.querySelectorAll('[data-select]'))b.onclick=()=>{state.index=Number(b.dataset.select);saveState();closeModal('queueModal');void render()};
+    for(const b of root.querySelectorAll('[data-direct]'))b.onclick=()=>{const x=queue[Number(b.dataset.direct)];if(x)goOut('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key))};
+    const more=root.querySelector('#queueMore');if(more)more.onclick=()=>{shown+=25;draw()};
+  };draw();
+}
 function stateText(detail,x){const dup=Boolean(x?.duplicateCreator||creatorWasLiked(x?.urlname)||detail?.liked===true);if(state.likedNow[x.key])return'❤️ この人は今回スキ済み｜⚠ 重複あり｜マガジン追加できます';if(detail?.liked===true)return'💗 この人は元からスキ済み｜⚠ 重複あり｜マガジン追加できます';if(state.likeSent[x.key])return'❤️ スキ送信済み・反映確認待ち｜⚠ 重複あり';if(dup)return'⚠ 重複あり｜この人には以前スキ済み。別の記事も確認できます';return'♡ この人は未スキ'}
-async function render(){const box=$('#current'),x=current();refreshLimits();if(!x){box.classList.add('hidden');status(state.source?'巡回対象がありません':'巡回元を入力してください');return}box.classList.remove('hidden');let detail=null,profile=null;try{[detail,profile]=await Promise.all([noteDetail(x.key),creatorProfile(x.urlname)]);if(detail?.liked===true){x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,state.likeSent[x.key]?'tool-confirmed':'preexisting');if(state.likeSent[x.key]&&!state.likedNow[x.key]){state.likedNow[x.key]=true;delete state.likeSent[x.key];saveState()}}}catch(e){status(formatError(e),true)}const st=stateText(detail,x);box.innerHTML=`<div class="progress">${state.index+1}/${state.queue.length}｜${esc(x.source||state.source)}</div><div class="creator"><img class="tap" id="profileImg" src="${esc(profile?.icon||'')}"><div class="tap" id="profileName"><div class="name">${esc(profile?.name||x.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${profile?.followers||'—'}・記事 ${profile?.articleCount||'—'}</div></div></div>${profile?.bio?`<div class="bio">${esc(profile.bio)}</div>`:''}<div class="state">${esc(st)}</div><div class="article"><h2>${esc(detail?.title||x.title)}</h2><div class="meta">記事スキ ${Number(detail?.likeCount??x.likeCount)||0}</div>${(detail?.thumb||x.thumb)?`<details class="media-optional"><summary>画像を表示</summary><img class="thumb" src="${esc(detail?.thumb||x.thumb)}" loading="lazy"></details>`:''}<div class="actions"><button id="likeBtn" ${(detail?.liked===true||state.likedNow[x.key]||state.likeSent[x.key])?'disabled':''}>${state.likedNow[x.key]?'❤️今回済':detail?.liked===true?'💗元から':state.likeSent[x.key]?'❤️送信済':'♡スキ'}</button><button id="openBtn">実記事</button><button id="previewBtn">プレビュー</button></div><div class="actions two"><button id="creatorBtn">📚 記事を見る</button><button id="magBtn">📚マガジン追加</button><button id="favoriteArticleBtn">⭐ 記事保存</button><button id="favoriteCreatorBtn">⭐ この人を保存</button></div></div>`;$('#likeBtn').onclick=likeCurrent;$('#openBtn').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(x.key)}`);$('#previewBtn').onclick=openPreview;$('#creatorBtn').onclick=openCreator;$('#magBtn').onclick=openMags;$('#favoriteArticleBtn').onclick=saveFavoriteArticle;$('#favoriteCreatorBtn').onclick=()=>saveFavoriteCreator(x);$('#profileImg').onclick=$('#profileName').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`)}
+async function render(){const box=$('#current'),x=current();refreshLimits();if(!x){box.classList.add('hidden');status(state.source?'巡回対象がありません':'巡回元を入力してください');return}box.classList.remove('hidden');let detail=null,profile=null;try{[detail,profile]=await Promise.all([noteDetail(x.key),creatorProfile(x.urlname)]);if(detail?.liked===true){x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,state.likeSent[x.key]?'tool-confirmed':'preexisting');if(state.likeSent[x.key]&&!state.likedNow[x.key]){state.likedNow[x.key]=true;delete state.likeSent[x.key];saveState()}}}catch(e){status(formatError(e),true)}const st=stateText(detail,x);box.innerHTML=`<div class="progress">${state.index+1}/${state.queue.length}｜${esc(x.source||state.source)}</div><div class="creator boost-creator-with-follow"><img class="tap" id="profileImg" src="${esc(profile?.icon||'')}"><div class="tap" id="profileName"><div class="name">${esc(profile?.name||x.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${profile?.followers||'—'}・記事 ${profile?.articleCount||'—'}</div></div><button type="button" id="followBtn" class="tiny-follow">確認中</button></div>${profile?.bio?`<div class="bio">${esc(profile.bio)}</div>`:''}<div class="state">${esc(st)}</div><div class="article">${boostCurrentArticleHeader(x,detail)}<div class="actions"><button id="likeBtn" ${(detail?.liked===true||state.likedNow[x.key]||state.likeSent[x.key])?'disabled':''}>${state.likedNow[x.key]?'❤️今回済':detail?.liked===true?'💗元から':state.likeSent[x.key]?'❤️送信済':'♡スキ'}</button><button id="openBtn">実記事</button><button id="previewBtn">プレビュー</button></div><div class="actions two"><button id="creatorBtn">📚 記事を見る</button><button id="magBtn">📚マガジン追加</button><button id="favoriteArticleBtn">⭐ 記事保存</button><button id="favoriteCreatorBtn">⭐ この人を保存</button></div></div>`;$('#likeBtn').onclick=likeCurrent;$('#openBtn').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(x.key)}`);$('#previewBtn').onclick=openPreview;$('#creatorBtn').onclick=openCreator;$('#magBtn').onclick=openMags;$('#favoriteArticleBtn').onclick=saveFavoriteArticle;$('#favoriteCreatorBtn').onclick=()=>saveFavoriteCreator(x);$('#profileImg').onclick=$('#profileName').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);$('#followBtn').onclick=()=>void boostFollowChange(x.urlname,m=>status(m)).then(()=>void boostSyncFollowButton(x.urlname));void boostSyncFollowButton(x.urlname)}
 function withReturn(raw){const x=new URL(raw,location.origin);x.searchParams.set('boost_return','1');return x.href}
 function goOut(raw){saveState();location.assign(withReturn(raw))}
 async function likeCurrent(){if(busy)return;const x=current();if(!x)return;busy=true;const b=$('#likeBtn');try{enforce('likes');b.disabled=true;b.textContent='確認中…';const before=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),liked=readLiked(before),beforeCount=readLikeCount(before);if(liked===true){status('💗 元からスキ済み｜送信なし');await render();return}b.textContent='スキ中…';try{await api(`/api/v3/notes/${encodeURIComponent(x.key)}/likes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'})}catch(e){const body=JSON.stringify(e.body||'');if(/already|liked|exist/i.test(body)){status('💗 すでにスキ済み｜解除せず完了');await render();return}if(e.status===403)setGuard('likes',Date.now()+3600000,'403検出');if(e.status===429)setGuard('likes',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}state.likeSent[x.key]=true;pushHist('likes',x.key);saveState();let ok=false;for(const w of [300,800,1500,2500]){await sleep(w);try{const after=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),aLiked=readLiked(after),afterCount=readLikeCount(after);if(aLiked===true||(beforeCount!=null&&afterCount!=null&&afterCount>beforeCount)){ok=true;break}}catch{}}if(ok){state.likedNow[x.key]=true;x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,'tool');delete state.likeSent[x.key];saveState();status('❤️ スキ反映を確認しました｜次回この人は「⚠ 重複あり」と表示します')}else{status('❤️ スキは送信済み。反映表示は次回読み込みで再確認します')}await render()}catch(e){if(b){b.disabled=false;b.textContent='♡スキ'}status(formatError(e),true);refreshLimits()}finally{busy=false}}
@@ -557,7 +607,7 @@ for(const b of $$('[data-close]'))b.onclick=()=>closeModal(b.dataset.close);
 $('#prev').onclick=async()=>{if(state.index>0){state.index--;saveState();await render()}};
 $('#next').onclick=async()=>{if(state.index<state.queue.length-1){state.index++;saveState();await render()}else status('最後の巡回対象です')};
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
-$('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;
+$('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
 
