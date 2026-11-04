@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.7.0
+// @version      6.7.1
 // @description  自分の最新5記事をタップして即開始。選択記事にスキした人＋スキが付いたコメント投稿者を循環。過去スキ済みは重複警告。マガジン先読み対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -47,7 +47,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#05090e;color:#eef7ff}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:linear-gradient(180deg,#07131b 0,#04080c 100%);overflow-x:hidden}button,input{font:inherit}.app{width:min(760px,100%);margin:auto;padding:12px 12px calc(92px + env(safe-area-inset-bottom,0px))}.head{position:sticky;top:0;z-index:10;padding:10px 2px 9px;background:#050a0ff2;backdrop-filter:blur(14px);border-bottom:1px solid #253a49}.headrow{display:flex;justify-content:space-between;gap:8px;align-items:center}.head h1{margin:0;font-size:19px}.acct{font-size:11px;color:#8feaff}.sub{font-size:10px;color:#8097a8;margin-top:3px}.card{margin-top:10px;border:1px solid #284151;border-radius:14px;background:#0a151e;padding:10px;box-shadow:0 8px 24px #0005}.row{display:flex;gap:8px;align-items:center}.grow{flex:1;min-width:0}input{width:100%;border:1px solid #355368;background:#071018;color:#fff;border-radius:11px;padding:11px 12px;outline:none}button{border:1px solid #355368;background:#102431;color:#fff;border-radius:10px;padding:10px 11px;font-weight:800;cursor:pointer}button.primary{background:#0d4b35;border-color:#2b9d68}button.danger{background:#36171b;border-color:#8a3b46}button:disabled{opacity:.48;cursor:default}.top-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.status{margin-top:8px;padding:8px 9px;border-radius:9px;background:#071018;color:#a8bfce;font-size:12px;white-space:pre-wrap}.status.ok{color:#82efb2}.status.bad{color:#ff9b9b}.limits{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:7px}.pill{padding:7px;border:1px solid #294354;border-radius:9px;background:#071018;font-size:10px;color:#9fb7c7}.progress{font-size:12px;color:#9eb5c4;margin:0 0 8px}.creator{display:grid;grid-template-columns:58px 1fr;gap:10px;align-items:center}.creator img{width:58px;height:58px;border-radius:50%;object-fit:cover;background:#14232d}.tap{cursor:pointer}.name{font-weight:900;line-height:1.25}.id,.meta,.stats{font-size:11px;color:#88a3b5}.bio{font-size:12px;color:#c3d0d8;white-space:pre-wrap;line-height:1.6;margin-top:5px}.state{margin-top:9px;padding:9px;border-radius:10px;border:1px solid #35536a;background:#08131b;text-align:center;font-weight:900}.article{margin-top:9px;border:1px solid #294454;border-radius:12px;background:#07131b;padding:9px}.article h2{font-size:15px;margin:0 0 5px;line-height:1.5}.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#111c24;margin-top:8px}.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:8px}.actions.two{grid-template-columns:repeat(2,minmax(0,1fr))}.actions button{min-width:0;padding:10px 5px}.footer{position:fixed;left:50%;bottom:0;z-index:15;transform:translateX(-50%);width:min(760px,100%);display:grid;grid-template-columns:1fr 1fr;background:#071019f5;border-top:1px solid #284353;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));backdrop-filter:blur(14px)}.footer button{border:0;background:#0f202c}.footer button+button{margin-left:6px}.modal{display:none;position:fixed;inset:0;z-index:30;background:#03080bf5}.modal.show{display:flex;flex-direction:column}.modalhead{display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid #263d4c;background:#071019}.modalhead b{flex:1}.modalbody{padding:10px;overflow:auto;flex:1}.listitem{border:1px solid #294252;border-radius:11px;background:#09141c;padding:9px;margin-bottom:8px}.listrow{display:grid;grid-template-columns:56px 1fr;gap:9px;align-items:center}.listrow img{width:56px;height:56px;border-radius:8px;object-fit:cover;background:#15232c}.mag-controls{position:sticky;top:0;z-index:3;background:#03080bf5;padding:0 0 8px}.mag-add{width:100%;margin:8px 0;background:#0d4b35;border-color:#2b9d68}.mag-list{margin-top:6px}.mag{display:grid;grid-template-columns:58px 28px 1fr;gap:8px;align-items:center;border:1px solid #294252;border-radius:11px;background:#09141c;padding:8px;margin-bottom:7px}.mag img,.magph{width:58px;height:58px;object-fit:cover;border-radius:8px;background:#15232c}.magph{display:grid;place-items:center;font-size:25px}.mag input[type=checkbox]{width:21px;height:21px;margin:0}.mag b{display:block;line-height:1.35}.mag .meta{margin-top:3px}.hidden{display:none!important}.empty{padding:24px 10px;text-align:center;color:#8ca2b1}.login{display:inline-block;margin-top:8px;color:#8feaff}.msg{font-size:11px;color:#8feaff;min-height:1.5em;margin:6px 0}.bar{display:flex;gap:7px}.bar button{flex:1}.pick-head{display:flex;gap:7px;align-items:center}.pick-head button{flex:1}.article-picks{display:grid;gap:8px;margin-top:10px}.article-pick{display:grid;grid-template-columns:74px 1fr auto;gap:9px;align-items:center;border:1px solid #294252;border-radius:12px;background:#09141c;padding:8px;text-align:left}.article-pick.selected{border-color:#63c9ff;box-shadow:0 0 0 1px #63c9ff55 inset;background:#0b1d29}.article-pick img,.article-pick .pickph{width:74px;height:54px;border-radius:8px;object-fit:cover;background:#15232c}.article-pick .pickph{display:grid;place-items:center;font-size:22px}.article-pick b{display:block;font-size:13px;line-height:1.35}.article-pick .meta{margin-top:4px}.article-pick .go{font-size:11px;color:#8feaff;white-space:nowrap}.pick-note{font-size:10px;color:#8fa6b5;margin-top:7px}
 @media(max-width:390px){.actions{grid-template-columns:1fr 1fr}.actions button:last-child:nth-child(odd){grid-column:1/-1}.creator{grid-template-columns:52px 1fr}.creator img{width:52px;height:52px}.head h1{font-size:17px}.mag{grid-template-columns:52px 26px 1fr}.mag img,.magph{width:52px;height:52px}}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">v6.7.0｜最新5記事から選ぶ循環BOOST</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">v6.7.1｜最新5記事から選ぶ循環BOOST</div></header>
 <section class="card"><div class="row"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／クリエイターID" autocomplete="off"><button id="startSource" disabled>巡回開始</button></div><div class="top-actions"><button id="saveSource" disabled>⭐ 条件保存</button><button id="showFavorites">⭐ お気に入り</button></div><p class="pick-note">#タグ・マガジンURL・記事URL・クリエイターID／URLで巡回できます。</p><div class="pick-head"><button id="refreshArticles" disabled>🗓 最新5記事を更新</button></div><div id="articlePicker" class="article-picks"><div class="empty">記事一覧を読み込み中…</div></div><div class="pick-note">記事カードをタップすると、その記事の「記事スキ＋スキ付きコメント投稿者」をすぐ循環します。</div><div class="top-actions"><button id="preloadMags" disabled>📚 マガジン先読み</button><button id="reset" class="danger">巡回をリセット</button></div><div id="status" class="status">noteログイン状態を確認中…</div><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div></section>
 <section id="current" class="card hidden"></section></main>
 <footer class="footer"><button id="prev">戻る</button><button id="next">次へ</button></footer>
@@ -107,7 +107,51 @@ function refreshLimits(){for(const [kind,id,icon] of [['likes','#likeLimit','♡
 function enforce(kind){const s=limitStatus(kind);if(s.until>Date.now()){const e=new Error(`安全上限により保護中・解除 ${fmtClock(s.until)}`);e.code='LIMIT';throw e}}
 function formatError(e){if(e?.code==='LOGIN')return'ログイン未確認：noteへログインしてください';if(e?.status===401)return'401：noteログインを確認してください';if(e?.status===403)return'403：note側で操作が制限されています';if(e?.status===429)return'429：操作間隔の制限を検出しました';if(e?.code==='TIMEOUT')return'API応答タイムアウト';return String(e?.message||e||'不明なエラー')}
 async function who(){const j=await api('/api/v2/current_user'),d=j?.data??j??{},u=d.user||d,id=String(u.urlname||u.url_name||u.username||'').replace(/^@/,'');if(!id){const e=new Error('noteへログインしてください');e.code='LOGIN';throw e}return{urlname:id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||''}}
-async function creatorContents(id,page=1){const j=await api(`/api/v2/creators/${encodeURIComponent(id)}/contents?kind=note&page=${page}`),d=j?.data??j??{},a=Array.isArray(d.contents)?d.contents:(Array.isArray(d.notes)?d.notes:(Array.isArray(d)?d:[]));return{items:a.map(n=>{const u=userOf(n);return{key:keyOf(n),id:n.id??n.note_id??n.noteId??null,urlname:String(u.urlname||u.url_name||u.username||id),name:String(u.nickname||u.name||id),title:String(n.name||n.title||keyOf(n)),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??n.likes_count??n.likesCount??0)||0,publishAt:n.publishAt||n.publish_at||n.createdAt||n.created_at||'',liked:readLiked(n),rawUser:u}}),last:Boolean(d.isLastPage??d.is_last_page??false)}}
+async function rssArticles(url,restrictId=''){
+  const xml=await textReq(url);
+  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  if(doc.querySelector('parsererror'))throw Error('RSS解析エラー');
+  const out=[];
+  for(const item of doc.querySelectorAll('item')){
+    const link=String(item.querySelector('link')?.textContent||'').trim();
+    let u;
+    try{u=new URL(link)}catch{continue}
+    const p=u.pathname.split('/').filter(Boolean),n=p.indexOf('n');
+    if(u.hostname!=='note.com'||n<1||!p[n+1])continue;
+    const id=p[n-1].toLowerCase(),key=p[n+1];
+    if(restrictId&&id!==restrictId.toLowerCase())continue;
+    const image=item.getElementsByTagName('media:thumbnail')[0]?.textContent||
+      item.getElementsByTagName('media:content')[0]?.getAttribute('url')||
+      item.querySelector('enclosure')?.getAttribute('url')||'';
+    out.push({key,id:null,urlname:id,name:id,title:item.querySelector('title')?.textContent?.trim()||key,
+      thumb:image,likeCount:null,publishAt:item.querySelector('pubDate')?.textContent||'',liked:null,source:'RSS'});
+  }
+  return out;
+}
+async function creatorContents(id,page=1){
+  let apiError=null,apiItems=[];
+  try{
+    const j=await api('/api/v2/creators/'+encodeURIComponent(id)+'/contents?kind=note&page='+page);
+    const d=j?.data??j??{};
+    const candidates=[d.contents,d.notes,d.items,d.contents?.contents,d.contents?.notes,d.contents?.items,d.note_list,d.noteList,j?.contents,j?.notes,Array.isArray(d)?d:null];
+    apiItems=candidates.find(x=>Array.isArray(x)&&x.length)||[];
+    const items=apiItems.map(v=>v?.note||v?.content||v).map(n=>{
+      const u=userOf(n),key=keyOf(n);
+      return{key,id:n.id??n.note_id??n.noteId??null,urlname:String(u.urlname||u.url_name||u.username||id),
+        name:String(u.nickname||u.name||id),title:String(n.name||n.title||key),thumb:thumbOf(n),
+        likeCount:Number(n.likeCount??n.like_count??n.likes_count??n.likesCount??0)||0,
+        publishAt:n.publishAt||n.publish_at||n.createdAt||n.created_at||'',liked:readLiked(n),rawUser:u};
+    }).filter(x=>x.key);
+    if(items.length)return{items,last:Boolean(d.isLastPage??d.is_last_page??false)};
+  }catch(e){apiError=e}
+  if(page>1){if(apiError)throw apiError;return{items:[],last:true}}
+  try{
+    const items=await rssArticles('https://note.com/'+encodeURIComponent(id)+'/rss',id);
+    if(items.length)return{items,last:true,fromRss:true};
+  }catch(e){if(!apiError)apiError=e}
+  if(apiError)throw apiError;
+  return{items:[],last:true};
+}
 async function creatorProfile(id){for(const ep of [`/api/v2/creators/${encodeURIComponent(id)}`,`/api/v1/creators/${encodeURIComponent(id)}`]){try{const j=await api(ep),d=j?.data??j??{},u=d.creator||d.user||d;return{id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||'',bio:String(u.bio||u.description||u.profile||''),followers:Number(u.followers_count??u.follower_count??u.followersCount??0)||0,following:Number(u.following_count??u.followingCount??0)||0,articleCount:Number(u.note_count??u.notes_count??u.noteCount??0)||0}}catch{}}const c=await creatorContents(id,1),u=c.items[0]?.rawUser||{};return{id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||'',bio:String(u.bio||u.description||''),followers:Number(u.followers_count??u.follower_count??0)||0,following:Number(u.following_count??0)||0,articleCount:0}}
 async function noteDetail(key){const j=await api(`/api/v3/notes/${encodeURIComponent(key)}`),n=noteObj(j),u=userOf(n);return{key:keyOf(n)||key,id:n.id??n.note_id??n.noteId??null,title:String(n.name||n.title||key),urlname:String(u.urlname||u.url_name||u.username||''),name:String(u.nickname||u.name||''),thumb:thumbOf(n),likeCount:readLikeCount(j)||0,liked:readLiked(j),body:n.body||n.body_html||n.bodyHtml||n.content||n.content_html||'',raw:j}}
 function sourceType(raw){const s=String(raw||'').trim();if(s.startsWith('#'))return{type:'tag',tag:s.replace(/^#+/,'')};if(/^https?:\/\//i.test(s)){try{const u=new URL(s),p=u.pathname.split('/').filter(Boolean),ni=p.indexOf('n'),mi=p.indexOf('m');if(u.hostname==='note.com'&&ni>=1&&p[ni+1])return{type:'note',key:p[ni+1],url:u.href};if(u.hostname==='note.com'&&mi>=1&&p[mi+1])return{type:'mag',url:u.href};if(u.hostname==='note.com'&&p.length===1)return{type:'creator',id:p[0]}}catch{}return null}const id=s.replace(/^@/,'');return /^[A-Za-z0-9_.-]+$/.test(id)?{type:'creator',id}:null}
@@ -132,15 +176,49 @@ async function likedCommentAuthorPeople(p,max=500){const comments=(await noteCom
 async function sourceFromCirculation(p,max=500){if(!p?.key)throw new Error('記事一覧から巡回する記事を選んでください');const people=new Map(),add=x=>{const id=String(x?.id||'').toLowerCase();if(!id||id===state.me)return;const prev=people.get(id);if(prev){const set=new Set(String(prev.via||'').split('＋').filter(Boolean));set.add(x.via);prev.via=[...set].join('＋');prev.hits=Number(prev.hits||1)+Number(x.hits||1);prev.commentLikes=Number(prev.commentLikes||0)+Number(x.commentLikes||0)}else people.set(id,{...x,id,hits:Number(x.hits||1)})};for(const x of await articleLikerPeople(p,max))add(x);for(const x of await likedCommentAuthorPeople(p,max))add(x);const ids=[...people.keys()].slice(0,max);status(`🔁 選択記事から ${ids.length}人を循環対象に作成中…`);return(await mapLimit(ids,4,async id=>{const meta=people.get(id),x=await latestForCreator(id,meta?.via||'記事スキ/スキ付きコメント');return x?{...x,source:meta?.via||'記事スキ/スキ付きコメント',sourceHits:Number(meta?.hits||1),commentLikes:Number(meta?.commentLikes||0),duplicateCreator:Boolean(x.duplicateCreator||creatorWasLiked(id))}:null})).filter(Boolean)}
 async function sourceFromArticle(p,max=500){return sourceFromCirculation(p,max)}
 async function sourceFromMagazine(p,max=500){const creators=new Map(),seenPages=new Set();for(let page=1;page<=50&&creators.size<max;page++){const u=new URL(p.url);u.searchParams.set('page',String(page));status(`📚 マガジンを取得中 ${creators.size}/${max}`);const html=await textReq(u.href),d=new DOMParser().parseFromString(html,'text/html'),keys=[];for(const a of d.querySelectorAll('a[href]')){let x;try{x=new URL(a.getAttribute('href'),u)}catch{continue}const pp=x.pathname.split('/').filter(Boolean),ni=pp.indexOf('n');if(ni<1||!pp[ni+1])continue;const id=pp[ni-1].toLowerCase(),key=pp[ni+1];keys.push(key);if(id&&id!==state.me&&!creators.has(id))creators.set(id,key);if(creators.size>=max)break}const sig=[...new Set(keys)].slice(0,10).join('|');if(!sig||seenPages.has(sig))break;seenPages.add(sig)}const ids=[...creators.keys()];return(await mapLimit(ids,5,id=>latestForCreator(id,'マガジンURL'))).filter(Boolean)}
-async function sourceFromTag(p,max=500){const out=[],seenCreators=new Set();let cursor='0';for(let page=1;page<=100&&out.length<max;page++){status(`🏷 #${p.tag} を取得中 ${out.length}/${max}`);let j;try{j=await api(`/api/v3/hashtags/${encodeURIComponent(p.tag)}/notes?order=new&page=${page}`);const d=j?.data??j??{},a=d.notes||d.contents||j?.notes||[];if(Array.isArray(a)&&a.length){for(const n of a){const u=userOf(n),id=String(u.urlname||u.url_name||u.username||'').toLowerCase(),key=keyOf(n);if(!id||id===state.me||!key||seenCreators.has(id))continue;seenCreators.add(id);out.push({key,id:n.id??n.note_id??null,urlname:id,name:String(u.nickname||u.name||id),title:String(n.name||n.title||key),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??0)||0,publishAt:n.publishAt||n.publish_at||'',source:`#${p.tag}`});if(out.length>=max)break}if(a.length<20)break;continue}}catch{}
-    j=await api(`/api/v3/searches?context=note&q=${encodeURIComponent(p.tag)}&size=20&start=${encodeURIComponent(cursor)}&sort=new`);const d=j?.data??j??{},ns=d.notes||{},a=ns.contents||ns.notes||d.contents||[];if(!Array.isArray(a)||!a.length)break;for(const n of a){const u=userOf(n),id=String(u.urlname||u.url_name||u.username||'').toLowerCase(),key=keyOf(n);if(!id||id===state.me||!key||seenCreators.has(id))continue;seenCreators.add(id);out.push({key,id:n.id??n.note_id??null,urlname:id,name:String(u.nickname||u.name||id),title:String(n.name||n.title||key),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??0)||0,publishAt:n.publishAt||n.publish_at||'',source:`#${p.tag}`});if(out.length>=max)break}const next=d?.cursor?.note??d.note_cursor??ns.next_cursor??ns.cursor??null;if(next==null||String(next)===String(cursor))break;cursor=String(next)}return out}
-async function sourceFromCreator(p){status(`@${p.id} の最新5記事を取得中…`);const r=await creatorContents(p.id,1);return(r.items||[]).sort(recentSort).slice(0,5).map(x=>({...x,source:`@${p.id}｜最新5記事`,duplicateCreator:creatorWasLiked(p.id)||x.liked===true}))}
+async function sourceFromTag(p,max=500){
+  const out=[],seenCreators=new Set();
+  for(let page=1;page<=50&&out.length<max;page++){
+    status('🏷 #'+p.tag+' を検索中… '+out.length+'人');
+    const j=await api('/api/v3/hashtags/'+encodeURIComponent(p.tag)+'/notes?order=new&page='+page);
+    const d=j?.data??j??{},x=d.notes||d.contents||j?.notes||[];
+    const arr=Array.isArray(x)?x:Array.isArray(x.contents)?x.contents:Array.isArray(x.notes)?x.notes:[];
+    if(!arr.length)break;
+    for(const n0 of arr){
+      const n=n0.note||n0.content||n0,u=userOf(n),id=String(u.urlname||u.url_name||u.username||'').toLowerCase(),key=keyOf(n);
+      if(!id||id===state.me||!key||seenCreators.has(id))continue;
+      seenCreators.add(id);
+      out.push({key,id:n.id??n.note_id??null,urlname:id,name:String(u.nickname||u.name||id),
+        title:String(n.name||n.title||key),thumb:thumbOf(n),likeCount:Number(n.likeCount??n.like_count??0)||0,
+        publishAt:n.publishAt||n.publish_at||'',source:'#'+p.tag});
+      if(out.length>=max)break;
+    }
+    if(arr.length<20)break;
+  }
+  return out;
+}
+async function sourceFromCreator(p){
+  status('@'+p.id+' の記事を取得中…');
+  const list=[];
+  for(let page=1;page<=20&&list.length<500;page++){
+    const r=await creatorContents(p.id,page);
+    const next=r.items||[];
+    list.push(...next.filter(x=>x.key));
+    if(r.last||!next.length||next.length<20)break;
+  }
+  const items=[...new Map(list.map(x=>[x.key,x])).values()];
+  items.sort((a,b)=>{
+    const va=a.likeCount,vb=b.likeCount;
+    return va!=null&&vb!=null&&va!==vb?vb-va:recentSort(a,b);
+  });
+  return items.map(x=>({...x,source:'@'+p.id+'｜クリエイター記事',duplicateCreator:creatorWasLiked(p.id)||x.liked===true}));
+}
 function selectedArticleKey(){const raw=String($('#source')?.value||state.source||'');try{const u=new URL(raw,location.origin),p=u.pathname.split('/').filter(Boolean),i=p.indexOf('n');return i>=1?String(p[i+1]||''):''}catch{return''}}
 function renderMyArticlePicker(){
  const box=$('#articlePicker');if(!box)return;
  const selected=selectedArticleKey();
  if(!myRecentArticles.length){box.innerHTML='<div class="empty">記事一覧を取得できませんでした。上の欄に#タグ・記事URLなどを直接入力して巡回できます。</div>';return}
- box.innerHTML=myRecentArticles.map(a=>`<button type="button" class="article-pick ${selected===a.key?'selected':''}" data-pick-key="${esc(a.key)}">${a.thumb?`<img src="${esc(a.thumb)}">`:'<div class="pickph">note</div>'}<span><b>${esc(a.title||a.key)}</b><span class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${Number(a.likeCount||0)}</span></span><span class="go">${selected===a.key?'選択中':'循環開始'} ›</span></button>`).join('');
+ box.innerHTML=myRecentArticles.map(a=>`<button type="button" class="article-pick ${selected===a.key?'selected':''}" data-pick-key="${esc(a.key)}">${a.thumb?`<img src="${esc(a.thumb)}">`:'<div class="pickph">note</div>'}<span><b>${esc(a.title||a.key)}</b><span class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${a.likeCount==null?"—":Number(a.likeCount||0)}</span></span><span class="go">${selected===a.key?'選択中':'循環開始'} ›</span></button>`).join('');
  for(const b of $('#articlePicker [data-pick-key]'))b.onclick=()=>{const a=myRecentArticles.find(x=>x.key===b.dataset.pickKey);if(!a||busy)return;const raw=`https://note.com/${encodeURIComponent(state.me)}/n/${encodeURIComponent(a.key)}`;$('#source').value=raw;state.source=raw;saveState();renderMyArticlePicker();void loadSource()};
 }
 async function loadMyRecentArticles(force=false){
@@ -150,7 +228,7 @@ async function loadMyRecentArticles(force=false){
   const r=await creatorContents(state.me,1);
   myRecentArticles=(r.items||[]).sort(recentSort).slice(0,5);
   renderMyArticlePicker();
-  status(myRecentArticles.length?`🗓 最新${myRecentArticles.length}記事を表示しました｜使う記事を選んでください`:'記事一覧を取得できませんでした',!myRecentArticles.length);
+  status(myRecentArticles.length?`🗓 最新${myRecentArticles.length}記事を表示｜巡回元を選べます`:'記事一覧を取得できませんでした。#タグ・URLからも巡回できます。',!myRecentArticles.length);
  }catch(e){myRecentArticles=[];renderMyArticlePicker();status(formatError(e),true)}
  finally{if(b){b.disabled=false;b.textContent='🗓 最新5記事を更新'}}
 }
