@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.8.0
+// @version      6.8.1
 // @description  自分の最新5記事をタップして即開始。選択記事にスキした人＋スキが付いたコメント投稿者を循環。過去スキ済みは重複警告。マガジン先読み対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -20,23 +20,129 @@ const STORE = 'noteBoostDedicatedV640';
 const PREV_STORE = 'noteBoostDedicatedV630';
 const OLD_STORE = 'noteBoostDedicatedV620';
 const LIMIT_PREFIX = 'noteBoostDedicatedLimit:';
-
-if (!dedicated) {
-  if (fromBoost) {
-    const addReturn = () => {
-      if (!document.body || document.getElementById('noteBoostReturnV630')) return;
-      const b = document.createElement('button');
-      b.id = 'noteBoostReturnV630';
-      b.type = 'button';
-      b.textContent = '← 巡回BOOSTへ戻る';
-      b.style.cssText = 'position:fixed;left:10px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:2147483647;border:1px solid #3a6680;border-radius:999px;padding:11px 14px;background:#071b28;color:#fff;font:800 13px system-ui;box-shadow:0 6px 24px #0008';
-      b.addEventListener('click', () => location.assign(APP_URL));
-      document.body.appendChild(b);
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addReturn, {once:true}); else addReturn();
+function mountOwnerBoostPanel(){
+  if(window.__mumeiBoostNotePanelV681)return;
+  window.__mumeiBoostNotePanelV681=true;
+  const TAB='mumei-boost-native-tab-v681',ROOT='mumei-boost-native-panel-v681';
+  const FAV='noteBoostOwnerFavoritesV670',PENDING='noteBoostOwnerPendingSourceV681',MAG_PENDING='noteBoostOwnerPendingMagazineV681';
+  let owner=false,checking=false,lastCheck=0,doing=false;
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const json=(key,alt)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??alt}catch{return alt}};
+  const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+  const state=()=>{const v=json(STORE,null)||json(PREV_STORE,null)||json(OLD_STORE,null)||{};return {...v,queue:Array.isArray(v.queue)?v.queue:[],index:Math.max(0,Number(v.index)||0),likedNow:v.likedNow||{},likeSent:v.likeSent||{}}};
+  const favs=()=>{const v=json(FAV,{});return {sources:Array.isArray(v.sources)?v.sources.map(x=>typeof x==='string'?x:x?.value).filter(Boolean):[],creators:Array.isArray(v.creators)?v.creators.filter(x=>x?.id):[],articles:Array.isArray(v.articles)?v.articles.filter(x=>x?.key&&x?.urlname):[]}};
+  const urlOf=x=>'https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key);
+  const css=document.createElement('style');css.id='mumei-boost-native-css-v681';
+  css.textContent=`
+#${TAB}{all:initial;box-sizing:border-box!important;position:fixed!important;right:8px!important;top:calc(env(safe-area-inset-top,0px) + 92px)!important;z-index:2147482000!important;border:1px solid #c6a362!important;background:#193040!important;color:#f7e5bd!important;padding:8px 10px!important;font:800 12px/1.2 system-ui!important;border-radius:10px!important;min-height:36px!important;box-shadow:0 4px 14px #0006!important;cursor:pointer!important}
+#${ROOT}{all:initial;box-sizing:border-box!important;position:fixed!important;right:8px!important;top:calc(env(safe-area-inset-top,0px) + 135px)!important;width:min(380px,calc(100vw - 16px))!important;max-height:calc(100dvh - 225px)!important;overflow-y:auto!important;overscroll-behavior:contain!important;z-index:2147482000!important;color:#eef7fd!important;background:#091720f7!important;border:1px solid #c6a362!important;border-radius:12px!important;padding:8px!important;box-shadow:0 12px 32px #000b!important;font:12px/1.4 system-ui!important}
+#${ROOT}[hidden],#${ROOT} [hidden]{display:none!important}#${ROOT} *{box-sizing:border-box!important}
+#${ROOT} header{display:flex;align-items:center;gap:6px;margin-bottom:5px;background:transparent!important;padding:0!important;height:auto!important;position:static!important}
+#${ROOT} header b{flex:1;font-size:14px;color:#ffe2a8}#${ROOT} header small{font-size:10px;color:#95b7c8}
+#${ROOT} button,#${ROOT} input{font:inherit!important;min-height:32px!important;border:1px solid #4b687a!important;border-radius:7px!important}
+#${ROOT} button{background:#142f3e!important;color:#eff8fc!important;padding:5px 7px!important;cursor:pointer!important}
+#${ROOT} button:disabled{opacity:.5!important}
+#${ROOT} input{background:#07111a!important;color:white!important;padding:6px 8px!important;width:100%!important;min-width:0!important;flex:1!important;appearance:none!important}
+#${ROOT} .mb-row{display:flex;gap:5px;margin-top:5px;align-items:center}
+#${ROOT} .mb-row button{white-space:nowrap!important}
+#${ROOT} .mb-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-top:5px}
+#${ROOT} .mb-actions button{min-width:0!important;font-size:11px!important;padding:6px 3px!important}
+#${ROOT} [data-status]{font-size:11px;color:#accede;margin:6px 1px;min-height:14px;overflow-wrap:anywhere}
+#${ROOT} [data-current]{padding:6px;border:1px solid #304e60;border-radius:8px;background:#0c2330;margin-top:6px}
+#${ROOT} .mb-current-title{font-weight:800;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#${ROOT} .mb-small{font-size:10px;color:#9bbccc;margin-top:3px}
+#${ROOT} .mb-group{border-top:1px solid #2e4a5c;margin-top:7px;padding-top:5px}
+#${ROOT} .mb-group h3{color:#dfbe81;font-size:12px;margin:3px 0 5px}
+#${ROOT} .mb-item{display:flex;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid #213947}
+#${ROOT} .mb-item span{flex:1;min-width:0;overflow-wrap:anywhere}
+#${ROOT} .mb-item button{font-size:10px!important;min-height:28px!important}
+@media(max-height:550px){#${ROOT}{top:115px!important;max-height:calc(100dvh - 155px)!important}#${TAB}{top:72px!important}}`;
+  const tab=document.createElement('button');tab.id=TAB;tab.type='button';tab.textContent='💗 BOOST';
+  const panel=document.createElement('div');panel.id=ROOT;panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','巡回BOOST運営者パネル');
+  panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
+  function message(t){const el=panel.querySelector('[data-status]');if(el)el.textContent=t}
+  function mount(){if(!owner||!document.body)return;if(!document.getElementById(css.id))(document.head||document.documentElement).append(css);if(!document.getElementById(TAB))document.body.append(tab);if(!document.getElementById(ROOT))document.body.append(panel);if(!panel.hidden)refresh()}
+  function dismiss(){tab.remove();panel.remove()}
+  function run(source){const raw=String(source||'').trim();if(!raw){message('巡回条件を入力してください');return}try{localStorage.setItem(PENDING,raw)}catch{}location.assign(APP_URL)}
+  function refresh(){
+    const v=state(),x=v.queue[v.index],area=panel.querySelector('[data-current]');
+    if(!x){area.innerHTML='<div class="mb-small">まだ巡回リストはありません。#タグ・URL・@IDから開始できます。</div>';return}
+    area.innerHTML='<div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div>';
+    if(v.likedNow[x.key]||v.likeSent[x.key]){const b=area.querySelector('[data-like]');b.disabled=true;b.textContent='♡処理済み'}
   }
-  return;
+  function drawFavorites(){
+    const v=favs(),el=panel.querySelector('[data-favorites]');
+    const block=(name,items,type,display)=>'<div class="mb-group"><h3>'+name+' ('+items.length+')</h3>'+(items.map((x,i)=>'<div class="mb-item"><span>'+esc(display(x))+'</span><button data-do="'+type+'" data-i="'+i+'">巡回</button><button data-del="'+type+'" data-i="'+i+'" aria-label="削除">×</button></div>').join('')||'<div class="mb-small">未登録</div>')+'</div>';
+    el.innerHTML=block('巡回条件',v.sources,'source',x=>x)+block('クリエイター',v.creators,'creator',x=>(x.name||x.id)+' @'+x.id)+block('記事',v.articles,'article',x=>x.title||x.key);
+  }
+  async function like(){
+    if(doing)return;const v=state(),x=v.queue[v.index];if(!x)return;
+    if(v.likedNow[x.key]||v.likeSent[x.key]){message('この記事は処理済みです');return}
+    doing=true;
+    const btn=panel.querySelector('[data-like]');if(btn)btn.disabled=true;
+    try{
+      const now=Date.now(),k=LIMIT_PREFIX+'likes',h=json(k,[]).filter(y=>now-Number(y.t)<86400000),recent=h.filter(y=>now-Number(y.t)<3600000),guard=json(LIMIT_PREFIX+'guard:likes',{});
+      if(recent.length>=18||h.length>=80||Number(guard.until||0)>now)throw Error('安全上限に達しています');
+      const get=async()=>{
+        const r=await fetch('/api/v3/notes/'+encodeURIComponent(x.key),{credentials:'include',cache:'no-store'});
+        if(!r.ok)throw Error('記事確認 HTTP '+r.status);
+        const j=await r.json();return j?.data?.note||j?.data||j?.note||j;
+      };
+      const liked=n=>['isLiked','is_liked','liked','hasLiked'].map(k=>n?.[k]).find(z=>typeof z==='boolean');
+      const before=liked(await get());
+      if(before===true){message('💗 元からスキ済み。解除しません');return}
+      if(before!==false)throw Error('スキ状態を確認できないため実行しません');
+      const r=await fetch('/api/v3/notes/'+encodeURIComponent(x.key)+'/likes',{method:'POST',credentials:'include',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'});
+      if(!r.ok)throw Error('スキ送信 HTTP '+r.status);
+      v.likeSent[x.key]=true;write(STORE,v);write(k,[...h,{t:now,key:x.key}].slice(-500));
+      let confirmed=false;
+      for(const delay of [250,750,1300]){await new Promise(resolve=>setTimeout(resolve,delay));try{if(liked(await get())===true){confirmed=true;break}}catch{}}
+      if(confirmed){v.likedNow[x.key]=true;delete v.likeSent[x.key];write(STORE,v);const old=json('noteBoostCreatorLikeHistoryV650',{});old[String(x.urlname||'').toLowerCase()]={at:Date.now(),noteKey:x.key,kind:'tool'};write('noteBoostCreatorLikeHistoryV650',old);message('❤️ スキ確認済み')}
+      else message('送信済み・反映確認待ち。重複送信を防止しています');
+    }catch(e){message('⚠ '+String(e?.message||e))}
+    finally{doing=false;refresh()}
+  }
+  panel.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.hasAttribute('data-close')){panel.hidden=true;return}
+    if(b.hasAttribute('data-run'))return run(panel.querySelector('[data-source]').value);
+    if(b.hasAttribute('data-app'))return location.assign(APP_URL);
+    if(b.hasAttribute('data-save')){const source=panel.querySelector('[data-source]').value.trim();if(!source)return message('先に保存する条件を入力してください');const v=favs();v.sources=[source,...v.sources.filter(x=>x!==source)].slice(0,100);write(FAV,v);message('☆ 条件を保存しました');drawFavorites();return}
+    if(b.hasAttribute('data-fav-toggle')){const area=panel.querySelector('[data-favorites]');area.hidden=!area.hidden;if(!area.hidden)drawFavorites();return}
+    const v=state(),x=v.queue[v.index];
+    if(b.hasAttribute('data-prev')||b.hasAttribute('data-next')){if(!v.queue.length)return;v.index=Math.min(v.queue.length-1,Math.max(0,v.index+(b.hasAttribute('data-next')?1:-1)));write(STORE,v);refresh();return}
+    if(b.hasAttribute('data-real')&&x)return location.assign(urlOf(x));
+    if(b.hasAttribute('data-like')){void like();return}
+    if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL);return}
+    if(b.hasAttribute('data-fav-person')&&x){const f=favs(),id=String(x.urlname||'').toLowerCase();f.creators=[{id,name:x.name||id},...f.creators.filter(y=>y.id!==id)].slice(0,200);write(FAV,f);message('☆ 人物を保存しました');drawFavorites();return}
+    const type=b.dataset.do||b.dataset.del,idx=Number(b.dataset.i);
+    if(!type||!Number.isInteger(idx))return;
+    const f=favs(),arr=type==='source'?f.sources:type==='creator'?f.creators:f.articles,obj=arr[idx];if(!obj)return;
+    if(b.hasAttribute('data-del')){arr.splice(idx,1);write(FAV,f);drawFavorites();return}
+    if(type==='source')return run(obj);
+    if(type==='creator')return run('@'+obj.id);
+    if(type==='article')return run(urlOf(obj));
+  });
+  panel.querySelector('[data-source]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run(e.target.value)}});
+  tab.addEventListener('click',()=>{panel.hidden=!panel.hidden;if(!panel.hidden){mount();refresh();drawFavorites()}});
+  async function verify(force=false){
+    if(checking||(!force&&Date.now()-lastCheck<30000)){mount();return}
+    checking=true;lastCheck=Date.now();
+    try{
+      const res=await fetch('/api/v2/current_user',{credentials:'include',cache:'no-store'});
+      if(!res.ok)throw Error('login');
+      const j=await res.json(),d=j?.data??j??{},u=d.user??d;
+      owner=String(u.urlname||u.url_name||u.username||'').replace(/^@/,'').toLowerCase()==='ss_yr';
+    }catch{owner=false}
+    finally{checking=false;if(owner)mount();else dismiss()}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>void verify(true),{once:true});else void verify(true);
+  addEventListener('pageshow',()=>void verify(true));addEventListener('focus',()=>void verify(true));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void verify(true)});
+  setInterval(()=>{if(owner)mount();if(Date.now()-lastCheck>60000)void verify(true)},8000);
 }
+
+if (!dedicated) { mountOwnerBoostPanel(); return; }
 
 try { document.documentElement.style.visibility = 'hidden'; } catch {}
 try { window.stop(); } catch {}
@@ -71,7 +177,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .fav-empty{color:#879ba9;font-size:11px;margin:5px 0}
 
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.8.0</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.8.1</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件を保存</button><button id="showFavorites">★ お気に入り</button></div>
@@ -376,6 +482,6 @@ $('#preloadMags').onclick=()=>void preloadMagazineList(true,false);
 
 try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(state.index>0){state.index--;saveState();void render()}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
-async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#preloadMags').disabled=false;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます')}catch(e){ready=false;$('#preloadMags').disabled=true;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#preloadMags').disabled=false;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}}catch(e){ready=false;$('#preloadMags').disabled=true;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
 void diagnose();
 })();
