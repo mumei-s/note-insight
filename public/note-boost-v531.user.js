@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.2
+// @version      6.9.3
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -119,6 +119,7 @@ function mountOwnerBoostPanel(){
 #${ROOT} .mb-item span{flex:1;min-width:0;overflow-wrap:anywhere}
 #${ROOT} .mb-item button{font-size:10px!important;min-height:28px!important}
 @media(max-height:550px){#${ROOT}{top:115px!important;max-height:calc(100dvh - 155px)!important}#${TAB}{top:72px!important}}`;
+  css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid;grid-template-columns:64px minmax(0,1fr);gap:7px;align-items:start}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block;width:64px;height:48px;object-fit:cover;background:#162934;border-radius:6px}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid;place-items:center;color:#91acbd;font-size:9px}\n";
   const tab=document.createElement('button');tab.id=TAB;tab.type='button';tab.textContent='💗 BOOST';
   const panel=document.createElement('div');panel.id=ROOT;panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','巡回BOOST運営者パネル');
   panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
@@ -129,7 +130,7 @@ function mountOwnerBoostPanel(){
   function refresh(){
     const v=state(),x=v.queue[v.index],area=panel.querySelector('[data-current]');
     if(!x){area.innerHTML='<div class="mb-small">まだ巡回リストはありません。#タグ・URL・@IDから開始できます。</div>';return}
-    area.innerHTML='<div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div><div class="mb-row" style="justify-content:flex-end"><button data-follow style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">状態を確認</button></div>';void nativeSyncFollow(x.urlname);
+    area.innerHTML='<div class="mb-card-row">'+(x.thumb?'<img src="'+esc(x.thumb)+'" alt="記事サムネイル" loading="lazy">':'<span class="mb-card-placeholder">画像なし</span>')+'<div><div class="mb-current-title">'+esc(x.title||x.key)+'</div><div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div></div></div><div class="mb-actions"><button data-prev>← 前</button><button data-real>実記事</button><button data-next>次 →</button></div><div class="mb-actions"><button data-like>♡スキ確認</button><button data-mag>📚追加</button><button data-fav-person>☆人物保存</button></div><div class="mb-row" style="justify-content:space-between"><button data-queue style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">🗂 記事一覧</button><button data-follow style="font-size:10px!important;min-height:28px!important;padding:4px 6px!important">状態を確認</button></div>';void nativeSyncFollow(x.urlname);
     if(v.likedNow[x.key]||v.likeSent[x.key]){const b=area.querySelector('[data-like]');b.disabled=true;b.textContent='♡処理済み'}
   }
 
@@ -194,6 +195,7 @@ function mountOwnerBoostPanel(){
     if(b.hasAttribute('data-real')&&x)return location.assign(urlOf(x));
     if(b.hasAttribute('data-like')){void like();return}
     if(b.hasAttribute('data-follow')&&x){void boostFollowChange(x.urlname,message).then(()=>void nativeSyncFollow(x.urlname,true));return}
+    if(b.hasAttribute('data-queue')){localStorage.setItem('noteBoostOwnerPendingQueueV693','1');location.assign(APP_URL);return}
     if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL);return}
     if(b.hasAttribute('data-fav-person')&&x){const f=favs(),id=String(x.urlname||'').toLowerCase();f.creators=[{id,name:x.name||id},...f.creators.filter(y=>y.id!==id)].slice(0,200);write(FAV,f);message('☆ 人物を保存しました');drawFavorites();return}
     const type=b.dataset.do||b.dataset.del,idx=Number(b.dataset.i);
@@ -272,7 +274,7 @@ const HTML = `<!doctype html><html lang="ja"><head>
 .boost-queue-more{display:block;width:100%;margin-top:10px}
 .fav-item .boost-card-placeholder,.fav-item img{width:45px;height:45px;flex:0 0 45px;object-fit:cover;border-radius:7px}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.2</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.3</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
@@ -612,6 +614,6 @@ $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('k
 
 try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(state.index>0){state.index--;saveState();void render()}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
-async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}if(localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1'){localStorage.removeItem('noteBoostOwnerPendingQueueV693');openQueue()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
 void diagnose();
 })();
