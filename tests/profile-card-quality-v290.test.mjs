@@ -91,8 +91,8 @@ test('the observation API records mismatch evidence without rewriting the origin
 });
 test('render observation delegates the exact original fillText arguments once and uses actual metrics',()=>{
  const r=runtime(),calls=[],ctx={fillText(...args){calls.push(args);return 42},measureText(){return{width:20,actualBoundingBoxLeft:0,actualBoundingBoxRight:20,actualBoundingBoxAscent:0,actualBoundingBoxDescent:10}}},source=acquire(r.q),file={};
- const observed=r.q.observeContext(ctx,source,860,140);assert.equal(observed,ctx);assert.equal(ctx.fillText('作者さん',100,86),42);
- r.q.generated(source,file);assert.deepEqual(calls,[['作者さん',100,86]]);
+ const observed=r.q.observeContext(ctx,source,860,140);assert.equal(observed,ctx);assert.equal(ctx.fillText(source.creator+'さん',100,86),42);
+ r.q.generated(source,file);assert.deepEqual(calls,[[source.creator+'さん',100,86]]);
  assert.ok(r.q.snapshot().records.at(-1).findings.some(f=>f.check==='画像内の文字枠'&&f.status==='confirmed'));r.close();
 });
 test('an inspector exception disables additional checks, records failure, and leaves the old output usable',()=>{
@@ -142,6 +142,6 @@ test('a missing or failed draft result never becomes a successful save in the qu
 test('the shipped pair includes quality hooks, preserves update identity, excludes purchase UI and needs no @require',()=>{
  const a=readFileSync('public/note-profile-card-likes300-fix-v220.user.js','utf8'),b=readFileSync('public/note-profile-card-paster-v1.user.js','utf8');
  assert.equal(a.slice(a.indexOf('(function(){')),b.slice(b.indexOf('(function(){')));
- assert.match(a,/@version\s+2\.9\.4/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
+ assert.match(a,/@version\s+2\.9\.5/);assert.ok(a.includes('BEGIN READ-ONLY QUALITY ADAPTERS'));assert.ok(a.includes('observeContext'));assert.ok(a.includes('qualityCall(\'acquired\''));assert.ok(!a.includes('patchPurchasedReviewPanel'));assert.ok(!a.includes('PURCHASE_REVIEW_FORMAT'));assert.ok(!a.includes('@require'));
  assert.match(a,/@namespace\s+https:\/\/github.com\/mumei-s\/note-insight\/likes300-fix/);
 });
