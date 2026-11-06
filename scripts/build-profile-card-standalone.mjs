@@ -8,7 +8,7 @@ import {transformCoreDividers} from './profile-card-dividers-v293.mjs';
 import {awakeRuntime,transformCoreContinuous,transformEditorContinuous,transformQualityContinuous} from './profile-card-continuous-v295.mjs';
 import {transformCoreSourceScope} from './profile-card-source-scope-v293.mjs';
 
-const version='2.9.5';
+const version='2.9.6';
 let core=readFileSync('public/note-profile-card-paster-core-v232.js','utf8');
 let editor=readFileSync('public/note-profile-card-paster-v22.user.js','utf8').replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\s*/,'');
 const gallery=readFileSync('public/note-profile-card-gallery-v263.js','utf8');

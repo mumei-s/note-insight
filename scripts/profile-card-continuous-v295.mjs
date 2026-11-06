@@ -219,6 +219,9 @@ export function transformCoreContinuous(source){
  source=once(source,'区切り線の再開完了｜下書き保存中…','途中から再開｜下書き保存中…');
  source=once(source,'cardRunActive=true;update();','cardRunActive=true;update();\n await keepAwake();');
  source=once(source,'}finally{cardRunActive=false;busy=false;update()}','}finally{cardRunActive=false;await releaseAwake();busy=false;update()}');
+ // Notification cards use the saved article plan. Images may have been
+ // deliberately removed, and their count is unrelated to native URL cards.
+ source=once(source,"  if(!run||!rows.length||!['images_ready','cards_building','complete'].includes(run.stage))throw new Error('先に①画像一覧を完成させてください');\n  const imageCount=resolveOwnedImageHits(view).length;\n  if(imageCount!==run.rows.length)throw new Error('今回画像が '+imageCount+'/'+run.rows.length+' 件です。画像一覧を確認してください');", "  if(!run||!rows.length)throw new Error('先に紹介する記事を読み込んでください');\n  if(run.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');");
  return once(source,"if(document.readyState==='loading')",`const continuousMakeFile=makeFile;
 makeFile=async function(row){const file=await continuousMakeFile(row);if(!imagePauseRequested&&!stopRequested)warmContinuousAssets(row);return file};
 `+"if(document.readyState==='loading')");
@@ -238,5 +241,13 @@ export function transformEditorContinuous(source){
  source=once(source,'  let insertPos=done?doneImages[done-1].pos+doneImages[done-1].node.nodeSize:Number(run.imageAnchorPos);','  const lastCompleted=doneImages.at(-1);\n  let insertPos=done&&lastCompleted?lastCompleted.pos+lastCompleted.node.nodeSize:done?cardAnchorFromSelection(view):Number(run.imageAnchorPos);');
  return once(source,'let attempts=0;',`const continuousMakeFile=makeFile;
 makeFile=async function(row){const file=await continuousMakeFile(row);if(!pauseRequested&&!stopRequested)warmContinuousAssets(row);return file};
+const continuousEnsureCardsReady=ensureCardsRunReady;
+ensureCardsRunReady=async function(view,anchors=null){
+ await Promise.all([hydrateRunBackup(),hydratePrepBackup()]);
+ const run=readRun();
+ if(run?.articleKey&&run.articleKey!==editorArticleKey())throw new Error('別の記事の保存記録です');
+ if(Array.isArray(run?.rows)&&run.rows.length)return run;
+ return continuousEnsureCardsReady(view,anchors);
+};
 let attempts=0;`);
 }

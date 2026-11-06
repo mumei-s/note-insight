@@ -3,7 +3,7 @@
 (function(page){
 'use strict';
 if(!page||page.__MUMEI_PROFILE_CARD_QUALITY__)return;
-const VERSION='2.9.5',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
+const VERSION='2.9.6',LIMIT=160,SOURCE_LIMIT=1024,PREF='mumei_profile_quality_mode_v1',PREFIX='mumei_profile_quality_log_v1:';
 const state={records:[],counts:{},mode:'on',fault:false,scope:'',dirty:false,batchId:'',batchSerial:0,runId:null,attention:''};
 const renderings=new WeakMap(),files=new WeakMap(),layouts=new WeakMap();
 const presentationNodes=new WeakMap();
