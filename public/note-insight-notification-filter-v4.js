@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationFilterV4Loaded)return;window.__mumeiNotificationFilterV4Loaded=true;
-const VERSION='4.2.17';
+const VERSION='4.2.18';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const EVT='mumei-insight-filter-refresh-v2939';
 const LEGACY='mumei-muted-v2933';
@@ -317,7 +317,7 @@ function restoreViewportAnchor(anchor){
  const shift=rect.top-nativeViewport(anchor.surface).top-anchor.top;
  if(Math.abs(shift)>.5)anchor.surface.scrollTop=Math.max(0,anchor.surface.scrollTop+shift);
 }
-async function refresh(forceState=false){const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateRows=candidate?rows(candidate):[],candidateHasRows=Boolean(candidateRows.length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision,generation=domRevision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=r===candidate&&generation===domRevision?candidateRows:rows(r);repairNativeLayout(r,list);const surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);const seen=new Set();for(const el of list){const hide=classifyRow(el,st,fingerprint),identity=classificationCache.get(el)?.duplicateKey,duplicate=Boolean(identity&&seen.has(identity));if(identity)seen.add(identity);setHidden(el,hide||duplicate)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
+async function refresh(forceState=false){if(!document.documentElement)return;const activeRun=++run;if(!featureOn()){attach(null);clearHides();return}restoreCollections();if(isDmRoute()){attach(null);return}installStyle();const candidate=shell(),filteredRoot=Boolean(root?.isConnected&&root.querySelector?.('.'+OWN)),candidateRows=candidate?rows(candidate):[],candidateHasRows=Boolean(candidateRows.length),r=filteredRoot&&!candidateHasRows?root:candidate&&shown(candidate)?candidate:filteredRoot?root:null;attach(r);if(!r)return;const rev=revision,generation=domRevision;let st;try{st=await state(forceState)}catch{st=null}if(!featureOn()){clearHides();return}if(activeRun!==run||rev!==revision||root!==r)return;if(!shown(r)){clearContinuation();clearResult();return;}if(!st){clearResult();if(retries++<2)schedule(400*retries,true);return}retries=0;const list=r===candidate&&generation===domRevision?candidateRows:rows(r);repairNativeLayout(r,list);const surface=retainedSurface(list)||scrollSurface(r,list),anchor=continuation?.isConnected?viewportAnchor(surface,list):null,fingerprint=classificationState(st);const seen=new Set();for(const el of list){const hide=classifyRow(el,st,fingerprint),identity=classificationCache.get(el)?.duplicateKey,duplicate=Boolean(identity&&seen.has(identity));if(identity)seen.add(identity);setHidden(el,hide||duplicate)}for(const el of r.querySelectorAll(`.${LEGACY}`)){if(!el.classList.contains(OWN))forceVisible(el,true)}continueFilteredPage(st,list,surface);restoreViewportAnchor(anchor);reportResult(st,list);const profiles=profileIdsForRows(st,list);hydrateProfiles(accountId,profiles.ids,st.profiles,profiles.recheck);return true}
 // Coalesce events without postponing forever while note appends incoming rows.
 function schedule(ms=50,force=false){pendingForce=pendingForce||force;if(timer)return;timer=setTimeout(()=>{timer=0;const forced=pendingForce;pendingForce=false;void refresh(forced)},ms)}
 function nativeClass(v){return String(v||'').split(/\s+/).filter(x=>x&&x!==OWN).sort().join(' ')}
@@ -349,7 +349,13 @@ addEventListener('resize',()=>{const width=document.documentElement?.clientWidth
 // Catch a panel mounted after the bell click, including a reused hidden panel.
 // Observe only relevant mutations; no background polling or repeated API scan.
 const discovery=new MutationObserver(ms=>{if(!featureOn())return;if(root&&(!root.isConnected||root.hidden)){schedule(0);return}for(const m of ms){const target=m.target,panel=root||watchedPanel;if(m.type==='attributes'){if(owned(target))continue;if((panel&&(target===panel||target.contains(panel)))||target.matches?.(PANEL_HINT)){if(changed(m)){nativeLayoutValidation=null;schedule();return}}}else{if(root?.contains(target))continue;if([...m.addedNodes].some(n=>n.nodeType===1&&!owned(n)&&(n.matches(PANEL_HINT)||n.querySelector(PANEL_HINT)||n.matches(FALLBACK_ITEM)&&fallbackRow(n)||[...n.querySelectorAll(FALLBACK_ITEM)].some(fallbackRow)))){schedule();return}}}});
-discovery.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden'],attributeOldValue:true});
-installStyle();schedule(120);
 window.__mumeiNotificationFilterV4={version:VERSION,refresh,getState:()=>lastResult,findPanel:()=>featureOn()&&root?.isConnected?(shown(root)?root:commonShell(exact('通知'),exact('お知らせ'))):null};
+// @run-at document-start can precede <html>. Publish the API immediately,
+// then attach DOM work once a root exists so later @require modules still run.
+function start(){
+ if(!document.documentElement){document.addEventListener('DOMContentLoaded',start,{once:true});return}
+ discovery.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden'],attributeOldValue:true});
+ installStyle();schedule(120);
+}
+start();
 })();
