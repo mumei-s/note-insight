@@ -73,7 +73,7 @@ async function member(req: Request) {
 
 function urlnameFromUrl(value: unknown) {
   const match = String(value || "").match(/^https?:\/\/(?:www\.)?note\.com\/([^/?#]+)/i);
-  return match ? decodeURIComponent(match[1]) : "";
+  try { return match ? decodeURIComponent(match[1]) : ""; } catch { return ""; }
 }
 
 function normalizeLike(raw: LikeRow) {
@@ -96,6 +96,78 @@ function normalizeLike(raw: LikeRow) {
   };
 }
 
+type HistoryFilter = { fromDate: string; toDate: string; articleKey: string; timezone: string };
+
+function historyFilter(value: unknown): HistoryFilter {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const date = (value: unknown) => {
+    const text = String(value || "");
+    if (!text) return "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text + "T00:00:00Z")) || new Date(text + "T00:00:00Z").toISOString().slice(0, 10) !== text) throw new Error("HISTORY_FILTER_INVALID_DATE");
+    return text;
+  };
+  const fromDate = date(raw.fromDate), toDate = date(raw.toDate);
+  const articleKey = String(raw.articleKey || "");
+  if (Boolean(fromDate) !== Boolean(toDate) || fromDate > toDate || articleKey && !/^n[a-f0-9]{12}$/i.test(articleKey) || raw.timezone && raw.timezone !== "Asia/Tokyo") throw new Error("HISTORY_FILTER_INVALID");
+  if (!fromDate && !articleKey) throw new Error("HISTORY_FILTER_REQUIRED");
+  return { fromDate, toDate, articleKey: articleKey.toLowerCase(), timezone: "Asia/Tokyo" };
+}
+
+async function filteredLikes(req: Request, m: { id: string; noteId: string; displayName: string }, body: Record<string, unknown>, dataMember: string, requested: number) {
+  if (!Number.isInteger(requested) || requested < 1) throw new Error("HISTORY_FILTER_INVALID_COUNT");
+  const filter = historyFilter(body.filter);
+  const from = filter.fromDate ? new Date(filter.fromDate + "T00:00:00+09:00").toISOString() : "";
+  const until = filter.toDate ? new Date(Date.parse(filter.toDate + "T00:00:00+09:00") + 86400000).toISOString() : "";
+  const pageSize = 1000, scanLimit = 20000;
+  // Filter before pagination and deduplication. Capture time / first_seen_at
+  // must never stand in for the actual like time.
+  const read = async (table: string, time: string, columns: string, notifications = false) => {
+    const out: Record<string, unknown>[] = [];
+    for (let offset = 0; offset < scanLimit; offset += pageSize) {
+      let query = db.from(table).select(columns).eq("member_id", dataMember);
+      if (from) query = query.gte(time, from).lt(time, until);
+      if (notifications) query = query.eq("notification_type", "like");
+      else if (filter.articleKey) query = query.eq("article_key", filter.articleKey);
+      query = query.order(time, { ascending: false, nullsFirst: false });
+      if (notifications) query = query.order("id", { ascending: false });
+      else query = query.order("article_key").order("liker_key");
+      const { data, error } = await query.range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      const batch = data || [];
+      out.push(...batch);
+      if (batch.length < pageSize) return out;
+    }
+    throw new Error("HISTORY_FILTER_TOO_MANY_RESULTS");
+  };
+  const [likes, notifications] = await Promise.all([
+    read("insight_public_likes", "liked_at", "article_key,liker_key,actor_name,actor_url,actor_image_url,liked_at"),
+    read("insight_notifications", "occurred_at", "id,notification_type,actor_name,actor_url,actor_image_url,target_url,occurred_at,meta", true),
+  ]);
+  const candidates: LikeRow[] = [...likes];
+  for (const event of notifications) {
+    const match = String(event.target_url || "").match(/^https:\/\/(?:www\.)?note\.com\/([^/?#]+)\/n\/(n[a-f0-9]{12})(?:[/?#]|$)/i);
+    if (!match || match[1].toLowerCase() !== m.noteId.toLowerCase() || filter.articleKey && match[2].toLowerCase() !== filter.articleKey) continue;
+    if ((event.meta as Record<string, unknown> | null)?.summary === true) continue;
+    candidates.push({ article_key: match[2].toLowerCase(), actor_name: event.actor_name, actor_url: event.actor_url, actor_image_url: event.actor_image_url, liked_at: event.occurred_at });
+  }
+  candidates.sort((a, b) => (Date.parse(String(b.liked_at || "")) || 0) - (Date.parse(String(a.liked_at || "")) || 0) || String(a.actor_url || "").localeCompare(String(b.actor_url || "")));
+  const rows: Array<Record<string, unknown>> = [], keys = new Set<string>(), accounts = new Set<string>();
+  for (const raw of candidates) {
+    const person = normalizeLike(raw);
+    if (!person) continue;
+    const account = person.row.urlname.toLowerCase(), key = String(raw.liker_key || "").toLowerCase();
+    const duplicate = accounts.has(account) || Boolean(key && keys.has(key));
+    accounts.add(account); if (key) keys.add(key);
+    if (!duplicate) rows.push(person.row);
+  }
+  return reply(req, {
+    ok: true, apiVersion: 2, source: "insight-likes-and-article-like-notifications", scope: "filtered-likes", filter,
+    member: { noteId: m.noteId, displayName: m.displayName }, requested, unique: true,
+    scanned: likes.length + notifications.length, sourceArticles: [], total: rows.length,
+    truncated: rows.length > requested, count: Math.min(rows.length, requested), rows: rows.slice(0, requested),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: headers(req) });
   if (req.method !== "POST") return reply(req, { ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -106,6 +178,7 @@ Deno.serve(async (req) => {
     const unique = body?.unique !== false;
     const scope = String(body?.scope || "recent-likes");
     const dataMember = m.noteId.toLowerCase() === "ss_yr" ? "owner" : m.id;
+    if (scope === "filtered-likes") return await filteredLikes(req, m, body, dataMember, requested);
     const rows: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
     const sourceArticles: Array<Record<string, unknown>> = [];
@@ -195,6 +268,6 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("insight-likes-export", message);
-    return reply(req, { ok: false, error: message }, /LOGIN|SESSION|INACTIVE/.test(message) ? 401 : 500);
+    return reply(req, { ok: false, error: message }, /LOGIN|SESSION|INACTIVE/.test(message) ? 401 : /HISTORY_FILTER/.test(message) ? 400 : 500);
   }
 });
