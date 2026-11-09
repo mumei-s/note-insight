@@ -7,8 +7,9 @@ import {contentRuntime,transformCoreContent,transformEditorContent} from './prof
 import {transformCoreDividers} from './profile-card-dividers-v293.mjs';
 import {awakeRuntime,transformCoreContinuous,transformEditorContinuous,transformQualityContinuous} from './profile-card-continuous-v295.mjs';
 import {transformCoreSourceScope} from './profile-card-source-scope-v293.mjs';
+import {transformEditorHistoryFilter} from './profile-card-history-filter-v297.mjs';
 
-const version='2.9.6';
+const version='2.9.7';
 let core=readFileSync('public/note-profile-card-paster-core-v232.js','utf8');
 let editor=readFileSync('public/note-profile-card-paster-v22.user.js','utf8').replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\s*/,'');
 const gallery=readFileSync('public/note-profile-card-gallery-v263.js','utf8');
@@ -41,6 +42,7 @@ core=transformCoreDesign(core);editor=transformEditorDesign(editor);
 core=transformCoreSpeed(core);editor=transformEditorSpeed(editor);
 core=transformCoreDividers(core);
 core=transformCoreContinuous(core);editor=transformEditorContinuous(editor);
+editor=transformEditorHistoryFilter(editor);
 
 const body=`(function(){\n'use strict';\nconst owner=typeof unsafeWindow!=='undefined'?unsafeWindow:window;\nif(location.hostname!=='editor.note.com')return;\nif(owner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__==='${version}')return;\nowner.__MUMEI_PROFILE_CARD_STANDALONE_VERSION__='${version}';\nowner.__MUMEI_PROFILE_CARD_GALLERY_MANIFEST__=${JSON.stringify(manifest)};\n${awakeRuntime}\n${quality}\n${contentRuntime}\n${gallery}\n// BEGIN INCLUDED EDITOR CORE\n${core}\n// BEGIN INCLUDED PROFILE IMPLEMENTATION\n${editor}\n})();\n`;
 function metadata(name,namespace,path){return `// ==UserScript==\n// @name         ${name}\n// @namespace    ${namespace}\n// @version      ${version}\n// @description  極薄・中型サムネイル単独版。#・記事のスキ・マガジンを複合指定。名前・プロフィール・無料本文の抜粋、手直し対応・画面点灯維持・連続貼付・通知カードに対応。\n// @match        https://editor.note.com/*\n// @noframes\n// @run-at       document-idle\n// @grant        GM_xmlhttpRequest\n// @grant        GM_setValue\n// @grant        GM_getValue\n// @grant        unsafeWindow\n// @connect      note.com\n// @connect      assets.st-note.com\n// @connect      *\n// @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/${path}\n// @downloadURL  https://raw.githubusercontent.com/mumei-s/note-insight/main/${path}\n// ==/UserScript==\n\n`;}

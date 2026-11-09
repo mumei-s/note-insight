@@ -62,6 +62,8 @@ jobs:
           node --check public/note-pon-editor-v6.user.js
       - name: Check profile thumbnails, unique creators and final extra entry
         run: node --test tests/profile-card-paster-v230.test.mjs tests/profile-export-session.test.mjs tests/editor-isolation.test.mjs
+      - name: Check date and article filters for thumbnail history
+        run: node --test tests/profile-card-history-filter-v297.test.mjs
       # Emergency maintenance/filter deploy: card-tool regressions are unrelated and temporarily skipped.
       - run: npm run build
       - name: Check whole-app audit regressions and account-safe persistence

@@ -27,6 +27,10 @@
   const count = Math.max(1, Math.min(1500, Number(q.get('count') || 200)));
   const unique = q.get('unique') !== '0';
   const recentArticles = false;
+  const filtered = q.get('scope') === 'filtered-likes';
+  const filter = filtered ? {fromDate:q.get('fromDate')||'',toDate:q.get('toDate')||'',articleKey:q.get('articleKey')||'',timezone:'Asia/Tokyo'} : null;
+  const scope = filtered ? 'filtered-likes' : recentArticles?'recent-articles':'recent-likes';
+  const filterLabel = filter ? (filter.fromDate?(filter.fromDate===filter.toDate?filter.fromDate:filter.fromDate+'〜'+filter.toDate)+'（日本時間）':'全期間')+'・'+(filter.articleKey?'指定記事':'全記事') : '';
   const expectedMember = String(localStorage.getItem('mumei-insight-active-account-v3') || '').trim().toLowerCase();
 
   function show(text, kind='') {
@@ -70,26 +74,28 @@
       return;
     }
     try {
-      show(recentArticles ? `最近の記事から順に、重複なし最大 ${count}人を取得中…` : `スキ履歴から最大 ${count}人を取得中…`);
+      show(filtered ? `${filterLabel}のスキを取得中…` : recentArticles ? `最近の記事から順に、重複なし最大 ${count}人を取得中…` : `スキ履歴から最大 ${count}人を取得中…`);
       const response = await fetch(ENDPOINT, {
         method:'POST',
         cache:'no-store',
         headers:{ 'Content-Type':'application/json', 'X-Insight-Token':token },
-        body:JSON.stringify({ count, unique, scope:recentArticles?'recent-articles':'recent-likes' })
+        body:JSON.stringify({ count, unique, scope, ...(filtered?{filter}:{}) })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) throw new Error(String(payload?.error || `HTTP_${response.status}`));
       if (expectedMember && String(payload?.member?.noteId || '').toLowerCase() !== expectedMember) throw new Error('保存されたアカウントと取得結果が一致しません');
+      if(filtered && (payload?.apiVersion!==2 || payload.scope!=='filtered-likes' || !filter || ['fromDate','toDate','articleKey','timezone'].some(key=>payload.filter?.[key]!==filter[key]))) throw new Error('日付・記事の絞り込み結果を確認できません。更新後に再取得してください');
+      if(filtered && payload.truncated) throw new Error('対象が多すぎます。日付の範囲か対象記事を絞ってください（上限1500人）');
       const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-      if (!rows.length) throw new Error('INSIGHT_LIKES_EMPTY');
-      const delivered = send({ ok:true, rows, count:rows.length, member:payload.member || null, sourceArticles:payload.sourceArticles || [] });
+      if (!rows.length) throw new Error(filtered ? '指定した日付・記事に、人物を確認できるスキ履歴がありません' : 'INSIGHT_LIKES_EMPTY');
+      const delivered = send({ ok:true, rows, count:rows.length, member:payload.member || null, sourceArticles:payload.sourceArticles || [], ...(filtered?{apiVersion:2,scope,filter,total:payload.total}:{}) });
       if (!delivered) {
         show(`取得は完了しました（${rows.length}人）が、元のnote編集画面へ返せませんでした。note編集画面へ戻ってもう一度押してください。`,'bad');
         close.hidden = false;
         return;
       }
       const articleCount = Array.isArray(payload?.sourceArticles) ? payload.sourceArticles.length : 0;
-      show(recentArticles ? `最近の記事 ${articleCount}本から ${rows.length}人 取得完了。note編集画面へ戻します。` : `スキ履歴から ${rows.length}人 取得完了。note編集画面へ戻します。`,'ok');
+      show(filtered ? `${filterLabel}：重複なし ${rows.length}人を取得しました。note編集画面へ戻します。` : recentArticles ? `最近の記事 ${articleCount}本から ${rows.length}人 取得完了。note編集画面へ戻します。` : `スキ履歴から ${rows.length}人 取得完了。note編集画面へ戻します。`,'ok');
       setTimeout(() => window.close(), 650);
     } catch (error) {
       const message = error?.message || String(error);
