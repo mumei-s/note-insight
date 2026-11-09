@@ -1,4 +1,4 @@
-INSIGHT 2026.11.02.2 / notification 3.6.67 / dashboard 1.7.7 / DM 1.4.20
+INSIGHT 2026.11.02.2 / notification 3.6.68 / dashboard 1.7.7 / DM 1.4.20
 Restore native bell context after article history navigation; preserve each tab's source entry and bounded scroll restoration.
 Suppress proven duplicate native notices and rearm a collapsed filtered page only on a downward gesture or explicit continuation.
 Retain captured comment bodies and exact-ID reply conversations across source deletion, refresh and concurrent saves.
@@ -27,3 +27,5 @@ Keep last confirmed positive relationships normal after a capped-window exit; do
 2026-11-01: Keep transient retry cooldown across article Back; fit controls to the visible viewport and repair measured native notification overflow without changing zoom or native rows. Bound exact recent reads and metadata lookups through service-only indexed scope queries.
 
 2026-11-02: Suppress repeated comment targets and exact ID-less comment echoes; preserve distinct comment IDs and native notification controls.
+
+2026-11-09: Defer notification filter DOM startup until html exists; restore native controls on visibility-only notification reopen. Preserve saved filter settings and pause state.
