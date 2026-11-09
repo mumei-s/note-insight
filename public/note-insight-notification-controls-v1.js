@@ -2,7 +2,7 @@
 'use strict';
 if(location.hostname!=='note.com')return;
 if(window.__mumeiNotificationControlsV1Loaded)return;window.__mumeiNotificationControlsV1Loaded=true;
-const VERSION='1.5.10';
+const VERSION='1.5.11';
 const featureOn=()=>window.__mumeiNotificationFeatureV1?.isEnabled?.()!==false;
 const TOOLBAR='mumei-inline-notification-controls-v1',STYLE=TOOLBAR+'-style';
 const FILTER_STATE=TOOLBAR+'-filter-state',FILTER_STATE_STYLE=FILTER_STATE+'-style';
@@ -198,6 +198,8 @@ function relevantNoticeChange(record){
  if(owned(target))return false;
  if(activeNoticePanel&&(!activeNoticePanel.isConnected||target&&activeNoticePanel.contains(target)))return true;
  if(target?.closest?.(NOTICE_HINT))return true;
+ if(record.type==='attributes')return Boolean(target&&((activeNoticePanel&&target.contains(activeNoticePanel))||target.querySelector(NOTICE_HINT)));
+ if(record.type==='characterData')return false;
  for(const node of [...record.addedNodes,...record.removedNodes]){
   if(!(node instanceof Element)||owned(node))continue;
   if(node.matches(NOTICE_HINT)||node.querySelector?.(NOTICE_HINT))return true;
@@ -206,7 +208,7 @@ function relevantNoticeChange(record){
 }
 function observe(){
  if(!document.documentElement){document.addEventListener('DOMContentLoaded',observe,{once:true});return}
- new MutationObserver(records=>{if(typeof document!=='undefined'&&document.documentElement&&records.some(relevantNoticeChange))schedule()}).observe(document.documentElement,{subtree:true,childList:true});
+ new MutationObserver(records=>{if(typeof document!=='undefined'&&document.documentElement&&records.some(relevantNoticeChange))schedule()}).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','inert']});
  schedule(150);
 }
 void refreshPanel().then(observe);

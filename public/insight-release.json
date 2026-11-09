@@ -1,12 +1,12 @@
 {
   "appVersion": "2026.11.02.2",
-  "notificationVersion": "3.6.67",
+  "notificationVersion": "3.6.68",
   "dashboardVersion": "1.7.7",
-  "releasedAt": "2026-11-02",
+  "releasedAt": "2026-11-09",
   "appLabel": "INSIGHT本体",
   "notificationLabel": "本人通知",
   "dashboardLabel": "ダッシュボード同期",
-  "note": "本人通知V3.6.67：Edge下部バーとの位置ずれを実際の表示位置で再補正。通知・フィルター・記事からの復帰は維持。",
+  "note": "本人通知V3.6.68：起動直後のフィルター停止と、通知パネルを開き直した時の再表示漏れを修正。登録済み設定と保存済み通知は保持。",
   "dmVersion": "1.4.20",
   "dmLabel": "DM同期"
 }
