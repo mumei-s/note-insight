@@ -10,7 +10,7 @@ import {transformCoreSourceScope} from './profile-card-source-scope-v293.mjs';
 import {transformEditorHistoryFilter} from './profile-card-history-filter-v297.mjs';
 import {transformCoreSummary,transformEditorSummary} from './profile-card-summary-v298.mjs';
 
-const version='2.9.8';
+const version='2.9.9';
 let core=readFileSync('public/note-profile-card-paster-core-v232.js','utf8');
 let editor=readFileSync('public/note-profile-card-paster-v22.user.js','utf8').replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\s*/,'');
 const gallery=readFileSync('public/note-profile-card-gallery-v263.js','utf8');
