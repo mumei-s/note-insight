@@ -33,7 +33,10 @@ function freeBody(note={}){
   }
  }
  const numericPrice=Object.prototype.hasOwnProperty.call(note,'price')&&note.price!==null&&note.price!==''&&Number.isFinite(Number(note.price));
- const explicitlyFree=numericPrice&&Number(note.price)===0&&!note.is_limited&&!note.isLimited&&!note.is_membership_only&&!note.isMembershipOnly&&!note.paywall?.is_simple_paid_note&&!note.paywall?.context?.is_membership_connected;
+ // is_simple_paid_note is a paywall UI feature flag. The public v3 API also
+ // returns it as true for unrestricted, zero-price articles with a full body.
+ // Use the price and actual access restrictions to determine free content.
+ const explicitlyFree=numericPrice&&Number(note.price)===0&&!note.is_limited&&!note.isLimited&&!note.is_membership_only&&!note.isMembershipOnly&&!note.paywall?.context?.is_membership_connected;
  if(body&&explicitlyFree)return{text:clean(body),field:'free-article-body',kind:'note-free'};
  // Publisher-supplied public leads are useful even when the full/free boundary
  // is unknown. Never use a title or an authenticated paid body as a summary.
