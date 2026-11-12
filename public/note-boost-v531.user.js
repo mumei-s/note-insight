@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.7
+// @version      6.9.8
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -173,9 +173,10 @@ function mountOwnerBoostPanel(){
   css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid;grid-template-columns:64px minmax(0,1fr);gap:7px;align-items:start}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block;width:64px;height:48px;object-fit:cover;background:#162934;border-radius:6px}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid;place-items:center;color:#91acbd;font-size:9px}\n";
   css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid!important;grid-template-columns:116px minmax(0,1fr)!important;gap:8px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block!important;width:116px!important;height:80px!important;object-fit:cover!important;background:#162934!important;border-radius:7px!important}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid!important;place-items:center!important;color:#91acbd!important;font-size:10px!important}\n#mumei-boost-native-panel-v681 .mb-card-info{min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:4px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-heading .mb-current-title{font:800 12px/1.32 system-ui!important;min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading button[data-follow]{all:initial!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;max-width:72px!important;height:25px!important;min-height:25px!important;padding:0 5px!important;white-space:nowrap!important;background:#122d39!important;color:#d9e9f4!important;border:1px solid #577486!important;border-radius:6px!important;font:700 10px/1 system-ui!important;cursor:pointer!important}\n#mumei-boost-native-panel-v681 .mb-actions{gap:4px!important;margin-top:4px!important}\n#mumei-boost-native-panel-v681 .mb-actions-four{grid-template-columns:repeat(4,minmax(0,1fr))!important}\n#mumei-boost-native-panel-v681 .mb-actions button{all:initial!important;box-sizing:border-box!important;display:flex!important;justify-content:center!important;align-items:center!important;width:100%!important;min-width:0!important;height:29px!important;min-height:29px!important;padding:2px 3px!important;border:1px solid #426072!important;border-radius:6px!important;background:#142e3f!important;color:#e9f6ff!important;font:700 10px/1.15 system-ui!important;cursor:pointer!important;text-align:center!important}\n#mumei-boost-native-panel-v681 .mb-actions button:disabled{opacity:.48!important;cursor:default!important}\n#mumei-boost-native-panel-v681 .mb-row button,#mumei-boost-native-panel-v681 header button{min-height:29px!important;padding:4px 6px!important;font:700 11px/1.15 system-ui!important}\n#mumei-boost-native-panel-v681 [data-current]{padding:6px!important;margin-top:5px!important}\n#mumei-boost-native-panel-v681 [data-status]{font-size:10px!important;margin:4px 0!important}\n#mumei-boost-native-panel-v681 .mb-card-info .mb-small{font-size:10px!important;line-height:1.3!important;margin-top:5px!important;overflow-wrap:anywhere!important}\n#mumei-boost-native-panel-v681{top:calc(env(safe-area-inset-top,0px) + 128px)!important;padding:7px!important}\n@media(max-width:350px){#mumei-boost-native-panel-v681 .mb-card-row{grid-template-columns:98px minmax(0,1fr)!important}#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{width:98px!important;height:72px!important}}\n";
   css.textContent += "\n#"+ROOT+" .boost-settings-line{display:grid;grid-template-columns:minmax(0,1fr) 75px 75px;gap:4px;align-items:center;margin:5px 0}#"+ROOT+" .boost-settings-line input{width:100%!important;font-size:16px!important;padding:3px!important;min-height:29px!important}#"+ROOT+" .boost-settings-follow{display:flex;gap:6px;align-items:center}#"+ROOT+" .boost-settings-follow input{width:20px!important;min-height:20px!important;flex:0 0 20px!important}#"+ROOT+" .boost-settings-caption{font-size:10px;color:#a3bece}#"+ROOT+" input[data-source]{font-size:16px!important}";
+  css.textContent += "\n#"+ROOT+" [data-close-settings]{display:block!important;width:100%!important;min-height:32px!important;padding:7px 8px!important;margin-top:6px!important;background:#193341!important;border:1px solid #58768a!important;color:#edf8fc!important;border-radius:7px!important;font:700 11px system-ui!important}";
   const tab=document.createElement('button');tab.id=TAB;tab.type='button';tab.textContent='💗 BOOST';
   const panel=document.createElement('div');panel.id=ROOT;panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','巡回BOOST運営者パネル');
-  panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><details data-settings><summary>⚙ 上限・フォロー設定</summary><div data-settings-ui></div></details><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
+  panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><details data-settings><summary>⚙ 上限・フォロー設定</summary><div data-settings-ui></div><button type="button" data-close-settings>設定を閉じる ✕</button></details><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
   function message(t){const el=panel.querySelector('[data-status]');if(el)el.textContent=t}
   function mount(){if(!owner||!document.body)return;if(!document.getElementById(css.id))(document.head||document.documentElement).append(css);if(!document.getElementById(TAB))document.body.append(tab);if(!document.getElementById(ROOT))document.body.append(panel);if(!panel.hidden)refresh()}
   function dismiss(){tab.remove();panel.remove()}
@@ -243,7 +244,9 @@ function mountOwnerBoostPanel(){
   }
   panel.addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
+    e.preventDefault();e.stopPropagation();
     if(b.hasAttribute('data-close')){panel.hidden=true;return}
+    if(b.hasAttribute('data-close-settings')){panel.querySelector('[data-settings]').open=false;return}
     if(b.hasAttribute('data-run'))return run(panel.querySelector('[data-source]').value);
     if(b.hasAttribute('data-app'))return location.assign(APP_URL);
     if(b.hasAttribute('data-save')){const source=panel.querySelector('[data-source]').value.trim();if(!source)return message('先に保存する条件を入力してください');const v=favs();v.sources=[source,...v.sources.filter(x=>x!==source)].slice(0,100);write(FAV,v);message('☆ 条件を保存しました');drawFavorites();return}
@@ -253,8 +256,8 @@ function mountOwnerBoostPanel(){
     if(b.hasAttribute('data-real')&&x)return location.assign(urlOf(x));
     if(b.hasAttribute('data-like')){void like();return}
     if(b.hasAttribute('data-follow')&&x){void boostFollowChange(x.urlname,message).then(()=>void nativeSyncFollow(x.urlname,true));return}
-    if(b.hasAttribute('data-queue')){localStorage.setItem('noteBoostOwnerPendingQueueV693','1');location.assign(APP_URL);return}
-    if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL);return}
+    if(b.hasAttribute('data-queue')){localStorage.setItem('noteBoostOwnerPendingQueueV693','1');location.assign(APP_URL+'&boost_view=queue');return}
+    if(b.hasAttribute('data-mag')){localStorage.setItem(MAG_PENDING,'1');location.assign(APP_URL+'&boost_view=mag');return}
     if(b.hasAttribute('data-fav-person')&&x){const f=favs(),id=String(x.urlname||'').toLowerCase();f.creators=[{id,name:x.name||id},...f.creators.filter(y=>y.id!==id)].slice(0,200);write(FAV,f);message('☆ 人物を保存しました');drawFavorites();return}
     const type=b.dataset.do||b.dataset.del,idx=Number(b.dataset.i);
     if(!type||!Number.isInteger(idx))return;
@@ -265,7 +268,7 @@ function mountOwnerBoostPanel(){
     if(type==='article')return run(urlOf(obj));
   });
   panel.querySelector('[data-source]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run(e.target.value)}});
-  tab.addEventListener('click',()=>{panel.hidden=!panel.hidden;if(!panel.hidden){mount();refresh();drawFavorites();boostPrefsForm(panel.querySelector('[data-settings-ui]'),refresh)}});
+  tab.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();panel.hidden=!panel.hidden;if(!panel.hidden){mount();refresh();drawFavorites();boostPrefsForm(panel.querySelector('[data-settings-ui]'),refresh)}});
   async function verify(force=false){
     if(checking||(!force&&Date.now()-lastCheck<30000)){mount();return}
     checking=true;lastCheck=Date.now();
@@ -291,6 +294,9 @@ function mountOwnerBoostPanel(){
 }
 
 if (!dedicated) { mountOwnerBoostPanel(); return; }
+
+// Stop the original note page loader before installing the dedicated app; API fetch calls remain available.
+try{window.stop()}catch{}
 
 const HTML = `<!doctype html><html lang="ja"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07131b"><title>note 巡回BOOST</title>
@@ -354,6 +360,8 @@ html,body{width:100%!important;min-width:0!important;overflow-x:hidden!important
 
 
 /* BOOST mobile layout guard: prevent accidental auto-zoom and overflowing list contents */
+#closeBoostSettings{margin-top:8px;width:100%;padding:8px 10px;border:1px solid #547487;color:#e4f1f8;background:#102836;border-radius:8px;font-size:12px}
+
 html,body{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
 .app,.card,.modal,.modalbody,.listrow,.listrow>div,.boost-queue-item,.boost-queue-copy{min-width:0!important;max-width:100%!important}
 .modal{width:100vw!important;max-width:100%!important;overflow:hidden!important}
@@ -382,12 +390,12 @@ input[type=text],input[type=search],input[type=number],#source,#magSearch{font-s
 .boost-settings-follow input{width:19px!important;height:19px!important;flex:0 0 19px}
 @media(max-width:375px){.boost-five-article{grid-template-columns:84px minmax(0,1fr)}.boost-five-article img,.boost-five-article .boost-card-placeholder{width:84px!important;height:59px!important}.boost-settings-line{grid-template-columns:minmax(0,1fr) 73px 73px}}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div class="boost-head-actions"><span id="acct" class="acct">診断中…</span><button id="backBoost" type="button">← 戻る</button><button id="exitBoost" type="button">終了 ×</button></div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.7</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div class="boost-head-actions"><span id="acct" class="acct">診断中…</span><button id="backBoost" type="button">← 戻る</button><button id="exitBoost" type="button">終了 ×</button></div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.8</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
 <div id="status" class="status" role="status">noteログイン状態を確認中…</div>
-<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div><div id="followLimit" class="pill">＋ 1h — / 24h —</div></div><div id="boostSettingsUI"></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
+<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div><div id="followLimit" class="pill">＋ 1h — / 24h —</div></div><div id="boostSettingsUI"></div><button type="button" id="closeBoostSettings">設定を閉じる ✕</button><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
 </section>
 <section id="current" class="card hidden"></section></main>
 <footer class="footer"><button id="prev">← 前の5人</button><button id="next">次の5人 →</button></footer>
@@ -414,6 +422,17 @@ input[type=text],input[type=search],input[type=number],#source,#magSearch{font-s
 })();
 
 const $ = (s,r=document) => r.querySelector(s);
+// Keep note.com's delegated click/submit handlers from hijacking BOOST actions.
+function shieldBoostClicks(root){
+  if(!root)return;
+  root.addEventListener('click',e=>{
+    const b=e.target.closest?.('button');
+    if(b){e.preventDefault();e.stopPropagation()}
+  });
+}
+for(const root of [document.querySelector('.app'),document.querySelector('.footer'),...document.querySelectorAll('.modal')])shieldBoostClicks(root);
+document.querySelectorAll('button:not([type])').forEach(b=>b.type='button');
+
 const $$ = (s,r=document) => [...r.querySelectorAll(s)];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -694,12 +713,13 @@ async function boostSyncFollowButton(id){
 
 function openQueue(){
   showModal('queueModal');
-  let page=Math.floor(state.index/5);const root=$('#queueBody'),tried=new Set();
+  const QUEUE_LIST_PAGE_SIZE=10;
+  let page=Math.floor(state.index/QUEUE_LIST_PAGE_SIZE);const root=$('#queueBody'),tried=new Set();
   const draw=()=>{
-    const q=state.queue||[],pages=Math.max(1,Math.ceil(q.length/5));
+    const q=state.queue||[],pages=Math.max(1,Math.ceil(q.length/QUEUE_LIST_PAGE_SIZE));
     page=Math.max(0,Math.min(page,pages-1));
-    const begin=page*5,items=q.slice(begin,begin+5);
-    root.innerHTML='<div class="bar"><button id="queuePrev" '+(page===0?'disabled':'')+'>← 前の5人</button><span class="meta">'+(page+1)+'/'+pages+' ページ・全'+q.length+'人</span><button id="queueNext" '+(page>=pages-1?'disabled':'')+'>次の5人 →</button></div>'+
+    const begin=page*QUEUE_LIST_PAGE_SIZE,items=q.slice(begin,begin+QUEUE_LIST_PAGE_SIZE);
+    root.innerHTML='<div class="bar"><button id="queuePrev" '+(page===0?'disabled':'')+'>← 前の10件</button><span class="meta">'+(page+1)+'/'+pages+' ページ・全'+q.length+'件</span><button id="queueNext" '+(page>=pages-1?'disabled':'')+'>次の10件 →</button></div>'+
       items.map((x,k)=>{const i=begin+k;return '<div class="boost-queue-item'+(state.index===i?' selected':'')+'">'+
         boostArticleThumbMarkup(x)+'<div class="boost-queue-copy"><b>'+esc(x.title||x.key)+'</b><div class="meta">@'+esc(x.urlname||'')+' ・ '+(i+1)+'/'+q.length+'</div>'+
         '<div class="boost-queue-actions"><button data-select="'+i+'">選ぶ</button><button data-direct="'+i+'">実記事</button></div></div></div>'}).join('')+
@@ -804,7 +824,44 @@ function hydrateCreatorCovers(id,articles){
     }catch{return false}
   });
 }
-async function openCreator(){const x=current();if(!x)return;showModal('creatorModal');$('#creatorBody').innerHTML='記事一覧を読み込み中…';try{const p=await creatorProfile(x.urlname),r=await creatorContents(x.urlname,1),arts=(r.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);$('#creatorBody').innerHTML=`<div class="creator"><img id="creatorProfileGo" class="tap" src="${esc(p.icon||'')}"><div><div class="name">${esc(p.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${p.followers||'—'}・記事 ${p.articleCount||arts.length||'—'}</div></div></div><div class="bio">${esc(p.bio||'')}</div><div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧</div>${arts.map(a=>`<div class="listitem"><div class="listrow" data-note-key="${esc(a.key)}">${boostArticleThumbMarkup(a)}<div><b>${esc(a.title)}</b><div class="meta">${a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):''}・♡${Number(a.likeCount||0)}${a.liked===true?'・💗スキ済み':''}</div><button data-open="https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(a.key)}" style="margin-top:6px">実記事</button></div></div></div>`).join('')||'<div class="empty">記事を取得できませんでした</div>'}`;$('#creatorProfileGo').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);for(const b of $('#creatorBody [data-open]'))b.onclick=()=>goOut(b.dataset.open);void hydrateCreatorCovers(x.urlname,arts)}catch(e){$('#creatorBody').textContent=formatError(e)}}
+async function openCreator(){
+  const x=current();if(!x)return;
+  showModal('creatorModal');
+  const body=$('#creatorBody');body.textContent='記事一覧を読み込み中…';
+  try{
+    const [profile,resp]=await Promise.all([creatorProfile(x.urlname),creatorContents(x.urlname,1)]);
+    const articles=(resp.items||[]).sort((a,b)=>Number(b.likeCount||0)-Number(a.likeCount||0)||recentSort(a,b)).slice(0,30);
+    const PAGE_SIZE=10;
+    let page=0;
+    const draw=()=>{
+      if(!body.isConnected||!$('#creatorModal').classList.contains('show'))return;
+      const count=Math.max(1,Math.ceil(articles.length/PAGE_SIZE));
+      page=Math.max(0,Math.min(page,count-1));
+      const slice=articles.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
+      const nav=(side)=>'<div class="bar" style="align-items:center;justify-content:space-between;margin:8px 0">'+
+        '<button type="button" data-creator-prev '+(page===0?'disabled':'')+'>← 前の10件</button>'+
+        '<span class="meta">'+(page+1)+'/'+count+' ページ</span>'+
+        '<button type="button" data-creator-next '+(page>=count-1?'disabled':'')+'>次の10件 →</button></div>';
+      body.innerHTML='<div class="creator"><img id="creatorProfileGo" class="tap" src="'+esc(profile.icon||'')+'">'+
+        '<div><div class="name">'+esc(profile.name||x.urlname)+'</div><div class="id">@'+esc(x.urlname)+'</div>'+
+        '<div class="stats">フォロワー '+(profile.followers||'—')+'・記事 '+(profile.articleCount||articles.length||'—')+'</div></div></div>'+
+        '<div class="bio">'+esc(profile.bio||'')+'</div>'+
+        '<div style="margin:14px 0 8px;font-weight:900">クリエイターの記事一覧（10件ずつ）</div>'+nav('top')+
+        (slice.map(a=>'<div class="listitem"><div class="listrow" data-note-key="'+esc(a.key)+'">'+
+          boostArticleThumbMarkup(a)+'<div><b>'+esc(a.title)+'</b><div class="meta">'+
+          (a.publishAt?new Date(a.publishAt).toLocaleDateString('ja-JP'):'')+'・♡'+Number(a.likeCount||0)+
+          (a.liked===true?'・💗スキ済み':'')+'</div><button type="button" data-open="https://note.com/'+
+          encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(a.key)+'" style="margin-top:6px">実記事</button>'+
+          '</div></div></div>').join('')||'<div class="empty">記事を取得できませんでした</div>')+nav('bottom');
+      const profileGo=$('#creatorProfileGo');if(profileGo)profileGo.onclick=()=>goOut('https://note.com/'+encodeURIComponent(x.urlname));
+      for(const btn of body.querySelectorAll('[data-open]'))btn.onclick=()=>goOut(btn.dataset.open);
+      for(const btn of body.querySelectorAll('[data-creator-prev]'))btn.onclick=()=>{if(page>0){page--;body.scrollTop=0;draw()}};
+      for(const btn of body.querySelectorAll('[data-creator-next]'))btn.onclick=()=>{if((page+1)*PAGE_SIZE<articles.length){page++;body.scrollTop=0;draw()}};
+      void hydrateCreatorCovers(x.urlname,slice);
+    };
+    draw();
+  }catch(e){body.textContent=formatError(e)}
+}
 function magAdded(m,bel){for(const k of ['is_added','isAdded','has_note','hasNote','included','is_included','isIncluded','contains_note','containsNote','is_note_added','isNoteAdded','selected'])if(typeof m?.[k]==='boolean')return m[k];return bel.has(String(m?.key||''))}
 function magThumb(m){for(const x of [m?.image_url,m?.imageUrl,m?.thumbnail_url,typeof m?.thumbnail==='string'?m.thumbnail:m?.thumbnail?.url,typeof m?.eyecatch==='string'?m.eyecatch:m?.eyecatch?.url,m?.cover_image_url,m?.coverImage,m?.cover_image?.url,typeof m?.image==='string'?m.image:m?.image?.url,m?.icon_url,m?.iconUrl,m?.icon?.url])if(typeof x==='string'&&/^https?:\/\//.test(x))return x;return''}
 function magUrl(m,key){const raw=m?.url||m?.magazine_url||m?.magazineUrl;if(raw)return raw;const owner=m?.user?.urlname||m?.creator?.urlname||m?.owner?.urlname||state.me||'';return owner?`https://note.com/${encodeURIComponent(owner)}/m/${encodeURIComponent(key)}`:''}
@@ -822,13 +879,24 @@ $('#prev').onclick=async()=>{const p=boostPage();if(p>0){state.index=(p-1)*BOOST
 $('#next').onclick=async()=>{const p=boostPage();if((p+1)*BOOST_PAGE_SIZE<state.queue.length){state.index=(p+1)*BOOST_PAGE_SIZE;saveState();await render();scrollTo(0,0)}else status('最後の巡回対象です')};
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
 boostPrefsForm($('#boostSettingsUI'),()=>{refreshLimits();void render()});
-$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(state.index>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
+$('#closeBoostSettings').onclick=()=>{$('.more-controls').open=false;$('.more-controls summary')?.focus()};
+$('#backBoost').onclick=()=>{const m=$$('.modal.show').pop();if(m)return closeModal(m.id);if(boostPage()>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
 
 try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(boostPage()>0){state.index=(boostPage()-1)*BOOST_PAGE_SIZE;saveState();void render()}else{location.assign('https://note.com/');return}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
-async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}if(localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1'){localStorage.removeItem('noteBoostOwnerPendingQueueV693');openQueue()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');
+const wantMag=url.searchParams.get('boost_view')==='mag'||localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1';
+const wantQueue=url.searchParams.get('boost_view')==='queue'||localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1';
+localStorage.removeItem('noteBoostOwnerPendingMagazineV681');
+localStorage.removeItem('noteBoostOwnerPendingQueueV693');
+if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}
+if(wantMag){if(state.queue.length)void openMags();else{$('#magBody').textContent='先に巡回対象を読み込んでください';showModal('magModal')}}
+else if(wantQueue)openQueue()}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
+// On transfer from the native panel, show the target view immediately rather than flashing BOOST home.
+if(url.searchParams.get('boost_view')==='mag'){showModal('magModal');$('#magBody').textContent='マガジンを読み込み中…'}
+if(url.searchParams.get('boost_view')==='queue'){showModal('queueModal');$('#queueBody').textContent='記事一覧を読み込み中…'}
 void diagnose();
 })();
