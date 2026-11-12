@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         note 巡回BOOST｜専用アプリ
 // @namespace    https://github.com/mumei-s/note-insight
-// @version      6.9.6
+// @version      6.9.7
 // @description  運営者専用。note上の巡回パネルとコンパクトな専用画面を統合。#タグ・記事・マガジン・人物とお気に入りに対応。
 // @match        https://note.com/*
 // @updateURL    https://raw.githubusercontent.com/mumei-s/note-insight/main/public/note-boost-v531.user.js
@@ -20,6 +20,54 @@ const STORE = 'noteBoostDedicatedV640';
 const PREV_STORE = 'noteBoostDedicatedV630';
 const OLD_STORE = 'noteBoostDedicatedV620';
 const LIMIT_PREFIX = 'noteBoostDedicatedLimit:';
+
+const BOOST_PREF_KEY='noteBoostOwnerSettingsV697';
+const BOOST_DEFAULTS={likes:{hour:18,day:80},mags:{hour:18,day:80},follows:{hour:6,day:20}};
+function boostSettings(){
+  let v={};try{v=JSON.parse(localStorage.getItem(BOOST_PREF_KEY)||'{}')||{}}catch{}
+  const caps={};
+  for(const k of Object.keys(BOOST_DEFAULTS)){
+    const x=v.caps?.[k]||{},d=BOOST_DEFAULTS[k];
+    const norm=(z,f)=>Number(z)>=1&&Number.isFinite(Number(z))?Math.min(2000,Math.floor(Number(z))):f;
+    caps[k]={hour:norm(x.hour,d.hour),day:norm(x.day,d.day)};
+  }
+  return{followEnabled:v.followEnabled===true,caps};
+}
+function boostLimit(k){
+  const now=Date.now(),cap=boostSettings().caps[k]||BOOST_DEFAULTS[k]||BOOST_DEFAULTS.likes;
+  let a=[],g={};try{a=JSON.parse(localStorage.getItem(LIMIT_PREFIX+k)||'[]')||[]}catch{}
+  try{g=JSON.parse(localStorage.getItem(LIMIT_PREFIX+'guard:'+k)||'{}')||{}}catch{}
+  a=(Array.isArray(a)?a:[]).filter(x=>Number(x.t)>0&&now-Number(x.t)<86400000&&Number(x.t)<=now).sort((x,y)=>x.t-y.t);
+  const h=a.filter(x=>now-Number(x.t)<3600000);
+  let until=Number(g.until)||0;
+  if(h.length>=cap.hour)until=Math.max(until,Number(h[h.length-cap.hour].t)+3600000);
+  if(a.length>=cap.day)until=Math.max(until,Number(a[a.length-cap.day].t)+86400000);
+  return{hour:h.length,day:a.length,until,cap};
+}
+function boostCheck(k){const l=boostLimit(k);if(l.until>Date.now())throw Error('操作上限・解除 '+new Date(l.until).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}))}
+function boostLog(k,key){
+  let a=[];try{a=JSON.parse(localStorage.getItem(LIMIT_PREFIX+k)||'[]')||[]}catch{}
+  a=(Array.isArray(a)?a:[]).filter(x=>Date.now()-Number(x.t)<86400000);a.push({t:Date.now(),key});
+  localStorage.setItem(LIMIT_PREFIX+k,JSON.stringify(a.slice(-2000)));
+}
+function boostPrefsForm(el,done){
+  if(!el)return;const v=boostSettings(),names={likes:'♡ スキ',mags:'📚 追加',follows:'＋ フォロー'};
+  el.innerHTML='<label class="boost-settings-follow"><input type="checkbox" data-follow-pref '+(v.followEnabled?'checked':'')+'> フォロー操作（初期OFF）</label>'+
+    '<p class="boost-settings-caption">リミッター：1時間 / 24時間の回数（note側の制限は別途適用）</p>'+
+    Object.keys(names).map(k=>'<div class="boost-settings-line"><span>'+names[k]+'</span><label>1h <input type="number" min="1" max="2000" inputmode="numeric" data-cap-kind="'+k+'" data-unit="hour" value="'+v.caps[k].hour+'"></label><label>24h <input type="number" min="1" max="2000" inputmode="numeric" data-cap-kind="'+k+'" data-unit="day" value="'+v.caps[k].day+'"></label></div>').join('');
+  el.onchange=e=>{
+    const t=e.target,n=boostSettings();
+    if(t.hasAttribute('data-follow-pref'))n.followEnabled=t.checked;
+    else if(t.hasAttribute('data-cap-kind')){
+      const k=t.dataset.capKind,u=t.dataset.unit,z=Number(t.value);
+      if(!n.caps[k]||!['hour','day'].includes(u)||!Number.isFinite(z)||z<1){boostPrefsForm(el,done);return}
+      n.caps[k][u]=Math.min(2000,Math.floor(z));
+    }else return;
+    localStorage.setItem(BOOST_PREF_KEY,JSON.stringify(n));
+    boostPrefsForm(el,done);if(typeof done==='function')done();
+  };
+}
+
 function boostFollowState(raw){
   const root=raw?.data??raw??{},user=root?.creator??root?.user??root,parts=[user,root,user?.relationship,user?.follow];
   for(const obj of parts){
@@ -42,6 +90,7 @@ async function boostFollowInfo(urlname){
     name:String(user.nickname||user.name||id),following:boostFollowState(json)};
 }
 async function boostFollowChange(urlname,notify){
+  if(!boostSettings().followEnabled){notify('フォローはOFFです。設定でONにしてください');return}
   const name=String(urlname||'').trim().toLowerCase();
   if(boostFollowBusy.has(name))return;
   boostFollowBusy.add(name);
@@ -63,13 +112,15 @@ async function boostFollowChange(urlname,notify){
     const again=await boostFollowInfo(name);
     if(again.id!==previous.id||again.following!==previous.following)
       throw Error('フォロー状態が変わったため操作を中止しました');
+    boostCheck('follows');
     const method=previous.following?'DELETE':'POST';
     boostFollowLastActionAt=Date.now();
     const res=await fetch('/api/v3/users/'+encodeURIComponent(previous.id)+'/following',{
       method,credentials:'include',cache:'no-store',
       headers:{accept:'application/json','x-requested-with':'XMLHttpRequest'}
     });
-    if(!res.ok)throw Error('フォロー操作ができません（HTTP '+res.status+'）');
+    if(!res.ok){if(res.status===403||res.status===429)localStorage.setItem(LIMIT_PREFIX+'guard:follows',JSON.stringify({until:Date.now()+3600000,reason:'HTTP '+res.status}));throw Error('フォロー操作ができません（HTTP '+res.status+'）')}
+    boostLog('follows',name);
     let success=false;
     for(const delay of [250,700,1200]){
       await new Promise(resolve=>setTimeout(resolve,delay));
@@ -121,9 +172,10 @@ function mountOwnerBoostPanel(){
 @media(max-height:550px){#${ROOT}{top:115px!important;max-height:calc(100dvh - 155px)!important}#${TAB}{top:72px!important}}`;
   css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid;grid-template-columns:64px minmax(0,1fr);gap:7px;align-items:start}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block;width:64px;height:48px;object-fit:cover;background:#162934;border-radius:6px}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid;place-items:center;color:#91acbd;font-size:9px}\n";
   css.textContent+="\n#mumei-boost-native-panel-v681 .mb-card-row{display:grid!important;grid-template-columns:116px minmax(0,1fr)!important;gap:8px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{display:block!important;width:116px!important;height:80px!important;object-fit:cover!important;background:#162934!important;border-radius:7px!important}\n#mumei-boost-native-panel-v681 .mb-card-placeholder{display:grid!important;place-items:center!important;color:#91acbd!important;font-size:10px!important}\n#mumei-boost-native-panel-v681 .mb-card-info{min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:4px!important;align-items:start!important}\n#mumei-boost-native-panel-v681 .mb-card-heading .mb-current-title{font:800 12px/1.32 system-ui!important;min-width:0!important}\n#mumei-boost-native-panel-v681 .mb-card-heading button[data-follow]{all:initial!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;max-width:72px!important;height:25px!important;min-height:25px!important;padding:0 5px!important;white-space:nowrap!important;background:#122d39!important;color:#d9e9f4!important;border:1px solid #577486!important;border-radius:6px!important;font:700 10px/1 system-ui!important;cursor:pointer!important}\n#mumei-boost-native-panel-v681 .mb-actions{gap:4px!important;margin-top:4px!important}\n#mumei-boost-native-panel-v681 .mb-actions-four{grid-template-columns:repeat(4,minmax(0,1fr))!important}\n#mumei-boost-native-panel-v681 .mb-actions button{all:initial!important;box-sizing:border-box!important;display:flex!important;justify-content:center!important;align-items:center!important;width:100%!important;min-width:0!important;height:29px!important;min-height:29px!important;padding:2px 3px!important;border:1px solid #426072!important;border-radius:6px!important;background:#142e3f!important;color:#e9f6ff!important;font:700 10px/1.15 system-ui!important;cursor:pointer!important;text-align:center!important}\n#mumei-boost-native-panel-v681 .mb-actions button:disabled{opacity:.48!important;cursor:default!important}\n#mumei-boost-native-panel-v681 .mb-row button,#mumei-boost-native-panel-v681 header button{min-height:29px!important;padding:4px 6px!important;font:700 11px/1.15 system-ui!important}\n#mumei-boost-native-panel-v681 [data-current]{padding:6px!important;margin-top:5px!important}\n#mumei-boost-native-panel-v681 [data-status]{font-size:10px!important;margin:4px 0!important}\n#mumei-boost-native-panel-v681 .mb-card-info .mb-small{font-size:10px!important;line-height:1.3!important;margin-top:5px!important;overflow-wrap:anywhere!important}\n#mumei-boost-native-panel-v681{top:calc(env(safe-area-inset-top,0px) + 128px)!important;padding:7px!important}\n@media(max-width:350px){#mumei-boost-native-panel-v681 .mb-card-row{grid-template-columns:98px minmax(0,1fr)!important}#mumei-boost-native-panel-v681 .mb-card-row img,#mumei-boost-native-panel-v681 .mb-card-placeholder{width:98px!important;height:72px!important}}\n";
+  css.textContent += "\n#"+ROOT+" .boost-settings-line{display:grid;grid-template-columns:minmax(0,1fr) 75px 75px;gap:4px;align-items:center;margin:5px 0}#"+ROOT+" .boost-settings-line input{width:100%!important;font-size:16px!important;padding:3px!important;min-height:29px!important}#"+ROOT+" .boost-settings-follow{display:flex;gap:6px;align-items:center}#"+ROOT+" .boost-settings-follow input{width:20px!important;min-height:20px!important;flex:0 0 20px!important}#"+ROOT+" .boost-settings-caption{font-size:10px;color:#a3bece}#"+ROOT+" input[data-source]{font-size:16px!important}";
   const tab=document.createElement('button');tab.id=TAB;tab.type='button';tab.textContent='💗 BOOST';
   const panel=document.createElement('div');panel.id=ROOT;panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','巡回BOOST運営者パネル');
-  panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
+  panel.innerHTML='<header><b>巡回BOOST</b><small>@ss_yr</small><button data-close aria-label="閉じる">×</button></header><div class="mb-row"><input data-source aria-label="巡回元" placeholder="#タグ / 記事URL / マガジン / @ID"><button data-run>巡回開始</button></div><div class="mb-actions"><button data-save>☆ 条件保存</button><button data-fav-toggle>★ お気に入り</button><button data-app>全画面</button></div><details data-settings><summary>⚙ 上限・フォロー設定</summary><div data-settings-ui></div></details><div data-status>巡回条件を入力できます</div><div data-current></div><div data-favorites hidden></div>';
   function message(t){const el=panel.querySelector('[data-status]');if(el)el.textContent=t}
   function mount(){if(!owner||!document.body)return;if(!document.getElementById(css.id))(document.head||document.documentElement).append(css);if(!document.getElementById(TAB))document.body.append(tab);if(!document.getElementById(ROOT))document.body.append(panel);if(!panel.hidden)refresh()}
   function dismiss(){tab.remove();panel.remove()}
@@ -134,10 +186,10 @@ function mountOwnerBoostPanel(){
     area.innerHTML='<div class="mb-card-row">'+
       (x.thumb?'<img src="'+esc(x.thumb)+'" alt="記事サムネイル" loading="lazy">':'<span class="mb-card-placeholder">画像なし</span>')+
       '<div class="mb-card-info"><div class="mb-card-heading"><div class="mb-current-title">'+esc(x.title||x.key)+'</div>'+
-      '<button type="button" data-follow title="確認してからフォローを操作">確認</button></div>'+
+      (boostSettings().followEnabled?'<button type="button" data-follow title="確認してからフォローを操作">確認</button>':'')+'</div>'+
       '<div class="mb-small">@'+esc(x.urlname)+'　'+(v.index+1)+' / '+v.queue.length+'</div></div></div>'+
       '<div class="mb-actions"><button data-prev>←前</button><button data-real>実記事</button><button data-next>次→</button></div>'+
-      '<div class="mb-actions mb-actions-four"><button data-like>♡スキ</button><button data-mag>📚追加</button><button data-fav-person>☆人物</button><button data-queue>▤一覧</button></div>';void nativeSyncFollow(x.urlname);
+      '<div class="mb-actions mb-actions-four"><button data-like>♡スキ</button><button data-mag>📚追加</button><button data-fav-person>☆人物</button><button data-queue>▤一覧</button></div>';if(boostSettings().followEnabled)void nativeSyncFollow(x.urlname);
     if(v.likedNow[x.key]||v.likeSent[x.key]){const b=area.querySelector('[data-like]');b.disabled=true;b.textContent='♡処理済み'}
   }
 
@@ -169,8 +221,7 @@ function mountOwnerBoostPanel(){
     doing=true;
     const btn=panel.querySelector('[data-like]');if(btn)btn.disabled=true;
     try{
-      const now=Date.now(),k=LIMIT_PREFIX+'likes',h=json(k,[]).filter(y=>now-Number(y.t)<86400000),recent=h.filter(y=>now-Number(y.t)<3600000),guard=json(LIMIT_PREFIX+'guard:likes',{});
-      if(recent.length>=18||h.length>=80||Number(guard.until||0)>now)throw Error('安全上限に達しています');
+      boostCheck('likes');
       const get=async()=>{
         const r=await fetch('/api/v3/notes/'+encodeURIComponent(x.key),{credentials:'include',cache:'no-store'});
         if(!r.ok)throw Error('記事確認 HTTP '+r.status);
@@ -182,7 +233,7 @@ function mountOwnerBoostPanel(){
       if(before!==false)throw Error('スキ状態を確認できないため実行しません');
       const r=await fetch('/api/v3/notes/'+encodeURIComponent(x.key)+'/likes',{method:'POST',credentials:'include',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'});
       if(!r.ok)throw Error('スキ送信 HTTP '+r.status);
-      v.likeSent[x.key]=true;write(STORE,v);write(k,[...h,{t:now,key:x.key}].slice(-500));
+      v.likeSent[x.key]=true;write(STORE,v);boostLog('likes',x.key);
       let confirmed=false;
       for(const delay of [250,750,1300]){await new Promise(resolve=>setTimeout(resolve,delay));try{if(liked(await get())===true){confirmed=true;break}}catch{}}
       if(confirmed){v.likedNow[x.key]=true;delete v.likeSent[x.key];write(STORE,v);const old=json('noteBoostCreatorLikeHistoryV650',{});old[String(x.urlname||'').toLowerCase()]={at:Date.now(),noteKey:x.key,kind:'tool'};write('noteBoostCreatorLikeHistoryV650',old);message('❤️ スキ確認済み')}
@@ -214,7 +265,7 @@ function mountOwnerBoostPanel(){
     if(type==='article')return run(urlOf(obj));
   });
   panel.querySelector('[data-source]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run(e.target.value)}});
-  tab.addEventListener('click',()=>{panel.hidden=!panel.hidden;if(!panel.hidden){mount();refresh();drawFavorites()}});
+  tab.addEventListener('click',()=>{panel.hidden=!panel.hidden;if(!panel.hidden){mount();refresh();drawFavorites();boostPrefsForm(panel.querySelector('[data-settings-ui]'),refresh)}});
   async function verify(force=false){
     if(checking||(!force&&Date.now()-lastCheck<30000)){mount();return}
     checking=true;lastCheck=Date.now();
@@ -224,7 +275,14 @@ function mountOwnerBoostPanel(){
       const j=await res.json(),d=j?.data??j??{},u=d.user??d;
       owner=String(u.urlname||u.url_name||u.username||'').replace(/^@/,'').toLowerCase()==='ss_yr';
     }catch{owner=false}
-    finally{checking=false;if(owner)mount();else dismiss()}
+    finally{checking=false;if(owner){mount();returnToBoost()}else dismiss()}
+  }
+
+  function returnToBoost(){
+    if(!fromBoost||!owner||!document.body||document.getElementById('boost-return-v697'))return;
+    const b=document.createElement('button');b.id='boost-return-v697';b.textContent='← BOOSTへ戻る';
+    b.style.cssText='position:fixed!important;left:8px!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;z-index:2147483647!important;border:1px solid #d4b47d!important;border-radius:12px!important;background:#0b2430!important;color:white!important;padding:11px 14px!important;font:800 13px system-ui!important;box-shadow:0 6px 20px #0007!important';
+    b.onclick=()=>location.assign(APP_URL);document.body.appendChild(b);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>void verify(true),{once:true});else void verify(true);
   addEventListener('pageshow',()=>void verify(true));addEventListener('focus',()=>void verify(true));
@@ -294,16 +352,45 @@ html,body{width:100%!important;min-width:0!important;overflow-x:hidden!important
 .modalbody .listrow img,.modalbody .listrow .boost-card-placeholder{width:94px!important;height:66px!important;object-fit:cover!important}
 @media(max-width:370px){#current .boost-article-row{grid-template-columns:114px minmax(0,1fr)!important}#current .boost-article-thumb,#current .boost-card-placeholder{width:114px!important;height:80px!important}.boost-queue-item{grid-template-columns:98px minmax(0,1fr)!important}.boost-queue-item>.boost-card-placeholder,.boost-queue-item>img{width:98px!important;height:70px!important}}
 
+
+/* BOOST mobile layout guard: prevent accidental auto-zoom and overflowing list contents */
+html,body{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
+.app,.card,.modal,.modalbody,.listrow,.listrow>div,.boost-queue-item,.boost-queue-copy{min-width:0!important;max-width:100%!important}
+.modal{width:100vw!important;max-width:100%!important;overflow:hidden!important}
+.modalbody{width:100%!important;overflow-x:hidden!important;overflow-wrap:anywhere;overscroll-behavior:contain}
+.modalbody img{max-width:100%!important}
+.modalbody h2,.modalbody b,.modalbody .meta,.boost-queue-copy b{overflow-wrap:anywhere;word-break:break-word}
+.listrow,.modalbody .listrow{grid-template-columns:94px minmax(0,1fr)!important}
+input[type=text],input[type=search],input[type=number],#source,#magSearch{font-size:16px!important}
+.headrow .boost-head-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.headrow .boost-head-actions button{padding:6px 8px;font-size:11px;min-height:32px}
+.boost-five-list{display:grid;gap:7px;margin-top:7px}
+.boost-five-card{min-width:0;border:1px solid #365160;border-radius:11px;background:#091c27;padding:8px}
+.boost-five-card.selected{border-color:#d0ac6b;background:#102636}
+.boost-five-title{font-size:12px;font-weight:900;overflow-wrap:anywhere}
+.boost-five-article{display:grid;grid-template-columns:94px minmax(0,1fr);gap:8px;min-width:0;margin-top:6px}
+.boost-five-article img,.boost-five-article .boost-card-placeholder{width:94px!important;height:65px!important;max-width:100%!important;object-fit:cover}
+.boost-five-article>div{min-width:0}
+.boost-five-article b{font-size:12px;line-height:1.35;display:block;overflow-wrap:anywhere}
+.boost-five-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:6px}
+.boost-five-actions button{padding:6px 3px!important;font-size:11px!important;min-height:31px!important}
+.boost-settings-line{display:grid;grid-template-columns:minmax(0,1fr) 82px 82px;gap:6px;align-items:center;font-size:11px;margin-top:7px}
+.boost-settings-line label{display:flex;align-items:center;gap:3px}
+.boost-settings-line input{width:100%!important;min-width:0!important;text-align:center;padding:6px 2px!important}
+.boost-settings-caption{font-size:10px;color:#93aabb;margin:7px 0}
+.boost-settings-follow{display:flex;align-items:center;gap:7px;font-size:12px}
+.boost-settings-follow input{width:19px!important;height:19px!important;flex:0 0 19px}
+@media(max-width:375px){.boost-five-article{grid-template-columns:84px minmax(0,1fr)}.boost-five-article img,.boost-five-article .boost-card-placeholder{width:84px!important;height:59px!important}.boost-settings-line{grid-template-columns:minmax(0,1fr) 73px 73px}}
 </style></head><body>
-<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div id="acct" class="acct">診断中…</div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.6</div></header>
+<main class="app"><header class="head"><div class="headrow"><h1>note 巡回BOOST</h1><div class="boost-head-actions"><span id="acct" class="acct">診断中…</span><button id="backBoost" type="button">← 戻る</button><button id="exitBoost" type="button">終了 ×</button></div></div><div class="sub">#タグ・記事・マガジン・人物から巡回｜v6.9.7</div></header>
 <section class="card boost-controls">
 <div class="row source-controls"><input class="grow" id="source" type="text" placeholder="#タグ／記事URL／マガジンURL／@ID" autocomplete="off" aria-label="巡回元"><button class="primary" id="startSource" disabled>巡回開始</button></div>
 <div class="top-actions"><button id="saveSource" disabled>☆ 条件保存</button><button id="showFavorites">★ お気に入り</button><button id="queueBtn">🗂 記事一覧</button></div>
 <div id="status" class="status" role="status">noteログイン状態を確認中…</div>
-<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
+<details class="more-controls"><summary>上限・詳細設定</summary><div class="limits"><div id="likeLimit" class="pill">♡ 1h — / 24h —</div><div id="magLimit" class="pill">📚 1h — / 24h —</div><div id="followLimit" class="pill">＋ 1h — / 24h —</div></div><div id="boostSettingsUI"></div><div class="top-actions"><button id="reset" class="danger">巡回をリセット</button></div></details>
 </section>
 <section id="current" class="card hidden"></section></main>
-<footer class="footer"><button id="prev">戻る</button><button id="next">次へ</button></footer>
+<footer class="footer"><button id="prev">← 前の5人</button><button id="next">次の5人 →</button></footer>
 <section id="previewModal" class="modal"><div class="modalhead"><button data-close="previewModal">戻る</button><b>プレビュー</b></div><div id="previewBody" class="modalbody"></div></section>
 <section id="creatorModal" class="modal"><div class="modalhead"><button data-close="creatorModal">戻る</button><b>クリエイター</b></div><div id="creatorBody" class="modalbody"></div></section>
 <section id="queueModal" class="modal"><div class="modalhead"><button data-close="queueModal">戻る</button><b>記事一覧</b></div><div id="queueBody" class="modalbody"></div></section><section id="magModal" class="modal"><div class="modalhead"><button data-close="magModal">戻る</button><b>マガジン追加</b></div><div id="magBody" class="modalbody"></div></section><section id="favModal" class="modal"><div class="modalhead"><button data-close="favModal">戻る</button><b>⭐ お気に入り</b></div><div id="favBody" class="modalbody"></div></section>
@@ -420,8 +507,8 @@ function saveHist(kind,a){localStorage.setItem(LIMIT_PREFIX+kind,JSON.stringify(
 function pushHist(kind,key){const a=hist(kind);a.push({t:Date.now(),key});saveHist(kind,a)}
 function guard(kind){try{return JSON.parse(localStorage.getItem(LIMIT_PREFIX+'guard:'+kind)||'{"until":0,"reason":""}')}catch{return{until:0,reason:''}}}
 function setGuard(kind,until,reason){localStorage.setItem(LIMIT_PREFIX+'guard:'+kind,JSON.stringify({until,reason}))}
-function limitStatus(kind){const a=hist(kind),now=Date.now(),hour=a.filter(x=>now-Number(x.t)<3600000),g=guard(kind);let until=Number(g.until||0);if(hour.length>=18)until=Math.max(until,Number(hour[0]?.t||0)+3600000);if(a.length>=80)until=Math.max(until,Number(a[0]?.t||0)+86400000);return{hour:hour.length,day:a.length,until}}
-function refreshLimits(){for(const [kind,id,icon] of [['likes','#likeLimit','♡'],['mags','#magLimit','📚']]){const s=limitStatus(kind),extra=s.until>Date.now()?`・解除 ${fmtClock(s.until)}`:'';$(id).textContent=`${icon} 1h ${s.hour}/18・24h ${s.day}/80${extra}`}}
+function limitStatus(kind){return boostLimit(kind)}
+function refreshLimits(){for(const [kind,id,icon] of [['likes','#likeLimit','♡'],['mags','#magLimit','📚'],['follows','#followLimit','＋']]){const s=limitStatus(kind),extra=s.until>Date.now()?'・解除 '+fmtClock(s.until):'';const el=$(id);if(el)el.textContent=icon+' 1h '+s.hour+'/'+s.cap.hour+'・24h '+s.day+'/'+s.cap.day+extra}}
 function enforce(kind){const s=limitStatus(kind);if(s.until>Date.now()){const e=new Error(`安全上限により保護中・解除 ${fmtClock(s.until)}`);e.code='LIMIT';throw e}}
 function formatError(e){if(e?.code==='LOGIN')return'ログイン未確認：noteへログインしてください';if(e?.status===401)return'401：noteログインを確認してください';if(e?.status===403)return'403：note側で操作が制限されています';if(e?.status===429)return'429：操作間隔の制限を検出しました';if(e?.code==='TIMEOUT')return'API応答タイムアウト';return String(e?.message||e||'不明なエラー')}
 async function who(){const j=await api('/api/v2/current_user'),d=j?.data??j??{},u=d.user||d,id=String(u.urlname||u.url_name||u.username||'').replace(/^@/,'');if(!id){const e=new Error('noteへログインしてください');e.code='LOGIN';throw e}return{urlname:id,name:String(u.nickname||u.name||id),icon:u.profile_image_url||u.profileImageUrl||u.icon_url||''}}
@@ -604,22 +691,26 @@ async function boostSyncFollowButton(id){
     button.textContent=info.following===true?'フォロー中':info.following===false?'フォロー':'状態確認';
   }catch{if(button.isConnected)button.textContent='状態確認'}
 }
+
 function openQueue(){
   showModal('queueModal');
-  let shown=25;const root=$('#queueBody'),coverTried=new Set();
+  let page=Math.floor(state.index/5);const root=$('#queueBody'),tried=new Set();
   const draw=()=>{
-    const queue=state.queue||[];
-    root.innerHTML='<div class="meta">巡回記事：'+queue.length+'件</div>'+
-      queue.slice(0,shown).map((x,i)=>'<div class="boost-queue-item'+(state.index===i?' selected':'')+'">'+
-      boostArticleThumbMarkup(x)+'<div class="boost-queue-copy"><b>'+esc(x.title||x.key)+'</b><div class="meta">@'+esc(x.urlname||'')+' ・ '+(i+1)+'/'+queue.length+'</div>'+
-      '<div class="boost-queue-actions"><button data-select="'+i+'">選ぶ</button><button data-direct="'+i+'">実記事</button></div></div></div>').join('')+
-      (shown<queue.length?'<button id="queueMore" class="boost-queue-more">次の'+Math.min(25,queue.length-shown)+'件を表示</button>':'');
+    const q=state.queue||[],pages=Math.max(1,Math.ceil(q.length/5));
+    page=Math.max(0,Math.min(page,pages-1));
+    const begin=page*5,items=q.slice(begin,begin+5);
+    root.innerHTML='<div class="bar"><button id="queuePrev" '+(page===0?'disabled':'')+'>← 前の5人</button><span class="meta">'+(page+1)+'/'+pages+' ページ・全'+q.length+'人</span><button id="queueNext" '+(page>=pages-1?'disabled':'')+'>次の5人 →</button></div>'+
+      items.map((x,k)=>{const i=begin+k;return '<div class="boost-queue-item'+(state.index===i?' selected':'')+'">'+
+        boostArticleThumbMarkup(x)+'<div class="boost-queue-copy"><b>'+esc(x.title||x.key)+'</b><div class="meta">@'+esc(x.urlname||'')+' ・ '+(i+1)+'/'+q.length+'</div>'+
+        '<div class="boost-queue-actions"><button data-select="'+i+'">選ぶ</button><button data-direct="'+i+'">実記事</button></div></div></div>'}).join('')+
+      '<div class="bar"><button id="queuePrevBottom" '+(page===0?'disabled':'')+'>← 前へ</button><button id="queueNextBottom" '+(page>=pages-1?'disabled':'')+'>次へ →</button></div>';
     for(const b of root.querySelectorAll('[data-select]'))b.onclick=()=>{state.index=Number(b.dataset.select);saveState();closeModal('queueModal');void render()};
-    for(const b of root.querySelectorAll('[data-direct]'))b.onclick=()=>{const x=queue[Number(b.dataset.direct)];if(x)goOut('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key))};
-    const more=root.querySelector('#queueMore');if(more)more.onclick=()=>{shown+=25;draw()};
-    const missing=queue.slice(0,shown).filter(x=>!x.thumb&&x.urlname&&x.key&&!coverTried.has(x.key)).slice(0,8);
+    for(const b of root.querySelectorAll('[data-direct]'))b.onclick=()=>{const x=q[Number(b.dataset.direct)];if(x)goOut('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key))};
+    for(const b of [root.querySelector('#queuePrev'),root.querySelector('#queuePrevBottom')].filter(Boolean))b.onclick=()=>{page--;root.scrollTop=0;draw()};
+    for(const b of [root.querySelector('#queueNext'),root.querySelector('#queueNextBottom')].filter(Boolean))b.onclick=()=>{page++;root.scrollTop=0;draw()};
+    const missing=items.filter(x=>!x.thumb&&x.urlname&&x.key&&!tried.has(x.key));
     if(missing.length){
-      for(const x of missing)coverTried.add(x.key);
+      for(const x of missing)tried.add(x.key);
       void mapLimit(missing,2,async x=>{
         const image=await ogImage('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key));
         if(!image)return false;x.thumb=image;saveState();return true;
@@ -628,10 +719,73 @@ function openQueue(){
   };draw();
 }
 function stateText(detail,x){const dup=Boolean(x?.duplicateCreator||creatorWasLiked(x?.urlname)||detail?.liked===true);if(state.likedNow[x.key])return'❤️ この人は今回スキ済み｜⚠ 重複あり｜マガジン追加できます';if(detail?.liked===true)return'💗 この人は元からスキ済み｜⚠ 重複あり｜マガジン追加できます';if(state.likeSent[x.key])return'❤️ スキ送信済み・反映確認待ち｜⚠ 重複あり';if(dup)return'⚠ 重複あり｜この人には以前スキ済み。別の記事も確認できます';return'♡ この人は未スキ'}
-async function render(){const box=$('#current'),x=current();refreshLimits();if(!x){box.classList.add('hidden');status(state.source?'巡回対象がありません':'巡回元を入力してください');return}box.classList.remove('hidden');let detail=null,profile=null;try{[detail,profile]=await Promise.all([noteDetail(x.key),creatorProfile(x.urlname)]);if(detail?.thumb&&!x.thumb){x.thumb=detail.thumb;saveState()}if(detail?.liked===true){x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,state.likeSent[x.key]?'tool-confirmed':'preexisting');if(state.likeSent[x.key]&&!state.likedNow[x.key]){state.likedNow[x.key]=true;delete state.likeSent[x.key];saveState()}}}catch(e){status(formatError(e),true)}const st=stateText(detail,x);box.innerHTML=`<div class="progress">${state.index+1}/${state.queue.length}｜${esc(x.source||state.source)}</div><div class="creator boost-creator-with-follow"><img class="tap" id="profileImg" src="${esc(profile?.icon||'')}"><div class="tap" id="profileName"><div class="name">${esc(profile?.name||x.name||x.urlname)}</div><div class="id">@${esc(x.urlname)}</div><div class="stats">フォロワー ${profile?.followers||'—'}・記事 ${profile?.articleCount||'—'}</div></div><button type="button" id="followBtn" class="tiny-follow">確認中</button></div>${profile?.bio?`<div class="bio">${esc(profile.bio)}</div>`:''}<div class="state">${esc(st)}</div><div class="article">${boostCurrentArticleHeader(x,detail)}<div class="actions"><button id="likeBtn" ${(detail?.liked===true||state.likedNow[x.key]||state.likeSent[x.key])?'disabled':''}>${state.likedNow[x.key]?'❤️今回済':detail?.liked===true?'💗元から':state.likeSent[x.key]?'❤️送信済':'♡スキ'}</button><button id="openBtn">実記事</button><button id="previewBtn">プレビュー</button></div><div class="actions two"><button id="creatorBtn">📚 記事を見る</button><button id="magBtn">📚マガジン追加</button><button id="favoriteArticleBtn">⭐ 記事保存</button><button id="favoriteCreatorBtn">⭐ この人を保存</button></div></div>`;$('#likeBtn').onclick=likeCurrent;$('#openBtn').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}/n/${encodeURIComponent(x.key)}`);$('#previewBtn').onclick=openPreview;$('#creatorBtn').onclick=openCreator;$('#magBtn').onclick=openMags;$('#favoriteArticleBtn').onclick=saveFavoriteArticle;$('#favoriteCreatorBtn').onclick=()=>saveFavoriteCreator(x);$('#profileImg').onclick=$('#profileName').onclick=()=>goOut(`https://note.com/${encodeURIComponent(x.urlname)}`);$('#followBtn').onclick=()=>void boostFollowChange(x.urlname,m=>status(m)).then(()=>void boostSyncFollowButton(x.urlname));void boostSyncFollowButton(x.urlname)}
+
+const BOOST_PAGE_SIZE=5;
+let boostRenderTicket=0;
+function boostPage(){return Math.floor(Math.max(0,state.index)/BOOST_PAGE_SIZE)}
+function boostCard(x,i,total){
+  const marked=!!(state.likedNow[x.key]||state.likeSent[x.key]||x.liked===true),following=boostSettings().followEnabled;
+  const label=state.likedNow[x.key]?'❤️今回済':state.likeSent[x.key]?'❤️送信済':x.liked===true?'💗既スキ':'♡スキ';
+  const button=(action,text,disabled)=>'<button type="button" data-boost-action="'+action+'" data-i="'+i+'" '+(disabled?'disabled':'')+'>'+text+'</button>';
+  const avatar=x.profileIcon?'<img src="'+esc(x.profileIcon)+'" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover">':'👤';
+  const info=marked?'💗処理済':x.duplicateCreator||creatorWasLiked(x.urlname)?'⚠ この人は過去にスキあり':'状態未確認';
+  return '<article class="boost-five-card'+(state.index===i?' selected':'')+'" data-boost-card="'+i+'">'+
+    '<div class="boost-five-title">'+(i+1)+' / '+total+'　'+avatar+'　'+esc(x.profileName||x.name||x.urlname||'')+' <span class="id">@'+esc(x.urlname||'')+'</span></div>'+
+    '<div class="boost-five-article">'+(x.thumb?'<img src="'+esc(x.thumb)+'" alt="記事サムネイル" loading="lazy">':'<div class="boost-card-placeholder">画像なし</div>')+
+    '<div><b>'+esc(x.title||x.key||'記事')+'</b><div class="meta">'+info+' ・ ♡'+(x.likeCount??'—')+'</div></div></div>'+
+    '<div class="boost-five-actions">'+button('like',label,marked)+button('article','実記事',false)+button('preview','プレビュー',false)+
+    button('creator','記事一覧',false)+button('mag','📚追加',false)+button('profile','👤本人',false)+
+    button('favorite','☆保存',false)+(following?button('follow','フォロー確認',false):'')+'</div></article>';
+}
+async function boostCardAction(index,action){
+  if(!Number.isInteger(index)||index<0||index>=state.queue.length)return;
+  if(busy||magBusy){status('操作の処理が完了してから選択してください');return}
+  state.index=index;saveState();
+  for(const el of $$('#current [data-boost-card]'))el.classList.toggle('selected',Number(el.dataset.boostCard)===index);
+  const x=current();
+  if(action==='like')return void likeCurrent();
+  if(action==='article')return goOut('https://note.com/'+encodeURIComponent(x.urlname)+'/n/'+encodeURIComponent(x.key));
+  if(action==='preview')return void openPreview();
+  if(action==='creator')return void openCreator();
+  if(action==='mag')return void openMags();
+  if(action==='profile')return goOut('https://note.com/'+encodeURIComponent(x.urlname));
+  if(action==='favorite'){saveFavoriteCreator(x);saveFavoriteArticle();return}
+  if(action==='follow'&&boostSettings().followEnabled)return void boostFollowChange(x.urlname,m=>status(m));
+}
+async function render(){
+  const box=$('#current'),ticket=++boostRenderTicket;refreshLimits();
+  if(!state.queue.length){box.classList.add('hidden');status(state.source?'巡回対象がありません':'巡回元を入力してください');return}
+  state.index=Math.min(state.queue.length-1,Math.max(0,state.index));
+  const page=boostPage(),start=page*BOOST_PAGE_SIZE,items=state.queue.slice(start,start+BOOST_PAGE_SIZE);
+  box.classList.remove('hidden');
+  box.innerHTML='<div class="progress">クリエイター '+(start+1)+'〜'+(start+items.length)+' / '+state.queue.length+' ｜ '+(page+1)+' / '+Math.ceil(state.queue.length/BOOST_PAGE_SIZE)+'ページ</div>'+
+    '<div class="boost-five-list">'+items.map((x,j)=>boostCard(x,start+j,state.queue.length)).join('')+'</div>';
+  for(const b of box.querySelectorAll('[data-boost-action]'))b.onclick=()=>void boostCardAction(Number(b.dataset.i),b.dataset.boostAction);
+  $('#prev').disabled=page===0;$('#next').disabled=(page+1)*BOOST_PAGE_SIZE>=state.queue.length;
+  void mapLimit(items,2,async (x,j)=>{
+    const i=start+j;let detail=null,profile=null;
+    try{detail=await noteDetail(x.key)}catch{}
+    try{profile=await creatorProfile(x.urlname)}catch{}
+    if(ticket!==boostRenderTicket)return;
+    if(detail){
+      if(detail.thumb&&!x.thumb)x.thumb=detail.thumb;
+      if(detail.title)x.title=detail.title;
+      if(detail.likeCount!=null)x.likeCount=detail.likeCount;
+      if(detail.liked===true){x.liked=true;x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,state.likeSent[x.key]?'tool-confirmed':'preexisting')}
+      else if(detail.liked===false)x.liked=false;
+      if(detail.liked===true&&state.likeSent[x.key]){state.likedNow[x.key]=true;delete state.likeSent[x.key]}
+    }
+    if(profile){x.profileIcon=profile.icon||x.profileIcon;x.profileName=profile.name||x.profileName}
+    saveState();
+    const prev=box.querySelector('[data-boost-card="'+i+'"]');if(!prev||ticket!==boostRenderTicket)return;
+    const next=document.createElement('div');next.innerHTML=boostCard(x,i,state.queue.length);const card=next.firstElementChild;
+    prev.replaceWith(card);
+    for(const b of card.querySelectorAll('[data-boost-action]'))b.onclick=()=>void boostCardAction(Number(b.dataset.i),b.dataset.boostAction);
+  }).catch(()=>{});
+}
 function withReturn(raw){const x=new URL(raw,location.origin);x.searchParams.set('boost_return','1');return x.href}
 function goOut(raw){saveState();location.assign(withReturn(raw))}
-async function likeCurrent(){if(busy)return;const x=current();if(!x)return;busy=true;const b=$('#likeBtn');try{enforce('likes');b.disabled=true;b.textContent='確認中…';const before=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),liked=readLiked(before),beforeCount=readLikeCount(before);if(liked===true){status('💗 元からスキ済み｜送信なし');await render();return}b.textContent='スキ中…';try{await api(`/api/v3/notes/${encodeURIComponent(x.key)}/likes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'})}catch(e){const body=JSON.stringify(e.body||'');if(/already|liked|exist/i.test(body)){status('💗 すでにスキ済み｜解除せず完了');await render();return}if(e.status===403)setGuard('likes',Date.now()+3600000,'403検出');if(e.status===429)setGuard('likes',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}state.likeSent[x.key]=true;pushHist('likes',x.key);saveState();let ok=false;for(const w of [300,800,1500,2500]){await sleep(w);try{const after=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),aLiked=readLiked(after),afterCount=readLikeCount(after);if(aLiked===true||(beforeCount!=null&&afterCount!=null&&afterCount>beforeCount)){ok=true;break}}catch{}}if(ok){state.likedNow[x.key]=true;x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,'tool');delete state.likeSent[x.key];saveState();status('❤️ スキ反映を確認しました｜次回この人は「⚠ 重複あり」と表示します')}else{status('❤️ スキは送信済み。反映表示は次回読み込みで再確認します')}await render()}catch(e){if(b){b.disabled=false;b.textContent='♡スキ'}status(formatError(e),true);refreshLimits()}finally{busy=false}}
+async function likeCurrent(){if(busy)return;const x=current();if(!x)return;busy=true;const b=$('#current [data-boost-action="like"][data-i="'+state.index+'"]');try{enforce('likes');if(b){b.disabled=true;b.textContent='確認中…'}const before=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),liked=readLiked(before),beforeCount=readLikeCount(before);if(liked===true){status('💗 元からスキ済み｜送信なし');await render();return}if(b)b.textContent='スキ中…';try{await api(`/api/v3/notes/${encodeURIComponent(x.key)}/likes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:'{}'})}catch(e){const body=JSON.stringify(e.body||'');if(/already|liked|exist/i.test(body)){status('💗 すでにスキ済み｜解除せず完了');await render();return}if(e.status===403)setGuard('likes',Date.now()+3600000,'403検出');if(e.status===429)setGuard('likes',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');throw e}state.likeSent[x.key]=true;pushHist('likes',x.key);saveState();let ok=false;for(const w of [300,800,1500,2500]){await sleep(w);try{const after=await api(`/api/v3/notes/${encodeURIComponent(x.key)}`),aLiked=readLiked(after),afterCount=readLikeCount(after);if(aLiked===true||(beforeCount!=null&&afterCount!=null&&afterCount>beforeCount)){ok=true;break}}catch{}}if(ok){state.likedNow[x.key]=true;x.duplicateCreator=true;markCreatorLiked(x.urlname,x.key,'tool');delete state.likeSent[x.key];saveState();status('❤️ スキ反映を確認しました｜次回この人は「⚠ 重複あり」と表示します')}else{status('❤️ スキは送信済み。反映表示は次回読み込みで再確認します')}await render()}catch(e){if(b){b.disabled=false;b.textContent='♡スキ'}status(formatError(e),true);refreshLimits()}finally{busy=false}}
 function sanitizeHtml(html){const d=new DOMParser().parseFromString(`<div id="x">${html||''}</div>`,'text/html'),root=d.querySelector('#x');for(const n of root.querySelectorAll('script,style,iframe,object,embed,form'))n.remove();for(const n of root.querySelectorAll('*'))for(const a of [...n.attributes])if(/^on/i.test(a.name)||a.name==='srcdoc')n.removeAttribute(a.name);return root.innerHTML}
 async function openPreview(){const x=current();if(!x)return;showModal('previewModal');$('#previewBody').innerHTML='読み込み中…';try{const d=await noteDetail(x.key);$('#previewBody').innerHTML=`${d.thumb?`<img class="thumb" src="${esc(d.thumb)}">`:''}<h2>${esc(d.title)}</h2><div class="meta">@${esc(d.urlname)}・♡${Number(d.likeCount||0)}</div><article style="margin-top:12px;line-height:1.8">${sanitizeHtml(d.body)||'<div class="empty">本文プレビューを取得できませんでした。</div>'}</article>`}catch(e){$('#previewBody').textContent=formatError(e)}}
 function hydrateCreatorCovers(id,articles){
@@ -661,17 +815,19 @@ async function hydrateMagThumbs(){const jobs=currentMags.filter(m=>!m.image&&m.u
 function renderMagList(filter=''){const list=$('#magList');if(!list)return;const q=filter.trim().toLowerCase();list.innerHTML=currentMags.filter(m=>!q||m.name.toLowerCase().includes(q)).map(m=>`<label class="mag" data-magrow="${esc(m.key)}">${m.image?`<img src="${esc(m.image)}" data-magopen="${esc(m.url)}">`:'<div class="magph">📚</div>'}<input type="checkbox" data-magcheck value="${esc(m.key)}" ${m.added?'checked disabled':''}><span><b>${esc(m.name)}</b><div class="meta">${m.added?'✔ 追加済み':`${m.count}記事`}</div></span></label>`).join('')||'<div class="empty">該当するマガジンがありません</div>';for(const im of $$('#magList [data-magopen]'))im.onclick=e=>{e.preventDefault();e.stopPropagation();goOut(im.dataset.magopen)}}
 async function openMags(){const x=current();if(!x)return;showModal('magModal');$('#magBody').innerHTML='マガジンを読み込み中…';try{const base=await loadMagazineBase(false);currentMags=base;$('#magBody').innerHTML=`<div class="mag-controls"><div class="bar"><input id="magSearch" placeholder="マガジン検索"><button id="magReload">更新</button></div><button id="magAddTop" class="mag-add">選択したマガジンへ追加</button><div id="magMsg" class="msg">追加状態を確認中…</div></div><div id="magList" class="mag-list"></div><button id="magAddBottom" class="mag-add">選択したマガジンへ追加</button>`;renderMagList();$('#magSearch').oninput=e=>renderMagList(e.target.value);$('#magAddTop').onclick=addSelectedMags;$('#magAddBottom').onclick=addSelectedMags;$('#magReload').onclick=async()=>{await loadMagazineBase(true);currentMags=await editableMagazines(x.key);renderMagList($('#magSearch')?.value||'');setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()};currentMags=await editableMagazines(x.key);renderMagList();setMsg(`${currentMags.filter(m=>m.added).length}誌に追加済み`);void hydrateMagThumbs()}catch(e){$('#magBody').textContent=formatError(e)}}
 async function addSelectedMags(){if(magBusy)return;const x=current();if(!x)return;const keys=$$('#magBody [data-magcheck]:checked:not(:disabled)').map(e=>e.value);if(!keys.length){setMsg('追加先を選択してください');return}magBusy=true;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=true;b.textContent='追加中…'}let ok=0,already=0,fail=0;try{const detail=await noteDetail(x.key),noteId=x.id??detail.id;if(!noteId)throw new Error('記事IDを取得できません');for(const key of keys){try{enforce('mags');await api(`/api/v1/our/magazines/${encodeURIComponent(key)}/notes`,{method:'POST',headers:{'content-type':'application/json','x-requested-with':'XMLHttpRequest'},body:JSON.stringify({note_id:noteId,note_key:x.key})});pushHist('mags',`${key}:${x.key}`);ok++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;setMsg(`追加中… ${ok+already}/${keys.length}`)}catch(e){const body=JSON.stringify(e.body||'');if(/already|exist|included/i.test(body)||e.status===409||e.status===422){already++;const m=currentMags.find(z=>z.key===key);if(m)m.added=true;continue}if(e.status===403){setGuard('mags',Date.now()+3600000,'403検出');fail++;setMsg('403を検出したため停止しました');break}if(e.status===429){setGuard('mags',Date.now()+Math.max(3600000,e.retryAfter||0),'429検出');fail++;setMsg('429を検出したため停止しました');break}fail++}}renderMagList($('#magSearch')?.value||'');setMsg(`追加 ${ok}｜追加済み ${already}｜失敗 ${fail}`);refreshLimits()}catch(e){setMsg(formatError(e))}finally{magBusy=false;for(const b of [$('#magAddTop'),$('#magAddBottom')].filter(Boolean)){b.disabled=false;b.textContent='選択したマガジンへ追加'}}}
-function showModal(id){$('#'+id)?.classList.add('show')}
+function showModal(id){try{document.activeElement?.blur?.()}catch{}const m=$('#'+id);if(m){m.classList.add('show');const body=m.querySelector('.modalbody');if(body)body.scrollTop=0}}
 function closeModal(id){$('#'+id)?.classList.remove('show')}
 for(const b of $$('[data-close]'))b.onclick=()=>closeModal(b.dataset.close);
-$('#prev').onclick=async()=>{if(state.index>0){state.index--;saveState();await render()}};
-$('#next').onclick=async()=>{if(state.index<state.queue.length-1){state.index++;saveState();await render()}else status('最後の巡回対象です')};
+$('#prev').onclick=async()=>{const p=boostPage();if(p>0){state.index=(p-1)*BOOST_PAGE_SIZE;saveState();await render();scrollTo(0,0)}};
+$('#next').onclick=async()=>{const p=boostPage();if((p+1)*BOOST_PAGE_SIZE<state.queue.length){state.index=(p+1)*BOOST_PAGE_SIZE;saveState();await render();scrollTo(0,0)}else status('最後の巡回対象です')};
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
+boostPrefsForm($('#boostSettingsUI'),()=>{refreshLimits();void render()});
+$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(state.index>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
 
-try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(state.index>0){state.index--;saveState();void render()}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
+try{history.replaceState({boostRoot:1},'',APP_URL);history.pushState({boostGuard:1},'',APP_URL);addEventListener('popstate',()=>{const m=$$('.modal.show').pop();if(m)m.classList.remove('show');else if(boostPage()>0){state.index=(boostPage()-1)*BOOST_PAGE_SIZE;saveState();void render()}else{location.assign('https://note.com/');return}history.pushState({boostGuard:1},'',APP_URL)})}catch{}
 
 async function diagnose(){try{status('noteログイン状態を確認中…');const me=await who();state.me=me.urlname.toLowerCase();if(state.me!=='ss_yr')throw Error('運営者本人のみ使用できます');saveState();$('#acct').textContent=`@${me.urlname}`;$('#startSource').disabled=false;$('#saveSource').disabled=false;ready=true;$('#source').value=state.source||'';refreshLimits();if(state.queue.length)await render();else status('巡回元を入力して開始できます');const pending=localStorage.getItem('noteBoostOwnerPendingSourceV681');if(pending){localStorage.removeItem('noteBoostOwnerPendingSourceV681');$('#source').value=pending;await loadSource()}else if(localStorage.getItem('noteBoostOwnerPendingMagazineV681')==='1'&&state.queue.length){localStorage.removeItem('noteBoostOwnerPendingMagazineV681');void openMags()}if(localStorage.getItem('noteBoostOwnerPendingQueueV693')==='1'){localStorage.removeItem('noteBoostOwnerPendingQueueV693');openQueue()}}catch(e){ready=false;$('#startSource').disabled=true;$('#saveSource').disabled=true;$('#acct').textContent='未接続';status(formatError(e),true);if(e?.code==='LOGIN'||e?.status===401)$('#status').insertAdjacentHTML('beforeend','<br><a class="login" href="https://note.com/login">noteへログイン</a>')}}
 void diagnose();
