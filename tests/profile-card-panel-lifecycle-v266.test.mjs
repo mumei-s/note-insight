@@ -51,12 +51,14 @@ async function runtime(t,path=files[0],{saved=pausedRun,prefs=null,mobile=false,
 }
 
 
-test('a fresh panel defaults to 200 and the recent-200 preset preserves a saved run',async t=>{
+test('history uses the top count and reopening the panel preserves the saved run',async t=>{
  const fresh=await runtime(t,files[0],{saved:null});assert.equal(fresh.panel().querySelector('[data-count]').value,'200');
  const r=await runtime(t,files[1],{prefs:{mode:'all',count:12}}),before=r.snapshots();
  for(let i=0;i<4;i++)r.ready();await r.flush();
- assert.equal(r.panel().querySelectorAll('[data-a="like200-preset"]').length,1);r.click(r.panel().querySelector('[data-a="like200-preset"]'));await r.flush();
- assert.equal(r.panel().querySelector('[data-mode]').value,'number');assert.equal(r.panel().querySelector('[data-count]').value,'200');
+ assert.equal(r.panel().querySelector('[data-a="like200-preset"]'),null);
+ assert.equal(r.panel().querySelector('[data-mode]').value,'all');assert.equal(r.panel().querySelector('[data-count]').value,'12');
+ assert.equal(r.panel().querySelector('[data-history-period]').value,'all');
+ assert.equal(r.panel().querySelector('[role="status"]').parentElement,r.panel());
  assert.deepEqual(r.snapshots(),before);assert.equal(r.counts.network,0);
 });
 

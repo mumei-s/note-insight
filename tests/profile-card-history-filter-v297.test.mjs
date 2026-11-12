@@ -25,13 +25,16 @@ function editor(){
  return{dom,w,panel,detail,api:w.api,field:name=>detail.querySelector('[data-history-'+name+']')};
 }
 
-test('default is today in Japan across UTC midnight, all articles and every matching creator',()=>{
+test('the top count applies to all dates and to a selected day in Japan',()=>{
  const r=editor();try{
-  assert.deepEqual(plain(r.api.selectedHistoryFilter()),filter);
-  const options=r.api.historyOptions();assert.equal(options.mode,'all');assert.equal(options.target,Infinity);assert.equal(options.count,1500);
-  assert.equal(r.field('period').value,'today');assert.equal(r.field('articles').value,'all');
+  assert.equal(r.api.selectedHistoryFilter(),null);
+  assert.equal(r.field('period').value,'all');assert.equal(r.field('articles').value,'all');
   assert.equal(r.w.document.querySelector('[data-history-dates]').hidden,true);
-  r.field('period').value='all';assert.equal(r.api.selectedHistoryFilter(),null);assert.equal(r.api.historyOptions().count,200);
+  assert.equal(r.api.historyOptions().target,200);
+  r.detail.querySelector('[data-a="history-today"]').click();
+  assert.deepEqual(plain(r.api.selectedHistoryFilter()),filter);
+  const options=r.api.historyOptions();assert.equal(options.mode,'number');assert.equal(options.target,200);
+  r.panel.querySelector('[data-mode]').value='all';assert.equal(r.api.historyOptions().target,Infinity);
  }finally{r.dom.window.close()}
 });
 
@@ -43,7 +46,7 @@ test('single day, inclusive range, selected article and invalid values do not fa
   assert.deepEqual(plain(r.api.selectedHistoryFilter()),{...filter,fromDate:'2026-10-03',toDate:'2026-10-05',articleKey:'n123456789abc'});
   r.field('to').value='2026-10-01';assert.throws(()=>r.api.historyOptions(),/日付/);
   r.field('to').value='2026-10-05';r.field('article').value='https://example.com/n/n123456789abc';assert.throws(()=>r.api.historyOptions(),/記事URL/);
-  r.field('article').value='n123456789abc';r.field('period').value='all';assert.equal(r.api.historyOptions().mode,'all');
+  r.field('article').value='n123456789abc';r.field('period').value='all';assert.equal(r.api.historyOptions().mode,'number');
  }finally{r.dom.window.close()}
 });
 
@@ -60,7 +63,7 @@ test('filter controls survive repeated patching without losing typing and saved 
 
 test('popup includes exact filter and a row at next midnight or with unknown like time is refused',async()=>{
  const r=editor();try{
-  let url;r.w.open=value=>{url=new URL(value);return{close(){}}};
+  let url;r.w.open=value=>{url=new URL(value);return{close(){}}};r.field('period').value='today';
   const promise=r.api.prepareLikesHistoryExport(r.api.historyOptions());promise.catch(()=>{});
   assert.equal(url.searchParams.get('scope'),'filtered-likes');assert.equal(url.searchParams.get('fromDate'),'2026-11-09');assert.equal(url.searchParams.get('count'),'1500');
   assert.ok(r.api.historyFilterContains(filter,{likedAt:'2026-11-08T15:00:00Z'}));

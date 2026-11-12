@@ -160,15 +160,9 @@ const patchPanel=String.raw`function patchPanel(){
  panel.querySelector('[data-gallery126]')?.remove();
  const title=panel.querySelector('.title');if(title&&title.textContent!=='極薄サム v'+VERSION)title.textContent='極薄サム v'+VERSION;
  const summary=detail.querySelector('summary');if(summary&&summary.textContent!=='＋ 自分のスキ履歴')summary.textContent='＋ 自分のスキ履歴';
- const hint=detail.querySelector('.hint'),hintText='直近順・同じ人は1回｜最新記事｜上の件数・全数を使用｜実績1件を追加';
+ const hint=detail.querySelector('.hint'),hintText='人数は上の「件数／全数」で指定｜同じ人は1回';
  if(hint&&hint.textContent!==hintText)hint.textContent=hintText;
- let preset=detail.querySelector('[data-a="like200-preset"]');
- if(!preset){preset=document.createElement('button');preset.type='button';preset.dataset.a='like200-preset';preset.textContent='200人に設定';(detail.querySelector('.special-actions')||detail).prepend(preset);}
- bindPanelAction(preset,'click:recent200',event=>{
-  event.preventDefault();const mode=panel.querySelector('[data-mode]'),count=panel.querySelector('[data-count]');if(!mode||!count)return;
-  mode.value='number';count.value='200';count.disabled=false;mode.dispatchEvent(new Event('change',{bubbles:true}));count.dispatchEvent(new Event('change',{bubbles:true}));
-  setStatus('スキ履歴を直近200人に設定しました｜「履歴から開始」で取得');
- });
+ detail.querySelector('[data-a="like200-preset"]')?.remove();
  const oldButton=detail.querySelector('[data-a="like300-images"],[data-a="like300-fixed"]');
  if(oldButton&&!panelBindings.get(oldButton)?.has('click:history')){
   const button=oldButton.cloneNode(true);button.dataset.a='like300-fixed';button.textContent='履歴から開始';button.style.background='#176b54';button.style.borderColor='#5bd7a7';oldButton.replaceWith(button);

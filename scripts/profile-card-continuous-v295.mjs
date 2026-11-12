@@ -91,6 +91,18 @@ function completedContinuousCount(rows,records){
  if(rows.slice(done).some(row=>completed.has(norm(row.url))))throw new Error('途中記録の順序が一致しません。完成分は保持しています');
  return done;
 }
+function imageUploadBaseline(view){
+ const before=new Set();
+ for(const {node} of imageNodes(view))if(remoteImage(node)){
+  if(node.attrs?.id)before.add(String(node.attrs.id));
+  before.add('src:'+String(node.attrs?.src||''));
+ }
+ return before;
+}
+function freshUploadedImages(view,before){
+ return imageNodes(view).filter(({node})=>remoteImage(node)&&!node.attrs?.imageUploading&&
+  !before.has(String(node.attrs?.id||''))&&!before.has('src:'+String(node.attrs?.src||'')));
+}
 function validateContinuousImageIds(view,records){
  const tracked=new Set((records||[]).map(item=>String(item.id||'')).filter(Boolean)),seen=new Set();
  for(const hit of imageNodes(view)){
@@ -113,10 +125,9 @@ async function continuousWaitForImage(view,beforeIds,timeout){
   function inspect(){
    if(finished)return;
    try{
-    const fresh=imageNodes(view).filter(hit=>{const id=String(hit.node.attrs?.id||'');return id&&!beforeIds.has(id)&&remoteImage(hit.node)});
+    const fresh=freshUploadedImages(view,beforeIds);
     if(fresh.length===1){finish(null,fresh[0]);return}
     if(fresh.length>1){finish(new Error('複数の新しい画像を検出しました。完成分は保持しています'));return}
-    if(stopRequested){finish(new Error('停止しました'));return}
     if(!document.hidden&&Date.now()>=deadline){finish(new Error('note画像アップロード待ちタイムアウト。完成分は保持しています'));return}
     timer=setTimeout(inspect,document.hidden?1000:Math.max(1,Math.min(500,deadline-Date.now())));
    }catch(error){finish(error)}

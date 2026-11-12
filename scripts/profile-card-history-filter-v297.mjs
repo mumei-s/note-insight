@@ -3,7 +3,6 @@ function once(source, from, to) {
   if (source.split(from).length !== 2) throw Error('History filter hook must match once: ' + from.slice(0, 100));
   return source.replace(from, () => to);
 }
-
 const helpers = String.raw`
 const HISTORY_FILTER_PREF='mumei_profile_card_history_filter_v297';
 function historyToday(){return new Date(Date.now()+9*3600000).toISOString().slice(0,10)}
@@ -37,11 +36,11 @@ function patchHistoryFilterPanel(panel,detail){
  if(controls)return;
  controls=document.createElement('div');controls.dataset.historyFilter='';
  controls.style.cssText='display:grid;gap:6px;margin:8px 0;padding:8px;border:1px solid #355064;border-radius:9px';
- controls.innerHTML='<label>スキされた日（日本時間）<select data-history-period style="width:100%;min-width:0"><option value="today">今日</option><option value="date">指定日</option><option value="range">期間指定</option><option value="all">全期間・直近順</option></select></label><div data-history-dates hidden><div style="display:flex;gap:6px"><label style="min-width:0;flex:1">日付<input data-history-from type="date" style="width:100%;min-width:0;box-sizing:border-box"></label><label data-history-until hidden style="min-width:0;flex:1">終了日<input data-history-to type="date" style="width:100%;min-width:0;box-sizing:border-box"></label></div></div><label>スキを受け取った記事<select data-history-articles style="width:100%;min-width:0"><option value="all">全記事（過去の記事を含む）</option><option value="selected">記事を指定</option></select></label><label data-history-article-field hidden>自分の記事URL<input data-history-article type="url" placeholder="https://note.com/…/n/…" style="width:100%;min-width:0;box-sizing:border-box"></label><small>日付・記事の指定時は該当全員。人物の重複はまとめます。</small><button type="button" data-a="history-today">今日・全記事に設定</button>';
+ controls.innerHTML='<label>スキされた日（日本時間）<select data-history-period style="width:100%;min-width:0"><option value="today">今日</option><option value="date">指定日</option><option value="range">期間指定</option><option value="all">全期間・直近順</option></select></label><div data-history-dates hidden><div style="display:flex;gap:6px"><label style="min-width:0;flex:1">日付<input data-history-from type="date" style="width:100%;min-width:0;box-sizing:border-box"></label><label data-history-until hidden style="min-width:0;flex:1">終了日<input data-history-to type="date" style="width:100%;min-width:0;box-sizing:border-box"></label></div></div><label>スキを受け取った記事<select data-history-articles style="width:100%;min-width:0"><option value="all">全記事（過去の記事を含む）</option><option value="selected">記事を指定</option></select></label><label data-history-article-field hidden>自分の記事URL<input data-history-article type="url" placeholder="https://note.com/…/n/…" style="width:100%;min-width:0;box-sizing:border-box"></label><button type="button" data-a="history-today">今日・全記事に設定</button>';
  (detail.querySelector('.special-actions')||detail.lastElementChild)?.before(controls);
  let saved={};try{saved=JSON.parse(localStorage.getItem(HISTORY_FILTER_PREF)||'{}')||{}}catch{}
  const field=name=>controls.querySelector('[data-history-'+name+']');
- field('period').value=['today','date','range','all'].includes(saved.period)?saved.period:'today';
+ field('period').value=['today','date','range','all'].includes(saved.period)?saved.period:'all';
  field('from').value=validHistoryDate(saved.fromDate||'')?saved.fromDate:historyToday();
  field('to').value=validHistoryDate(saved.toDate||'')?saved.toDate:historyToday();
  field('articles').value=saved.articles==='selected'?'selected':'all';field('article').value=String(saved.article||'');
@@ -56,24 +55,29 @@ function patchHistoryFilterPanel(panel,detail){
  update();
 }
 `;
-
 export function transformEditorHistoryFilter(source) {
   source = once(source, 'let exportWaiter=null;', 'let exportWaiter=null;\n' + helpers);
+  source = once(source, "const count=Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.historyRequestedCount||run.count)||300;", "const count=Number(run.historyRequestedCount)||(Array.isArray(run.rows)&&run.rows.at(-1)?.finalMarker?run.rows.length-1:Number(run.count)||300);");
   source = once(source, "return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count};", "return{mode:run.mode==='all'?'all':'number',count,target:run.mode==='all'?Infinity:count,historyFilter:run.historyFilter||null};");
-  source = once(source, " const panel=document.getElementById(PANEL),mode=panel?.querySelector('[data-mode]')?.value==='all'?'all':'number';", " const historyFilter=selectedHistoryFilter();\n if(historyFilter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter};\n const panel=document.getElementById(PANEL),mode=panel?.querySelector('[data-mode]')?.value==='all'?'all':'number';");
-  source = once(source, 'function checkpointHistoryOptions(saved){', "function checkpointHistoryOptions(saved){\n if(saved?.historyFilter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:saved.historyFilter};");
+  source = once(source, "return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count};", "return{mode,count:mode==='all'?HISTORY_CANDIDATE_CAP:count,target:mode==='all'?Infinity:count,historyFilter:selectedHistoryFilter()};");
+  source = once(source, 'function checkpointHistoryOptions(saved){', 'function checkpointHistoryOptions(saved,bridge=null){');
+  source = once(source, " if(token)return{mode:token==='all'?'all':'number',count:token==='all'?HISTORY_CANDIDATE_CAP:Number(token),target:token==='all'?Infinity:Number(token)};", ` const selected=bridge?.selection,filter=bridge?.historyFilter||saved?.historyFilter||null;
+ const requested=token||(selected?.mode==='all'?'all':selected?.count);
+ if(requested==='all')return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:filter};
+ if(Number.isInteger(Number(requested))&&Number(requested)>=1&&Number(requested)<=HISTORY_CANDIDATE_CAP)return{mode:'number',count:Number(requested),target:Number(requested),historyFilter:filter};
+ if(filter)return{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:filter};`);
+  source = once(source, "function historyExportCount(options){return options.mode==='all'?", "function historyExportCount(options){return options.historyFilter||options.mode==='all'?");
   source = once(source, "url.searchParams.set('unique','1');url.searchParams.set('scope','recent-likes');", "url.searchParams.set('unique','1');url.searchParams.set('scope',options.historyFilter?'filtered-likes':'recent-likes');\n if(options.historyFilter)for(const [key,value]of Object.entries(options.historyFilter))url.searchParams.set(key,value);");
-  source = once(source, 'exportWaiter={requestId,popup,promise,resolve,reject,timer};', 'exportWaiter={requestId,popup,promise,resolve,reject,timer,historyFilter:options.historyFilter||null};');
+  source = once(source, 'exportWaiter={requestId,popup,promise,resolve,reject,timer};', 'exportWaiter={requestId,popup,promise,resolve,reject,timer,historyFilter:options.historyFilter||null,selection:{mode:options.mode,count:options.count}};');
   source = once(source, "  const people=uniquePeople(Array.isArray(payload.rows)?payload.rows:[]);", "  if(waiting.historyFilter&&(payload.apiVersion!==2||payload.scope!=='filtered-likes'||!sameHistoryFilter(waiting.historyFilter,payload.filter)))throw new Error('日付・記事の絞り込み結果を確認できません');\n  if(waiting.historyFilter&&(payload.rows||[]).some(row=>!historyFilterContains(waiting.historyFilter,row)))throw new Error('指定した日付・記事と異なるスキ履歴を検出しました');\n  const people=uniquePeople(Array.isArray(payload.rows)?payload.rows:[]);");
-  source = once(source, "{version:231,scope:'recent-likes',at:Date.now(),people}", "{version:297,scope:waiting.historyFilter?'filtered-likes':'recent-likes',historyFilter:waiting.historyFilter,at:Date.now(),people}");
+  source = once(source, "{version:231,scope:'recent-likes',at:Date.now(),people}", "{version:297,scope:waiting.historyFilter?'filtered-likes':'recent-likes',historyFilter:waiting.historyFilter,selection:waiting.selection,at:Date.now(),people}");
   source = once(source, "writePrep({signature,index,rows,skipped,presentationOptions:", "writePrep({signature,index,rows,skipped,historyFilter:bridge.historyFilter||null,presentationOptions:");
+  source = once(source, 'if(target!==Infinity&&rows.length<target)throw', 'if(!bridge.historyFilter&&target!==Infinity&&rows.length<target)throw');
   source = once(source, "likedAt:String(person.likedAt||'')", "likedAt:String(person.likedAt||''),likedArticleKey:String(person.likedArticleKey||'')");
-  source = once(source, "const previous=historyOptions(run),same=previous.mode===options.mode&&(options.mode==='all'||previous.count===options.count);", "const previous=historyOptions(run),same=!options.historyFilter&&!previous.historyFilter&&previous.mode===options.mode&&(options.mode==='all'||previous.count===options.count);");
+  source = once(source, "const previous=historyOptions(run),same=previous.mode===options.mode&&(options.mode==='all'||previous.count===options.count);", "const previous=historyOptions(run),same=!options.historyFilter&&!previous.historyFilter&&previous.mode===options.mode&&options.mode==='number'&&previous.count===options.count&&run.rows.length-1===options.count;");
   source = once(source, 'writeRun({...run,version:VERSION,mode:options.mode,count:rows.length-1,historyRequestedCount:', 'writeRun({...run,version:VERSION,mode:options.mode,historyFilter:options.historyFilter||null,count:rows.length-1,historyRequestedCount:');
-  source = once(source, "return createFixed300(checkpointHistoryOptions(saved));", "return createFixed300(bridge.historyFilter?{mode:'all',count:HISTORY_CANDIDATE_CAP,target:Infinity,historyFilter:bridge.historyFilter}:checkpointHistoryOptions(saved));");
+  source = once(source, "return createFixed300(checkpointHistoryOptions(saved));", "return createFixed300(checkpointHistoryOptions(String(saved?.signature||'').startsWith(String(bridge.at||0)+'|')?saved:null,bridge));");
   source = once(source, "historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,choice:", "historyRequestedCount:!gallery&&requested.mode==='number'?requested.count:null,historyFilter:!gallery?requested.historyFilter||null:null,choice:");
   source = once(source, " const hint=detail.querySelector('.hint'),hintText=", " patchHistoryFilterPanel(panel,detail);\n const hint=detail.querySelector('.hint'),hintText=");
-  source = once(source, '直近順・同じ人は1回｜最新記事｜上の件数・全数を使用｜実績1件を追加', '同じ人は1回｜最新記事を紹介｜実績1件を追加');
-  source = once(source, "  mode.value='number';count.value='200';", "  const period=detail.querySelector('[data-history-period]'),articles=detail.querySelector('[data-history-articles]');if(period){period.value='all';period.dispatchEvent(new Event('change',{bubbles:true}))}if(articles){articles.value='all';articles.dispatchEvent(new Event('change',{bubbles:true}))}\n  mode.value='number';count.value='200';");
   return source;
 }
