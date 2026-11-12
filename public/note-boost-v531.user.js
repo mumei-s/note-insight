@@ -880,7 +880,7 @@ $('#next').onclick=async()=>{const p=boostPage();if((p+1)*BOOST_PAGE_SIZE<state.
 $('#reset').onclick=()=>{if(confirm('巡回リストと位置だけをリセットします。スキやマガジン追加は取り消しません。')){state.queue=[];state.index=0;state.source='';saveState();$('#source').value='';$('#current').classList.add('hidden');status('巡回をリセットしました｜巡回条件を入力できます')}};
 boostPrefsForm($('#boostSettingsUI'),()=>{refreshLimits();void render()});
 $('#closeBoostSettings').onclick=()=>{$('.more-controls').open=false;$('.more-controls summary')?.focus()};
-$('#backBoost').onclick=()=>{const m=$('.modal.show').pop();if(m)return closeModal(m.id);if(boostPage()>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
+$('#backBoost').onclick=()=>{const m=$$('.modal.show').pop();if(m)return closeModal(m.id);if(boostPage()>0)return $('#prev').click();location.assign('https://note.com/')};$('#exitBoost').onclick=()=>{saveState();location.assign('https://note.com/')};
 $('#startSource').onclick=()=>void loadSource();$('#source').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadSource()}});$('#saveSource').onclick=()=>saveFavoriteSource($('#source').value);$('#showFavorites').onclick=openFavorites;$('#queueBtn').onclick=openQueue;
 
 
